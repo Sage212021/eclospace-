@@ -16,8 +16,13 @@ function rateForCumulativeQuantity(tiers: RoyaltyTier[], cumulativeQuantity: num
   return tiers.length > 0 ? tiers[tiers.length - 1].rate : 0;
 }
 
-async function findActiveRoyaltyContract(tx: Tx, manuscriptId: string) {
-  return tx.contract.findFirst({
+// Un même ouvrage peut avoir plusieurs contrats de droits actifs simultanément
+// (ex. un contrat papier et un contrat numérique séparés, chacun avec son
+// propre taux) — Contract.formats les distingue déjà (Ch. 9). On choisit le
+// contrat dont formats[] contient le format effectivement vendu ; à défaut,
+// un contrat sans restriction de format (formats: []) sert de repli général.
+async function findActiveRoyaltyContract(tx: Tx, manuscriptId: string, format: string) {
+  const candidates = await tx.contract.findMany({
     where: {
       manuscriptId,
       status: "active",
@@ -26,7 +31,9 @@ async function findActiveRoyaltyContract(tx: Tx, manuscriptId: string) {
       royaltyTerms: { isNot: null },
     },
     include: { royaltyTerms: true },
+    orderBy: { createdAt: "desc" },
   });
+  return candidates.find((c) => c.formats.includes(format)) ?? candidates.find((c) => c.formats.length === 0) ?? null;
 }
 
 // Ch. 9 §9.5 : dès qu'une vente (ou un retour) est enregistrée, le relevé de
@@ -40,6 +47,7 @@ export async function recordRoyaltyEntry(
   tx: Tx,
   params: {
     manuscriptId: string;
+    format: string;
     quantity: number; // signé : négatif pour un retour
     unitPublicPrice: number;
     unitNetPrice: number;
@@ -47,7 +55,7 @@ export async function recordRoyaltyEntry(
     sourceId: string;
   },
 ): Promise<void> {
-  const contract = await findActiveRoyaltyContract(tx, params.manuscriptId);
+  const contract = await findActiveRoyaltyContract(tx, params.manuscriptId, params.format);
   if (!contract || !contract.royaltyTerms) return; // pas de contrat de droits actif : rien à calculer
 
   const priorSum = await tx.royaltyEntry.aggregate({

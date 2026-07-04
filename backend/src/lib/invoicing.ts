@@ -9,6 +9,7 @@ type Tx = Prisma.TransactionClient | PrismaClient;
 interface InvoiceLineInput {
   isbnId: string | null;
   manuscriptId: string | null;
+  format: string | null;
   description: string;
   quantity: number;
   unitPrice: number;
@@ -63,9 +64,10 @@ async function createInvoiceRecord(
   });
 
   for (const line of params.lines) {
-    if (!line.manuscriptId) continue;
+    if (!line.manuscriptId || !line.format) continue;
     await recordRoyaltyEntry(tx, {
       manuscriptId: line.manuscriptId,
+      format: line.format,
       quantity: line.quantity,
       unitPublicPrice: line.unitPrice,
       unitNetPrice: line.unitPrice,
@@ -94,11 +96,26 @@ export async function createInvoiceFromDelivery(tx: Tx, deliveryId: string) {
     lines.push({
       isbnId: deliveryLine.isbnId,
       manuscriptId: isbn?.manuscriptId ?? null,
+      format: isbn?.format ?? null,
       description: `Livraison ${delivery.deliveryNumber}`,
       quantity: deliveryLine.quantity,
       unitPrice: netUnitPrice,
       taxRate: Number(orderLine.taxRate),
     });
+  }
+  // Frais de port (Ch. 17 §17.5) : facturés une seule fois par commande, sur
+  // sa première livraison, jamais sur les livraisons de reliquat suivantes.
+  if (!delivery.order.shippingFeeInvoiced && Number(delivery.order.shippingFee) > 0) {
+    lines.push({
+      isbnId: null,
+      manuscriptId: null,
+      format: null,
+      description: "Frais de port",
+      quantity: 1,
+      unitPrice: Number(delivery.order.shippingFee),
+      taxRate: 0,
+    });
+    await tx.salesOrder.update({ where: { id: delivery.orderId }, data: { shippingFeeInvoiced: true } });
   }
   return createInvoiceRecord(tx, {
     customerId: delivery.order.customerId,
@@ -128,6 +145,7 @@ export async function createInvoiceFromConsignmentStatement(tx: Tx, statementId:
       {
         isbnId: statement.consignment.isbnId,
         manuscriptId: statement.consignment.isbn.manuscriptId,
+        format: statement.consignment.isbn.format,
         description: `Relevé de dépôt-vente ${statement.periodStart.toISOString().slice(0, 10)} – ${statement.periodEnd.toISOString().slice(0, 10)}`,
         quantity: statement.quantitySold,
         unitPrice,
@@ -152,6 +170,7 @@ export async function createInvoiceFromPosSale(tx: Tx, posSaleId: string) {
       {
         isbnId: posSale.isbnId,
         manuscriptId: posSale.isbn.manuscriptId,
+        format: posSale.isbn.format,
         description: "Vente au comptoir / salon",
         quantity: posSale.quantity,
         unitPrice: Number(posSale.unitPrice),
@@ -208,6 +227,7 @@ export async function createCreditNoteFromReturn(tx: Tx, customerReturnId: strin
     lineInputs.push({
       isbnId: line.isbnId,
       manuscriptId: isbn?.manuscriptId ?? null,
+      format: isbn?.format ?? null,
       description: `Retour client — ${line.verdict ?? "à contrôler"}`,
       quantity: line.quantity,
       unitPrice,
@@ -243,9 +263,10 @@ export async function createCreditNoteFromReturn(tx: Tx, customerReturnId: strin
   });
 
   for (const line of lineInputs) {
-    if (!line.manuscriptId) continue;
+    if (!line.manuscriptId || !line.format) continue;
     await recordRoyaltyEntry(tx, {
       manuscriptId: line.manuscriptId,
+      format: line.format,
       quantity: -line.quantity,
       unitPublicPrice: line.unitPrice,
       unitNetPrice: line.unitPrice,

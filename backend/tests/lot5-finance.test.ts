@@ -99,12 +99,12 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
     return { manuscript, isbnId, contractId: contract.id as string };
   }
 
-  async function createCustomer(name: string, category = "particulier", creditLimit?: number) {
+  async function createCustomer(name: string, category = "particulier", creditLimit?: number, shippingZone?: string) {
     const response = await app.inject({
       method: "POST",
       url: "/api/v1/customers",
       headers: { cookie: adminCookie },
-      payload: { category, name, credit_limit: creditLimit },
+      payload: { category, name, credit_limit: creditLimit, shipping_zone: shippingZone },
     });
     return response.json();
   }
@@ -138,6 +138,65 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
     expect(Number(invoice.totalTax)).toBe(18000);
     expect(Number(invoice.totalTtc)).toBe(118000);
     expect(invoice.status).toBe("issued");
+  });
+
+  it("applique un forfait de frais de port sur la première livraison seulement (Ch. 17 §17.5)", async () => {
+    const shippingRate = await app.inject({
+      method: "POST",
+      url: "/api/v1/shipping-rates",
+      headers: { cookie: adminCookie },
+      payload: { zone: "douala", flat_amount: 2000 },
+    });
+    expect(shippingRate.statusCode).toBe(201);
+
+    const { isbnId } = await createIsbnWithContractAndStock("Manuscrit Finance Frais Port", 50);
+    const customer = await createCustomer("Client Frais Port Douala", "particulier", undefined, "douala");
+
+    const order = await app.inject({
+      method: "POST",
+      url: "/api/v1/sales-orders",
+      headers: { cookie: adminCookie },
+      payload: { customer_id: customer.id, channel: "telephone", location_id: warehouseId, lines: [{ isbn_id: isbnId, quantity: 10, unit_price: 10000 }] },
+    });
+    expect(Number(order.json().shippingFee)).toBe(2000);
+
+    const firstDelivery = await app.inject({
+      method: "POST",
+      url: `/api/v1/sales-orders/${order.json().id}/deliveries`,
+      headers: { cookie: adminCookie },
+      payload: { carrier: "Transporteur", lines: [{ isbn_id: isbnId, quantity: 6 }] },
+    });
+    const firstInvoice = await prisma.invoice.findFirstOrThrow({ where: { sourceType: "delivery", sourceId: firstDelivery.json().id }, include: { lines: true } });
+    expect(firstInvoice.lines.some((l) => l.description === "Frais de port" && Number(l.unitPrice) === 2000)).toBe(true);
+
+    const secondDelivery = await app.inject({
+      method: "POST",
+      url: `/api/v1/sales-orders/${order.json().id}/deliveries`,
+      headers: { cookie: adminCookie },
+      payload: { carrier: "Transporteur", lines: [{ isbn_id: isbnId, quantity: 4 }] },
+    });
+    const secondInvoice = await prisma.invoice.findFirstOrThrow({ where: { sourceType: "delivery", sourceId: secondDelivery.json().id }, include: { lines: true } });
+    expect(secondInvoice.lines.some((l) => l.description === "Frais de port")).toBe(false);
+  });
+
+  it("applique la gratuité des frais de port au-delà d'un seuil de commande (Ch. 17 §17.5)", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/api/v1/shipping-rates",
+      headers: { cookie: adminCookie },
+      payload: { zone: "yaounde", flat_amount: 1500, free_above_amount: 50000 },
+    });
+
+    const { isbnId } = await createIsbnWithContractAndStock("Manuscrit Finance Port Gratuit", 50);
+    const customer = await createCustomer("Client Port Gratuit Yaoundé", "particulier", undefined, "yaounde");
+
+    const order = await app.inject({
+      method: "POST",
+      url: "/api/v1/sales-orders",
+      headers: { cookie: adminCookie },
+      payload: { customer_id: customer.id, channel: "telephone", location_id: warehouseId, lines: [{ isbn_id: isbnId, quantity: 10, unit_price: 10000 }] },
+    });
+    expect(Number(order.json().shippingFee)).toBe(0); // 100000 >= seuil de gratuité de 50000
   });
 
   it("un encaissement lettré réduit l'encours client (Ch. 18 §18.3)", async () => {
@@ -296,6 +355,84 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
     expect(secondAttempt.json().code).toBe("already_paid");
   });
 
+  it("choisit le contrat de droits selon le format vendu quand plusieurs contrats actifs coexistent (Ch. 9 §9.5)", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/manuscripts",
+      headers: { cookie: adminCookie },
+      payload: { title: "Manuscrit Finance Multi-Format", genre_id: genreId, language: "fr", owner_id: adminId, author: { first_name: "Auteur", last_name: "Multi-Format" } },
+    });
+    const manuscript = createResponse.json();
+    const partnerId = (await prisma.workContributor.findFirstOrThrow({ where: { manuscriptId: manuscript.id } })).partnerId;
+
+    async function createActiveContract(formats: string[], rate: number) {
+      const contractResponse = await app.inject({
+        method: "POST",
+        url: "/api/v1/contracts",
+        headers: { cookie: adminCookie },
+        payload: {
+          type: "edition",
+          manuscript_id: manuscript.id,
+          partner_id: partnerId,
+          formats,
+          financial_terms: { base: "prix_public_ht", tiers: [{ up_to: null, rate }], advance_amount: 0 },
+        },
+      });
+      const contract = contractResponse.json();
+      for (const status of ["legal_review", "direction_approval", "awaiting_signature", "active"]) {
+        await app.inject({ method: "PATCH", url: `/api/v1/contracts/${contract.id}/status`, headers: { cookie: adminCookie }, payload: { status } });
+      }
+      return contract.id as string;
+    }
+
+    const printContractId = await createActiveContract(["print"], 0.10);
+    const epubContractId = await createActiveContract(["epub"], 0.25);
+
+    const pool = await app.inject({
+      method: "POST",
+      url: "/api/v1/isbn-pools",
+      headers: { cookie: adminCookie },
+      payload: { prefix: uniqueIsbnPrefix(1), digit_width: 1, range_start: 0, range_end: 9 },
+    });
+    const printIsbn = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscript.id}/isbn`,
+      headers: { cookie: adminCookie },
+      payload: { format: "print", pool_id: pool.json().id },
+    });
+    const epubIsbn = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscript.id}/isbn`,
+      headers: { cookie: adminCookie },
+      payload: { format: "epub", pool_id: pool.json().id },
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/v1/stock-movements",
+      headers: { cookie: adminCookie },
+      payload: { type: "production_in", isbn_id: printIsbn.json().id, to_location_id: warehouseId, quantity: 10, reason: "Réception fabrication" },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/v1/stock-movements",
+      headers: { cookie: adminCookie },
+      payload: { type: "production_in", isbn_id: epubIsbn.json().id, to_location_id: warehouseId, quantity: 10, reason: "Réception fabrication" },
+    });
+
+    const customer = await createCustomer("Client Multi-Format");
+    await deliverOrder(printIsbn.json().id, customer.id, 5, 10000); // 5 * 10000 * 10 % = 5000, contrat papier
+    await deliverOrder(epubIsbn.json().id, customer.id, 5, 10000); // 5 * 10000 * 25 % = 12500, contrat numérique
+
+    const printEntries = await app.inject({ method: "GET", url: `/api/v1/contracts/${printContractId}/royalty-entries`, headers: { cookie: adminCookie } });
+    expect(printEntries.json()).toHaveLength(1);
+    expect(Number(printEntries.json()[0].amount)).toBe(5000);
+
+    const epubEntries = await app.inject({ method: "GET", url: `/api/v1/contracts/${epubContractId}/royalty-entries`, headers: { cookie: adminCookie } });
+    expect(epubEntries.json()).toHaveLength(1);
+    expect(Number(epubEntries.json()[0].amount)).toBe(12500);
+  });
+
   it("la séparation des tâches empêche l'auto-validation d'une dépense (Ch. 18 §18.11)", async () => {
     await createUserWithRole("resp_finance_test", "RESP_FINANCE", "RespFinance123!");
     const respFinanceCookie = await loginCookie(app, "resp_finance_test", "RespFinance123!");
@@ -325,6 +462,57 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
     });
     expect(validatedByOther.statusCode).toBe(200);
     expect(validatedByOther.json().status).toBe("validee");
+  });
+
+  it("une dépense au-delà du seuil de délégation exige une validation finale de la Direction générale (Ch. 18 §18.11)", async () => {
+    await createUserWithRole("resp_finance_test", "RESP_FINANCE", "RespFinance123!");
+    const respFinanceCookie = await loginCookie(app, "resp_finance_test", "RespFinance123!");
+    await createUserWithRole("dir_general_test", "DIR_GENERAL", "DirGeneral123!");
+    const dirGeneralCookie = await loginCookie(app, "dir_general_test", "DirGeneral123!");
+
+    const expense = await app.inject({
+      method: "POST",
+      url: "/api/v1/expenses",
+      headers: { cookie: adminCookie },
+      payload: { category: "prestation", amount: 600000, description: "Prestation au-delà du seuil de délégation" },
+    });
+    expect(expense.statusCode).toBe(201);
+
+    const firstValidation = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/expenses/${expense.json().id}/validate`,
+      headers: { cookie: respFinanceCookie },
+      payload: {},
+    });
+    expect(firstValidation.statusCode).toBe(200);
+    expect(firstValidation.json().status).toBe("en_attente_dg");
+
+    const refusedNonDg = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/expenses/${expense.json().id}/validate`,
+      headers: { cookie: respFinanceCookie },
+      payload: {},
+    });
+    expect(refusedNonDg.statusCode).toBe(403);
+    expect(refusedNonDg.json().code).toBe("dg_approval_required");
+
+    const finalValidation = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/expenses/${expense.json().id}/validate`,
+      headers: { cookie: dirGeneralCookie },
+      payload: {},
+    });
+    expect(finalValidation.statusCode).toBe(200);
+    expect(finalValidation.json().status).toBe("validee");
+
+    const alreadyDone = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/expenses/${expense.json().id}/validate`,
+      headers: { cookie: dirGeneralCookie },
+      payload: {},
+    });
+    expect(alreadyDone.statusCode).toBe(409);
+    expect(alreadyDone.json().code).toBe("invalid_transition");
   });
 
   it("une dépense rattachée à un ouvrage devient un cost_entry et alimente l'analytique (Ch. 18 §18.4-18.5)", async () => {
@@ -373,6 +561,102 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
     expect(withActuals.json()[0].lines[0].over_budget).toBe(false);
   });
 
+  it("gère plusieurs comptes/caisses et les virements internes sans affecter la position globale (Ch. 18 §18.8)", async () => {
+    const bank = await app.inject({
+      method: "POST",
+      url: "/api/v1/bank-accounts",
+      headers: { cookie: adminCookie },
+      payload: { label: "Compte principal", type: "banque" },
+    });
+    expect(bank.statusCode).toBe(201);
+    const caisse = await app.inject({
+      method: "POST",
+      url: "/api/v1/bank-accounts",
+      headers: { cookie: adminCookie },
+      payload: { label: "Caisse comptoir", type: "caisse" },
+    });
+    expect(caisse.statusCode).toBe(201);
+
+    const positionBefore = await app.inject({ method: "GET", url: "/api/v1/treasury-position", headers: { cookie: adminCookie } });
+
+    const transfer = await app.inject({
+      method: "POST",
+      url: "/api/v1/account-transfers",
+      headers: { cookie: adminCookie },
+      payload: { from_account_id: bank.json().id, to_account_id: caisse.json().id, amount: 30000, reason: "Approvisionnement caisse comptoir" },
+    });
+    expect(transfer.statusCode).toBe(201);
+
+    const bankBalance = await app.inject({ method: "GET", url: `/api/v1/bank-accounts/${bank.json().id}/balance`, headers: { cookie: adminCookie } });
+    expect(bankBalance.json().balance).toBe(-30000);
+    const caisseBalance = await app.inject({ method: "GET", url: `/api/v1/bank-accounts/${caisse.json().id}/balance`, headers: { cookie: adminCookie } });
+    expect(caisseBalance.json().balance).toBe(30000);
+
+    const positionAfter = await app.inject({ method: "GET", url: "/api/v1/treasury-position", headers: { cookie: adminCookie } });
+    expect(positionAfter.json().position).toBe(positionBefore.json().position); // virement interne : la position globale ne bouge pas
+
+    const sameAccount = await app.inject({
+      method: "POST",
+      url: "/api/v1/account-transfers",
+      headers: { cookie: adminCookie },
+      payload: { from_account_id: bank.json().id, to_account_id: bank.json().id, amount: 1000 },
+    });
+    expect(sameAccount.statusCode).toBe(400);
+  });
+
+  it("importe un relevé bancaire et pointe une ligne avec un paiement (Ch. 18 §18.8)", async () => {
+    const bank = await app.inject({
+      method: "POST",
+      url: "/api/v1/bank-accounts",
+      headers: { cookie: adminCookie },
+      payload: { label: "Compte à rapprocher", type: "banque" },
+    });
+    const { isbnId } = await createIsbnWithContractAndStock("Manuscrit Finance Rapprochement", 10);
+    const customer = await createCustomer("Client Rapprochement");
+    const { delivery } = await deliverOrder(isbnId, customer.id, 2, 10000);
+    const invoice = await prisma.invoice.findFirstOrThrow({ where: { sourceType: "delivery", sourceId: delivery.id } });
+    const payment = await app.inject({
+      method: "POST",
+      url: "/api/v1/payments",
+      headers: { cookie: adminCookie },
+      payload: { method: "transfer", amount: Number(invoice.totalTtc), bank_account_id: bank.json().id, allocations: [{ invoice_id: invoice.id, amount: Number(invoice.totalTtc) }] },
+    });
+
+    const statement = await app.inject({
+      method: "POST",
+      url: `/api/v1/bank-accounts/${bank.json().id}/statements`,
+      headers: { cookie: adminCookie },
+      payload: {
+        period_start: "2026-01-01T00:00:00.000Z",
+        period_end: "2026-01-31T00:00:00.000Z",
+        lines: [{ transaction_date: "2026-01-15T00:00:00.000Z", label: "Virement reçu", amount: Number(invoice.totalTtc) }],
+      },
+    });
+    expect(statement.statusCode).toBe(201);
+    const lineId = statement.json().lines[0].id as string;
+
+    const match = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/statement-lines/${lineId}/match`,
+      headers: { cookie: adminCookie },
+      payload: { payment_id: payment.json().id },
+    });
+    expect(match.statusCode).toBe(200);
+    expect(match.json().reconciledAt).not.toBeNull();
+
+    const alreadyReconciled = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/statement-lines/${lineId}/match`,
+      headers: { cookie: adminCookie },
+      payload: { payment_id: payment.json().id },
+    });
+    expect(alreadyReconciled.statusCode).toBe(409);
+    expect(alreadyReconciled.json().code).toBe("already_reconciled");
+
+    const list = await app.inject({ method: "GET", url: `/api/v1/bank-accounts/${bank.json().id}/statements`, headers: { cookie: adminCookie } });
+    expect(list.json()).toHaveLength(1);
+  });
+
   it("génère un export comptable normalisé avec checksum (Ch. 18 §18.10, Option B)", async () => {
     const periodKey = periodKeyFor(new Date());
     const exportResponse = await app.inject({
@@ -383,10 +667,25 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
     });
     expect(exportResponse.statusCode).toBe(201);
     expect(exportResponse.json().checksum).toMatch(/^[a-f0-9]{64}$/);
-    expect(exportResponse.json().csv).toContain("type,reference,date,montant");
+    expect(exportResponse.json().csv).toContain("type,reference,date,montant,compte_debit,compte_credit,journal,centre_analytique,piece");
+    expect(exportResponse.json().chart_of_accounts_status).toBe("indicatif_non_valide");
+    // Écritures présentes dans les tests précédents (factures, dépenses validées).
+    expect(exportResponse.json().csv).toMatch(/^invoice,FA-\d{4}-\d{5},.*,411000,707000,VE,/m);
+    expect(exportResponse.json().csv).toContain("expense,");
 
     const list = await app.inject({ method: "GET", url: "/api/v1/accounting/exports", headers: { cookie: adminCookie } });
     expect(list.json().length).toBeGreaterThan(0);
+  });
+
+  it("journalise les factures générées automatiquement dans le journal d'audit (Ch. 0 §0.3)", async () => {
+    const { isbnId } = await createIsbnWithContractAndStock("Manuscrit Finance Audit", 10);
+    const customer = await createCustomer("Client Audit");
+    const { delivery } = await deliverOrder(isbnId, customer.id, 2, 10000);
+    const invoice = await prisma.invoice.findFirstOrThrow({ where: { sourceType: "delivery", sourceId: delivery.id } });
+
+    const auditEntry = await prisma.auditLog.findFirst({ where: { entityType: "invoice", entityId: invoice.id } });
+    expect(auditEntry).not.toBeNull();
+    expect(auditEntry?.action).toBe("create");
   });
 
   it("une période comptable clôturée bloque toute nouvelle écriture financière (Ch. 18 §18.11)", async () => {

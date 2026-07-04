@@ -719,7 +719,7 @@ export function listCustomers(category?: CustomerCategory) {
   return request<Customer[]>(`/api/v1/customers${query}`);
 }
 
-export function createCustomer(input: { category: CustomerCategory; name: string; credit_limit?: number }) {
+export function createCustomer(input: { category: CustomerCategory; name: string; credit_limit?: number; shipping_zone?: string }) {
   return request<Customer>("/api/v1/customers", { method: "POST", body: JSON.stringify(input) });
 }
 
@@ -896,4 +896,49 @@ export function generateRoyaltyStatement(contractId: string, input: { period_sta
 
 export function payRoyaltyStatement(statementId: string, input: { method: string; bank_account_id?: string; tax_withheld?: number }) {
   return request(`/api/v1/royalty-statements/${statementId}/payments`, { method: "POST", body: JSON.stringify(input) });
+}
+
+// Frais de port (Ch. 17 §17.5, ajouté hors cahier des charges initial).
+export type ShippingZone = "yaounde" | "douala" | "autres_villes_cameroun" | "international";
+
+export interface ShippingRate {
+  id: string;
+  zone: ShippingZone;
+  flatAmount: string | null;
+  perKgAmount: string | null;
+  freeAboveAmount: string | null;
+}
+
+export function listShippingRates() {
+  return request<ShippingRate[]>(`/api/v1/shipping-rates`);
+}
+
+export function setShippingRate(input: { zone: ShippingZone; flat_amount?: number; per_kg_amount?: number; free_above_amount?: number }) {
+  return request<ShippingRate>(`/api/v1/shipping-rates`, { method: "POST", body: JSON.stringify(input) });
+}
+
+// Trésorerie : comptes/caisses, virements internes, rapprochement bancaire (Ch. 18 §18.8).
+export type BankAccountType = "banque" | "caisse" | "mobile_money";
+
+export interface BankAccount {
+  id: string;
+  label: string;
+  type: BankAccountType;
+  currency: string;
+}
+
+export function listBankAccounts() {
+  return request<BankAccount[]>(`/api/v1/bank-accounts`);
+}
+
+export function createBankAccount(input: { label: string; type: BankAccountType; currency?: string }) {
+  return request<BankAccount>(`/api/v1/bank-accounts`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getBankAccountBalance(id: string) {
+  return request<{ account_id: string; balance: number }>(`/api/v1/bank-accounts/${id}/balance`);
+}
+
+export function createAccountTransfer(input: { from_account_id: string; to_account_id: string; amount: number; reason?: string }) {
+  return request(`/api/v1/account-transfers`, { method: "POST", body: JSON.stringify(input) });
 }

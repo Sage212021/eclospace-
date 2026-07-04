@@ -59,8 +59,9 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
     const name = window.prompt("Nom du client");
     if (!name) return;
     const category = (window.prompt(`Catégorie (${Object.keys(CATEGORY_LABELS).join(", ")})`, "librairie") ?? "librairie") as CustomerCategory;
+    const shippingZoneInput = window.prompt("Zone de livraison (yaounde, douala, autres_villes_cameroun, international) — laisser vide si non applicable", "");
     try {
-      await createCustomer({ category, name });
+      await createCustomer({ category, name, shipping_zone: shippingZoneInput || undefined });
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de la création du client.");

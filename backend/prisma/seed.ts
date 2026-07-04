@@ -289,6 +289,15 @@ async function main() {
   await grant("DIR_GENERAL", ["royalties:consultation", "royalties:validation"]);
   await grant("RESP_JURIDIQUE", ["royalties:consultation"]);
 
+  // Seuil de délégation pour la validation finale des dépenses (Ch. 18
+  // §18.11) : au-delà, la Direction générale doit valider en second — comme
+  // purchase_order_delegation_threshold (Ch. 15 §15.3), valeur à confirmer.
+  await prisma.setting.upsert({
+    where: { key: "expense_dg_validation_threshold" },
+    update: {},
+    create: { key: "expense_dg_validation_threshold", value: 500_000 },
+  });
+
   // Référentiel des étapes du workflow (Ch. 4 §4.3).
   for (const status of workflowStatuses) {
     await prisma.workflowStatus.upsert({

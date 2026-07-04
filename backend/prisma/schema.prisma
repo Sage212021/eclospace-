@@ -1540,6 +1540,34 @@ enum RelationMode {
   depot_vente
 }
 
+// Frais de port (Ch. 17 §17.5, ajouté hors cahier des charges initial — cf.
+// docs/JOURNAL_TECHNIQUE.md, demande opérateur du 04/07/2026) : zones du
+// marché principal (Cameroun) plus international, paramétrables sans
+// redéploiement.
+enum ShippingZone {
+  yaounde
+  douala
+  autres_villes_cameroun
+  international
+}
+
+// Un mode de tarification par zone : gratuité au-delà d'un seuil de commande
+// prioritaire si atteinte, sinon tarif au kilogramme si renseigné, sinon
+// forfait. Les trois valeurs sont indépendantes et modifiables par le
+// financier via l'écran Finance, sans redéploiement (comme tax_rates).
+model ShippingRate {
+  id               String       @id @default(uuid())
+  zone             ShippingZone @unique
+  flatAmount       Decimal?     @map("flat_amount") @db.Decimal(10, 2)
+  perKgAmount      Decimal?     @map("per_kg_amount") @db.Decimal(10, 2)
+  freeAboveAmount  Decimal?     @map("free_above_amount") @db.Decimal(10, 2)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("shipping_rates")
+}
+
 // Ch. 17 §17.3 : fichier clients structuré par catégorie, avec conditions
 // commerciales (remise, plafond d'encours) et mode de relation.
 model Customer {
@@ -1554,6 +1582,7 @@ model Customer {
   paymentTerms String?          @map("payment_terms")
   creditLimit  Decimal?         @map("credit_limit") @db.Decimal(12, 2)
   taxId        String?          @map("tax_id")
+  shippingZone ShippingZone?    @map("shipping_zone")
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -1643,6 +1672,12 @@ model SalesOrder {
   status      SalesOrderStatus @default(draft)
   blockReason String?          @map("block_reason")
   approvedBy  String?          @map("approved_by")
+  // Frais de port (calculés à la commande depuis la zone du client et le poids
+  // total, cf. lib/shipping.ts) ; facturés une seule fois, sur la première
+  // livraison de la commande (shippingFeeInvoiced évite un double comptage
+  // en cas de livraisons partielles multiples).
+  shippingFee         Decimal @default(0) @map("shipping_fee") @db.Decimal(10, 2)
+  shippingFeeInvoiced Boolean @default(false) @map("shipping_fee_invoiced")
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
@@ -1976,8 +2011,16 @@ enum ExpenseCategory {
   autre
 }
 
+// en_attente_dg : dépense au-delà du seuil de délégation (Ch. 18 §18.11),
+// validée une première fois (finance:administration) mais dont la validation
+// finale est réservée au rôle Direction générale — simplification documentée
+// d'un circuit "demandeur → responsable hiérarchique → DAF → DG" complet :
+// aucun organigramme RH n'existe avant le Lot 6, donc pas de "responsable
+// hiérarchique" personnel identifiable ; le circuit retenu a deux paliers
+// (validation courante, puis DG au-delà du seuil).
 enum ExpenseStatus {
   a_valider
+  en_attente_dg
   validee
   payee
   rejetee
@@ -1986,15 +2029,16 @@ enum ExpenseStatus {
 // Dépenses hors commandes d'impression (celles-ci sont déjà engagées via
 // purchase_orders, Ch. 15 §15.4) — circuit de validation par seuils.
 model Expense {
-  id           String          @id @default(uuid())
-  category     ExpenseCategory
-  amount       Decimal         @db.Decimal(12, 2)
-  status       ExpenseStatus   @default(a_valider)
-  supplier     String?
-  manuscriptId String?         @map("manuscript_id")
-  manuscript   Manuscript?     @relation(fields: [manuscriptId], references: [id])
-  description  String?
-  approvedBy   String?         @map("approved_by")
+  id                String          @id @default(uuid())
+  category          ExpenseCategory
+  amount            Decimal         @db.Decimal(12, 2)
+  status            ExpenseStatus   @default(a_valider)
+  supplier          String?
+  manuscriptId      String?         @map("manuscript_id")
+  manuscript        Manuscript?     @relation(fields: [manuscriptId], references: [id])
+  description       String?
+  approvedBy        String?         @map("approved_by")
+  financeValidatedBy String?        @map("finance_validated_by")
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
@@ -2063,18 +2107,46 @@ model BudgetLine {
   @@map("budget_lines")
 }
 
+// "caisse" ajouté par rapport à la seule distinction banque/mobile money du
+// Lot 5 initial : une maison d'édition tient aussi une caisse espèces
+// (comptoir, salons) distincte des comptes bancaires (Ch. 18 §18.8).
+enum BankAccountType {
+  banque
+  caisse
+  mobile_money
+}
+
 model BankAccount {
-  id            String  @id @default(uuid())
-  label         String
-  isMobileMoney Boolean @default(false) @map("is_mobile_money")
-  currency      String  @default("XOF")
+  id       String          @id @default(uuid())
+  label    String
+  type     BankAccountType @default(banque)
+  currency String          @default("XOF")
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  payments   Payment[]
-  statements BankStatement[]
+  payments        Payment[]
+  statements      BankStatement[]
+  transfersOut    AccountTransfer[] @relation("TransferFrom")
+  transfersIn     AccountTransfer[] @relation("TransferTo")
 
   @@map("bank_accounts")
+}
+
+// Virement interne entre deux comptes/caisses propres à la maison — ne
+// modifie pas la position de trésorerie globale (Ch. 18 §18.8), seulement la
+// répartition entre comptes.
+model AccountTransfer {
+  id             String      @id @default(uuid())
+  fromAccountId  String      @map("from_account_id")
+  fromAccount    BankAccount @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccountId    String      @map("to_account_id")
+  toAccount      BankAccount @relation("TransferTo", fields: [toAccountId], references: [id])
+  amount         Decimal     @db.Decimal(12, 2)
+  reason         String?
+  transferredAt  DateTime    @default(now()) @map("transferred_at")
+  createdBy      String?     @map("created_by")
+
+  @@map("account_transfers")
 }
 
 model BankStatement {

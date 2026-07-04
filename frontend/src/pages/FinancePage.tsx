@@ -1,23 +1,40 @@
 import { useEffect, useState } from "react";
 import {
+  createAccountTransfer,
+  createBankAccount,
   createExpense,
   createPayment,
   generateRoyaltyStatement,
+  getBankAccountBalance,
   getCustomerAging,
+  listBankAccounts,
   listCustomers,
   listExpenses,
   listInvoices,
   listRoyaltyStatements,
+  listShippingRates,
   nextDunning,
   payRoyaltyStatement,
+  setShippingRate,
   validateExpense,
   type AgingBalance,
+  type BankAccount,
+  type BankAccountType,
   type Customer,
   type Expense,
   type ExpenseCategory,
   type Invoice,
   type RoyaltyStatement,
+  type ShippingRate,
+  type ShippingZone,
 } from "../api/client";
+
+const ZONE_LABELS: Record<ShippingZone, string> = {
+  yaounde: "Yaoundé",
+  douala: "Douala",
+  autres_villes_cameroun: "Autres villes (Cameroun)",
+  international: "International",
+};
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   loyer: "Loyer",
@@ -49,22 +66,31 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [royaltyStatements, setRoyaltyStatements] = useState<RoyaltyStatement[]>([]);
+  const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [balances, setBalances] = useState<Record<string, number>>({});
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [aging, setAging] = useState<AgingBalance | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const refresh = async () => {
-    const [invoiceList, customerList, expenseList, statementList] = await Promise.all([
+    const [invoiceList, customerList, expenseList, statementList, shippingRateList, bankAccountList] = await Promise.all([
       listInvoices(),
       listCustomers(),
       listExpenses(),
       listRoyaltyStatements(),
+      listShippingRates(),
+      listBankAccounts(),
     ]);
     setInvoices(invoiceList);
     setCustomers(customerList);
     setExpenses(expenseList);
     setRoyaltyStatements(statementList);
+    setShippingRates(shippingRateList);
+    setBankAccounts(bankAccountList);
+    const balanceEntries = await Promise.all(bankAccountList.map(async (a) => [a.id, (await getBankAccountBalance(a.id)).balance] as const));
+    setBalances(Object.fromEntries(balanceEntries));
   };
 
   useEffect(() => {
@@ -136,6 +162,57 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec du paiement.");
+    }
+  }
+
+  async function handleSetShippingRate(zone: ShippingZone) {
+    const flat = window.prompt(`Forfait pour ${ZONE_LABELS[zone]} (laisser vide si non applicable)`, "");
+    const perKg = window.prompt(`Tarif au kilogramme pour ${ZONE_LABELS[zone]} (laisser vide si non applicable)`, "");
+    const freeAbove = window.prompt(`Gratuité au-delà de (montant de commande, laisser vide si non applicable)`, "");
+    try {
+      await setShippingRate({
+        zone,
+        flat_amount: flat ? Number(flat) : undefined,
+        per_kg_amount: perKg ? Number(perKg) : undefined,
+        free_above_amount: freeAbove ? Number(freeAbove) : undefined,
+      });
+      setMessage(`Tarif de livraison ${ZONE_LABELS[zone]} mis à jour.`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de la mise à jour du tarif.");
+    }
+  }
+
+  async function handleCreateBankAccount() {
+    const label = window.prompt("Libellé du compte/caisse");
+    if (!label) return;
+    const type = (window.prompt("Type (banque, caisse, mobile_money)", "banque") ?? "banque") as BankAccountType;
+    try {
+      await createBankAccount({ label, type });
+      setMessage("Compte créé.");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de la création du compte.");
+    }
+  }
+
+  async function handleTransfer() {
+    if (bankAccounts.length < 2) {
+      setError("Il faut au moins deux comptes/caisses pour effectuer un virement interne.");
+      return;
+    }
+    const fromLabel = window.prompt(`Compte source (${bankAccounts.map((a) => a.label).join(", ")})`);
+    const from = bankAccounts.find((a) => a.label === fromLabel);
+    const toLabel = window.prompt(`Compte destination (${bankAccounts.map((a) => a.label).join(", ")})`);
+    const to = bankAccounts.find((a) => a.label === toLabel);
+    const amountStr = window.prompt("Montant du virement");
+    if (!from || !to || !amountStr) return;
+    try {
+      await createAccountTransfer({ from_account_id: from.id, to_account_id: to.id, amount: Number(amountStr) });
+      setMessage("Virement interne enregistré.");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec du virement.");
     }
   }
 
@@ -237,6 +314,48 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
           <button onClick={() => handleGenerateStatement("")} style={{ ...secondaryButtonStyle, marginTop: 10 }}>
             + Générer un relevé
           </button>
+        )}
+      </div>
+
+      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Frais de port par zone (Ch. 17 §17.5)</div>
+        {(Object.keys(ZONE_LABELS) as ShippingZone[]).map((zone) => {
+          const rate = shippingRates.find((r) => r.zone === zone);
+          return (
+            <div key={zone} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
+              <span>
+                {ZONE_LABELS[zone]}
+                {rate
+                  ? ` — forfait : ${rate.flatAmount ?? "—"}, au kg : ${rate.perKgAmount ?? "—"}, gratuit au-delà de : ${rate.freeAboveAmount ?? "—"}`
+                  : " — non paramétré (frais nuls)"}
+              </span>
+              {canAdminister && (
+                <button onClick={() => handleSetShippingRate(zone)} style={secondaryButtonStyle}>
+                  Paramétrer
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Trésorerie : comptes, caisses et virements (Ch. 18 §18.8)</div>
+        {bankAccounts.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun compte.</p>}
+        {bankAccounts.map((account) => (
+          <div key={account.id} style={{ fontSize: 13, padding: "4px 0" }}>
+            {account.label} ({account.type}) — solde : {balances[account.id] ?? "…"}
+          </div>
+        ))}
+        {canAdminister && (
+          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            <button onClick={handleCreateBankAccount} style={secondaryButtonStyle}>
+              + Compte/caisse
+            </button>
+            <button onClick={handleTransfer} style={secondaryButtonStyle}>
+              Virement interne
+            </button>
+          </div>
         )}
       </div>
     </div>

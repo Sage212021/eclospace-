@@ -169,3 +169,24 @@ L'opérateur a tranché le point d'interprétation ouvert par le cahier des char
 - Export comptable limité au CSV (le format prévu par l'Option B) ; aucun format spécifique à un logiciel comptable particulier n'a été demandé.
 
 **Prochaine étape :** faire valider ce Lot 5 par l'opérateur (en particulier trancher le point des frais de port), puis démarrer le Lot 6 (RH, pilotage, rapports) une fois validé.
+
+### 04/07/2026 (suite) — Renforcement du Lot 5 suite à la revue d'un contrôle de gestion externe (18,5/20, conformité Cameroun/SYSCOHADA)
+
+L'opérateur a fait auditer le Lot 5 par un contrôle de gestion externe, qui a noté le module 18,5/20 et recommandé plusieurs améliorations avant validation définitive. Après clarification (plusieurs points étaient déjà couverts, un relève d'un lot ultérieur par construction du projet), tout ce qui était réalisable sans donnée manquante a été implémenté :
+
+**Fait :**
+- **Bug réel corrigé** : le moteur de droits d'auteur choisissait arbitrairement un contrat quand un même ouvrage avait plusieurs contrats actifs (ex. papier vs numérique) au lieu de sélectionner celui dont le format correspond à la vente — corrigé, avec un test à deux contrats/deux formats.
+- **Frais de port paramétrables** (Ch. 17 §17.5) : zones Yaoundé / Douala / autres villes du Cameroun / international, avec forfait, tarif au kilogramme (poids réel de l'ouvrage) ou gratuité au-delà d'un seuil de commande — configurable par le financier sans redéveloppement, facturé une seule fois par commande.
+- **Journal d'audit complet** sur tout le module Finance, y compris les factures/avoirs générés automatiquement par les événements commerciaux (livraison, dépôt-vente, vente directe, retour).
+- **Escalade de validation des dépenses** au-delà d'un seuil paramétrable (500 000 par défaut) : validation finale réservée à la Direction générale, distincte du premier valideur et du créateur.
+- **Rapprochement bancaire assisté** : import d'un relevé et pointage ligne à ligne avec un paiement.
+- **Multi-caisses et virements internes** : distinction banque/caisse/mobile money par compte, virement entre comptes propres à la maison sans effet sur la position de trésorerie globale, solde par compte.
+- **Export comptable enrichi façon SYSCOHADA** : colonnes compte débit/compte crédit/journal/centre analytique/référence de pièce, directement exploitables par Sage, Odoo, SAP ou Excel (tous important un CSV structuré) — **le plan de comptes est indicatif, non certifié, à valider par le comptable de la maison avant tout dépôt réel** (signalé explicitement dans la réponse de l'export). Un second bug réel a été corrigé au passage : un paiement de droits d'auteur était compté deux fois dans l'export.
+- **14 nouveaux tests automatisés** (86 au total, tous verts). Vérifié dans un navigateur réel : paramétrage d'un tarif de frais de port par zone, création de deux comptes (banque + caisse) avec affichage du solde.
+
+**Points explicitement non traités, avec justification :**
+- Connecteurs dédiés Sage/Odoo/SAP/export .xlsx binaire : le CSV enrichi s'importe déjà dans ces logiciels sans connecteur propriétaire à maintenir (cohérent avec la sobriété technique demandée) ; un vrai `.xlsx` nécessiterait une nouvelle dépendance non requise.
+- Tableaux de bord Finance consolidés : relèvent du Lot 6 « RH, pilotage, rapports » selon le découpage du projet lui-même — non commencés en avance sur le plan de développement.
+- Circuit de validation des dépenses à un vrai palier « responsable hiérarchique » personnel : suppose un organigramme (RH, Lot 6) qui n'existe pas encore ; le circuit à deux paliers retenu (validation courante + Direction générale au-delà du seuil) reste une amélioration réelle sans anticiper ce module.
+
+**Prochaine étape :** faire valider ce renforcement par l'opérateur, puis démarrer le Lot 6 (RH, pilotage, rapports).

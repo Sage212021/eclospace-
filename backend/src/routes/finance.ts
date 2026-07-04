@@ -1,12 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { PaymentMethod, ExpenseCategory, CostType } from "@prisma/client";
+import { Prisma, PaymentMethod, ExpenseCategory, CostType, BankAccountType, ShippingZone } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { assertPeriodOpen, PeriodClosedError, periodKeyFor } from "../lib/accountingPeriod.js";
 import { computeCustomerOutstandingBalance } from "../lib/finance.js";
+import { SYSCOHADA_ACCOUNTS, JOURNAL_CODES, expenseCategoryToAccount } from "../lib/accountingMapping.js";
 
 const paymentSchema = z.object({
   method: z.nativeEnum(PaymentMethod),
@@ -32,7 +33,7 @@ const budgetSchema = z.object({
 
 const bankAccountSchema = z.object({
   label: z.string().min(1),
-  is_mobile_money: z.boolean().default(false),
+  type: z.nativeEnum(BankAccountType).default("banque"),
   currency: z.string().default("XOF"),
 });
 
@@ -40,6 +41,13 @@ const taxRateSchema = z.object({
   country: z.string().min(1),
   product_type: z.string().min(1),
   rate: z.number().min(0).max(100),
+});
+
+const shippingRateSchema = z.object({
+  zone: z.nativeEnum(ShippingZone),
+  flat_amount: z.number().nonnegative().optional(),
+  per_kg_amount: z.number().nonnegative().optional(),
+  free_above_amount: z.number().nonnegative().optional(),
 });
 
 // Ch. 18 : Finance et comptabilité — Option B (décision opérateur du
@@ -210,6 +218,14 @@ export default async function financeRoutes(fastify: FastifyInstance) {
         createdBy: request.user!.id,
       },
     });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "create",
+      entityType: "expense",
+      entityId: expense.id,
+      newValues: expense,
+      ipAddress: request.ip,
+    });
     return reply.code(201).send(expense);
   });
 
@@ -223,8 +239,12 @@ export default async function financeRoutes(fastify: FastifyInstance) {
   });
 
   // Séparation des tâches (Ch. 18 §18.11) : celui qui saisit une dépense ne
-  // peut pas la valider seul (finance:administration réservé aux profils
-  // habilités à double-valider, distinct de finance:saisie).
+  // peut pas la valider seul. Circuit à deux paliers au-delà d'un seuil
+  // paramétrable (comme purchase_order_delegation_threshold, Ch. 15 §15.3) :
+  // validation courante (finance:administration) puis validation finale
+  // réservée au rôle Direction générale. Simplification documentée : un vrai
+  // circuit "demandeur → responsable hiérarchique → DAF → DG" suppose un
+  // organigramme (Ch. 19, Lot 6) qui n'existe pas encore.
   fastify.patch(
     "/api/v1/expenses/:id/validate",
     { preHandler: requirePermission("finance", "administration") },
@@ -240,24 +260,62 @@ export default async function financeRoutes(fastify: FastifyInstance) {
           message: "Celui qui saisit une dépense ne peut pas la valider seul (Ch. 18 §18.11).",
         });
       }
-      const updated = await prisma.$transaction(async (tx) => {
-        const result = await tx.expense.update({ where: { id }, data: { status: "validee", approvedBy: request.user!.id } });
-        if (result.manuscriptId) {
-          await tx.costEntry.create({
-            data: {
-              manuscriptId: result.manuscriptId,
-              costType: mapExpenseCategoryToCostType(result.category),
-              sourceType: "expense",
-              sourceId: result.id,
-              amount: result.amount,
-              committed: false,
-              expenseId: result.id,
-            },
+
+      if (expense.status === "a_valider") {
+        const threshold = await expenseDgValidationThreshold();
+        if (Number(expense.amount) > threshold) {
+          const updated = await prisma.expense.update({
+            where: { id },
+            data: { status: "en_attente_dg", financeValidatedBy: request.user!.id },
+          });
+          await writeAuditLog({
+            userId: request.user!.id,
+            action: "update",
+            entityType: "expense",
+            entityId: id,
+            newValues: { status: "en_attente_dg" },
+            ipAddress: request.ip,
+          });
+          return reply.send(updated);
+        }
+        const updated = await validateExpenseAndPostCostEntry(id, request.user!.id);
+        await writeAuditLog({
+          userId: request.user!.id,
+          action: "update",
+          entityType: "expense",
+          entityId: id,
+          newValues: { status: "validee" },
+          ipAddress: request.ip,
+        });
+        return reply.send(updated);
+      }
+
+      if (expense.status === "en_attente_dg") {
+        if (!request.user!.roles.includes("DIR_GENERAL")) {
+          return reply.code(403).send({
+            code: "dg_approval_required",
+            message: "Au-delà du seuil de délégation, la validation finale est réservée à la Direction générale.",
           });
         }
-        return result;
-      });
-      return reply.send(updated);
+        if (expense.financeValidatedBy === request.user!.id) {
+          return reply.code(409).send({
+            code: "self_validation_forbidden",
+            message: "Celui qui a effectué la première validation ne peut pas aussi être le validateur final.",
+          });
+        }
+        const updated = await validateExpenseAndPostCostEntry(id, request.user!.id);
+        await writeAuditLog({
+          userId: request.user!.id,
+          action: "update",
+          entityType: "expense",
+          entityId: id,
+          newValues: { status: "validee" },
+          ipAddress: request.ip,
+        });
+        return reply.send(updated);
+      }
+
+      return reply.code(409).send({ code: "invalid_transition", message: "Cette dépense n'est pas en attente de validation." });
     },
   );
 
@@ -313,6 +371,14 @@ export default async function financeRoutes(fastify: FastifyInstance) {
       },
       include: { lines: true },
     });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "create",
+      entityType: "budget",
+      entityId: budget.id,
+      newValues: budget,
+      ipAddress: request.ip,
+    });
     return reply.code(201).send(budget);
   });
 
@@ -350,6 +416,14 @@ export default async function financeRoutes(fastify: FastifyInstance) {
         where: { id },
         data: { revisedAmount: parsed.data.revised_amount, revisionReason: parsed.data.reason },
       });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "budget_line",
+        entityId: id,
+        newValues: { revisedAmount: parsed.data.revised_amount, revisionReason: parsed.data.reason },
+        ipAddress: request.ip,
+      });
       return reply.send(updated);
     },
   );
@@ -362,7 +436,15 @@ export default async function financeRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
     }
     const account = await prisma.bankAccount.create({
-      data: { label: parsed.data.label, isMobileMoney: parsed.data.is_mobile_money, currency: parsed.data.currency },
+      data: { label: parsed.data.label, type: parsed.data.type, currency: parsed.data.currency },
+    });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "create",
+      entityType: "bank_account",
+      entityId: account.id,
+      newValues: account,
+      ipAddress: request.ip,
     });
     return reply.code(201).send(account);
   });
@@ -454,6 +536,153 @@ export default async function financeRoutes(fastify: FastifyInstance) {
     return reply.send({ current_position: Math.round(currentPosition * 100) / 100, horizon_days: horizonDays, windows: forecast, alert: lowPoints.length > 0 });
   });
 
+  // Solde par compte/caisse (Ch. 18 §18.8) : paiements externes reçus/versés
+  // sur ce compte, plus les virements internes entrants moins sortants.
+  fastify.get("/api/v1/bank-accounts/:id/balance", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [incoming, outgoing, transfersIn, transfersOut] = await Promise.all([
+      prisma.payment.aggregate({ where: { bankAccountId: id, direction: "in" }, _sum: { amount: true } }),
+      prisma.payment.aggregate({ where: { bankAccountId: id, direction: "out" }, _sum: { amount: true } }),
+      prisma.accountTransfer.aggregate({ where: { toAccountId: id }, _sum: { amount: true } }),
+      prisma.accountTransfer.aggregate({ where: { fromAccountId: id }, _sum: { amount: true } }),
+    ]);
+    const balance =
+      Number(incoming._sum.amount ?? 0) -
+      Number(outgoing._sum.amount ?? 0) +
+      Number(transfersIn._sum.amount ?? 0) -
+      Number(transfersOut._sum.amount ?? 0);
+    return reply.send({ account_id: id, balance: Math.round(balance * 100) / 100 });
+  });
+
+  // Virement interne entre deux comptes/caisses propres à la maison (Ch. 18
+  // §18.8) : ne modifie pas la position de trésorerie globale, seulement la
+  // répartition entre comptes.
+  fastify.post("/api/v1/account-transfers", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+    const schema = z.object({
+      from_account_id: z.string().uuid(),
+      to_account_id: z.string().uuid(),
+      amount: z.number().positive(),
+      reason: z.string().optional(),
+    });
+    const parsed = schema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    if (parsed.data.from_account_id === parsed.data.to_account_id) {
+      return reply.code(400).send({ code: "validation_error", message: "Le compte source et le compte destination doivent être différents." });
+    }
+    const transfer = await prisma.accountTransfer.create({
+      data: {
+        fromAccountId: parsed.data.from_account_id,
+        toAccountId: parsed.data.to_account_id,
+        amount: parsed.data.amount,
+        reason: parsed.data.reason,
+        createdBy: request.user!.id,
+      },
+    });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "create",
+      entityType: "account_transfer",
+      entityId: transfer.id,
+      newValues: transfer,
+      ipAddress: request.ip,
+    });
+    return reply.code(201).send(transfer);
+  });
+
+  fastify.get("/api/v1/account-transfers", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const transfers = await prisma.accountTransfer.findMany({ orderBy: { transferredAt: "desc" } });
+    return reply.send(transfers);
+  });
+
+  // Rapprochement bancaire assisté (Ch. 18 §18.8) : import des lignes d'un
+  // relevé (saisie/import JSON — aucun format de relevé bancaire spécifique
+  // n'est imposé par un partenaire, donc pas de parseur CSV dédié pour
+  // l'instant) puis pointage ligne à ligne avec un encaissement/décaissement.
+  fastify.post("/api/v1/bank-accounts/:id/statements", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const schema = z.object({
+      period_start: z.string().datetime(),
+      period_end: z.string().datetime(),
+      lines: z.array(z.object({ transaction_date: z.string().datetime(), label: z.string().min(1), amount: z.number() })).min(1),
+    });
+    const parsed = schema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const statement = await prisma.bankStatement.create({
+      data: {
+        bankAccountId: id,
+        periodStart: new Date(parsed.data.period_start),
+        periodEnd: new Date(parsed.data.period_end),
+        lines: {
+          create: parsed.data.lines.map((l) => ({
+            transactionDate: new Date(l.transaction_date),
+            label: l.label,
+            amount: l.amount,
+          })),
+        },
+      },
+      include: { lines: true },
+    });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "create",
+      entityType: "bank_statement",
+      entityId: statement.id,
+      newValues: { bankAccountId: id, lineCount: statement.lines.length },
+      ipAddress: request.ip,
+    });
+    return reply.code(201).send(statement);
+  });
+
+  fastify.get("/api/v1/bank-accounts/:id/statements", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const statements = await prisma.bankStatement.findMany({ where: { bankAccountId: id }, include: { lines: true }, orderBy: { periodStart: "desc" } });
+    return reply.send(statements);
+  });
+
+  fastify.patch(
+    "/api/v1/statement-lines/:id/match",
+    { preHandler: requirePermission("finance", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const schema = z.object({ payment_id: z.string().uuid() });
+      const parsed = schema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const line = await prisma.statementLine.findUnique({ where: { id } });
+      if (!line) {
+        return reply.code(404).send({ code: "not_found", message: "Ligne de relevé introuvable." });
+      }
+      if (line.reconciledAt) {
+        return reply.code(409).send({ code: "already_reconciled", message: "Cette ligne est déjà pointée." });
+      }
+      try {
+        const updated = await prisma.statementLine.update({
+          where: { id },
+          data: { matchedPaymentId: parsed.data.payment_id, reconciledAt: new Date() },
+        });
+        await writeAuditLog({
+          userId: request.user!.id,
+          action: "update",
+          entityType: "statement_line",
+          entityId: id,
+          newValues: { matchedPaymentId: parsed.data.payment_id },
+          ipAddress: request.ip,
+        });
+        return reply.send(updated);
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+          return reply.code(409).send({ code: "payment_already_matched", message: "Ce paiement est déjà pointé sur une autre ligne de relevé." });
+        }
+        throw err;
+      }
+    },
+  );
+
   // --- Taxes (Ch. 18 §18.9) ---
 
   fastify.post("/api/v1/tax-rates", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
@@ -466,11 +695,58 @@ export default async function financeRoutes(fastify: FastifyInstance) {
       update: { rate: parsed.data.rate },
       create: { country: parsed.data.country, productType: parsed.data.product_type, rate: parsed.data.rate },
     });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "tax_rate",
+      entityId: rate.id,
+      newValues: rate,
+      ipAddress: request.ip,
+    });
     return reply.code(201).send(rate);
   });
 
   fastify.get("/api/v1/tax-rates", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
     const rates = await prisma.taxRate.findMany();
+    return reply.send(rates);
+  });
+
+  // --- Frais de port (Ch. 17 §17.5, ajouté hors cahier des charges initial) ---
+
+  fastify.post("/api/v1/shipping-rates", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+    const parsed = shippingRateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const rate = await prisma.shippingRate.upsert({
+      where: { zone: parsed.data.zone },
+      update: {
+        flatAmount: parsed.data.flat_amount,
+        perKgAmount: parsed.data.per_kg_amount,
+        freeAboveAmount: parsed.data.free_above_amount,
+        updatedBy: request.user!.id,
+      },
+      create: {
+        zone: parsed.data.zone,
+        flatAmount: parsed.data.flat_amount,
+        perKgAmount: parsed.data.per_kg_amount,
+        freeAboveAmount: parsed.data.free_above_amount,
+        updatedBy: request.user!.id,
+      },
+    });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "shipping_rate",
+      entityId: rate.id,
+      newValues: rate,
+      ipAddress: request.ip,
+    });
+    return reply.code(201).send(rate);
+  });
+
+  fastify.get("/api/v1/shipping-rates", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const rates = await prisma.shippingRate.findMany();
     return reply.send(rates);
   });
 
@@ -491,12 +767,25 @@ export default async function financeRoutes(fastify: FastifyInstance) {
         update: { status: "closed", closedAt: new Date(), closedBy: request.user!.id },
         create: { periodKey, status: "closed", closedAt: new Date(), closedBy: request.user!.id },
       });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "accounting_period",
+        entityId: period.id,
+        newValues: { periodKey, status: "closed" },
+        ipAddress: request.ip,
+      });
       return reply.send(period);
     },
   );
 
-  // Export normalisé (Option B) : toute facture/paiement de la période s'y
-  // retrouve une seule fois — contrôle d'exhaustivité par comptage et checksum.
+  // Export normalisé (Option B) : toute facture/paiement/dépense validée/droit
+  // d'auteur versé de la période s'y retrouve une seule fois — contrôle
+  // d'exhaustivité par comptage et checksum. Colonnes compte/journal/
+  // analytique/pièce ajoutées pour une importation directe dans un logiciel
+  // comptable externe (Sage, Odoo, SAP, Excel) — plan de comptes indicatif
+  // (cf. lib/accountingMapping.ts), À VALIDER PAR LE COMPTABLE avant tout
+  // dépôt réel.
   fastify.post(
     "/api/v1/accounting/exports",
     { preHandler: requirePermission("finance", "administration") },
@@ -510,15 +799,69 @@ export default async function financeRoutes(fastify: FastifyInstance) {
       const periodStart = new Date(Date.UTC(year, month - 1, 1));
       const periodEnd = new Date(Date.UTC(year, month, 1));
 
-      const [invoices, payments] = await Promise.all([
+      // Les droits d'auteur versés (royalty_payments) référencent un Payment
+      // déjà compté ci-dessous via la requête `payments` — ne pas les
+      // interroger séparément sous peine de compter deux fois le même
+      // mouvement de trésorerie (contrôle d'exhaustivité : chaque opération
+      // une seule fois).
+      const [invoices, payments, expenses] = await Promise.all([
         prisma.invoice.findMany({ where: { createdAt: { gte: periodStart, lt: periodEnd } } }),
-        prisma.payment.findMany({ where: { receivedAt: { gte: periodStart, lt: periodEnd } } }),
+        prisma.payment.findMany({ where: { receivedAt: { gte: periodStart, lt: periodEnd } }, include: { bankAccount: true, royaltyPayment: true } }),
+        prisma.expense.findMany({ where: { createdAt: { gte: periodStart, lt: periodEnd }, status: { in: ["validee", "payee"] } } }),
       ]);
 
+      // Écritures en partie double simplifiée (compte_debit / compte_credit) :
+      // la TVA n'est pas isolée sur son propre compte (4431) — elle reste
+      // incluse dans le montant TTC du compte de ventes — simplification
+      // documentée, à corriger avec le comptable si l'export doit s'intégrer
+      // directement dans un grand livre sans retraitement.
       const rows = [
-        "type,reference,date,montant",
-        ...invoices.map((i) => `${i.type},${i.invoiceNumber},${i.createdAt.toISOString()},${i.totalTtc}`),
-        ...payments.map((p) => `payment_${p.direction},${p.id},${p.receivedAt.toISOString()},${p.amount}`),
+        "type,reference,date,montant,compte_debit,compte_credit,journal,centre_analytique,piece",
+        ...invoices.map((i) =>
+          [
+            i.type,
+            i.invoiceNumber,
+            i.createdAt.toISOString(),
+            i.totalTtc,
+            i.type === "credit_note" ? SYSCOHADA_ACCOUNTS.ventesMarchandises : SYSCOHADA_ACCOUNTS.clients,
+            i.type === "credit_note" ? SYSCOHADA_ACCOUNTS.clients : SYSCOHADA_ACCOUNTS.ventesMarchandises,
+            i.type === "credit_note" ? JOURNAL_CODES.avoirs : JOURNAL_CODES.ventes,
+            "",
+            i.invoiceNumber,
+          ].join(","),
+        ),
+        ...payments.map((p) => {
+          const treasuryAccount = p.bankAccount?.type === "caisse" ? SYSCOHADA_ACCOUNTS.caisse : SYSCOHADA_ACCOUNTS.banque;
+          const counterpartAccount = p.royaltyPayment
+            ? SYSCOHADA_ACCOUNTS.droitsAuteur
+            : p.direction === "in"
+              ? SYSCOHADA_ACCOUNTS.clients
+              : SYSCOHADA_ACCOUNTS.fournisseurs;
+          return [
+            `payment_${p.direction}`,
+            p.id,
+            p.receivedAt.toISOString(),
+            p.amount,
+            p.direction === "in" ? treasuryAccount : counterpartAccount,
+            p.direction === "in" ? counterpartAccount : treasuryAccount,
+            p.bankAccount?.type === "caisse" ? JOURNAL_CODES.caisse : JOURNAL_CODES.banque,
+            "",
+            p.id,
+          ].join(",");
+        }),
+        ...expenses.map((e) =>
+          [
+            "expense",
+            e.id,
+            e.createdAt.toISOString(),
+            e.amount,
+            expenseCategoryToAccount(e.category),
+            SYSCOHADA_ACCOUNTS.fournisseurs,
+            JOURNAL_CODES.operationsDiverses,
+            e.manuscriptId ?? "",
+            e.id,
+          ].join(","),
+        ),
       ];
       const csv = rows.join("\n");
       const checksum = createHashOf(csv);
@@ -532,8 +875,16 @@ export default async function financeRoutes(fastify: FastifyInstance) {
           createdBy: request.user!.id,
         },
       });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "accounting_export",
+        entityId: exportRecord.id,
+        newValues: { periodKey: exportRecord.periodKey, lineCount: exportRecord.lineCount, checksum: exportRecord.checksum },
+        ipAddress: request.ip,
+      });
 
-      return reply.code(201).send({ ...exportRecord, csv });
+      return reply.code(201).send({ ...exportRecord, csv, chart_of_accounts_status: "indicatif_non_valide" });
     },
   );
 
@@ -547,6 +898,31 @@ function mapExpenseCategoryToCostType(category: string): CostType {
   if (category === "prestation") return "editorial_services";
   if (category === "communication") return "promotion";
   return "overhead_allocation";
+}
+
+async function expenseDgValidationThreshold(): Promise<number> {
+  const setting = await prisma.setting.findUnique({ where: { key: "expense_dg_validation_threshold" } });
+  return (setting?.value as number | undefined) ?? 500_000;
+}
+
+async function validateExpenseAndPostCostEntry(id: string, approvedBy: string) {
+  return prisma.$transaction(async (tx) => {
+    const result = await tx.expense.update({ where: { id }, data: { status: "validee", approvedBy } });
+    if (result.manuscriptId) {
+      await tx.costEntry.create({
+        data: {
+          manuscriptId: result.manuscriptId,
+          costType: mapExpenseCategoryToCostType(result.category),
+          sourceType: "expense",
+          sourceId: result.id,
+          amount: result.amount,
+          committed: false,
+          expenseId: result.id,
+        },
+      });
+    }
+    return result;
+  });
 }
 
 function createHashOf(content: string): string {

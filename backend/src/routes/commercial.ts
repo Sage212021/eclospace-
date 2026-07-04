@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { CustomerCategory, SalesChannel, SalesOrderStatus, PosPaymentMethod, ReturnLineVerdict } from "@prisma/client";
+import { CustomerCategory, SalesChannel, SalesOrderStatus, PosPaymentMethod, ReturnLineVerdict, ShippingZone } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -11,6 +11,7 @@ import { createInvoiceFromDelivery, createInvoiceFromConsignmentStatement, creat
 import { PeriodClosedError } from "../lib/accountingPeriod.js";
 import { computeCustomerOutstandingBalance } from "../lib/finance.js";
 import { lookupTaxRatePct } from "../lib/taxRate.js";
+import { computeShippingFee, computeOrderWeightGrams } from "../lib/shipping.js";
 
 const customerSchema = z.object({
   category: z.nativeEnum(CustomerCategory),
@@ -23,6 +24,7 @@ const customerSchema = z.object({
   payment_terms: z.string().optional(),
   credit_limit: z.number().nonnegative().optional(),
   tax_id: z.string().optional(),
+  shipping_zone: z.nativeEnum(ShippingZone).optional(),
 });
 
 const customerDiscountSchema = z.object({
@@ -144,6 +146,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
         paymentTerms: body.payment_terms,
         creditLimit: body.credit_limit,
         taxId: body.tax_id,
+        shippingZone: body.shipping_zone,
         createdBy: request.user!.id,
       },
     });
@@ -276,8 +279,10 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     const discountPct = await resolveDiscountPct(body.customer_id);
     const orderTotal = body.lines.reduce((sum, line) => sum + line.unit_price * line.quantity * (1 - discountPct / 100), 0);
     const outstandingBalance = await computeOutstandingBalance(body.customer_id);
-    const overLimit = customer.creditLimit !== null && outstandingBalance + orderTotal > Number(customer.creditLimit);
     const defaultTaxRatePct = await lookupTaxRatePct(prisma);
+    const totalWeightGrams = await computeOrderWeightGrams(prisma, body.lines);
+    const shippingFee = await computeShippingFee(prisma, body.customer_id, totalWeightGrams, orderTotal);
+    const overLimit = customer.creditLimit !== null && outstandingBalance + orderTotal + shippingFee > Number(customer.creditLimit);
 
     const orderNumber = await nextSalesOrderNumber();
     const order = await prisma.salesOrder.create({
@@ -287,6 +292,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
         channel: body.channel,
         status: overLimit ? SalesOrderStatus.blocked_credit : SalesOrderStatus.confirmed,
         blockReason: overLimit ? "Plafond d'encours dépassé" : undefined,
+        shippingFee,
         createdBy: request.user!.id,
         lines: {
           create: body.lines.map((line) => ({
@@ -466,11 +472,20 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
           await tx.salesOrder.update({ where: { id }, data: { status: "shipped" } });
           // Ch. 18 §18.2 : la livraison d'une vente ferme génère automatiquement
           // sa facture (et, en cascade, les droits d'auteur, Ch. 9 §9.5).
-          await createInvoiceFromDelivery(tx, created.id);
-          return created;
+          const invoice = await createInvoiceFromDelivery(tx, created.id);
+          return { delivery: created, invoice };
         });
 
-        return reply.code(201).send(delivery);
+        await writeAuditLog({
+          userId: request.user!.id,
+          action: "create",
+          entityType: "invoice",
+          entityId: delivery.invoice.id,
+          newValues: { invoiceNumber: delivery.invoice.invoiceNumber, sourceType: "delivery", sourceId: delivery.delivery.id },
+          ipAddress: request.ip,
+        });
+
+        return reply.code(201).send(delivery.delivery);
       } catch (err) {
         if (err instanceof PeriodClosedError) {
           return reply.code(409).send({ code: "accounting_period_closed", message: err.message });
@@ -602,14 +617,24 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       try {
-        const updated = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx) => {
           const statement = await tx.consignmentStatement.update({ where: { id }, data: { validatedAt: new Date() } });
           // Ch. 17 §17.6, Ch. 18 §18.2 : la validation du relevé génère la
           // facture et les droits d'auteur (Ch. 9 §9.5) — pas la simple saisie du relevé.
-          await createInvoiceFromConsignmentStatement(tx, statement.id);
-          return statement;
+          const invoice = await createInvoiceFromConsignmentStatement(tx, statement.id);
+          return { statement, invoice };
         });
-        return reply.send(updated);
+        if (result.invoice) {
+          await writeAuditLog({
+            userId: request.user!.id,
+            action: "create",
+            entityType: "invoice",
+            entityId: result.invoice.id,
+            newValues: { invoiceNumber: result.invoice.invoiceNumber, sourceType: "consignment_statement", sourceId: result.statement.id },
+            ipAddress: request.ip,
+          });
+        }
+        return reply.send(result.statement);
       } catch (err) {
         if (err instanceof PeriodClosedError) {
           return reply.code(409).send({ code: "accounting_period_closed", message: err.message });
@@ -660,11 +685,20 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
         });
         await adjustStockItem(tx, parsed.data.isbn_id, parsed.data.location_id, 0, -parsed.data.quantity);
         // Ch. 18 §18.2, §18.7 : facture immédiate + encaissement + droits d'auteur.
-        await createInvoiceFromPosSale(tx, created.id);
-        return created;
+        const invoice = await createInvoiceFromPosSale(tx, created.id);
+        return { sale: created, invoice };
       });
 
-      return reply.code(201).send(sale);
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "invoice",
+        entityId: sale.invoice.id,
+        newValues: { invoiceNumber: sale.invoice.invoiceNumber, sourceType: "pos_sale", sourceId: sale.sale.id },
+        ipAddress: request.ip,
+      });
+
+      return reply.code(201).send(sale.sale);
     } catch (err) {
       if (err instanceof PeriodClosedError) {
         return reply.code(409).send({ code: "accounting_period_closed", message: err.message });
@@ -772,11 +806,22 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
           const result = await tx.customerReturn.update({ where: { id }, data: { receivedAt: new Date() } });
           // Ch. 17 §17.9, Ch. 18 §18.2 : avoir rattaché à la facture d'origine et
           // recalcul des droits d'auteur, quel que soit le devenir physique des exemplaires.
-          await createCreditNoteFromReturn(tx, id);
-          return result;
+          const creditNote = await createCreditNoteFromReturn(tx, id);
+          return { customerReturn: result, creditNote };
         });
 
-        return reply.send(updated);
+        if (updated.creditNote) {
+          await writeAuditLog({
+            userId: request.user!.id,
+            action: "create",
+            entityType: "invoice",
+            entityId: updated.creditNote.id,
+            newValues: { invoiceNumber: updated.creditNote.invoiceNumber, sourceType: "customer_return", sourceId: updated.customerReturn.id },
+            ipAddress: request.ip,
+          });
+        }
+
+        return reply.send(updated.customerReturn);
       } catch (err) {
         if (err instanceof PeriodClosedError) {
           return reply.code(409).send({ code: "accounting_period_closed", message: err.message });

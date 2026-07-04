@@ -20,6 +20,8 @@ import productionRoutes from "./routes/production.js";
 import isbnRoutes from "./routes/isbn.js";
 import batRoutes from "./routes/bat.js";
 import printingRoutes from "./routes/printing.js";
+import stockRoutes from "./routes/stock.js";
+import commercialRoutes from "./routes/commercial.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
@@ -52,6 +54,8 @@ export async function buildApp() {
   await app.register(isbnRoutes);
   await app.register(batRoutes);
   await app.register(printingRoutes);
+  await app.register(stockRoutes);
+  await app.register(commercialRoutes);
 
   return app;
 }

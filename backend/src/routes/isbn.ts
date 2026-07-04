@@ -114,6 +114,19 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
     return reply.send(isbns);
   });
 
+  // Référentiel transverse (hors spécification API v1, cf. docs/JOURNAL_TECHNIQUE.md) :
+  // nécessaire aux écrans Stock et Commercial pour choisir un ouvrage par ISBN
+  // sans naviguer manuscrit par manuscrit.
+  fastify.get("/api/v1/isbns", { preHandler: requireAuth }, async (request, reply) => {
+    const query = request.query as { format?: IsbnFormat };
+    const isbns = await prisma.isbn.findMany({
+      where: query.format ? { format: query.format } : {},
+      include: { manuscript: { select: { title: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    return reply.send(isbns);
+  });
+
   // Attribution (Ch. 13 §13.3) : conditions vérifiées (contrat actif), ISBN
   // suivant disponible dans la tranche, clé de contrôle calculée, propagation
   // via la relation manuscriptId (page de copyright Ch. 11, code-barres Ch. 12).

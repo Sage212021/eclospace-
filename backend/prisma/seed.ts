@@ -2,7 +2,7 @@
 // les rôles identifiés au Ch. 2 §2.2 et Ch. 3 §3.3, et un compte administrateur
 // initial. Rejouable sans effet de bord (upsert par code).
 import argon2 from "argon2";
-import { PrismaClient, PermissionAction } from "@prisma/client";
+import { PrismaClient, PermissionAction, CustomerCategory } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -52,7 +52,8 @@ const lot0Modules = ["documents", "notifications", "users", "settings"];
 const lot1Modules = ["manuscripts", "comite_lecture", "decision_editoriale"];
 const lot2Modules = ["contracts", "tasks"];
 const lot3Modules = ["production", "isbn", "bat", "printing"];
-const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules];
+const lot4Modules = ["stock", "commercial"];
+const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules];
 const actions = Object.values(PermissionAction);
 
 // Référentiel des ~20 étapes du workflow (Ch. 4 §4.3). Toutes sont créées dès
@@ -256,6 +257,24 @@ async function main() {
   await grant("DIR_GENERAL", ["printing:consultation", "printing:validation", "printing:administration"]);
   await grant("RESP_FINANCE", ["printing:consultation"]);
 
+  // Stock et magasin (Ch. 16).
+  await grant("MAGASINIER", [
+    "stock:consultation",
+    "stock:saisie",
+    "stock:validation",
+    "stock:administration",
+  ]);
+  await grant("RESP_COMMERCIAL", ["stock:consultation"]);
+  await grant("DIR_GENERAL", ["stock:consultation", "stock:validation"]);
+
+  // Commercial, distribution et ventes (Ch. 17) — la validation d'une
+  // remise hors grille ou du déblocage d'un encours dépassé reste réservée
+  // à la Direction générale (commercial:administration), même schéma que
+  // printing:administration (Ch. 15).
+  await grant("RESP_COMMERCIAL", ["commercial:consultation", "commercial:saisie", "commercial:validation"]);
+  await grant("RESP_FINANCE", ["commercial:consultation", "commercial:validation"]);
+  await grant("DIR_GENERAL", ["commercial:consultation", "commercial:validation", "commercial:administration"]);
+
   // Référentiel des étapes du workflow (Ch. 4 §4.3).
   for (const status of workflowStatuses) {
     await prisma.workflowStatus.upsert({
@@ -311,6 +330,30 @@ async function main() {
     update: {},
     create: { key: "purchase_order_delegation_threshold", value: 5_000_000 },
   });
+
+  // Seuil d'alerte de stock par défaut (Ch. 16 §16.5) — utilisé quand une
+  // référence n'a pas de seuil propre paramétré sur sa fiche stock_items.
+  await prisma.setting.upsert({
+    where: { key: "stock_default_alert_threshold" },
+    update: {},
+    create: { key: "stock_default_alert_threshold", value: 20 },
+  });
+
+  // Grille de remise par défaut par catégorie de client (Ch. 17 §17.4).
+  const discountGrids: { category: CustomerCategory; discountPct: number }[] = [
+    { category: "librairie", discountPct: 35 },
+    { category: "distributeur", discountPct: 45 },
+    { category: "institution", discountPct: 15 },
+    { category: "particulier", discountPct: 0 },
+    { category: "plateforme", discountPct: 40 },
+  ];
+  for (const grid of discountGrids) {
+    await prisma.discountGrid.upsert({
+      where: { category: grid.category },
+      update: { discountPct: grid.discountPct },
+      create: { category: grid.category, discountPct: grid.discountPct },
+    });
+  }
 
   // Grille d'évaluation du comité de lecture (Ch. 7 §7.4-7.5).
   for (const criterion of evaluationCriteria) {

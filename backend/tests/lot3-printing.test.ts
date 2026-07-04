@@ -215,7 +215,7 @@ describe("Impression et fabrication (Lot 3)", () => {
       method: "POST",
       url: `/api/v1/print-quotes/${quote.id}/purchase-order`,
       headers: { cookie: adminCookie },
-      payload: { delivery_due: "2026-09-01T00:00:00.000Z", delivery_location: "Entrepôt central", quantity_tolerance_pct: 2 },
+      payload: { delivery_due: "2026-09-01T00:00:00.000Z", quantity_tolerance_pct: 2 },
     });
     expect(po.statusCode).toBe(201);
     expect(Number(po.json().amount)).toBe(800000);

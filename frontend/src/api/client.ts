@@ -603,7 +603,7 @@ export interface PurchaseOrder {
   orderedQuantity: number;
 }
 
-export function createPurchaseOrder(quoteId: string, input: { delivery_due?: string; delivery_location?: string; quantity_tolerance_pct?: number }) {
+export function createPurchaseOrder(quoteId: string, input: { delivery_due?: string; delivery_location_id?: string; quantity_tolerance_pct?: number }) {
   return request<PurchaseOrder>(`/api/v1/print-quotes/${quoteId}/purchase-order`, { method: "POST", body: JSON.stringify(input) });
 }
 
@@ -620,4 +620,145 @@ export function recordGoodsReceipt(poId: string, quantityReceived: number) {
     method: "POST",
     body: JSON.stringify({ quantity_received: quantityReceived }),
   });
+}
+
+// --- Lot 4 : Stock et magasin (Ch. 16), Commercial (Ch. 17) ---
+
+export interface IsbnRef {
+  id: string;
+  isbn13: string;
+  format: IsbnFormat;
+  manuscript: { title: string } | null;
+}
+
+export function listIsbnRefs(format?: IsbnFormat) {
+  const query = format ? `?format=${format}` : "";
+  return request<IsbnRef[]>(`/api/v1/isbns${query}`);
+}
+
+export type StockLocationType = "entrepot" | "depot" | "depot_vente" | "emplacement";
+
+export interface StockLocation {
+  id: string;
+  type: StockLocationType;
+  label: string;
+}
+
+export function listStockLocations() {
+  return request<StockLocation[]>("/api/v1/stock-locations");
+}
+
+export function createStockLocation(input: { type: StockLocationType; label: string; parent_id?: string; customer_id?: string }) {
+  return request<StockLocation>("/api/v1/stock-locations", { method: "POST", body: JSON.stringify(input) });
+}
+
+export interface StockItem {
+  id: string;
+  isbnId: string;
+  locationId: string;
+  printRun: number;
+  quantityPhysical: number;
+  quantityReserved: number;
+  quantityAvailable: number;
+  alertThreshold: number | null;
+  outOfStockThreshold: number;
+  isbn: { isbn13: string };
+  location: { label: string };
+}
+
+export function listStockItems(filters?: { isbn_id?: string; location_id?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.isbn_id) params.set("isbn_id", filters.isbn_id);
+  if (filters?.location_id) params.set("location_id", filters.location_id);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return request<StockItem[]>(`/api/v1/stock-items${query}`);
+}
+
+export function listStockAlerts() {
+  return request<(StockItem & { severity: "alerte" | "rupture" })[]>("/api/v1/stock-alerts");
+}
+
+export type StockMovementType =
+  | "production_in"
+  | "sale_out"
+  | "consignment_out"
+  | "consignment_return"
+  | "customer_return"
+  | "transfer"
+  | "press_copy"
+  | "author_copy"
+  | "pulping"
+  | "inventory_adjustment";
+
+export function createStockMovement(input: {
+  type: StockMovementType;
+  isbn_id: string;
+  print_run?: number;
+  from_location_id?: string;
+  to_location_id?: string;
+  quantity: number;
+  reason: string;
+}) {
+  return request(`/api/v1/stock-movements`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export type CustomerCategory = "librairie" | "distributeur" | "institution" | "particulier" | "plateforme";
+
+export interface Customer {
+  id: string;
+  category: CustomerCategory;
+  name: string;
+  creditLimit: string | null;
+}
+
+export function listCustomers(category?: CustomerCategory) {
+  const query = category ? `?category=${category}` : "";
+  return request<Customer[]>(`/api/v1/customers${query}`);
+}
+
+export function createCustomer(input: { category: CustomerCategory; name: string; credit_limit?: number }) {
+  return request<Customer>("/api/v1/customers", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getCustomer(id: string) {
+  return request<Customer & { outstandingBalance: number }>(`/api/v1/customers/${id}`);
+}
+
+export interface SalesOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  channel: string;
+  blockReason: string | null;
+  customer: { name: string };
+  lines: { isbnId: string; quantity: number; unitPrice: string; discountPct: string }[];
+}
+
+export function listSalesOrders(filters?: { customer_id?: string }) {
+  const query = filters?.customer_id ? `?customer_id=${filters.customer_id}` : "";
+  return request<SalesOrder[]>(`/api/v1/sales-orders${query}`);
+}
+
+export function createSalesOrder(input: {
+  customer_id: string;
+  channel: string;
+  location_id: string;
+  lines: { isbn_id: string; quantity: number; unit_price: number }[];
+}) {
+  return request<SalesOrder>("/api/v1/sales-orders", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function approveSalesOrder(id: string) {
+  return request<SalesOrder>(`/api/v1/sales-orders/${id}/approve`, { method: "POST", body: "{}" });
+}
+
+export function createPosSale(input: {
+  isbn_id: string;
+  location_id: string;
+  quantity: number;
+  unit_price: number;
+  payment_method: "cash" | "card" | "mobile_money";
+  event_label?: string;
+}) {
+  return request(`/api/v1/pos-sales`, { method: "POST", body: JSON.stringify(input) });
 }

@@ -5,6 +5,8 @@ import { Dashboard } from "./pages/Dashboard";
 import { Manuscripts } from "./pages/Manuscripts";
 import { ManuscriptDetail } from "./pages/ManuscriptDetail";
 import { MyReadings } from "./pages/MyReadings";
+import { StockPage } from "./pages/StockPage";
+import { CommercialPage } from "./pages/CommercialPage";
 import { Sidebar, type NavItem } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 
@@ -12,9 +14,17 @@ const NAV_ITEMS: NavItem[] = [
   { key: "dashboard", label: "Tableau de bord" },
   { key: "manuscripts", label: "Manuscrits", permission: "manuscripts:consultation" },
   { key: "my-readings", label: "Mes lectures", permission: "comite_lecture:saisie" },
+  { key: "stock", label: "Stock", permission: "stock:consultation" },
+  { key: "commercial", label: "Commercial", permission: "commercial:consultation" },
 ];
 
-type View = { key: "dashboard" } | { key: "manuscripts" } | { key: "my-readings" } | { key: "manuscript-detail"; id: string };
+type View =
+  | { key: "dashboard" }
+  | { key: "manuscripts" }
+  | { key: "my-readings" }
+  | { key: "manuscript-detail"; id: string }
+  | { key: "stock" }
+  | { key: "commercial" };
 
 export function App() {
   const [user, setUser] = useState<EffectiveUser | null>(null);
@@ -74,6 +84,10 @@ export function App() {
           <ManuscriptDetail manuscriptId={view.id} permissions={permissions} onBack={() => setView({ key: "manuscripts" })} />
         )}
         {view.key === "my-readings" && <MyReadings />}
+        {view.key === "stock" && <StockPage canManage={permissions.has("stock:saisie")} canAdminister={permissions.has("stock:administration")} />}
+        {view.key === "commercial" && (
+          <CommercialPage canManage={permissions.has("commercial:saisie")} canValidate={permissions.has("commercial:administration")} />
+        )}
       </div>
     </div>
   );

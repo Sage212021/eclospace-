@@ -36,7 +36,7 @@ const selectQuoteSchema = z.object({
 
 const purchaseOrderSchema = z.object({
   delivery_due: z.string().datetime().optional(),
-  delivery_location: z.string().optional(),
+  delivery_location_id: z.string().uuid().optional(),
   quantity_tolerance_pct: z.number().nonnegative().optional(),
 });
 
@@ -57,7 +57,7 @@ const reprintSchema = z.object({
   quantity: z.number().int().positive(),
   amount: z.number().positive(),
   delivery_due: z.string().datetime().optional(),
-  delivery_location: z.string().optional(),
+  delivery_location_id: z.string().uuid().optional(),
 });
 
 // Ch. 15 : relation avec les imprimeurs et suivi de la fabrication, du devis
@@ -309,7 +309,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
           orderedQuantity: quote.selectedQuantity,
           amount,
           deliveryDue: parsed.data.delivery_due ? new Date(parsed.data.delivery_due) : undefined,
-          deliveryLocation: parsed.data.delivery_location,
+          deliveryLocationId: parsed.data.delivery_location_id,
           quantityTolerancePct: parsed.data.quantity_tolerance_pct,
           filesHashReference,
           createdBy: request.user!.id,
@@ -565,7 +565,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
           orderedQuantity: parsed.data.quantity,
           amount: parsed.data.amount,
           deliveryDue: parsed.data.delivery_due ? new Date(parsed.data.delivery_due) : undefined,
-          deliveryLocation: parsed.data.delivery_location,
+          deliveryLocationId: parsed.data.delivery_location_id,
           filesHashReference: signedBat.signatures[0]?.filesHash,
           reprintNumber: (lastPo?.reprintNumber ?? 0) + 1,
           createdBy: request.user!.id,

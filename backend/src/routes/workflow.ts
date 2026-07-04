@@ -217,6 +217,52 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // Ch. 16 §16.4 : l'entrée en stock ne peut être validée qu'une fois
+      // des exemplaires effectivement réceptionnés (mouvement production_in).
+      if (targetStatus.code === "ENTREE_STOCK") {
+        const printIsbn = await prisma.isbn.findFirst({ where: { manuscriptId: id, format: "print" } });
+        const entryMovement = printIsbn
+          ? await prisma.stockMovement.findFirst({ where: { isbnId: printIsbn.id, type: "production_in" } })
+          : null;
+        if (!entryMovement) {
+          return reply.code(409).send({
+            code: "no_stock_entry",
+            message: "Aucun exemplaire n'a encore été réceptionné en stock pour cet ouvrage.",
+          });
+        }
+      }
+
+      // Ch. 17 §17.2 : la mise en vente suppose une fiche commerciale
+      // minimale (prix public défini).
+      if (targetStatus.code === "COMMERCIALISATION") {
+        const printIsbn = await prisma.isbn.findFirst({ where: { manuscriptId: id, format: "print" } });
+        const price = printIsbn ? await prisma.priceList.findFirst({ where: { isbnId: printIsbn.id } }) : null;
+        if (!price) {
+          return reply.code(409).send({
+            code: "price_missing",
+            message: "Aucun prix public n'a été défini pour cet ouvrage.",
+          });
+        }
+      }
+
+      // Ch. 17 §17.5 : la première commande ou vente enregistrée matérialise
+      // le passage effectif à la commercialisation.
+      if (targetStatus.code === "VENTE_LIVRAISON") {
+        const printIsbn = await prisma.isbn.findFirst({ where: { manuscriptId: id, format: "print" } });
+        const [order, posSale] = printIsbn
+          ? await Promise.all([
+              prisma.salesOrder.findFirst({ where: { lines: { some: { isbnId: printIsbn.id } }, status: { not: "cancelled" } } }),
+              prisma.posSale.findFirst({ where: { isbnId: printIsbn.id } }),
+            ])
+          : [null, null];
+        if (!order && !posSale) {
+          return reply.code(409).send({
+            code: "no_sale_recorded",
+            message: "Aucune commande ou vente n'a encore été enregistrée pour cet ouvrage.",
+          });
+        }
+      }
+
       // Ch. 4 §4.3 : la réécriture est déclenchée par la correction ou
       // l'expertise — le responsable de l'étape pose le drapeau ici.
       let manuscriptForNextStep = manuscript;

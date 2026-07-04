@@ -1048,6 +1048,16 @@ model Isbn {
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  stockItems      StockItem[]
+  stockMovements  StockMovement[]
+  inventoryLines  InventoryLine[]
+  priceList       PriceList[]
+  salesOrderLines SalesOrderLine[]
+  deliveryLines   DeliveryLine[]
+  consignments    Consignment[]
+  posSales        PosSale[]
+  returnLines     ReturnLine[]
+
   @@map("isbns")
 }
 
@@ -1232,8 +1242,6 @@ enum PurchaseOrderStatus {
   cancelled
 }
 
-// delivery_location reste un champ texte libre : stock_locations (Ch. 16)
-// n'existe pas encore, c'est le Lot 4.
 model PurchaseOrder {
   id                   String              @id @default(uuid())
   quoteId              String              @unique @map("quote_id")
@@ -1245,7 +1253,8 @@ model PurchaseOrder {
   amount               Decimal             @db.Decimal(12, 2)
   currency             String              @default("XOF")
   deliveryDue          DateTime?           @map("delivery_due")
-  deliveryLocation     String?             @map("delivery_location")
+  deliveryLocationId   String?             @map("delivery_location_id")
+  deliveryLocation     StockLocation?      @relation(fields: [deliveryLocationId], references: [id])
   quantityTolerancePct Decimal?            @map("quantity_tolerance_pct") @db.Decimal(5, 2)
   status               PurchaseOrderStatus @default(draft)
   approvedBy           String?             @map("approved_by")
@@ -1268,6 +1277,22 @@ model PoNumberCounter {
   lastValue Int @default(0) @map("last_value")
 
   @@map("po_number_counters")
+}
+
+// Même mécanisme atomique, pour les numéros de commande (Ch. 17 §17.5) et
+// de bon de livraison (Ch. 17 §17.8).
+model SalesOrderNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("sales_order_number_counters")
+}
+
+model DeliveryNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("delivery_number_counters")
 }
 
 enum ProductionMilestoneType {
@@ -1321,4 +1346,424 @@ model SupplierClaim {
   createdAt   DateTime     @default(now()) @map("created_at")
 
   @@map("supplier_claims")
+}
+
+// ============================================================
+// Lot 4 — Stock et magasin (Ch. 16)
+// ============================================================
+
+// Principe cardinal (Ch. 16 §16.1) : le stock affiché doit toujours refléter
+// la réalité physique. Lieux hiérarchiques (zone > allée > étagère, §16.2) ;
+// un lieu de type depot_vente est rattaché à un client (Ch. 17).
+enum StockLocationType {
+  entrepot
+  depot
+  depot_vente
+  emplacement
+}
+
+model StockLocation {
+  id         String            @id @default(uuid())
+  type       StockLocationType
+  label      String
+  parentId   String?           @map("parent_id")
+  parent     StockLocation?    @relation("StockLocationHierarchy", fields: [parentId], references: [id])
+  children   StockLocation[]   @relation("StockLocationHierarchy")
+  customerId String?           @map("customer_id")
+  customer   Customer?         @relation(fields: [customerId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  stockItems       StockItem[]
+  movementsFrom    StockMovement[] @relation("MovementFrom")
+  movementsTo      StockMovement[] @relation("MovementTo")
+  inventories      Inventory[]
+  purchaseOrders   PurchaseOrder[]
+  consignmentsHere Consignment[]
+
+  @@map("stock_locations")
+}
+
+// Stock par (isbn, lieu, tirage) — disponible = physique - réservé, calculé
+// à la lecture (Ch. 16 §16.5), jamais stocké pour éviter toute divergence.
+model StockItem {
+  id                  String        @id @default(uuid())
+  isbnId              String        @map("isbn_id")
+  isbn                Isbn          @relation(fields: [isbnId], references: [id])
+  locationId          String        @map("location_id")
+  location            StockLocation @relation(fields: [locationId], references: [id])
+  printRun            Int           @map("print_run")
+  quantityPhysical    Int           @default(0) @map("quantity_physical")
+  quantityReserved    Int           @default(0) @map("quantity_reserved")
+  unitCost            Decimal?      @map("unit_cost") @db.Decimal(10, 2)
+  alertThreshold      Int?          @map("alert_threshold")
+  outOfStockThreshold Int           @default(0) @map("out_of_stock_threshold")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([isbnId, locationId, printRun])
+  @@map("stock_items")
+}
+
+// Table pivot : une ligne par mouvement, aucune modification a posteriori
+// (Ch. 16 §16.4 : "aucun mouvement sans type, motif et responsable" — le
+// stock courant est la somme des mouvements, vérifiable à tout instant).
+enum StockMovementType {
+  production_in
+  sale_out
+  consignment_out
+  consignment_return
+  customer_return
+  transfer
+  press_copy
+  author_copy
+  pulping
+  inventory_adjustment
+}
+
+enum StockMovementStatus {
+  pending
+  in_transit
+  completed
+}
+
+model StockMovement {
+  id             String              @id @default(uuid())
+  type           StockMovementType
+  isbnId         String              @map("isbn_id")
+  isbn           Isbn                @relation(fields: [isbnId], references: [id])
+  printRun       Int                 @map("print_run")
+  fromLocationId String?             @map("from_location_id")
+  fromLocation   StockLocation?      @relation("MovementFrom", fields: [fromLocationId], references: [id])
+  toLocationId   String?             @map("to_location_id")
+  toLocation     StockLocation?      @relation("MovementTo", fields: [toLocationId], references: [id])
+  quantity       Int
+  reason         String?
+  // Référence polymorphe (Ch. 16 §16.4) : goods_receipt, sales_order,
+  // consignment_statement, customer_return, inventory_line...
+  referenceType  String?             @map("reference_type")
+  referenceId    String?             @map("reference_id")
+  status         StockMovementStatus @default(completed)
+  movedBy        String?             @map("moved_by")
+  movedAt        DateTime            @default(now()) @map("moved_at")
+
+  inventoryAdjustmentFor InventoryLine?
+
+  @@map("stock_movements")
+}
+
+enum InventoryType {
+  full
+  rotating
+}
+
+enum InventoryStatus {
+  open
+  closed
+}
+
+// Ch. 16 §16.8 : campagne d'inventaire (complet ou tournant), comptage à
+// l'aveugle (quantités théoriques masquées jusqu'à validation).
+model Inventory {
+  id         String          @id @default(uuid())
+  type       InventoryType
+  locationId String?         @map("location_id")
+  location   StockLocation?  @relation(fields: [locationId], references: [id])
+  blind      Boolean         @default(true)
+  status     InventoryStatus @default(open)
+  openedAt   DateTime        @default(now()) @map("opened_at")
+  closedAt   DateTime?       @map("closed_at")
+  openedBy   String?         @map("opened_by")
+
+  lines InventoryLine[]
+
+  @@map("inventories")
+}
+
+model InventoryLine {
+  id                   String         @id @default(uuid())
+  inventoryId          String         @map("inventory_id")
+  inventory            Inventory      @relation(fields: [inventoryId], references: [id])
+  isbnId               String         @map("isbn_id")
+  isbn                 Isbn           @relation(fields: [isbnId], references: [id])
+  theoreticalQty       Int            @map("theoretical_qty")
+  countedQty           Int?           @map("counted_qty")
+  variance             Int?
+  recountRequired      Boolean        @default(false) @map("recount_required")
+  adjustmentMovementId String?        @unique @map("adjustment_movement_id")
+  adjustmentMovement   StockMovement? @relation(fields: [adjustmentMovementId], references: [id])
+
+  @@map("inventory_lines")
+}
+
+// ============================================================
+// Lot 4 — Commercial, distribution et ventes (Ch. 17)
+// ============================================================
+
+enum CustomerCategory {
+  librairie
+  distributeur
+  institution
+  particulier
+  plateforme
+}
+
+enum RelationMode {
+  ferme
+  depot_vente
+}
+
+// Ch. 17 §17.3 : fichier clients structuré par catégorie, avec conditions
+// commerciales (remise, plafond d'encours) et mode de relation.
+model Customer {
+  id           String           @id @default(uuid())
+  category     CustomerCategory
+  name         String
+  contactName  String?          @map("contact_name")
+  email        String?
+  phone        String?
+  address      String?
+  relationMode RelationMode     @default(ferme) @map("relation_mode")
+  paymentTerms String?          @map("payment_terms")
+  creditLimit  Decimal?         @map("credit_limit") @db.Decimal(12, 2)
+  taxId        String?          @map("tax_id")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  discounts       CustomerDiscount[]
+  salesOrders     SalesOrder[]
+  consignments    Consignment[]
+  customerReturns CustomerReturn[]
+  stockLocations  StockLocation[]
+
+  @@map("customers")
+}
+
+// Grille par catégorie (Ch. 17 §17.4) — valeur de départ paramétrable.
+model DiscountGrid {
+  id          String           @id @default(uuid())
+  category    CustomerCategory @unique
+  discountPct Decimal          @map("discount_pct") @db.Decimal(5, 2)
+
+  @@map("discount_grids")
+}
+
+// Remise spécifique négociée ou promotionnelle bornée dans le temps ; toute
+// remise hors grille exige une validation tracée (§17.4).
+model CustomerDiscount {
+  id          String    @id @default(uuid())
+  customerId  String    @map("customer_id")
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  discountPct Decimal   @map("discount_pct") @db.Decimal(5, 2)
+  label       String?
+  validFrom   DateTime? @map("valid_from")
+  validUntil  DateTime? @map("valid_until")
+  approvedBy  String?   @map("approved_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("customer_discounts")
+}
+
+// Historisation native des prix par pays/devise (Ch. 17 §17.2).
+model PriceList {
+  id            String   @id @default(uuid())
+  isbnId        String   @map("isbn_id")
+  isbn          Isbn     @relation(fields: [isbnId], references: [id])
+  country       String
+  currency      String
+  price         Decimal  @db.Decimal(10, 2)
+  effectiveFrom DateTime @map("effective_from")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@map("price_list")
+}
+
+enum SalesChannel {
+  representant
+  telephone
+  salon
+  en_ligne
+  comptoir
+}
+
+enum SalesOrderStatus {
+  draft
+  blocked_credit
+  confirmed
+  preparing
+  shipped
+  delivered
+  invoiced
+  cancelled
+}
+
+// Ch. 17 §17.5 : la confirmation crée la réservation de stock ; le contrôle
+// d'encours bloque la commande si le plafond est dépassé ou le client en retard.
+model SalesOrder {
+  id          String           @id @default(uuid())
+  customerId  String           @map("customer_id")
+  customer    Customer         @relation(fields: [customerId], references: [id])
+  orderNumber String           @unique @map("order_number")
+  channel     SalesChannel
+  status      SalesOrderStatus @default(draft)
+  blockReason String?          @map("block_reason")
+  approvedBy  String?          @map("approved_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  lines      SalesOrderLine[]
+  deliveries Delivery[]
+
+  @@map("sales_orders")
+}
+
+model SalesOrderLine {
+  id          String     @id @default(uuid())
+  orderId     String     @map("order_id")
+  order       SalesOrder @relation(fields: [orderId], references: [id])
+  isbnId      String     @map("isbn_id")
+  isbn        Isbn       @relation(fields: [isbnId], references: [id])
+  quantity    Int
+  unitPrice   Decimal    @map("unit_price") @db.Decimal(10, 2)
+  discountPct Decimal    @default(0) @map("discount_pct") @db.Decimal(5, 2)
+  taxRate     Decimal    @default(0) @map("tax_rate") @db.Decimal(5, 2)
+
+  @@map("sales_order_lines")
+}
+
+// Ch. 17 §17.8 : rapprochée des mouvements de stock (Ch. 16 §16.6) ; reliquats
+// gérés par livraisons multiples sur une même commande.
+model Delivery {
+  id             String     @id @default(uuid())
+  orderId        String     @map("order_id")
+  order          SalesOrder @relation(fields: [orderId], references: [id])
+  deliveryNumber String     @unique @map("delivery_number")
+  carrier        String?
+  shippedAt      DateTime?  @map("shipped_at")
+  deliveredAt    DateTime?  @map("delivered_at")
+  trackingNumber String?    @map("tracking_number")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lines           DeliveryLine[]
+  customerReturns CustomerReturn[]
+
+  @@map("deliveries")
+}
+
+model DeliveryLine {
+  id         String   @id @default(uuid())
+  deliveryId String   @map("delivery_id")
+  delivery   Delivery @relation(fields: [deliveryId], references: [id])
+  isbnId     String   @map("isbn_id")
+  isbn       Isbn     @relation(fields: [isbnId], references: [id])
+  quantity   Int
+
+  @@map("delivery_lines")
+}
+
+enum ConsignmentStatus {
+  active
+  closed
+}
+
+// Ch. 17 §17.6 : les exemplaires déposés restent la propriété d'Éclosion
+// Édition (stock "en dépôt-vente", Ch. 16 §16.5) ; seules les ventes
+// relevées sont facturées et génèrent des droits d'auteur.
+model Consignment {
+  id                String            @id @default(uuid())
+  customerId        String            @map("customer_id")
+  customer          Customer          @relation(fields: [customerId], references: [id])
+  locationId        String?           @map("location_id")
+  location          StockLocation?    @relation(fields: [locationId], references: [id])
+  isbnId            String            @map("isbn_id")
+  isbn              Isbn              @relation(fields: [isbnId], references: [id])
+  quantityDeposited Int               @map("quantity_deposited")
+  status            ConsignmentStatus @default(active)
+  depositedAt       DateTime          @default(now()) @map("deposited_at")
+
+  statements ConsignmentStatement[]
+
+  @@map("consignments")
+}
+
+model ConsignmentStatement {
+  id            String      @id @default(uuid())
+  consignmentId String      @map("consignment_id")
+  consignment   Consignment @relation(fields: [consignmentId], references: [id])
+  periodStart   DateTime    @map("period_start")
+  periodEnd     DateTime    @map("period_end")
+  quantitySold  Int         @map("quantity_sold")
+  receivedAt    DateTime?   @map("received_at")
+  validatedAt   DateTime?   @map("validated_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("consignment_statements")
+}
+
+enum PosPaymentMethod {
+  cash
+  card
+  mobile_money
+}
+
+// Ch. 17 §17.7 : vente au comptoir et sur salons — chaque encaissement est
+// transmis au module Finance (Lot 5, non encore implémenté).
+model PosSale {
+  id            String           @id @default(uuid())
+  isbnId        String           @map("isbn_id")
+  isbn          Isbn             @relation(fields: [isbnId], references: [id])
+  quantity      Int
+  unitPrice     Decimal          @map("unit_price") @db.Decimal(10, 2)
+  paymentMethod PosPaymentMethod @map("payment_method")
+  eventLabel    String?          @map("event_label")
+  soldBy        String?          @map("sold_by")
+  soldAt        DateTime         @default(now()) @map("sold_at")
+
+  @@map("pos_sales")
+}
+
+enum ReturnLineVerdict {
+  resaleable
+  damaged
+  pulp
+}
+
+// Ch. 17 §17.9 : autorisation, réception, verdict exemplaire par exemplaire ;
+// génère l'avoir et le recalcul des droits d'auteur (Lot 5, non encore implémenté).
+model CustomerReturn {
+  id               String    @id @default(uuid())
+  customerId       String    @map("customer_id")
+  customer         Customer  @relation(fields: [customerId], references: [id])
+  originDeliveryId String?   @map("origin_delivery_id")
+  originDelivery   Delivery? @relation(fields: [originDeliveryId], references: [id])
+  authorizedAt     DateTime? @map("authorized_at")
+  receivedAt       DateTime? @map("received_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lines ReturnLine[]
+
+  @@map("customer_returns")
+}
+
+model ReturnLine {
+  id       String             @id @default(uuid())
+  returnId String             @map("return_id")
+  return   CustomerReturn     @relation(fields: [returnId], references: [id])
+  isbnId   String             @map("isbn_id")
+  isbn     Isbn               @relation(fields: [isbnId], references: [id])
+  quantity Int
+  verdict  ReturnLineVerdict?
+
+  @@map("return_lines")
 }

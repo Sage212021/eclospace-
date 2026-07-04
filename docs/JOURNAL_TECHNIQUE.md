@@ -58,6 +58,19 @@ Le cahier des charges décrit le comité de lecture et la décision éditoriale 
 | 04/07/2026 | Jalons de fabrication (Ch. 15 §15.6) : alerte de retard au responsable impression uniquement, pas d'alerte automatique au Gantt du projet | Le Gantt (Ch. 8) n'a pas de mécanisme d'insertion automatique de jalons externes ; un lien serait à construire si confirmé nécessaire. |
 | 04/07/2026 | Épreuve contractuelle demandée à l'imprimeur (Ch. 15 §15.5) : **non implémentée** | Fonctionnalité secondaire du circuit de transmission des fichiers, non bloquante pour le circuit principal devis → commande → réception. |
 
+## Décisions et points d'interprétation du Lot 4 (Stock et magasin, Commercial)
+
+| Date | Choix | Raison |
+|---|---|---|
+| 04/07/2026 | `PurchaseOrder.deliveryLocation` (texte libre, Lot 3) remplacé par `deliveryLocationId` (FK vers `stock_locations`) | Le Lot 4 introduit enfin `stock_locations` ; le champ texte libre n'était qu'un palliatif documenté au Lot 3. Aucune donnée réelle en jeu. |
+| 04/07/2026 | Encours client (Ch. 17 §17.3, §17.5) : **approximé par le total des commandes non soldées** (statuts confirmed/preparing/shipped/delivered), en l'absence du module Finance | Le calcul exact de l'encours dépend des factures et paiements (Ch. 18, Lot 5) qui n'existent pas encore. Approximation raisonnable pour bloquer une commande dépassant un plafond, à réviser quand la facturation existera. |
+| 04/07/2026 | Frais de port et taxes (Ch. 17 §17.5 point 3) : **non calculés automatiquement** — `tax_rate` saisi manuellement par ligne, frais de port absents | Le référentiel `tax_rates` (Ch. 18) et le calcul de frais selon poids/destination sont hors périmètre avant le module Finance. |
+| 04/07/2026 | Facturation, avoirs et droits d'auteur déclenchés par une vente/un retour (Ch. 17 §17.6, §17.9) : **non implémentés** | Modules Finance (Ch. 18) et moteur de droits d'auteur connecté aux ventes (Ch. 9 §9.5) prévus au Lot 5, qui dépend justement des événements de vente créés ici. |
+| 04/07/2026 | Retour client déclassé (verdict « damaged ») : **consigné mais sans mouvement de stock ni remise en vente** | Le modèle ne prévoit pas de bucket de stock « défraîchi » distinct ; seul le verdict est tracé sur la ligne de retour. À affiner si un besoin de suivi physique des exemplaires déclassés est confirmé. |
+| 04/07/2026 | Réservation de stock à la confirmation d'une commande (Ch. 17 §17.5) : **répartie sur les tirages existants d'un même lieu**, sans choix de lieu automatique multi-entrepôt | Le lieu source est désigné explicitement par l'opérateur à la création de la commande ; répartir automatiquement une commande entre plusieurs entrepôts n'est pas demandé par le texte et aurait ajouté une complexité non spécifiée. |
+| 04/07/2026 | Relance automatique des relevés de dépôt-vente en retard (Ch. 17 §17.6) : **non implémentée** | Nécessiterait une tâche planifiée (cron) absente de l'infrastructure actuelle ; les relevés existants sont consultables mais aucune alerte automatique n'est générée. |
+| 04/07/2026 | Bug réel trouvé en testant dans un navigateur (pas seulement via les tests automatisés) : un mouvement de stock à sens unique (ex. « exemplaire d'auteur ») créditait silencieusement un second lieu si le formulaire envoyait par erreur un `to_location_id` non pertinent pour ce type de mouvement | La création de mouvement appliquait un delta sur n'importe quel lieu présent dans la requête, sans vérifier que le type de mouvement l'exigeait réellement. Corrigé dans `routes/stock.ts` (delta appliqué uniquement si le type l'exige) ; régression ajoutée aux tests automatisés. |
+
 ## Environnements
 
 - **Développement** : Docker Compose local (PostgreSQL + backend + frontend), aucune donnée réelle (Ch. 21 §21.4).

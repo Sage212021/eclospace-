@@ -6,7 +6,7 @@
 | Lot 1 | Entrée des manuscrits, comité de lecture, workflow | En cours — flux complet fonctionnel (étapes 1 à 5) |
 | Lot 2 | Contrats, planification/Gantt, correction | En cours — flux complet fonctionnel (étapes 5 à 7) |
 | Lot 3 | Maquette, infographie, ISBN, BAT, impression | En cours — flux complet fonctionnel (étapes 10 à 15) |
-| Lot 4 | Stock et commercial | En attente |
+| Lot 4 | Stock et commercial | En cours — flux complet fonctionnel (étapes 16 à 18) |
 | Lot 5 | Finance et droits d'auteur | En attente |
 | Lot 6 | RH, pilotage, rapports | En attente |
 
@@ -115,3 +115,23 @@ M. Noah Mbala a tranché les trois points signalés à la fin du Lot 2 :
 - Épreuve contractuelle imprimeur (Ch. 15 §15.5) non implémentée.
 
 **Prochaine étape :** faire valider ce Lot 3 par l'opérateur, puis démarrer le Lot 4 (stock et magasin, commercial) une fois validé.
+
+### 04/07/2026 (suite) — Lot 3 validé par l'opérateur ; démarrage et livraison du Lot 4 : stock et magasin, commercial
+
+**Fait :**
+- Schéma Prisma : `stock_locations` (hiérarchie zone > allée > étagère, dépôt-vente rattaché à un client), `stock_items` (stock par isbn/lieu/tirage), `stock_movements` (table pivot append-only : 10 types typés), `inventories`/`inventory_lines` ; `customers`, `discount_grids`/`customer_discounts`, `price_list`, `sales_orders`/`sales_order_lines`, `deliveries`/`delivery_lines`, `consignments`/`consignment_statements`, `pos_sales`, `customer_returns`/`return_lines`. `PurchaseOrder.deliveryLocation` (texte libre, Lot 3) remplacé par une vraie relation vers `stock_locations`.
+- **Stock et magasin (Ch. 16)** : mouvements typés (entrée fabrication, sortie vente/pilon/exemplaires auteur et presse, transfert, retour, régularisation), **aucun mouvement sans type, motif et responsable** ; disponible = physique − réservé toujours recalculé, jamais stocké ; seuils d'alerte et de rupture par référence ; **inventaires à l'aveugle** (quantités théoriques masquées jusqu'au comptage), double comptage en cas d'écart, régularisation tracée par un mouvement dédié ; entrée en stock déclenchée par la réception de fabrication, réservée aux exemplaires acceptés par le contrôle qualité (Ch. 14/15).
+- **Commercial, distribution et ventes (Ch. 17)** : fiche client par catégorie avec remise automatique (grille par catégorie ou remise négociée), toute remise hors grille exigeant une validation de la Direction générale ; commande avec **contrôle de disponibilité en temps réel** et **contrôle d'encours** (une commande dépassant le plafond est bloquée puis débloquée par validation) ; réservation du stock à la confirmation ; livraison rapprochée automatiquement des mouvements de stock, reliquats gérés par livraisons multiples ; **dépôt-vente** (les exemplaires restent la propriété d'Éclosion Édition, seules les ventes relevées réduisent le stock déposé) ; vente au comptoir/salon avec encaissement espèces/carte/**mobile money** ; retours clients avec verdict exemplaire par exemplaire (remis en stock vendable / pilon / déclassé).
+- **Intégration au moteur de workflow (étapes 16 à 18)** : entrée en stock exigeant un mouvement de réception effectif, mise en vente exigeant un prix public défini, passage à la vente/livraison exigeant qu'une commande ou une vente ait été enregistrée.
+- **21 nouveaux tests automatisés** (68 au total, tous verts) : cohérence stock = somme des mouvements, transfert en transit jusqu'à confirmation, seuils d'alerte/rupture, inventaire à l'aveugle avec écart et régularisation, entrée en stock réservée aux exemplaires acceptés, remise de grille et remise hors grille validée, contrôle de disponibilité et d'encours avec blocage/déblocage, livraison avec rapprochement, dépôt-vente avec relevé, vente au comptoir, retour client par exemplaire, circuit complet du workflow (étapes 16 à 18) avec vérification de chaque verrou.
+- **Frontend** : deux nouveaux écrans transverses (non rattachés à un seul manuscrit, contrairement aux sections des lots précédents) — **Stock** (lieux, état du stock par référence, alertes, saisie de mouvement) et **Commercial** (clients, commandes, déblocage d'encours, vente au comptoir). Endpoint `GET /api/v1/isbns` ajouté hors spécification API v1 (nécessaire pour choisir un ouvrage par ISBN sans naviguer manuscrit par manuscrit).
+- **1 bug réel trouvé en testant dans un navigateur** (pas seulement via les tests automatisés) : un mouvement de stock à sens unique (ex. « exemplaire d'auteur ») créditait silencieusement un second lieu si le formulaire envoyait par erreur un lieu de destination non pertinent pour ce type de mouvement — invisible dans les tests automatisés qui n'exerçaient jamais cette combinaison précise. Corrigé (le delta n'est appliqué que sur le(s) lieu(x) que le type de mouvement exige réellement), régression ajoutée aux tests.
+
+**Points d'interprétation signalés** (détail dans `docs/JOURNAL_TECHNIQUE.md`) : encours client approximé en l'absence du module Finance, frais de port et taxes non calculés automatiquement, facturation/avoirs/droits d'auteur non déclenchés (Lot 5), retour déclassé sans bucket de stock dédié, réservation sans répartition automatique multi-entrepôt, relance de dépôt-vente en retard non automatisée.
+
+**Limites connues de ce Lot 4 :**
+- Pas de tableau de bord dédié au stock ni au commercial (Ch. 16 §16.10, Ch. 17 §17.11) — hors périmètre minimal.
+- Pas d'écran de bon de préparation (picking) avec scan (Ch. 16 §16.6) — les mouvements de sortie se saisissent directement.
+- Analyse des ventes (palmarès, vitesse d'écoulement, taux de couverture des coûts, Ch. 17 §17.10) non implémentée — dépend en partie des coûts de fabrication consolidés (Ch. 15 §15.9) et du module Finance.
+
+**Prochaine étape :** faire valider ce Lot 4 par l'opérateur, puis démarrer le Lot 5 (finance et droits d'auteur) une fois validé.

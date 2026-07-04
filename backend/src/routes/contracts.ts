@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { ContractType, ContractStatus, RoyaltyBase } from "@prisma/client";
+import { ContractType, ContractStatus, RoyaltyBase, StatementPeriodicity } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -12,6 +12,10 @@ const financialTermsSchema = z
     tiers: z.array(z.object({ up_to: z.number().nullable(), rate: z.number() })).optional(),
     advance_amount: z.number().optional(),
     payment_schedule: z.string().optional(),
+    // Revue opérateur du 04/07/2026 : retenue fiscale par défaut et
+    // périodicité indicative des relevés, au niveau du contrat.
+    tax_withholding_pct: z.number().min(0).max(100).optional(),
+    statement_periodicity: z.nativeEnum(StatementPeriodicity).optional(),
   })
   .catchall(z.unknown());
 
@@ -83,6 +87,8 @@ export default async function contractRoutes(fastify: FastifyInstance) {
             tiers: body.financial_terms.tiers,
             advanceAmount: body.financial_terms.advance_amount,
             paymentSchedule: body.financial_terms.payment_schedule,
+            taxWithholdingPct: body.financial_terms.tax_withholding_pct,
+            statementPeriodicity: body.financial_terms.statement_periodicity,
           },
         });
       }

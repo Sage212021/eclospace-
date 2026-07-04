@@ -355,6 +355,142 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
     expect(secondAttempt.json().code).toBe("already_paid");
   });
 
+  it("répartit le paiement des droits entre plusieurs bénéficiaires (revue opérateur du 04/07/2026)", async () => {
+    const { isbnId, contractId } = await createIsbnWithContractAndStock("Manuscrit Finance Droits Partagés", 30, {
+      base: "prix_public_ht",
+      tiers: [{ up_to: null, rate: 0.10 }],
+      advance_amount: 0,
+    });
+    const customer = await createCustomer("Client Droits Partagés");
+
+    const illustrator = await app.inject({
+      method: "POST",
+      url: "/api/v1/partners",
+      headers: { cookie: adminCookie },
+      payload: { category: "illustrateur", first_name: "Illustrateur", last_name: "Test" },
+    });
+    const authorContract = await prisma.contract.findUniqueOrThrow({ where: { id: contractId } });
+
+    const beneficiaries = await app.inject({
+      method: "POST",
+      url: `/api/v1/contracts/${contractId}/beneficiaries`,
+      headers: { cookie: adminCookie },
+      payload: {
+        beneficiaries: [
+          { partner_id: authorContract.partnerId, share_pct: 70 },
+          { partner_id: illustrator.json().id, share_pct: 30 },
+        ],
+      },
+    });
+    expect(beneficiaries.statusCode).toBe(201);
+
+    const invalidSum = await app.inject({
+      method: "POST",
+      url: `/api/v1/contracts/${contractId}/beneficiaries`,
+      headers: { cookie: adminCookie },
+      payload: { beneficiaries: [{ partner_id: authorContract.partnerId, share_pct: 60 }] },
+    });
+    expect(invalidSum.statusCode).toBe(400);
+
+    await deliverOrder(isbnId, customer.id, 10, 10000); // 10 * 10000 * 10 % = 10000 de droits générés
+
+    const statement = await app.inject({
+      method: "POST",
+      url: `/api/v1/contracts/${contractId}/royalty-statements`,
+      headers: { cookie: adminCookie },
+      payload: { period_start: "2000-01-01T00:00:00.000Z", period_end: "2100-01-01T00:00:00.000Z" },
+    });
+    expect(Number(statement.json().balanceDue)).toBe(10000);
+
+    const payment = await app.inject({
+      method: "POST",
+      url: `/api/v1/royalty-statements/${statement.json().id}/payments`,
+      headers: { cookie: adminCookie },
+      payload: { method: "transfer" },
+    });
+    expect(payment.statusCode).toBe(201);
+    expect(payment.json().payments).toHaveLength(2);
+    const [authorPayment, illustratorPayment] = payment.json().payments;
+    expect(Number(authorPayment.amount)).toBe(7000);
+    expect(Number(illustratorPayment.amount)).toBe(3000);
+    expect(payment.json().remaining_balance).toBe(0);
+
+    const statementAfter = await app.inject({ method: "GET", url: `/api/v1/royalty-statements/${statement.json().id}`, headers: { cookie: adminCookie } });
+    expect(statementAfter.json().status).toBe("paid");
+  });
+
+  it("accepte des paiements partiels de droits d'auteur avec suivi du solde restant (Ch. 9 §9.5)", async () => {
+    const { isbnId, contractId } = await createIsbnWithContractAndStock("Manuscrit Finance Droits Partiels", 30, {
+      base: "prix_public_ht",
+      tiers: [{ up_to: null, rate: 0.10 }],
+      advance_amount: 0,
+    });
+    const customer = await createCustomer("Client Droits Partiels");
+    await deliverOrder(isbnId, customer.id, 10, 10000); // 10000 de droits générés
+
+    const statement = await app.inject({
+      method: "POST",
+      url: `/api/v1/contracts/${contractId}/royalty-statements`,
+      headers: { cookie: adminCookie },
+      payload: { period_start: "2000-01-01T00:00:00.000Z", period_end: "2100-01-01T00:00:00.000Z" },
+    });
+
+    const firstPayment = await app.inject({
+      method: "POST",
+      url: `/api/v1/royalty-statements/${statement.json().id}/payments`,
+      headers: { cookie: adminCookie },
+      payload: { method: "transfer", amount: 4000 },
+    });
+    expect(firstPayment.statusCode).toBe(201);
+    expect(Number(firstPayment.json().amount)).toBe(4000);
+    expect(firstPayment.json().remaining_balance).toBe(6000);
+
+    const statementMidway = await app.inject({ method: "GET", url: `/api/v1/royalty-statements/${statement.json().id}`, headers: { cookie: adminCookie } });
+    expect(statementMidway.json().status).toBe("issued"); // pas encore soldé
+    expect(statementMidway.json().remaining_balance).toBe(6000);
+
+    const secondPayment = await app.inject({
+      method: "POST",
+      url: `/api/v1/royalty-statements/${statement.json().id}/payments`,
+      headers: { cookie: adminCookie },
+      payload: { method: "transfer" }, // pas de montant : solde restant par défaut
+    });
+    expect(secondPayment.statusCode).toBe(201);
+    expect(Number(secondPayment.json().amount)).toBe(6000);
+    expect(secondPayment.json().remaining_balance).toBe(0);
+
+    const statementFinal = await app.inject({ method: "GET", url: `/api/v1/royalty-statements/${statement.json().id}`, headers: { cookie: adminCookie } });
+    expect(statementFinal.json().status).toBe("paid");
+  });
+
+  it("applique la retenue fiscale par défaut du contrat si non explicitement surchargée (Ch. 18 §18.7)", async () => {
+    const { isbnId, contractId } = await createIsbnWithContractAndStock("Manuscrit Finance Retenue Contrat", 30, {
+      base: "prix_public_ht",
+      tiers: [{ up_to: null, rate: 0.10 }],
+      advance_amount: 0,
+      tax_withholding_pct: 15,
+    });
+    const customer = await createCustomer("Client Retenue Contrat");
+    await deliverOrder(isbnId, customer.id, 10, 10000); // 10000 de droits générés
+
+    const statement = await app.inject({
+      method: "POST",
+      url: `/api/v1/contracts/${contractId}/royalty-statements`,
+      headers: { cookie: adminCookie },
+      payload: { period_start: "2000-01-01T00:00:00.000Z", period_end: "2100-01-01T00:00:00.000Z" },
+    });
+
+    const payment = await app.inject({
+      method: "POST",
+      url: `/api/v1/royalty-statements/${statement.json().id}/payments`,
+      headers: { cookie: adminCookie },
+      payload: { method: "transfer" }, // pas de tax_withheld : retenue de 15 % du contrat appliquée
+    });
+    expect(payment.statusCode).toBe(201);
+    expect(Number(payment.json().taxWithheld)).toBe(1500); // 15 % de 10000
+    expect(Number(payment.json().amount)).toBe(8500);
+  });
+
   it("choisit le contrat de droits selon le format vendu quand plusieurs contrats actifs coexistent (Ch. 9 §9.5)", async () => {
     const createResponse = await app.inject({
       method: "POST",

@@ -112,6 +112,30 @@ L'opérateur a fait valider le Lot 5 par un contrôle de gestion externe (note 1
 
 **14 nouveaux tests automatisés** (86 au total, tous verts) : sélection du contrat de droits par format avec deux contrats actifs, forfait de frais de port facturé une seule fois sur la première livraison, gratuité au-delà d'un seuil, escalade de validation au-delà du seuil de délégation avec refus d'un non-DG et refus du double rôle, multi-caisses et virement interne sans effet sur la position globale, import de relevé bancaire et pointage avec un paiement, export comptable enrichi avec écritures de dépense, traçabilité des factures générées automatiquement dans le journal d'audit.
 
+## Convention de droits d'auteur entièrement paramétrable (revue opérateur du 04/07/2026)
+
+L'opérateur a transmis une proposition détaillée pour rendre la convention de droits d'auteur « entièrement paramétrable » (9 points). Analyse avant mise en œuvre :
+
+**Déjà couvert par le moteur existant** (aucun changement nécessaire) :
+- Calcul classique quantité × prix de base × taux (`lib/royalty.ts`).
+- Amortissement automatique de l'à-valoir (`royalty_statements.advance_recouped`).
+- Paliers de vente progressifs selon la quantité cumulée (`royalty_terms.tiers`).
+- Taux distinct selon le support (papier/ebook/audio/traduction) : chaque contrat porte son propre `formats[]` et ses propres paliers ; corrigé dans cette même session pour que le moteur sélectionne le bon contrat selon le format effectivement vendu (cf. section précédente).
+- Base de calcul prix HT / prix net éditeur (`royalty_terms.base`, `RoyaltyBase`).
+
+**Ajouté dans cette session** :
+
+| Date | Choix | Raison |
+|---|---|---|
+| 04/07/2026 | **Répartition entre plusieurs bénéficiaires** (point 3) : nouveau modèle `contract_beneficiaries` (contrat, partenaire, part en %) — `POST /contracts/:id/beneficiaries` remplace la liste complète et exige une somme de parts égale à 100 % | Le calcul des droits reste au niveau du contrat (royalty_entries/statements inchangés — un seul calcul, une seule à-valoir) ; la répartition n'intervient qu'à l'exécution du paiement, qui crée un `Payment`/`royalty_payment` par bénéficiaire proportionnellement à sa part. Sans bénéficiaire configuré, 100 % va au partenaire unique du contrat (rétrocompatible, aucune régression sur les relevés déjà émis). |
+| 04/07/2026 | **Paiements partiels et solde restant** (point 9) : `POST /royalty-statements/:id/payments` accepte un montant brut partiel (`amount`, défaut = solde restant) ; le relevé ne passe « paid » que lorsque le solde restant atteint zéro ; `GET /royalty-statements` et `.../:id` exposent `remaining_balance` | Auparavant, un seul paiement soldait obligatoirement la totalité du relevé — aucun paiement fractionné n'était possible, alors que c'est une pratique courante (acompte puis solde). |
+| 04/07/2026 | **Retenue fiscale par défaut du contrat** (point « retenues fiscales ») : `royalty_terms.tax_withholding_pct`, appliqué automatiquement à l'exécution du paiement si `tax_withheld` n'est pas explicitement fourni dans la requête | Évite une saisie manuelle à chaque paiement quand le taux de retenue est stable pour un contrat donné (ex. retenue à la source sur redevances d'auteur non-résident). Reste surchargeable au cas par cas. |
+| 04/07/2026 | **Périodicité des relevés** (point « périodicité ») : `royalty_terms.statement_periodicity` (mensuelle/trimestrielle/semestrielle/annuelle), champ **informatif** stocké sur le contrat | Aucune tâche planifiée n'existe dans le projet (pas de cron/scheduler) pour déclencher automatiquement la génération à la bonne date ; la génération reste une action volontaire « en un clic » comme le prévoit déjà le Ch. 9 §9.5. Un futur mécanisme de rappel pourrait s'appuyer sur ce champ si une infrastructure de tâches planifiées est ajoutée au projet. |
+
+**Point volontairement non traité, avec justification** : la base de calcul « recettes d'exploitation » (mentionnée dans la proposition) suppose un flux de revenus de cession de droits étrangers/subsidiary rights qui n'est pas modélisé dans Eclospace (aucune table de suivi des ventes de droits à l'étranger) — contrairement à prix HT/prix net éditeur qui se calculent directement sur une vente unitaire déjà enregistrée. Ajouter cette option sans le flux de données sous-jacent produirait un champ inutilisable. À construire si un module de cession de droits est confirmé nécessaire.
+
+**3 nouveaux tests automatisés** (89 au total, tous verts) : répartition 70/30 entre deux bénéficiaires avec refus d'une somme de parts ≠ 100 %, paiement partiel suivi du solde puis paiement final, retenue fiscale par défaut du contrat appliquée automatiquement.
+
 ## Environnements
 
 - **Développement** : Docker Compose local (PostgreSQL + backend + frontend), aucune donnée réelle (Ch. 21 §21.4).

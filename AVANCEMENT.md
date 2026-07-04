@@ -190,3 +190,17 @@ L'opérateur a fait auditer le Lot 5 par un contrôle de gestion externe, qui a 
 - Circuit de validation des dépenses à un vrai palier « responsable hiérarchique » personnel : suppose un organigramme (RH, Lot 6) qui n'existe pas encore ; le circuit à deux paliers retenu (validation courante + Direction générale au-delà du seuil) reste une amélioration réelle sans anticiper ce module.
 
 **Prochaine étape :** faire valider ce renforcement par l'opérateur, puis démarrer le Lot 6 (RH, pilotage, rapports).
+
+### 04/07/2026 (suite) — Convention de droits d'auteur entièrement paramétrable
+
+L'opérateur a transmis une proposition détaillée (9 points) pour rendre la convention de droits d'auteur entièrement paramétrable, conforme à la liberté contractuelle laissée par la législation camerounaise. Analyse faite avant mise en œuvre : plusieurs points étaient déjà couverts par le moteur existant (calcul classique, amortissement de l'à-valoir, paliers de vente, taux par support, base HT/net éditeur) ; trois manques réels ont été comblés :
+
+**Fait :**
+- **Répartition entre plusieurs bénéficiaires** (auteur + illustrateur, coauteurs...) : chaque contrat peut désormais définir une répartition en pourcentage (somme obligatoirement égale à 100 %) ; le paiement des droits crée automatiquement un versement distinct par bénéficiaire, proportionnel à sa part. Sans répartition configurée, tout va au partenaire unique du contrat comme avant (aucune régression).
+- **Paiements partiels des droits d'auteur** : un relevé peut désormais être réglé en plusieurs fois (acompte puis solde), avec suivi du solde restant affiché à l'écran ; le relevé ne passe « réglé » que lorsque le solde atteint zéro.
+- **Retenue fiscale par défaut et périodicité au niveau du contrat** : un taux de retenue fiscale peut être fixé une fois pour toutes sur le contrat (appliqué automatiquement à chaque paiement, sauf surcharge ponctuelle) ; la périodicité des relevés (mensuelle/trimestrielle/semestrielle/annuelle) est désormais un champ du contrat — à titre indicatif, la génération reste une action volontaire (pas de tâche planifiée automatique, aucune infrastructure de ce type dans le projet).
+- **3 nouveaux tests automatisés** (89 au total, tous verts). Vérifié dans un navigateur réel : les nouveaux boutons « Répartir entre bénéficiaires » et le paiement partiel des droits s'affichent et fonctionnent sans erreur.
+
+**Point volontairement non traité, avec justification** : la base de calcul « recettes d'exploitation » (pour les cessions de droits à l'étranger) suppose un module de suivi des revenus de cession de droits qui n'existe pas dans Eclospace — contrairement aux bases HT/net éditeur qui se calculent directement sur une vente déjà enregistrée. Ajouter cette option sans les données sous-jacentes produirait un champ inutilisable ; à construire si un module de cession de droits est confirmé nécessaire.
+
+**Prochaine étape :** faire valider cette évolution par l'opérateur, puis démarrer le Lot 6 (RH, pilotage, rapports).

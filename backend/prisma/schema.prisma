@@ -369,10 +369,12 @@ model Partner {
   deletedAt DateTime? @map("deleted_at")
   deletedBy String?   @map("deleted_by")
 
-  workContributors WorkContributor[]
-  contracts        Contract[]
-  printer          Printer?
-  metadataExports  MetadataExport[]
+  workContributors     WorkContributor[]
+  contracts            Contract[]
+  printer              Printer?
+  metadataExports      MetadataExport[]
+  royaltyBeneficiaries ContractBeneficiary[]
+  royaltyPayments      RoyaltyPayment[]
 
   @@map("partners")
 }
@@ -754,9 +756,10 @@ model Contract {
   deletedAt DateTime? @map("deleted_at")
   deletedBy String?   @map("deleted_by")
 
-  royaltyTerms      RoyaltyTerms?
-  royaltyEntries    RoyaltyEntry[]
-  royaltyStatements RoyaltyStatement[]
+  royaltyTerms        RoyaltyTerms?
+  royaltyEntries      RoyaltyEntry[]
+  royaltyStatements   RoyaltyStatement[]
+  royaltyBeneficiaries ContractBeneficiary[]
 
   @@map("contracts")
 }
@@ -766,22 +769,56 @@ enum RoyaltyBase {
   prix_net_editeur
 }
 
+// Périodicité des relevés (revue opérateur du 04/07/2026) : information
+// descriptive rattachée au contrat — aucune tâche planifiée n'existe dans le
+// projet pour la déclencher automatiquement (pas de cron/scheduler), la
+// génération reste une action volontaire (« en un clic », Ch. 9 §9.5).
+enum StatementPeriodicity {
+  mensuelle
+  trimestrielle
+  semestrielle
+  annuelle
+}
+
 // Termes du contrat uniquement (Ch. 9 §9.4). Le moteur de calcul connecté
 // aux ventes (royalty_entries/statements/payments, §9.5) est le Lot 5 : il
 // n'existe pas de vente à relier tant que le Lot 4 n'est pas construit.
 model RoyaltyTerms {
-  id              String      @id @default(uuid())
-  contractId      String      @unique @map("contract_id")
-  contract        Contract    @relation(fields: [contractId], references: [id])
-  base            RoyaltyBase
-  tiers           Json // paliers : [{ "up_to": 3000, "rate": 0.08 }, { "up_to": null, "rate": 0.10 }]
-  advanceAmount   Decimal?    @map("advance_amount") @db.Decimal(12, 2)
-  paymentSchedule String?     @map("payment_schedule")
+  id                  String                @id @default(uuid())
+  contractId          String                @unique @map("contract_id")
+  contract            Contract              @relation(fields: [contractId], references: [id])
+  base                RoyaltyBase
+  tiers               Json // paliers : [{ "up_to": 3000, "rate": 0.08 }, { "up_to": null, "rate": 0.10 }]
+  advanceAmount       Decimal?              @map("advance_amount") @db.Decimal(12, 2)
+  paymentSchedule     String?               @map("payment_schedule")
+  // Revue opérateur du 04/07/2026 : retenue fiscale par défaut du contrat
+  // (appliquée à l'exécution du paiement si non explicitement surchargée) et
+  // périodicité indicative des relevés.
+  taxWithholdingPct   Decimal?              @map("tax_withholding_pct") @db.Decimal(5, 2)
+  statementPeriodicity StatementPeriodicity? @map("statement_periodicity")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("royalty_terms")
+}
+
+// Répartition des droits entre plusieurs bénéficiaires d'un même contrat
+// (Ch. 9 : auteur + illustrateur, coauteurs...) — revue opérateur du
+// 04/07/2026. Le calcul des droits reste au niveau du contrat (royalty_
+// entries/statements inchangés) ; la répartition n'intervient qu'à
+// l'exécution du paiement. Sans bénéficiaire configuré, 100 % va au
+// partenaire unique du contrat (rétrocompatible).
+model ContractBeneficiary {
+  id         String  @id @default(uuid())
+  contractId String  @map("contract_id")
+  contract   Contract @relation(fields: [contractId], references: [id])
+  partnerId  String  @map("partner_id")
+  partner    Partner @relation(fields: [partnerId], references: [id])
+  sharePct   Decimal @map("share_pct") @db.Decimal(5, 2)
+
+  @@unique([contractId, partnerId])
+  @@map("contract_beneficiaries")
 }
 
 // Types issus de la fusion Ch. 8 (production générale) et Ch. 10 §10.3
@@ -1881,10 +1918,16 @@ model RoyaltyStatement {
   @@map("royalty_statements")
 }
 
+// partnerId : bénéficiaire réellement payé par cette ligne (revue opérateur
+// du 04/07/2026, répartition multi-bénéficiaires) — le contrat peut avoir
+// plusieurs royalty_payments pour un même relevé, un par bénéficiaire et par
+// paiement partiel.
 model RoyaltyPayment {
   id          String           @id @default(uuid())
   statementId String           @map("statement_id")
   statement   RoyaltyStatement @relation(fields: [statementId], references: [id])
+  partnerId   String?          @map("partner_id")
+  partner     Partner?         @relation(fields: [partnerId], references: [id])
   paidAt      DateTime         @default(now()) @map("paid_at")
   amount      Decimal          @db.Decimal(12, 2)
   taxWithheld Decimal          @default(0) @map("tax_withheld") @db.Decimal(12, 2)

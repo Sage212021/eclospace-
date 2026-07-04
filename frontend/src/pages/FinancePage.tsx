@@ -15,6 +15,7 @@ import {
   listShippingRates,
   nextDunning,
   payRoyaltyStatement,
+  setContractBeneficiaries,
   setShippingRate,
   validateExpense,
   type AgingBalance,
@@ -156,12 +157,37 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
   }
 
   async function handlePayStatement(statement: RoyaltyStatement) {
+    const amountStr = window.prompt(
+      `Montant à payer (brut, laisser vide pour le solde restant : ${statement.remaining_balance ?? statement.balanceDue})`,
+      "",
+    );
     try {
-      await payRoyaltyStatement(statement.id, { method: "transfer" });
+      await payRoyaltyStatement(statement.id, { method: "transfer", amount: amountStr ? Number(amountStr) : undefined });
       setMessage("Ordre de paiement des droits d'auteur exécuté.");
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec du paiement.");
+    }
+  }
+
+  async function handleSetBeneficiaries(contractNumber: string) {
+    const contractId = window.prompt(`ID du contrat pour répartir les droits (référence attendue : ${contractNumber})`);
+    if (!contractId) return;
+    const beneficiaries: { partner_id: string; share_pct: number }[] = [];
+    let addAnother = true;
+    while (addAnother) {
+      const partnerId = window.prompt("ID du partenaire bénéficiaire (laisser vide pour terminer)");
+      if (!partnerId) break;
+      const sharePct = Number(window.prompt(`Part de ${partnerId} (%)`, "100") ?? "0");
+      beneficiaries.push({ partner_id: partnerId, share_pct: sharePct });
+      addAnother = window.confirm("Ajouter un autre bénéficiaire ?");
+    }
+    if (beneficiaries.length === 0) return;
+    try {
+      await setContractBeneficiaries(contractId, beneficiaries);
+      setMessage("Répartition des droits enregistrée.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de l'enregistrement de la répartition.");
     }
   }
 
@@ -301,9 +327,9 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
           <div key={statement.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
             <span>
               {statement.contract.contractNumber} — {statement.contract.partner.firstName} {statement.contract.partner.lastName} —
-              {" "}dû : {statement.balanceDue} — {statement.status}
+              {" "}dû : {statement.balanceDue} — restant : {statement.remaining_balance ?? statement.balanceDue} — {statement.status}
             </span>
-            {canAdminister && statement.status === "issued" && Number(statement.balanceDue) > 0 && (
+            {canAdminister && statement.status !== "paid" && Number(statement.remaining_balance ?? statement.balanceDue) > 0 && (
               <button onClick={() => handlePayStatement(statement)} style={secondaryButtonStyle}>
                 Payer
               </button>
@@ -311,9 +337,14 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
           </div>
         ))}
         {canAdminister && (
-          <button onClick={() => handleGenerateStatement("")} style={{ ...secondaryButtonStyle, marginTop: 10 }}>
-            + Générer un relevé
-          </button>
+          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            <button onClick={() => handleGenerateStatement("")} style={secondaryButtonStyle}>
+              + Générer un relevé
+            </button>
+            <button onClick={() => handleSetBeneficiaries("")} style={secondaryButtonStyle}>
+              Répartir entre bénéficiaires
+            </button>
+          </div>
         )}
       </div>
 

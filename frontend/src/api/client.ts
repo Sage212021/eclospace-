@@ -883,6 +883,7 @@ export interface RoyaltyStatement {
   balanceDue: string;
   status: "draft" | "issued" | "paid";
   contract: { contractNumber: string; partner: { firstName: string; lastName: string } };
+  remaining_balance?: number;
 }
 
 export function listRoyaltyStatements(contractId?: string) {
@@ -890,12 +891,39 @@ export function listRoyaltyStatements(contractId?: string) {
   return request<RoyaltyStatement[]>(`/api/v1/royalty-statements${query}`);
 }
 
+export function getRoyaltyStatement(statementId: string) {
+  return request<RoyaltyStatement>(`/api/v1/royalty-statements/${statementId}`);
+}
+
 export function generateRoyaltyStatement(contractId: string, input: { period_start: string; period_end: string }) {
   return request<RoyaltyStatement>(`/api/v1/contracts/${contractId}/royalty-statements`, { method: "POST", body: JSON.stringify(input) });
 }
 
-export function payRoyaltyStatement(statementId: string, input: { method: string; bank_account_id?: string; tax_withheld?: number }) {
+export function payRoyaltyStatement(
+  statementId: string,
+  input: { method: string; bank_account_id?: string; tax_withheld?: number; amount?: number },
+) {
   return request(`/api/v1/royalty-statements/${statementId}/payments`, { method: "POST", body: JSON.stringify(input) });
+}
+
+// Répartition des droits entre plusieurs bénéficiaires d'un même contrat
+// (revue opérateur du 04/07/2026 : auteur + illustrateur, coauteurs...).
+export interface ContractBeneficiary {
+  id: string;
+  partnerId: string;
+  sharePct: string;
+  partner: { firstName: string; lastName: string };
+}
+
+export function listContractBeneficiaries(contractId: string) {
+  return request<ContractBeneficiary[]>(`/api/v1/contracts/${contractId}/beneficiaries`);
+}
+
+export function setContractBeneficiaries(contractId: string, beneficiaries: { partner_id: string; share_pct: number }[]) {
+  return request<ContractBeneficiary[]>(`/api/v1/contracts/${contractId}/beneficiaries`, {
+    method: "POST",
+    body: JSON.stringify({ beneficiaries }),
+  });
 }
 
 // Frais de port (Ch. 17 §17.5, ajouté hors cahier des charges initial).

@@ -14,8 +14,20 @@ const statementSchema = z.object({
 const paymentSchema = z.object({
   method: z.nativeEnum(PaymentMethod),
   bank_account_id: z.string().uuid().optional(),
-  tax_withheld: z.number().nonnegative().default(0),
+  tax_withheld: z.number().nonnegative().optional(), // absolute montant ; défaut = tax_withholding_pct du contrat
+  amount: z.number().positive().optional(), // paiement partiel (brut) ; défaut = solde restant
 });
+
+const beneficiariesSchema = z.object({
+  beneficiaries: z
+    .array(z.object({ partner_id: z.string().uuid(), share_pct: z.number().positive().max(100) }))
+    .min(1),
+});
+
+async function computeSettledAmount(tx: typeof prisma, statementId: string): Promise<number> {
+  const payments = await tx.royaltyPayment.findMany({ where: { statementId } });
+  return payments.reduce((sum, p) => sum + Number(p.amount) + Number(p.taxWithheld), 0);
+}
 
 // Ch. 9 §9.5, Ch. 18 §18.7 : exécution financière du moteur de calcul des
 // droits d'auteur — relevés par période (amortissement de l'à-valoir) et
@@ -35,6 +47,67 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Répartition entre plusieurs bénéficiaires d'un même contrat (revue
+  // opérateur du 04/07/2026 : auteur + illustrateur, coauteurs...). Remplace
+  // la liste complète à chaque appel (cohérence garantie : la somme des
+  // parts doit toujours faire 100 %) ; le calcul des droits reste au niveau
+  // du contrat, seule l'exécution du paiement répartit le montant.
+  fastify.post(
+    "/api/v1/contracts/:id/beneficiaries",
+    { preHandler: requirePermission("royalties", "validation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = beneficiariesSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const contract = await prisma.contract.findUnique({ where: { id } });
+      if (!contract) {
+        return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
+      }
+      const partnerIds = new Set(parsed.data.beneficiaries.map((b) => b.partner_id));
+      if (partnerIds.size !== parsed.data.beneficiaries.length) {
+        return reply.code(400).send({ code: "validation_error", message: "Un même partenaire ne peut apparaître qu'une seule fois." });
+      }
+      const totalShare = parsed.data.beneficiaries.reduce((sum, b) => sum + b.share_pct, 0);
+      if (Math.abs(totalShare - 100) > 0.01) {
+        return reply.code(400).send({
+          code: "validation_error",
+          message: `La somme des parts doit faire 100 % (calculée : ${totalShare} %).`,
+        });
+      }
+
+      const beneficiaries = await prisma.$transaction(async (tx) => {
+        await tx.contractBeneficiary.deleteMany({ where: { contractId: id } });
+        await tx.contractBeneficiary.createMany({
+          data: parsed.data.beneficiaries.map((b) => ({ contractId: id, partnerId: b.partner_id, sharePct: b.share_pct })),
+        });
+        return tx.contractBeneficiary.findMany({ where: { contractId: id }, include: { partner: true } });
+      });
+
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "contract_beneficiaries",
+        entityId: id,
+        newValues: { beneficiaries: parsed.data.beneficiaries },
+        ipAddress: request.ip,
+      });
+
+      return reply.code(201).send(beneficiaries);
+    },
+  );
+
+  fastify.get(
+    "/api/v1/contracts/:id/beneficiaries",
+    { preHandler: requirePermission("royalties", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const beneficiaries = await prisma.contractBeneficiary.findMany({ where: { contractId: id }, include: { partner: true } });
+      return reply.send(beneficiaries);
+    },
+  );
+
   fastify.get(
     "/api/v1/royalty-statements",
     { preHandler: requirePermission("royalties", "consultation") },
@@ -42,10 +115,14 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
       const query = request.query as { contract_id?: string };
       const statements = await prisma.royaltyStatement.findMany({
         where: query.contract_id ? { contractId: query.contract_id } : {},
-        include: { contract: { include: { partner: true } } },
+        include: { contract: { include: { partner: true } }, payments: true },
         orderBy: { periodEnd: "desc" },
       });
-      return reply.send(statements);
+      const withRemaining = statements.map(({ payments, ...statement }) => {
+        const settled = payments.reduce((sum, p) => sum + Number(p.amount) + Number(p.taxWithheld), 0);
+        return { ...statement, remaining_balance: Math.round((Number(statement.balanceDue) - settled) * 100) / 100 };
+      });
+      return reply.send(withRemaining);
     },
   );
 
@@ -56,12 +133,14 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
       const statement = await prisma.royaltyStatement.findUnique({
         where: { id },
-        include: { contract: { include: { partner: true } }, entries: true, payments: true },
+        include: { contract: { include: { partner: true } }, entries: true, payments: { include: { partner: true } } },
       });
       if (!statement) {
         return reply.code(404).send({ code: "not_found", message: "Relevé de droits introuvable." });
       }
-      return reply.send(statement);
+      const settled = await computeSettledAmount(prisma, id);
+      const remainingBalance = Math.round((Number(statement.balanceDue) - settled) * 100) / 100;
+      return reply.send({ ...statement, remaining_balance: remainingBalance });
     },
   );
 
@@ -157,8 +236,12 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // Ordre de paiement (§9.5, §18.7) : solde le relevé, retenues fiscales
-  // applicables déduites du montant net versé.
+  // Ordre de paiement (§9.5, §18.7) : accepte un montant brut partiel (défaut
+  // = solde restant) et répartit le montant entre les bénéficiaires du
+  // contrat (revue opérateur du 04/07/2026) — un seul bénéficiaire implicite
+  // (le partenaire du contrat, 100 %) si aucune répartition n'est configurée.
+  // La retenue fiscale par défaut du contrat s'applique si non explicitement
+  // surchargée dans la requête.
   fastify.post(
     "/api/v1/royalty-statements/:id/payments",
     { preHandler: requirePermission("royalties", "validation") },
@@ -168,58 +251,104 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
       }
-      const statement = await prisma.royaltyStatement.findUnique({ where: { id } });
+      const statement = await prisma.royaltyStatement.findUnique({
+        where: { id },
+        include: { contract: { include: { royaltyTerms: true } } },
+      });
       if (!statement) {
         return reply.code(404).send({ code: "not_found", message: "Relevé de droits introuvable." });
       }
       if (statement.status === "paid") {
         return reply.code(409).send({ code: "already_paid", message: "Ce relevé de droits est déjà réglé." });
       }
-      if (Number(statement.balanceDue) <= 0) {
+      const settled = await computeSettledAmount(prisma, id);
+      const remaining = Math.round((Number(statement.balanceDue) - settled) * 100) / 100;
+      if (remaining <= 0) {
         return reply.code(409).send({
           code: "no_balance_due",
           message: "Aucun solde dû sur ce relevé (à-valoir non encore couvert par les droits générés).",
         });
       }
-      const netAmount = Math.round((Number(statement.balanceDue) - parsed.data.tax_withheld) * 100) / 100;
-      if (netAmount <= 0) {
-        return reply.code(400).send({ code: "validation_error", message: "La retenue fiscale ne peut excéder le solde dû." });
+
+      const grossAmount = parsed.data.amount ?? remaining;
+      if (grossAmount > remaining + 0.01) {
+        return reply.code(400).send({
+          code: "validation_error",
+          message: `Le montant demandé (${grossAmount}) dépasse le solde restant (${remaining}).`,
+        });
       }
 
+      const defaultWithholdingPct = Number(statement.contract.royaltyTerms?.taxWithholdingPct ?? 0);
+      const taxWithheld = parsed.data.tax_withheld ?? Math.round(((grossAmount * defaultWithholdingPct) / 100) * 100) / 100;
+      const netAmount = Math.round((grossAmount - taxWithheld) * 100) / 100;
+      if (netAmount <= 0) {
+        return reply.code(400).send({ code: "validation_error", message: "La retenue fiscale ne peut excéder le montant brut." });
+      }
+
+      const beneficiaries = await prisma.contractBeneficiary.findMany({ where: { contractId: statement.contractId } });
+      const splits =
+        beneficiaries.length > 0
+          ? beneficiaries.map((b) => ({ partnerId: b.partnerId as string | null, sharePct: Number(b.sharePct) }))
+          : [{ partnerId: statement.contract.partnerId as string | null, sharePct: 100 }];
+
       try {
-        const result = await prisma.$transaction(async (tx) => {
+        const created = await prisma.$transaction(async (tx) => {
           await assertPeriodOpen(tx);
-          const payment = await tx.payment.create({
-            data: {
-              direction: "out",
-              method: parsed.data.method,
-              amount: netAmount,
-              bankAccountId: parsed.data.bank_account_id,
-              createdBy: request.user!.id,
-            },
-          });
-          const royaltyPayment = await tx.royaltyPayment.create({
-            data: {
-              statementId: id,
-              amount: netAmount,
-              taxWithheld: parsed.data.tax_withheld,
-              paymentId: payment.id,
-            },
-          });
-          await tx.royaltyStatement.update({ where: { id }, data: { status: "paid" } });
-          return royaltyPayment;
+          const rows = [];
+          let allocatedGross = 0;
+          let allocatedTax = 0;
+          for (let i = 0; i < splits.length; i++) {
+            const isLast = i === splits.length - 1;
+            const splitGross = isLast
+              ? Math.round((grossAmount - allocatedGross) * 100) / 100
+              : Math.round(((grossAmount * splits[i].sharePct) / 100) * 100) / 100;
+            const splitTax = isLast
+              ? Math.round((taxWithheld - allocatedTax) * 100) / 100
+              : Math.round(((taxWithheld * splits[i].sharePct) / 100) * 100) / 100;
+            allocatedGross += splitGross;
+            allocatedTax += splitTax;
+            const splitNet = Math.round((splitGross - splitTax) * 100) / 100;
+            if (splitNet <= 0) continue;
+            const payment = await tx.payment.create({
+              data: {
+                direction: "out",
+                method: parsed.data.method,
+                amount: splitNet,
+                bankAccountId: parsed.data.bank_account_id,
+                createdBy: request.user!.id,
+              },
+            });
+            const royaltyPayment = await tx.royaltyPayment.create({
+              data: { statementId: id, partnerId: splits[i].partnerId ?? undefined, amount: splitNet, taxWithheld: splitTax, paymentId: payment.id },
+            });
+            rows.push(royaltyPayment);
+          }
+          const newSettled = settled + grossAmount;
+          if (newSettled >= Number(statement.balanceDue) - 0.01) {
+            await tx.royaltyStatement.update({ where: { id }, data: { status: "paid" } });
+          }
+          return rows;
         });
 
-        await writeAuditLog({
-          userId: request.user!.id,
-          action: "create",
-          entityType: "royalty_payment",
-          entityId: result.id,
-          newValues: result,
-          ipAddress: request.ip,
-        });
+        for (const row of created) {
+          await writeAuditLog({
+            userId: request.user!.id,
+            action: "create",
+            entityType: "royalty_payment",
+            entityId: row.id,
+            newValues: row,
+            ipAddress: request.ip,
+          });
+        }
 
-        return reply.code(201).send(result);
+        const remainingAfter = Math.round((remaining - grossAmount) * 100) / 100;
+        // Rétrocompatibilité : un paiement à un seul bénéficiaire (cas le plus
+        // fréquent, aucune répartition configurée) renvoie l'objet à plat
+        // comme avant l'ajout de la répartition multi-bénéficiaires.
+        if (created.length === 1) {
+          return reply.code(201).send({ ...created[0], remaining_balance: remainingAfter });
+        }
+        return reply.code(201).send({ payments: created, remaining_balance: remainingAfter });
       } catch (err) {
         if (err instanceof PeriodClosedError) {
           return reply.code(409).send({ code: "accounting_period_closed", message: err.message });

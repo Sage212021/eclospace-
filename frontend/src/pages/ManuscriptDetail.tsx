@@ -11,6 +11,9 @@ import {
   type UserSummary,
 } from "../api/client";
 import { Spine } from "../components/Spine";
+import { ContractsSection } from "../components/ContractsSection";
+import { TasksSection } from "../components/TasksSection";
+import { CorrectionSection } from "../components/CorrectionSection";
 
 interface ManuscriptDetailProps {
   manuscriptId: string;
@@ -19,9 +22,12 @@ interface ManuscriptDetailProps {
 }
 
 type ManuscriptWithExtras = Manuscript & {
-  workContributors: { author: { firstName: string; lastName: string; penName: string | null } }[];
+  workContributors: { author: { id: string; firstName: string; lastName: string; penName: string | null } }[];
   owner: UserSummary;
 };
+
+const CONTRACTUALISATION_STEP_ORDER = 5;
+const PLANIFICATION_STEP_ORDER = 6;
 
 export function ManuscriptDetail({ manuscriptId, permissions, onBack }: ManuscriptDetailProps) {
   const [manuscript, setManuscript] = useState<ManuscriptWithExtras | null>(null);
@@ -122,12 +128,29 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           />
         )}
 
-        {!["VERIF_ADMIN", "COMITE_LECTURE", "DECISION_EDITORIALE"].includes(manuscript.status.code) && (
-          <p style={{ fontSize: 13, color: "var(--muted)" }}>
-            Aucune action disponible à cette étape dans les lots actuellement livrés.
-          </p>
-        )}
+        {!["VERIF_ADMIN", "COMITE_LECTURE", "DECISION_EDITORIALE"].includes(manuscript.status.code) &&
+          manuscript.status.stepOrder < CONTRACTUALISATION_STEP_ORDER && (
+            <p style={{ fontSize: 13, color: "var(--muted)" }}>
+              Aucune action disponible à cette étape dans les lots actuellement livrés.
+            </p>
+          )}
       </div>
+
+      {manuscript.status.stepOrder >= CONTRACTUALISATION_STEP_ORDER && permissions.has("contracts:consultation") && (
+        <ContractsSection
+          manuscriptId={manuscript.id}
+          authorId={manuscript.workContributors[0]?.author.id ?? ""}
+          canCreate={permissions.has("contracts:saisie")}
+          canValidate={permissions.has("contracts:validation")}
+        />
+      )}
+
+      {manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && permissions.has("tasks:consultation") && (
+        <>
+          <TasksSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
+          <CorrectionSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
+        </>
+      )}
     </div>
   );
 }

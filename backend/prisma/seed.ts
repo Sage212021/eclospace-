@@ -50,7 +50,8 @@ const roles: { code: string; label: string; departmentCode: string | null }[] = 
 // Modules exposés par l'API (Ch. 2 §2.3 : 4 niveaux d'action), ajoutés lot par lot.
 const lot0Modules = ["documents", "notifications", "users", "settings"];
 const lot1Modules = ["manuscripts", "comite_lecture", "decision_editoriale"];
-const modules = [...lot0Modules, ...lot1Modules];
+const lot2Modules = ["contracts", "tasks"];
+const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules];
 const actions = Object.values(PermissionAction);
 
 // Référentiel des ~20 étapes du workflow (Ch. 4 §4.3). Toutes sont créées dès
@@ -202,7 +203,25 @@ async function main() {
     "comite_lecture:consultation",
     "decision_editoriale:validation",
     "users:consultation",
+    "contracts:consultation",
+    "tasks:consultation",
+    "tasks:saisie",
+    "tasks:validation",
   ]);
+
+  // Juridique et contrats (Ch. 9 §9.11 : accès réservé aux profils listés).
+  await grant("RESP_JURIDIQUE", [
+    "contracts:consultation",
+    "contracts:saisie",
+    "contracts:validation",
+    "manuscripts:consultation",
+    "users:consultation",
+  ]);
+  await grant("DIR_GENERAL", ["contracts:consultation", "contracts:validation", "manuscripts:administration"]);
+  await grant("RESP_FINANCE", ["contracts:consultation"]);
+
+  // Correction éditoriale (Ch. 10) : le correcteur voit et exécute ses tâches.
+  await grant("CORRECTEUR", ["tasks:consultation", "tasks:saisie"]);
 
   // Référentiel des étapes du workflow (Ch. 4 §4.3).
   for (const status of workflowStatuses) {

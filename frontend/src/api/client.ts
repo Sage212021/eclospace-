@@ -117,7 +117,7 @@ export function listManuscripts() {
 export function getManuscript(id: string) {
   return request<
     Manuscript & {
-      workContributors: { author: { firstName: string; lastName: string; penName: string | null } }[];
+      workContributors: { author: { id: string; firstName: string; lastName: string; penName: string | null } }[];
       owner: UserSummary;
     }
   >(`/api/v1/manuscripts/${id}`);
@@ -194,5 +194,151 @@ export function submitEditorialDecision(
   return request(`/api/v1/manuscripts/${manuscriptId}/editorial-decision`, {
     method: "POST",
     body: JSON.stringify({ decision, motivation }),
+  });
+}
+
+// --- Lot 2 : contrats, tâches/Gantt, correction et comparateur ---
+
+export type ContractStatus = "preparation" | "legal_review" | "direction_approval" | "awaiting_signature" | "active" | "expired" | "terminated";
+
+export interface Contract {
+  id: string;
+  contractNumber: string;
+  type: string;
+  status: ContractStatus;
+  signedAt: string | null;
+  author: { id: string; firstName: string; lastName: string };
+  manuscript: { id: string; manuscriptNumber: string; title: string } | null;
+}
+
+export function listContracts(manuscriptId?: string) {
+  const query = manuscriptId ? `?manuscript=${manuscriptId}` : "";
+  return request<Contract[]>(`/api/v1/contracts${query}`);
+}
+
+export function createContract(input: {
+  type: string;
+  manuscript_id?: string;
+  author_id: string;
+  financial_terms: Record<string, unknown>;
+}) {
+  return request<Contract>("/api/v1/contracts", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateContractStatus(id: string, status: ContractStatus) {
+  return request<Contract>(`/api/v1/contracts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
+export type TaskStatus = "non_commencee" | "en_cours" | "suspendue" | "terminee" | "validee";
+
+export interface Task {
+  id: string;
+  title: string;
+  type: string;
+  status: TaskStatus;
+  progressPct: number;
+  plannedStart: string | null;
+  plannedEnd: string | null;
+  dependsOnTaskId: string | null;
+  assignee: { id: string; username: string } | null;
+}
+
+export function listTasks(manuscriptId: string) {
+  return request<Task[]>(`/api/v1/tasks?manuscript=${manuscriptId}`);
+}
+
+export function createTask(
+  manuscriptId: string,
+  input: { title: string; type: string; assignee_id?: string; planned_start?: string; planned_end?: string; depends_on_task_id?: string },
+) {
+  return request<Task>(`/api/v1/manuscripts/${manuscriptId}/tasks`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function patchTask(id: string, input: { status?: TaskStatus; progress_pct?: number }) {
+  return request<Task>(`/api/v1/tasks/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export interface TaskComment {
+  id: string;
+  body: string;
+  isBlocking: boolean;
+  resolvedAt: string | null;
+  author: { id: string; username: string };
+}
+
+export function listTaskComments(taskId: string) {
+  return request<TaskComment[]>(`/api/v1/tasks/${taskId}/comments`);
+}
+
+export function addTaskComment(taskId: string, body: string, isBlocking: boolean) {
+  return request<TaskComment>(`/api/v1/tasks/${taskId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body, is_blocking: isBlocking }),
+  });
+}
+
+export function resolveTaskComment(id: string) {
+  return request<TaskComment>(`/api/v1/task-comments/${id}/resolve`, { method: "PATCH" });
+}
+
+export interface DocumentSummary {
+  id: string;
+  title: string;
+}
+
+export interface DocumentVersionSummary {
+  id: string;
+  versionNumber: number;
+  mimeType: string;
+  changeSummary: string | null;
+  uploadedAt: string;
+}
+
+export function createDocument(input: { entity_type: string; entity_id: string; category: string; title: string }) {
+  return request<DocumentSummary>("/api/v1/documents", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function listDocuments(entityType: string, entityId: string) {
+  return request<DocumentSummary[]>(`/api/v1/documents?entity_type=${entityType}&entity_id=${entityId}`);
+}
+
+export function listDocumentVersions(documentId: string) {
+  return request<DocumentVersionSummary[]>(`/api/v1/documents/${documentId}/versions`);
+}
+
+export async function uploadDocumentVersion(documentId: string, file: File, changeSummary?: string) {
+  const form = new FormData();
+  form.append("file", file);
+  if (changeSummary) form.append("change_summary", changeSummary);
+  const response = await fetch(`${API_BASE}/api/v1/documents/${documentId}/versions`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    throw new Error(error?.message ?? `Erreur ${response.status}`);
+  }
+  return response.json() as Promise<DocumentVersionSummary>;
+}
+
+export interface ComparisonChange {
+  type: "added" | "removed" | "unchanged";
+  value: string;
+}
+
+export interface ComparisonReport {
+  left_version: number;
+  right_version: number;
+  additions: number;
+  deletions: number;
+  modifications: number;
+  changes: ComparisonChange[];
+}
+
+export function compareVersions(leftId: string, rightId: string) {
+  return request<ComparisonReport>("/api/v1/document-versions/compare", {
+    method: "POST",
+    body: JSON.stringify({ left_id: leftId, right_id: rightId }),
   });
 }

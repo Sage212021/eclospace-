@@ -90,6 +90,8 @@ model User {
   manuscriptSteps    ManuscriptStep[]
   readingAssignments ReadingAssignment[]
   editorialDecisions EditorialDecision[]
+  assignedTasks      Task[]
+  taskComments       TaskComment[]
 
   @@map("users")
 }
@@ -226,6 +228,7 @@ enum DocumentCategory {
   bat
   facture
   visuel
+  rapport_comparaison
   autre
 }
 
@@ -275,6 +278,8 @@ model DocumentVersion {
   changeSummary String?               @map("change_summary")
   uploadedBy    String?               @map("uploaded_by")
   uploadedAt    DateTime              @default(now()) @map("uploaded_at")
+
+  taskComments TaskComment[]
 
   @@unique([documentId, versionNumber])
   @@map("document_versions")
@@ -344,6 +349,7 @@ model Author {
   deletedBy String?   @map("deleted_by")
 
   workContributors WorkContributor[]
+  contracts        Contract[]
 
   @@map("authors")
 }
@@ -428,6 +434,8 @@ model Manuscript {
   stepTransitions    StepTransition[]
   readingAssignments ReadingAssignment[]
   editorialDecisions EditorialDecision[]
+  contracts          Contract[]
+  tasks              Task[]
 
   @@map("manuscripts")
 }
@@ -490,6 +498,8 @@ model ManuscriptStep {
   observations  String?
 
   createdAt DateTime @default(now()) @map("created_at")
+
+  tasks Task[]
 
   @@unique([manuscriptId, statusId])
   @@map("manuscript_steps")
@@ -634,4 +644,191 @@ model EditorialDecision {
   scoreGapFlag Boolean               @default(false) @map("score_gap_flag")
 
   @@map("editorial_decisions")
+}
+
+// ============================================================
+// Lot 2 — Contrats (Ch. 9, hors moteur de droits connecté aux ventes : Lot 5),
+// tâches et Gantt (Ch. 8 §8.4-8.12), correction éditoriale (Ch. 10 — réutilise
+// documents/document_versions du Lot 0 pour le versionnage).
+// ============================================================
+
+model ContractNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("contract_number_counters")
+}
+
+enum ContractType {
+  edition
+  coedition
+  traduction
+  illustration
+  correction
+  prestation
+  cession
+  avenant
+}
+
+// Circuit de validation Ch. 9 §9.8 (preparation → legal_review → direction_approval
+// → awaiting_signature → active), plus expired/terminated (§9.3).
+enum ContractStatus {
+  preparation
+  legal_review
+  direction_approval
+  awaiting_signature
+  active
+  expired
+  terminated
+}
+
+// La « partie contractante » du Ch. 9 §9.3 est polymorphe dans le modèle de
+// données (auteur, prestataire, employé externe). Seul le cas auteur est
+// implémenté au Lot 2 — aucune fiche « tiers/prestataire » n'existe encore
+// dans le cahier des charges (RH complet = Lot 6) ; l'étendre serait inventer
+// une donnée non spécifiée.
+model Contract {
+  id             String       @id @default(uuid())
+  contractNumber String       @unique @map("contract_number")
+  type           ContractType
+  manuscriptId   String?      @map("manuscript_id")
+  manuscript     Manuscript?  @relation(fields: [manuscriptId], references: [id])
+  authorId       String       @map("author_id")
+  author         Author       @relation(fields: [authorId], references: [id])
+
+  parentContractId String?    @map("parent_contract_id")
+  parentContract   Contract?  @relation("ContractAmendments", fields: [parentContractId], references: [id])
+  amendments       Contract[] @relation("ContractAmendments")
+
+  signedAt       DateTime?
+  effectiveAt    DateTime?      @map("effective_at")
+  durationMonths Int?           @map("duration_months")
+  territories    String[]       @default([])
+  languages      String[]       @default([])
+  formats        String[]       @default([])
+  financialTerms Json           @map("financial_terms")
+  status         ContractStatus @default(preparation)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  royaltyTerms RoyaltyTerms?
+
+  @@map("contracts")
+}
+
+enum RoyaltyBase {
+  prix_public_ht
+  prix_net_editeur
+}
+
+// Termes du contrat uniquement (Ch. 9 §9.4). Le moteur de calcul connecté
+// aux ventes (royalty_entries/statements/payments, §9.5) est le Lot 5 : il
+// n'existe pas de vente à relier tant que le Lot 4 n'est pas construit.
+model RoyaltyTerms {
+  id              String      @id @default(uuid())
+  contractId      String      @unique @map("contract_id")
+  contract        Contract    @relation(fields: [contractId], references: [id])
+  base            RoyaltyBase
+  tiers           Json // paliers : [{ "up_to": 3000, "rate": 0.08 }, { "up_to": null, "rate": 0.10 }]
+  advanceAmount   Decimal?    @map("advance_amount") @db.Decimal(12, 2)
+  paymentSchedule String?     @map("payment_schedule")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("royalty_terms")
+}
+
+// Types issus de la fusion Ch. 8 (production générale) et Ch. 10 §10.3
+// (niveaux de correction) — une même table `tasks` porte les deux (modèle §4.5).
+enum TaskType {
+  correction_ortho
+  correction_gramm
+  correction_typo
+  correction_syntaxe
+  correction_style
+  harmonisation
+  verif_biblio
+  coherence
+  layout
+  cover
+  illustration
+  expertise
+  rewrite
+  autre
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  critical
+}
+
+// Ch. 8 §8.6.
+enum TaskStatus {
+  non_commencee
+  en_cours
+  suspendue
+  terminee
+  validee
+}
+
+model Task {
+  id           String          @id @default(uuid())
+  manuscriptId String          @map("manuscript_id")
+  manuscript   Manuscript      @relation(fields: [manuscriptId], references: [id])
+  stepId       String?         @map("step_id")
+  step         ManuscriptStep? @relation(fields: [stepId], references: [id])
+  title        String
+  type         TaskType
+  assigneeId   String?         @map("assignee_id")
+  assignee     User?           @relation(fields: [assigneeId], references: [id])
+  priority     TaskPriority    @default(medium)
+  plannedStart DateTime?       @map("planned_start")
+  plannedEnd   DateTime?       @map("planned_end")
+  actualStart  DateTime?       @map("actual_start")
+  actualEnd    DateTime?       @map("actual_end")
+  progressPct  Int             @default(0) @map("progress_pct")
+  status       TaskStatus      @default(non_commencee)
+
+  // Dépendances du Gantt (Ch. 8 §8.7) : une tâche ne peut commencer avant la
+  // fin de celle dont elle dépend.
+  dependsOnTaskId String? @map("depends_on_task_id")
+  dependsOnTask   Task?   @relation("TaskDependency", fields: [dependsOnTaskId], references: [id])
+  dependentTasks  Task[]  @relation("TaskDependency")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  comments TaskComment[]
+
+  @@map("tasks")
+}
+
+// Observations du correcteur (Ch. 10 §10.7) : datées, signées, liées à la
+// version concernée ; un point bloquant non résolu empêche la validation.
+model TaskComment {
+  id                String           @id @default(uuid())
+  taskId            String           @map("task_id")
+  task              Task             @relation(fields: [taskId], references: [id])
+  documentVersionId String?          @map("document_version_id")
+  documentVersion   DocumentVersion? @relation(fields: [documentVersionId], references: [id])
+  authorId          String           @map("author_id")
+  author            User             @relation(fields: [authorId], references: [id])
+  body              String
+  isBlocking        Boolean          @default(false) @map("is_blocking")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  resolvedAt        DateTime?        @map("resolved_at")
+
+  @@map("task_comments")
 }

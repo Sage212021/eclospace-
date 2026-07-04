@@ -1,14 +1,39 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { Manuscript } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+
+// Ch. 4 §4.3, §4.6 : les étapes 8 (expertise) et 9 (réécriture) ne sont
+// activées que si le projet le requiert ; leur absence n'est pas comptée
+// comme une étape sautée. Seule EXPERTISE a un signal explicite au Lot 2
+// (manuscript.requires_expertise) ; REECRITURE n'a pas encore de mécanisme de
+// déclenchement dans le cahier des charges — elle est donc toujours sautée
+// pour l'instant (point à trancher avec la Direction éditoriale, voir
+// docs/JOURNAL_TECHNIQUE.md).
+function isStepRequired(statusCode: string, manuscript: Manuscript): boolean {
+  if (statusCode === "EXPERTISE") return manuscript.requiresExpertise;
+  if (statusCode === "REECRITURE") return false;
+  return true;
+}
+
+async function findNextApplicableStatus(fromStepOrder: number, manuscript: Manuscript) {
+  const candidates = await prisma.workflowStatus.findMany({
+    where: { stepOrder: { gt: fromStepOrder } },
+    orderBy: { stepOrder: "asc" },
+  });
+  return candidates.find((candidate) => !candidate.isConditional || isStepRequired(candidate.code, manuscript)) ?? null;
+}
 
 const validateStepSchema = z.object({
   observations: z.string().optional(),
   // Utilisé uniquement par l'étape VERIF_ADMIN (Ch. 4 §4.3, étape 2) : un
   // dossier incomplet bloque le passage à l'étape suivante.
   outcome: z.enum(["conforme", "incomplet"]).default("conforme"),
+  // Dérogation de la Direction générale (Ch. 9 §9.12) pour envoyer un
+  // ouvrage en production sans contrat d'édition actif — motivée et tracée.
+  override_justification: z.string().min(1).optional(),
 });
 
 // Étapes pilotées par un flux dédié plutôt que par cet endpoint générique :
@@ -59,8 +84,53 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { observations, outcome } = parsed.data;
+      const { observations, outcome, override_justification } = parsed.data;
       const now = new Date();
+
+      // Ch. 9 §9.12 : un ouvrage ne passe en production (planification) que
+      // si son contrat d'édition est actif, sauf dérogation motivée de la
+      // Direction générale.
+      if (targetStatus.code === "CONTRACTUALISATION") {
+        const activeEditionContract = await prisma.contract.findFirst({
+          where: { manuscriptId: id, type: { in: ["edition", "coedition"] }, status: "active", deletedAt: null },
+        });
+        if (!activeEditionContract) {
+          if (!override_justification) {
+            return reply.code(409).send({
+              code: "contract_required",
+              message: "Aucun contrat d'édition actif pour ce manuscrit. La production ne peut pas démarrer sans dérogation motivée de la Direction générale.",
+            });
+          }
+          if (!request.user!.permissions.has("manuscripts:administration")) {
+            return reply.code(403).send({
+              code: "forbidden",
+              message: "Seule la Direction générale peut accorder une dérogation à cette règle.",
+            });
+          }
+          await writeAuditLog({
+            userId: request.user!.id,
+            action: "status_change",
+            entityType: "manuscript",
+            entityId: id,
+            newValues: { derogation: "contrat_absent", justification: override_justification },
+            ipAddress: request.ip,
+          });
+        }
+      }
+
+      // Ch. 10 §10.7 : un point bloquant non levé empêche la validation de
+      // l'étape de correction.
+      if (targetStatus.code === "CORRECTION") {
+        const blockingComment = await prisma.taskComment.findFirst({
+          where: { isBlocking: true, resolvedAt: null, task: { manuscriptId: id, deletedAt: null } },
+        });
+        if (blockingComment) {
+          return reply.code(409).send({
+            code: "blocking_comment_unresolved",
+            message: "Au moins un point bloquant du correcteur n'a pas été levé sur ce manuscrit.",
+          });
+        }
+      }
 
       if (outcome === "incomplet") {
         await prisma.manuscriptStep.upsert({
@@ -84,7 +154,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         return reply.send({ advanced: false, message: "Dossier incomplet : passage à l'étape suivante bloqué." });
       }
 
-      const nextStatus = await prisma.workflowStatus.findFirst({ where: { stepOrder: targetStatus.stepOrder + 1 } });
+      const nextStatus = await findNextApplicableStatus(targetStatus.stepOrder, manuscript);
 
       await prisma.$transaction(async (tx) => {
         await tx.manuscriptStep.upsert({

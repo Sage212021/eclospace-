@@ -14,9 +14,26 @@ const createDocumentSchema = z.object({
   confidentiality: z.nativeEnum(Confidentiality).default("interne"),
 });
 
+const listDocumentsQuerySchema = z.object({
+  entity_type: z.string().min(1),
+  entity_id: z.string().uuid(),
+});
+
 // GED transverse (spécification API §2.3, modèle §3.5) : le dépôt d'une
 // version ne remplace jamais la précédente ; le hash est calculé côté serveur.
 export default async function documentRoutes(fastify: FastifyInstance) {
+  fastify.get("/api/v1/documents", { preHandler: requirePermission("documents", "consultation") }, async (request, reply) => {
+    const parsed = listDocumentsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Paramètres invalides.", details: parsed.error.issues });
+    }
+    const documents = await prisma.document.findMany({
+      where: { entityType: parsed.data.entity_type, entityId: parsed.data.entity_id, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+    });
+    return reply.send(documents);
+  });
+
   fastify.post("/api/v1/documents", { preHandler: requirePermission("documents", "saisie") }, async (request, reply) => {
     const parsed = createDocumentSchema.safeParse(request.body);
     if (!parsed.success) {

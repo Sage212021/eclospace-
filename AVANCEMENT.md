@@ -4,7 +4,7 @@
 |---|---|---|
 | Lot 0 | Fondations (sécurité, rôles, audit, GED, notifications) | En cours — socle backend/frontend fonctionnel |
 | Lot 1 | Entrée des manuscrits, comité de lecture, workflow | En cours — flux complet fonctionnel (étapes 1 à 5) |
-| Lot 2 | Contrats, planification/Gantt, correction | En attente |
+| Lot 2 | Contrats, planification/Gantt, correction | En cours — flux complet fonctionnel (étapes 5 à 7) |
 | Lot 3 | Maquette, infographie, ISBN, BAT, impression | En attente |
 | Lot 4 | Stock et commercial | En attente |
 | Lot 5 | Finance et droits d'auteur | En attente |
@@ -55,3 +55,28 @@
 - Contractualisation, planification, Gantt (Ch. 8 §8.4 et suivants) : Lot 2, non commencés.
 
 **Prochaine étape :** faire valider ce Lot 1 par l'opérateur, puis démarrer le Lot 2 (contrats, planification/Gantt, correction avec comparateur de versions) une fois validé.
+
+### 04/07/2026 (suite) — Lot 2 : contrats, tâches/Gantt, correction et comparateur de versions
+
+**Fait :**
+- Schéma Prisma : `contracts`, `royalty_terms` (termes contractuels — le moteur de calcul connecté aux ventes reste le Lot 5), `tasks`, `task_comments`.
+- **Contrats** (Ch. 9) : numéro auto-généré (`CT-AAAA-NNNN`), circuit de validation à 5 étapes strictement séquentiel (preparation → legal_review → direction_approval → awaiting_signature → active), consultations journalisées (§9.11 : la sensibilité juridique impose de tracer même la lecture seule).
+- **Règle de blocage Ch. 9 §9.12** : impossible de faire passer un manuscrit en production sans contrat d'édition actif, sauf dérogation motivée réservée à la Direction générale (tracée dans l'audit).
+- **Tâches et Gantt simplifié** (Ch. 8 §8.4-8.7) : création, dépendances, replanification avec recalcul en cascade des tâches dépendantes et **détection automatique des conflits** (une tâche déjà engagée dont l'échéance amont bouge).
+- **Correction éditoriale** (Ch. 10) : missions typées (orthographe, grammaire, style...), observations liées à une tâche avec points bloquants — un point bloquant non levé **empêche la validation de l'étape CORRECTION**.
+- **Comparateur de versions** (Ch. 10 §10.5, risque technique identifié par le plan) : extraction de texte `.docx` + calcul des ajouts/suppressions, rapport structuré archivé au dossier. Limité aux `.docx` (repli prévu par le plan) ; export PDF non implémenté.
+- **8 nouveaux tests automatisés** (19 au total, tous verts) : circuit contrat, blocage sans contrat actif, régression sur le saut de l'étape EXPERTISE (bug réel trouvé et corrigé), point bloquant, réplanification avec conflit, comparateur (ajouts/suppressions détectés, refus de comparer deux documents différents).
+- **Frontend** : section Contrats (création, progression du circuit), section Tâches (Gantt en liste, création, avancement), section Correction (dépôt de version, comparateur avec surlignage des changements) — intégrées à la fiche manuscrit, conditionnées à l'étape courante. Flux vérifié dans un navigateur réel.
+- **2 bugs réels trouvés et corrigés en testant dans un navigateur** (pas seulement via les tests automatisés) :
+  1. Les étapes conditionnelles (Expertise, Réécriture) n'étaient jamais sautées même non requises — un manuscrit sans expertise nécessaire passait quand même par cette étape.
+  2. CORS bloquait les requêtes `PATCH` (contrats, tâches) : la configuration par défaut de `@fastify/cors` ne les autorisait pas explicitement. Invisible dans les tests automatisés (qui n'utilisent pas de vrai CORS), révélé uniquement par le test en conditions réelles — illustre pourquoi la vérification navigateur reste nécessaire en plus des tests.
+
+**Points d'interprétation à faire valider** (détail dans `docs/JOURNAL_TECHNIQUE.md`) : contrepartie de contrat limitée aux auteurs (pas de fiche prestataire/tiers), déclenchement de l'étape REECRITURE non spécifié, transfert vers la mise en page simplifié (validation manuelle plutôt qu'automatique à la version finale), Gantt en liste plutôt qu'en diagramme interactif, autorité de dérogation contractuelle.
+
+**Limites connues de ce Lot 2 :**
+- Pas de diagramme de Gantt graphique avec glisser-déposer (Ch. 8 §8.7) — liste avec dépendances et recalcul, fonctionnellement correcte mais visuellement plus simple.
+- Comparateur limité aux `.docx` ; PDF maquetté non pris en charge (repli explicitement prévu par le plan).
+- Pas de tableau de bord juridique consolidé (Ch. 9 §9.9) ni de tableau de bord des corrections (Ch. 10 §10.8) — hors périmètre minimal.
+- Échéances de contrats et alertes automatiques (Ch. 9 §9.6) non implémentées.
+
+**Prochaine étape :** faire valider ce Lot 2 par l'opérateur, puis démarrer le Lot 3 (maquette, infographie, ISBN/dépôt légal, BAT, impression) une fois validé.

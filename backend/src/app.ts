@@ -11,6 +11,10 @@ import workflowRoutes from "./routes/workflow.js";
 import readingCommitteeRoutes from "./routes/readingCommittee.js";
 import userRoutes from "./routes/users.js";
 import referenceRoutes from "./routes/reference.js";
+import contractRoutes from "./routes/contracts.js";
+import taskRoutes from "./routes/tasks.js";
+import taskCommentRoutes from "./routes/taskComments.js";
+import comparatorRoutes from "./routes/comparator.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
@@ -18,6 +22,7 @@ export async function buildApp() {
   await app.register(cors, {
     origin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
     credentials: true,
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   });
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024 } });
@@ -33,6 +38,10 @@ export async function buildApp() {
   await app.register(readingCommitteeRoutes);
   await app.register(userRoutes);
   await app.register(referenceRoutes);
+  await app.register(contractRoutes);
+  await app.register(taskRoutes);
+  await app.register(taskCommentRoutes);
+  await app.register(comparatorRoutes);
 
   return app;
 }

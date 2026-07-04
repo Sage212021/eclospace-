@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eclospace — Prototype Phase 3</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1E2430;          /* texte principal */
+  --chrome:#232B3E;       /* barre latérale */
+  --chrome-2:#2C3650;
+  --paper:#F7F6F2;        /* fond espace de travail */
+  --card:#FFFFFF;
+  --line:#E4E2DA;
+  --eclosion:#B18414;     /* or Éclosion (logo) */
+  --eclosion-soft:#F7EFDA;
+  --amber:#C4661F;        /* attention (orange brûlé) */
+  --amber-soft:#F9E9DB;
+  --alert:#C24B3A;        /* critique */
+  --alert-soft:#F9E9E6;
+  --muted:#6B7280;
+  --radius:10px;
+  --font-display:'Fraunces',Georgia,serif;
+  --font-body:'Public Sans',system-ui,sans-serif;
+  --font-data:'IBM Plex Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);color:var(--ink);background:var(--paper);font-size:14px;line-height:1.5}
+button{font:inherit;cursor:pointer;border:none;background:none}
+.screen{display:none;min-height:100vh}
+.screen.active{display:block}
+
+/* ---------- ÉCRAN CONNEXION ---------- */
+#login{display:none;place-items:center;background:linear-gradient(160deg,var(--chrome) 0%,#1A2233 100%)}
+#login.active{display:grid}
+.login-card{background:var(--card);border-radius:16px;padding:44px 40px;width:min(400px,92vw);box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.brand h1{font-family:var(--font-display);font-size:22px;font-weight:600}
+.login-card p.sub{color:var(--muted);margin-bottom:26px;font-size:13px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--ink)}
+.field input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#FCFCFA}
+.field input:focus{outline:2px solid var(--eclosion);outline-offset:1px;border-color:var(--eclosion)}
+.btn-primary{width:100%;background:var(--eclosion);color:#fff;padding:12px;border-radius:8px;font-weight:600;margin-top:6px}
+.btn-primary:hover{background:#96700F}
+.login-foot{margin-top:22px;font-size:12px;color:var(--muted);text-align:center}
+.login-foot a{color:var(--eclosion);text-decoration:none}
+
+/* ---------- COQUILLE APPLICATION ---------- */
+.shell{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
+.sidebar{background:var(--chrome);color:#C9CFDD;padding:18px 0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.sidebar .brand{padding:0 18px 16px;border-bottom:1px solid var(--chrome-2);margin-bottom:10px}
+.sidebar .brand h1{color:#fff;font-size:17px}
+.sidebar .brand small{display:block;color:#8B93A7;font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.nav-group{padding:10px 18px 4px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#7C8499}
+.nav a{display:flex;align-items:center;gap:10px;padding:8px 18px;color:#C9CFDD;text-decoration:none;font-size:13px;border-left:3px solid transparent}
+.nav a:hover{background:var(--chrome-2)}
+.nav a.on{background:var(--chrome-2);color:#fff;border-left-color:var(--eclosion)}
+.nav .dot{width:7px;height:7px;border-radius:50%;background:#4A5470;flex:none}
+.nav a.on .dot{background:var(--eclosion)}
+.sidebar .user{margin-top:auto;padding:14px 18px;border-top:1px solid var(--chrome-2);font-size:12px}
+.sidebar .user b{color:#fff;display:block}
+.main{padding:0 32px 48px}
+.topbar{display:flex;align-items:center;gap:18px;padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:24px;position:sticky;top:0;background:var(--paper);z-index:5}
+.search{flex:1;max-width:420px;position:relative}
+.search input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.search::before{content:"⌕";position:absolute;left:11px;top:7px;color:var(--muted);font-size:16px}
+.topbar .bell{position:relative;font-size:18px;color:var(--muted)}
+.topbar .bell i{position:absolute;top:-4px;right:-6px;background:var(--alert);color:#fff;font-style:normal;font-size:10px;font-weight:700;border-radius:8px;padding:1px 5px}
+.page-title{font-family:var(--font-display);font-size:24px;font-weight:600;margin-bottom:2px}
+.page-sub{color:var(--muted);font-size:13px;margin-bottom:22px}
+
+/* ---------- COMPOSANTS ---------- */
+.grid{display:grid;gap:16px}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g2{grid-template-columns:2fr 1fr}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.card h3{font-size:13px;font-weight:600;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.card h3 a{font-size:12px;color:var(--eclosion);text-decoration:none;font-weight:500}
+.kpi .n{font-family:var(--font-data);font-size:26px;font-weight:500;line-height:1.1}
+.kpi .l{font-size:12px;color:var(--muted);margin-top:4px}
+.kpi .d{font-size:11px;margin-top:6px;font-weight:600}
+.up{color:var(--eclosion)}.down{color:var(--alert)}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600}
+.p-green{background:var(--eclosion-soft);color:var(--eclosion)}
+.p-amber{background:var(--amber-soft);color:#8F4A12}
+.p-red{background:var(--alert-soft);color:var(--alert)}
+.p-grey{background:#EEEDE8;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid #F0EFE9;vertical-align:middle}
+tr:hover td{background:#FBFAF6}
+.mono{font-family:var(--font-data);font-size:12px}
+.linklike{color:var(--eclosion);cursor:pointer;font-weight:500}
+
+/* Recommandations pilotage */
+.reco{display:flex;gap:12px;padding:12px;border-radius:8px;border:1px solid var(--line);margin-bottom:10px;align-items:flex-start}
+.reco .sev{width:8px;border-radius:4px;flex:none;align-self:stretch}
+.sev-c{background:var(--alert)}.sev-h{background:var(--amber)}.sev-m{background:var(--eclosion)}
+.reco p{font-size:13px}
+.reco .acts{margin-top:6px;display:flex;gap:8px}
+.reco .acts button{font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:#fff}
+.reco .acts button:hover{border-color:var(--eclosion);color:var(--eclosion)}
+
+/* ---------- FRISE MANUSCRIT (élément signature) ---------- */
+.spine{display:flex;align-items:flex-start;overflow-x:auto;padding:22px 4px 10px;gap:0}
+.station{display:flex;flex-direction:column;align-items:center;min-width:86px;position:relative;font-size:11px;text-align:center;color:var(--muted)}
+.station::before{content:"";position:absolute;top:9px;left:50%;width:100%;height:2px;background:var(--line);z-index:0}
+.station:last-child::before{display:none}
+.station .node{width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid var(--line);z-index:1;display:grid;place-items:center;font-size:10px;color:#fff}
+.station.done .node{background:var(--eclosion);border-color:var(--eclosion)}
+.station.done::before{background:var(--eclosion)}
+.station.now .node{background:#fff;border-color:var(--eclosion);box-shadow:0 0 0 4px var(--eclosion-soft)}
+.station.late .node{background:var(--amber);border-color:var(--amber)}
+.station .nm{margin-top:8px;max-width:80px;line-height:1.25}
+.station.now .nm{color:var(--ink);font-weight:600}
+.station .dt{font-family:var(--font-data);font-size:10px;margin-top:2px}
+.station.late .dt{color:#8F4A12;font-weight:600}
+
+/* Onglets fiche */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:18px 0}
+.tabs button{padding:9px 14px;font-size:13px;color:var(--muted);border-bottom:2px solid transparent}
+.tabs button.on{color:var(--ink);font-weight:600;border-bottom-color:var(--eclosion)}
+.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.meta div b{display:block;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+
+/* ---------- GANTT ---------- */
+.gantt{overflow-x:auto}
+.g-head,.g-row{display:grid;grid-template-columns:230px repeat(24,34px);align-items:center}
+.g-head{font-size:10px;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:4px}
+.g-head span{text-align:center}
+.g-row{min-height:38px;border-bottom:1px solid #F0EFE9}
+.g-row .ttl{font-size:12.5px;padding-right:12px}
+.g-row .ttl small{display:block;color:var(--muted);font-size:11px}
+.bar{height:16px;border-radius:8px;position:relative;grid-row:1}
+.bar.b-done{background:var(--eclosion)}
+.bar.b-run{background:repeating-linear-gradient(45deg,var(--eclosion),var(--eclosion) 6px,#D3A62E 6px,#D3A62E 12px)}
+.bar.b-plan{background:#D8D6CC}
+.bar.b-late{background:var(--amber)}
+.bar .dep{position:absolute;left:-8px;top:7px;width:8px;height:2px;background:#B9B6A9}
+.today{grid-row:1/99;width:2px;background:var(--alert);opacity:.55;height:100%;justify-self:center}
+.legend{display:flex;gap:16px;font-size:11px;color:var(--muted);margin-top:12px}
+.legend i{display:inline-block;width:14px;height:10px;border-radius:5px;margin-right:5px;vertical-align:-1px}
+
+.note{background:var(--eclosion-soft);border:1px solid #E7D6A6;border-radius:8px;padding:10px 14px;font-size:12px;color:#6E5410;margin-bottom:18px}
+
+/* ---- Comité de lecture ---- */
+.crit{display:grid;grid-template-columns:1fr 70px 150px 60px;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid #F0EFE9;font-size:13px}
+.crit .coef{font-family:var(--font-data);font-size:11px;color:var(--muted);text-align:center}
+.crit input[type=range]{width:100%;accent-color:var(--eclosion)}
+.crit .sc{font-family:var(--font-data);text-align:right;font-weight:500}
+.scorebox{text-align:center;padding:22px 16px}
+.scorebox .big{font-family:var(--font-data);font-size:44px;font-weight:500;line-height:1}
+.scorebox .of{color:var(--muted);font-size:13px}
+.readers td{font-family:var(--font-data)}
+/* ---- Stock / mobile ---- */
+.phone{width:262px;border:10px solid var(--chrome);border-radius:30px;background:var(--paper);overflow:hidden;flex:none;box-shadow:0 14px 34px rgba(0,0,0,.18)}
+.phone .cam{height:150px;background:linear-gradient(160deg,#2B3346,#1A2233);position:relative;display:grid;place-items:center}
+.phone .cam .frame{width:170px;height:74px;border:2px solid var(--eclosion);border-radius:8px;box-shadow:0 0 0 400px rgba(0,0,0,.35)}
+.phone .cam .bc{position:absolute;font-family:var(--font-data);color:#fff;font-size:10px;letter-spacing:2px}
+.phone .body{padding:14px}
+.phone h4{font-size:13px;margin-bottom:2px}
+.phone .qty{display:flex;align-items:center;gap:12px;justify-content:center;margin:12px 0}
+.phone .qty button{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);font-size:18px;background:#fff}
+.phone .qty b{font-family:var(--font-data);font-size:24px;min-width:44px;text-align:center}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.seg button{font-size:11px;padding:5px 9px;border:1px solid var(--line);border-radius:99px;background:#fff}
+.seg button.on{background:var(--eclosion);border-color:var(--eclosion);color:#fff;font-weight:600}
+/* ---- Commande ---- */
+.warn{background:var(--alert-soft);border:1px solid #EACFC9;color:#8C3325;border-radius:8px;padding:10px 14px;font-size:12.5px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.warn button{background:#fff;border:1px solid #D9AFA6;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:#8C3325}
+.totals td{border:none;padding:5px 10px}
+.totals tr:last-child td{border-top:2px solid var(--ink);font-weight:700;font-size:15px}
+/* ---- Droits ---- */
+.amort{height:14px;border-radius:7px;background:#EEEDE8;overflow:hidden;margin:8px 0 4px}
+.amort i{display:block;height:100%;background:var(--eclosion);border-radius:7px}
+.neg{color:var(--alert)}
+
+/* ---- BAT ---- */
+.chk{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #F0EFE9;font-size:13px}
+.chk input{margin-top:2px;accent-color:var(--eclosion);width:15px;height:15px}
+.chk small{display:block;color:var(--muted);font-size:11px}
+.signpad{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;font-size:12.5px;color:var(--muted)}
+/* ---- Impression ---- */
+.mstone{display:flex;align-items:center;gap:0;margin:6px 0 2px}
+.mstone .st{flex:1;text-align:center;font-size:10.5px;color:var(--muted);position:relative}
+.mstone .st::before{content:"";position:absolute;top:7px;left:-50%;width:100%;height:2px;background:var(--line)}
+.mstone .st:first-child::before{display:none}
+.mstone .st i{display:block;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid var(--line);margin:0 auto 4px;position:relative;z-index:1}
+.mstone .st.ok i{background:var(--eclosion);border-color:var(--eclosion)}
+.mstone .st.ok::before{background:var(--eclosion)}
+.mstone .st.run i{border-color:var(--eclosion);box-shadow:0 0 0 3px var(--eclosion-soft)}
+/* ---- Correcteur ---- */
+.mission{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;background:#fff}
+.mission .top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:8px}
+.mission h4{font-size:14px}
+.prog{height:8px;border-radius:4px;background:#EEEDE8;overflow:hidden;margin:8px 0 4px}
+.prog i{display:block;height:100%;background:var(--eclosion);border-radius:4px}
+@media(max-width:900px){.shell{grid-template-columns:1fr}.sidebar{display:none}.g4,.g3{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}.meta{grid-template-columns:1fr 1fr}}
+:focus-visible{outline:2px solid var(--eclosion);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<!-- ============ ÉCRAN 1 : CONNEXION ============ -->
+<section id="login" class="screen active">
+  <div class="login-card">
+    <img src="data:image/jpeg;base64,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iYo9otIfulDUN/Jc0/Uu3Fr60P8ATFTH+VHn5CvEpdnNw8igNXcKUVfVt64RRu6sPx526Sc7uc4zxwvmTZ5cm+hU0r/a4fQvN8q9ILXOtxV7I+Ut3i8FVunRlMWr7HLjFexpPY9pb8oXehu1vqMdVW0z89jZAo+k0Pe2ZxDC/wDJlH0rqS6WvMXpW6Z35OHfIVOM/wA0t/a4bXuiY82OR4erm3PglUODhkEEd4X7lRF5NdaE56qugx2hr2rnh1ReqUgCvmPhLh3yqyj0wt07L9mqn/O3RGcsqnmVRKVsplR5TbQLnGMTRU0478Fp+JepTbRKV2BU0U0fjG4OH0LpWPSfL7uzh8Hvif8AxTXl9+no1Zei8ek1dZqvAbWsjcfeygs+XgvVimjmaHxSMkae1pBC7NnFWb0a2q4q7p1atduqjnRo+0TKK9AREQEREBERAREQEREBERAREQEREBERAREQEREBERAXy+Nsgw4ZHrX0ixMa7xweQ0uc+TxE95YCVzNY1ow0ADwGF+osRRTG6GdZMJhEUmBMIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICYREDC45aaGbhLDHJ+U0FciLE0xVsmCJ0ebNpu0VGTJbqfJ7Ws3fkXQn0LZpfRjmh/IkP05WQotK7lmEu8+1TPshbTfuU7qpYdPs5gOeor5W9wewO+TC6R0NeKJ2/RVsWRyLHujKz5Fzrno1gKp1pommeyZhfTj70bJnVg8dVrK18JYH1cY7HASfG3iu5T68ZERHc7fUUru1wBI+A4KyxfL4mSN3Xsa8HscMqdGV4mx9hiKtOqqIq8pYnEUV8+iPZsdOgvduuYHktXFIfwc4d8B4rvZXl1WmLRVnekoYmu/CjG4R7QvyG0VNFjyO5z7g/iqkda34eDh8K3bdzFUbLtMT20z8p85U1Rbnmzp3/58nqouGB9T6NRGwH8KN2QfYeIXMt2mrhRqqkREUgREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERB//2Q==" alt="Eclospace" style="width:100%;max-width:300px;display:block;margin:0 auto 8px">
+    <p class="sub" style="text-align:center">La plateforme de gestion éditoriale d'Éclosion Édition</p>
+    <div class="field"><label for="u">Identifiant</label><input id="u" value="a.diallo"></div>
+    <div class="field"><label for="p">Mot de passe</label><input id="p" type="password" value="••••••••••"></div>
+    <button class="btn-primary" onclick="go('dash')">Se connecter</button>
+    <p class="login-foot"><a href="#">Mot de passe oublié ?</a> · Accès réservé au personnel autorisé</p>
+  </div>
+</section>
+
+<!-- ============ COQUILLE + ÉCRANS 2-4 ============ -->
+<section id="app" class="screen">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand" style="display:flex;gap:10px;align-items:center">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="flex:none">
+        <circle cx="12" cy="10" r="7" fill="#C9971C"/>
+        <path d="M12 14V7M12 9l-2.4-2M12 10.5l2.4-2M12 12l-1.8-1.2M12 12.5l2-1.3" stroke="#3A2E08" stroke-width="1.1" stroke-linecap="round"/>
+        <rect x="10" y="17" width="4" height="1.4" rx=".7" fill="#8B93A7"/>
+        <rect x="10.3" y="19" width="3.4" height="1.2" rx=".6" fill="#8B93A7"/>
+        <path d="M4 8.5l-1.6-.9M20 8.5l1.6-.9M12 1.6V.4M6 3.5 5 2.3M18 3.5l1-1.2" stroke="#C9971C" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      <div><h1>Eclospace</h1><small>Éclosion Édition</small></div>
+    </div>
+    <nav class="nav">
+      <div class="nav-group">Pilotage</div>
+      <a href="#" class="on" data-view="dash" onclick="show(event,'dash')"><span class="dot"></span>Direction générale</a>
+      <a href="#" data-view="gantt" onclick="show(event,'gantt')"><span class="dot"></span>Planning de production</a>
+      <div class="nav-group">Chaîne du livre</div>
+      <a href="#"><span class="dot"></span>Secrétariat éditorial</a>
+      <a href="#" data-view="comite" onclick="show(event,'comite')"><span class="dot"></span>Comité de lecture</a>
+      <a href="#" data-view="correct" onclick="show(event,'correct')"><span class="dot"></span>Correction</a>
+      <a href="#"><span class="dot"></span>Maquette · Infographie</a>
+      <a href="#" data-view="bat" onclick="show(event,'bat')"><span class="dot"></span>BAT · Qualité</a>
+      <a href="#" data-view="impr" onclick="show(event,'impr')"><span class="dot"></span>Impression</a>
+      <div class="nav-group">Diffusion</div>
+      <a href="#" data-view="stock" onclick="show(event,'stock')"><span class="dot"></span>Stock</a>
+      <a href="#" data-view="commande" onclick="show(event,'commande')"><span class="dot"></span>Commercial</a>
+      <a href="#" data-view="droits" onclick="show(event,'droits')"><span class="dot"></span>Finance · Droits</a>
+    </nav>
+    <div class="user"><b>Aminata Diallo</b>Directrice générale</div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="search"><input placeholder="Rechercher un ouvrage, un auteur, un ISBN…" onkeydown="if(event.key==='Enter')show(null,'fiche')"></div>
+      <button class="bell" title="7 notifications">🔔<i>7</i></button>
+    </div>
+
+    <!-- ===== VUE : TABLEAU DE BORD DIRECTION ===== -->
+    <div id="v-dash" class="view">
+      <h2 class="page-title">Tableau de bord — Direction générale</h2>
+      <p class="page-sub">Samedi 4 juillet 2026 · données en temps réel</p>
+
+      <div class="grid g4" style="margin-bottom:16px">
+        <div class="card kpi"><div class="n">147</div><div class="l">Manuscrits actifs</div><div class="d up">+9 ce mois</div></div>
+        <div class="card kpi"><div class="n">12</div><div class="l">Projets en retard</div><div class="d down">+3 cette semaine</div></div>
+        <div class="card kpi"><div class="n mono">18,4 M</div><div class="l">Chiffre d'affaires FCFA — juin</div><div class="d up">+12 % vs mai</div></div>
+        <div class="card kpi"><div class="n">4</div><div class="l">Titres en rupture</div><div class="d down">2 réimpressions suggérées</div></div>
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <h3>Manuscrits par étape <a onclick="show(null,'gantt')">Ouvrir le planning →</a></h3>
+          <table>
+            <tr><th>Étape</th><th style="width:90px">Ouvrages</th><th style="width:110px">Délai moyen</th><th style="width:90px">Retards</th></tr>
+            <tr><td>Comité de lecture</td><td class="mono">23</td><td class="mono">18 j</td><td><span class="pill p-amber">2</span></td></tr>
+            <tr><td>Correction</td><td class="mono">31</td><td class="mono">24 j</td><td><span class="pill p-red">5</span></td></tr>
+            <tr><td>Maquette · Infographie</td><td class="mono">14</td><td class="mono">15 j</td><td><span class="pill p-amber">3</span></td></tr>
+            <tr><td>BAT</td><td class="mono">6</td><td class="mono">4 j</td><td><span class="pill p-green">0</span></td></tr>
+            <tr><td>Impression</td><td class="mono">9</td><td class="mono">21 j</td><td><span class="pill p-amber">2</span></td></tr>
+            <tr><td>Commercialisation</td><td class="mono">64</td><td>—</td><td>—</td></tr>
+          </table>
+        </div>
+
+        <div class="card">
+          <h3>Pilotage intelligent <a href="#">Historique</a></h3>
+          <div class="reco"><span class="sev sev-c"></span><div>
+            <p><b>3 manuscrits bloqués en correction depuis plus de 10 jours</b> — charge de M. Koné à 140 %.</p>
+            <div class="acts"><button onclick="show(null,'gantt')">Voir les projets</button><button>Traiter</button><button>Reporter</button></div>
+          </div></div>
+          <div class="reco"><span class="sev sev-h"></span><div>
+            <p><b>« Les Saisons de Ségou »</b> atteindra le seuil d'alerte de stock dans 8 jours au rythme de vente actuel.</p>
+            <div class="acts"><button>Simuler une réimpression</button><button>Ignorer</button></div>
+          </div></div>
+          <div class="reco"><span class="sev sev-m"></span><div>
+            <p>Le coût de fabrication de <b>« Mathématiques 6e »</b> dépasse le budget prévu de <b>15 %</b>.</p>
+            <div class="acts"><button>Voir le budget</button><button>Traiter</button></div>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="grid g3" style="margin-top:16px">
+        <div class="card">
+          <h3>Validations en attente</h3>
+          <table>
+            <tr><td>BAT — <span class="linklike" onclick="show(null,'fiche')">L'Enfant du fleuve</span></td><td style="text-align:right"><span class="pill p-amber">2 j</span></td></tr>
+            <tr><td>Contrat — K. Touré</td><td style="text-align:right"><span class="pill p-red">6 j</span></td></tr>
+            <tr><td>Commande impression — 1,2 M FCFA</td><td style="text-align:right"><span class="pill p-grey">nouveau</span></td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3>Meilleures ventes — 30 jours</h3>
+          <table>
+            <tr><td>1. Les Saisons de Ségou</td><td class="mono" style="text-align:right">412 ex.</td></tr>
+            <tr><td>2. Mathématiques 6e</td><td class="mono" style="text-align:right">387 ex.</td></tr>
+            <tr><td>3. Contes de la lagune</td><td class="mono" style="text-align:right">201 ex.</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3>Trésorerie</h3>
+          <div class="kpi"><div class="n mono">42,7 M</div><div class="l">Position FCFA · point bas prévu le 22/07 : 31,2 M</div></div>
+          <p style="font-size:12px;margin-top:10px">Créances &gt; 60 j : <b class="down">6,1 M FCFA</b> · 3 clients en relance</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== VUE : FICHE MANUSCRIT ===== -->
+    <div id="v-fiche" class="view" style="display:none">
+      <p class="page-sub" style="margin-bottom:6px"><span class="linklike" onclick="show(null,'dash')">← Tableau de bord</span></p>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap">
+        <div>
+          <h2 class="page-title">L'Enfant du fleuve</h2>
+          <p class="page-sub" style="margin-bottom:0">Roman · Collection Racines · <span class="mono">MS-2026-0341</span> · Fatoumata Kane</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="pill p-amber">BAT — en attente de signature</span>
+          <button class="btn-primary" style="width:auto;padding:9px 16px;margin:0">Signer le BAT</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <h3>Parcours du manuscrit <span style="font-weight:500;color:var(--muted);font-size:12px">Avancement : 74 %</span></h3>
+        <div class="spine">
+          <div class="station done"><span class="node">✓</span><span class="nm">Réception</span><span class="dt">12/01</span></div>
+          <div class="station done"><span class="node">✓</span><span class="nm">Comité de lecture</span><span class="dt">03/02</span></div>
+          <div class="station done"><span class="node">✓</span><span class="nm">Décision</span><span class="dt">10/02</span></div>
+          <div class="station done"><span class="node">✓</span><span class="nm">Contrat</span><span class="dt">02/03</span></div>
+          <div class="station done"><span class="node">✓</span><span class="nm">Correction</span><span class="dt">28/04</span></div>
+          <div class="station done late"><span class="node">✓</span><span class="nm">Maquette</span><span class="dt">19/06 (+6 j)</span></div>
+          <div class="station done"><span class="node">✓</span><span class="nm">Couverture</span><span class="dt">22/06</span></div>
+          <div class="station now"><span class="node"></span><span class="nm">BAT</span><span class="dt">prévu 08/07</span></div>
+          <div class="station"><span class="node"></span><span class="nm">Impression</span><span class="dt">—</span></div>
+          <div class="station"><span class="node"></span><span class="nm">Stock</span><span class="dt">—</span></div>
+          <div class="station"><span class="node"></span><span class="nm">Mise en vente</span><span class="dt">obj. 15/09</span></div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="on">Synthèse</button><button>Documents (14)</button><button>Tâches (3 ouvertes)</button><button>Contrat &amp; droits</button><button>Budget</button><button>Historique</button>
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <h3>Informations</h3>
+          <div class="meta">
+            <div><b>Responsable actuel</b>Contrôle qualité — I. Sow</div>
+            <div><b>Chef de projet</b>M. Ouédraogo</div>
+            <div><b>Pages (réel)</b><span class="mono">288</span> <span style="color:var(--muted)">(est. 272)</span></div>
+            <div><b>ISBN papier</b><span class="mono">978-2-901234-41-7</span></div>
+            <div><b>Tirage prévu</b><span class="mono">2 000 ex.</span></div>
+            <div><b>Prix public</b><span class="mono">6 500 FCFA</span></div>
+            <div><b>Budget fabrication</b><span class="mono">2,84 M</span> / 3,10 M</div>
+            <div><b>Dépôt légal</b><span class="pill p-green">Préparé</span></div>
+          </div>
+          <div class="note" style="margin:16px 0 0">Contrôle de complétude : ISBN ✓ · code-barres ✓ · métadonnées ✓ · dépôt légal ✓ — le BAT peut être signé.</div>
+        </div>
+        <div class="card">
+          <h3>Dossier de BAT — cycle 2</h3>
+          <table>
+            <tr><td>Intérieur v6 <span class="mono" style="color:var(--muted)">sha256 4f2a…9c</span></td><td style="text-align:right"><span class="pill p-green">Contrôlé</span></td></tr>
+            <tr><td>Couverture v3 <span class="mono" style="color:var(--muted)">sha256 b81d…04</span></td><td style="text-align:right"><span class="pill p-green">Contrôlé</span></td></tr>
+            <tr><td>Anomalie #12 — folio p. 145 <span style="color:var(--muted)">(cycle 1)</span></td><td style="text-align:right"><span class="pill p-grey">Corrigée</span></td></tr>
+          </table>
+          <p style="font-size:12px;color:var(--muted);margin-top:12px">La signature verrouillera ces fichiers et notifiera le module Impression.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== VUE : GANTT PORTEFEUILLE ===== -->
+    <div id="v-gantt" class="view" style="display:none">
+      <h2 class="page-title">Planning de production — vue portefeuille</h2>
+      <p class="page-sub">24 semaines · filtres : Collection <b>Toutes</b> · Responsable <b>Tous</b> · <span class="linklike">Modifier</span></p>
+      <div class="card gantt">
+        <div class="g-head"><span></span>
+          <span>S23</span><span>S24</span><span>S25</span><span>S26</span><span>S27</span><span>S28</span><span>S29</span><span>S30</span><span>S31</span><span>S32</span><span>S33</span><span>S34</span><span>S35</span><span>S36</span><span>S37</span><span>S38</span><span>S39</span><span>S40</span><span>S41</span><span>S42</span><span>S43</span><span>S44</span><span>S45</span><span>S46</span>
+        </div>
+        <div class="g-row"><div class="ttl"><span class="linklike" onclick="show(null,'fiche')">L'Enfant du fleuve</span><small>BAT en attente — I. Sow</small></div>
+          <div class="bar b-done" style="grid-column:2/8"></div><div class="bar b-run" style="grid-column:8/10"><span class="dep"></span></div><div class="bar b-plan" style="grid-column:10/15"><span class="dep"></span></div><div class="today" style="grid-column:7"></div></div>
+        <div class="g-row"><div class="ttl">Mathématiques 6e <small>Impression — dépassement budget</small></div>
+          <div class="bar b-done" style="grid-column:2/9"></div><div class="bar b-late" style="grid-column:9/13"></div><div class="bar b-plan" style="grid-column:13/16"><span class="dep"></span></div><div class="today" style="grid-column:7"></div></div>
+        <div class="g-row"><div class="ttl">Contes de la lagune — t.2 <small>Correction — M. Koné</small></div>
+          <div class="bar b-done" style="grid-column:3/6"></div><div class="bar b-late" style="grid-column:6/9"></div><div class="bar b-plan" style="grid-column:9/13"><span class="dep"></span></div><div class="bar b-plan" style="grid-column:13/18"><span class="dep"></span></div><div class="today" style="grid-column:7"></div></div>
+        <div class="g-row"><div class="ttl">Histoire du Mali moderne <small>Expertise scientifique</small></div>
+          <div class="bar b-done" style="grid-column:2/5"></div><div class="bar b-run" style="grid-column:5/9"></div><div class="bar b-plan" style="grid-column:9/14"><span class="dep"></span></div><div class="today" style="grid-column:7"></div></div>
+        <div class="g-row"><div class="ttl">Poèmes du Sahel <small>Maquette — planifié</small></div>
+          <div class="bar b-plan" style="grid-column:8/11"></div><div class="bar b-plan" style="grid-column:11/14"><span class="dep"></span></div><div class="today" style="grid-column:7"></div></div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--eclosion)"></i>Terminé</span>
+        <span><i style="background:repeating-linear-gradient(45deg,var(--eclosion),var(--eclosion) 4px,#D3A62E 4px,#D3A62E 8px)"></i>En cours</span>
+        <span><i style="background:var(--amber)"></i>En retard</span>
+        <span><i style="background:#D8D6CC"></i>Planifié</span>
+        <span style="color:var(--alert)">│ aujourd'hui</span>
+        <span>— trait gauche : dépendance</span>
+      </div>
+      <p class="note" style="margin-top:14px">Prototype : dans l'application finale, les barres se déplacent par glisser-déposer (selon les droits), avec recalcul des dépendances et justification tracée — Ch. 8 §8.7.</p>
+    </div>
+
+
+    <!-- ===== VUE : COMITÉ DE LECTURE ===== -->
+    <div id="v-comite" class="view" style="display:none">
+      <h2 class="page-title">Comité de lecture — Évaluation</h2>
+      <p class="page-sub">« La Route des caravanes » · <span class="mono">MS-2026-0367</span> · essai historique · lecteur : vous (B. Traoré) · échéance 12/07</p>
+      <div class="grid g2">
+        <div class="card">
+          <h3>Grille d'évaluation <span style="font-weight:500;color:var(--muted);font-size:12px">coefficients fixés par la Direction éditoriale</span></h3>
+          <div class="crit" style="border-bottom:1px solid var(--line);padding-bottom:6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em"><span>Critère</span><span class="coef">Coef.</span><span style="text-align:center">Note</span><span style="text-align:right">/10</span></div>
+          <div class="crit"><span>Originalité du sujet</span><span class="coef">×2</span><input type="range" min="0" max="10" value="8" oninput="this.parentNode.querySelector('.sc').textContent=this.value;calc()"><span class="sc">8</span></div>
+          <div class="crit"><span>Qualité de l'écriture</span><span class="coef">×2</span><input type="range" min="0" max="10" value="7" oninput="this.parentNode.querySelector('.sc').textContent=this.value;calc()"><span class="sc">7</span></div>
+          <div class="crit"><span>Structure du texte</span><span class="coef">×1</span><input type="range" min="0" max="10" value="6" oninput="this.parentNode.querySelector('.sc').textContent=this.value;calc()"><span class="sc">6</span></div>
+          <div class="crit"><span>Rigueur scientifique</span><span class="coef">×3</span><input type="range" min="0" max="10" value="9" oninput="this.parentNode.querySelector('.sc').textContent=this.value;calc()"><span class="sc">9</span></div>
+          <div class="crit"><span>Adéquation ligne éditoriale</span><span class="coef">×3</span><input type="range" min="0" max="10" value="8" oninput="this.parentNode.querySelector('.sc').textContent=this.value;calc()"><span class="sc">8</span></div>
+          <div class="crit"><span>Potentiel commercial</span><span class="coef">×2</span><input type="range" min="0" max="10" value="6" oninput="this.parentNode.querySelector('.sc').textContent=this.value;calc()"><span class="sc">6</span></div>
+          <div style="margin-top:16px">
+            <b style="font-size:12px">Recommandation</b>
+            <div class="seg" id="recoseg">
+              <button class="on">Accepter</button><button>Corrections mineures</button><button>Corrections majeures</button><button>Réécriture</button><button>Refus motivé</button>
+            </div>
+            <textarea style="width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;min-height:70px" placeholder="Appréciation générale, points forts, points à améliorer…"></textarea>
+            <button class="btn-primary" style="width:auto;padding:10px 18px;margin-top:10px">Remettre mon rapport</button>
+          </div>
+        </div>
+        <div>
+          <div class="card scorebox">
+            <h3 style="justify-content:center">Score pondéré</h3>
+            <div class="big" id="gscore">7,8</div><div class="of">/ 10 — calcul automatique</div>
+            <div style="margin-top:10px"><span class="pill p-green" id="grating">Très bon</span></div>
+          </div>
+          <div class="card" style="margin-top:16px">
+            <h3>Autres lecteurs</h3>
+            <table class="readers">
+              <tr><td>M. Cissé</td><td style="text-align:right">8,4 · remis 28/06</td></tr>
+              <tr><td>Vous</td><td style="text-align:right" id="mine">7,8 · en cours</td></tr>
+            </table>
+            <p style="font-size:12px;color:var(--muted);margin-top:10px">Écart entre lecteurs : <b>0,6</b> — sous le seuil de discussion (1,5).</p>
+          </div>
+          <p class="note" style="margin-top:16px">Le score éclaire la décision, il ne la remplace pas : la décision finale revient à la Direction éditoriale (Ch. 7 §7.5).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== VUE : STOCK ===== -->
+    <div id="v-stock" class="view" style="display:none">
+      <h2 class="page-title">Stock — Magasin principal</h2>
+      <p class="page-sub">Valeur totale : <span class="mono">31,6 M FCFA</span> · fiabilité inventaire : 99,2 % · 2 références sous seuil</p>
+      <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
+        <div class="card" style="flex:1;min-width:420px">
+          <h3>Niveaux par référence <a href="#">Inventaire tournant →</a></h3>
+          <table>
+            <tr><th>Titre</th><th>Physique</th><th>Réservé</th><th>Disponible</th><th>Dépôt-vente</th><th></th></tr>
+            <tr><td>Les Saisons de Ségou<br><small class="mono" style="color:var(--muted)">978-2-901234-38-7</small></td>
+              <td class="mono">96</td><td class="mono">30</td><td class="mono"><b>66</b></td><td class="mono">44</td>
+              <td><span class="pill p-amber">Seuil dans 8 j</span></td></tr>
+            <tr><td>Mathématiques 6e<br><small class="mono" style="color:var(--muted)">978-2-901234-35-6</small></td>
+              <td class="mono">412</td><td class="mono">180</td><td class="mono"><b>232</b></td><td class="mono">—</td>
+              <td><span class="pill p-green">OK</span></td></tr>
+            <tr><td>Contes de la lagune<br><small class="mono" style="color:var(--muted)">978-2-901234-31-8</small></td>
+              <td class="mono">0</td><td class="mono">0</td><td class="mono"><b>0</b></td><td class="mono">12</td>
+              <td><span class="pill p-red">Rupture</span></td></tr>
+            <tr><td>Poèmes du Sahel<br><small class="mono" style="color:var(--muted)">978-2-901234-29-5</small></td>
+              <td class="mono">238</td><td class="mono">4</td><td class="mono"><b>234</b></td><td class="mono">18</td>
+              <td><span class="pill p-grey">Invendu &gt; 8 mois</span></td></tr>
+          </table>
+          <p class="note" style="margin-top:14px">Disponible = physique − réservé. Le stock courant est la somme des mouvements : chaque chiffre est auditable (Ch. 16 §16.4).</p>
+        </div>
+        <div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:8px;text-align:center"><b>Saisie mobile par scan</b> — entrée, sortie, inventaire</p>
+          <div class="phone">
+            <div class="cam"><div class="frame"></div><span class="bc">‖‖│‖│││‖│‖‖│ 9 782901 234387</span></div>
+            <div class="body">
+              <h4>Les Saisons de Ségou</h4>
+              <p style="font-size:11px;color:var(--muted)">Roman · tirage n°2 · empl. <span class="mono">A-03-2</span></p>
+              <div class="seg"><button class="on">Sortie vente</button><button>Entrée</button><button>Inventaire</button></div>
+              <div class="qty"><button>−</button><b>12</b><button>+</button></div>
+              <button class="btn-primary" style="margin:0">Enregistrer le mouvement</button>
+              <p style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center">Réf. commande CDE-2026-0812 · clé d'idempotence générée</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== VUE : PRISE DE COMMANDE ===== -->
+    <div id="v-commande" class="view" style="display:none">
+      <h2 class="page-title">Nouvelle commande</h2>
+      <p class="page-sub">Client : <b>Librairie Savane, Bamako</b> · catégorie Librairie · remise grille 30 % · paiement 60 j · relation : ferme</p>
+      <div class="warn" style="margin-bottom:16px">
+        <span><b>Encours dépassé :</b> 4,9 M FCFA après cette commande, pour un plafond de 4,0 M — et 1 facture à 72 jours. La commande sera <b>bloquée en attente de validation</b> de la direction commerciale.</span>
+        <button>Demander la validation</button>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <h3>Lignes de commande <a href="#">+ Ajouter un titre</a></h3>
+          <table>
+            <tr><th>Titre</th><th>Dispo</th><th>Qté</th><th>PU public</th><th>Remise</th><th style="text-align:right">Net HT</th></tr>
+            <tr><td>Les Saisons de Ségou</td><td class="mono">66</td><td class="mono">30</td><td class="mono">6 500</td><td class="mono">30 %</td><td class="mono" style="text-align:right">136 500</td></tr>
+            <tr><td>Mathématiques 6e</td><td class="mono">232</td><td class="mono">120</td><td class="mono">4 800</td><td class="mono">30 %</td><td class="mono" style="text-align:right">403 200</td></tr>
+            <tr><td>Contes de la lagune</td><td class="mono neg">0</td><td class="mono">20</td><td class="mono">5 200</td><td class="mono">30 %</td><td class="mono neg" style="text-align:right">rupture</td></tr>
+          </table>
+          <p style="font-size:12px;color:var(--muted);margin-top:10px">« Contes de la lagune » : réimpression en cours, livraison estimée S38 — proposer un reliquat ?</p>
+        </div>
+        <div class="card">
+          <h3>Récapitulatif</h3>
+          <table class="totals">
+            <tr><td>Total brut</td><td class="mono" style="text-align:right">771 000</td></tr>
+            <tr><td>Remise librairie 30 %</td><td class="mono" style="text-align:right">− 231 300</td></tr>
+            <tr><td>Net HT</td><td class="mono" style="text-align:right">539 700</td></tr>
+            <tr><td>TVA livre (exonéré)</td><td class="mono" style="text-align:right">0</td></tr>
+            <tr><td>Frais de port (14,2 kg)</td><td class="mono" style="text-align:right">8 500</td></tr>
+            <tr><td>Total FCFA</td><td class="mono" style="text-align:right">548 200</td></tr>
+          </table>
+          <button class="btn-primary" style="margin-top:14px">Confirmer — envoyer en validation</button>
+          <p style="font-size:11px;color:var(--muted);margin-top:10px">La confirmation réserve le stock ; la livraison créera la facture et les droits d'auteur en une transaction (API §8.1).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== VUE : DROITS D'AUTEUR ===== -->
+    <div id="v-droits" class="view" style="display:none">
+      <h2 class="page-title">Droits d'auteur — Fatoumata Kane</h2>
+      <p class="page-sub">Contrat <span class="mono">CT-2026-0089</span> · « Les Saisons de Ségou » · 8 % du prix public HT jusqu'à 3 000 ex., 10 % au-delà · avance : 400 000 FCFA</p>
+      <div class="grid g2">
+        <div class="card">
+          <h3>Relevé — 1er semestre 2026 <a href="#">Voir ligne à ligne</a></h3>
+          <table>
+            <tr><th>Mouvement</th><th>Qté</th><th>Taux</th><th style="text-align:right">Droits FCFA</th></tr>
+            <tr><td>Ventes fermes librairies</td><td class="mono">1 246</td><td class="mono">8 %</td><td class="mono" style="text-align:right">648 000</td></tr>
+            <tr><td>Ventes relevées — dépôts</td><td class="mono">318</td><td class="mono">8 %</td><td class="mono" style="text-align:right">165 400</td></tr>
+            <tr><td>Ventes directes &amp; salons</td><td class="mono">204</td><td class="mono">8 %</td><td class="mono" style="text-align:right">106 100</td></tr>
+            <tr><td class="neg">Retours librairies</td><td class="mono neg">− 57</td><td class="mono">8 %</td><td class="mono neg" style="text-align:right">− 29 600</td></tr>
+            <tr><td><b>Droits générés</b></td><td class="mono"><b>1 711</b></td><td></td><td class="mono" style="text-align:right"><b>889 900</b></td></tr>
+          </table>
+        </div>
+        <div>
+          <div class="card">
+            <h3>Amortissement de l'avance</h3>
+            <div class="amort"><i style="width:100%"></i></div>
+            <p style="font-size:12px">Avance de <span class="mono">400 000</span> entièrement amortie depuis le <b>14/04/2026</b>.</p>
+            <table class="totals" style="margin-top:10px">
+              <tr><td>Droits générés S1</td><td class="mono" style="text-align:right">889 900</td></tr>
+              <tr><td>Avance amortie</td><td class="mono" style="text-align:right">− 400 000</td></tr>
+              <tr><td>Retenue fiscale 7,5 %</td><td class="mono" style="text-align:right">− 36 700</td></tr>
+              <tr><td>Net à payer</td><td class="mono" style="text-align:right">453 200</td></tr>
+            </table>
+            <button class="btn-primary" style="margin-top:14px">Générer le relevé PDF et l'ordre de paiement</button>
+          </div>
+          <p class="note" style="margin-top:16px">Chaque montant est recalculable ligne à ligne depuis les ventes d'origine (royalty_entries, modèle §5.2) — l'auteur peut tout vérifier.</p>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ===== VUE : BAT / CONTRÔLE QUALITÉ ===== -->
+    <div id="v-bat" class="view" style="display:none">
+      <h2 class="page-title">BAT — L'Enfant du fleuve <span class="pill p-amber" style="vertical-align:4px">Cycle 2 · contrôle en cours</span></h2>
+      <p class="page-sub">Dossier assemblé le 02/07 · intérieur v6 + couverture v3 · contrôleur : I. Sow · <span class="linklike" onclick="show(null,'fiche')">Ouvrir la fiche de l'ouvrage →</span></p>
+      <div class="grid g2">
+        <div class="card">
+          <h3>Liste de contrôle <span style="font-weight:500;color:var(--muted);font-size:12px">14 / 16 points vérifiés</span></h3>
+          <p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:6px 0 2px">Intérieur</p>
+          <label class="chk"><input type="checkbox" checked><span>Mise en page conforme au gabarit <small>Collection Racines · gabarit R-2</small></span></label>
+          <label class="chk"><input type="checkbox" checked><span>Pagination et table des matières exactes <small>288 pages · TdM vérifiée</small></span></label>
+          <label class="chk"><input type="checkbox" checked><span>Mentions légales complètes <small>ISBN 978-2-901234-41-7 · dépôt légal 3e trim. 2026 · achevé d'imprimer</small></span></label>
+          <label class="chk"><input type="checkbox" checked><span>Images : résolution et colorimétrie <small>12 visuels · 300 dpi · CMJN</small></span></label>
+          <p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px">Couverture</p>
+          <label class="chk"><input type="checkbox" checked><span>Orthographe du titre et de l'auteur <small>double lecture effectuée</small></span></label>
+          <label class="chk"><input type="checkbox" checked><span>Épaisseur du dos cohérente <small>288 p. · bouffant 80 g → 17,2 mm ✓</small></span></label>
+          <label class="chk"><input type="checkbox"><span>Code-barres scannable <small>test douchette à réaliser sur l'épreuve papier</small></span></label>
+          <label class="chk"><input type="checkbox"><span>Prix conforme à la fiche commerciale <small>6 500 FCFA — en attente de confirmation du commercial</small></span></label>
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <button class="btn-primary" style="width:auto;padding:9px 16px;margin:0;opacity:.45" disabled>Transmettre à la signature</button>
+            <button style="border:1px solid var(--alert);color:var(--alert);border-radius:8px;padding:9px 14px;font-weight:600;font-size:13px">Déclarer une anomalie</button>
+          </div>
+          <p style="font-size:11.5px;color:var(--muted);margin-top:8px">La transmission est bloquée tant que les 16 points ne sont pas vérifiés (Ch. 14 §14.3).</p>
+        </div>
+        <div>
+          <div class="card">
+            <h3>Anomalies du cycle</h3>
+            <table>
+              <tr><td>#12 · folio manquant p. 145 <small style="color:var(--muted)">majeure · cycle 1</small></td><td style="text-align:right"><span class="pill p-grey">Corrigée v6</span></td></tr>
+              <tr><td>#13 · veuve p. 201 <small style="color:var(--muted)">mineure · cycle 1</small></td><td style="text-align:right"><span class="pill p-grey">Corrigée v6</span></td></tr>
+            </table>
+            <p style="font-size:12px;color:var(--muted);margin-top:10px">Comparateur v5 → v6 : <b>2 changements</b>, tous deux attendus. Aucune régression détectée.</p>
+          </div>
+          <div class="card" style="margin-top:16px">
+            <h3>Signature électronique</h3>
+            <div class="signpad">
+              Signataires requis : <b>Directeur éditorial</b> (tirage ≤ 3 000 ex.)<br>
+              La signature enregistrera l'empreinte des fichiers<br>
+              <span class="mono" style="font-size:11px">intérieur 4f2a…9c · couverture b81d…04</span><br>
+              et verrouillera toute modification.
+            </div>
+            <p style="font-size:11.5px;color:var(--muted);margin-top:10px">BAT auteur : épreuve envoyée à F. Kane le 01/07 — accord reçu le 03/07 ✓ (clause 9.2 du contrat).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== VUE : IMPRESSION ===== -->
+    <div id="v-impr" class="view" style="display:none">
+      <h2 class="page-title">Impression — Commandes en cours</h2>
+      <p class="page-sub">3 fabrications en cours · 1 consultation ouverte · 1 livraison attendue cette semaine</p>
+      <div class="card" style="margin-bottom:16px">
+        <h3>Mathématiques 6e — réimpression n°3 <span class="mono" style="font-weight:500;color:var(--muted)">BC-2026-0147 · Imprimerie Sahel Print</span></h3>
+        <div class="mstone">
+          <div class="st ok"><i></i>Fichiers reçus<br><span class="mono">22/06</span></div>
+          <div class="st ok"><i></i>Calage<br><span class="mono">25/06</span></div>
+          <div class="st run"><i></i>Impression<br><span class="mono">prévu 08/07</span></div>
+          <div class="st"><i></i>Façonnage<br><span class="mono">—</span></div>
+          <div class="st"><i></i>Expédition<br><span class="mono">—</span></div>
+          <div class="st"><i></i>Livraison<br><span class="mono">obj. 18/07</span></div>
+        </div>
+        <div class="meta" style="margin-top:14px">
+          <div><b>Quantité</b><span class="mono">3 000 ex. (±3 %)</span></div>
+          <div><b>Montant engagé</b><span class="mono">3,42 M FCFA</span></div>
+          <div><b>Coût unitaire</b><span class="mono">1 140 FCFA</span></div>
+          <div><b>Budget fabrication</b><span class="pill p-red">+15 % vs prévu</span></div>
+        </div>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <h3>Consultation — L'Enfant du fleuve <span style="font-weight:500;color:var(--muted);font-size:12px">2 000 ex. · en attente du BAT signé</span></h3>
+          <table>
+            <tr><th>Imprimeur</th><th>1 000 ex.</th><th>2 000 ex.</th><th>Délai</th><th>Éval.</th></tr>
+            <tr><td>Sahel Print</td><td class="mono">1 480/ex.</td><td class="mono"><b>1 190/ex.</b></td><td class="mono">21 j</td><td><span class="pill p-green">A · 96 % délais</span></td></tr>
+            <tr><td>Graphique Océan</td><td class="mono">1 395/ex.</td><td class="mono"><b>1 150/ex.</b></td><td class="mono">28 j</td><td><span class="pill p-amber">B · 2 réclamations</span></td></tr>
+            <tr><td>Print Express CI</td><td class="mono">1 610/ex.</td><td class="mono"><b>1 320/ex.</b></td><td class="mono">14 j</td><td><span class="pill p-green">A− · rapide</span></td></tr>
+          </table>
+          <p style="font-size:11.5px;color:var(--muted);margin-top:10px">L'évaluation est calculée sur l'historique réel : délais tenus, non-conformités, compétitivité (Ch. 15 §15.2). Sélection &gt; 2 M FCFA : validation Direction générale requise.</p>
+        </div>
+        <div class="card">
+          <h3>Réception attendue</h3>
+          <table>
+            <tr><td>Contes de la lagune — réimpr. n°2<br><small style="color:var(--muted)">BC-2026-0139 · 1 500 ex. · Graphique Océan</small></td><td style="text-align:right"><span class="pill p-amber">J+2 de retard</span></td></tr>
+          </table>
+          <p style="font-size:12px;margin-top:12px">À la livraison : comptage, contrôle qualité sur échantillon (60 ex.), puis entrée en stock des exemplaires acceptés. La facture fournisseur ne sera payable qu'après rapprochement commande / réception (Ch. 18 §18.4).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== VUE : TABLEAU DE BORD CORRECTEUR ===== -->
+    <div id="v-correct" class="view" style="display:none">
+      <h2 class="page-title">Mes missions de correction</h2>
+      <p class="page-sub">Moussa Koné · correcteur · 3 missions en cours · charge : <span class="pill p-red">140 %</span> — signalée à la direction éditoriale</p>
+      <div class="grid g2">
+        <div>
+          <div class="mission">
+            <div class="top"><h4>Contes de la lagune — t.2 <small style="color:var(--muted)">· stylistique + harmonisation</small></h4><span class="pill p-red">Échéance dépassée · J+4</span></div>
+            <div class="prog"><i style="width:70%"></i></div>
+            <p style="font-size:12px;color:var(--muted)">Version 4 en cours · 168 / 240 pages · 2 points bloquants ouverts (clarifications auteur)</p>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn-primary" style="width:auto;padding:7px 14px;margin:0;font-size:12px">Déposer la version 5</button>
+              <button style="border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12px;background:#fff">Demander un délai</button>
+            </div>
+          </div>
+          <div class="mission">
+            <div class="top"><h4>Histoire du Mali moderne <small style="color:var(--muted)">· références bibliographiques</small></h4><span class="pill p-amber">Échéance 11/07</span></div>
+            <div class="prog"><i style="width:35%"></i></div>
+            <p style="font-size:12px;color:var(--muted)">Version 2 · 96 / 312 pages · en parallèle de l'expertise scientifique</p>
+          </div>
+          <div class="mission">
+            <div class="top"><h4>Poèmes du Sahel <small style="color:var(--muted)">· typographique</small></h4><span class="pill p-grey">Début planifié 15/07</span></div>
+            <div class="prog"><i style="width:0%"></i></div>
+            <p style="font-size:12px;color:var(--muted)">En attente de la fin de « Contes de la lagune »</p>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <h3>Points bloquants à traiter</h3>
+            <table>
+              <tr><td>p. 87 — incohérence de prénom (Awa / Awa­tou) <small style="color:var(--muted)">question posée à l'auteur le 30/06</small></td><td style="text-align:right"><span class="pill p-amber">Attente auteur</span></td></tr>
+              <tr><td>p. 142 — citation sans source</td><td style="text-align:right"><span class="pill p-red">Bloquant</span></td></tr>
+            </table>
+            <p style="font-size:11.5px;color:var(--muted);margin-top:10px">Un point bloquant empêche la validation de la version (Ch. 10 §10.7).</p>
+          </div>
+          <div class="card" style="margin-top:16px">
+            <h3>Mes versions récentes</h3>
+            <table>
+              <tr><td>Contes t.2 — v4 <span class="mono" style="color:var(--muted)">28/06</span></td><td style="text-align:right"><span class="pill p-amber">En révision</span></td></tr>
+              <tr><td>Histoire du Mali — v2 <span class="mono" style="color:var(--muted)">25/06</span></td><td style="text-align:right"><span class="pill p-green">Validée</span></td></tr>
+            </table>
+            <p style="font-size:12px;color:var(--muted);margin-top:10px"><span class="linklike">Comparer v3 → v4</span> · rapport des changements en PDF</p>
+          </div>
+          <p class="note" style="margin-top:16px">Ce que voit un correcteur : uniquement ses missions et ses versions. Ni finances, ni contrats — cloisonnement du Ch. 2.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</section>
+
+<script>
+function go(view){
+  document.getElementById('login').classList.remove('active');
+  document.getElementById('app').classList.add('active');
+  show(null,view);
+}
+function show(ev,view){
+  if(ev){ev.preventDefault();}
+  document.querySelectorAll('.view').forEach(v=>v.style.display='none');
+  document.getElementById('v-'+view).style.display='block';
+  document.querySelectorAll('.nav a[data-view]').forEach(a=>{
+    a.classList.toggle('on', a.dataset.view===view);
+  });
+  window.scrollTo(0,0);
+}
+
+function calc(){
+  const rows=document.querySelectorAll('#v-comite .crit');
+  let tot=0,coefs=0;
+  rows.forEach(r=>{
+    const rg=r.querySelector('input[type=range]');if(!rg)return;
+    const c=parseInt(r.querySelector('.coef').textContent.replace('×',''));
+    tot+=parseInt(rg.value)*c;coefs+=c;
+  });
+  const s=(tot/coefs).toFixed(1).replace('.',',');
+  document.getElementById('gscore').textContent=s;
+  document.getElementById('mine').textContent=s+' · en cours';
+  const v=tot/coefs,b=document.getElementById('grating');
+  b.textContent=v>=8.5?'Excellent':v>=7?'Très bon':v>=5.5?'Bon':v>=4?'À retravailler':'Refusé';
+  b.className='pill '+(v>=7?'p-green':v>=5.5?'p-amber':'p-red');
+}
+document.querySelectorAll('.seg').forEach(sg=>{
+  sg.addEventListener('click',e=>{
+    if(e.target.tagName!=='BUTTON')return;
+    sg.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+    e.target.classList.add('on');
+  });
+});
+
+</script>
+</body>
+</html>

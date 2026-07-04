@@ -80,3 +80,15 @@
 - Échéances de contrats et alertes automatiques (Ch. 9 §9.6) non implémentées.
 
 **Prochaine étape :** faire valider ce Lot 2 par l'opérateur, puis démarrer le Lot 3 (maquette, infographie, ISBN/dépôt légal, BAT, impression) une fois validé.
+
+### 04/07/2026 (suite) — Arbitrage opérateur sur les 3 points d'interprétation du Lot 2
+
+M. Noah Mbala a tranché les trois points signalés à la fin du Lot 2 :
+
+1. **Contrats : fiche Partenaire unique.** Décision de ne pas limiter les contrats aux auteurs. Mise en œuvre : table `authors` remplacée par une fiche `partners` unique avec catégorie (auteur, correcteur, traducteur, illustrateur, maquettiste, graphiste, imprimeur, consultant, autre prestataire). `work_contributors` et `contracts` référencent tous deux cette fiche unique — un contrat de prestation avec un imprimeur ou un correcteur fonctionne dès maintenant, sans refonte de structure prévue pour plus tard. Nouvel écran de création rapide de partenaire depuis le formulaire de contrat.
+2. **Étape Réécriture : activée mais facultative.** Mise en œuvre : `manuscript.requires_rewrite`, posé par le responsable au moment de valider l'étape Correction (case à cocher « Cette version nécessite une réécriture »). Si coché, le manuscrit passe par l'étape Réécriture ; sinon elle est sautée comme avant, exactement comme pour l'étape Expertise.
+3. **Diagramme de Gantt : liste pour la v1, confirmé.** Aucun changement de code — décision actée que le Gantt en liste (déjà livré) est la bonne première version, avec un diagramme graphique interactif prévu en v2 quand le besoin se précisera.
+
+**Vérifié dans un navigateur réel** : création d'un partenaire « Imprimeur » depuis le formulaire de contrat (sélectionné automatiquement après création), et bascule vers l'étape Réécriture en cochant la case au moment de valider la Correction. 21 tests automatisés au total (2 nouveaux pour ces changements), tous verts.
+
+**Prochaine étape :** démarrer le Lot 3 (maquette, infographie, ISBN/dépôt légal, BAT, impression).

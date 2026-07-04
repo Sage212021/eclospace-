@@ -330,16 +330,32 @@ model Setting {
 // Lot 1 — Domaine éditorial (modèle §4, Ch. 4/6/7/8 du cahier des charges)
 // ============================================================
 
-model Author {
-  id        String  @id @default(uuid())
-  firstName String  @map("first_name")
-  lastName  String  @map("last_name")
-  penName   String? @map("pen_name")
+// Décision opérateur (04/07/2026) : fiche unique couvrant l'auteur et tous
+// les prestataires externes, pour que le circuit contractuel n'ait pas à
+// être refondu quand un nouveau type de partenaire apparaît.
+enum PartnerCategory {
+  auteur
+  correcteur
+  traducteur
+  illustrateur
+  maquettiste
+  graphiste
+  imprimeur
+  consultant
+  autre
+}
+
+model Partner {
+  id        String          @id @default(uuid())
+  category  PartnerCategory @default(auteur)
+  firstName String          @map("first_name")
+  lastName  String          @map("last_name")
+  penName   String?         @map("pen_name")
   email     String?
   phone     String?
   address   String?
   bio       String?
-  taxStatus Json?   @map("tax_status")
+  taxStatus Json?           @map("tax_status")
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -351,7 +367,7 @@ model Author {
   workContributors WorkContributor[]
   contracts        Contract[]
 
-  @@map("authors")
+  @@map("partners")
 }
 
 // Référentiel Ch. 6 §6.2 (« Collection envisagée » : liste déroulante) — la
@@ -421,6 +437,10 @@ model Manuscript {
 
   receivedAt        DateTime @map("received_at")
   requiresExpertise Boolean  @default(false) @map("requires_expertise")
+  // Décision opérateur (04/07/2026) : étape Réécriture activée mais
+  // facultative — déclenchée par la correction ou l'expertise (Ch. 4 §4.3),
+  // via le drapeau posé à la validation de ces étapes (voir workflow.ts).
+  requiresRewrite   Boolean  @default(false) @map("requires_rewrite")
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -452,12 +472,12 @@ model WorkContributor {
   id           String          @id @default(uuid())
   manuscriptId String          @map("manuscript_id")
   manuscript   Manuscript      @relation(fields: [manuscriptId], references: [id])
-  authorId     String          @map("author_id")
-  author       Author          @relation(fields: [authorId], references: [id])
+  partnerId    String          @map("partner_id")
+  partner      Partner         @relation(fields: [partnerId], references: [id])
   role         ContributorRole @default(author)
   displayOrder Int             @default(0) @map("display_order")
 
-  @@unique([manuscriptId, authorId, role])
+  @@unique([manuscriptId, partnerId, role])
   @@map("work_contributors")
 }
 
@@ -682,19 +702,16 @@ enum ContractStatus {
   terminated
 }
 
-// La « partie contractante » du Ch. 9 §9.3 est polymorphe dans le modèle de
-// données (auteur, prestataire, employé externe). Seul le cas auteur est
-// implémenté au Lot 2 — aucune fiche « tiers/prestataire » n'existe encore
-// dans le cahier des charges (RH complet = Lot 6) ; l'étendre serait inventer
-// une donnée non spécifiée.
+// La « partie contractante » du Ch. 9 §9.3 (auteur, prestataire...) est
+// couverte par la fiche Partenaire unique (décision opérateur du 04/07/2026).
 model Contract {
   id             String       @id @default(uuid())
   contractNumber String       @unique @map("contract_number")
   type           ContractType
   manuscriptId   String?      @map("manuscript_id")
   manuscript     Manuscript?  @relation(fields: [manuscriptId], references: [id])
-  authorId       String       @map("author_id")
-  author         Author       @relation(fields: [authorId], references: [id])
+  partnerId      String       @map("partner_id")
+  partner        Partner      @relation(fields: [partnerId], references: [id])
 
   parentContractId String?    @map("parent_contract_id")
   parentContract   Contract?  @relation("ContractAmendments", fields: [parentContractId], references: [id])

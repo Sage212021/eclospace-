@@ -76,7 +76,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       payload: { decision: "acceptation", motivation: "Bon texte." },
     });
 
-    const authorId = (await prisma.workContributor.findFirstOrThrow({ where: { manuscriptId: manuscript.id } })).authorId;
+    const partnerId = (await prisma.workContributor.findFirstOrThrow({ where: { manuscriptId: manuscript.id } })).partnerId;
     const contractResponse = await app.inject({
       method: "POST",
       url: "/api/v1/contracts",
@@ -84,7 +84,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       payload: {
         type: "edition",
         manuscript_id: manuscript.id,
-        author_id: authorId,
+        partner_id: partnerId,
         financial_terms: { base: "prix_public_ht", tiers: [{ up_to: null, rate: 0.1 }] },
       },
     });
@@ -115,12 +115,12 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
   }
 
   it("le circuit de validation du contrat interdit tout saut d'étape", async () => {
-    const author = await prisma.author.create({ data: { firstName: "Test", lastName: "Contrat" } });
+    const partner = await prisma.partner.create({ data: { category: "auteur", firstName: "Test", lastName: "Contrat" } });
     const contractResponse = await app.inject({
       method: "POST",
       url: "/api/v1/contracts",
       headers: { cookie: adminCookie },
-      payload: { type: "edition", author_id: author.id, financial_terms: {} },
+      payload: { type: "edition", partner_id: partner.id, financial_terms: {} },
     });
     const contract = contractResponse.json();
 
@@ -144,13 +144,13 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
   it("un rôle sans permission contracts:saisie ne peut pas créer de contrat", async () => {
     await createUserWithRole("correcteur_contract_test", "CORRECTEUR", "Correcteur123!");
     const cookie = await loginCookie(app, "correcteur_contract_test", "Correcteur123!");
-    const author = await prisma.author.create({ data: { firstName: "X", lastName: "Y" } });
+    const partner = await prisma.partner.create({ data: { category: "auteur", firstName: "X", lastName: "Y" } });
 
     const response = await app.inject({
       method: "POST",
       url: "/api/v1/contracts",
       headers: { cookie },
-      payload: { type: "edition", author_id: author.id, financial_terms: {} },
+      payload: { type: "edition", partner_id: partner.id, financial_terms: {} },
     });
     expect(response.statusCode).toBe(403);
   });
@@ -220,6 +220,62 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
     });
     expect(validate.statusCode).toBe(200);
     expect(validate.json().status).toBe("MISE_EN_PAGE");
+  });
+
+  it("l'étape RÉÉCRITURE est activée mais facultative (décision opérateur du 04/07/2026)", async () => {
+    const manuscript = await createManuscriptAtCorrection("Manuscrit Réécriture Non Requise");
+
+    const withoutFlag = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscript.id}/steps/CORRECTION/validate`,
+      headers: { cookie: adminCookie },
+      payload: {},
+    });
+    expect(withoutFlag.statusCode).toBe(200);
+    expect(withoutFlag.json().status).toBe("MISE_EN_PAGE");
+
+    const manuscriptWithRewrite = await createManuscriptAtCorrection("Manuscrit Réécriture Requise");
+    const withFlag = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscriptWithRewrite.id}/steps/CORRECTION/validate`,
+      headers: { cookie: adminCookie },
+      payload: { requires_rewrite: true },
+    });
+    expect(withFlag.statusCode).toBe(200);
+    expect(withFlag.json().status).toBe("REECRITURE");
+
+    const stored = await prisma.manuscript.findUniqueOrThrow({ where: { id: manuscriptWithRewrite.id } });
+    expect(stored.requiresRewrite).toBe(true);
+  });
+
+  it("gère les partenaires par catégorie (auteur, correcteur, imprimeur...) sans refonte de structure", async () => {
+    const printer = await app.inject({
+      method: "POST",
+      url: "/api/v1/partners",
+      headers: { cookie: adminCookie },
+      payload: { category: "imprimeur", first_name: "Presses", last_name: "du Sahel" },
+    });
+    expect(printer.statusCode).toBe(201);
+    expect(printer.json().category).toBe("imprimeur");
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/v1/partners?category=imprimeur",
+      headers: { cookie: adminCookie },
+    });
+    expect(list.statusCode).toBe(200);
+    const partners = list.json();
+    expect(partners.every((p: { category: string }) => p.category === "imprimeur")).toBe(true);
+    expect(partners.some((p: { id: string }) => p.id === printer.json().id)).toBe(true);
+
+    // Un contrat de prestation avec ce partenaire (pas un auteur) doit fonctionner.
+    const contract = await app.inject({
+      method: "POST",
+      url: "/api/v1/contracts",
+      headers: { cookie: adminCookie },
+      payload: { type: "prestation", partner_id: printer.json().id, financial_terms: {} },
+    });
+    expect(contract.statusCode).toBe(201);
   });
 
   it("un point bloquant non résolu empêche la validation de l'étape CORRECTION", async () => {

@@ -117,7 +117,7 @@ export function listManuscripts() {
 export function getManuscript(id: string) {
   return request<
     Manuscript & {
-      workContributors: { author: { id: string; firstName: string; lastName: string; penName: string | null } }[];
+      workContributors: { partner: { id: string; firstName: string; lastName: string; penName: string | null } }[];
       owner: UserSummary;
     }
   >(`/api/v1/manuscripts/${id}`);
@@ -137,7 +137,11 @@ export function createManuscript(input: {
   return request<Manuscript>("/api/v1/manuscripts", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function validateStep(manuscriptId: string, step: string, options?: { observations?: string; outcome?: "conforme" | "incomplet" }) {
+export function validateStep(
+  manuscriptId: string,
+  step: string,
+  options?: { observations?: string; outcome?: "conforme" | "incomplet"; requires_rewrite?: boolean },
+) {
   return request<{ advanced: boolean; status: string | null }>(`/api/v1/manuscripts/${manuscriptId}/steps/${step}/validate`, {
     method: "POST",
     body: JSON.stringify(options ?? {}),
@@ -201,13 +205,43 @@ export function submitEditorialDecision(
 
 export type ContractStatus = "preparation" | "legal_review" | "direction_approval" | "awaiting_signature" | "active" | "expired" | "terminated";
 
+// Fiche Partenaire unique (décision opérateur du 04/07/2026) : couvre
+// l'auteur et tous les prestataires externes (correcteur, traducteur,
+// illustrateur, maquettiste, graphiste, imprimeur, consultant, autre).
+export type PartnerCategory =
+  | "auteur"
+  | "correcteur"
+  | "traducteur"
+  | "illustrateur"
+  | "maquettiste"
+  | "graphiste"
+  | "imprimeur"
+  | "consultant"
+  | "autre";
+
+export interface Partner {
+  id: string;
+  category: PartnerCategory;
+  firstName: string;
+  lastName: string;
+}
+
+export function listPartners(category?: PartnerCategory) {
+  const query = category ? `?category=${category}` : "";
+  return request<Partner[]>(`/api/v1/partners${query}`);
+}
+
+export function createPartner(input: { category: PartnerCategory; first_name: string; last_name: string }) {
+  return request<Partner>("/api/v1/partners", { method: "POST", body: JSON.stringify(input) });
+}
+
 export interface Contract {
   id: string;
   contractNumber: string;
   type: string;
   status: ContractStatus;
   signedAt: string | null;
-  author: { id: string; firstName: string; lastName: string };
+  partner: { id: string; firstName: string; lastName: string };
   manuscript: { id: string; manuscriptNumber: string; title: string } | null;
 }
 
@@ -219,7 +253,7 @@ export function listContracts(manuscriptId?: string) {
 export function createContract(input: {
   type: string;
   manuscript_id?: string;
-  author_id: string;
+  partner_id: string;
   financial_terms: Record<string, unknown>;
 }) {
   return request<Contract>("/api/v1/contracts", { method: "POST", body: JSON.stringify(input) });

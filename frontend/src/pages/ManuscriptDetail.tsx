@@ -22,7 +22,7 @@ interface ManuscriptDetailProps {
 }
 
 type ManuscriptWithExtras = Manuscript & {
-  workContributors: { author: { id: string; firstName: string; lastName: string; penName: string | null } }[];
+  workContributors: { partner: { id: string; firstName: string; lastName: string; penName: string | null } }[];
   owner: UserSummary;
 };
 
@@ -72,7 +72,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
       <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>{manuscript.title}</h1>
       <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 12 }}>{manuscript.manuscriptNumber}</p>
       <p style={{ fontSize: 13 }}>
-        Auteur : {manuscript.workContributors.map((c) => `${c.author.firstName} ${c.author.lastName}`).join(", ")} · Genre :{" "}
+        Auteur : {manuscript.workContributors.map((c) => `${c.partner.firstName} ${c.partner.lastName}`).join(", ")} · Genre :{" "}
         {manuscript.genre?.label ?? "—"} · Responsable : {manuscript.owner.username}
       </p>
 
@@ -128,18 +128,30 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           />
         )}
 
-        {!["VERIF_ADMIN", "COMITE_LECTURE", "DECISION_EDITORIALE"].includes(manuscript.status.code) &&
-          manuscript.status.stepOrder < CONTRACTUALISATION_STEP_ORDER && (
-            <p style={{ fontSize: 13, color: "var(--muted)" }}>
-              Aucune action disponible à cette étape dans les lots actuellement livrés.
-            </p>
-          )}
+        {["CONTRACTUALISATION", "PLANIFICATION", "CORRECTION"].includes(manuscript.status.code) && canValidate && (
+          <GenericStepValidation
+            manuscriptId={manuscript.id}
+            stepCode={manuscript.status.code}
+            onValidated={(status) =>
+              handle(async () => {}, status ? `Étape validée : passage à « ${status} ».` : "Étape validée.")
+            }
+            onError={setError}
+          />
+        )}
+
+        {!["VERIF_ADMIN", "COMITE_LECTURE", "DECISION_EDITORIALE", "CONTRACTUALISATION", "PLANIFICATION", "CORRECTION"].includes(
+          manuscript.status.code,
+        ) && (
+          <p style={{ fontSize: 13, color: "var(--muted)" }}>
+            Aucune action disponible à cette étape dans les lots actuellement livrés.
+          </p>
+        )}
       </div>
 
       {manuscript.status.stepOrder >= CONTRACTUALISATION_STEP_ORDER && permissions.has("contracts:consultation") && (
         <ContractsSection
           manuscriptId={manuscript.id}
-          authorId={manuscript.workContributors[0]?.author.id ?? ""}
+          defaultPartnerId={manuscript.workContributors[0]?.partner.id ?? ""}
           canCreate={permissions.has("contracts:saisie")}
           canValidate={permissions.has("contracts:validation")}
         />
@@ -249,5 +261,54 @@ function EditorialDecisionForm({ manuscriptId, onDecided }: { manuscriptId: stri
       </label>
       <ActionButton onClick={() => {}}>Enregistrer la décision</ActionButton>
     </form>
+  );
+}
+
+const STEP_ACTION_LABELS: Record<string, string> = {
+  CONTRACTUALISATION: "Valider la contractualisation",
+  PLANIFICATION: "Valider la planification",
+  CORRECTION: "Valider la correction",
+};
+
+// Étapes pilotées par le moteur de workflow générique (Ch. 4 §4.2), au-delà
+// de la décision éditoriale. La réécriture (Ch. 4 §4.3) est activée mais
+// facultative (décision opérateur du 04/07/2026) : le responsable de la
+// correction décide ici si elle est nécessaire.
+function GenericStepValidation({
+  manuscriptId,
+  stepCode,
+  onValidated,
+  onError,
+}: {
+  manuscriptId: string;
+  stepCode: string;
+  onValidated: (status: string | null) => void;
+  onError: (message: string) => void;
+}) {
+  const [requiresRewrite, setRequiresRewrite] = useState(false);
+
+  async function handleValidate() {
+    try {
+      const result = await validateStep(
+        manuscriptId,
+        stepCode,
+        stepCode === "CORRECTION" ? { requires_rewrite: requiresRewrite } : undefined,
+      );
+      onValidated(result.status);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de la validation.");
+    }
+  }
+
+  return (
+    <div>
+      {stepCode === "CORRECTION" && (
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 10 }}>
+          <input type="checkbox" checked={requiresRewrite} onChange={(e) => setRequiresRewrite(e.target.checked)} />
+          Cette version nécessite une réécriture avant de poursuivre
+        </label>
+      )}
+      <ActionButton onClick={handleValidate}>{STEP_ACTION_LABELS[stepCode] ?? "Valider cette étape"}</ActionButton>
+    </div>
   );
 }

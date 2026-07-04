@@ -18,7 +18,7 @@ const financialTermsSchema = z
 const createContractSchema = z.object({
   type: z.nativeEnum(ContractType),
   manuscript_id: z.string().uuid().optional(),
-  author_id: z.string().uuid(),
+  partner_id: z.string().uuid(),
   parent_contract_id: z.string().uuid().optional(),
   territories: z.array(z.string()).default([]),
   languages: z.array(z.string()).default([]),
@@ -63,7 +63,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
           contractNumber,
           type: body.type,
           manuscriptId: body.manuscript_id,
-          authorId: body.author_id,
+          partnerId: body.partner_id,
           parentContractId: body.parent_contract_id,
           territories: body.territories,
           languages: body.languages,
@@ -95,7 +95,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
       action: "create",
       entityType: "contract",
       entityId: contract.id,
-      newValues: { contractNumber, type: body.type, authorId: body.author_id },
+      newValues: { contractNumber, type: body.type, partnerId: body.partner_id },
       ipAddress: request.ip,
     });
 
@@ -117,7 +117,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         ...(status ? { status } : {}),
         ...(manuscript ? { manuscriptId: manuscript } : {}),
       },
-      include: { author: true, manuscript: { select: { id: true, manuscriptNumber: true, title: true } } },
+      include: { partner: true, manuscript: { select: { id: true, manuscriptNumber: true, title: true } } },
       orderBy: { createdAt: "desc" },
     });
 
@@ -147,7 +147,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
 
     const contract = await prisma.contract.findFirst({
       where: { id, deletedAt: null },
-      include: { author: true, manuscript: true, royaltyTerms: true, amendments: true },
+      include: { partner: true, manuscript: true, royaltyTerms: true, amendments: true },
     });
     if (!contract) {
       return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });

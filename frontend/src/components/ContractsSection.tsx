@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { createContract, listContracts, updateContractStatus, type Contract, type ContractStatus } from "../api/client";
+import {
+  createContract,
+  createPartner,
+  listContracts,
+  listPartners,
+  updateContractStatus,
+  type Contract,
+  type ContractStatus,
+  type Partner,
+  type PartnerCategory,
+} from "../api/client";
 
 const STATUS_CHAIN: ContractStatus[] = ["preparation", "legal_review", "direction_approval", "awaiting_signature", "active"];
 const STATUS_LABELS: Record<ContractStatus, string> = {
@@ -12,16 +22,30 @@ const STATUS_LABELS: Record<ContractStatus, string> = {
   terminated: "Résilié",
 };
 
+const PARTNER_CATEGORY_LABELS: Record<PartnerCategory, string> = {
+  auteur: "Auteur",
+  correcteur: "Correcteur",
+  traducteur: "Traducteur",
+  illustrateur: "Illustrateur",
+  maquettiste: "Maquettiste",
+  graphiste: "Graphiste",
+  imprimeur: "Imprimeur",
+  consultant: "Consultant",
+  autre: "Autre prestataire",
+};
+
 interface ContractsSectionProps {
   manuscriptId: string;
-  authorId: string;
+  defaultPartnerId: string;
   canCreate: boolean;
   canValidate: boolean;
 }
 
 // Juridique et contrats (Ch. 9) — circuit de validation affiché comme une
 // suite d'étapes, cohérent avec la frise du manuscrit (guide de style §5.1).
-export function ContractsSection({ manuscriptId, authorId, canCreate, canValidate }: ContractsSectionProps) {
+// La contrepartie du contrat est un Partenaire (fiche unique auteur +
+// prestataires externes — décision opérateur du 04/07/2026).
+export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, canValidate }: ContractsSectionProps) {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +84,7 @@ export function ContractsSection({ manuscriptId, authorId, canCreate, canValidat
       {showForm && (
         <NewContractForm
           manuscriptId={manuscriptId}
-          authorId={authorId}
+          defaultPartnerId={defaultPartnerId}
           onCreated={() => {
             setShowForm(false);
             refresh();
@@ -75,7 +99,7 @@ export function ContractsSection({ manuscriptId, authorId, canCreate, canValidat
         <div key={contract.id} style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 10, fontSize: 13 }}>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>{contract.contractNumber}</div>
           <div>
-            {contract.type} — {contract.author.firstName} {contract.author.lastName}
+            {contract.type} — {contract.partner.firstName} {contract.partner.lastName}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
             <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 999, padding: "2px 10px", fontSize: 11 }}>
@@ -95,18 +119,40 @@ export function ContractsSection({ manuscriptId, authorId, canCreate, canValidat
 
 function NewContractForm({
   manuscriptId,
-  authorId,
+  defaultPartnerId,
   onCreated,
   onError,
 }: {
   manuscriptId: string;
-  authorId: string;
+  defaultPartnerId: string;
   onCreated: () => void;
   onError: (m: string) => void;
 }) {
   const [type, setType] = useState("edition");
   const [rate, setRate] = useState(10);
   const [advance, setAdvance] = useState(0);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [partnerId, setPartnerId] = useState(defaultPartnerId);
+
+  const refreshPartners = () => listPartners().then(setPartners);
+
+  useEffect(() => {
+    refreshPartners();
+  }, []);
+
+  async function handleAddPartner() {
+    const category = window.prompt(
+      `Catégorie (${Object.keys(PARTNER_CATEGORY_LABELS).join(", ")})`,
+      "correcteur",
+    ) as PartnerCategory | null;
+    if (!category || !(category in PARTNER_CATEGORY_LABELS)) return;
+    const firstName = window.prompt("Prénom");
+    const lastName = window.prompt("Nom");
+    if (!firstName || !lastName) return;
+    const partner = await createPartner({ category, first_name: firstName, last_name: lastName });
+    await refreshPartners();
+    setPartnerId(partner.id);
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -114,7 +160,7 @@ function NewContractForm({
       await createContract({
         type,
         manuscript_id: manuscriptId,
-        author_id: authorId,
+        partner_id: partnerId,
         financial_terms: {
           base: "prix_public_ht",
           tiers: [{ up_to: null, rate: rate / 100 }],
@@ -138,8 +184,26 @@ function NewContractForm({
             <option value="coedition">Coédition</option>
             <option value="cession">Cession de droits</option>
             <option value="traduction">Traduction</option>
+            <option value="correction">Correction</option>
+            <option value="illustration">Illustration</option>
+            <option value="prestation">Prestation de services</option>
           </select>
         </label>
+        <label style={{ fontSize: 12 }}>
+          Partenaire
+          <select value={partnerId} onChange={(e) => setPartnerId(e.target.value)} style={inputStyle}>
+            {partners.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.firstName} {p.lastName} ({PARTNER_CATEGORY_LABELS[p.category]})
+              </option>
+            ))}
+          </select>
+        </label>
+        <div style={{ display: "flex", alignItems: "flex-end" }}>
+          <button type="button" onClick={handleAddPartner} style={secondaryButtonStyle}>
+            + Nouveau partenaire
+          </button>
+        </div>
         <label style={{ fontSize: 12 }}>
           Taux de droits (%)
           <input type="number" value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} />

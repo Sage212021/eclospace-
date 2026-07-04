@@ -37,6 +37,7 @@ const patchManuscriptSchema = z.object({
   owner_id: z.string().uuid().optional(),
   project_manager_id: z.string().uuid().optional(),
   requires_expertise: z.boolean().optional(),
+  requires_rewrite: z.boolean().optional(),
 });
 
 const priorityOverrideSchema = z.object({
@@ -74,11 +75,15 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     const now = new Date();
 
     const manuscript = await prisma.$transaction(async (tx) => {
+      // L'auteur est un partenaire de catégorie « auteur » (fiche unique
+      // couvrant aussi correcteurs, traducteurs, imprimeurs... — décision
+      // opérateur du 04/07/2026, voir docs/JOURNAL_TECHNIQUE.md).
       const author =
         "author_id" in body.author
-          ? await tx.author.findUniqueOrThrow({ where: { id: body.author.author_id } })
-          : await tx.author.create({
+          ? await tx.partner.findUniqueOrThrow({ where: { id: body.author.author_id } })
+          : await tx.partner.create({
               data: {
+                category: "auteur",
                 firstName: body.author.first_name,
                 lastName: body.author.last_name,
                 penName: body.author.pen_name,
@@ -105,7 +110,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           createdBy: request.user!.id,
           updatedBy: request.user!.id,
           workContributors: {
-            create: { authorId: author.id, role: "author", displayOrder: 0 },
+            create: { partnerId: author.id, role: "author", displayOrder: 0 },
           },
         },
       });
@@ -187,7 +192,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         collection: true,
         owner: { select: { id: true, username: true } },
         projectManager: { select: { id: true, username: true } },
-        workContributors: { include: { author: true } },
+        workContributors: { include: { partner: true } },
         steps: { include: { status: true }, orderBy: { status: { stepOrder: "asc" } } },
       },
     });
@@ -224,6 +229,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         ownerId: body.owner_id,
         projectManagerId: body.project_manager_id,
         requiresExpertise: body.requires_expertise,
+        requiresRewrite: body.requires_rewrite,
         updatedBy: request.user!.id,
       },
     });

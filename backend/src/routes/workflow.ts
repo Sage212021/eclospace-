@@ -7,14 +7,13 @@ import { writeAuditLog } from "../lib/audit.js";
 
 // Ch. 4 §4.3, §4.6 : les étapes 8 (expertise) et 9 (réécriture) ne sont
 // activées que si le projet le requiert ; leur absence n'est pas comptée
-// comme une étape sautée. Seule EXPERTISE a un signal explicite au Lot 2
-// (manuscript.requires_expertise) ; REECRITURE n'a pas encore de mécanisme de
-// déclenchement dans le cahier des charges — elle est donc toujours sautée
-// pour l'instant (point à trancher avec la Direction éditoriale, voir
-// docs/JOURNAL_TECHNIQUE.md).
+// comme une étape sautée. Décision opérateur du 04/07/2026 : la réécriture
+// est activée mais facultative, déclenchée par un drapeau posé à la
+// validation de CORRECTION ou EXPERTISE (voir plus bas), au même titre que
+// l'expertise.
 function isStepRequired(statusCode: string, manuscript: Manuscript): boolean {
   if (statusCode === "EXPERTISE") return manuscript.requiresExpertise;
-  if (statusCode === "REECRITURE") return false;
+  if (statusCode === "REECRITURE") return manuscript.requiresRewrite;
   return true;
 }
 
@@ -34,6 +33,9 @@ const validateStepSchema = z.object({
   // Dérogation de la Direction générale (Ch. 9 §9.12) pour envoyer un
   // ouvrage en production sans contrat d'édition actif — motivée et tracée.
   override_justification: z.string().min(1).optional(),
+  // Ch. 4 §4.3 : la réécriture est déclenchée par la correction ou
+  // l'expertise — posé à la validation de l'une de ces deux étapes.
+  requires_rewrite: z.boolean().optional(),
 });
 
 // Étapes pilotées par un flux dédié plutôt que par cet endpoint générique :
@@ -84,7 +86,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { observations, outcome, override_justification } = parsed.data;
+      const { observations, outcome, override_justification, requires_rewrite } = parsed.data;
       const now = new Date();
 
       // Ch. 9 §9.12 : un ouvrage ne passe en production (planification) que
@@ -132,6 +134,16 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // Ch. 4 §4.3 : la réécriture est déclenchée par la correction ou
+      // l'expertise — le responsable de l'étape pose le drapeau ici.
+      let manuscriptForNextStep = manuscript;
+      if (["CORRECTION", "EXPERTISE"].includes(targetStatus.code) && requires_rewrite !== undefined) {
+        manuscriptForNextStep = await prisma.manuscript.update({
+          where: { id },
+          data: { requiresRewrite: requires_rewrite },
+        });
+      }
+
       if (outcome === "incomplet") {
         await prisma.manuscriptStep.upsert({
           where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
@@ -154,7 +166,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         return reply.send({ advanced: false, message: "Dossier incomplet : passage à l'étape suivante bloqué." });
       }
 
-      const nextStatus = await findNextApplicableStatus(targetStatus.stepOrder, manuscript);
+      const nextStatus = await findNextApplicableStatus(targetStatus.stepOrder, manuscriptForNextStep);
 
       await prisma.$transaction(async (tx) => {
         await tx.manuscriptStep.upsert({

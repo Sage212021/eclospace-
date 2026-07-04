@@ -14,6 +14,19 @@ Document vivant : chaque choix technique structurant y est consigné avec sa jus
 | 04/07/2026 | Fichiers (GED) : stockage sur disque (dev) / objet compatible S3 (prod cloud), hash SHA-256 calculé serveur | Le modèle l'exige (`document_versions.sha256_hash`) ; un stockage compatible S3 garde le choix du fournisseur cloud ouvert. |
 | 04/07/2026 | Tests : **Vitest** | Intégré à l'écosystème TypeScript/Vite, rapide, sans configuration lourde. |
 
+| 04/07/2026 | Endpoints ajoutés hors spécification API v1 : `GET /genres`, `GET /collections`, `GET /evaluation-criteria`, `GET /users` | Plomberie minimale nécessaire aux listes déroulantes du Ch. 6 §6.2 et à la grille du Ch. 7 §7.4, absente de `03_Specification_API.md` (document explicitement « version de travail »). Lecture seule, permissions vérifiées. |
+
+## Points d'interprétation du Lot 1 à confirmer avec la Direction éditoriale
+
+Le cahier des charges décrit le comité de lecture et la décision éditoriale en langage métier ; certains détails d'implémentation ont exigé un choix non explicitement tranché par les documents. Signalés ici conformément à CLAUDE.md règle 2 :
+
+1. **Échelle de notation** : les critères (Ch. 7 §7.4) sont notés de 0 à 10. Le cahier des charges ne précise pas l'échelle.
+2. **Seuils de classement qualitatif** (Ch. 7 §7.5 : « seuils paramétrables ») : valeurs de départ Excellent ≥ 8,5, Très bon ≥ 7, Bon ≥ 5, À retravailler ≥ 3, sinon Refusé. Stockées dans `settings` (clé `evaluation_rating_thresholds`), modifiables sans redéploiement.
+3. **Seuil d'écart signalant un désaccord entre lecteurs** (Ch. 7 §7.5) : fixé à 3 points par défaut (clé `evaluation_score_gap_threshold`), à confirmer.
+4. **Coefficients de la grille** (Ch. 7 §7.5) : seuls 3 exemples sont donnés dans le texte (ligne éditoriale ×3, potentiel commercial ×2, originalité ×2) ; les 6 autres critères ont reçu un coefficient par défaut de 1, à valider avec la Direction éditoriale.
+5. **Étape 4 (décision éditoriale) marquée « validée »** uniquement pour les décisions terminales (acceptation, acceptation sous conditions, refus) ; une révision ou une mise en attente n'avance pas le workflow et ne clôt pas l'étape — lecture combinée du Ch. 4 §4.3 (3 statuts) et du Ch. 8 §8.2 (5 décisions), qui ne se recoupent pas exactement.
+6. **Genres de départ** (Ch. 6 §6.2) : liste limitée aux exemples cités dans le texte (roman, essai, poésie, manuel, jeunesse) ; à compléter par le secrétariat éditorial selon le catalogue réel. Aucune collection n'a été pré-remplie (donnée propre à la maison, non spécifiée).
+
 ## Environnements
 
 - **Développement** : Docker Compose local (PostgreSQL + backend + frontend), aucune donnée réelle (Ch. 21 §21.4).

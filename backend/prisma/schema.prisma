@@ -15,10 +15,10 @@ datasource db {
 // Répétés sur chaque table métier, conformément au modèle de données §2.
 
 model Department {
-  id        String   @id @default(uuid())
-  code      String   @unique
-  name      String
-  isActive  Boolean  @default(true) @map("is_active")
+  id       String  @id @default(uuid())
+  code     String  @unique
+  name     String
+  isActive Boolean @default(true) @map("is_active")
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -27,8 +27,9 @@ model Department {
   deletedAt DateTime? @map("deleted_at")
   deletedBy String?   @map("deleted_by")
 
-  roles     Role[]
-  employees Employee[]
+  roles            Role[]
+  employees        Employee[]
+  workflowStatuses WorkflowStatus[]
 
   @@map("departments")
 }
@@ -36,10 +37,10 @@ model Department {
 // Dossier RH minimal — le domaine RH complet (Ch. 19) est spécifié au Lot 6.
 // On modélise ici uniquement ce qui est nécessaire à users.employee_id (Ch. 3.2 du modèle).
 model Employee {
-  id           String   @id @default(uuid())
-  firstName    String   @map("first_name")
-  lastName     String   @map("last_name")
-  departmentId String?  @map("department_id")
+  id           String      @id @default(uuid())
+  firstName    String      @map("first_name")
+  lastName     String      @map("last_name")
+  departmentId String?     @map("department_id")
   department   Department? @relation(fields: [departmentId], references: [id])
 
   createdAt DateTime  @default(now()) @map("created_at")
@@ -84,6 +85,12 @@ model User {
   auditEntries    AuditLog[]
   loginChallenges LoginChallenge[]
 
+  ownedManuscripts   Manuscript[]        @relation("ManuscriptOwner")
+  managedManuscripts Manuscript[]        @relation("ManuscriptProjectManager")
+  manuscriptSteps    ManuscriptStep[]
+  readingAssignments ReadingAssignment[]
+  editorialDecisions EditorialDecision[]
+
   @@map("users")
 }
 
@@ -100,10 +107,10 @@ model LoginChallenge {
 }
 
 model Role {
-  id           String  @id @default(uuid())
-  code         String  @unique
+  id           String      @id @default(uuid())
+  code         String      @unique
   label        String
-  departmentId String? @map("department_id")
+  departmentId String?     @map("department_id")
   department   Department? @relation(fields: [departmentId], references: [id])
 
   createdAt DateTime  @default(now()) @map("created_at")
@@ -127,7 +134,7 @@ enum PermissionAction {
 }
 
 model Permission {
-  id     String            @id @default(uuid())
+  id     String           @id @default(uuid())
   module String
   action PermissionAction
 
@@ -256,18 +263,18 @@ enum DocumentVersionStatus {
 }
 
 model DocumentVersion {
-  id            String                 @id @default(uuid())
-  documentId    String                 @map("document_id")
-  document      Document               @relation(fields: [documentId], references: [id])
-  versionNumber Int                    @map("version_number")
-  filePath      String                 @map("file_path")
-  fileSize      Int                    @map("file_size")
-  mimeType      String                 @map("mime_type")
-  sha256Hash    String                 @map("sha256_hash")
-  status        DocumentVersionStatus  @default(draft)
-  changeSummary String?                @map("change_summary")
-  uploadedBy    String?                @map("uploaded_by")
-  uploadedAt    DateTime               @default(now()) @map("uploaded_at")
+  id            String                @id @default(uuid())
+  documentId    String                @map("document_id")
+  document      Document              @relation(fields: [documentId], references: [id])
+  versionNumber Int                   @map("version_number")
+  filePath      String                @map("file_path")
+  fileSize      Int                   @map("file_size")
+  mimeType      String                @map("mime_type")
+  sha256Hash    String                @map("sha256_hash")
+  status        DocumentVersionStatus @default(draft)
+  changeSummary String?               @map("change_summary")
+  uploadedBy    String?               @map("uploaded_by")
+  uploadedAt    DateTime              @default(now()) @map("uploaded_at")
 
   @@unique([documentId, versionNumber])
   @@map("document_versions")
@@ -312,4 +319,319 @@ model Setting {
   updatedBy String?  @map("updated_by")
 
   @@map("settings")
+}
+
+// ============================================================
+// Lot 1 — Domaine éditorial (modèle §4, Ch. 4/6/7/8 du cahier des charges)
+// ============================================================
+
+model Author {
+  id        String  @id @default(uuid())
+  firstName String  @map("first_name")
+  lastName  String  @map("last_name")
+  penName   String? @map("pen_name")
+  email     String?
+  phone     String?
+  address   String?
+  bio       String?
+  taxStatus Json?   @map("tax_status")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  workContributors WorkContributor[]
+
+  @@map("authors")
+}
+
+// Référentiel Ch. 6 §6.2 (« Collection envisagée » : liste déroulante) — la
+// gabarit/charte par défaut (FK layout_templates/graphic_charters) sera
+// ajoutée au Lot 3, ces tables n'existant pas encore.
+model Collection {
+  id    String @id @default(uuid())
+  code  String @unique
+  label String
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  manuscripts Manuscript[]
+
+  @@map("collections")
+}
+
+// Référentiel Ch. 6 §6.2 (« Domaine » : roman, essai, poésie, manuel, jeunesse...).
+model Genre {
+  id    String @id @default(uuid())
+  code  String @unique
+  label String
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  manuscripts Manuscript[]
+
+  @@map("genres")
+}
+
+enum ManuscriptOrigin {
+  soumission
+  commande
+}
+
+// Entité centrale (modèle §4.2) : le « manuscrit » et le « projet éditorial »
+// sont une même ligne dont le cycle de vie est porté par le statut.
+model Manuscript {
+  id               String           @id @default(uuid())
+  manuscriptNumber String           @unique @map("manuscript_number")
+  title            String
+  subtitle         String?
+  collectionId     String?          @map("collection_id")
+  collection       Collection?      @relation(fields: [collectionId], references: [id])
+  genreId          String?          @map("genre_id")
+  genre            Genre?           @relation(fields: [genreId], references: [id])
+  language         String
+  estimatedPages   Int?             @map("estimated_pages")
+  summary          String?
+  keywords         String[]         @default([])
+  origin           ManuscriptOrigin @default(soumission)
+
+  statusId                      String         @map("status_id")
+  status                        WorkflowStatus @relation(fields: [statusId], references: [id])
+  priorityScore                 Decimal        @default(0) @map("priority_score") @db.Decimal(6, 2)
+  priorityOverride              Decimal?       @map("priority_override") @db.Decimal(6, 2)
+  priorityOverrideJustification String?        @map("priority_override_justification")
+
+  ownerId          String  @map("owner_id")
+  owner            User    @relation("ManuscriptOwner", fields: [ownerId], references: [id])
+  projectManagerId String? @map("project_manager_id")
+  projectManager   User?   @relation("ManuscriptProjectManager", fields: [projectManagerId], references: [id])
+
+  receivedAt        DateTime @map("received_at")
+  requiresExpertise Boolean  @default(false) @map("requires_expertise")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  workContributors   WorkContributor[]
+  steps              ManuscriptStep[]
+  stepTransitions    StepTransition[]
+  readingAssignments ReadingAssignment[]
+  editorialDecisions EditorialDecision[]
+
+  @@map("manuscripts")
+}
+
+enum ContributorRole {
+  author
+  co_author
+  translator
+  illustrator
+  preface
+}
+
+model WorkContributor {
+  id           String          @id @default(uuid())
+  manuscriptId String          @map("manuscript_id")
+  manuscript   Manuscript      @relation(fields: [manuscriptId], references: [id])
+  authorId     String          @map("author_id")
+  author       Author          @relation(fields: [authorId], references: [id])
+  role         ContributorRole @default(author)
+  displayOrder Int             @default(0) @map("display_order")
+
+  @@unique([manuscriptId, authorId, role])
+  @@map("work_contributors")
+}
+
+// Référentiel des ~20 étapes (Ch. 4 §4.3). Toutes sont créées dès le Lot 1 —
+// seules les étapes 1 à 4 sont pilotées par l'application à ce stade ; les
+// suivantes attendent les modules des lots 2 à 5.
+model WorkflowStatus {
+  id            String      @id @default(uuid())
+  code          String      @unique
+  label         String
+  stepOrder     Int         @map("step_order")
+  departmentId  String?     @map("department_id")
+  department    Department? @relation(fields: [departmentId], references: [id])
+  isConditional Boolean     @default(false) @map("is_conditional")
+
+  manuscripts Manuscript[]
+  steps       ManuscriptStep[]
+
+  @@map("workflow_statuses")
+}
+
+// Une ligne par étape franchie ou planifiée par manuscrit (modèle §4.3).
+// C'est la source de la frise chronologique (Ch. 4 §4.4).
+model ManuscriptStep {
+  id            String         @id @default(uuid())
+  manuscriptId  String         @map("manuscript_id")
+  manuscript    Manuscript     @relation(fields: [manuscriptId], references: [id])
+  statusId      String         @map("status_id")
+  status        WorkflowStatus @relation(fields: [statusId], references: [id])
+  responsibleId String?        @map("responsible_id")
+  responsible   User?          @relation(fields: [responsibleId], references: [id])
+  plannedStart  DateTime?      @map("planned_start")
+  plannedEnd    DateTime?      @map("planned_end")
+  actualStart   DateTime?      @map("actual_start")
+  actualEnd     DateTime?      @map("actual_end")
+  validationBy  String?        @map("validation_by")
+  validatedAt   DateTime?      @map("validated_at")
+  observations  String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([manuscriptId, statusId])
+  @@map("manuscript_steps")
+}
+
+// Journal des transmissions inter-départements (Ch. 3 §3.4).
+model StepTransition {
+  id               String     @id @default(uuid())
+  manuscriptId     String     @map("manuscript_id")
+  manuscript       Manuscript @relation(fields: [manuscriptId], references: [id])
+  fromStatusCode   String?    @map("from_status_code")
+  toStatusCode     String     @map("to_status_code")
+  fromDepartmentId String?    @map("from_department_id")
+  toDepartmentId   String?    @map("to_department_id")
+  responsibleId    String?    @map("responsible_id")
+  occurredAt       DateTime   @default(now()) @map("occurred_at")
+  observations     String?
+
+  @@map("step_transitions")
+}
+
+enum ReadingAssignmentStatus {
+  pending
+  submitted
+  late
+  cancelled
+}
+
+// Ch. 7 §7.2.
+model ReadingAssignment {
+  id              String                  @id @default(uuid())
+  manuscriptId    String                  @map("manuscript_id")
+  manuscript      Manuscript              @relation(fields: [manuscriptId], references: [id])
+  readerId        String                  @map("reader_id")
+  reader          User                    @relation(fields: [readerId], references: [id])
+  assignedAt      DateTime                @default(now()) @map("assigned_at")
+  dueAt           DateTime                @map("due_at")
+  submittedAt     DateTime?               @map("submitted_at")
+  status          ReadingAssignmentStatus @default(pending)
+  extensionReason String?                 @map("extension_reason")
+
+  evaluation Evaluation?
+
+  @@map("reading_assignments")
+}
+
+// Grille d'évaluation personnalisable (Ch. 7 §7.4), coefficients configurables (§7.5).
+model EvaluationCriterion {
+  id          String  @id @default(uuid())
+  label       String
+  coefficient Decimal @default(1) @db.Decimal(4, 2)
+  isActive    Boolean @default(true) @map("is_active")
+
+  scores EvaluationScore[]
+
+  @@map("evaluation_criteria")
+}
+
+enum EvaluationRecommendation {
+  accept
+  accept_minor
+  accept_major
+  rewrite
+  new_expertise
+  reject
+}
+
+// Excellent / Très bon / Bon / À retravailler / Refusé (Ch. 7 §7.5).
+enum EvaluationRating {
+  excellent
+  very_good
+  good
+  to_rework
+  refused
+}
+
+// Quatre niveaux de diffusion du rapport (Ch. 7 §7.9).
+enum EvaluationVisibility {
+  confidentiel
+  direction_seule
+  comite
+  dossier_editorial
+}
+
+model Evaluation {
+  id             String                   @id @default(uuid())
+  assignmentId   String                   @unique @map("assignment_id")
+  assignment     ReadingAssignment        @relation(fields: [assignmentId], references: [id])
+  overallComment String?                  @map("overall_comment")
+  recommendation EvaluationRecommendation
+  globalScore    Decimal                  @map("global_score") @db.Decimal(6, 2)
+  rating         EvaluationRating
+  visibility     EvaluationVisibility     @default(comite)
+  submittedAt    DateTime                 @default(now()) @map("submitted_at")
+
+  scores EvaluationScore[]
+
+  @@map("evaluations")
+}
+
+model EvaluationScore {
+  id           String              @id @default(uuid())
+  evaluationId String              @map("evaluation_id")
+  evaluation   Evaluation          @relation(fields: [evaluationId], references: [id])
+  criterionId  String              @map("criterion_id")
+  criterion    EvaluationCriterion @relation(fields: [criterionId], references: [id])
+  score        Decimal             @db.Decimal(4, 2)
+  comment      String?
+
+  @@unique([evaluationId, criterionId])
+  @@map("evaluation_scores")
+}
+
+// Ch. 8 §8.2 : acceptation / acceptation sous conditions / révision / attente / refus.
+enum EditorialDecisionType {
+  acceptation
+  acceptation_conditions
+  revision
+  attente
+  refus
+}
+
+// Compteur atomique pour la numérotation des manuscrits (Ch. 6 §6.2 : généré
+// automatiquement). Une ligne par année, incrémentée via upsert atomique
+// (voir lib/manuscriptNumber.ts) pour éviter toute collision concurrente.
+model ManuscriptNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("manuscript_number_counters")
+}
+
+model EditorialDecision {
+  id           String                @id @default(uuid())
+  manuscriptId String                @map("manuscript_id")
+  manuscript   Manuscript            @relation(fields: [manuscriptId], references: [id])
+  decision     EditorialDecisionType
+  decidedById  String                @map("decided_by")
+  decidedBy    User                  @relation(fields: [decidedById], references: [id])
+  decidedAt    DateTime              @default(now()) @map("decided_at")
+  motivation   String
+  scoreGapFlag Boolean               @default(false) @map("score_gap_flag")
+
+  @@map("editorial_decisions")
 }

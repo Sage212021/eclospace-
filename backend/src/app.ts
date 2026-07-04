@@ -6,6 +6,11 @@ import authPlugin from "./plugins/auth.js";
 import authRoutes from "./routes/auth.js";
 import documentRoutes from "./routes/documents.js";
 import notificationRoutes from "./routes/notifications.js";
+import manuscriptRoutes from "./routes/manuscripts.js";
+import workflowRoutes from "./routes/workflow.js";
+import readingCommitteeRoutes from "./routes/readingCommittee.js";
+import userRoutes from "./routes/users.js";
+import referenceRoutes from "./routes/reference.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
@@ -23,6 +28,11 @@ export async function buildApp() {
   await app.register(authRoutes);
   await app.register(documentRoutes);
   await app.register(notificationRoutes);
+  await app.register(manuscriptRoutes);
+  await app.register(workflowRoutes);
+  await app.register(readingCommitteeRoutes);
+  await app.register(userRoutes);
+  await app.register(referenceRoutes);
 
   return app;
 }

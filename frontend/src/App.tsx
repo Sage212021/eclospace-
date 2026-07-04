@@ -2,15 +2,24 @@ import { useEffect, useState } from "react";
 import { fetchMe, logout, type EffectiveUser } from "./api/client";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
+import { Manuscripts } from "./pages/Manuscripts";
+import { ManuscriptDetail } from "./pages/ManuscriptDetail";
+import { MyReadings } from "./pages/MyReadings";
 import { Sidebar, type NavItem } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 
-const NAV_ITEMS: NavItem[] = [{ key: "dashboard", label: "Tableau de bord" }];
+const NAV_ITEMS: NavItem[] = [
+  { key: "dashboard", label: "Tableau de bord" },
+  { key: "manuscripts", label: "Manuscrits", permission: "manuscripts:consultation" },
+  { key: "my-readings", label: "Mes lectures", permission: "comite_lecture:saisie" },
+];
+
+type View = { key: "dashboard" } | { key: "manuscripts" } | { key: "my-readings" } | { key: "manuscript-detail"; id: string };
 
 export function App() {
   const [user, setUser] = useState<EffectiveUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeKey, setActiveKey] = useState("dashboard");
+  const [view, setView] = useState<View>({ key: "dashboard" });
 
   const refreshUser = () => fetchMe().then(setUser).catch(() => setUser(null));
 
@@ -24,13 +33,16 @@ export function App() {
     return <Login onAuthenticated={() => refreshUser()} />;
   }
 
+  const permissions = new Set(user.permissions);
+  const activeKey = view.key === "manuscript-detail" ? "manuscripts" : view.key;
+
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar
         items={NAV_ITEMS}
-        permissions={new Set(user.permissions)}
+        permissions={permissions}
         activeKey={activeKey}
-        onSelect={setActiveKey}
+        onSelect={(key) => setView({ key } as View)}
         username={user.username}
       />
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
@@ -50,7 +62,18 @@ export function App() {
             Se déconnecter
           </button>
         </div>
-        {activeKey === "dashboard" && <Dashboard user={user} />}
+
+        {view.key === "dashboard" && <Dashboard user={user} />}
+        {view.key === "manuscripts" && (
+          <Manuscripts
+            canCreate={permissions.has("manuscripts:saisie")}
+            onOpenManuscript={(id) => setView({ key: "manuscript-detail", id })}
+          />
+        )}
+        {view.key === "manuscript-detail" && (
+          <ManuscriptDetail manuscriptId={view.id} permissions={permissions} onBack={() => setView({ key: "manuscripts" })} />
+        )}
+        {view.key === "my-readings" && <MyReadings />}
       </div>
     </div>
   );

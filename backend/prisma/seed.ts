@@ -47,10 +47,69 @@ const roles: { code: string; label: string; departmentCode: string | null }[] = 
   { code: "RESP_RH", label: "Responsable RH", departmentCode: "RH" },
 ];
 
-// Modules déjà exposés par l'API au Lot 0 (Ch. 2 §2.3 : 4 niveaux d'action).
-// Les modules métier (manuscrits, contrats...) seront ajoutés lot par lot.
+// Modules exposés par l'API (Ch. 2 §2.3 : 4 niveaux d'action), ajoutés lot par lot.
 const lot0Modules = ["documents", "notifications", "users", "settings"];
+const lot1Modules = ["manuscripts", "comite_lecture", "decision_editoriale"];
+const modules = [...lot0Modules, ...lot1Modules];
 const actions = Object.values(PermissionAction);
+
+// Référentiel des ~20 étapes du workflow (Ch. 4 §4.3). Toutes sont créées dès
+// le Lot 1 ; seules les étapes 1 à 4 sont pilotées par l'application à ce
+// stade — les suivantes attendent les modules des lots 2 à 5.
+const workflowStatuses: {
+  code: string;
+  label: string;
+  stepOrder: number;
+  departmentCode: string;
+  isConditional?: boolean;
+}[] = [
+  { code: "RECEPTION", label: "Réception du manuscrit", stepOrder: 1, departmentCode: "SECR" },
+  { code: "VERIF_ADMIN", label: "Vérification administrative", stepOrder: 2, departmentCode: "SECR" },
+  { code: "COMITE_LECTURE", label: "Comité de lecture", stepOrder: 3, departmentCode: "COMLEC" },
+  { code: "DECISION_EDITORIALE", label: "Décision éditoriale", stepOrder: 4, departmentCode: "DIRED" },
+  { code: "CONTRACTUALISATION", label: "Contractualisation", stepOrder: 5, departmentCode: "JURID" },
+  { code: "PLANIFICATION", label: "Planification du projet", stepOrder: 6, departmentCode: "DIRED" },
+  { code: "CORRECTION", label: "Correction éditoriale", stepOrder: 7, departmentCode: "CORR" },
+  { code: "EXPERTISE", label: "Expertise scientifique", stepOrder: 8, departmentCode: "EXPERT", isConditional: true },
+  { code: "REECRITURE", label: "Réécriture éditoriale", stepOrder: 9, departmentCode: "CORR", isConditional: true },
+  { code: "MISE_EN_PAGE", label: "Mise en page", stepOrder: 10, departmentCode: "MAQ" },
+  { code: "INFOGRAPHIE", label: "Infographie", stepOrder: 11, departmentCode: "INFOG" },
+  { code: "VALIDATION_BAT", label: "Validation du BAT", stepOrder: 12, departmentCode: "CQ" },
+  { code: "ATTRIBUTION_REFERENCES", label: "Attribution des références", stepOrder: 13, departmentCode: "SECR" },
+  { code: "IMPRESSION", label: "Impression", stepOrder: 14, departmentCode: "IMPR" },
+  { code: "CONTROLE_QUALITE_IMPRESSION", label: "Contrôle qualité (exemplaires imprimés)", stepOrder: 15, departmentCode: "CQ" },
+  { code: "ENTREE_STOCK", label: "Entrée en stock", stepOrder: 16, departmentCode: "STOCK" },
+  { code: "COMMERCIALISATION", label: "Commercialisation", stepOrder: 17, departmentCode: "COM" },
+  { code: "VENTE_LIVRAISON", label: "Vente et livraison", stepOrder: 18, departmentCode: "COM" },
+  { code: "SUIVI_POST_PUBLICATION", label: "Suivi post-publication", stepOrder: 19, departmentCode: "COM" },
+  { code: "ARCHIVAGE", label: "Archivage", stepOrder: 20, departmentCode: "ARCH" },
+];
+
+// Domaines cités en exemple au Ch. 6 §6.2 — liste de départ, à compléter par
+// le secrétariat éditorial selon le catalogue réel de la maison.
+const genres = [
+  { code: "ROMAN", label: "Roman" },
+  { code: "ESSAI", label: "Essai" },
+  { code: "POESIE", label: "Poésie" },
+  { code: "MANUEL", label: "Manuel scolaire ou pratique" },
+  { code: "JEUNESSE", label: "Jeunesse" },
+];
+
+// Grille d'évaluation du comité de lecture (Ch. 7 §7.4). Coefficients : les
+// trois exemples donnés par le cahier des charges (§7.5) sont appliqués tels
+// quels ; les autres critères restent à confirmer avec la Direction
+// éditoriale (configurables via l'administration, non inventés au hasard).
+const evaluationCriteria: { label: string; coefficient: number }[] = [
+  { label: "Originalité du sujet", coefficient: 2 },
+  { label: "Qualité de l'écriture", coefficient: 1 },
+  { label: "Structure du texte", coefficient: 1 },
+  { label: "Cohérence du contenu", coefficient: 1 },
+  { label: "Rigueur scientifique (si applicable)", coefficient: 1 },
+  { label: "Qualité des références", coefficient: 1 },
+  { label: "Intérêt pour le public cible", coefficient: 1 },
+  { label: "Adéquation avec la ligne éditoriale d'Éclosion Édition", coefficient: 3 },
+  { label: "Potentiel commercial", coefficient: 2 },
+];
 
 async function main() {
   const departmentByCode = new Map<string, string>();
@@ -78,7 +137,7 @@ async function main() {
   }
 
   const permissionIdByKey = new Map<string, string>();
-  for (const module of lot0Modules) {
+  for (const module of modules) {
     for (const action of actions) {
       const row = await prisma.permission.upsert({
         where: { module_action: { module, action } },
@@ -110,6 +169,91 @@ async function main() {
         where: { roleId_permissionId: { roleId, permissionId: permissionIdByKey.get(key)! } },
         update: {},
         create: { roleId, permissionId: permissionIdByKey.get(key)! },
+      });
+    }
+  }
+
+  // Permissions métier du Lot 1, par rôle (Ch. 2 §2.2-2.3, Ch. 6-8).
+  async function grant(roleCode: string, keys: string[]) {
+    const roleId = roleByCode.get(roleCode);
+    if (!roleId) return;
+    for (const key of keys) {
+      const permissionId = permissionIdByKey.get(key);
+      if (!permissionId) continue;
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId, permissionId } },
+        update: {},
+        create: { roleId, permissionId },
+      });
+    }
+  }
+
+  await grant("ASSISTANT_EDITORIAL", [
+    "manuscripts:consultation",
+    "manuscripts:saisie",
+    "comite_lecture:consultation",
+    "comite_lecture:saisie",
+    "users:consultation",
+  ]);
+  await grant("MEMBRE_COMITE_LECTURE", ["comite_lecture:consultation", "comite_lecture:saisie"]);
+  await grant("DIR_EDITORIAL", [
+    "manuscripts:consultation",
+    "manuscripts:validation",
+    "comite_lecture:consultation",
+    "decision_editoriale:validation",
+    "users:consultation",
+  ]);
+
+  // Référentiel des étapes du workflow (Ch. 4 §4.3).
+  for (const status of workflowStatuses) {
+    await prisma.workflowStatus.upsert({
+      where: { code: status.code },
+      update: {
+        label: status.label,
+        stepOrder: status.stepOrder,
+        departmentId: departmentByCode.get(status.departmentCode),
+        isConditional: status.isConditional ?? false,
+      },
+      create: {
+        code: status.code,
+        label: status.label,
+        stepOrder: status.stepOrder,
+        departmentId: departmentByCode.get(status.departmentCode),
+        isConditional: status.isConditional ?? false,
+      },
+    });
+  }
+
+  // Référentiel des genres (Ch. 6 §6.2).
+  for (const genre of genres) {
+    await prisma.genre.upsert({ where: { code: genre.code }, update: { label: genre.label }, create: genre });
+  }
+
+  // Seuils du comité de lecture (Ch. 7 §7.5 : "seuils paramétrables") —
+  // valeurs de départ sur une échelle de 0 à 10, à confirmer avec la
+  // Direction éditoriale et ajustables ensuite via la table settings.
+  await prisma.setting.upsert({
+    where: { key: "evaluation_rating_thresholds" },
+    update: {},
+    create: { key: "evaluation_rating_thresholds", value: { excellent: 8.5, very_good: 7, good: 5, to_rework: 3 } },
+  });
+  await prisma.setting.upsert({
+    where: { key: "evaluation_score_gap_threshold" },
+    update: {},
+    create: { key: "evaluation_score_gap_threshold", value: 3 },
+  });
+
+  // Grille d'évaluation du comité de lecture (Ch. 7 §7.4-7.5).
+  for (const criterion of evaluationCriteria) {
+    const existing = await prisma.evaluationCriterion.findFirst({ where: { label: criterion.label } });
+    if (existing) {
+      await prisma.evaluationCriterion.update({
+        where: { id: existing.id },
+        data: { coefficient: criterion.coefficient },
+      });
+    } else {
+      await prisma.evaluationCriterion.create({
+        data: { label: criterion.label, coefficient: criterion.coefficient },
       });
     }
   }

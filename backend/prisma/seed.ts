@@ -53,7 +53,8 @@ const lot1Modules = ["manuscripts", "comite_lecture", "decision_editoriale"];
 const lot2Modules = ["contracts", "tasks"];
 const lot3Modules = ["production", "isbn", "bat", "printing"];
 const lot4Modules = ["stock", "commercial"];
-const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules];
+const lot5Modules = ["finance", "royalties"];
+const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules, ...lot5Modules];
 const actions = Object.values(PermissionAction);
 
 // Référentiel des ~20 étapes du workflow (Ch. 4 §4.3). Toutes sont créées dès
@@ -274,6 +275,19 @@ async function main() {
   await grant("RESP_COMMERCIAL", ["commercial:consultation", "commercial:saisie", "commercial:validation"]);
   await grant("RESP_FINANCE", ["commercial:consultation", "commercial:validation"]);
   await grant("DIR_GENERAL", ["commercial:consultation", "commercial:validation", "commercial:administration"]);
+
+  // Finance et comptabilité (Ch. 18) — séparation des tâches (§18.11) : le
+  // comptable saisit/valide au quotidien, la clôture de période et les
+  // dépenses hors seuils restent réservées à la Direction générale.
+  await grant("COMPTABLE", ["finance:consultation", "finance:saisie", "finance:validation"]);
+  await grant("RESP_FINANCE", ["finance:consultation", "finance:saisie", "finance:validation", "finance:administration"]);
+  await grant("DIR_GENERAL", ["finance:consultation", "finance:validation", "finance:administration"]);
+
+  // Droits d'auteur — exécution financière (Ch. 9 §9.5, Ch. 18 §18.7).
+  await grant("RESP_FINANCE", ["royalties:consultation", "royalties:saisie", "royalties:validation"]);
+  await grant("COMPTABLE", ["royalties:consultation", "royalties:saisie"]);
+  await grant("DIR_GENERAL", ["royalties:consultation", "royalties:validation"]);
+  await grant("RESP_JURIDIQUE", ["royalties:consultation"]);
 
   // Référentiel des étapes du workflow (Ch. 4 §4.3).
   for (const status of workflowStatuses) {

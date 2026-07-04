@@ -30,6 +30,7 @@ model Department {
   roles            Role[]
   employees        Employee[]
   workflowStatuses WorkflowStatus[]
+  budgets          Budget[]
 
   @@map("departments")
 }
@@ -473,6 +474,9 @@ model Manuscript {
   metadataExports    MetadataExport[]
   batRecords         BatRecord[]
   printQuotes        PrintQuote[]
+  expenses           Expense[]
+  costEntries        CostEntry[]
+  budgets            Budget[]
 
   @@map("manuscripts")
 }
@@ -750,7 +754,9 @@ model Contract {
   deletedAt DateTime? @map("deleted_at")
   deletedBy String?   @map("deleted_by")
 
-  royaltyTerms RoyaltyTerms?
+  royaltyTerms      RoyaltyTerms?
+  royaltyEntries    RoyaltyEntry[]
+  royaltyStatements RoyaltyStatement[]
 
   @@map("contracts")
 }
@@ -1057,6 +1063,7 @@ model Isbn {
   consignments    Consignment[]
   posSales        PosSale[]
   returnLines     ReturnLine[]
+  invoiceLines    InvoiceLine[]
 
   @@map("isbns")
 }
@@ -1293,6 +1300,15 @@ model DeliveryNumberCounter {
   lastValue Int @default(0) @map("last_value")
 
   @@map("delivery_number_counters")
+}
+
+// Numérotation chronologique continue et infalsifiable (Ch. 18 §18.2,
+// exigence légale) — même mécanisme atomique que les autres séquences.
+model InvoiceNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("invoice_number_counters")
 }
 
 enum ProductionMilestoneType {
@@ -1549,6 +1565,8 @@ model Customer {
   consignments    Consignment[]
   customerReturns CustomerReturn[]
   stockLocations  StockLocation[]
+  invoices        Invoice[]
+  dunnings        Dunning[]
 
   @@map("customers")
 }
@@ -1776,4 +1794,380 @@ model ReturnLine {
   verdict  ReturnLineVerdict?
 
   @@map("return_lines")
+}
+
+// ============================================================
+// Lot 5 — Droits d'auteur, exécution financière (Ch. 9 §9.5, Ch. 18 §18.7)
+// ============================================================
+
+// Une ligne par mouvement générateur (Ch. 9 §9.5) : tout est recalculable et
+// traçable ligne à ligne, y compris les retours (montant négatif, Ch. 16 §16.7).
+model RoyaltyEntry {
+  id             String            @id @default(uuid())
+  contractId     String            @map("contract_id")
+  contract       Contract          @relation(fields: [contractId], references: [id])
+  sourceType     String            @map("source_type") // sales_order_line | return_line | consignment_statement | pos_sale
+  sourceId       String            @map("source_id")
+  quantity       Int
+  unitBaseAmount Decimal           @map("unit_base_amount") @db.Decimal(10, 2)
+  rateApplied    Decimal           @map("rate_applied") @db.Decimal(5, 4)
+  amount         Decimal           @db.Decimal(12, 2) // positif ou négatif (retour)
+  computedAt     DateTime          @default(now()) @map("computed_at")
+  statementId    String?           @map("statement_id")
+  statement      RoyaltyStatement? @relation(fields: [statementId], references: [id])
+
+  @@map("royalty_entries")
+}
+
+enum RoyaltyStatementStatus {
+  draft
+  issued
+  paid
+}
+
+model RoyaltyStatement {
+  id              String                 @id @default(uuid())
+  contractId      String                 @map("contract_id")
+  contract        Contract               @relation(fields: [contractId], references: [id])
+  periodStart     DateTime               @map("period_start")
+  periodEnd       DateTime               @map("period_end")
+  totalEarned     Decimal                @map("total_earned") @db.Decimal(12, 2)
+  advanceRecouped Decimal                @default(0) @map("advance_recouped") @db.Decimal(12, 2)
+  balanceDue      Decimal                @map("balance_due") @db.Decimal(12, 2)
+  status          RoyaltyStatementStatus @default(draft)
+  documentId      String?                @map("document_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  entries  RoyaltyEntry[]
+  payments RoyaltyPayment[]
+
+  @@map("royalty_statements")
+}
+
+model RoyaltyPayment {
+  id          String           @id @default(uuid())
+  statementId String           @map("statement_id")
+  statement   RoyaltyStatement @relation(fields: [statementId], references: [id])
+  paidAt      DateTime         @default(now()) @map("paid_at")
+  amount      Decimal          @db.Decimal(12, 2)
+  taxWithheld Decimal          @default(0) @map("tax_withheld") @db.Decimal(12, 2)
+  paymentId   String?          @unique @map("payment_id")
+  payment     Payment?         @relation(fields: [paymentId], references: [id])
+
+  @@map("royalty_payments")
+}
+
+// ============================================================
+// Lot 5 — Finance et comptabilité (Ch. 18) — Option B (décision opérateur
+// du 04/07/2026) : gestion financière opérationnelle + exports normalisés,
+// pas de comptabilité générale intégrée (pas de plan comptable/grand livre).
+// ============================================================
+
+enum InvoiceType {
+  invoice
+  credit_note
+}
+
+enum InvoiceStatus {
+  issued
+  paid
+  cancelled
+}
+
+// Jamais modifiée après émission (Ch. 18 §18.2) : une correction est un
+// avoir (credit_note, parent_invoice_id) suivi d'une nouvelle facture.
+model Invoice {
+  id              String        @id @default(uuid())
+  invoiceNumber   String        @unique @map("invoice_number")
+  type            InvoiceType   @default(invoice)
+  parentInvoiceId String?       @map("parent_invoice_id")
+  parentInvoice   Invoice?      @relation("InvoiceCreditNotes", fields: [parentInvoiceId], references: [id])
+  creditNotes     Invoice[]     @relation("InvoiceCreditNotes")
+  customerId      String        @map("customer_id")
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  sourceType      String        @map("source_type") // delivery | consignment_statement | pos_sale
+  sourceId        String        @map("source_id")
+  totalHt         Decimal       @map("total_ht") @db.Decimal(12, 2)
+  totalTax        Decimal       @map("total_tax") @db.Decimal(12, 2)
+  totalTtc        Decimal       @map("total_ttc") @db.Decimal(12, 2)
+  currency        String        @default("XOF")
+  dueDate         DateTime?     @map("due_date")
+  status          InvoiceStatus @default(issued)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  lines              InvoiceLine[]
+  paymentAllocations PaymentAllocation[]
+
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id          String  @id @default(uuid())
+  invoiceId   String  @map("invoice_id")
+  invoice     Invoice @relation(fields: [invoiceId], references: [id])
+  isbnId      String? @map("isbn_id")
+  isbn        Isbn?   @relation(fields: [isbnId], references: [id])
+  description String
+  quantity    Int
+  unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
+  taxRate     Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  lineTotal   Decimal @map("line_total") @db.Decimal(12, 2)
+
+  @@map("invoice_lines")
+}
+
+enum PaymentDirection {
+  in
+  out
+}
+
+// "card" ajouté par rapport à la liste du Ch. 18 §18.3 (virement/chèque/
+// espèces/mobile money) pour couvrir la vente directe par carte (Ch. 17 §17.7).
+enum PaymentMethod {
+  transfer
+  cheque
+  cash
+  card
+  mobile_money
+}
+
+model Payment {
+  id            String           @id @default(uuid())
+  direction     PaymentDirection
+  method        PaymentMethod
+  amount        Decimal          @db.Decimal(12, 2)
+  receivedAt    DateTime         @default(now()) @map("received_at")
+  bankAccountId String?          @map("bank_account_id")
+  bankAccount   BankAccount?     @relation(fields: [bankAccountId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  allocations    PaymentAllocation[]
+  royaltyPayment RoyaltyPayment?
+
+  @@map("payments")
+}
+
+// Lettrage paiement ↔ facture (Ch. 18 §18.3) : total, partiel ou acompte.
+model PaymentAllocation {
+  id        String  @id @default(uuid())
+  paymentId String  @map("payment_id")
+  payment   Payment @relation(fields: [paymentId], references: [id])
+  invoiceId String  @map("invoice_id")
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+  amount    Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("payment_allocations")
+}
+
+enum ExpenseCategory {
+  loyer
+  salaire
+  prestation
+  transport
+  communication
+  autre
+}
+
+enum ExpenseStatus {
+  a_valider
+  validee
+  payee
+  rejetee
+}
+
+// Dépenses hors commandes d'impression (celles-ci sont déjà engagées via
+// purchase_orders, Ch. 15 §15.4) — circuit de validation par seuils.
+model Expense {
+  id           String          @id @default(uuid())
+  category     ExpenseCategory
+  amount       Decimal         @db.Decimal(12, 2)
+  status       ExpenseStatus   @default(a_valider)
+  supplier     String?
+  manuscriptId String?         @map("manuscript_id")
+  manuscript   Manuscript?     @relation(fields: [manuscriptId], references: [id])
+  description  String?
+  approvedBy   String?         @map("approved_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  costEntries CostEntry[]
+
+  @@map("expenses")
+}
+
+enum CostType {
+  advance
+  royalties
+  editorial_services
+  manufacturing
+  promotion
+  overhead_allocation
+}
+
+// Comptabilité analytique par ouvrage (Ch. 18 §18.5) : chaque ouvrage est un
+// centre de coûts et de recettes. Marge/point d'équilibre = vues calculées
+// croisant cost_entries et ventes nettes, pas des colonnes stockées.
+model CostEntry {
+  id           String     @id @default(uuid())
+  manuscriptId String     @map("manuscript_id")
+  manuscript   Manuscript @relation(fields: [manuscriptId], references: [id])
+  costType     CostType   @map("cost_type")
+  sourceType   String     @map("source_type") // purchase_order | expense | royalty_statement
+  sourceId     String     @map("source_id")
+  amount       Decimal    @db.Decimal(12, 2)
+  committed    Boolean    @default(true) // engagé (true) vs réalisé (false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  expenseId String?  @map("expense_id")
+  expense   Expense? @relation(fields: [expenseId], references: [id])
+
+  @@map("cost_entries")
+}
+
+// Budget prévisionnel par ouvrage ou par département (Ch. 18 §18.6).
+model Budget {
+  id           String      @id @default(uuid())
+  manuscriptId String?     @map("manuscript_id")
+  manuscript   Manuscript? @relation(fields: [manuscriptId], references: [id])
+  departmentId String?     @map("department_id")
+  department   Department? @relation(fields: [departmentId], references: [id])
+  label        String
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  lines BudgetLine[]
+
+  @@map("budgets")
+}
+
+model BudgetLine {
+  id             String   @id @default(uuid())
+  budgetId       String   @map("budget_id")
+  budget         Budget   @relation(fields: [budgetId], references: [id])
+  costType       CostType @map("cost_type")
+  plannedAmount  Decimal  @map("planned_amount") @db.Decimal(12, 2)
+  revisedAmount  Decimal? @map("revised_amount") @db.Decimal(12, 2)
+  revisionReason String?  @map("revision_reason")
+
+  @@map("budget_lines")
+}
+
+model BankAccount {
+  id            String  @id @default(uuid())
+  label         String
+  isMobileMoney Boolean @default(false) @map("is_mobile_money")
+  currency      String  @default("XOF")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  payments   Payment[]
+  statements BankStatement[]
+
+  @@map("bank_accounts")
+}
+
+model BankStatement {
+  id            String      @id @default(uuid())
+  bankAccountId String      @map("bank_account_id")
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  periodStart   DateTime    @map("period_start")
+  periodEnd     DateTime    @map("period_end")
+  importedAt    DateTime    @default(now()) @map("imported_at")
+
+  lines StatementLine[]
+
+  @@map("bank_statements")
+}
+
+model StatementLine {
+  id               String        @id @default(uuid())
+  statementId      String        @map("statement_id")
+  statement        BankStatement @relation(fields: [statementId], references: [id])
+  transactionDate  DateTime      @map("transaction_date")
+  label            String
+  amount           Decimal       @db.Decimal(12, 2)
+  matchedPaymentId String?       @unique @map("matched_payment_id")
+  reconciledAt     DateTime?     @map("reconciled_at")
+
+  @@map("statement_lines")
+}
+
+// Taxes par pays et type de produit (Ch. 18 §18.9) — le livre bénéficie
+// souvent d'un taux réduit ou d'une exonération selon les pays.
+model TaxRate {
+  id          String  @id @default(uuid())
+  country     String
+  productType String  @map("product_type")
+  rate        Decimal @db.Decimal(5, 2)
+
+  @@unique([country, productType])
+  @@map("tax_rates")
+}
+
+enum AccountingPeriodStatus {
+  open
+  closed
+}
+
+// Une période clôturée n'accepte plus d'écriture (Ch. 18 §18.11) ; correction
+// = écriture sur période ouverte, tracée.
+model AccountingPeriod {
+  id        String                 @id @default(uuid())
+  periodKey String                 @unique @map("period_key") // ex. "2026-07"
+  status    AccountingPeriodStatus @default(open)
+  closedAt  DateTime?              @map("closed_at")
+  closedBy  String?                @map("closed_by")
+
+  @@map("accounting_periods")
+}
+
+enum DunningLevel {
+  rappel
+  mise_en_demeure
+}
+
+// Relance graduée (Ch. 18 §18.3) : rappel courtois puis mise en demeure,
+// tracée au dossier client — l'encours est figé au moment de l'envoi.
+model Dunning {
+  id                String       @id @default(uuid())
+  customerId        String       @map("customer_id")
+  customer          Customer     @relation(fields: [customerId], references: [id])
+  level             DunningLevel
+  outstandingAmount Decimal      @map("outstanding_amount") @db.Decimal(12, 2)
+  sentAt            DateTime     @default(now()) @map("sent_at")
+  createdBy         String?      @map("created_by")
+
+  @@map("dunnings")
+}
+
+enum AccountingExportFormat {
+  csv
+}
+
+// Export normalisé vers un logiciel/cabinet comptable externe (Option B,
+// décision opérateur du 04/07/2026, Ch. 18 §18.10) — contrôle d'exhaustivité :
+// toute opération de la période se retrouve dans l'export, une seule fois.
+model AccountingExport {
+  id        String                 @id @default(uuid())
+  periodKey String                 @map("period_key")
+  format    AccountingExportFormat @default(csv)
+  lineCount Int                    @map("line_count")
+  checksum  String
+  filePath  String?                @map("file_path")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@map("accounting_exports")
 }

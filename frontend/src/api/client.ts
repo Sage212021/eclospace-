@@ -765,3 +765,135 @@ export function createPosSale(input: {
 }) {
   return request(`/api/v1/pos-sales`, { method: "POST", body: JSON.stringify(input) });
 }
+
+// Ch. 18 : Finance et comptabilité (Lot 5).
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  type: "invoice" | "credit_note";
+  status: string;
+  totalHt: string;
+  totalTax: string;
+  totalTtc: string;
+  dueDate: string | null;
+  createdAt: string;
+  customer: { name: string };
+}
+
+export function listInvoices(filters?: { customer_id?: string; type?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.customer_id) params.set("customer_id", filters.customer_id);
+  if (filters?.type) params.set("type", filters.type);
+  const query = params.toString() ? `?${params}` : "";
+  return request<Invoice[]>(`/api/v1/invoices${query}`);
+}
+
+export interface AgingBalance {
+  not_due: number;
+  d30: number;
+  d60: number;
+  d90_plus: number;
+}
+
+export function getCustomerAging(customerId: string) {
+  return request<AgingBalance>(`/api/v1/customers/${customerId}/aging`);
+}
+
+export function createPayment(input: {
+  method: "transfer" | "cheque" | "cash" | "card" | "mobile_money";
+  amount: number;
+  allocations: { invoice_id: string; amount: number }[];
+}) {
+  return request(`/api/v1/payments`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export interface Dunning {
+  id: string;
+  level: "rappel" | "mise_en_demeure";
+  outstandingAmount: string;
+  sentAt: string;
+}
+
+export function nextDunning(customerId: string) {
+  return request<Dunning>(`/api/v1/dunning/${customerId}/next`, { method: "POST", body: "{}" });
+}
+
+export function listCustomerDunnings(customerId: string) {
+  return request<Dunning[]>(`/api/v1/customers/${customerId}/dunning`);
+}
+
+export type ExpenseCategory = "loyer" | "salaire" | "prestation" | "transport" | "communication" | "autre";
+
+export interface Expense {
+  id: string;
+  category: ExpenseCategory;
+  amount: string;
+  status: "a_valider" | "validee" | "payee" | "rejetee";
+  supplier: string | null;
+  description: string | null;
+  createdBy: string | null;
+}
+
+export function listExpenses(manuscriptId?: string) {
+  const query = manuscriptId ? `?manuscript_id=${manuscriptId}` : "";
+  return request<Expense[]>(`/api/v1/expenses${query}`);
+}
+
+export function createExpense(input: { category: ExpenseCategory; amount: number; supplier?: string; manuscript_id?: string; description?: string }) {
+  return request<Expense>(`/api/v1/expenses`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function validateExpense(id: string) {
+  return request<Expense>(`/api/v1/expenses/${id}/validate`, { method: "PATCH", body: "{}" });
+}
+
+export interface ManuscriptProfitability {
+  total_cost: number;
+  net_sales: number;
+  margin: number;
+  coverage_ratio: number | null;
+  units_to_break_even: number | null;
+}
+
+export function getManuscriptProfitability(manuscriptId: string) {
+  return request<ManuscriptProfitability>(`/api/v1/manuscripts/${manuscriptId}/profitability`);
+}
+
+export interface TreasuryForecastWindow {
+  from: string;
+  to: string;
+  expected_inflow: number;
+  expected_outflow: number;
+  projected_balance: number;
+}
+
+export function getTreasuryForecast(horizonDays = 90) {
+  return request<{ current_position: number; horizon_days: number; windows: TreasuryForecastWindow[]; alert: boolean }>(
+    `/api/v1/treasury/forecast?horizon=${horizonDays}d`,
+  );
+}
+
+// Ch. 9 §9.5, Ch. 18 §18.7 : moteur de droits d'auteur — exécution financière.
+export interface RoyaltyStatement {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  totalEarned: string;
+  advanceRecouped: string;
+  balanceDue: string;
+  status: "draft" | "issued" | "paid";
+  contract: { contractNumber: string; partner: { firstName: string; lastName: string } };
+}
+
+export function listRoyaltyStatements(contractId?: string) {
+  const query = contractId ? `?contract_id=${contractId}` : "";
+  return request<RoyaltyStatement[]>(`/api/v1/royalty-statements${query}`);
+}
+
+export function generateRoyaltyStatement(contractId: string, input: { period_start: string; period_end: string }) {
+  return request<RoyaltyStatement>(`/api/v1/contracts/${contractId}/royalty-statements`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function payRoyaltyStatement(statementId: string, input: { method: string; bank_account_id?: string; tax_withheld?: number }) {
+  return request(`/api/v1/royalty-statements/${statementId}/payments`, { method: "POST", body: JSON.stringify(input) });
+}

@@ -7,7 +7,7 @@
 | Lot 2 | Contrats, planification/Gantt, correction | En cours — flux complet fonctionnel (étapes 5 à 7) |
 | Lot 3 | Maquette, infographie, ISBN, BAT, impression | En cours — flux complet fonctionnel (étapes 10 à 15) |
 | Lot 4 | Stock et commercial | En cours — flux complet fonctionnel (étapes 16 à 18) |
-| Lot 5 | Finance et droits d'auteur | En attente |
+| Lot 5 | Finance et droits d'auteur | En cours — flux complet fonctionnel |
 | Lot 6 | RH, pilotage, rapports | En attente |
 
 ## Journal des sessions
@@ -144,3 +144,28 @@ M. Noah Mbala a validé le Lot 4 sous réserve des 4 points signalés, avec la d
 2. **Calcul financier précis de l'encours client, calcul automatique des frais de port et des taxes, facturation et droits d'auteur automatiques.** Ces trois points relèvent du module Finance (Ch. 18) et du moteur de droits d'auteur (Ch. 9 §9.5), tous deux prévus au **Lot 5**, qui démarre immédiatement pour les traiter.
 
 **Prochaine étape :** démarrer le Lot 5 (finance et droits d'auteur).
+
+### 04/07/2026 (suite) — Décision opérateur Ch. 18 §18.1/§18.10, puis livraison du Lot 5 : finance et droits d'auteur
+
+L'opérateur a tranché le point d'interprétation ouvert par le cahier des charges lui-même (§18.1, §18.10) : **Option B — gestion financière opérationnelle + exports normalisés** vers un cabinet/logiciel comptable externe (pas de comptabilité générale intégrée dans Eclospace).
+
+**Fait :**
+- Schéma Prisma : `royalty_entries`/`royalty_statements`/`royalty_payments`, `invoices`/`invoice_lines` (immuables, avoirs rattachés par `parent_invoice_id`), `payments`/`payment_allocations` (lettrage), `expenses`/`cost_entries`, `budgets`/`budget_lines`, `bank_accounts`/`bank_statements`/`statement_lines`, `tax_rates`, `accounting_periods`, `accounting_exports`, `dunnings` (relance graduée).
+- **Facturation clients (Ch. 18 §18.2)** : génération **automatique** de la facture à la livraison d'une vente ferme, à la validation d'un relevé de dépôt-vente, ou à une vente directe (numérotation chronologique continue `FA-AAAA-NNNNN`) ; avoir généré automatiquement depuis un retour client validé, rattaché à la facture d'origine ; une facture émise n'est jamais modifiée.
+- **Encaissements et créances (Ch. 18 §18.3)** : enregistrement des règlements (virement, chèque, espèces, mobile money, carte) avec **lettrage** total/partiel ; **encours client calculé précisément** (solde dû = total TTC − paiements alloués − avoirs), remplaçant l'approximation du Lot 4 — `routes/commercial.ts` importe désormais `lib/finance.ts` ; **balance âgée** (non échu/30/60/90+ jours, échéance à 30 jours par défaut) ; **relance graduée** (rappel courtois → mise en demeure, tracée au dossier client, refusée au-delà).
+- **Bug réel corrigé** : le taux de TVA d'une commande restait à 0 par défaut sans jamais consulter le référentiel de taux (`tax_rates`) — trouvé en écrivant les tests du Lot 5. C'était précisément le second point signalé par l'opérateur en validant le Lot 4 (« calcul automatique des taxes »). `POST /sales-orders` résout maintenant le taux automatiquement si non fourni.
+- **Moteur de droits d'auteur (Ch. 9 §9.5, Ch. 18 §18.7)** : chaque vente/retour met déjà à jour le relevé de l'auteur (calcul connecté au module commercial, livré en toile de fond du Lot 4/5) ; génération **en un clic** d'un relevé de droits par période (agrège les mouvements non encore rattachés, amortit l'à-valoir restant, dégage un solde dû) ; ordre de paiement exécutable une fois le solde positif, avec retenue fiscale optionnelle.
+- **Dépenses, analytique, budgets, trésorerie, taxes, exports (Ch. 18 §18.4-18.10)** : circuit de validation des dépenses avec **séparation des tâches stricte** (qui saisit ne peut pas valider seul) ; dépense rattachée à un ouvrage devenant un coût analytique automatiquement ; rentabilité par ouvrage (coût complet, marge, point d'équilibre) ; budgets prévisionnels par ouvrage/département avec révision motivée et tracée ; position de trésorerie et **plan prévisionnel** à 90 jours par fenêtres de 30 jours (encaissements attendus vs décaissements prévus, alerte sur point bas) ; taux de taxe paramétrables par pays/type de produit ; **clôture de période comptable bloquant toute nouvelle écriture financière** ; export comptable normalisé (CSV + somme de contrôle) vers le cabinet externe.
+- **12 nouveaux tests automatisés** (79 au total, tous verts) : facture automatique avec TVA calculée, encaissement/lettrage réduisant l'encours, refus d'un lettrage incohérent, relance graduée à deux niveaux avec refus au-delà, amortissement de l'à-valoir avant tout paiement de droits, exécution d'un paiement de droits avec retenue fiscale, séparation des tâches sur la validation d'une dépense, dépense-ouvrage alimentant l'analytique, budget avec révision motivée, export comptable avec somme de contrôle, clôture de période bloquant une nouvelle facture. `vitest.config.ts` ajouté (`fileParallelism: false`) : la clôture de période comptable manipule un état global réel (le mois courant), qui entrerait en concurrence avec d'autres fichiers de test s'ils s'exécutaient en parallèle sur la même base.
+- **Frontend** : nouvel écran transverse **Finance** (factures, encours/relance par client, dépenses avec formulaire de saisie, relevés de droits d'auteur). Vérifié dans un navigateur réel : affichage de la balance âgée pour un client sans facture, création d'une dépense, et blocage explicite de l'auto-validation (« Celui qui saisit une dépense ne peut pas la valider seul (Ch. 18 §18.11). ») affiché tel quel dans l'interface, conforme au guide de style (erreurs explicites).
+
+**Points d'interprétation signalés** (détail dans `docs/JOURNAL_TECHNIQUE.md`) : échéance de facture à 30 jours par défaut faute de délai standard spécifié, relance à deux niveaux fixes, trésorerie prévisionnelle approximée (pas de rapprochement bancaire assisté), rapprochement à trois volets facture fournisseur/commande/réception non implémenté, provisionnement des créances douteuses non implémenté (le cahier des charges lui-même le note « à définir avec le comptable »), retenues fiscales sur droits d'auteur saisies manuellement (pas de barème automatique par pays).
+
+**Point à signaler explicitement** : les « frais de port automatiques » demandés par l'opérateur en validant le Lot 4 **ne figurent nulle part dans le cahier des charges** (recherche faite dans les 22 chapitres) — aucune règle de calcul n'y est décrite. Cette fonctionnalité n'a pas été implémentée faute de spécification ; une clarification de l'opérateur est nécessaire (forfait par transporteur ? grille par zone ? intégration à une API de transporteur ?) avant de la construire.
+
+**Limites connues de ce Lot 5 :**
+- Pas de rapprochement bancaire assisté ni d'import de relevé (Ch. 18 §18.8) — les tables existent au schéma, aucune route d'import/pointage n'a été écrite.
+- Pas de tableau de bord dédié Finance (Ch. 18 §18.11 : indicateurs consolidés pour la Direction générale) — les données sont consultables par écran, pas encore agrégées en un tableau de bord.
+- Export comptable limité au CSV (le format prévu par l'Option B) ; aucun format spécifique à un logiciel comptable particulier n'a été demandé.
+
+**Prochaine étape :** faire valider ce Lot 5 par l'opérateur (en particulier trancher le point des frais de port), puis démarrer le Lot 6 (RH, pilotage, rapports) une fois validé.

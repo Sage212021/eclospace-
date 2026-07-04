@@ -22,6 +22,8 @@ import batRoutes from "./routes/bat.js";
 import printingRoutes from "./routes/printing.js";
 import stockRoutes from "./routes/stock.js";
 import commercialRoutes from "./routes/commercial.js";
+import financeRoutes from "./routes/finance.js";
+import royaltiesRoutes from "./routes/royalties.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
@@ -56,6 +58,8 @@ export async function buildApp() {
   await app.register(printingRoutes);
   await app.register(stockRoutes);
   await app.register(commercialRoutes);
+  await app.register(financeRoutes);
+  await app.register(royaltiesRoutes);
 
   return app;
 }

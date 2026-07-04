@@ -7,6 +7,7 @@ import { ManuscriptDetail } from "./pages/ManuscriptDetail";
 import { MyReadings } from "./pages/MyReadings";
 import { StockPage } from "./pages/StockPage";
 import { CommercialPage } from "./pages/CommercialPage";
+import { FinancePage } from "./pages/FinancePage";
 import { Sidebar, type NavItem } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 
@@ -16,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: "my-readings", label: "Mes lectures", permission: "comite_lecture:saisie" },
   { key: "stock", label: "Stock", permission: "stock:consultation" },
   { key: "commercial", label: "Commercial", permission: "commercial:consultation" },
+  { key: "finance", label: "Finance", permission: "finance:consultation" },
 ];
 
 type View =
@@ -24,7 +26,8 @@ type View =
   | { key: "my-readings" }
   | { key: "manuscript-detail"; id: string }
   | { key: "stock" }
-  | { key: "commercial" };
+  | { key: "commercial" }
+  | { key: "finance" };
 
 export function App() {
   const [user, setUser] = useState<EffectiveUser | null>(null);
@@ -87,6 +90,9 @@ export function App() {
         {view.key === "stock" && <StockPage canManage={permissions.has("stock:saisie")} canAdminister={permissions.has("stock:administration")} />}
         {view.key === "commercial" && (
           <CommercialPage canManage={permissions.has("commercial:saisie")} canValidate={permissions.has("commercial:administration")} />
+        )}
+        {view.key === "finance" && (
+          <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} />
         )}
       </div>
     </div>

@@ -7,6 +7,10 @@ import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { adjustStockItem, availableQuantity } from "../lib/stock.js";
 import { nextSalesOrderNumber, nextDeliveryNumber } from "../lib/salesOrderNumber.js";
+import { createInvoiceFromDelivery, createInvoiceFromConsignmentStatement, createInvoiceFromPosSale, createCreditNoteFromReturn } from "../lib/invoicing.js";
+import { PeriodClosedError } from "../lib/accountingPeriod.js";
+import { computeCustomerOutstandingBalance } from "../lib/finance.js";
+import { lookupTaxRatePct } from "../lib/taxRate.js";
 
 const customerSchema = z.object({
   category: z.nativeEnum(CustomerCategory),
@@ -39,7 +43,8 @@ const orderLineSchema = z.object({
   isbn_id: z.string().uuid(),
   quantity: z.number().int().positive(),
   unit_price: z.number().positive(),
-  tax_rate: z.number().min(0).max(100).default(0),
+  // Non fourni : calculé automatiquement (Ch. 18 §18.9) plutôt qu'un défaut à 0.
+  tax_rate: z.number().min(0).max(100).optional(),
 });
 
 const salesOrderSchema = z.object({
@@ -105,21 +110,9 @@ async function resolveDiscountPct(customerId: string): Promise<number> {
   return grid ? Number(grid.discountPct) : 0;
 }
 
-// Encours client (Ch. 17 §17.3, §17.5) : approximé par le total des
-// commandes non encore soldées, en l'absence du module Finance (Lot 5) qui
-// portera la véritable balance facture/paiement.
-async function computeOutstandingBalance(customerId: string): Promise<number> {
-  const orders = await prisma.salesOrder.findMany({
-    where: { customerId, status: { in: ["confirmed", "preparing", "shipped", "delivered"] } },
-    include: { lines: true },
-  });
-  return orders.reduce(
-    (sum, order) =>
-      sum +
-      order.lines.reduce((lineSum, line) => lineSum + Number(line.unitPrice) * line.quantity * (1 - Number(line.discountPct) / 100), 0),
-    0,
-  );
-}
+// Encours client (Ch. 17 §17.3, §17.5) : calcul précis porté par le module
+// Finance (Lot 5) — somme des soldes dus (facture − paiements − avoirs).
+const computeOutstandingBalance = computeCustomerOutstandingBalance;
 
 // Ch. 17 : mise en marché des ouvrages — clients, conditions commerciales,
 // commandes, ventes fermes et dépôts-ventes, vente directe, livraisons, retours.
@@ -284,6 +277,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     const orderTotal = body.lines.reduce((sum, line) => sum + line.unit_price * line.quantity * (1 - discountPct / 100), 0);
     const outstandingBalance = await computeOutstandingBalance(body.customer_id);
     const overLimit = customer.creditLimit !== null && outstandingBalance + orderTotal > Number(customer.creditLimit);
+    const defaultTaxRatePct = await lookupTaxRatePct(prisma);
 
     const orderNumber = await nextSalesOrderNumber();
     const order = await prisma.salesOrder.create({
@@ -300,7 +294,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
             quantity: line.quantity,
             unitPrice: line.unit_price,
             discountPct,
-            taxRate: line.tax_rate,
+            taxRate: line.tax_rate ?? defaultTaxRatePct,
           })),
         },
       },
@@ -430,49 +424,59 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       }
 
       const deliveryNumber = await nextDeliveryNumber();
-      const delivery = await prisma.$transaction(async (tx) => {
-        const created = await tx.delivery.create({
-          data: {
-            orderId: id,
-            deliveryNumber,
-            carrier: parsed.data.carrier,
-            shippedAt: new Date(),
-            lines: { create: parsed.data.lines.map((line) => ({ isbnId: line.isbn_id, quantity: line.quantity })) },
-          },
-          include: { lines: true },
+      try {
+        const delivery = await prisma.$transaction(async (tx) => {
+          const created = await tx.delivery.create({
+            data: {
+              orderId: id,
+              deliveryNumber,
+              carrier: parsed.data.carrier,
+              shippedAt: new Date(),
+              lines: { create: parsed.data.lines.map((line) => ({ isbnId: line.isbn_id, quantity: line.quantity })) },
+            },
+            include: { lines: true },
+          });
+
+          for (const line of parsed.data.lines) {
+            const stockItems = await tx.stockItem.findMany({ where: { isbnId: line.isbn_id, quantityReserved: { gt: 0 } } });
+            let remaining = line.quantity;
+            for (const item of stockItems) {
+              if (remaining <= 0) break;
+              const released = Math.min(remaining, item.quantityReserved);
+              if (released <= 0) continue;
+              await tx.stockMovement.create({
+                data: {
+                  type: "sale_out",
+                  isbnId: line.isbn_id,
+                  printRun: item.printRun,
+                  fromLocationId: item.locationId,
+                  quantity: released,
+                  reason: `Livraison ${deliveryNumber} (commande ${order.orderNumber})`,
+                  referenceType: "delivery",
+                  referenceId: created.id,
+                  status: "completed",
+                  movedBy: request.user!.id,
+                },
+              });
+              await adjustStockItem(tx, line.isbn_id, item.locationId, item.printRun, -released, -released);
+              remaining -= released;
+            }
+          }
+
+          await tx.salesOrder.update({ where: { id }, data: { status: "shipped" } });
+          // Ch. 18 §18.2 : la livraison d'une vente ferme génère automatiquement
+          // sa facture (et, en cascade, les droits d'auteur, Ch. 9 §9.5).
+          await createInvoiceFromDelivery(tx, created.id);
+          return created;
         });
 
-        for (const line of parsed.data.lines) {
-          const stockItems = await tx.stockItem.findMany({ where: { isbnId: line.isbn_id, quantityReserved: { gt: 0 } } });
-          let remaining = line.quantity;
-          for (const item of stockItems) {
-            if (remaining <= 0) break;
-            const released = Math.min(remaining, item.quantityReserved);
-            if (released <= 0) continue;
-            await tx.stockMovement.create({
-              data: {
-                type: "sale_out",
-                isbnId: line.isbn_id,
-                printRun: item.printRun,
-                fromLocationId: item.locationId,
-                quantity: released,
-                reason: `Livraison ${deliveryNumber} (commande ${order.orderNumber})`,
-                referenceType: "delivery",
-                referenceId: created.id,
-                status: "completed",
-                movedBy: request.user!.id,
-              },
-            });
-            await adjustStockItem(tx, line.isbn_id, item.locationId, item.printRun, -released, -released);
-            remaining -= released;
-          }
+        return reply.code(201).send(delivery);
+      } catch (err) {
+        if (err instanceof PeriodClosedError) {
+          return reply.code(409).send({ code: "accounting_period_closed", message: err.message });
         }
-
-        await tx.salesOrder.update({ where: { id }, data: { status: "shipped" } });
-        return created;
-      });
-
-      return reply.code(201).send(delivery);
+        throw err;
+      }
     },
   );
 
@@ -597,8 +601,21 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     { preHandler: requirePermission("commercial", "validation") },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const updated = await prisma.consignmentStatement.update({ where: { id }, data: { validatedAt: new Date() } });
-      return reply.send(updated);
+      try {
+        const updated = await prisma.$transaction(async (tx) => {
+          const statement = await tx.consignmentStatement.update({ where: { id }, data: { validatedAt: new Date() } });
+          // Ch. 17 §17.6, Ch. 18 §18.2 : la validation du relevé génère la
+          // facture et les droits d'auteur (Ch. 9 §9.5) — pas la simple saisie du relevé.
+          await createInvoiceFromConsignmentStatement(tx, statement.id);
+          return statement;
+        });
+        return reply.send(updated);
+      } catch (err) {
+        if (err instanceof PeriodClosedError) {
+          return reply.code(409).send({ code: "accounting_period_closed", message: err.message });
+        }
+        throw err;
+      }
     },
   );
 
@@ -615,36 +632,45 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       return reply.code(409).send({ code: "insufficient_stock", message: "Stock disponible insuffisant pour cette vente." });
     }
 
-    const sale = await prisma.$transaction(async (tx) => {
-      const created = await tx.posSale.create({
-        data: {
-          isbnId: parsed.data.isbn_id,
-          quantity: parsed.data.quantity,
-          unitPrice: parsed.data.unit_price,
-          paymentMethod: parsed.data.payment_method,
-          eventLabel: parsed.data.event_label,
-          soldBy: request.user!.id,
-        },
+    try {
+      const sale = await prisma.$transaction(async (tx) => {
+        const created = await tx.posSale.create({
+          data: {
+            isbnId: parsed.data.isbn_id,
+            quantity: parsed.data.quantity,
+            unitPrice: parsed.data.unit_price,
+            paymentMethod: parsed.data.payment_method,
+            eventLabel: parsed.data.event_label,
+            soldBy: request.user!.id,
+          },
+        });
+        await tx.stockMovement.create({
+          data: {
+            type: "sale_out",
+            isbnId: parsed.data.isbn_id,
+            printRun: 0,
+            fromLocationId: parsed.data.location_id,
+            quantity: parsed.data.quantity,
+            reason: "Vente au comptoir",
+            referenceType: "pos_sale",
+            referenceId: created.id,
+            status: "completed",
+            movedBy: request.user!.id,
+          },
+        });
+        await adjustStockItem(tx, parsed.data.isbn_id, parsed.data.location_id, 0, -parsed.data.quantity);
+        // Ch. 18 §18.2, §18.7 : facture immédiate + encaissement + droits d'auteur.
+        await createInvoiceFromPosSale(tx, created.id);
+        return created;
       });
-      await tx.stockMovement.create({
-        data: {
-          type: "sale_out",
-          isbnId: parsed.data.isbn_id,
-          printRun: 0,
-          fromLocationId: parsed.data.location_id,
-          quantity: parsed.data.quantity,
-          reason: "Vente au comptoir",
-          referenceType: "pos_sale",
-          referenceId: created.id,
-          status: "completed",
-          movedBy: request.user!.id,
-        },
-      });
-      await adjustStockItem(tx, parsed.data.isbn_id, parsed.data.location_id, 0, -parsed.data.quantity);
-      return created;
-    });
 
-    return reply.code(201).send(sale);
+      return reply.code(201).send(sale);
+    } catch (err) {
+      if (err instanceof PeriodClosedError) {
+        return reply.code(409).send({ code: "accounting_period_closed", message: err.message });
+      }
+      throw err;
+    }
   });
 
   fastify.get("/api/v1/pos-sales", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
@@ -682,70 +708,81 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ code: "not_found", message: "Retour introuvable." });
       }
 
-      const updated = await prisma.$transaction(async (tx) => {
-        for (const line of parsed.data.lines) {
-          await tx.returnLine.create({
-            data: { returnId: id, isbnId: line.isbn_id, quantity: line.quantity, verdict: line.verdict },
-          });
-          if (line.verdict === "resaleable") {
-            await tx.stockMovement.create({
-              data: {
-                type: "customer_return",
-                isbnId: line.isbn_id,
-                printRun: 0,
-                toLocationId: line.location_id,
-                quantity: line.quantity,
-                reason: "Retour client — remis en stock vendable",
-                referenceType: "customer_return",
-                referenceId: id,
-                status: "completed",
-                movedBy: request.user!.id,
-              },
+      try {
+        const updated = await prisma.$transaction(async (tx) => {
+          for (const line of parsed.data.lines) {
+            await tx.returnLine.create({
+              data: { returnId: id, isbnId: line.isbn_id, quantity: line.quantity, verdict: line.verdict },
             });
-            await adjustStockItem(tx, line.isbn_id, line.location_id, 0, line.quantity);
-          } else if (line.verdict === "pulp") {
-            // Traçabilité (§16.4 : incidence comptable transmise au module Finance)
-            // sans variation de stock : ces exemplaires n'ont jamais été
-            // recomptés en stock vendable, il n'y a donc rien à en retrancher.
-            await tx.stockMovement.create({
-              data: {
-                type: "pulping",
-                isbnId: line.isbn_id,
-                printRun: 0,
-                fromLocationId: line.location_id,
-                quantity: line.quantity,
-                reason: "Retour client — mis au pilon",
-                referenceType: "customer_return",
-                referenceId: id,
-                status: "completed",
-                movedBy: request.user!.id,
-              },
-            });
-          } else if (line.verdict === "damaged") {
-            // Ch. 16 §16.7 : ni remis en stock vendable ni détruit — un
-            // compartiment de stock "déclassé" à part entière, candidat aux
-            // opérations commerciales (§16.10) plutôt qu'une simple mention.
-            await tx.stockMovement.create({
-              data: {
-                type: "customer_return",
-                isbnId: line.isbn_id,
-                printRun: 0,
-                toLocationId: line.location_id,
-                quantity: line.quantity,
-                reason: "Retour client — déclassé (défraîchi)",
-                referenceType: "customer_return",
-                referenceId: id,
-                status: "completed",
-                movedBy: request.user!.id,
-              },
-            });
-            await adjustStockItem(tx, line.isbn_id, line.location_id, 0, line.quantity, 0, "declasse");
+            if (line.verdict === "resaleable") {
+              await tx.stockMovement.create({
+                data: {
+                  type: "customer_return",
+                  isbnId: line.isbn_id,
+                  printRun: 0,
+                  toLocationId: line.location_id,
+                  quantity: line.quantity,
+                  reason: "Retour client — remis en stock vendable",
+                  referenceType: "customer_return",
+                  referenceId: id,
+                  status: "completed",
+                  movedBy: request.user!.id,
+                },
+              });
+              await adjustStockItem(tx, line.isbn_id, line.location_id, 0, line.quantity);
+            } else if (line.verdict === "pulp") {
+              // Traçabilité (§16.4 : incidence comptable transmise au module Finance)
+              // sans variation de stock : ces exemplaires n'ont jamais été
+              // recomptés en stock vendable, il n'y a donc rien à en retrancher.
+              await tx.stockMovement.create({
+                data: {
+                  type: "pulping",
+                  isbnId: line.isbn_id,
+                  printRun: 0,
+                  fromLocationId: line.location_id,
+                  quantity: line.quantity,
+                  reason: "Retour client — mis au pilon",
+                  referenceType: "customer_return",
+                  referenceId: id,
+                  status: "completed",
+                  movedBy: request.user!.id,
+                },
+              });
+            } else if (line.verdict === "damaged") {
+              // Ch. 16 §16.7 : ni remis en stock vendable ni détruit — un
+              // compartiment de stock "déclassé" à part entière, candidat aux
+              // opérations commerciales (§16.10) plutôt qu'une simple mention.
+              await tx.stockMovement.create({
+                data: {
+                  type: "customer_return",
+                  isbnId: line.isbn_id,
+                  printRun: 0,
+                  toLocationId: line.location_id,
+                  quantity: line.quantity,
+                  reason: "Retour client — déclassé (défraîchi)",
+                  referenceType: "customer_return",
+                  referenceId: id,
+                  status: "completed",
+                  movedBy: request.user!.id,
+                },
+              });
+              await adjustStockItem(tx, line.isbn_id, line.location_id, 0, line.quantity, 0, "declasse");
+            }
           }
-        }
-        return tx.customerReturn.update({ where: { id }, data: { receivedAt: new Date() } });
-      });
+          const result = await tx.customerReturn.update({ where: { id }, data: { receivedAt: new Date() } });
+          // Ch. 17 §17.9, Ch. 18 §18.2 : avoir rattaché à la facture d'origine et
+          // recalcul des droits d'auteur, quel que soit le devenir physique des exemplaires.
+          await createCreditNoteFromReturn(tx, id);
+          return result;
+        });
 
-      return reply.send(updated);
+        return reply.send(updated);
+      } catch (err) {
+        if (err instanceof PeriodClosedError) {
+          return reply.code(409).send({ code: "accounting_period_closed", message: err.message });
+        }
+        throw err;
+      }
     },
   );
 

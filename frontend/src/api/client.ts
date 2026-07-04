@@ -376,3 +376,248 @@ export function compareVersions(leftId: string, rightId: string) {
     body: JSON.stringify({ left_id: leftId, right_id: rightId }),
   });
 }
+
+// --- Lot 3 : Maquette, Infographie, ISBN/dépôt légal/métadonnées, BAT, Impression ---
+
+export interface ProductionSpecs {
+  trimFormat: string | null;
+  finalPages: number | null;
+  paperInterior: string | null;
+  paperInteriorGsm: number | null;
+  paperCover: string | null;
+  binding: string | null;
+  lamination: string | null;
+  spineWidthMm: string | null;
+  spineNeedsRecalc: boolean;
+}
+
+export function getProductionSpecs(manuscriptId: string) {
+  return request<ProductionSpecs | null>(`/api/v1/manuscripts/${manuscriptId}/production-specs`);
+}
+
+export function updateProductionSpecs(manuscriptId: string, input: Partial<{
+  trim_format: string;
+  final_pages: number;
+  paper_interior: string;
+  paper_interior_gsm: number;
+  paper_cover: string;
+  binding: string;
+  lamination: string;
+}>) {
+  return request<ProductionSpecs>(`/api/v1/manuscripts/${manuscriptId}/production-specs`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export type ImageAssetType = "couverture_1" | "couverture_4" | "dos" | "rabat" | "illustration_interieure" | "visuel_marketing";
+export type RightsOrigin = "creation_interne" | "banque_images" | "fourni_par_auteur";
+
+export interface ImageAsset {
+  id: string;
+  type: ImageAssetType;
+  resolutionDpi: number | null;
+  colorMode: string | null;
+  technicalOk: boolean;
+  rightsOrigin: RightsOrigin | null;
+}
+
+export function listImageAssets(manuscriptId: string) {
+  return request<ImageAsset[]>(`/api/v1/manuscripts/${manuscriptId}/image-assets`);
+}
+
+export function createImageAsset(
+  manuscriptId: string,
+  input: { type: ImageAssetType; resolution_dpi?: number; color_mode?: string; rights_origin?: RightsOrigin },
+) {
+  return request<ImageAsset>(`/api/v1/manuscripts/${manuscriptId}/image-assets`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export interface IsbnPoolSummary {
+  id: string;
+  prefix: string;
+  digitWidth: number;
+  available: number;
+}
+
+export function listIsbnPools() {
+  return request<{ pools: IsbnPoolSummary[]; total_available: number; alert_threshold: number; low_stock: boolean }>("/api/v1/isbn-pools");
+}
+
+export function createIsbnPool(input: { prefix: string; digit_width: number; range_start: number; range_end: number }) {
+  return request<IsbnPoolSummary>("/api/v1/isbn-pools", { method: "POST", body: JSON.stringify(input) });
+}
+
+export type IsbnFormat = "print" | "epub" | "pdf" | "audio";
+
+export interface Isbn {
+  id: string;
+  isbn13: string;
+  format: IsbnFormat;
+  status: string;
+}
+
+export function listIsbns(manuscriptId: string) {
+  return request<Isbn[]>(`/api/v1/manuscripts/${manuscriptId}/isbn`);
+}
+
+export function assignIsbn(manuscriptId: string, format: IsbnFormat, poolId?: string) {
+  return request<Isbn>(`/api/v1/manuscripts/${manuscriptId}/isbn`, {
+    method: "POST",
+    body: JSON.stringify({ format, pool_id: poolId }),
+  });
+}
+
+export function isbnBarcodeUrl(isbnId: string) {
+  return `${API_BASE}/api/v1/isbn/${isbnId}/barcode`;
+}
+
+export interface LegalDeposit {
+  id: string;
+  country: string;
+  depository: string;
+  copiesRequired: number;
+  status: string;
+  depositedAt: string | null;
+}
+
+export function listLegalDeposits(manuscriptId: string) {
+  return request<LegalDeposit[]>(`/api/v1/manuscripts/${manuscriptId}/legal-deposits`);
+}
+
+export function createLegalDeposit(manuscriptId: string, input: { country: string; depository: string; copies_required: number }) {
+  return request<LegalDeposit>(`/api/v1/manuscripts/${manuscriptId}/legal-deposits`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export interface WorkMetadata {
+  version: number;
+  summary: string | null;
+  weightGrams: number | null;
+  themaCodes: string[];
+}
+
+export function getWorkMetadata(manuscriptId: string) {
+  return request<WorkMetadata | null>(`/api/v1/manuscripts/${manuscriptId}/metadata`);
+}
+
+export function updateWorkMetadata(manuscriptId: string, input: Partial<{ summary: string; weight_grams: number; thema_codes: string[] }>) {
+  return request<WorkMetadata>(`/api/v1/manuscripts/${manuscriptId}/metadata`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function getIsbnCompleteness(manuscriptId: string) {
+  return request<{ complete: boolean; missing: string[] }>(`/api/v1/manuscripts/${manuscriptId}/isbn-completeness`);
+}
+
+export interface ChecklistItem {
+  id: string;
+  label: string;
+  isBlocking: boolean;
+  notApplicable: boolean;
+  checkedAt: string | null;
+  observation: string | null;
+}
+
+export interface BatRecord {
+  id: string;
+  cycleNumber: number;
+  status: "in_control" | "corrections_requested" | "awaiting_signature" | "signed" | "cancelled";
+  checklist: { items: ChecklistItem[] } | null;
+  anomalies: { id: string; description: string; severity: "minor" | "major" | "blocking"; resolvedAt: string | null }[];
+}
+
+export function listBatRecords(manuscriptId: string) {
+  return request<BatRecord[]>(`/api/v1/manuscripts/${manuscriptId}/bat`);
+}
+
+export function openBat(manuscriptId: string, interiorVersionId: string, coverVersionId: string) {
+  return request<BatRecord>(`/api/v1/manuscripts/${manuscriptId}/bat`, {
+    method: "POST",
+    body: JSON.stringify({ interior_version_id: interiorVersionId, cover_version_id: coverVersionId }),
+  });
+}
+
+export function toggleChecklistItem(itemId: string, checked: boolean) {
+  return request<ChecklistItem>(`/api/v1/checklist-items/${itemId}`, { method: "PATCH", body: JSON.stringify({ checked }) });
+}
+
+export function addBatAnomaly(batId: string, description: string, severity: "minor" | "major" | "blocking") {
+  return request(`/api/v1/bat/${batId}/anomalies`, { method: "POST", body: JSON.stringify({ description, severity }) });
+}
+
+export function updateBatStatus(batId: string, status: "corrections_requested" | "awaiting_signature") {
+  return request<BatRecord>(`/api/v1/bat/${batId}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
+export function signBat(batId: string, authorApproval?: boolean) {
+  return request(`/api/v1/bat/${batId}/sign`, { method: "POST", body: JSON.stringify({ author_approval: authorApproval ?? false }) });
+}
+
+export interface Printer {
+  id: string;
+  specialties: string[];
+  partner: { id: string; firstName: string; lastName: string };
+}
+
+export function listPrinters() {
+  return request<Printer[]>("/api/v1/printers");
+}
+
+export interface PrintQuote {
+  id: string;
+  status: "requested" | "received" | "selected" | "declined";
+  quantities: number[];
+  amounts: Record<string, number> | null;
+  leadTimeDays: number | null;
+  printer: { id: string; partner: { firstName: string; lastName: string } };
+}
+
+export function listPrintQuotes(manuscriptId: string) {
+  return request<{ quotes: PrintQuote[]; comparison: { quote_id: string; unit_costs: Record<string, number> }[] }>(
+    `/api/v1/manuscripts/${manuscriptId}/print-quotes`,
+  );
+}
+
+export function requestPrintQuote(manuscriptId: string, printerId: string, quantities: number[]) {
+  return request<PrintQuote>(`/api/v1/manuscripts/${manuscriptId}/print-quotes`, {
+    method: "POST",
+    body: JSON.stringify({ printer_id: printerId, quantities }),
+  });
+}
+
+export function recordPrintQuoteAmounts(quoteId: string, amounts: Record<string, number>, leadTimeDays?: number) {
+  return request<PrintQuote>(`/api/v1/print-quotes/${quoteId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ amounts, lead_time_days: leadTimeDays }),
+  });
+}
+
+export function selectPrintQuote(quoteId: string, selectionMotive: string, chosenQuantity: number) {
+  return request<PrintQuote>(`/api/v1/print-quotes/${quoteId}/select`, {
+    method: "POST",
+    body: JSON.stringify({ selection_motive: selectionMotive, chosen_quantity: chosenQuantity }),
+  });
+}
+
+export interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  status: string;
+  amount: string;
+  orderedQuantity: number;
+}
+
+export function createPurchaseOrder(quoteId: string, input: { delivery_due?: string; delivery_location?: string; quantity_tolerance_pct?: number }) {
+  return request<PurchaseOrder>(`/api/v1/print-quotes/${quoteId}/purchase-order`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function listPurchaseOrders(manuscriptId: string) {
+  return request<PurchaseOrder[]>(`/api/v1/manuscripts/${manuscriptId}/purchase-orders`);
+}
+
+export function updatePurchaseOrderStatus(poId: string, status: string) {
+  return request<PurchaseOrder>(`/api/v1/purchase-orders/${poId}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
+export function recordGoodsReceipt(poId: string, quantityReceived: number) {
+  return request<{ id: string; variance: number; within_tolerance: boolean }>(`/api/v1/purchase-orders/${poId}/goods-receipts`, {
+    method: "POST",
+    body: JSON.stringify({ quantity_received: quantityReceived }),
+  });
+}

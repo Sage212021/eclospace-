@@ -5,7 +5,7 @@
 | Lot 0 | Fondations (sécurité, rôles, audit, GED, notifications) | En cours — socle backend/frontend fonctionnel |
 | Lot 1 | Entrée des manuscrits, comité de lecture, workflow | En cours — flux complet fonctionnel (étapes 1 à 5) |
 | Lot 2 | Contrats, planification/Gantt, correction | En cours — flux complet fonctionnel (étapes 5 à 7) |
-| Lot 3 | Maquette, infographie, ISBN, BAT, impression | En attente |
+| Lot 3 | Maquette, infographie, ISBN, BAT, impression | En cours — flux complet fonctionnel (étapes 10 à 15) |
 | Lot 4 | Stock et commercial | En attente |
 | Lot 5 | Finance et droits d'auteur | En attente |
 | Lot 6 | RH, pilotage, rapports | En attente |
@@ -92,3 +92,26 @@ M. Noah Mbala a tranché les trois points signalés à la fin du Lot 2 :
 **Vérifié dans un navigateur réel** : création d'un partenaire « Imprimeur » depuis le formulaire de contrat (sélectionné automatiquement après création), et bascule vers l'étape Réécriture en cochant la case au moment de valider la Correction. 21 tests automatisés au total (2 nouveaux pour ces changements), tous verts.
 
 **Prochaine étape :** démarrer le Lot 3 (maquette, infographie, ISBN/dépôt légal, BAT, impression).
+
+### 04/07/2026 (suite) — Lot 3 : maquette, infographie, ISBN/dépôt légal/métadonnées, BAT, impression
+
+**Fait :**
+- Schéma Prisma : `production_specs`, `image_assets`, `layout_templates`, `graphic_charters`, `checklists`/`checklist_items` (mécanisme générique réutilisé par le BAT et la complétude ISBN), `isbn_pool`/`isbns`, `legal_deposits`, `work_metadata`, `metadata_exports`, `bat_records`/`bat_anomalies`/`bat_signatures`, `printers`/`print_quotes`/`purchase_orders`/`production_milestones`/`goods_receipts`/`supplier_claims`.
+- **Maquette (Ch. 11) et Infographie (Ch. 12)** : fiche technique de fabrication avec **calcul automatique de l'épaisseur du dos** et alerte de recalcul quand pages/papier changent ; visuels avec contrôle technique automatique (résolution ≥ seuil paramétrable, mode CMJN) et gestion des droits iconographiques (origine, licence, crédit) — notification si non conforme.
+- **ISBN, dépôt légal et métadonnées (Ch. 13)** : gestion du stock d'ISBN par tranches avec alerte de seuil bas paramétrable, attribution automatique (clé de contrôle EAN-13 calculée et vérifiée), **un ISBN attribué n'est jamais réutilisé**, code-barres EAN-13 généré à la volée en SVG, fiche de dépôt légal, fiche de métadonnées versionnée (les partenaires déjà notifiés sont signalés à re-notifier après modification), **contrôle de complétude bloquant** avant le BAT.
+- **BAT et contrôle qualité (Ch. 14)** : constitution automatique du dossier bloquée tant que la convergence amont (ISBN/métadonnées, fiche technique, couverture conforme et pourvue de ses droits) n'est pas atteinte ; liste de contrôle structurée ; anomalies avec gravité et renvoi en correction (nouveau cycle) ; **signature électronique verrouillant les fichiers** par une empreinte combinée des versions approuvées — toute modification après signature exige une annulation motivée et tracée, notifiée à la Direction générale.
+- **Impression et fabrication (Ch. 15)** : référentiel imprimeurs (fiche Partenaire, catégorie imprimeur) avec évaluation continue (délais, non-conformité, réclamations) ; devis comparés par hypothèse de tirage avec tableau de coût unitaire ; sélection motivée soumise à un **seuil de délégation paramétrable** (Direction générale au-delà) ; bon de commande numéroté automatiquement, référençant l'empreinte des fichiers du BAT signé ; jalons de fabrication avec alerte de retard ; réception avec **rapprochement automatique commande/livraison** (écart hors tolérance signalé) ; réclamations fournisseurs ; réimpressions en sous-cycle accéléré reprenant le dernier BAT signé.
+- **Intégration au moteur de workflow (étapes 10 à 15)** : convergence Maquette/Infographie exigée avant l'étape Infographie, contrôle de complétude ISBN bloquant avant l'étape Attribution des références, signature du BAT exigée avant l'étape Validation du BAT, bon de commande transmis exigé avant l'étape Impression, verdict de contrôle qualité acceptable exigé avant l'étape Contrôle qualité (exemplaires imprimés).
+- **Correction d'un ordre du Lot 1** : l'étape « Attribution des références » (ISBN) est repassée avant « Validation du BAT », conformément aux Ch. 13 §13.9 et Ch. 14 §14.2 qui exigent la complétude ISBN avant le BAT — l'ordre initial du Lot 1 les avait inversées.
+- **27 nouveaux tests automatisés** (48 au total, tous verts) : calcul et alerte de recalcul du dos, contrôle technique et droits iconographiques bloquants, attribution ISBN et non-réutilisation, complétude ISBN/dépôt légal/métadonnées, circuit complet de BAT (contrôle → signature → verrouillage), renvoi en correction et réouverture de cycle, annulation de signature motivée, devis/sélection/bon de commande avec seuil de délégation, jalons et alerte de retard, rapprochement commande/livraison et réclamation, réimpression, évaluation imprimeur, et circuit complet du workflow (étapes 10 à 15) avec vérification de chaque verrou.
+- **Frontend** : quatre nouvelles sections intégrées à la fiche manuscrit (fiche technique de fabrication et visuels, ISBN/dépôt légal/métadonnées avec code-barres affiché, dossier de BAT avec checklist et signature, devis/bon de commande imprimeur), conditionnées à l'étape courante. Flux de saisie vérifié dans un navigateur réel (remplissage et enregistrement de la fiche technique, calcul du dos affiché immédiatement).
+
+**Points d'interprétation signalés** (détail dans `docs/JOURNAL_TECHNIQUE.md`) : formule du calcul du dos, code-barres généré à la volée plutôt que stocké, choix manuel d'un ISBN précis non implémenté, export ONIX non implémenté (CSV simplifié seulement), classification Thema simplifiée à une liste de codes libres, réouverture de cycle de BAT reprenant tous les points non cochés plutôt qu'une liste strictement limitée, engagement Finance et rapprochement facture/commande/réception non implémentés (module Finance hors périmètre avant un lot ultérieur).
+
+**Limites connues de ce Lot 3 :**
+- Pas d'écran d'administration pour les gabarits de mise en page et chartes graphiques (Ch. 11 §11.4, Ch. 12 §12.4) — endpoints prêts, écran non prioritaire pour ce lot.
+- Pas d'export ONIX 3.0 ni de tableau de bord dédié à l'ISBN/BAT/impression (Ch. 13 §13.10, Ch. 14 §14.8, Ch. 15 §15.10) — hors périmètre minimal.
+- Le choix manuel d'un ISBN précis dans une tranche n'est pas implémenté (seule l'attribution automatique du prochain disponible l'est).
+- Épreuve contractuelle imprimeur (Ch. 15 §15.5) non implémentée.
+
+**Prochaine étape :** faire valider ce Lot 3 par l'opérateur, puis démarrer le Lot 4 (stock et magasin, commercial) une fois validé.

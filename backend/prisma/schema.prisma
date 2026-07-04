@@ -92,6 +92,7 @@ model User {
   editorialDecisions EditorialDecision[]
   assignedTasks      Task[]
   taskComments       TaskComment[]
+  batSignatures      BatSignature[]
 
   @@map("users")
 }
@@ -280,6 +281,9 @@ model DocumentVersion {
   uploadedAt    DateTime              @default(now()) @map("uploaded_at")
 
   taskComments TaskComment[]
+  imageAssets  ImageAsset[]
+  batInterior  BatRecord[]   @relation("BatInterior")
+  batCover     BatRecord[]   @relation("BatCover")
 
   @@unique([documentId, versionNumber])
   @@map("document_versions")
@@ -366,6 +370,8 @@ model Partner {
 
   workContributors WorkContributor[]
   contracts        Contract[]
+  printer          Printer?
+  metadataExports  MetadataExport[]
 
   @@map("partners")
 }
@@ -382,7 +388,9 @@ model Collection {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  manuscripts Manuscript[]
+  manuscripts     Manuscript[]
+  layoutTemplates LayoutTemplate[]
+  graphicCharters GraphicCharter[]
 
   @@map("collections")
 }
@@ -456,6 +464,15 @@ model Manuscript {
   editorialDecisions EditorialDecision[]
   contracts          Contract[]
   tasks              Task[]
+  productionSpecs    ProductionSpecs?
+  imageAssets        ImageAsset[]
+  checklists         Checklist[]
+  isbns              Isbn[]
+  legalDeposits      LegalDeposit[]
+  workMetadata       WorkMetadata?
+  metadataExports    MetadataExport[]
+  batRecords         BatRecord[]
+  printQuotes        PrintQuote[]
 
   @@map("manuscripts")
 }
@@ -848,4 +865,460 @@ model TaskComment {
   resolvedAt        DateTime?        @map("resolved_at")
 
   @@map("task_comments")
+}
+
+// ============================================================
+// Lot 3 — Maquette (Ch. 11), Infographie (Ch. 12), ISBN/dépôt légal/
+// métadonnées (Ch. 13), BAT et contrôle qualité (Ch. 14), Impression et
+// fabrication (Ch. 15).
+// ============================================================
+
+// Bibliothèque de gabarits réutilisables (Ch. 11 §11.3).
+model LayoutTemplate {
+  id           String      @id @default(uuid())
+  name         String
+  collectionId String?     @map("collection_id")
+  collection   Collection? @relation(fields: [collectionId], references: [id])
+  format       String // dimensions fermées, ex. "140x220mm"
+  specs        Json // marges, polices, styles
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("layout_templates")
+}
+
+// Chartes graphiques (Ch. 12 §12.4).
+model GraphicCharter {
+  id           String      @id @default(uuid())
+  scope        String // "maison" ou "collection"
+  collectionId String?     @map("collection_id")
+  collection   Collection? @relation(fields: [collectionId], references: [id])
+  description  String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("graphic_charters")
+}
+
+// Fiche technique de fabrication, une par manuscrit (Ch. 11 §11.5, Ch. 12 §12.3).
+// Le calcul du dos est une approximation documentée (§ JOURNAL_TECHNIQUE) : le
+// cahier des charges ne fixe pas de formule, seulement l'exigence du calcul.
+model ProductionSpecs {
+  id               String     @id @default(uuid())
+  manuscriptId     String     @unique @map("manuscript_id")
+  manuscript       Manuscript @relation(fields: [manuscriptId], references: [id])
+  trimFormat       String?    @map("trim_format")
+  finalPages       Int?       @map("final_pages")
+  paperInterior    String?    @map("paper_interior")
+  paperInteriorGsm Int?       @map("paper_interior_gsm")
+  paperCover       String?    @map("paper_cover")
+  binding          String?
+  lamination       String?
+  spineWidthMm     Decimal?   @map("spine_width_mm") @db.Decimal(6, 2)
+  spineNeedsRecalc Boolean    @default(false) @map("spine_needs_recalc")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("production_specs")
+}
+
+// Éléments structurels (Ch. 11 §11.6), points de contrôle du BAT (Ch. 14 §14.3),
+// complétude ISBN (Ch. 13 §13.9) — une même table de listes de contrôle
+// paramétrables, réutilisée selon le contexte (modèle §4.6).
+enum ChecklistContext {
+  structure_ouvrage
+  bat
+  isbn_completeness
+}
+
+model Checklist {
+  id           String           @id @default(uuid())
+  context      ChecklistContext
+  manuscriptId String           @map("manuscript_id")
+  manuscript   Manuscript       @relation(fields: [manuscriptId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  items     ChecklistItem[]
+  batRecord BatRecord?
+
+  @@map("checklists")
+}
+
+model ChecklistItem {
+  id            String    @id @default(uuid())
+  checklistId   String    @map("checklist_id")
+  checklist     Checklist @relation(fields: [checklistId], references: [id])
+  label         String
+  isBlocking    Boolean   @default(true) @map("is_blocking")
+  notApplicable Boolean   @default(false) @map("not_applicable")
+  checkedBy     String?   @map("checked_by")
+  checkedAt     DateTime? @map("checked_at")
+  observation   String?
+
+  @@map("checklist_items")
+}
+
+// Visuels (Ch. 11 §11.7, Ch. 12 §12.3, §12.5) : couverture, dos, illustrations,
+// visuels marketing.
+enum ImageAssetType {
+  couverture_1
+  couverture_4
+  dos
+  rabat
+  illustration_interieure
+  visuel_marketing
+}
+
+enum RightsOrigin {
+  creation_interne
+  banque_images
+  fourni_par_auteur
+}
+
+model ImageAsset {
+  id                String           @id @default(uuid())
+  manuscriptId      String           @map("manuscript_id")
+  manuscript        Manuscript       @relation(fields: [manuscriptId], references: [id])
+  type              ImageAssetType
+  placement         String?
+  resolutionDpi     Int?             @map("resolution_dpi")
+  colorMode         String?          @map("color_mode")
+  technicalOk       Boolean          @default(false) @map("technical_ok")
+  rightsOrigin      RightsOrigin?    @map("rights_origin")
+  rightsLicense     String?          @map("rights_license")
+  rightsCredit      String?          @map("rights_credit")
+  documentVersionId String?          @map("document_version_id")
+  documentVersion   DocumentVersion? @relation(fields: [documentVersionId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("image_assets")
+}
+
+// Ch. 13 §13.2 : tranches d'ISBN reçues, gérées comme une ressource avec seuil d'alerte.
+model IsbnPool {
+  id         String   @id @default(uuid())
+  prefix     String // partie fixe, sans tirets ni clé, ex. "97823456"
+  digitWidth Int      @default(3) @map("digit_width") // chiffres du numéro de titre
+  rangeStart Int      @map("range_start")
+  rangeEnd   Int      @map("range_end")
+  nextValue  Int      @map("next_value")
+  receivedAt DateTime @default(now()) @map("received_at")
+
+  isbns Isbn[]
+
+  @@map("isbn_pool")
+}
+
+enum IsbnFormat {
+  print
+  epub
+  pdf
+  audio
+}
+
+enum IsbnStatus {
+  available
+  reserved
+  assigned
+  published
+}
+
+// Ch. 13 §13.2-13.3 : un ISBN n'est jamais réutilisé (contrainte applicative —
+// aucune suppression, aucun statut ne revient en arrière vers "available").
+model Isbn {
+  id           String      @id @default(uuid())
+  isbn13       String      @unique
+  poolId       String?     @map("pool_id")
+  pool         IsbnPool?   @relation(fields: [poolId], references: [id])
+  manuscriptId String?     @map("manuscript_id")
+  manuscript   Manuscript? @relation(fields: [manuscriptId], references: [id])
+  format       IsbnFormat
+  status       IsbnStatus  @default(available)
+  assignedAt   DateTime?   @map("assigned_at")
+  assignedBy   String?     @map("assigned_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("isbns")
+}
+
+enum LegalDepositStatus {
+  a_preparer
+  depose
+  accuse_reception
+}
+
+model LegalDeposit {
+  id                String             @id @default(uuid())
+  manuscriptId      String             @map("manuscript_id")
+  manuscript        Manuscript         @relation(fields: [manuscriptId], references: [id])
+  country           String
+  depository        String
+  copiesRequired    Int                @map("copies_required")
+  dueDate           DateTime?          @map("due_date")
+  depositedAt       DateTime?          @map("deposited_at")
+  receiptDocumentId String?            @map("receipt_document_id")
+  depositNumber     String?            @map("deposit_number")
+  status            LegalDepositStatus @default(a_preparer)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("legal_deposits")
+}
+
+// Fiche descriptive complète, source unique pour tous les canaux (Ch. 13 §13.6).
+model WorkMetadata {
+  id             String     @id @default(uuid())
+  manuscriptId   String     @unique @map("manuscript_id")
+  manuscript     Manuscript @relation(fields: [manuscriptId], references: [id])
+  version        Int        @default(1)
+  weightGrams    Int?       @map("weight_grams")
+  summary        String?
+  authorBio      String?    @map("author_bio")
+  publicTarget   String?    @map("public_target")
+  ageRange       String?    @map("age_range")
+  themaCodes     String[]   @default([]) @map("thema_codes")
+  priceByCountry Json?      @map("price_by_country")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("work_metadata")
+}
+
+enum MetadataExportFormat {
+  onix30
+  csv
+}
+
+model MetadataExport {
+  id              String               @id @default(uuid())
+  manuscriptId    String               @map("manuscript_id")
+  manuscript      Manuscript           @relation(fields: [manuscriptId], references: [id])
+  partnerId       String?              @map("partner_id")
+  partner         Partner?             @relation(fields: [partnerId], references: [id])
+  format          MetadataExportFormat
+  metadataVersion Int                  @map("metadata_version")
+  sentAt          DateTime             @default(now()) @map("sent_at")
+  needsResend     Boolean              @default(false) @map("needs_resend")
+
+  @@map("metadata_exports")
+}
+
+enum BatStatus {
+  in_control
+  corrections_requested
+  awaiting_signature
+  signed
+  cancelled
+}
+
+model BatRecord {
+  id                String           @id @default(uuid())
+  manuscriptId      String           @map("manuscript_id")
+  manuscript        Manuscript       @relation(fields: [manuscriptId], references: [id])
+  cycleNumber       Int              @map("cycle_number")
+  openedAt          DateTime         @default(now()) @map("opened_at")
+  status            BatStatus        @default(in_control)
+  interiorVersionId String?          @map("interior_version_id")
+  interiorVersion   DocumentVersion? @relation("BatInterior", fields: [interiorVersionId], references: [id])
+  coverVersionId    String?          @map("cover_version_id")
+  coverVersion      DocumentVersion? @relation("BatCover", fields: [coverVersionId], references: [id])
+  technicalSheet    Json?            @map("technical_sheet")
+  checklistId       String?          @unique @map("checklist_id")
+  checklist         Checklist?       @relation(fields: [checklistId], references: [id])
+
+  anomalies  BatAnomaly[]
+  signatures BatSignature[]
+
+  @@unique([manuscriptId, cycleNumber])
+  @@map("bat_records")
+}
+
+enum AnomalySeverity {
+  minor
+  major
+  blocking
+}
+
+model BatAnomaly {
+  id          String          @id @default(uuid())
+  batId       String          @map("bat_id")
+  bat         BatRecord       @relation(fields: [batId], references: [id])
+  description String
+  location    String?
+  severity    AnomalySeverity
+  returnedTo  String?         @map("returned_to")
+  resolvedAt  DateTime?       @map("resolved_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  @@map("bat_anomalies")
+}
+
+// La signature verrouille les versions référencées (Ch. 14 §14.5) : voir la
+// contrainte base dans la migration append-only du Lot 0, étendue ici.
+model BatSignature {
+  id             String    @id @default(uuid())
+  batId          String    @map("bat_id")
+  bat            BatRecord @relation(fields: [batId], references: [id])
+  signerId       String    @map("signer_id")
+  signer         User      @relation(fields: [signerId], references: [id])
+  signedAt       DateTime  @default(now()) @map("signed_at")
+  filesHash      String    @map("files_hash")
+  authorApproval Boolean   @default(false) @map("author_approval")
+
+  @@map("bat_signatures")
+}
+
+// Fiche imprimeur (Ch. 15 §15.2) — les coordonnées et le contact passent par
+// la fiche Partenaire unique (catégorie "imprimeur") ; ce modèle ne porte que
+// les données propres à l'activité d'impression.
+model Printer {
+  id           String   @id @default(uuid())
+  partnerId    String   @unique @map("partner_id")
+  partner      Partner  @relation(fields: [partnerId], references: [id])
+  specialties  String[] @default([])
+  paymentTerms String?  @map("payment_terms")
+
+  quotes         PrintQuote[]
+  purchaseOrders PurchaseOrder[]
+
+  @@map("printers")
+}
+
+enum PrintQuoteStatus {
+  requested
+  received
+  selected
+  declined
+}
+
+model PrintQuote {
+  id               String           @id @default(uuid())
+  manuscriptId     String           @map("manuscript_id")
+  manuscript       Manuscript       @relation(fields: [manuscriptId], references: [id])
+  printerId        String           @map("printer_id")
+  printer          Printer          @relation(fields: [printerId], references: [id])
+  quantities       Json // [500, 1000, 2000]
+  amounts          Json? // { "500": 120000, "1000": 200000 }
+  leadTimeDays     Int?             @map("lead_time_days")
+  validUntil       DateTime?        @map("valid_until")
+  status           PrintQuoteStatus @default(requested)
+  selectionMotive  String?          @map("selection_motive")
+  selectedQuantity Int?             @map("selected_quantity")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  purchaseOrder PurchaseOrder?
+
+  @@map("print_quotes")
+}
+
+enum PurchaseOrderStatus {
+  draft
+  approved
+  sent
+  in_production
+  completed
+  cancelled
+}
+
+// delivery_location reste un champ texte libre : stock_locations (Ch. 16)
+// n'existe pas encore, c'est le Lot 4.
+model PurchaseOrder {
+  id                   String              @id @default(uuid())
+  quoteId              String              @unique @map("quote_id")
+  quote                PrintQuote          @relation(fields: [quoteId], references: [id])
+  printerId            String              @map("printer_id")
+  printer              Printer             @relation(fields: [printerId], references: [id])
+  poNumber             String              @unique @map("po_number")
+  orderedQuantity      Int                 @map("ordered_quantity")
+  amount               Decimal             @db.Decimal(12, 2)
+  currency             String              @default("XOF")
+  deliveryDue          DateTime?           @map("delivery_due")
+  deliveryLocation     String?             @map("delivery_location")
+  quantityTolerancePct Decimal?            @map("quantity_tolerance_pct") @db.Decimal(5, 2)
+  status               PurchaseOrderStatus @default(draft)
+  approvedBy           String?             @map("approved_by")
+  filesHashReference   String?             @map("files_hash_reference")
+  reprintNumber        Int                 @default(0) @map("reprint_number")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  milestones    ProductionMilestone[]
+  goodsReceipts GoodsReceipt[]
+
+  @@map("purchase_orders")
+}
+
+// Même mécanisme atomique que contract_number_counters (Ch. 9 §9.2), pour
+// les numéros de bon de commande (Ch. 15 §15.4).
+model PoNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("po_number_counters")
+}
+
+enum ProductionMilestoneType {
+  files_received
+  setup
+  printing
+  finishing
+  shipped
+  delivered
+}
+
+model ProductionMilestone {
+  id        String                  @id @default(uuid())
+  poId      String                  @map("po_id")
+  po        PurchaseOrder           @relation(fields: [poId], references: [id])
+  milestone ProductionMilestoneType
+  plannedAt DateTime?               @map("planned_at")
+  actualAt  DateTime?               @map("actual_at")
+
+  @@unique([poId, milestone])
+  @@map("production_milestones")
+}
+
+enum QcVerdict {
+  conform
+  with_reserves
+  non_conform
+}
+
+model GoodsReceipt {
+  id               String        @id @default(uuid())
+  poId             String        @map("po_id")
+  po               PurchaseOrder @relation(fields: [poId], references: [id])
+  receivedAt       DateTime      @default(now()) @map("received_at")
+  quantityReceived Int           @map("quantity_received")
+  variance         Int           @default(0)
+  qcVerdict        QcVerdict?    @map("qc_verdict")
+
+  claims SupplierClaim[]
+
+  @@map("goods_receipts")
+}
+
+model SupplierClaim {
+  id          String       @id @default(uuid())
+  receiptId   String       @map("receipt_id")
+  receipt     GoodsReceipt @relation(fields: [receiptId], references: [id])
+  description String
+  resolution  String?
+  resolvedAt  DateTime?    @map("resolved_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  @@map("supplier_claims")
 }

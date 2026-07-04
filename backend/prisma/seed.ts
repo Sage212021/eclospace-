@@ -51,7 +51,8 @@ const roles: { code: string; label: string; departmentCode: string | null }[] = 
 const lot0Modules = ["documents", "notifications", "users", "settings"];
 const lot1Modules = ["manuscripts", "comite_lecture", "decision_editoriale"];
 const lot2Modules = ["contracts", "tasks"];
-const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules];
+const lot3Modules = ["production", "isbn", "bat", "printing"];
+const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules];
 const actions = Object.values(PermissionAction);
 
 // Référentiel des ~20 étapes du workflow (Ch. 4 §4.3). Toutes sont créées dès
@@ -75,8 +76,12 @@ const workflowStatuses: {
   { code: "REECRITURE", label: "Réécriture éditoriale", stepOrder: 9, departmentCode: "CORR", isConditional: true },
   { code: "MISE_EN_PAGE", label: "Mise en page", stepOrder: 10, departmentCode: "MAQ" },
   { code: "INFOGRAPHIE", label: "Infographie", stepOrder: 11, departmentCode: "INFOG" },
-  { code: "VALIDATION_BAT", label: "Validation du BAT", stepOrder: 12, departmentCode: "CQ" },
-  { code: "ATTRIBUTION_REFERENCES", label: "Attribution des références", stepOrder: 13, departmentCode: "SECR" },
+  // Ordre corrigé (Lot 3) par rapport au Lot 1 : Ch. 13 §13.9 et Ch. 14 §14.2
+  // exigent tous deux que la complétude ISBN/dépôt légal/métadonnées soit
+  // vérifiée AVANT la constitution du dossier de BAT — l'ordre initial du
+  // Lot 1 (BAT avant attribution des références) contredisait ce texte.
+  { code: "ATTRIBUTION_REFERENCES", label: "Attribution des références", stepOrder: 12, departmentCode: "SECR" },
+  { code: "VALIDATION_BAT", label: "Validation du BAT", stepOrder: 13, departmentCode: "CQ" },
   { code: "IMPRESSION", label: "Impression", stepOrder: 14, departmentCode: "IMPR" },
   { code: "CONTROLE_QUALITE_IMPRESSION", label: "Contrôle qualité (exemplaires imprimés)", stepOrder: 15, departmentCode: "CQ" },
   { code: "ENTREE_STOCK", label: "Entrée en stock", stepOrder: 16, departmentCode: "STOCK" },
@@ -223,6 +228,34 @@ async function main() {
   // Correction éditoriale (Ch. 10) : le correcteur voit et exécute ses tâches.
   await grant("CORRECTEUR", ["tasks:consultation", "tasks:saisie"]);
 
+  // Maquette (Ch. 11) et Infographie (Ch. 12).
+  await grant("MAQUETTISTE", ["production:consultation", "production:saisie", "manuscripts:consultation"]);
+  await grant("RESP_INFOGRAPHIE", [
+    "production:consultation",
+    "production:saisie",
+    "production:administration",
+    "manuscripts:consultation",
+  ]);
+  await grant("DIR_EDITORIAL", ["production:consultation"]);
+
+  // ISBN, dépôt légal, métadonnées (Ch. 13) : secrétariat éditorial.
+  await grant("ASSISTANT_EDITORIAL", ["isbn:consultation", "isbn:saisie", "isbn:administration"]);
+  await grant("DIR_GENERAL", ["isbn:consultation", "isbn:administration"]);
+
+  // BAT et contrôle qualité (Ch. 14).
+  await grant("RESP_QUALITE", ["bat:consultation", "bat:saisie", "bat:validation", "manuscripts:consultation"]);
+  await grant("DIR_EDITORIAL", ["bat:consultation", "bat:validation"]);
+
+  // Impression et fabrication (Ch. 15).
+  await grant("RESP_IMPRESSION", [
+    "printing:consultation",
+    "printing:saisie",
+    "printing:validation",
+    "manuscripts:consultation",
+  ]);
+  await grant("DIR_GENERAL", ["printing:consultation", "printing:validation", "printing:administration"]);
+  await grant("RESP_FINANCE", ["printing:consultation"]);
+
   // Référentiel des étapes du workflow (Ch. 4 §4.3).
   for (const status of workflowStatuses) {
     await prisma.workflowStatus.upsert({
@@ -260,6 +293,23 @@ async function main() {
     where: { key: "evaluation_score_gap_threshold" },
     update: {},
     create: { key: "evaluation_score_gap_threshold", value: 3 },
+  });
+
+  // Seuil d'alerte du stock d'ISBN disponibles (Ch. 13 §13.2, "seuil
+  // paramétrable") — valeur de départ à confirmer avec la Direction éditoriale.
+  await prisma.setting.upsert({
+    where: { key: "isbn_stock_alert_threshold" },
+    update: {},
+    create: { key: "isbn_stock_alert_threshold", value: 20 },
+  });
+
+  // Seuil de délégation pour la validation d'un bon de commande d'impression
+  // (Ch. 15 §15.3 point 5, "seuil paramétrable") — montant en XOF, au-delà
+  // duquel la validation de la Direction générale est requise (à confirmer).
+  await prisma.setting.upsert({
+    where: { key: "purchase_order_delegation_threshold" },
+    update: {},
+    create: { key: "purchase_order_delegation_threshold", value: 5_000_000 },
   });
 
   // Grille d'évaluation du comité de lecture (Ch. 7 §7.4-7.5).

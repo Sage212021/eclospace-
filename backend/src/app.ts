@@ -16,6 +16,10 @@ import partnerRoutes from "./routes/partners.js";
 import taskRoutes from "./routes/tasks.js";
 import taskCommentRoutes from "./routes/taskComments.js";
 import comparatorRoutes from "./routes/comparator.js";
+import productionRoutes from "./routes/production.js";
+import isbnRoutes from "./routes/isbn.js";
+import batRoutes from "./routes/bat.js";
+import printingRoutes from "./routes/printing.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
@@ -44,6 +48,10 @@ export async function buildApp() {
   await app.register(taskRoutes);
   await app.register(taskCommentRoutes);
   await app.register(comparatorRoutes);
+  await app.register(productionRoutes);
+  await app.register(isbnRoutes);
+  await app.register(batRoutes);
+  await app.register(printingRoutes);
 
   return app;
 }

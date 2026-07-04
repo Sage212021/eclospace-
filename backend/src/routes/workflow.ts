@@ -4,6 +4,8 @@ import type { Manuscript } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
+import { computeIsbnCompleteness } from "./isbn.js";
 
 // Ch. 4 §4.3, §4.6 : les étapes 8 (expertise) et 9 (réécriture) ne sont
 // activées que si le projet le requiert ; leur absence n'est pas comptée
@@ -130,6 +132,87 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
           return reply.code(409).send({
             code: "blocking_comment_unresolved",
             message: "Au moins un point bloquant du correcteur n'a pas été levé sur ce manuscrit.",
+          });
+        }
+      }
+
+      // Ch. 11 : la mise en page ne peut démarrer avant qu'une fiche technique
+      // de fabrication (même partielle) n'ait été ouverte pour l'ouvrage.
+      if (targetStatus.code === "MISE_EN_PAGE") {
+        const specs = await prisma.productionSpecs.findUnique({ where: { manuscriptId: id } });
+        if (!specs) {
+          return reply.code(409).send({
+            code: "production_specs_missing",
+            message: "Aucune fiche technique de fabrication n'a été ouverte pour ce manuscrit.",
+          });
+        }
+      }
+
+      // Ch. 11/12 : Maquette et Infographie avancent en parallèle mais
+      // convergent à cette étape (fiche technique complète, dos à jour,
+      // couverture conforme et pourvue de ses droits).
+      if (targetStatus.code === "INFOGRAPHIE") {
+        const missing = await checkMaquetteInfographieConvergence(id);
+        if (missing.length > 0) {
+          return reply.code(409).send({
+            code: "maquette_infographie_incomplete",
+            message: "La convergence Maquette/Infographie n'est pas atteinte.",
+            missing,
+          });
+        }
+      }
+
+      // Ch. 13 §13.9 : contrôle de complétude bloquant (ISBN, dépôt légal,
+      // métadonnées, classification) avant de libérer l'ouvrage vers le BAT.
+      // Correction d'ordre du Lot 1 : cf. docs/JOURNAL_TECHNIQUE.md.
+      if (targetStatus.code === "ATTRIBUTION_REFERENCES") {
+        const completeness = await computeIsbnCompleteness(id);
+        if (!completeness.complete) {
+          return reply.code(409).send({
+            code: "isbn_completeness_incomplete",
+            message: "La liste de contrôle ISBN/dépôt légal/métadonnées n'est pas complète.",
+            missing: completeness.missing,
+          });
+        }
+      }
+
+      // Ch. 14 §14.6 : la signature électronique du BAT est l'acte qui
+      // autorise le passage à l'impression — cette étape ne fait que
+      // constater qu'un BAT signé existe pour le cycle courant.
+      if (targetStatus.code === "VALIDATION_BAT") {
+        const latestBat = await prisma.batRecord.findFirst({ where: { manuscriptId: id }, orderBy: { cycleNumber: "desc" } });
+        if (!latestBat || latestBat.status !== "signed") {
+          return reply.code(409).send({
+            code: "bat_not_signed",
+            message: "Le BAT n'est pas signé : impossible de valider cette étape.",
+          });
+        }
+      }
+
+      // Ch. 15 §15.4 : l'impression proprement dite suppose un bon de
+      // commande au moins transmis à l'imprimeur.
+      if (targetStatus.code === "IMPRESSION") {
+        const activeOrder = await prisma.purchaseOrder.findFirst({
+          where: { quote: { manuscriptId: id }, status: { in: ["sent", "in_production", "completed"] } },
+        });
+        if (!activeOrder) {
+          return reply.code(409).send({
+            code: "purchase_order_not_sent",
+            message: "Aucun bon de commande transmis à l'imprimeur pour ce manuscrit.",
+          });
+        }
+      }
+
+      // Ch. 14 §14.7 : seuls les exemplaires contrôlés (conformes ou
+      // conformes avec réserves) peuvent être transmis à l'entrée en stock.
+      if (targetStatus.code === "CONTROLE_QUALITE_IMPRESSION") {
+        const acceptedReceipt = await prisma.goodsReceipt.findFirst({
+          where: { po: { quote: { manuscriptId: id } }, qcVerdict: { in: ["conform", "with_reserves"] } },
+        });
+        if (!acceptedReceipt) {
+          return reply.code(409).send({
+            code: "no_accepted_receipt",
+            message: "Aucune réception d'exemplaires n'a reçu de verdict de contrôle qualité acceptable.",
           });
         }
       }

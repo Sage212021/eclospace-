@@ -23,3 +23,12 @@ export function extractSessionCookie(setCookieHeader: string | string[] | undefi
   if (!raw) throw new Error("Aucun cookie de session reçu.");
   return raw.split(";")[0];
 }
+
+// isbn13 est unique en base : un préfixe de test statique collisionne dès la
+// deuxième exécution de la suite sur une base non réinitialisée entre les runs.
+export function uniqueIsbnPrefix(digitWidth: number): string {
+  const length = 12 - digitWidth;
+  let result = "";
+  for (let i = 0; i < length; i++) result += Math.floor(Math.random() * 10).toString();
+  return result;
+}

@@ -14,6 +14,10 @@ import { Spine } from "../components/Spine";
 import { ContractsSection } from "../components/ContractsSection";
 import { TasksSection } from "../components/TasksSection";
 import { CorrectionSection } from "../components/CorrectionSection";
+import { ProductionSection } from "../components/ProductionSection";
+import { IsbnSection } from "../components/IsbnSection";
+import { BatSection } from "../components/BatSection";
+import { PrintingSection } from "../components/PrintingSection";
 
 interface ManuscriptDetailProps {
   manuscriptId: string;
@@ -28,6 +32,7 @@ type ManuscriptWithExtras = Manuscript & {
 
 const CONTRACTUALISATION_STEP_ORDER = 5;
 const PLANIFICATION_STEP_ORDER = 6;
+const MISE_EN_PAGE_STEP_ORDER = 10;
 
 export function ManuscriptDetail({ manuscriptId, permissions, onBack }: ManuscriptDetailProps) {
   const [manuscript, setManuscript] = useState<ManuscriptWithExtras | null>(null);
@@ -162,6 +167,30 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           <TasksSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
           <CorrectionSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
         </>
+      )}
+
+      {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("production:consultation") && (
+        <ProductionSection manuscriptId={manuscript.id} canManage={permissions.has("production:saisie")} />
+      )}
+
+      {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("isbn:consultation") && (
+        <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie")} />
+      )}
+
+      {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("bat:consultation") && (
+        <BatSection
+          manuscriptId={manuscript.id}
+          canManage={permissions.has("bat:saisie")}
+          canValidate={permissions.has("bat:validation")}
+        />
+      )}
+
+      {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("printing:consultation") && (
+        <PrintingSection
+          manuscriptId={manuscript.id}
+          canManage={permissions.has("printing:saisie")}
+          canValidate={permissions.has("printing:validation")}
+        />
       )}
     </div>
   );

@@ -1386,23 +1386,33 @@ model StockLocation {
 
 // Stock par (isbn, lieu, tirage) — disponible = physique - réservé, calculé
 // à la lecture (Ch. 16 §16.5), jamais stocké pour éviter toute divergence.
+// Ch. 16 §16.7 : un retour contrôlé se répartit en "remis en stock vendable
+// / déclassé (défraîchi) / pilon" — declasse est un compartiment de stock à
+// part entière (candidat aux opérations commerciales, §16.10), distinct du
+// stock vendable normal, pas seulement une mention sur la ligne de retour.
+enum StockItemCondition {
+  vendable
+  declasse
+}
+
 model StockItem {
-  id                  String        @id @default(uuid())
-  isbnId              String        @map("isbn_id")
-  isbn                Isbn          @relation(fields: [isbnId], references: [id])
-  locationId          String        @map("location_id")
-  location            StockLocation @relation(fields: [locationId], references: [id])
-  printRun            Int           @map("print_run")
-  quantityPhysical    Int           @default(0) @map("quantity_physical")
-  quantityReserved    Int           @default(0) @map("quantity_reserved")
-  unitCost            Decimal?      @map("unit_cost") @db.Decimal(10, 2)
-  alertThreshold      Int?          @map("alert_threshold")
-  outOfStockThreshold Int           @default(0) @map("out_of_stock_threshold")
+  id                  String             @id @default(uuid())
+  isbnId              String             @map("isbn_id")
+  isbn                Isbn               @relation(fields: [isbnId], references: [id])
+  locationId          String             @map("location_id")
+  location            StockLocation      @relation(fields: [locationId], references: [id])
+  printRun            Int                @map("print_run")
+  condition           StockItemCondition @default(vendable)
+  quantityPhysical    Int                @default(0) @map("quantity_physical")
+  quantityReserved    Int                @default(0) @map("quantity_reserved")
+  unitCost            Decimal?           @map("unit_cost") @db.Decimal(10, 2)
+  alertThreshold      Int?               @map("alert_threshold")
+  outOfStockThreshold Int                @default(0) @map("out_of_stock_threshold")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@unique([isbnId, locationId, printRun])
+  @@unique([isbnId, locationId, printRun, condition])
   @@map("stock_items")
 }
 

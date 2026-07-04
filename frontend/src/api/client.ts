@@ -652,11 +652,14 @@ export function createStockLocation(input: { type: StockLocationType; label: str
   return request<StockLocation>("/api/v1/stock-locations", { method: "POST", body: JSON.stringify(input) });
 }
 
+export type StockItemCondition = "vendable" | "declasse";
+
 export interface StockItem {
   id: string;
   isbnId: string;
   locationId: string;
   printRun: number;
+  condition: StockItemCondition;
   quantityPhysical: number;
   quantityReserved: number;
   quantityAvailable: number;

@@ -123,6 +123,11 @@ export function StockPage({ canManage, canAdminister }: StockPageProps) {
           <div key={item.id} style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
             <span>
               {item.isbn.isbn13} — {item.location.label} (tirage {item.printRun})
+              {item.condition === "declasse" && (
+                <span style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 999, padding: "2px 8px", fontSize: 11, marginLeft: 8 }}>
+                  Déclassé
+                </span>
+              )}
             </span>
             <span style={{ fontFamily: "var(--font-mono)" }}>
               {item.quantityPhysical} physique / {item.quantityReserved} réservé / {item.quantityAvailable} disponible

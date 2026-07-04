@@ -721,9 +721,26 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
                 movedBy: request.user!.id,
               },
             });
+          } else if (line.verdict === "damaged") {
+            // Ch. 16 §16.7 : ni remis en stock vendable ni détruit — un
+            // compartiment de stock "déclassé" à part entière, candidat aux
+            // opérations commerciales (§16.10) plutôt qu'une simple mention.
+            await tx.stockMovement.create({
+              data: {
+                type: "customer_return",
+                isbnId: line.isbn_id,
+                printRun: 0,
+                toLocationId: line.location_id,
+                quantity: line.quantity,
+                reason: "Retour client — déclassé (défraîchi)",
+                referenceType: "customer_return",
+                referenceId: id,
+                status: "completed",
+                movedBy: request.user!.id,
+              },
+            });
+            await adjustStockItem(tx, line.isbn_id, line.location_id, 0, line.quantity, 0, "declasse");
           }
-          // verdict "damaged" : consigné mais non remis en stock vendable ni détruit
-          // (déclassement, hors périmètre de ce lot — cf. docs/JOURNAL_TECHNIQUE.md).
         }
         return tx.customerReturn.update({ where: { id }, data: { receivedAt: new Date() } });
       });

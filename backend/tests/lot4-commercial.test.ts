@@ -319,10 +319,13 @@ describe("Commercial, distribution et ventes (Lot 4)", () => {
     expect(received.statusCode).toBe(200);
     expect(received.json().receivedAt).not.toBeNull();
 
-    const stockItem = await prisma.stockItem.findFirstOrThrow({ where: { isbnId, locationId: warehouseId } });
-    // 20 initial + 5 remis en stock vendable ; les 2 pilonnés et le 1 déclassé
-    // ne modifient pas ce lieu (pilon retire d'un stock déjà sorti ; déclassé hors périmètre).
-    expect(stockItem.quantityPhysical).toBe(25);
+    const vendableStock = await prisma.stockItem.findFirstOrThrow({ where: { isbnId, locationId: warehouseId, condition: "vendable" } });
+    // 20 initial + 5 remis en stock vendable ; le pilon retire d'un stock déjà
+    // sorti (rien à en retrancher ici) ; le déclassé va dans un compartiment séparé.
+    expect(vendableStock.quantityPhysical).toBe(25);
+
+    const declasseStock = await prisma.stockItem.findFirstOrThrow({ where: { isbnId, locationId: warehouseId, condition: "declasse" } });
+    expect(declasseStock.quantityPhysical).toBe(1);
   });
 
   it("un rôle sans permission commercial:saisie ne peut pas créer de commande", async () => {

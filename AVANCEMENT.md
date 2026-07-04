@@ -127,7 +127,7 @@ M. Noah Mbala a tranché les trois points signalés à la fin du Lot 2 :
 - **Frontend** : deux nouveaux écrans transverses (non rattachés à un seul manuscrit, contrairement aux sections des lots précédents) — **Stock** (lieux, état du stock par référence, alertes, saisie de mouvement) et **Commercial** (clients, commandes, déblocage d'encours, vente au comptoir). Endpoint `GET /api/v1/isbns` ajouté hors spécification API v1 (nécessaire pour choisir un ouvrage par ISBN sans naviguer manuscrit par manuscrit).
 - **1 bug réel trouvé en testant dans un navigateur** (pas seulement via les tests automatisés) : un mouvement de stock à sens unique (ex. « exemplaire d'auteur ») créditait silencieusement un second lieu si le formulaire envoyait par erreur un lieu de destination non pertinent pour ce type de mouvement — invisible dans les tests automatisés qui n'exerçaient jamais cette combinaison précise. Corrigé (le delta n'est appliqué que sur le(s) lieu(x) que le type de mouvement exige réellement), régression ajoutée aux tests.
 
-**Points d'interprétation signalés** (détail dans `docs/JOURNAL_TECHNIQUE.md`) : encours client approximé en l'absence du module Finance, frais de port et taxes non calculés automatiquement, facturation/avoirs/droits d'auteur non déclenchés (Lot 5), retour déclassé sans bucket de stock dédié, réservation sans répartition automatique multi-entrepôt, relance de dépôt-vente en retard non automatisée.
+**Points d'interprétation signalés** (détail dans `docs/JOURNAL_TECHNIQUE.md`) : encours client approximé en l'absence du module Finance, frais de port et taxes non calculés automatiquement, facturation/avoirs/droits d'auteur non déclenchés (Lot 5), réservation sans répartition automatique multi-entrepôt, relance de dépôt-vente en retard non automatisée.
 
 **Limites connues de ce Lot 4 :**
 - Pas de tableau de bord dédié au stock ni au commercial (Ch. 16 §16.10, Ch. 17 §17.11) — hors périmètre minimal.
@@ -135,3 +135,12 @@ M. Noah Mbala a tranché les trois points signalés à la fin du Lot 2 :
 - Analyse des ventes (palmarès, vitesse d'écoulement, taux de couverture des coûts, Ch. 17 §17.10) non implémentée — dépend en partie des coûts de fabrication consolidés (Ch. 15 §15.9) et du module Finance.
 
 **Prochaine étape :** faire valider ce Lot 4 par l'opérateur, puis démarrer le Lot 5 (finance et droits d'auteur) une fois validé.
+
+### 04/07/2026 (suite) — Arbitrage opérateur sur les 4 points d'interprétation du Lot 4
+
+M. Noah Mbala a validé le Lot 4 sous réserve des 4 points signalés, avec la décision suivante :
+
+1. **Stock déclassé : compartiment séparé du stock vendable.** Mis en œuvre immédiatement (ne dépendait pas du module Finance) : `stock_items.condition` (`vendable` / `declasse`), unique par (isbn, lieu, tirage, état). Un retour client avec verdict « défraîchi » crédite désormais ce compartiment séparé au lieu de n'être qu'une mention sur la ligne de retour ; exclu du calcul des alertes de rupture du stock vendable.
+2. **Calcul financier précis de l'encours client, calcul automatique des frais de port et des taxes, facturation et droits d'auteur automatiques.** Ces trois points relèvent du module Finance (Ch. 18) et du moteur de droits d'auteur (Ch. 9 §9.5), tous deux prévus au **Lot 5**, qui démarre immédiatement pour les traiter.
+
+**Prochaine étape :** démarrer le Lot 5 (finance et droits d'auteur).

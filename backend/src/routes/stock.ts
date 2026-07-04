@@ -104,11 +104,12 @@ export default async function stockRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get("/api/v1/stock-items", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
-    const query = request.query as { isbn_id?: string; location_id?: string };
+    const query = request.query as { isbn_id?: string; location_id?: string; condition?: "vendable" | "declasse" };
     const items = await prisma.stockItem.findMany({
       where: {
         ...(query.isbn_id ? { isbnId: query.isbn_id } : {}),
         ...(query.location_id ? { locationId: query.location_id } : {}),
+        ...(query.condition ? { condition: query.condition } : {}),
       },
       include: { isbn: true, location: true },
       orderBy: { updatedAt: "desc" },
@@ -116,10 +117,10 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     return reply.send(items.map((item) => ({ ...item, quantityAvailable: availableQuantity(item) })));
   });
 
-  // Ruptures et seuils d'alerte (Ch. 16 §16.5) : remontée au tableau de bord
-  // et suggestion de réimpression le cas échéant (Ch. 15 §15.8).
+  // Ruptures et seuils d'alerte (Ch. 16 §16.5) : le stock déclassé (§16.7)
+  // est un compartiment séparé, exclu du calcul de rupture du stock vendable.
   fastify.get("/api/v1/stock-alerts", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
-    const items = await prisma.stockItem.findMany({ include: { isbn: true, location: true } });
+    const items = await prisma.stockItem.findMany({ where: { condition: "vendable" }, include: { isbn: true, location: true } });
     const defaultThreshold = await isbnStockAlertThreshold();
     const alerts = items
       .map((item) => ({ ...item, quantityAvailable: availableQuantity(item) }))

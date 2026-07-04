@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: eclospace
+      POSTGRES_PASSWORD: eclospace_dev
+      POSTGRES_DB: eclospace
+    ports:
+      - "5432:5432"
+    volumes:
+      - eclospace_db_data:/var/lib/postgresql/data
+
+volumes:
+  eclospace_db_data:

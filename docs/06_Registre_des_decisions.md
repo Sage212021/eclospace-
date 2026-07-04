@@ -8,7 +8,7 @@ Ce registre consigne toute décision qui engage le projet : arbitrages du cahier
 | D-001 | 04/07/2026 | **M. Noah Mbala Yves B.** est désigné chef de projet métier, à mi-temps sanctuarisé | Direction générale | Plan de développement §6 |
 | D-002 | 04/07/2026 | Organisation en **17 départements** validée (Annexe A, point 4) | Direction générale | Ch. 3 confirmé ; modèle de données inchangé |
 | D-003 | 04/07/2026 | Comptabilité : **option B — exports vers logiciel/cabinet comptable externe** (Annexe A, point 20) | Direction générale | Ch. 18 §18.10 option B confirmée ; hypothèse H2 du modèle de données devient définitive |
-| D-004 | — | Hébergement (Annexe A, point 26) : **EN ATTENTE** — cloud / serveur local / hybride | Direction générale | Conditionne le Lot 0 (choix du serveur) |
+| D-004 | 04/07/2026 | Hébergement (Annexe A, point 26) : **option Cloud** (régional ou international) | Direction générale (via M. Noah Mbala) | Ch. 21 §21.7 confirmé ; Lot 0 : environnements dev/recette/prod provisionnés en cloud ; fournisseur précis et région à préciser avant mise en production |
 | D-005 | 04/07/2026 | Mode de réalisation : **développement assisté par IA (Claude Code)**, sans prestataire — M. Noah Mbala opérateur, appuyé sur le dossier de conception | Direction générale | Plan de développement §6 à adapter ; budget : abonnement Claude + hébergement ; la recette métier (12 scénarios) reste assurée par les équipes |
 
 ## Décisions en file d'attente

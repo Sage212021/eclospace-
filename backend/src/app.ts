@@ -1,0 +1,28 @@
+import Fastify from "fastify";
+import cookie from "@fastify/cookie";
+import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
+import authPlugin from "./plugins/auth.js";
+import authRoutes from "./routes/auth.js";
+import documentRoutes from "./routes/documents.js";
+import notificationRoutes from "./routes/notifications.js";
+
+export async function buildApp() {
+  const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
+
+  await app.register(cors, {
+    origin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
+    credentials: true,
+  });
+  await app.register(cookie);
+  await app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024 } });
+  await app.register(authPlugin);
+
+  app.get("/api/v1/health", async () => ({ status: "ok" }));
+
+  await app.register(authRoutes);
+  await app.register(documentRoutes);
+  await app.register(notificationRoutes);
+
+  return app;
+}

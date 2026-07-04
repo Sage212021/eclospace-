@@ -28,14 +28,17 @@ Eclospace est l'ERP éditorial de la maison d'édition Éclosion Édition : un s
 
 ## Stack technique retenue
 
-- Backend : à proposer à l'opérateur en début de Lot 0 (recommandation attendue : framework web mature + PostgreSQL, cf. cahier des charges Ch. 21)
-- La base de données suit le modèle de `docs/02_Modele_de_donnees.md` (UUID, champs d'audit systématiques, snake_case)
+- Backend : Node.js + TypeScript + Fastify, ORM Prisma
+- Base de données : PostgreSQL, suit le modèle de `docs/02_Modele_de_donnees.md` (UUID, champs d'audit systématiques, snake_case)
+- Frontend : React + TypeScript + Vite, CSS aux jetons du guide de style (pas de bibliothèque UI lourde)
 - API REST /api/v1/ conforme à `docs/03_Specification_API.md`
+- Hébergement : **Cloud** (décision D-004, `docs/06_Registre_des_decisions.md`) — fournisseur et région à préciser avant la mise en production
+- Détail et justification de chaque choix : `docs/JOURNAL_TECHNIQUE.md`
 
 ## État d'avancement
 
 Voir `AVANCEMENT.md` (mis à jour à chaque session).
-Lot en cours : **Lot 0 — Fondations** (non démarré).
+Lot en cours : **Lot 0 — Fondations** (démarré le 04/07/2026).
 
 ## L'opérateur
 

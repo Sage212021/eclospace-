@@ -1,0 +1,315 @@
+// Schéma Prisma — Lot 0 (fondations)
+// Traduction de docs/02_Modele_de_donnees.md §3 (domaine transverse) et §10 (RH, stub minimal).
+// Conventions : UUID, champs d'audit systématiques, snake_case en base (voir @@map / @map).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Champs d'audit systématiques (créés_par/mis à jour_par/suppression logique) ---
+// Répétés sur chaque table métier, conformément au modèle de données §2.
+
+model Department {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  roles     Role[]
+  employees Employee[]
+
+  @@map("departments")
+}
+
+// Dossier RH minimal — le domaine RH complet (Ch. 19) est spécifié au Lot 6.
+// On modélise ici uniquement ce qui est nécessaire à users.employee_id (Ch. 3.2 du modèle).
+model Employee {
+  id           String   @id @default(uuid())
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  departmentId String?  @map("department_id")
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  user User?
+
+  @@map("employees")
+}
+
+enum UserStatus {
+  active
+  suspended
+  disabled
+}
+
+model User {
+  id           String     @id @default(uuid())
+  employeeId   String?    @unique @map("employee_id")
+  employee     Employee?  @relation(fields: [employeeId], references: [id])
+  username     String     @unique
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  mfaEnabled   Boolean    @default(false) @map("mfa_enabled")
+  mfaSecret    String?    @map("mfa_secret")
+  status       UserStatus @default(active)
+  lastLoginAt  DateTime?  @map("last_login_at")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  userRoles       UserRole[]
+  notifications   Notification[]
+  auditEntries    AuditLog[]
+  loginChallenges LoginChallenge[]
+
+  @@map("users")
+}
+
+// Défi 2FA en attente entre l'étape mot de passe et l'étape code TOTP
+// (POST /auth/login puis POST /auth/2fa, §2.1 de la spécification API).
+model LoginChallenge {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("login_challenges")
+}
+
+model Role {
+  id           String  @id @default(uuid())
+  code         String  @unique
+  label        String
+  departmentId String? @map("department_id")
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@map("roles")
+}
+
+enum PermissionAction {
+  consultation
+  saisie
+  validation
+  administration
+}
+
+model Permission {
+  id     String            @id @default(uuid())
+  module String
+  action PermissionAction
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  rolePermissions RolePermission[]
+
+  @@unique([module, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  roleId        String    @map("role_id")
+  user          User      @relation(fields: [userId], references: [id])
+  role          Role      @relation(fields: [roleId], references: [id])
+  grantedAt     DateTime  @default(now()) @map("granted_at")
+  grantedBy     String?   @map("granted_by")
+  revokedAt     DateTime? @map("revoked_at")
+  justification String?
+
+  @@map("user_roles")
+}
+
+enum NotificationType {
+  affectation
+  echeance
+  validation
+  alerte_stock
+  autre
+}
+
+enum NotificationPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum NotificationChannel {
+  in_app
+  email
+  sms
+}
+
+model Notification {
+  id         String               @id @default(uuid())
+  userId     String               @map("user_id")
+  user       User                 @relation(fields: [userId], references: [id])
+  type       NotificationType
+  priority   NotificationPriority @default(medium)
+  title      String
+  body       String
+  entityType String?              @map("entity_type")
+  entityId   String?              @map("entity_id")
+  channel    NotificationChannel  @default(in_app)
+  readAt     DateTime?            @map("read_at")
+  sentAt     DateTime?            @map("sent_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+enum DocumentCategory {
+  manuscrit
+  rapport_lecture
+  contrat
+  bat
+  facture
+  visuel
+  autre
+}
+
+enum Confidentiality {
+  public
+  interne
+  restreint
+}
+
+model Document {
+  id              String           @id @default(uuid())
+  entityType      String           @map("entity_type")
+  entityId        String           @map("entity_id")
+  category        DocumentCategory
+  title           String
+  confidentiality Confidentiality  @default(interne)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  versions DocumentVersion[]
+
+  @@map("documents")
+}
+
+enum DocumentVersionStatus {
+  draft
+  in_review
+  validated
+  archived
+}
+
+model DocumentVersion {
+  id            String                 @id @default(uuid())
+  documentId    String                 @map("document_id")
+  document      Document               @relation(fields: [documentId], references: [id])
+  versionNumber Int                    @map("version_number")
+  filePath      String                 @map("file_path")
+  fileSize      Int                    @map("file_size")
+  mimeType      String                 @map("mime_type")
+  sha256Hash    String                 @map("sha256_hash")
+  status        DocumentVersionStatus  @default(draft)
+  changeSummary String?                @map("change_summary")
+  uploadedBy    String?                @map("uploaded_by")
+  uploadedAt    DateTime               @default(now()) @map("uploaded_at")
+
+  @@unique([documentId, versionNumber])
+  @@map("document_versions")
+}
+
+enum AuditAction {
+  create
+  update
+  status_change
+  validate
+  login
+  view_sensitive
+  export
+}
+
+// Journal inviolable (Ch. 5 §5.8, modèle §3.6) : append-only.
+// Aucun champ d'audit (created_by/updated_at...) : la ligne elle-même EST l'audit,
+// jamais modifiée ni supprimée après écriture (contrainte imposée en base — voir migration).
+model AuditLog {
+  id         String      @id @default(uuid())
+  occurredAt DateTime    @default(now()) @map("occurred_at")
+  userId     String?     @map("user_id")
+  user       User?       @relation(fields: [userId], references: [id])
+  action     AuditAction
+  entityType String      @map("entity_type")
+  entityId   String      @map("entity_id")
+  oldValues  Json?       @map("old_values")
+  newValues  Json?       @map("new_values")
+  ipAddress  String?     @map("ip_address")
+
+  @@map("audit_log")
+}
+
+// Paramétrage clé/valeur versionné (seuils, pondérations, calendriers...).
+model Setting {
+  id      String @id @default(uuid())
+  key     String @unique
+  value   Json
+  version Int    @default(1)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("settings")
+}

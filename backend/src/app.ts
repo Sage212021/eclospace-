@@ -24,6 +24,10 @@ import stockRoutes from "./routes/stock.js";
 import commercialRoutes from "./routes/commercial.js";
 import financeRoutes from "./routes/finance.js";
 import royaltiesRoutes from "./routes/royalties.js";
+import hrRoutes from "./routes/hr.js";
+import directionRoutes from "./routes/direction.js";
+import pilotageRoutes from "./routes/pilotage.js";
+import reportsRoutes from "./routes/reports.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
@@ -60,6 +64,10 @@ export async function buildApp() {
   await app.register(commercialRoutes);
   await app.register(financeRoutes);
   await app.register(royaltiesRoutes);
+  await app.register(hrRoutes);
+  await app.register(directionRoutes);
+  await app.register(pilotageRoutes);
+  await app.register(reportsRoutes);
 
   return app;
 }

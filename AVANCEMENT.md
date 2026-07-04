@@ -7,8 +7,8 @@
 | Lot 2 | Contrats, planification/Gantt, correction | En cours — flux complet fonctionnel (étapes 5 à 7) |
 | Lot 3 | Maquette, infographie, ISBN, BAT, impression | En cours — flux complet fonctionnel (étapes 10 à 15) |
 | Lot 4 | Stock et commercial | En cours — flux complet fonctionnel (étapes 16 à 18) |
-| Lot 5 | Finance et droits d'auteur | En cours — flux complet fonctionnel |
-| Lot 6 | RH, pilotage, rapports | En attente |
+| Lot 5 | Finance et droits d'auteur | **Validé par l'opérateur (04/07/2026)** |
+| Lot 6 | RH, pilotage, rapports | En cours — flux complet fonctionnel, en attente de validation opérateur |
 
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
@@ -204,3 +204,26 @@ L'opérateur a transmis une proposition détaillée (9 points) pour rendre la co
 **Point volontairement non traité, avec justification** : la base de calcul « recettes d'exploitation » (pour les cessions de droits à l'étranger) suppose un module de suivi des revenus de cession de droits qui n'existe pas dans Eclospace — contrairement aux bases HT/net éditeur qui se calculent directement sur une vente déjà enregistrée. Ajouter cette option sans les données sous-jacentes produirait un champ inutilisable ; à construire si un module de cession de droits est confirmé nécessaire.
 
 **Prochaine étape :** faire valider cette évolution par l'opérateur, puis démarrer le Lot 6 (RH, pilotage, rapports).
+
+### 04/07/2026 (suite) — Lot 5 validé par l'opérateur ; démarrage du Lot 6 : RH, pilotage, rapports
+
+M. Noah Mbala a validé le Lot 5 et demandé le démarrage immédiat du Lot 6, dernier lot du plan de développement (Ch. 19 RH, Ch. 5 Direction générale/pilotage intelligent, Ch. 20 rapports/BI). Relecture complète des trois chapitres avant développement (règle CLAUDE.md n°2) ; le détail du lot suit dans une prochaine entrée.
+
+### 04/07/2026 (suite) — Livraison du Lot 6 : RH, pilotage, rapports (dernier lot du plan de développement)
+
+**Fait :**
+- **Ressources humaines (Ch. 19)** : dossier collaborateur (arrivée avec création de compte et notification du responsable, mobilité, départ avec désactivation automatique du compte — immédiate ou à la prochaine connexion, suspension/réactivation) ; module confidentiel séparé (salaire de base, notes) avec consultation journalisée comme le juridique ; attribution/retrait de rôle avec justification ; détection d'anomalies d'accès (compte sans dossier RH, cumul saisie/administration sur un module sensible) ; campagnes de revue périodique des habilitations ; circuit de demande/validation des congés avec décompte du solde ; disponibilité et charge de travail consolidées depuis les autres modules ; cartographie des compétences ; préparation des variables de paie.
+- **Direction générale (Ch. 5)** : tableau de bord consolidé (éditorial, production, commercial, financier — masqué sans la permission finance), recherche globale combinable (numéro, titre, contributeur, collection, ISBN), fiche synthétique d'un ouvrage, alertes automatiques à quatre niveaux de priorité (tâches en retard, validations en attente, contrats non signés, BAT à approuver, stock faible, échéances impayées).
+- **Centre de pilotage intelligent (Ch. 5 §5.9, Ch. 20 §20.6)** : règles configurables (manuscrits bloqués, projection de rupture de stock, dépassement budgétaire) génératrices de recommandations en langage naturel, traitées avec traçabilité (traité/reporté/ignoré + commentaire).
+- **Rapports et indicateurs (Ch. 20)** : dictionnaire d'indicateurs (une formule, une source de vérité par indicateur), bibliothèque de 5 rapports standards générés à la demande (flux éditorial, délais de production, ventes par canal, marges par ouvrage, charge RH par département), explorateur d'analyses personnelles contraint au registre d'indicateurs (partage entre utilisateurs, promotion en rapport standard), simulation de tirage (coût unitaire et durée d'écoulement estimée).
+- Trois écrans frontend ajoutés (Ressources humaines, Direction générale, Rapports), vérifiés dans un navigateur réel (Playwright) : connexion, navigation, génération d'un rapport avec affichage des lignes, génération des recommandations — aucune erreur.
+- **20 nouveaux tests automatisés** (109 au total, tous verts).
+
+**Points d'interprétation et simplifications, documentés dans `docs/JOURNAL_TECHNIQUE.md` :**
+- Aucune tâche planifiée (cron) dans le projet : désactivation de compte, génération des recommandations et des rapports sont toutes déclenchées à la demande ou paresseusement à la connexion, jamais en tâche de fond.
+- Paie complète (bulletins, déclarations sociales) : non implémentée, hors périmètre par défaut selon le cahier des charges lui-même (Ch. 19 §19.7, « à confirmer »). Seule la préparation des variables l'est.
+- Entretiens périodiques d'évaluation : non implémentés — le cahier des charges les signale lui-même comme un point à trancher avec la direction (Ch. 19 §19.6), pas comme une exigence actée.
+- Explorateur d'analyses volontairement contraint au registre d'indicateurs existant plutôt qu'un moteur de tableau croisé entièrement libre, pour garantir qu'un même indicateur ne soit jamais calculé différemment à deux endroits.
+- Revue des habilitations : un réviseur uniquement pour les employés ayant un responsable hiérarchique identifié (pas d'autorité de repli inventée).
+
+**Prochaine étape :** faire valider ce Lot 6 par l'opérateur — c'est le dernier lot du plan de développement.

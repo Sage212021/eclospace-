@@ -970,3 +970,294 @@ export function getBankAccountBalance(id: string) {
 export function createAccountTransfer(input: { from_account_id: string; to_account_id: string; amount: number; reason?: string }) {
   return request(`/api/v1/account-transfers`, { method: "POST", body: JSON.stringify(input) });
 }
+
+// --- Lot 6 : RH (Ch. 19), Direction générale (Ch. 5), Rapports (Ch. 20) ---
+
+export type EmployeeStatus = "salarie" | "prestataire_externe" | "stagiaire" | "benevole";
+
+export interface Employee {
+  id: string;
+  firstName: string;
+  lastName: string;
+  status: EmployeeStatus;
+  position: string | null;
+  hireDate: string | null;
+  departureDate: string | null;
+  leaveBalanceDays: string;
+  department: { id: string; name: string } | null;
+  manager: { id: string; firstName: string; lastName: string } | null;
+  user?: { id: string; username: string; status: string } | null;
+}
+
+export function listEmployees(filters?: { department_id?: string; status?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.department_id) params.set("department_id", filters.department_id);
+  if (filters?.status) params.set("status", filters.status);
+  const query = params.toString() ? `?${params}` : "";
+  return request<Employee[]>(`/api/v1/employees${query}`);
+}
+
+export function getEmployee(id: string) {
+  return request<Employee & { hrContracts: unknown[]; reports: Employee[]; employeeSkills: unknown[] }>(`/api/v1/employees/${id}`);
+}
+
+export function createEmployee(input: {
+  first_name: string;
+  last_name: string;
+  department_id?: string;
+  status?: EmployeeStatus;
+  position?: string;
+  manager_id?: string;
+  hire_date?: string;
+  account?: { username: string; email: string; password: string; role_code: string };
+}) {
+  return request<Employee>("/api/v1/employees", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateEmployee(id: string, input: Partial<{ department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null }>) {
+  return request<Employee>(`/api/v1/employees/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function setEmployeeDeparture(id: string, date: string) {
+  return request<Employee>(`/api/v1/employees/${id}/departure`, { method: "PATCH", body: JSON.stringify({ date }) });
+}
+
+export function suspendEmployee(id: string) {
+  return request(`/api/v1/employees/${id}/suspend`, { method: "PATCH", body: "{}" });
+}
+
+export function reinstateEmployee(id: string) {
+  return request(`/api/v1/employees/${id}/reinstate`, { method: "PATCH", body: "{}" });
+}
+
+export function getEmployeeConfidential(id: string) {
+  return request<{ baseSalary?: string; notes?: string }>(`/api/v1/employees/${id}/confidential`);
+}
+
+export function updateEmployeeConfidential(id: string, input: { base_salary?: number; notes?: string }) {
+  return request(`/api/v1/employees/${id}/confidential`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function grantRole(userId: string, roleCode: string, justification: string) {
+  return request(`/api/v1/users/${userId}/roles`, { method: "POST", body: JSON.stringify({ role_code: roleCode, justification }) });
+}
+
+export function revokeRole(userRoleId: string, justification: string) {
+  return request(`/api/v1/user-roles/${userRoleId}/revoke`, { method: "PATCH", body: JSON.stringify({ justification }) });
+}
+
+export interface AccessAnomaly {
+  type: string;
+  user_id: string;
+  username: string;
+  detail: string;
+}
+
+export function listAccessAnomalies() {
+  return request<AccessAnomaly[]>("/api/v1/access-anomalies");
+}
+
+export interface AccessReview {
+  id: string;
+  label: string;
+  launchedAt: string;
+}
+
+export function createAccessReview(label: string) {
+  return request<AccessReview>("/api/v1/access-reviews", { method: "POST", body: JSON.stringify({ label }) });
+}
+
+export function listAccessReviews() {
+  return request<AccessReview[]>("/api/v1/access-reviews");
+}
+
+export type AccessReviewDecision = "confirme" | "anomalie_signalee";
+
+export interface AccessReviewItem {
+  id: string;
+  decision: AccessReviewDecision | null;
+  comment: string | null;
+  employee: { firstName: string; lastName: string };
+  reviewer: { firstName: string; lastName: string };
+}
+
+export function listAccessReviewItems(reviewId: string, reviewer?: "me") {
+  const query = reviewer ? "?reviewer=me" : "";
+  return request<AccessReviewItem[]>(`/api/v1/access-reviews/${reviewId}/items${query}`);
+}
+
+export function decideAccessReviewItem(itemId: string, decision: AccessReviewDecision, comment?: string) {
+  return request<AccessReviewItem>(`/api/v1/access-review-items/${itemId}`, { method: "PATCH", body: JSON.stringify({ decision, comment }) });
+}
+
+export type AbsenceType = "conge" | "maladie" | "mission" | "teletravail";
+export type AbsenceStatus = "en_attente" | "validee" | "refusee";
+
+export interface Absence {
+  id: string;
+  employeeId: string;
+  type: AbsenceType;
+  fromDate: string;
+  toDate: string;
+  status: AbsenceStatus;
+  reason: string | null;
+}
+
+export function createAbsence(input: { employee_id: string; type: AbsenceType; from_date: string; to_date: string; reason?: string }) {
+  return request<Absence>("/api/v1/absences", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function listAbsences(filters?: { employee_id?: string; status?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.employee_id) params.set("employee_id", filters.employee_id);
+  if (filters?.status) params.set("status", filters.status);
+  const query = params.toString() ? `?${params}` : "";
+  return request<Absence[]>(`/api/v1/absences${query}`);
+}
+
+export function decideAbsence(id: string, decision: "validee" | "refusee") {
+  return request<Absence>(`/api/v1/absences/${id}/decide`, { method: "PATCH", body: JSON.stringify({ decision }) });
+}
+
+export interface Workload {
+  employee_id: string;
+  name: string;
+  tasks_in_progress: number;
+  tasks_done: number;
+  tasks_late: number;
+  tasks_upcoming: number;
+}
+
+export function getWorkload(filters?: { department_id?: string; person_id?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.department_id) params.set("department_id", filters.department_id);
+  if (filters?.person_id) params.set("person_id", filters.person_id);
+  const query = params.toString() ? `?${params}` : "";
+  return request<Workload[]>(`/api/v1/workload${query}`);
+}
+
+// Ch. 5 : Direction générale — tableau de bord, recherche, alertes.
+export interface DirectionDashboard {
+  editorial: unknown;
+  production: unknown;
+  commercial: unknown;
+  financial: unknown | null;
+}
+
+export function getDirectionDashboard() {
+  return request<DirectionDashboard>("/api/v1/dashboards/direction");
+}
+
+export function searchGlobal(q: string) {
+  return request<Manuscript[]>(`/api/v1/search?q=${encodeURIComponent(q)}`);
+}
+
+export interface Alert {
+  type: string;
+  priority: "faible" | "moyenne" | "elevee" | "critique";
+  message: string;
+  entity_type: string;
+  entity_id: string;
+}
+
+export function listAlerts() {
+  return request<Alert[]>("/api/v1/alerts");
+}
+
+// Ch. 5 §5.9, Ch. 20 §20.6 : centre de pilotage intelligent.
+export interface Recommendation {
+  id: string;
+  message: string;
+  priority: "faible" | "moyenne" | "elevee" | "critique";
+  status: "open" | "treated" | "ignored" | "postponed";
+  rule: { label: string };
+  createdAt: string;
+}
+
+export function generateRecommendations() {
+  return request<{ created: number }>("/api/v1/recommendations/generate", { method: "POST", body: "{}" });
+}
+
+export function listRecommendations(filters?: { status?: string; priority?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.priority) params.set("priority", filters.priority);
+  const query = params.toString() ? `?${params}` : "";
+  return request<Recommendation[]>(`/api/v1/recommendations${query}`);
+}
+
+export function decideRecommendation(id: string, status: "treated" | "ignored" | "postponed", comment?: string) {
+  return request<Recommendation>(`/api/v1/recommendations/${id}`, { method: "PATCH", body: JSON.stringify({ status, comment }) });
+}
+
+// Ch. 20 : Rapports, dictionnaire d'indicateurs, explorateur.
+export interface KpiDefinition {
+  code: string;
+  label: string;
+  definition: string;
+  formula: string;
+  value?: unknown;
+}
+
+export function listKpis() {
+  return request<KpiDefinition[]>("/api/v1/kpi");
+}
+
+export function getKpi(code: string) {
+  return request<KpiDefinition>(`/api/v1/kpi/${code}`);
+}
+
+export type ReportDomain = "editorial" | "production" | "commercial" | "financier" | "rh";
+
+export interface Report {
+  id: string;
+  key: string;
+  label: string;
+  domain: ReportDomain;
+  description: string | null;
+}
+
+export function listReports() {
+  return request<Report[]>("/api/v1/reports");
+}
+
+export function runReport(id: string, input?: { period_start?: string; period_end?: string }) {
+  return request<{ run: { id: string; rowCount: number }; rows: unknown[] }>(`/api/v1/reports/${id}/run`, {
+    method: "POST",
+    body: JSON.stringify(input ?? {}),
+  });
+}
+
+export function listReportRuns(id: string) {
+  return request<{ id: string; generatedAt: string; rowCount: number }[]>(`/api/v1/reports/${id}/runs`);
+}
+
+export interface SavedAnalysis {
+  id: string;
+  label: string;
+  definition: { metric: string };
+}
+
+export function createAnalysis(input: { label: string; definition: { metric: string }; shared_with?: string[] }) {
+  return request<SavedAnalysis>("/api/v1/analyses", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function listAnalyses() {
+  return request<SavedAnalysis[]>("/api/v1/analyses");
+}
+
+export function runAnalysis(id: string) {
+  return request<{ metric: string; value: unknown }>(`/api/v1/analyses/${id}/run`, { method: "POST", body: "{}" });
+}
+
+export function promoteAnalysis(id: string, key: string, domain: ReportDomain) {
+  return request<Report>(`/api/v1/analyses/${id}/promote`, { method: "POST", body: JSON.stringify({ key, domain }) });
+}
+
+export function simulatePrintRun(manuscriptId: string, quantities: number[]) {
+  return request<{
+    manuscript_id: string;
+    daily_sale_rate: number;
+    simulations: { quantity: number; total_cost: number | null; unit_cost: number | null; estimated_days_to_sell_out: number | null }[];
+  }>("/api/v1/simulations/print-run", { method: "POST", body: JSON.stringify({ manuscript_id: manuscriptId, quantities }) });
+}

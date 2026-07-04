@@ -37,12 +37,33 @@ model Department {
 
 // Dossier RH minimal — le domaine RH complet (Ch. 19) est spécifié au Lot 6.
 // On modélise ici uniquement ce qui est nécessaire à users.employee_id (Ch. 3.2 du modèle).
+// Ch. 19 §19.2 : le statut conditionne les rubriques actives du dossier
+// (contrat de travail pour salarié/stagiaire, lien vers un contrat de
+// prestation Ch. 9 pour un externe).
+enum EmployeeStatus {
+  salarie
+  prestataire_externe
+  stagiaire
+  benevole
+}
+
 model Employee {
   id           String      @id @default(uuid())
   firstName    String      @map("first_name")
   lastName     String      @map("last_name")
   departmentId String?     @map("department_id")
   department   Department? @relation(fields: [departmentId], references: [id])
+  status       EmployeeStatus @default(salarie)
+  position     String?
+  managerId    String?     @map("manager_id")
+  manager      Employee?   @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports      Employee[]  @relation("EmployeeManager")
+  hireDate     DateTime?   @map("hire_date")
+  // Ch. 19 §19.3 : date programmée de désactivation du compte ; vérifiée de
+  // façon paresseuse à chaque connexion (pas de tâche planifiée dans le
+  // projet — cf. docs/JOURNAL_TECHNIQUE.md).
+  departureDate    DateTime? @map("departure_date")
+  leaveBalanceDays Decimal   @default(0) @map("leave_balance_days") @db.Decimal(5, 1)
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -52,8 +73,173 @@ model Employee {
   deletedBy String?   @map("deleted_by")
 
   user User?
+  hrContracts      HrContract[]
+  confidential     EmployeeConfidential?
+  absences         Absence[]
+  employeeSkills   EmployeeSkill[]
+  payrollVariables PayrollVariable[]
+  accessReviewSubjectItems  AccessReviewItem[] @relation("AccessReviewSubject")
+  accessReviewReviewerItems AccessReviewItem[] @relation("AccessReviewReviewer")
 
   @@map("employees")
+}
+
+enum HrContractType {
+  cdi
+  cdd
+  stage
+  prestation
+}
+
+// Contrat de travail (interne) ou lien vers un contrat de prestation
+// existant (externe, Ch. 9) — Ch. 19 §19.2.
+model HrContract {
+  id               String         @id @default(uuid())
+  employeeId       String         @map("employee_id")
+  employee         Employee       @relation(fields: [employeeId], references: [id])
+  type             HrContractType
+  linkedContractId String?        @map("linked_contract_id")
+  linkedContract   Contract?      @relation(fields: [linkedContractId], references: [id])
+  startDate        DateTime       @map("start_date")
+  endDate          DateTime?      @map("end_date")
+  renewalCount     Int            @default(0) @map("renewal_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@map("hr_contracts")
+}
+
+// Données confidentielles (rémunération) — accès restreint, consultation
+// journalisée (Ch. 19 §19.2, même exigence que le juridique Ch. 9 §9.11).
+model EmployeeConfidential {
+  id         String   @id @default(uuid())
+  employeeId String   @unique @map("employee_id")
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  baseSalary Decimal? @map("base_salary") @db.Decimal(12, 2)
+  notes      String?
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("employee_confidential")
+}
+
+enum AbsenceType {
+  conge
+  maladie
+  mission
+  teletravail
+}
+
+enum AbsenceStatus {
+  en_attente
+  validee
+  refusee
+}
+
+// Circuit demandeur → responsable (Ch. 19 §19.5) ; seul le type "conge"
+// décrémente le solde de congés à la validation.
+model Absence {
+  id         String        @id @default(uuid())
+  employeeId String        @map("employee_id")
+  employee   Employee      @relation(fields: [employeeId], references: [id])
+  type       AbsenceType
+  fromDate   DateTime      @map("from_date")
+  toDate     DateTime      @map("to_date")
+  status     AbsenceStatus @default(en_attente)
+  reason     String?
+  approvedBy String?       @map("approved_by")
+  approvedAt DateTime?     @map("approved_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@map("absences")
+}
+
+// Cartographie des compétences (Ch. 19 §19.8) : langues de correction,
+// logiciels maîtrisés, genres éditoriaux, habilitations internes.
+model Skill {
+  id       String @id @default(uuid())
+  category String
+  label    String
+
+  employeeSkills EmployeeSkill[]
+
+  @@unique([category, label])
+  @@map("skills")
+}
+
+model EmployeeSkill {
+  id         String   @id @default(uuid())
+  employeeId String   @map("employee_id")
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  skillId    String   @map("skill_id")
+  skill      Skill    @relation(fields: [skillId], references: [id])
+  level      Int?
+
+  @@unique([employeeId, skillId])
+  @@map("employee_skills")
+}
+
+// Variables de paie par période (Ch. 19 §19.7) — export vers un logiciel de
+// paie externe ou saisie du net à payer pour exécution par le module Finance.
+model PayrollVariable {
+  id             String    @id @default(uuid())
+  employeeId     String    @map("employee_id")
+  employee       Employee  @relation(fields: [employeeId], references: [id])
+  periodKey      String    @map("period_key")
+  presenceDays   Decimal?  @map("presence_days") @db.Decimal(5, 1)
+  absenceDays    Decimal?  @map("absence_days") @db.Decimal(5, 1)
+  bonusAmount    Decimal?  @map("bonus_amount") @db.Decimal(12, 2)
+  missionsAmount Decimal?  @map("missions_amount") @db.Decimal(12, 2)
+  exportedAt     DateTime? @map("exported_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@unique([employeeId, periodKey])
+  @@map("payroll_variables")
+}
+
+enum AccessReviewStatus {
+  en_cours
+  terminee
+}
+
+// Campagne de revue périodique des habilitations (Ch. 19 §19.4) : chaque
+// responsable confirme ou signale les accès de son équipe.
+model AccessReview {
+  id         String             @id @default(uuid())
+  label      String
+  launchedAt DateTime           @default(now()) @map("launched_at")
+  launchedBy String?            @map("launched_by")
+  status     AccessReviewStatus @default(en_cours)
+
+  items AccessReviewItem[]
+
+  @@map("access_reviews")
+}
+
+enum AccessReviewDecision {
+  confirme
+  anomalie_signalee
+}
+
+model AccessReviewItem {
+  id             String                @id @default(uuid())
+  accessReviewId String                @map("access_review_id")
+  accessReview   AccessReview          @relation(fields: [accessReviewId], references: [id])
+  employeeId     String                @map("employee_id")
+  employee       Employee              @relation("AccessReviewSubject", fields: [employeeId], references: [id])
+  reviewerId     String                @map("reviewer_id")
+  reviewer       Employee              @relation("AccessReviewReviewer", fields: [reviewerId], references: [id])
+  decision       AccessReviewDecision?
+  comment        String?
+  decidedAt      DateTime?             @map("decided_at")
+
+  @@map("access_review_items")
 }
 
 enum UserStatus {
@@ -760,6 +946,7 @@ model Contract {
   royaltyEntries      RoyaltyEntry[]
   royaltyStatements   RoyaltyStatement[]
   royaltyBeneficiaries ContractBeneficiary[]
+  hrContracts         HrContract[]
 
   @@map("contracts")
 }
@@ -2285,4 +2472,139 @@ model AccountingExport {
   createdBy String?  @map("created_by")
 
   @@map("accounting_exports")
+}
+
+// ============================================================
+// Lot 6 — Direction générale, pilotage intelligent et rapports
+// (Ch. 5, Ch. 20). Module transverse : lit les données des autres modules,
+// n'écrit que ses propres artefacts (recommandations, exécutions de rapport,
+// analyses enregistrées).
+// ============================================================
+
+enum RecommendationPriority {
+  faible
+  moyenne
+  elevee
+  critique
+}
+
+enum RecommendationStatus {
+  open
+  treated
+  ignored
+  postponed
+}
+
+// Règle configurable du centre de pilotage intelligent (Ch. 5 §5.9, Ch. 20
+// §20.6) : seuils de blocage, écart budgétaire, vitesse d'écoulement des
+// stocks... Pas de tâche planifiée dans le projet — les règles sont évaluées
+// à la demande (POST /recommendations/generate), pas en tâche de fond.
+model SmartRule {
+  id          String                 @id @default(uuid())
+  code        String                 @unique
+  label       String
+  description String?
+  params      Json
+  priority    RecommendationPriority @default(moyenne)
+  isActive    Boolean                @default(true) @map("is_active")
+
+  recommendations Recommendation[]
+
+  @@map("smart_rules")
+}
+
+// Instance générée par une règle. Historique conservé (pas de suppression)
+// pour évaluer a posteriori la pertinence des règles (§5.9).
+model Recommendation {
+  id              String                 @id @default(uuid())
+  ruleId          String                 @map("rule_id")
+  rule            SmartRule              @relation(fields: [ruleId], references: [id])
+  entityType      String                 @map("entity_type")
+  entityId        String                 @map("entity_id")
+  message         String
+  priority        RecommendationPriority
+  status          RecommendationStatus   @default(open)
+  treatedBy       String?                @map("treated_by")
+  treatedAt       DateTime?              @map("treated_at")
+  decisionComment String?                @map("decision_comment")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("recommendations")
+}
+
+// Dictionnaire des indicateurs (Ch. 20 §20.2) : une définition et une formule
+// documentées par indicateur diffusé — une seule source de vérité.
+model KpiDefinition {
+  id         String @id @default(uuid())
+  code       String @unique
+  label      String
+  definition String
+  formula    String
+  version    Int    @default(1)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("kpi_definitions")
+}
+
+enum ReportDomain {
+  editorial
+  production
+  commercial
+  financier
+  rh
+}
+
+// Catalogue de rapports standards (Ch. 20 §20.3). scheduleCron/recipients
+// sont des métadonnées de gouvernance (§20.7) : aucune tâche planifiée
+// n'existe dans le projet pour les exploiter automatiquement — la
+// génération reste une action volontaire (POST /reports/:id/run).
+model Report {
+  id           String       @id @default(uuid())
+  key          String       @unique
+  label        String
+  domain       ReportDomain
+  description  String?
+  ownerId      String?      @map("owner_id")
+  scheduleCron String?      @map("schedule_cron")
+  recipients   String[]     @default([])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  runs                 ReportRun[]
+  promotedFromAnalysis SavedAnalysis?
+
+  @@map("reports")
+}
+
+// Journal des générations (§20.7 : traçabilité de qui a reçu quoi, quand) —
+// génération synchrone (pas de file de tâches asynchrones dans le projet).
+model ReportRun {
+  id          String   @id @default(uuid())
+  reportId    String   @map("report_id")
+  report      Report   @relation(fields: [reportId], references: [id])
+  params      Json?
+  generatedAt DateTime @default(now()) @map("generated_at")
+  generatedBy String?  @map("generated_by")
+  rowCount    Int?     @map("row_count")
+
+  @@map("report_runs")
+}
+
+// Explorateur d'analyses (Ch. 20 §20.4) : dimensions/métriques contraintes au
+// registre KPI plutôt qu'un moteur de tableau croisé entièrement libre
+// (portée volontairement réduite, cf. docs/JOURNAL_TECHNIQUE.md).
+model SavedAnalysis {
+  id               String   @id @default(uuid())
+  label            String
+  ownerId          String   @map("owner_id")
+  definition       Json
+  sharedWith       String[] @default([]) @map("shared_with")
+  promotedReportId String?  @unique @map("promoted_report_id")
+  promotedReport   Report?  @relation(fields: [promotedReportId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("saved_analyses")
 }

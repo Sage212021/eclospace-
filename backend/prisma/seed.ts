@@ -54,7 +54,8 @@ const lot2Modules = ["contracts", "tasks"];
 const lot3Modules = ["production", "isbn", "bat", "printing"];
 const lot4Modules = ["stock", "commercial"];
 const lot5Modules = ["finance", "royalties"];
-const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules, ...lot5Modules];
+const lot6Modules = ["rh", "rh_confidentiel", "direction", "pilotage", "rapports"];
+const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules, ...lot5Modules, ...lot6Modules];
 const actions = Object.values(PermissionAction);
 
 // Référentiel des ~20 étapes du workflow (Ch. 4 §4.3). Toutes sont créées dès
@@ -297,6 +298,135 @@ async function main() {
     update: {},
     create: { key: "expense_dg_validation_threshold", value: 500_000 },
   });
+
+  // Ressources humaines (Ch. 19) — le dossier RH est réservé au responsable
+  // RH et à la Direction ; consultation élargie aux responsables de service
+  // (revue des accès de leur équipe, §19.4) mais sans les données
+  // confidentielles (rémunération), à accès restreint (§19.2, même exigence
+  // que le juridique).
+  const managementRoles = [
+    "DIR_GENERAL",
+    "DIR_EDITORIAL",
+    "RESP_FINANCE",
+    "RESP_COMMERCIAL",
+    "RESP_INFOGRAPHIE",
+    "RESP_JURIDIQUE",
+    "RESP_QUALITE",
+    "RESP_IMPRESSION",
+    "RESP_RH",
+  ];
+  for (const roleCode of managementRoles) {
+    await grant(roleCode, ["rh:consultation"]);
+  }
+  await grant("RESP_RH", ["rh:saisie", "rh:validation", "rh:administration", "rh_confidentiel:consultation", "rh_confidentiel:saisie"]);
+  await grant("DIR_GENERAL", ["rh:saisie", "rh:validation", "rh:administration", "rh_confidentiel:consultation", "rh_confidentiel:saisie"]);
+
+  // Attribution/retrait des rôles applicatifs (Ch. 2 §2.4, Ch. 19 §19.3-19.4)
+  // — réservé au responsable RH et à la Direction générale.
+  await grant("RESP_RH", ["users:administration"]);
+  await grant("DIR_GENERAL", ["users:administration"]);
+
+  // Direction générale et pilotage intelligent (Ch. 5) : tableau de bord
+  // consolidé, recherche, alertes, recommandations — les indicateurs
+  // financiers restent en outre soumis à finance:consultation (§5.2, §18).
+  await grant("DIR_GENERAL", ["direction:consultation", "pilotage:consultation", "pilotage:saisie", "pilotage:administration"]);
+  await grant("DIR_EDITORIAL", ["direction:consultation", "pilotage:consultation", "pilotage:saisie"]);
+  await grant("RESP_FINANCE", ["direction:consultation", "pilotage:consultation", "pilotage:saisie"]);
+
+  // Rapports, dictionnaire d'indicateurs, explorateur (Ch. 20).
+  for (const roleCode of managementRoles) {
+    await grant(roleCode, ["rapports:consultation"]);
+  }
+  await grant("DIR_GENERAL", ["rapports:saisie", "rapports:administration"]);
+  await grant("RESP_RH", ["rapports:saisie"]);
+
+  // Règles par défaut du centre de pilotage intelligent (Ch. 5 §5.9, Ch. 20
+  // §20.6) — seuils repris des exemples du cahier des charges, à ajuster par
+  // la Direction générale (§5.9 : "définies par l'administrateur avec la direction").
+  const smartRules = [
+    {
+      code: "manuscrits_bloques",
+      label: "Manuscrits bloqués",
+      description: "Manuscrits sans validation d'étape depuis plus de N jours.",
+      params: { blocked_days_threshold: 10 },
+      priority: "moyenne" as const,
+    },
+    {
+      code: "stock_seuil_proche",
+      label: "Stock proche du seuil d'alerte",
+      description: "Projection de rupture au rythme de vente courant (Ch. 16).",
+      params: { projection_days: 7 },
+      priority: "moyenne" as const,
+    },
+    {
+      code: "depassement_budget",
+      label: "Dépassement budgétaire",
+      description: "Coût réel d'un poste budgétaire dépassant le prévisionnel de N %.",
+      params: { variance_pct_threshold: 15 },
+      priority: "elevee" as const,
+    },
+  ];
+  for (const rule of smartRules) {
+    await prisma.smartRule.upsert({
+      where: { code: rule.code },
+      update: {},
+      create: rule,
+    });
+  }
+
+  // Dictionnaire des indicateurs (Ch. 20 §20.2) : définition et formule
+  // documentées pour chaque indicateur diffusé — cf. lib/kpi.ts.
+  const kpiDefinitions = [
+    {
+      code: "manuscripts_by_status",
+      label: "Manuscrits par statut",
+      definition: "Répartition des manuscrits actifs selon leur étape courante du workflow éditorial.",
+      formula: "COUNT(manuscripts) GROUP BY statut courant, statut non supprimé.",
+    },
+    {
+      code: "on_time_rate_pct",
+      label: "Taux de respect des délais",
+      definition: "Part des tâches terminées dans les délais prévus, parmi les tâches terminées ayant une échéance planifiée.",
+      formula: "COUNT(tâches terminées où date réelle de fin <= date planifiée de fin) / COUNT(tâches terminées avec échéance planifiée) × 100.",
+    },
+    {
+      code: "revenue_total",
+      label: "Chiffre d'affaires net",
+      definition: "Ventes nettes toutes factures confondues, avoirs déduits.",
+      formula: "SUM(invoice_lines.line_total × signe) où signe = -1 pour un avoir, +1 pour une facture.",
+    },
+    {
+      code: "royalties_due",
+      label: "Droits d'auteur à payer",
+      definition: "Somme des soldes dus sur les relevés de droits d'auteur émis et non réglés.",
+      formula: "SUM(royalty_statements.balance_due) WHERE status = 'issued'.",
+    },
+    {
+      code: "treasury_position",
+      label: "Situation de trésorerie",
+      definition: "Position de trésorerie cumulée, tous comptes et caisses confondus.",
+      formula: "SUM(payments.amount WHERE direction = 'in') − SUM(payments.amount WHERE direction = 'out').",
+    },
+  ];
+  for (const kpi of kpiDefinitions) {
+    await prisma.kpiDefinition.upsert({
+      where: { code: kpi.code },
+      update: { label: kpi.label, definition: kpi.definition, formula: kpi.formula },
+      create: kpi,
+    });
+  }
+
+  // Bibliothèque de rapports standards (Ch. 20 §20.3), un par domaine.
+  const reports = [
+    { key: "editorial_flow", label: "Flux des manuscrits", domain: "editorial" as const, description: "Reçus, acceptés, refusés par genre et période." },
+    { key: "production_delays", label: "Délais de production par étape", domain: "production" as const, description: "Durée moyenne réalisée par étape du workflow." },
+    { key: "commercial_sales", label: "Ventes par canal", domain: "commercial" as const, description: "Unités et chiffre d'affaires par canal de distribution." },
+    { key: "financial_margins", label: "Marges par ouvrage", domain: "financier" as const, description: "Coût, ventes nettes et marge par ouvrage ; titres sous leur point d'équilibre." },
+    { key: "rh_workload", label: "Charge par département", domain: "rh" as const, description: "Effectif et tâches ouvertes/en retard par département." },
+  ];
+  for (const report of reports) {
+    await prisma.report.upsert({ where: { key: report.key }, update: {}, create: report });
+  }
 
   // Référentiel des étapes du workflow (Ch. 4 §4.3).
   for (const status of workflowStatuses) {

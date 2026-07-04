@@ -23,6 +23,7 @@ export async function loadEffectiveUser(userId: string): Promise<EffectiveUser |
   const user = await prisma.user.findUnique({
     where: { id: userId, deletedAt: null },
     include: {
+      employee: true,
       userRoles: {
         where: { revokedAt: null },
         include: {
@@ -34,7 +35,18 @@ export async function loadEffectiveUser(userId: string): Promise<EffectiveUser |
     },
   });
 
-  if (!user || user.status !== "active") return null;
+  if (!user) return null;
+
+  // Ch. 19 §19.3 : désactivation automatique du compte à la date de départ
+  // du dossier RH — aucune tâche planifiée n'existe dans le projet (cf.
+  // docs/JOURNAL_TECHNIQUE.md), donc vérifiée de façon paresseuse à chaque
+  // résolution de session plutôt qu'à une heure précise.
+  if (user.status === "active" && user.employee?.departureDate && user.employee.departureDate <= new Date()) {
+    await prisma.user.update({ where: { id: userId }, data: { status: "disabled" } });
+    return null;
+  }
+
+  if (user.status !== "active") return null;
 
   const roles = new Set<string>();
   const permissions = new Set<string>();

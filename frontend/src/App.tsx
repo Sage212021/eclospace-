@@ -8,6 +8,9 @@ import { MyReadings } from "./pages/MyReadings";
 import { StockPage } from "./pages/StockPage";
 import { CommercialPage } from "./pages/CommercialPage";
 import { FinancePage } from "./pages/FinancePage";
+import { HrPage } from "./pages/HrPage";
+import { DirectionPage } from "./pages/DirectionPage";
+import { ReportsPage } from "./pages/ReportsPage";
 import { Sidebar, type NavItem } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 
@@ -18,6 +21,9 @@ const NAV_ITEMS: NavItem[] = [
   { key: "stock", label: "Stock", permission: "stock:consultation" },
   { key: "commercial", label: "Commercial", permission: "commercial:consultation" },
   { key: "finance", label: "Finance", permission: "finance:consultation" },
+  { key: "hr", label: "Ressources humaines", permission: "rh:consultation" },
+  { key: "direction", label: "Direction générale", permission: "direction:consultation" },
+  { key: "reports", label: "Rapports", permission: "rapports:consultation" },
 ];
 
 type View =
@@ -27,7 +33,10 @@ type View =
   | { key: "manuscript-detail"; id: string }
   | { key: "stock" }
   | { key: "commercial" }
-  | { key: "finance" };
+  | { key: "finance" }
+  | { key: "hr" }
+  | { key: "direction" }
+  | { key: "reports" };
 
 export function App() {
   const [user, setUser] = useState<EffectiveUser | null>(null);
@@ -93,6 +102,20 @@ export function App() {
         )}
         {view.key === "finance" && (
           <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} />
+        )}
+        {view.key === "hr" && (
+          <HrPage
+            canManage={permissions.has("rh:saisie")}
+            canAdminister={permissions.has("rh:administration")}
+            canValidateAbsence={permissions.has("rh:validation")}
+            canManageUsers={permissions.has("users:administration")}
+            canReadConfidential={permissions.has("rh_confidentiel:consultation")}
+            canWriteConfidential={permissions.has("rh_confidentiel:saisie")}
+          />
+        )}
+        {view.key === "direction" && <DirectionPage canTreatRecommendations={permissions.has("pilotage:saisie")} />}
+        {view.key === "reports" && (
+          <ReportsPage canCreateAnalysis={permissions.has("rapports:saisie")} canPromoteAnalysis={permissions.has("rapports:administration")} />
         )}
       </div>
     </div>

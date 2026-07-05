@@ -8,7 +8,7 @@
 | Lot 3 | Maquette, infographie, ISBN, BAT, impression | En cours — flux complet fonctionnel (étapes 10 à 15) |
 | Lot 4 | Stock et commercial | En cours — flux complet fonctionnel (étapes 16 à 18) |
 | Lot 5 | Finance et droits d'auteur | **Validé par l'opérateur (04/07/2026)** |
-| Lot 6 | RH, pilotage, rapports | En cours — flux complet fonctionnel, en attente de validation opérateur |
+| Lot 6 | RH, pilotage, rapports | **Validé par l'opérateur (05/07/2026)** |
 
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
@@ -234,3 +234,16 @@ L'opérateur a signalé que l'application restait bloquée sur le chargement (au
 
 - **Cause réelle** : PostgreSQL n'est pas démarré automatiquement dans les environnements Claude Code sur le web (pas de `systemd`) — sans base de données, toutes les requêtes échouent et rien ne peut jamais s'afficher. Corrigé en ajoutant un hook de démarrage de session (`.claude/hooks/session-start.sh`, déclaré dans `.claude/settings.json`) qui démarre PostgreSQL, attend qu'il accepte les connexions, applique les migrations et réamorce les données de base (dev + test) avant toute autre action — validé par un test à froid (base arrêtée puis relancée uniquement via ce hook).
 - **Bug réel trouvé pendant cette vérification** (sans lien avec le signalement initial, mais qui aurait fait échouer `npm test` en re-validation) : `tests/lot6-hr-pilotage.test.ts` utilisait des identifiants de compte statiques (`manager_arrivee_test`, `arrivant_test`...) créés via `POST /employees` (un vrai `create`, pas un `upsert`) — une seconde exécution de la suite sur la même base de test (non réinitialisée entre les runs, comme documenté dans `tests/helpers.ts` pour `uniqueIsbnPrefix`) provoquait une violation de contrainte d'unicité sur `users.username`, donc une erreur 500 en cascade sur 4 tests. Corrigé avec un suffixe aléatoire par exécution (même principe que `uniqueIsbnPrefix`), vérifié par trois exécutions consécutives de `npm test` sans réinitialisation de la base entre elles (109/109 à chaque fois).
+
+### 05/07/2026 (suite) — Lot 6 validé par l'opérateur : fin du plan de développement
+
+M. Noah Mbala a validé le Lot 6 après correction du blocage au chargement. Les sept lots du plan de développement (`docs/05_Plan_de_developpement.md`, Lot 0 à Lot 6) sont désormais tous validés. Le périmètre applicatif spécifié au cahier des charges (`docs/01_Cahier_des_charges.md`) est couvert de bout en bout : du dépôt d'un manuscrit à l'archivage, en passant par le comité de lecture, les contrats, la production éditoriale, l'impression, le stock, le commercial, la finance et les droits d'auteur, jusqu'aux RH, à la Direction générale et aux rapports.
+
+**Limites et points ouverts restants** (récapitulatif, détail dans `docs/JOURNAL_TECHNIQUE.md`) :
+- Hébergement de production (fournisseur cloud et région) à préciser avant toute mise en production (décision D-004).
+- Paie complète (bulletins, déclarations sociales) et entretiens périodiques d'évaluation : hors périmètre par défaut, le cahier des charges les signale lui-même comme à confirmer.
+- Comptabilité générale tenue par un cabinet externe (Option B) : Eclospace exporte, ne tient pas le grand livre ; le plan de comptes SYSCOHADA fourni est indicatif, non certifié.
+- Base de calcul « recettes d'exploitation » pour les droits d'auteur (cession de droits à l'étranger) : non modélisée, aucun flux de données sous-jacent dans le projet.
+- Explorateur d'analyses contraint au registre d'indicateurs existant, pas un moteur de tableau croisé entièrement libre.
+
+**Prochaine étape :** aucune au titre du plan de développement initial ; évolutions futures à discuter avec l'opérateur (hébergement de production, périmètre paie, points ouverts ci-dessus).

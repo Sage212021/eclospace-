@@ -266,3 +266,12 @@ Quatre options comparées (PaaS francophone Scalingo, VPS économique Hetzner/OV
 **Point bloquant signalé avant tout usage réel en production (pas avant la recette)** : le stockage des documents (contrats, BAT, visuels...) écrit sur le disque local du serveur, qui est **éphémère** chez Scalingo (perdu à chaque redémarrage/redéploiement). Nécessite un stockage objet compatible S3, à choisir avec l'opérateur avant de déposer de vrais documents en production — détail dans `docs/JOURNAL_TECHNIQUE.md`.
 
 **Prochaine étape :** l'opérateur crée le compte Scalingo et l'application de recette (avec l'addon PostgreSQL), connecte ce dépôt Git, définit `SESSION_SECRET`, puis un premier déploiement peut être tenté et testé dans un navigateur réel.
+
+### 05/07/2026 (suite) — Fusion dans main (PR #2) et correction : le seed manquait au déploiement
+
+- **PR #2 fusionnée dans `main`** : la configuration de déploiement (décision Scalingo + Procfile/build) est désormais sur la branche de référence. C'est `main` que Scalingo déploiera.
+- **Correction avant le premier déploiement** : le hook `postdeploy` appliquait les migrations mais **pas le seed** — une base Scalingo neuve aurait été vide (ni départements/rôles/permissions, ni compte administrateur), rendant l'application inutilisable et l'écran de connexion inaccessible. Ajouté au hook (`seed:deploy`), avec `tsx` déplacé en dépendance de production (comme `prisma`) pour qu'il fonctionne dans l'image finale.
+- **Sécurité vérifiée** : le seed est idempotent (rejouable à chaque déploiement sans rien écraser) et le mot de passe du compte administrateur (`ADMIN_INITIAL_PASSWORD`, à définir par l'opérateur) n'est **jamais réinitialisé par un redéploiement** une fois changé depuis l'interface — testé concrètement (connexion réussie, puis l'ancien mot de passe reste valide et le nouveau du seed est refusé après une relance simulant un redéploiement).
+- Compte administrateur de départ : identifiant **`admin`**, mot de passe = variable `ADMIN_INITIAL_PASSWORD` (à définir dans l'onglet Environment de Scalingo, valeur forte), à changer dès la première connexion.
+
+**Prochaine étape :** l'opérateur configure l'application Scalingo (branche `main`, addon PostgreSQL, variables `SESSION_SECRET` et `ADMIN_INITIAL_PASSWORD`), déclenche le premier déploiement et se connecte dans un navigateur réel — première vérification en conditions réelles du projet.

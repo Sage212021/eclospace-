@@ -6,6 +6,13 @@ import type { FastifyInstance } from "fastify";
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
 
+// Comme `uniqueIsbnPrefix` (tests/helpers.ts) : les comptes créés via
+// POST /employees le sont par un `create` (pas un upsert, contrairement à
+// `createUserWithRole`) — un identifiant statique collisionnerait sur
+// `users.username` dès la deuxième exécution de la suite sur une base non
+// réinitialisée entre les runs.
+const RUN_ID = Math.random().toString(36).slice(2, 8);
+
 async function loginCookie(app: FastifyInstance, username: string, password: string) {
   const response = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username, password } });
   return extractSessionCookie(response.cookies.map((c) => `${c.name}=${c.value}`));
@@ -37,7 +44,7 @@ describe("RH, pilotage et rapports (Lot 6)", () => {
         first_name: "Manager",
         last_name: "Test",
         department_id: rhDept.id,
-        account: { username: "manager_arrivee_test", email: "manager.arrivee@eclospace.local", password: "ManagerTest123!", role_code: "RESP_RH" },
+        account: { username: `manager_arrivee_test_${RUN_ID}`, email: `manager.arrivee_${RUN_ID}@eclospace.local`, password: "ManagerTest123!", role_code: "RESP_RH" },
       },
     });
     expect(manager.statusCode).toBe(201);
@@ -51,16 +58,16 @@ describe("RH, pilotage et rapports (Lot 6)", () => {
         last_name: "Arrivant",
         department_id: rhDept.id,
         manager_id: manager.json().id,
-        account: { username: "arrivant_test", email: "arrivant@eclospace.local", password: "ArrivantTest123!", role_code: "ASSISTANT_EDITORIAL" },
+        account: { username: `arrivant_test_${RUN_ID}`, email: `arrivant_${RUN_ID}@eclospace.local`, password: "ArrivantTest123!", role_code: "ASSISTANT_EDITORIAL" },
       },
     });
     expect(employee.statusCode).toBe(201);
 
-    const managerUser = await prisma.user.findUniqueOrThrow({ where: { username: "manager_arrivee_test" } });
+    const managerUser = await prisma.user.findUniqueOrThrow({ where: { username: `manager_arrivee_test_${RUN_ID}` } });
     const notification = await prisma.notification.findFirst({ where: { userId: managerUser.id, entityType: "employee", entityId: employee.json().id } });
     expect(notification).not.toBeNull();
 
-    const newUser = await prisma.user.findUniqueOrThrow({ where: { username: "arrivant_test" } });
+    const newUser = await prisma.user.findUniqueOrThrow({ where: { username: `arrivant_test_${RUN_ID}` } });
     expect(newUser.status).toBe("active");
     const userRole = await prisma.userRole.findFirst({ where: { userId: newUser.id, role: { code: "ASSISTANT_EDITORIAL" } } });
     expect(userRole).not.toBeNull();
@@ -74,7 +81,7 @@ describe("RH, pilotage et rapports (Lot 6)", () => {
       payload: {
         first_name: "Partant",
         last_name: "Immediat",
-        account: { username: "partant_immediat_test", email: "partant.immediat@eclospace.local", password: "PartantTest123!", role_code: "ASSISTANT_EDITORIAL" },
+        account: { username: `partant_immediat_test_${RUN_ID}`, email: `partant.immediat_${RUN_ID}@eclospace.local`, password: "PartantTest123!", role_code: "ASSISTANT_EDITORIAL" },
       },
     });
     const departure = await app.inject({
@@ -85,7 +92,7 @@ describe("RH, pilotage et rapports (Lot 6)", () => {
     });
     expect(departure.statusCode).toBe(200);
 
-    const user = await prisma.user.findUniqueOrThrow({ where: { username: "partant_immediat_test" } });
+    const user = await prisma.user.findUniqueOrThrow({ where: { username: `partant_immediat_test_${RUN_ID}` } });
     expect(user.status).toBe("disabled");
   });
 
@@ -97,7 +104,7 @@ describe("RH, pilotage et rapports (Lot 6)", () => {
       payload: {
         first_name: "Partant",
         last_name: "Futur",
-        account: { username: "partant_futur_test", email: "partant.futur@eclospace.local", password: "PartantTest123!", role_code: "ASSISTANT_EDITORIAL" },
+        account: { username: `partant_futur_test_${RUN_ID}`, email: `partant.futur_${RUN_ID}@eclospace.local`, password: "PartantTest123!", role_code: "ASSISTANT_EDITORIAL" },
       },
     });
     const futureDate = new Date(Date.now() + 500).toISOString(); // dans 0,5 seconde
@@ -107,18 +114,18 @@ describe("RH, pilotage et rapports (Lot 6)", () => {
       headers: { cookie: adminCookie },
       payload: { date: futureDate },
     });
-    const userBefore = await prisma.user.findUniqueOrThrow({ where: { username: "partant_futur_test" } });
+    const userBefore = await prisma.user.findUniqueOrThrow({ where: { username: `partant_futur_test_${RUN_ID}` } });
     expect(userBefore.status).toBe("active"); // pas encore passé
 
     await new Promise((resolve) => setTimeout(resolve, 700));
 
-    const meAttempt = await app.inject({ method: "GET", url: "/api/v1/me", headers: { cookie: await loginCookie(app, "partant_futur_test", "PartantTest123!").catch(() => "") } });
+    const meAttempt = await app.inject({ method: "GET", url: "/api/v1/me", headers: { cookie: await loginCookie(app, `partant_futur_test_${RUN_ID}`, "PartantTest123!").catch(() => "") } });
     // La connexion elle-même doit désormais échouer car le compte est désactivé
     // au moment de la résolution de session (lib/permissions.ts).
-    const loginAttempt = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: "partant_futur_test", password: "PartantTest123!" } });
+    const loginAttempt = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: `partant_futur_test_${RUN_ID}`, password: "PartantTest123!" } });
     expect(loginAttempt.statusCode).toBe(401);
 
-    const userAfter = await prisma.user.findUniqueOrThrow({ where: { username: "partant_futur_test" } });
+    const userAfter = await prisma.user.findUniqueOrThrow({ where: { username: `partant_futur_test_${RUN_ID}` } });
     expect(userAfter.status).toBe("disabled");
   });
 
@@ -130,7 +137,7 @@ describe("RH, pilotage et rapports (Lot 6)", () => {
       payload: {
         first_name: "Suspendu",
         last_name: "Test",
-        account: { username: "suspendu_test", email: "suspendu@eclospace.local", password: "SuspenduTest123!", role_code: "ASSISTANT_EDITORIAL" },
+        account: { username: `suspendu_test_${RUN_ID}`, email: `suspendu_${RUN_ID}@eclospace.local`, password: "SuspenduTest123!", role_code: "ASSISTANT_EDITORIAL" },
       },
     });
     const suspend = await app.inject({ method: "PATCH", url: `/api/v1/employees/${employee.json().id}/suspend`, headers: { cookie: adminCookie }, payload: {} });
@@ -212,7 +219,7 @@ describe("RH, pilotage et rapports (Lot 6)", () => {
         first_name: "Reviseur",
         last_name: "Test",
         department_id: rhDept.id,
-        account: { username: "reviseur_test", email: "reviseur@eclospace.local", password: "ReviseurTest123!", role_code: "RESP_RH" },
+        account: { username: `reviseur_test_${RUN_ID}`, email: `reviseur_${RUN_ID}@eclospace.local`, password: "ReviseurTest123!", role_code: "RESP_RH" },
       },
     });
     await app.inject({
@@ -225,7 +232,7 @@ describe("RH, pilotage et rapports (Lot 6)", () => {
     const review = await app.inject({ method: "POST", url: "/api/v1/access-reviews", headers: { cookie: adminCookie }, payload: { label: "Revue semestrielle test" } });
     expect(review.statusCode).toBe(201);
 
-    const reviewerCookie = await loginCookie(app, "reviseur_test", "ReviseurTest123!");
+    const reviewerCookie = await loginCookie(app, `reviseur_test_${RUN_ID}`, "ReviseurTest123!");
     const items = await app.inject({ method: "GET", url: `/api/v1/access-reviews/${review.json().id}/items?reviewer=me`, headers: { cookie: reviewerCookie } });
     expect(items.statusCode).toBe(200);
     expect(items.json().length).toBeGreaterThan(0);

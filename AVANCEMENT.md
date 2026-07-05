@@ -227,3 +227,10 @@ M. Noah Mbala a validé le Lot 5 et demandé le démarrage immédiat du Lot 6, d
 - Revue des habilitations : un réviseur uniquement pour les employés ayant un responsable hiérarchique identifié (pas d'autorité de repli inventée).
 
 **Prochaine étape :** faire valider ce Lot 6 par l'opérateur — c'est le dernier lot du plan de développement.
+
+### 05/07/2026 — Correctif : l'application restait bloquée sur le chargement en environnement de validation
+
+L'opérateur a signalé que l'application restait bloquée sur le chargement (aucune interface ne s'affichait). Reproduit et corrigé :
+
+- **Cause réelle** : PostgreSQL n'est pas démarré automatiquement dans les environnements Claude Code sur le web (pas de `systemd`) — sans base de données, toutes les requêtes échouent et rien ne peut jamais s'afficher. Corrigé en ajoutant un hook de démarrage de session (`.claude/hooks/session-start.sh`, déclaré dans `.claude/settings.json`) qui démarre PostgreSQL, attend qu'il accepte les connexions, applique les migrations et réamorce les données de base (dev + test) avant toute autre action — validé par un test à froid (base arrêtée puis relancée uniquement via ce hook).
+- **Bug réel trouvé pendant cette vérification** (sans lien avec le signalement initial, mais qui aurait fait échouer `npm test` en re-validation) : `tests/lot6-hr-pilotage.test.ts` utilisait des identifiants de compte statiques (`manager_arrivee_test`, `arrivant_test`...) créés via `POST /employees` (un vrai `create`, pas un `upsert`) — une seconde exécution de la suite sur la même base de test (non réinitialisée entre les runs, comme documenté dans `tests/helpers.ts` pour `uniqueIsbnPrefix`) provoquait une violation de contrainte d'unicité sur `users.username`, donc une erreur 500 en cascade sur 4 tests. Corrigé avec un suffixe aléatoire par exécution (même principe que `uniqueIsbnPrefix`), vérifié par trois exécutions consécutives de `npm test` sans réinitialisation de la base entre elles (109/109 à chaque fois).

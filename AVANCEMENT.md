@@ -247,3 +247,22 @@ M. Noah Mbala a validé le Lot 6 après correction du blocage au chargement. Les
 - Explorateur d'analyses contraint au registre d'indicateurs existant, pas un moteur de tableau croisé entièrement libre.
 
 **Prochaine étape :** aucune au titre du plan de développement initial ; évolutions futures à discuter avec l'opérateur (hébergement de production, périmètre paie, points ouverts ci-dessus).
+
+### 05/07/2026 (suite) — Décision opérateur sur l'hébergement de production (D-004-bis)
+
+Quatre options comparées (PaaS francophone Scalingo, VPS économique Hetzner/OVH, PaaS anglophone Render, grand cloud AWS/OVHcloud avancé). M. Noah Mbala a choisi **Scalingo** (PaaS français, région Paris) : support en français, PostgreSQL géré (sauvegardes et mises à jour de sécurité assurées par le prestataire, sans avoir à administrer un serveur), déploiement par `git push`, coût prévisible, bonne latence réseau France ↔ Cameroun. Décision consignée dans `docs/06_Registre_des_decisions.md` (D-004-bis) et `docs/JOURNAL_TECHNIQUE.md`.
+
+**Prochaine étape :** créer le compte Scalingo, connecter le dépôt Git, provisionner une application + une base PostgreSQL managée par environnement (recette, puis production), configurer les variables d'environnement (secrets), premier déploiement, puis test réel dans un navigateur par l'opérateur lui-même — la première vérification en conditions réelles depuis le début du projet.
+
+### 05/07/2026 (suite) — Préparation du déploiement Scalingo (Procfile, build, migrations automatiques)
+
+**Fait :**
+- `package.json` et `Procfile` ajoutés à la racine du dépôt : un script `build` qui compile le frontend puis le backend et copie le frontend compilé dans `backend/public` ; `Procfile` définit le processus `web` et un hook `postdeploy` qui applique les migrations Prisma après chaque déploiement.
+- **Une seule application Scalingo** au lieu de deux : le backend (Fastify) sert désormais aussi le frontend compilé (`@fastify/static`, avec repli vers `index.html` pour les routes de l'interface) — plus simple et moins cher à exploiter qu'un backend + un frontend séparés avec buildpack Nginx (cohérent avec CLAUDE.md règle 6).
+- `prisma` déplacé des dépendances de développement vers les dépendances de production dans `backend/package.json` (nécessaire pour que le hook de migration fonctionne après le nettoyage des dépendances de développement fait par Scalingo).
+- Variables d'environnement à configurer documentées dans `docs/JOURNAL_TECHNIQUE.md` (`SESSION_SECRET` à définir manuellement ; `DATABASE_URL`/`PORT` fournis automatiquement par Scalingo).
+- **Vérifié en local** en simulant exactement les commandes Scalingo (build à la racine, démarrage sans fichier `.env`, uniquement des variables d'environnement) : page d'accueil, routes de l'interface, fichiers statiques, API et 404 explicite sur une route API inconnue, tous corrects. Les 109 tests automatisés restent tous verts.
+
+**Point bloquant signalé avant tout usage réel en production (pas avant la recette)** : le stockage des documents (contrats, BAT, visuels...) écrit sur le disque local du serveur, qui est **éphémère** chez Scalingo (perdu à chaque redémarrage/redéploiement). Nécessite un stockage objet compatible S3, à choisir avec l'opérateur avant de déposer de vrais documents en production — détail dans `docs/JOURNAL_TECHNIQUE.md`.
+
+**Prochaine étape :** l'opérateur crée le compte Scalingo et l'application de recette (avec l'addon PostgreSQL), connecte ce dépôt Git, définit `SESSION_SECRET`, puis un premier déploiement peut être tenté et testé dans un navigateur réel.

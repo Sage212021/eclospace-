@@ -5,6 +5,7 @@ Document vivant : chaque choix technique structurant y est consigné avec sa jus
 | Date | Choix | Raison |
 |---|---|---|
 | 04/07/2026 | Hébergement : **Cloud** (D-004) | Décidé par l'opérateur. Fournisseur et région précis à choisir avant la mise en production (Ch. 21 §21.7) ; en dev, tout tourne en local via Docker pour ne pas dépendre du choix final. |
+| 05/07/2026 | Fournisseur cloud : **Scalingo** (PaaS français, région Paris) (D-004-bis) | Décidé par l'opérateur après comparaison de 4 options (Scalingo, VPS Hetzner/OVH, Render, grand cloud AWS/OVHcloud avancé). Retenu pour : support/documentation en français, PostgreSQL managé (sauvegardes et mises à jour de sécurité assurées par le prestataire — pas d'équipe technique interne pour les opérer), déploiement par `git push` sans administration serveur, coût prévisible, bonne latence réseau France ↔ Cameroun. Détail dans `06_Registre_des_decisions.md`. |
 | 04/07/2026 | Backend : **Node.js + TypeScript + Fastify** | Un seul langage (TypeScript) du backend au frontend : plus simple à relire pour un chef de projet non-développeur. Fastify est léger, rapide, peu gourmand en ressources — cohérent avec l'exigence de sobriété (Ch. 21 §21.6) et un hébergement cloud à coût maîtrisé. |
 | 04/07/2026 | ORM/migrations : **Prisma** | Schéma déclaratif proche du modèle de données déjà écrit (`02_Modele_de_donnees.md`) : UUID, champs d'audit, snake_case via `@map`. Migrations versionnées, lisibles en revue. |
 | 04/07/2026 | Base de données : **PostgreSQL** | Imposé par le cahier des charges (Ch. 21 §21.3) et l'hypothèse H4 du modèle de données. |
@@ -160,4 +161,29 @@ Couche transverse du projet : contrairement aux lots précédents, ce lot ne sai
 ## Environnements
 
 - **Développement** : Docker Compose local (PostgreSQL + backend + frontend), aucune donnée réelle (Ch. 21 §21.4).
-- **Recette** et **Production** : à provisionner chez le fournisseur cloud retenu, une fois choisi ; les migrations Prisma et les seeds sont identiques d'un environnement à l'autre.
+- **Recette** et **Production** : provisionnées chez **Scalingo** (région Paris, D-004-bis), une application Scalingo par environnement, PostgreSQL managé Scalingo pour chacune. Les migrations Prisma et les seeds sont identiques d'un environnement à l'autre.
+
+## Configuration du déploiement Scalingo (05/07/2026)
+
+| Date | Choix | Raison |
+|---|---|---|
+| 05/07/2026 | **Une seule application déployée** (pas une pour le backend, une pour le frontend) : le frontend compilé (`frontend/dist`) est copié dans `backend/public` au moment du build, et Fastify le sert directement (`@fastify/static`, repli vers `index.html` pour les routes non-`/api/`, `backend/src/app.ts`) | Évite de payer et d'administrer deux applications Scalingo, un buildpack Nginx additionnel et la configuration CORS en production (le frontend et l'API sont servis depuis la même origine) — cohérent avec CLAUDE.md règle 6 (stack économe, pas de dépendance exotique). Le CORS dev (`FRONTEND_ORIGIN`, Vite sur le port 5173) reste inchangé pour le développement local. |
+| 05/07/2026 | `package.json` et `Procfile` à la **racine du dépôt** (nouveau) : `npm run build` construit le frontend (avec `VITE_API_BASE=` vide pour des appels API en chemin relatif, donc même origine en production), puis le backend, puis copie `frontend/dist` vers `backend/public` ; `Procfile` définit `web: node backend/dist/server.js` et `postdeploy: npm --prefix backend run prisma:deploy` | Scalingo détecte un buildpack Node.js à la racine du dépôt et exécute automatiquement le script `build` du `package.json` racine ; le hook `postdeploy` (Procfile) applique les migrations Prisma après chaque déploiement réussi, dans un conteneur à usage unique, avant que le nouveau code ne serve du trafic. |
+| 05/07/2026 | `prisma` déplacé de `devDependencies` vers `dependencies` dans `backend/package.json` | Scalingo élague les `devDependencies` après la construction ; sans ce déplacement, la commande `prisma migrate deploy` du hook `postdeploy` échouerait faute de trouver le paquet `prisma` dans l'image finale. |
+| 05/07/2026 | Vérifié en local (simulation des commandes Scalingo) : `npm run build` à la racine, puis démarrage par `node backend/dist/server.js` avec les seules variables d'environnement (pas de fichier `.env`, comme sur Scalingo) : API (`/api/v1/health`), page d'accueil (`index.html`), route cliente du frontend (`/manuscripts/...` → repli SPA), fichier statique (`/assets/...`), 404 JSON explicite sur une route `/api/` inconnue — tous corrects. 109 tests automatisés toujours verts après ce changement. | Confirme que la configuration fonctionne avant la première tentative de déploiement réelle chez Scalingo, sans attendre que l'opérateur découvre un problème en production. |
+
+### ⚠️ Point bloquant à traiter avant tout usage réel en production : stockage des documents (GED)
+
+`backend/src/lib/storage.ts` écrit les fichiers déposés (contrats, BAT, visuels...) sur le **disque local** du conteneur (`UPLOAD_DIR`). Or le système de fichiers d'un conteneur Scalingo (comme sur tout PaaS) est **éphémère** : tout fichier écrit localement est perdu au redémarrage ou au redéploiement de l'application. En l'état, une simple mise à jour du code effacerait silencieusement tous les documents déposés — violation directe de la contrainte d'intégrité « versionnage de tous les documents » (CLAUDE.md règle 3).
+
+**Ce point n'est pas traité dans cette session** (hors périmètre de la préparation du déploiement demandée) : il exige un choix de fournisseur de stockage objet compatible S3 (ex. Scaleway Object Storage, OVH Object Storage, AWS S3) — décision similaire à celle de l'hébergement (D-004-bis), à trancher avec l'opérateur avant de brancher de vrais documents en production. Sans conséquence pour une phase de recette fonctionnelle où les documents déposés sont encore des données de test.
+
+### Variables d'environnement à configurer sur Scalingo
+
+| Variable | Origine | Remarque |
+|---|---|---|
+| `DATABASE_URL` | Injectée automatiquement par l'addon PostgreSQL Scalingo | Aucune action requise |
+| `PORT` | Injectée automatiquement par Scalingo | Aucune action requise (le code lit déjà `process.env.PORT`) |
+| `SESSION_SECRET` | À définir manuellement, une valeur différente par environnement (recette ≠ production) | Secret d'application (`scalingo env-set` ou tableau de bord) |
+| `FRONTEND_ORIGIN` | Optionnelle, sans effet utile en production (même origine) | Peut rester non définie |
+| `UPLOAD_DIR` | Optionnelle | Voir point bloquant ci-dessus avant toute donnée réelle |

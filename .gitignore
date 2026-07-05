@@ -5,3 +5,4 @@ build/
 *.log
 .DS_Store
 backend/uploads/
+backend/public/

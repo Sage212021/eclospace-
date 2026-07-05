@@ -1,7 +1,11 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
+import staticFiles from "@fastify/static";
 import authPlugin from "./plugins/auth.js";
 import authRoutes from "./routes/auth.js";
 import documentRoutes from "./routes/documents.js";
@@ -68,6 +72,21 @@ export async function buildApp() {
   await app.register(directionRoutes);
   await app.register(pilotageRoutes);
   await app.register(reportsRoutes);
+
+  // En production, le frontend compilé (frontend/dist) est copié dans backend/public
+  // par le script de build racine (npm run build) : une seule application déployée,
+  // pas de serveur ni d'hébergement séparé pour le frontend (docs/JOURNAL_TECHNIQUE.md).
+  const frontendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../public");
+  if (existsSync(frontendDir)) {
+    await app.register(staticFiles, { root: frontendDir });
+    app.setNotFoundHandler((request, reply) => {
+      if (request.raw.url?.startsWith("/api/")) {
+        reply.code(404).send({ error: "not_found" });
+        return;
+      }
+      reply.type("text/html").send(readFileSync(path.join(frontendDir, "index.html")));
+    });
+  }
 
   return app;
 }

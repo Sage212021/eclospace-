@@ -1,0 +1,2610 @@
+// Schéma Prisma — Lot 0 (fondations)
+// Traduction de docs/02_Modele_de_donnees.md §3 (domaine transverse) et §10 (RH, stub minimal).
+// Conventions : UUID, champs d'audit systématiques, snake_case en base (voir @@map / @map).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Champs d'audit systématiques (créés_par/mis à jour_par/suppression logique) ---
+// Répétés sur chaque table métier, conformément au modèle de données §2.
+
+model Department {
+  id       String  @id @default(uuid())
+  code     String  @unique
+  name     String
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  roles            Role[]
+  employees        Employee[]
+  workflowStatuses WorkflowStatus[]
+  budgets          Budget[]
+
+  @@map("departments")
+}
+
+// Dossier RH minimal — le domaine RH complet (Ch. 19) est spécifié au Lot 6.
+// On modélise ici uniquement ce qui est nécessaire à users.employee_id (Ch. 3.2 du modèle).
+// Ch. 19 §19.2 : le statut conditionne les rubriques actives du dossier
+// (contrat de travail pour salarié/stagiaire, lien vers un contrat de
+// prestation Ch. 9 pour un externe).
+enum EmployeeStatus {
+  salarie
+  prestataire_externe
+  stagiaire
+  benevole
+}
+
+model Employee {
+  id           String      @id @default(uuid())
+  firstName    String      @map("first_name")
+  lastName     String      @map("last_name")
+  departmentId String?     @map("department_id")
+  department   Department? @relation(fields: [departmentId], references: [id])
+  status       EmployeeStatus @default(salarie)
+  position     String?
+  managerId    String?     @map("manager_id")
+  manager      Employee?   @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports      Employee[]  @relation("EmployeeManager")
+  hireDate     DateTime?   @map("hire_date")
+  // Ch. 19 §19.3 : date programmée de désactivation du compte ; vérifiée de
+  // façon paresseuse à chaque connexion (pas de tâche planifiée dans le
+  // projet — cf. docs/JOURNAL_TECHNIQUE.md).
+  departureDate    DateTime? @map("departure_date")
+  leaveBalanceDays Decimal   @default(0) @map("leave_balance_days") @db.Decimal(5, 1)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  user User?
+  hrContracts      HrContract[]
+  confidential     EmployeeConfidential?
+  absences         Absence[]
+  employeeSkills   EmployeeSkill[]
+  payrollVariables PayrollVariable[]
+  accessReviewSubjectItems  AccessReviewItem[] @relation("AccessReviewSubject")
+  accessReviewReviewerItems AccessReviewItem[] @relation("AccessReviewReviewer")
+
+  @@map("employees")
+}
+
+enum HrContractType {
+  cdi
+  cdd
+  stage
+  prestation
+}
+
+// Contrat de travail (interne) ou lien vers un contrat de prestation
+// existant (externe, Ch. 9) — Ch. 19 §19.2.
+model HrContract {
+  id               String         @id @default(uuid())
+  employeeId       String         @map("employee_id")
+  employee         Employee       @relation(fields: [employeeId], references: [id])
+  type             HrContractType
+  linkedContractId String?        @map("linked_contract_id")
+  linkedContract   Contract?      @relation(fields: [linkedContractId], references: [id])
+  startDate        DateTime       @map("start_date")
+  endDate          DateTime?      @map("end_date")
+  renewalCount     Int            @default(0) @map("renewal_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@map("hr_contracts")
+}
+
+// Données confidentielles (rémunération) — accès restreint, consultation
+// journalisée (Ch. 19 §19.2, même exigence que le juridique Ch. 9 §9.11).
+model EmployeeConfidential {
+  id         String   @id @default(uuid())
+  employeeId String   @unique @map("employee_id")
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  baseSalary Decimal? @map("base_salary") @db.Decimal(12, 2)
+  notes      String?
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("employee_confidential")
+}
+
+enum AbsenceType {
+  conge
+  maladie
+  mission
+  teletravail
+}
+
+enum AbsenceStatus {
+  en_attente
+  validee
+  refusee
+}
+
+// Circuit demandeur → responsable (Ch. 19 §19.5) ; seul le type "conge"
+// décrémente le solde de congés à la validation.
+model Absence {
+  id         String        @id @default(uuid())
+  employeeId String        @map("employee_id")
+  employee   Employee      @relation(fields: [employeeId], references: [id])
+  type       AbsenceType
+  fromDate   DateTime      @map("from_date")
+  toDate     DateTime      @map("to_date")
+  status     AbsenceStatus @default(en_attente)
+  reason     String?
+  approvedBy String?       @map("approved_by")
+  approvedAt DateTime?     @map("approved_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@map("absences")
+}
+
+// Cartographie des compétences (Ch. 19 §19.8) : langues de correction,
+// logiciels maîtrisés, genres éditoriaux, habilitations internes.
+model Skill {
+  id       String @id @default(uuid())
+  category String
+  label    String
+
+  employeeSkills EmployeeSkill[]
+
+  @@unique([category, label])
+  @@map("skills")
+}
+
+model EmployeeSkill {
+  id         String   @id @default(uuid())
+  employeeId String   @map("employee_id")
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  skillId    String   @map("skill_id")
+  skill      Skill    @relation(fields: [skillId], references: [id])
+  level      Int?
+
+  @@unique([employeeId, skillId])
+  @@map("employee_skills")
+}
+
+// Variables de paie par période (Ch. 19 §19.7) — export vers un logiciel de
+// paie externe ou saisie du net à payer pour exécution par le module Finance.
+model PayrollVariable {
+  id             String    @id @default(uuid())
+  employeeId     String    @map("employee_id")
+  employee       Employee  @relation(fields: [employeeId], references: [id])
+  periodKey      String    @map("period_key")
+  presenceDays   Decimal?  @map("presence_days") @db.Decimal(5, 1)
+  absenceDays    Decimal?  @map("absence_days") @db.Decimal(5, 1)
+  bonusAmount    Decimal?  @map("bonus_amount") @db.Decimal(12, 2)
+  missionsAmount Decimal?  @map("missions_amount") @db.Decimal(12, 2)
+  exportedAt     DateTime? @map("exported_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@unique([employeeId, periodKey])
+  @@map("payroll_variables")
+}
+
+enum AccessReviewStatus {
+  en_cours
+  terminee
+}
+
+// Campagne de revue périodique des habilitations (Ch. 19 §19.4) : chaque
+// responsable confirme ou signale les accès de son équipe.
+model AccessReview {
+  id         String             @id @default(uuid())
+  label      String
+  launchedAt DateTime           @default(now()) @map("launched_at")
+  launchedBy String?            @map("launched_by")
+  status     AccessReviewStatus @default(en_cours)
+
+  items AccessReviewItem[]
+
+  @@map("access_reviews")
+}
+
+enum AccessReviewDecision {
+  confirme
+  anomalie_signalee
+}
+
+model AccessReviewItem {
+  id             String                @id @default(uuid())
+  accessReviewId String                @map("access_review_id")
+  accessReview   AccessReview          @relation(fields: [accessReviewId], references: [id])
+  employeeId     String                @map("employee_id")
+  employee       Employee              @relation("AccessReviewSubject", fields: [employeeId], references: [id])
+  reviewerId     String                @map("reviewer_id")
+  reviewer       Employee              @relation("AccessReviewReviewer", fields: [reviewerId], references: [id])
+  decision       AccessReviewDecision?
+  comment        String?
+  decidedAt      DateTime?             @map("decided_at")
+
+  @@map("access_review_items")
+}
+
+enum UserStatus {
+  active
+  suspended
+  disabled
+}
+
+model User {
+  id           String     @id @default(uuid())
+  employeeId   String?    @unique @map("employee_id")
+  employee     Employee?  @relation(fields: [employeeId], references: [id])
+  username     String     @unique
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  mfaEnabled   Boolean    @default(false) @map("mfa_enabled")
+  mfaSecret    String?    @map("mfa_secret")
+  status       UserStatus @default(active)
+  lastLoginAt  DateTime?  @map("last_login_at")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  userRoles       UserRole[]
+  notifications   Notification[]
+  auditEntries    AuditLog[]
+  loginChallenges LoginChallenge[]
+
+  ownedManuscripts   Manuscript[]        @relation("ManuscriptOwner")
+  managedManuscripts Manuscript[]        @relation("ManuscriptProjectManager")
+  manuscriptSteps    ManuscriptStep[]
+  readingAssignments ReadingAssignment[]
+  editorialDecisions EditorialDecision[]
+  assignedTasks      Task[]
+  taskComments       TaskComment[]
+  batSignatures      BatSignature[]
+
+  @@map("users")
+}
+
+// Défi 2FA en attente entre l'étape mot de passe et l'étape code TOTP
+// (POST /auth/login puis POST /auth/2fa, §2.1 de la spécification API).
+model LoginChallenge {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("login_challenges")
+}
+
+model Role {
+  id           String      @id @default(uuid())
+  code         String      @unique
+  label        String
+  departmentId String?     @map("department_id")
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@map("roles")
+}
+
+enum PermissionAction {
+  consultation
+  saisie
+  validation
+  administration
+}
+
+model Permission {
+  id     String           @id @default(uuid())
+  module String
+  action PermissionAction
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  rolePermissions RolePermission[]
+
+  @@unique([module, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  roleId        String    @map("role_id")
+  user          User      @relation(fields: [userId], references: [id])
+  role          Role      @relation(fields: [roleId], references: [id])
+  grantedAt     DateTime  @default(now()) @map("granted_at")
+  grantedBy     String?   @map("granted_by")
+  revokedAt     DateTime? @map("revoked_at")
+  justification String?
+
+  @@map("user_roles")
+}
+
+enum NotificationType {
+  affectation
+  echeance
+  validation
+  alerte_stock
+  autre
+}
+
+enum NotificationPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum NotificationChannel {
+  in_app
+  email
+  sms
+}
+
+model Notification {
+  id         String               @id @default(uuid())
+  userId     String               @map("user_id")
+  user       User                 @relation(fields: [userId], references: [id])
+  type       NotificationType
+  priority   NotificationPriority @default(medium)
+  title      String
+  body       String
+  entityType String?              @map("entity_type")
+  entityId   String?              @map("entity_id")
+  channel    NotificationChannel  @default(in_app)
+  readAt     DateTime?            @map("read_at")
+  sentAt     DateTime?            @map("sent_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+enum DocumentCategory {
+  manuscrit
+  rapport_lecture
+  contrat
+  bat
+  facture
+  visuel
+  rapport_comparaison
+  autre
+}
+
+enum Confidentiality {
+  public
+  interne
+  restreint
+}
+
+model Document {
+  id              String           @id @default(uuid())
+  entityType      String           @map("entity_type")
+  entityId        String           @map("entity_id")
+  category        DocumentCategory
+  title           String
+  confidentiality Confidentiality  @default(interne)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  versions DocumentVersion[]
+
+  @@map("documents")
+}
+
+enum DocumentVersionStatus {
+  draft
+  in_review
+  validated
+  archived
+}
+
+model DocumentVersion {
+  id            String                @id @default(uuid())
+  documentId    String                @map("document_id")
+  document      Document              @relation(fields: [documentId], references: [id])
+  versionNumber Int                   @map("version_number")
+  filePath      String                @map("file_path")
+  fileSize      Int                   @map("file_size")
+  mimeType      String                @map("mime_type")
+  sha256Hash    String                @map("sha256_hash")
+  status        DocumentVersionStatus @default(draft)
+  changeSummary String?               @map("change_summary")
+  uploadedBy    String?               @map("uploaded_by")
+  uploadedAt    DateTime              @default(now()) @map("uploaded_at")
+
+  taskComments TaskComment[]
+  imageAssets  ImageAsset[]
+  batInterior  BatRecord[]   @relation("BatInterior")
+  batCover     BatRecord[]   @relation("BatCover")
+
+  @@unique([documentId, versionNumber])
+  @@map("document_versions")
+}
+
+enum AuditAction {
+  create
+  update
+  status_change
+  validate
+  login
+  view_sensitive
+  export
+}
+
+// Journal inviolable (Ch. 5 §5.8, modèle §3.6) : append-only.
+// Aucun champ d'audit (created_by/updated_at...) : la ligne elle-même EST l'audit,
+// jamais modifiée ni supprimée après écriture (contrainte imposée en base — voir migration).
+model AuditLog {
+  id         String      @id @default(uuid())
+  occurredAt DateTime    @default(now()) @map("occurred_at")
+  userId     String?     @map("user_id")
+  user       User?       @relation(fields: [userId], references: [id])
+  action     AuditAction
+  entityType String      @map("entity_type")
+  entityId   String      @map("entity_id")
+  oldValues  Json?       @map("old_values")
+  newValues  Json?       @map("new_values")
+  ipAddress  String?     @map("ip_address")
+
+  @@map("audit_log")
+}
+
+// Paramétrage clé/valeur versionné (seuils, pondérations, calendriers...).
+model Setting {
+  id      String @id @default(uuid())
+  key     String @unique
+  value   Json
+  version Int    @default(1)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("settings")
+}
+
+// ============================================================
+// Lot 1 — Domaine éditorial (modèle §4, Ch. 4/6/7/8 du cahier des charges)
+// ============================================================
+
+// Décision opérateur (04/07/2026) : fiche unique couvrant l'auteur et tous
+// les prestataires externes, pour que le circuit contractuel n'ait pas à
+// être refondu quand un nouveau type de partenaire apparaît.
+enum PartnerCategory {
+  auteur
+  correcteur
+  traducteur
+  illustrateur
+  maquettiste
+  graphiste
+  imprimeur
+  consultant
+  autre
+}
+
+model Partner {
+  id        String          @id @default(uuid())
+  category  PartnerCategory @default(auteur)
+  firstName String          @map("first_name")
+  lastName  String          @map("last_name")
+  penName   String?         @map("pen_name")
+  email     String?
+  phone     String?
+  address   String?
+  bio       String?
+  taxStatus Json?           @map("tax_status")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  workContributors     WorkContributor[]
+  contracts            Contract[]
+  printer              Printer?
+  metadataExports      MetadataExport[]
+  royaltyBeneficiaries ContractBeneficiary[]
+  royaltyPayments      RoyaltyPayment[]
+
+  @@map("partners")
+}
+
+// Référentiel Ch. 6 §6.2 (« Collection envisagée » : liste déroulante) — la
+// gabarit/charte par défaut (FK layout_templates/graphic_charters) sera
+// ajoutée au Lot 3, ces tables n'existant pas encore.
+model Collection {
+  id    String @id @default(uuid())
+  code  String @unique
+  label String
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  manuscripts     Manuscript[]
+  layoutTemplates LayoutTemplate[]
+  graphicCharters GraphicCharter[]
+
+  @@map("collections")
+}
+
+// Référentiel Ch. 6 §6.2 (« Domaine » : roman, essai, poésie, manuel, jeunesse...).
+model Genre {
+  id    String @id @default(uuid())
+  code  String @unique
+  label String
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  manuscripts Manuscript[]
+
+  @@map("genres")
+}
+
+enum ManuscriptOrigin {
+  soumission
+  commande
+}
+
+// Entité centrale (modèle §4.2) : le « manuscrit » et le « projet éditorial »
+// sont une même ligne dont le cycle de vie est porté par le statut.
+model Manuscript {
+  id               String           @id @default(uuid())
+  manuscriptNumber String           @unique @map("manuscript_number")
+  title            String
+  subtitle         String?
+  collectionId     String?          @map("collection_id")
+  collection       Collection?      @relation(fields: [collectionId], references: [id])
+  genreId          String?          @map("genre_id")
+  genre            Genre?           @relation(fields: [genreId], references: [id])
+  language         String
+  estimatedPages   Int?             @map("estimated_pages")
+  summary          String?
+  keywords         String[]         @default([])
+  origin           ManuscriptOrigin @default(soumission)
+
+  statusId                      String         @map("status_id")
+  status                        WorkflowStatus @relation(fields: [statusId], references: [id])
+  priorityScore                 Decimal        @default(0) @map("priority_score") @db.Decimal(6, 2)
+  priorityOverride              Decimal?       @map("priority_override") @db.Decimal(6, 2)
+  priorityOverrideJustification String?        @map("priority_override_justification")
+
+  ownerId          String  @map("owner_id")
+  owner            User    @relation("ManuscriptOwner", fields: [ownerId], references: [id])
+  projectManagerId String? @map("project_manager_id")
+  projectManager   User?   @relation("ManuscriptProjectManager", fields: [projectManagerId], references: [id])
+
+  receivedAt        DateTime @map("received_at")
+  requiresExpertise Boolean  @default(false) @map("requires_expertise")
+  // Décision opérateur (04/07/2026) : étape Réécriture activée mais
+  // facultative — déclenchée par la correction ou l'expertise (Ch. 4 §4.3),
+  // via le drapeau posé à la validation de ces étapes (voir workflow.ts).
+  requiresRewrite   Boolean  @default(false) @map("requires_rewrite")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  workContributors   WorkContributor[]
+  steps              ManuscriptStep[]
+  stepTransitions    StepTransition[]
+  readingAssignments ReadingAssignment[]
+  editorialDecisions EditorialDecision[]
+  contracts          Contract[]
+  tasks              Task[]
+  productionSpecs    ProductionSpecs?
+  imageAssets        ImageAsset[]
+  checklists         Checklist[]
+  isbns              Isbn[]
+  legalDeposits      LegalDeposit[]
+  workMetadata       WorkMetadata?
+  metadataExports    MetadataExport[]
+  batRecords         BatRecord[]
+  printQuotes        PrintQuote[]
+  expenses           Expense[]
+  costEntries        CostEntry[]
+  budgets            Budget[]
+
+  @@map("manuscripts")
+}
+
+enum ContributorRole {
+  author
+  co_author
+  translator
+  illustrator
+  preface
+}
+
+model WorkContributor {
+  id           String          @id @default(uuid())
+  manuscriptId String          @map("manuscript_id")
+  manuscript   Manuscript      @relation(fields: [manuscriptId], references: [id])
+  partnerId    String          @map("partner_id")
+  partner      Partner         @relation(fields: [partnerId], references: [id])
+  role         ContributorRole @default(author)
+  displayOrder Int             @default(0) @map("display_order")
+
+  @@unique([manuscriptId, partnerId, role])
+  @@map("work_contributors")
+}
+
+// Référentiel des ~20 étapes (Ch. 4 §4.3). Toutes sont créées dès le Lot 1 —
+// seules les étapes 1 à 4 sont pilotées par l'application à ce stade ; les
+// suivantes attendent les modules des lots 2 à 5.
+model WorkflowStatus {
+  id            String      @id @default(uuid())
+  code          String      @unique
+  label         String
+  stepOrder     Int         @map("step_order")
+  departmentId  String?     @map("department_id")
+  department    Department? @relation(fields: [departmentId], references: [id])
+  isConditional Boolean     @default(false) @map("is_conditional")
+
+  manuscripts Manuscript[]
+  steps       ManuscriptStep[]
+
+  @@map("workflow_statuses")
+}
+
+// Une ligne par étape franchie ou planifiée par manuscrit (modèle §4.3).
+// C'est la source de la frise chronologique (Ch. 4 §4.4).
+model ManuscriptStep {
+  id            String         @id @default(uuid())
+  manuscriptId  String         @map("manuscript_id")
+  manuscript    Manuscript     @relation(fields: [manuscriptId], references: [id])
+  statusId      String         @map("status_id")
+  status        WorkflowStatus @relation(fields: [statusId], references: [id])
+  responsibleId String?        @map("responsible_id")
+  responsible   User?          @relation(fields: [responsibleId], references: [id])
+  plannedStart  DateTime?      @map("planned_start")
+  plannedEnd    DateTime?      @map("planned_end")
+  actualStart   DateTime?      @map("actual_start")
+  actualEnd     DateTime?      @map("actual_end")
+  validationBy  String?        @map("validation_by")
+  validatedAt   DateTime?      @map("validated_at")
+  observations  String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tasks Task[]
+
+  @@unique([manuscriptId, statusId])
+  @@map("manuscript_steps")
+}
+
+// Journal des transmissions inter-départements (Ch. 3 §3.4).
+model StepTransition {
+  id               String     @id @default(uuid())
+  manuscriptId     String     @map("manuscript_id")
+  manuscript       Manuscript @relation(fields: [manuscriptId], references: [id])
+  fromStatusCode   String?    @map("from_status_code")
+  toStatusCode     String     @map("to_status_code")
+  fromDepartmentId String?    @map("from_department_id")
+  toDepartmentId   String?    @map("to_department_id")
+  responsibleId    String?    @map("responsible_id")
+  occurredAt       DateTime   @default(now()) @map("occurred_at")
+  observations     String?
+
+  @@map("step_transitions")
+}
+
+enum ReadingAssignmentStatus {
+  pending
+  submitted
+  late
+  cancelled
+}
+
+// Ch. 7 §7.2.
+model ReadingAssignment {
+  id              String                  @id @default(uuid())
+  manuscriptId    String                  @map("manuscript_id")
+  manuscript      Manuscript              @relation(fields: [manuscriptId], references: [id])
+  readerId        String                  @map("reader_id")
+  reader          User                    @relation(fields: [readerId], references: [id])
+  assignedAt      DateTime                @default(now()) @map("assigned_at")
+  dueAt           DateTime                @map("due_at")
+  submittedAt     DateTime?               @map("submitted_at")
+  status          ReadingAssignmentStatus @default(pending)
+  extensionReason String?                 @map("extension_reason")
+
+  evaluation Evaluation?
+
+  @@map("reading_assignments")
+}
+
+// Grille d'évaluation personnalisable (Ch. 7 §7.4), coefficients configurables (§7.5).
+model EvaluationCriterion {
+  id          String  @id @default(uuid())
+  label       String
+  coefficient Decimal @default(1) @db.Decimal(4, 2)
+  isActive    Boolean @default(true) @map("is_active")
+
+  scores EvaluationScore[]
+
+  @@map("evaluation_criteria")
+}
+
+enum EvaluationRecommendation {
+  accept
+  accept_minor
+  accept_major
+  rewrite
+  new_expertise
+  reject
+}
+
+// Excellent / Très bon / Bon / À retravailler / Refusé (Ch. 7 §7.5).
+enum EvaluationRating {
+  excellent
+  very_good
+  good
+  to_rework
+  refused
+}
+
+// Quatre niveaux de diffusion du rapport (Ch. 7 §7.9).
+enum EvaluationVisibility {
+  confidentiel
+  direction_seule
+  comite
+  dossier_editorial
+}
+
+model Evaluation {
+  id             String                   @id @default(uuid())
+  assignmentId   String                   @unique @map("assignment_id")
+  assignment     ReadingAssignment        @relation(fields: [assignmentId], references: [id])
+  overallComment String?                  @map("overall_comment")
+  recommendation EvaluationRecommendation
+  globalScore    Decimal                  @map("global_score") @db.Decimal(6, 2)
+  rating         EvaluationRating
+  visibility     EvaluationVisibility     @default(comite)
+  submittedAt    DateTime                 @default(now()) @map("submitted_at")
+
+  scores EvaluationScore[]
+
+  @@map("evaluations")
+}
+
+model EvaluationScore {
+  id           String              @id @default(uuid())
+  evaluationId String              @map("evaluation_id")
+  evaluation   Evaluation          @relation(fields: [evaluationId], references: [id])
+  criterionId  String              @map("criterion_id")
+  criterion    EvaluationCriterion @relation(fields: [criterionId], references: [id])
+  score        Decimal             @db.Decimal(4, 2)
+  comment      String?
+
+  @@unique([evaluationId, criterionId])
+  @@map("evaluation_scores")
+}
+
+// Ch. 8 §8.2 : acceptation / acceptation sous conditions / révision / attente / refus.
+enum EditorialDecisionType {
+  acceptation
+  acceptation_conditions
+  revision
+  attente
+  refus
+}
+
+// Compteur atomique pour la numérotation des manuscrits (Ch. 6 §6.2 : généré
+// automatiquement). Une ligne par année, incrémentée via upsert atomique
+// (voir lib/manuscriptNumber.ts) pour éviter toute collision concurrente.
+model ManuscriptNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("manuscript_number_counters")
+}
+
+model EditorialDecision {
+  id           String                @id @default(uuid())
+  manuscriptId String                @map("manuscript_id")
+  manuscript   Manuscript            @relation(fields: [manuscriptId], references: [id])
+  decision     EditorialDecisionType
+  decidedById  String                @map("decided_by")
+  decidedBy    User                  @relation(fields: [decidedById], references: [id])
+  decidedAt    DateTime              @default(now()) @map("decided_at")
+  motivation   String
+  scoreGapFlag Boolean               @default(false) @map("score_gap_flag")
+
+  @@map("editorial_decisions")
+}
+
+// ============================================================
+// Lot 2 — Contrats (Ch. 9, hors moteur de droits connecté aux ventes : Lot 5),
+// tâches et Gantt (Ch. 8 §8.4-8.12), correction éditoriale (Ch. 10 — réutilise
+// documents/document_versions du Lot 0 pour le versionnage).
+// ============================================================
+
+model ContractNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("contract_number_counters")
+}
+
+enum ContractType {
+  edition
+  coedition
+  traduction
+  illustration
+  correction
+  prestation
+  cession
+  avenant
+}
+
+// Circuit de validation Ch. 9 §9.8 (preparation → legal_review → direction_approval
+// → awaiting_signature → active), plus expired/terminated (§9.3).
+enum ContractStatus {
+  preparation
+  legal_review
+  direction_approval
+  awaiting_signature
+  active
+  expired
+  terminated
+}
+
+// La « partie contractante » du Ch. 9 §9.3 (auteur, prestataire...) est
+// couverte par la fiche Partenaire unique (décision opérateur du 04/07/2026).
+model Contract {
+  id             String       @id @default(uuid())
+  contractNumber String       @unique @map("contract_number")
+  type           ContractType
+  manuscriptId   String?      @map("manuscript_id")
+  manuscript     Manuscript?  @relation(fields: [manuscriptId], references: [id])
+  partnerId      String       @map("partner_id")
+  partner        Partner      @relation(fields: [partnerId], references: [id])
+
+  parentContractId String?    @map("parent_contract_id")
+  parentContract   Contract?  @relation("ContractAmendments", fields: [parentContractId], references: [id])
+  amendments       Contract[] @relation("ContractAmendments")
+
+  signedAt       DateTime?
+  effectiveAt    DateTime?      @map("effective_at")
+  durationMonths Int?           @map("duration_months")
+  territories    String[]       @default([])
+  languages      String[]       @default([])
+  formats        String[]       @default([])
+  financialTerms Json           @map("financial_terms")
+  status         ContractStatus @default(preparation)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  royaltyTerms        RoyaltyTerms?
+  royaltyEntries      RoyaltyEntry[]
+  royaltyStatements   RoyaltyStatement[]
+  royaltyBeneficiaries ContractBeneficiary[]
+  hrContracts         HrContract[]
+
+  @@map("contracts")
+}
+
+enum RoyaltyBase {
+  prix_public_ht
+  prix_net_editeur
+}
+
+// Périodicité des relevés (revue opérateur du 04/07/2026) : information
+// descriptive rattachée au contrat — aucune tâche planifiée n'existe dans le
+// projet pour la déclencher automatiquement (pas de cron/scheduler), la
+// génération reste une action volontaire (« en un clic », Ch. 9 §9.5).
+enum StatementPeriodicity {
+  mensuelle
+  trimestrielle
+  semestrielle
+  annuelle
+}
+
+// Termes du contrat uniquement (Ch. 9 §9.4). Le moteur de calcul connecté
+// aux ventes (royalty_entries/statements/payments, §9.5) est le Lot 5 : il
+// n'existe pas de vente à relier tant que le Lot 4 n'est pas construit.
+model RoyaltyTerms {
+  id                  String                @id @default(uuid())
+  contractId          String                @unique @map("contract_id")
+  contract            Contract              @relation(fields: [contractId], references: [id])
+  base                RoyaltyBase
+  tiers               Json // paliers : [{ "up_to": 3000, "rate": 0.08 }, { "up_to": null, "rate": 0.10 }]
+  advanceAmount       Decimal?              @map("advance_amount") @db.Decimal(12, 2)
+  paymentSchedule     String?               @map("payment_schedule")
+  // Revue opérateur du 04/07/2026 : retenue fiscale par défaut du contrat
+  // (appliquée à l'exécution du paiement si non explicitement surchargée) et
+  // périodicité indicative des relevés.
+  taxWithholdingPct   Decimal?              @map("tax_withholding_pct") @db.Decimal(5, 2)
+  statementPeriodicity StatementPeriodicity? @map("statement_periodicity")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("royalty_terms")
+}
+
+// Répartition des droits entre plusieurs bénéficiaires d'un même contrat
+// (Ch. 9 : auteur + illustrateur, coauteurs...) — revue opérateur du
+// 04/07/2026. Le calcul des droits reste au niveau du contrat (royalty_
+// entries/statements inchangés) ; la répartition n'intervient qu'à
+// l'exécution du paiement. Sans bénéficiaire configuré, 100 % va au
+// partenaire unique du contrat (rétrocompatible).
+model ContractBeneficiary {
+  id         String  @id @default(uuid())
+  contractId String  @map("contract_id")
+  contract   Contract @relation(fields: [contractId], references: [id])
+  partnerId  String  @map("partner_id")
+  partner    Partner @relation(fields: [partnerId], references: [id])
+  sharePct   Decimal @map("share_pct") @db.Decimal(5, 2)
+
+  @@unique([contractId, partnerId])
+  @@map("contract_beneficiaries")
+}
+
+// Types issus de la fusion Ch. 8 (production générale) et Ch. 10 §10.3
+// (niveaux de correction) — une même table `tasks` porte les deux (modèle §4.5).
+enum TaskType {
+  correction_ortho
+  correction_gramm
+  correction_typo
+  correction_syntaxe
+  correction_style
+  harmonisation
+  verif_biblio
+  coherence
+  layout
+  cover
+  illustration
+  expertise
+  rewrite
+  autre
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  critical
+}
+
+// Ch. 8 §8.6.
+enum TaskStatus {
+  non_commencee
+  en_cours
+  suspendue
+  terminee
+  validee
+}
+
+model Task {
+  id           String          @id @default(uuid())
+  manuscriptId String          @map("manuscript_id")
+  manuscript   Manuscript      @relation(fields: [manuscriptId], references: [id])
+  stepId       String?         @map("step_id")
+  step         ManuscriptStep? @relation(fields: [stepId], references: [id])
+  title        String
+  type         TaskType
+  assigneeId   String?         @map("assignee_id")
+  assignee     User?           @relation(fields: [assigneeId], references: [id])
+  priority     TaskPriority    @default(medium)
+  plannedStart DateTime?       @map("planned_start")
+  plannedEnd   DateTime?       @map("planned_end")
+  actualStart  DateTime?       @map("actual_start")
+  actualEnd    DateTime?       @map("actual_end")
+  progressPct  Int             @default(0) @map("progress_pct")
+  status       TaskStatus      @default(non_commencee)
+
+  // Dépendances du Gantt (Ch. 8 §8.7) : une tâche ne peut commencer avant la
+  // fin de celle dont elle dépend.
+  dependsOnTaskId String? @map("depends_on_task_id")
+  dependsOnTask   Task?   @relation("TaskDependency", fields: [dependsOnTaskId], references: [id])
+  dependentTasks  Task[]  @relation("TaskDependency")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  comments TaskComment[]
+
+  @@map("tasks")
+}
+
+// Observations du correcteur (Ch. 10 §10.7) : datées, signées, liées à la
+// version concernée ; un point bloquant non résolu empêche la validation.
+model TaskComment {
+  id                String           @id @default(uuid())
+  taskId            String           @map("task_id")
+  task              Task             @relation(fields: [taskId], references: [id])
+  documentVersionId String?          @map("document_version_id")
+  documentVersion   DocumentVersion? @relation(fields: [documentVersionId], references: [id])
+  authorId          String           @map("author_id")
+  author            User             @relation(fields: [authorId], references: [id])
+  body              String
+  isBlocking        Boolean          @default(false) @map("is_blocking")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  resolvedAt        DateTime?        @map("resolved_at")
+
+  @@map("task_comments")
+}
+
+// ============================================================
+// Lot 3 — Maquette (Ch. 11), Infographie (Ch. 12), ISBN/dépôt légal/
+// métadonnées (Ch. 13), BAT et contrôle qualité (Ch. 14), Impression et
+// fabrication (Ch. 15).
+// ============================================================
+
+// Bibliothèque de gabarits réutilisables (Ch. 11 §11.3).
+model LayoutTemplate {
+  id           String      @id @default(uuid())
+  name         String
+  collectionId String?     @map("collection_id")
+  collection   Collection? @relation(fields: [collectionId], references: [id])
+  format       String // dimensions fermées, ex. "140x220mm"
+  specs        Json // marges, polices, styles
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("layout_templates")
+}
+
+// Chartes graphiques (Ch. 12 §12.4).
+model GraphicCharter {
+  id           String      @id @default(uuid())
+  scope        String // "maison" ou "collection"
+  collectionId String?     @map("collection_id")
+  collection   Collection? @relation(fields: [collectionId], references: [id])
+  description  String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("graphic_charters")
+}
+
+// Fiche technique de fabrication, une par manuscrit (Ch. 11 §11.5, Ch. 12 §12.3).
+// Le calcul du dos est une approximation documentée (§ JOURNAL_TECHNIQUE) : le
+// cahier des charges ne fixe pas de formule, seulement l'exigence du calcul.
+model ProductionSpecs {
+  id               String     @id @default(uuid())
+  manuscriptId     String     @unique @map("manuscript_id")
+  manuscript       Manuscript @relation(fields: [manuscriptId], references: [id])
+  trimFormat       String?    @map("trim_format")
+  finalPages       Int?       @map("final_pages")
+  paperInterior    String?    @map("paper_interior")
+  paperInteriorGsm Int?       @map("paper_interior_gsm")
+  paperCover       String?    @map("paper_cover")
+  binding          String?
+  lamination       String?
+  spineWidthMm     Decimal?   @map("spine_width_mm") @db.Decimal(6, 2)
+  spineNeedsRecalc Boolean    @default(false) @map("spine_needs_recalc")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("production_specs")
+}
+
+// Éléments structurels (Ch. 11 §11.6), points de contrôle du BAT (Ch. 14 §14.3),
+// complétude ISBN (Ch. 13 §13.9) — une même table de listes de contrôle
+// paramétrables, réutilisée selon le contexte (modèle §4.6).
+enum ChecklistContext {
+  structure_ouvrage
+  bat
+  isbn_completeness
+}
+
+model Checklist {
+  id           String           @id @default(uuid())
+  context      ChecklistContext
+  manuscriptId String           @map("manuscript_id")
+  manuscript   Manuscript       @relation(fields: [manuscriptId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  items     ChecklistItem[]
+  batRecord BatRecord?
+
+  @@map("checklists")
+}
+
+model ChecklistItem {
+  id            String    @id @default(uuid())
+  checklistId   String    @map("checklist_id")
+  checklist     Checklist @relation(fields: [checklistId], references: [id])
+  label         String
+  isBlocking    Boolean   @default(true) @map("is_blocking")
+  notApplicable Boolean   @default(false) @map("not_applicable")
+  checkedBy     String?   @map("checked_by")
+  checkedAt     DateTime? @map("checked_at")
+  observation   String?
+
+  @@map("checklist_items")
+}
+
+// Visuels (Ch. 11 §11.7, Ch. 12 §12.3, §12.5) : couverture, dos, illustrations,
+// visuels marketing.
+enum ImageAssetType {
+  couverture_1
+  couverture_4
+  dos
+  rabat
+  illustration_interieure
+  visuel_marketing
+}
+
+enum RightsOrigin {
+  creation_interne
+  banque_images
+  fourni_par_auteur
+}
+
+model ImageAsset {
+  id                String           @id @default(uuid())
+  manuscriptId      String           @map("manuscript_id")
+  manuscript        Manuscript       @relation(fields: [manuscriptId], references: [id])
+  type              ImageAssetType
+  placement         String?
+  resolutionDpi     Int?             @map("resolution_dpi")
+  colorMode         String?          @map("color_mode")
+  technicalOk       Boolean          @default(false) @map("technical_ok")
+  rightsOrigin      RightsOrigin?    @map("rights_origin")
+  rightsLicense     String?          @map("rights_license")
+  rightsCredit      String?          @map("rights_credit")
+  documentVersionId String?          @map("document_version_id")
+  documentVersion   DocumentVersion? @relation(fields: [documentVersionId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("image_assets")
+}
+
+// Ch. 13 §13.2 : tranches d'ISBN reçues, gérées comme une ressource avec seuil d'alerte.
+model IsbnPool {
+  id         String   @id @default(uuid())
+  prefix     String // partie fixe, sans tirets ni clé, ex. "97823456"
+  digitWidth Int      @default(3) @map("digit_width") // chiffres du numéro de titre
+  rangeStart Int      @map("range_start")
+  rangeEnd   Int      @map("range_end")
+  nextValue  Int      @map("next_value")
+  receivedAt DateTime @default(now()) @map("received_at")
+
+  isbns Isbn[]
+
+  @@map("isbn_pool")
+}
+
+enum IsbnFormat {
+  print
+  epub
+  pdf
+  audio
+}
+
+enum IsbnStatus {
+  available
+  reserved
+  assigned
+  published
+}
+
+// Ch. 13 §13.2-13.3 : un ISBN n'est jamais réutilisé (contrainte applicative —
+// aucune suppression, aucun statut ne revient en arrière vers "available").
+model Isbn {
+  id           String      @id @default(uuid())
+  isbn13       String      @unique
+  poolId       String?     @map("pool_id")
+  pool         IsbnPool?   @relation(fields: [poolId], references: [id])
+  manuscriptId String?     @map("manuscript_id")
+  manuscript   Manuscript? @relation(fields: [manuscriptId], references: [id])
+  format       IsbnFormat
+  status       IsbnStatus  @default(available)
+  assignedAt   DateTime?   @map("assigned_at")
+  assignedBy   String?     @map("assigned_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  stockItems      StockItem[]
+  stockMovements  StockMovement[]
+  inventoryLines  InventoryLine[]
+  priceList       PriceList[]
+  salesOrderLines SalesOrderLine[]
+  deliveryLines   DeliveryLine[]
+  consignments    Consignment[]
+  posSales        PosSale[]
+  returnLines     ReturnLine[]
+  invoiceLines    InvoiceLine[]
+
+  @@map("isbns")
+}
+
+enum LegalDepositStatus {
+  a_preparer
+  depose
+  accuse_reception
+}
+
+model LegalDeposit {
+  id                String             @id @default(uuid())
+  manuscriptId      String             @map("manuscript_id")
+  manuscript        Manuscript         @relation(fields: [manuscriptId], references: [id])
+  country           String
+  depository        String
+  copiesRequired    Int                @map("copies_required")
+  dueDate           DateTime?          @map("due_date")
+  depositedAt       DateTime?          @map("deposited_at")
+  receiptDocumentId String?            @map("receipt_document_id")
+  depositNumber     String?            @map("deposit_number")
+  status            LegalDepositStatus @default(a_preparer)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("legal_deposits")
+}
+
+// Fiche descriptive complète, source unique pour tous les canaux (Ch. 13 §13.6).
+model WorkMetadata {
+  id             String     @id @default(uuid())
+  manuscriptId   String     @unique @map("manuscript_id")
+  manuscript     Manuscript @relation(fields: [manuscriptId], references: [id])
+  version        Int        @default(1)
+  weightGrams    Int?       @map("weight_grams")
+  summary        String?
+  authorBio      String?    @map("author_bio")
+  publicTarget   String?    @map("public_target")
+  ageRange       String?    @map("age_range")
+  themaCodes     String[]   @default([]) @map("thema_codes")
+  priceByCountry Json?      @map("price_by_country")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("work_metadata")
+}
+
+enum MetadataExportFormat {
+  onix30
+  csv
+}
+
+model MetadataExport {
+  id              String               @id @default(uuid())
+  manuscriptId    String               @map("manuscript_id")
+  manuscript      Manuscript           @relation(fields: [manuscriptId], references: [id])
+  partnerId       String?              @map("partner_id")
+  partner         Partner?             @relation(fields: [partnerId], references: [id])
+  format          MetadataExportFormat
+  metadataVersion Int                  @map("metadata_version")
+  sentAt          DateTime             @default(now()) @map("sent_at")
+  needsResend     Boolean              @default(false) @map("needs_resend")
+
+  @@map("metadata_exports")
+}
+
+enum BatStatus {
+  in_control
+  corrections_requested
+  awaiting_signature
+  signed
+  cancelled
+}
+
+model BatRecord {
+  id                String           @id @default(uuid())
+  manuscriptId      String           @map("manuscript_id")
+  manuscript        Manuscript       @relation(fields: [manuscriptId], references: [id])
+  cycleNumber       Int              @map("cycle_number")
+  openedAt          DateTime         @default(now()) @map("opened_at")
+  status            BatStatus        @default(in_control)
+  interiorVersionId String?          @map("interior_version_id")
+  interiorVersion   DocumentVersion? @relation("BatInterior", fields: [interiorVersionId], references: [id])
+  coverVersionId    String?          @map("cover_version_id")
+  coverVersion      DocumentVersion? @relation("BatCover", fields: [coverVersionId], references: [id])
+  technicalSheet    Json?            @map("technical_sheet")
+  checklistId       String?          @unique @map("checklist_id")
+  checklist         Checklist?       @relation(fields: [checklistId], references: [id])
+
+  anomalies  BatAnomaly[]
+  signatures BatSignature[]
+
+  @@unique([manuscriptId, cycleNumber])
+  @@map("bat_records")
+}
+
+enum AnomalySeverity {
+  minor
+  major
+  blocking
+}
+
+model BatAnomaly {
+  id          String          @id @default(uuid())
+  batId       String          @map("bat_id")
+  bat         BatRecord       @relation(fields: [batId], references: [id])
+  description String
+  location    String?
+  severity    AnomalySeverity
+  returnedTo  String?         @map("returned_to")
+  resolvedAt  DateTime?       @map("resolved_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  @@map("bat_anomalies")
+}
+
+// La signature verrouille les versions référencées (Ch. 14 §14.5) : voir la
+// contrainte base dans la migration append-only du Lot 0, étendue ici.
+model BatSignature {
+  id             String    @id @default(uuid())
+  batId          String    @map("bat_id")
+  bat            BatRecord @relation(fields: [batId], references: [id])
+  signerId       String    @map("signer_id")
+  signer         User      @relation(fields: [signerId], references: [id])
+  signedAt       DateTime  @default(now()) @map("signed_at")
+  filesHash      String    @map("files_hash")
+  authorApproval Boolean   @default(false) @map("author_approval")
+
+  @@map("bat_signatures")
+}
+
+// Fiche imprimeur (Ch. 15 §15.2) — les coordonnées et le contact passent par
+// la fiche Partenaire unique (catégorie "imprimeur") ; ce modèle ne porte que
+// les données propres à l'activité d'impression.
+model Printer {
+  id           String   @id @default(uuid())
+  partnerId    String   @unique @map("partner_id")
+  partner      Partner  @relation(fields: [partnerId], references: [id])
+  specialties  String[] @default([])
+  paymentTerms String?  @map("payment_terms")
+
+  quotes         PrintQuote[]
+  purchaseOrders PurchaseOrder[]
+
+  @@map("printers")
+}
+
+enum PrintQuoteStatus {
+  requested
+  received
+  selected
+  declined
+}
+
+model PrintQuote {
+  id               String           @id @default(uuid())
+  manuscriptId     String           @map("manuscript_id")
+  manuscript       Manuscript       @relation(fields: [manuscriptId], references: [id])
+  printerId        String           @map("printer_id")
+  printer          Printer          @relation(fields: [printerId], references: [id])
+  quantities       Json // [500, 1000, 2000]
+  amounts          Json? // { "500": 120000, "1000": 200000 }
+  leadTimeDays     Int?             @map("lead_time_days")
+  validUntil       DateTime?        @map("valid_until")
+  status           PrintQuoteStatus @default(requested)
+  selectionMotive  String?          @map("selection_motive")
+  selectedQuantity Int?             @map("selected_quantity")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  purchaseOrder PurchaseOrder?
+
+  @@map("print_quotes")
+}
+
+enum PurchaseOrderStatus {
+  draft
+  approved
+  sent
+  in_production
+  completed
+  cancelled
+}
+
+model PurchaseOrder {
+  id                   String              @id @default(uuid())
+  quoteId              String              @unique @map("quote_id")
+  quote                PrintQuote          @relation(fields: [quoteId], references: [id])
+  printerId            String              @map("printer_id")
+  printer              Printer             @relation(fields: [printerId], references: [id])
+  poNumber             String              @unique @map("po_number")
+  orderedQuantity      Int                 @map("ordered_quantity")
+  amount               Decimal             @db.Decimal(12, 2)
+  currency             String              @default("XOF")
+  deliveryDue          DateTime?           @map("delivery_due")
+  deliveryLocationId   String?             @map("delivery_location_id")
+  deliveryLocation     StockLocation?      @relation(fields: [deliveryLocationId], references: [id])
+  quantityTolerancePct Decimal?            @map("quantity_tolerance_pct") @db.Decimal(5, 2)
+  status               PurchaseOrderStatus @default(draft)
+  approvedBy           String?             @map("approved_by")
+  filesHashReference   String?             @map("files_hash_reference")
+  reprintNumber        Int                 @default(0) @map("reprint_number")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  milestones    ProductionMilestone[]
+  goodsReceipts GoodsReceipt[]
+
+  @@map("purchase_orders")
+}
+
+// Même mécanisme atomique que contract_number_counters (Ch. 9 §9.2), pour
+// les numéros de bon de commande (Ch. 15 §15.4).
+model PoNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("po_number_counters")
+}
+
+// Même mécanisme atomique, pour les numéros de commande (Ch. 17 §17.5) et
+// de bon de livraison (Ch. 17 §17.8).
+model SalesOrderNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("sales_order_number_counters")
+}
+
+model DeliveryNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("delivery_number_counters")
+}
+
+// Numérotation chronologique continue et infalsifiable (Ch. 18 §18.2,
+// exigence légale) — même mécanisme atomique que les autres séquences.
+model InvoiceNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("invoice_number_counters")
+}
+
+enum ProductionMilestoneType {
+  files_received
+  setup
+  printing
+  finishing
+  shipped
+  delivered
+}
+
+model ProductionMilestone {
+  id        String                  @id @default(uuid())
+  poId      String                  @map("po_id")
+  po        PurchaseOrder           @relation(fields: [poId], references: [id])
+  milestone ProductionMilestoneType
+  plannedAt DateTime?               @map("planned_at")
+  actualAt  DateTime?               @map("actual_at")
+
+  @@unique([poId, milestone])
+  @@map("production_milestones")
+}
+
+enum QcVerdict {
+  conform
+  with_reserves
+  non_conform
+}
+
+model GoodsReceipt {
+  id               String        @id @default(uuid())
+  poId             String        @map("po_id")
+  po               PurchaseOrder @relation(fields: [poId], references: [id])
+  receivedAt       DateTime      @default(now()) @map("received_at")
+  quantityReceived Int           @map("quantity_received")
+  variance         Int           @default(0)
+  qcVerdict        QcVerdict?    @map("qc_verdict")
+
+  claims SupplierClaim[]
+
+  @@map("goods_receipts")
+}
+
+model SupplierClaim {
+  id          String       @id @default(uuid())
+  receiptId   String       @map("receipt_id")
+  receipt     GoodsReceipt @relation(fields: [receiptId], references: [id])
+  description String
+  resolution  String?
+  resolvedAt  DateTime?    @map("resolved_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  @@map("supplier_claims")
+}
+
+// ============================================================
+// Lot 4 — Stock et magasin (Ch. 16)
+// ============================================================
+
+// Principe cardinal (Ch. 16 §16.1) : le stock affiché doit toujours refléter
+// la réalité physique. Lieux hiérarchiques (zone > allée > étagère, §16.2) ;
+// un lieu de type depot_vente est rattaché à un client (Ch. 17).
+enum StockLocationType {
+  entrepot
+  depot
+  depot_vente
+  emplacement
+}
+
+model StockLocation {
+  id         String            @id @default(uuid())
+  type       StockLocationType
+  label      String
+  parentId   String?           @map("parent_id")
+  parent     StockLocation?    @relation("StockLocationHierarchy", fields: [parentId], references: [id])
+  children   StockLocation[]   @relation("StockLocationHierarchy")
+  customerId String?           @map("customer_id")
+  customer   Customer?         @relation(fields: [customerId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  stockItems       StockItem[]
+  movementsFrom    StockMovement[] @relation("MovementFrom")
+  movementsTo      StockMovement[] @relation("MovementTo")
+  inventories      Inventory[]
+  purchaseOrders   PurchaseOrder[]
+  consignmentsHere Consignment[]
+
+  @@map("stock_locations")
+}
+
+// Stock par (isbn, lieu, tirage) — disponible = physique - réservé, calculé
+// à la lecture (Ch. 16 §16.5), jamais stocké pour éviter toute divergence.
+// Ch. 16 §16.7 : un retour contrôlé se répartit en "remis en stock vendable
+// / déclassé (défraîchi) / pilon" — declasse est un compartiment de stock à
+// part entière (candidat aux opérations commerciales, §16.10), distinct du
+// stock vendable normal, pas seulement une mention sur la ligne de retour.
+enum StockItemCondition {
+  vendable
+  declasse
+}
+
+model StockItem {
+  id                  String             @id @default(uuid())
+  isbnId              String             @map("isbn_id")
+  isbn                Isbn               @relation(fields: [isbnId], references: [id])
+  locationId          String             @map("location_id")
+  location            StockLocation      @relation(fields: [locationId], references: [id])
+  printRun            Int                @map("print_run")
+  condition           StockItemCondition @default(vendable)
+  quantityPhysical    Int                @default(0) @map("quantity_physical")
+  quantityReserved    Int                @default(0) @map("quantity_reserved")
+  unitCost            Decimal?           @map("unit_cost") @db.Decimal(10, 2)
+  alertThreshold      Int?               @map("alert_threshold")
+  outOfStockThreshold Int                @default(0) @map("out_of_stock_threshold")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([isbnId, locationId, printRun, condition])
+  @@map("stock_items")
+}
+
+// Table pivot : une ligne par mouvement, aucune modification a posteriori
+// (Ch. 16 §16.4 : "aucun mouvement sans type, motif et responsable" — le
+// stock courant est la somme des mouvements, vérifiable à tout instant).
+enum StockMovementType {
+  production_in
+  sale_out
+  consignment_out
+  consignment_return
+  customer_return
+  transfer
+  press_copy
+  author_copy
+  pulping
+  inventory_adjustment
+}
+
+enum StockMovementStatus {
+  pending
+  in_transit
+  completed
+}
+
+model StockMovement {
+  id             String              @id @default(uuid())
+  type           StockMovementType
+  isbnId         String              @map("isbn_id")
+  isbn           Isbn                @relation(fields: [isbnId], references: [id])
+  printRun       Int                 @map("print_run")
+  fromLocationId String?             @map("from_location_id")
+  fromLocation   StockLocation?      @relation("MovementFrom", fields: [fromLocationId], references: [id])
+  toLocationId   String?             @map("to_location_id")
+  toLocation     StockLocation?      @relation("MovementTo", fields: [toLocationId], references: [id])
+  quantity       Int
+  reason         String?
+  // Référence polymorphe (Ch. 16 §16.4) : goods_receipt, sales_order,
+  // consignment_statement, customer_return, inventory_line...
+  referenceType  String?             @map("reference_type")
+  referenceId    String?             @map("reference_id")
+  status         StockMovementStatus @default(completed)
+  movedBy        String?             @map("moved_by")
+  movedAt        DateTime            @default(now()) @map("moved_at")
+
+  inventoryAdjustmentFor InventoryLine?
+
+  @@map("stock_movements")
+}
+
+enum InventoryType {
+  full
+  rotating
+}
+
+enum InventoryStatus {
+  open
+  closed
+}
+
+// Ch. 16 §16.8 : campagne d'inventaire (complet ou tournant), comptage à
+// l'aveugle (quantités théoriques masquées jusqu'à validation).
+model Inventory {
+  id         String          @id @default(uuid())
+  type       InventoryType
+  locationId String?         @map("location_id")
+  location   StockLocation?  @relation(fields: [locationId], references: [id])
+  blind      Boolean         @default(true)
+  status     InventoryStatus @default(open)
+  openedAt   DateTime        @default(now()) @map("opened_at")
+  closedAt   DateTime?       @map("closed_at")
+  openedBy   String?         @map("opened_by")
+
+  lines InventoryLine[]
+
+  @@map("inventories")
+}
+
+model InventoryLine {
+  id                   String         @id @default(uuid())
+  inventoryId          String         @map("inventory_id")
+  inventory            Inventory      @relation(fields: [inventoryId], references: [id])
+  isbnId               String         @map("isbn_id")
+  isbn                 Isbn           @relation(fields: [isbnId], references: [id])
+  theoreticalQty       Int            @map("theoretical_qty")
+  countedQty           Int?           @map("counted_qty")
+  variance             Int?
+  recountRequired      Boolean        @default(false) @map("recount_required")
+  adjustmentMovementId String?        @unique @map("adjustment_movement_id")
+  adjustmentMovement   StockMovement? @relation(fields: [adjustmentMovementId], references: [id])
+
+  @@map("inventory_lines")
+}
+
+// ============================================================
+// Lot 4 — Commercial, distribution et ventes (Ch. 17)
+// ============================================================
+
+enum CustomerCategory {
+  librairie
+  distributeur
+  institution
+  particulier
+  plateforme
+}
+
+enum RelationMode {
+  ferme
+  depot_vente
+}
+
+// Frais de port (Ch. 17 §17.5, ajouté hors cahier des charges initial — cf.
+// docs/JOURNAL_TECHNIQUE.md, demande opérateur du 04/07/2026) : zones du
+// marché principal (Cameroun) plus international, paramétrables sans
+// redéploiement.
+enum ShippingZone {
+  yaounde
+  douala
+  autres_villes_cameroun
+  international
+}
+
+// Un mode de tarification par zone : gratuité au-delà d'un seuil de commande
+// prioritaire si atteinte, sinon tarif au kilogramme si renseigné, sinon
+// forfait. Les trois valeurs sont indépendantes et modifiables par le
+// financier via l'écran Finance, sans redéploiement (comme tax_rates).
+model ShippingRate {
+  id               String       @id @default(uuid())
+  zone             ShippingZone @unique
+  flatAmount       Decimal?     @map("flat_amount") @db.Decimal(10, 2)
+  perKgAmount      Decimal?     @map("per_kg_amount") @db.Decimal(10, 2)
+  freeAboveAmount  Decimal?     @map("free_above_amount") @db.Decimal(10, 2)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("shipping_rates")
+}
+
+// Ch. 17 §17.3 : fichier clients structuré par catégorie, avec conditions
+// commerciales (remise, plafond d'encours) et mode de relation.
+model Customer {
+  id           String           @id @default(uuid())
+  category     CustomerCategory
+  name         String
+  contactName  String?          @map("contact_name")
+  email        String?
+  phone        String?
+  address      String?
+  relationMode RelationMode     @default(ferme) @map("relation_mode")
+  paymentTerms String?          @map("payment_terms")
+  creditLimit  Decimal?         @map("credit_limit") @db.Decimal(12, 2)
+  taxId        String?          @map("tax_id")
+  shippingZone ShippingZone?    @map("shipping_zone")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  discounts       CustomerDiscount[]
+  salesOrders     SalesOrder[]
+  consignments    Consignment[]
+  customerReturns CustomerReturn[]
+  stockLocations  StockLocation[]
+  invoices        Invoice[]
+  dunnings        Dunning[]
+
+  @@map("customers")
+}
+
+// Grille par catégorie (Ch. 17 §17.4) — valeur de départ paramétrable.
+model DiscountGrid {
+  id          String           @id @default(uuid())
+  category    CustomerCategory @unique
+  discountPct Decimal          @map("discount_pct") @db.Decimal(5, 2)
+
+  @@map("discount_grids")
+}
+
+// Remise spécifique négociée ou promotionnelle bornée dans le temps ; toute
+// remise hors grille exige une validation tracée (§17.4).
+model CustomerDiscount {
+  id          String    @id @default(uuid())
+  customerId  String    @map("customer_id")
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  discountPct Decimal   @map("discount_pct") @db.Decimal(5, 2)
+  label       String?
+  validFrom   DateTime? @map("valid_from")
+  validUntil  DateTime? @map("valid_until")
+  approvedBy  String?   @map("approved_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("customer_discounts")
+}
+
+// Historisation native des prix par pays/devise (Ch. 17 §17.2).
+model PriceList {
+  id            String   @id @default(uuid())
+  isbnId        String   @map("isbn_id")
+  isbn          Isbn     @relation(fields: [isbnId], references: [id])
+  country       String
+  currency      String
+  price         Decimal  @db.Decimal(10, 2)
+  effectiveFrom DateTime @map("effective_from")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@map("price_list")
+}
+
+enum SalesChannel {
+  representant
+  telephone
+  salon
+  en_ligne
+  comptoir
+}
+
+enum SalesOrderStatus {
+  draft
+  blocked_credit
+  confirmed
+  preparing
+  shipped
+  delivered
+  invoiced
+  cancelled
+}
+
+// Ch. 17 §17.5 : la confirmation crée la réservation de stock ; le contrôle
+// d'encours bloque la commande si le plafond est dépassé ou le client en retard.
+model SalesOrder {
+  id          String           @id @default(uuid())
+  customerId  String           @map("customer_id")
+  customer    Customer         @relation(fields: [customerId], references: [id])
+  orderNumber String           @unique @map("order_number")
+  channel     SalesChannel
+  status      SalesOrderStatus @default(draft)
+  blockReason String?          @map("block_reason")
+  approvedBy  String?          @map("approved_by")
+  // Frais de port (calculés à la commande depuis la zone du client et le poids
+  // total, cf. lib/shipping.ts) ; facturés une seule fois, sur la première
+  // livraison de la commande (shippingFeeInvoiced évite un double comptage
+  // en cas de livraisons partielles multiples).
+  shippingFee         Decimal @default(0) @map("shipping_fee") @db.Decimal(10, 2)
+  shippingFeeInvoiced Boolean @default(false) @map("shipping_fee_invoiced")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  lines      SalesOrderLine[]
+  deliveries Delivery[]
+
+  @@map("sales_orders")
+}
+
+model SalesOrderLine {
+  id          String     @id @default(uuid())
+  orderId     String     @map("order_id")
+  order       SalesOrder @relation(fields: [orderId], references: [id])
+  isbnId      String     @map("isbn_id")
+  isbn        Isbn       @relation(fields: [isbnId], references: [id])
+  quantity    Int
+  unitPrice   Decimal    @map("unit_price") @db.Decimal(10, 2)
+  discountPct Decimal    @default(0) @map("discount_pct") @db.Decimal(5, 2)
+  taxRate     Decimal    @default(0) @map("tax_rate") @db.Decimal(5, 2)
+
+  @@map("sales_order_lines")
+}
+
+// Ch. 17 §17.8 : rapprochée des mouvements de stock (Ch. 16 §16.6) ; reliquats
+// gérés par livraisons multiples sur une même commande.
+model Delivery {
+  id             String     @id @default(uuid())
+  orderId        String     @map("order_id")
+  order          SalesOrder @relation(fields: [orderId], references: [id])
+  deliveryNumber String     @unique @map("delivery_number")
+  carrier        String?
+  shippedAt      DateTime?  @map("shipped_at")
+  deliveredAt    DateTime?  @map("delivered_at")
+  trackingNumber String?    @map("tracking_number")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lines           DeliveryLine[]
+  customerReturns CustomerReturn[]
+
+  @@map("deliveries")
+}
+
+model DeliveryLine {
+  id         String   @id @default(uuid())
+  deliveryId String   @map("delivery_id")
+  delivery   Delivery @relation(fields: [deliveryId], references: [id])
+  isbnId     String   @map("isbn_id")
+  isbn       Isbn     @relation(fields: [isbnId], references: [id])
+  quantity   Int
+
+  @@map("delivery_lines")
+}
+
+enum ConsignmentStatus {
+  active
+  closed
+}
+
+// Ch. 17 §17.6 : les exemplaires déposés restent la propriété d'Éclosion
+// Édition (stock "en dépôt-vente", Ch. 16 §16.5) ; seules les ventes
+// relevées sont facturées et génèrent des droits d'auteur.
+model Consignment {
+  id                String            @id @default(uuid())
+  customerId        String            @map("customer_id")
+  customer          Customer          @relation(fields: [customerId], references: [id])
+  locationId        String?           @map("location_id")
+  location          StockLocation?    @relation(fields: [locationId], references: [id])
+  isbnId            String            @map("isbn_id")
+  isbn              Isbn              @relation(fields: [isbnId], references: [id])
+  quantityDeposited Int               @map("quantity_deposited")
+  status            ConsignmentStatus @default(active)
+  depositedAt       DateTime          @default(now()) @map("deposited_at")
+
+  statements ConsignmentStatement[]
+
+  @@map("consignments")
+}
+
+model ConsignmentStatement {
+  id            String      @id @default(uuid())
+  consignmentId String      @map("consignment_id")
+  consignment   Consignment @relation(fields: [consignmentId], references: [id])
+  periodStart   DateTime    @map("period_start")
+  periodEnd     DateTime    @map("period_end")
+  quantitySold  Int         @map("quantity_sold")
+  receivedAt    DateTime?   @map("received_at")
+  validatedAt   DateTime?   @map("validated_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("consignment_statements")
+}
+
+enum PosPaymentMethod {
+  cash
+  card
+  mobile_money
+}
+
+// Ch. 17 §17.7 : vente au comptoir et sur salons — chaque encaissement est
+// transmis au module Finance (Lot 5, non encore implémenté).
+model PosSale {
+  id            String           @id @default(uuid())
+  isbnId        String           @map("isbn_id")
+  isbn          Isbn             @relation(fields: [isbnId], references: [id])
+  quantity      Int
+  unitPrice     Decimal          @map("unit_price") @db.Decimal(10, 2)
+  paymentMethod PosPaymentMethod @map("payment_method")
+  eventLabel    String?          @map("event_label")
+  soldBy        String?          @map("sold_by")
+  soldAt        DateTime         @default(now()) @map("sold_at")
+
+  @@map("pos_sales")
+}
+
+enum ReturnLineVerdict {
+  resaleable
+  damaged
+  pulp
+}
+
+// Ch. 17 §17.9 : autorisation, réception, verdict exemplaire par exemplaire ;
+// génère l'avoir et le recalcul des droits d'auteur (Lot 5, non encore implémenté).
+model CustomerReturn {
+  id               String    @id @default(uuid())
+  customerId       String    @map("customer_id")
+  customer         Customer  @relation(fields: [customerId], references: [id])
+  originDeliveryId String?   @map("origin_delivery_id")
+  originDelivery   Delivery? @relation(fields: [originDeliveryId], references: [id])
+  authorizedAt     DateTime? @map("authorized_at")
+  receivedAt       DateTime? @map("received_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lines ReturnLine[]
+
+  @@map("customer_returns")
+}
+
+model ReturnLine {
+  id       String             @id @default(uuid())
+  returnId String             @map("return_id")
+  return   CustomerReturn     @relation(fields: [returnId], references: [id])
+  isbnId   String             @map("isbn_id")
+  isbn     Isbn               @relation(fields: [isbnId], references: [id])
+  quantity Int
+  verdict  ReturnLineVerdict?
+
+  @@map("return_lines")
+}
+
+// ============================================================
+// Lot 5 — Droits d'auteur, exécution financière (Ch. 9 §9.5, Ch. 18 §18.7)
+// ============================================================
+
+// Une ligne par mouvement générateur (Ch. 9 §9.5) : tout est recalculable et
+// traçable ligne à ligne, y compris les retours (montant négatif, Ch. 16 §16.7).
+model RoyaltyEntry {
+  id             String            @id @default(uuid())
+  contractId     String            @map("contract_id")
+  contract       Contract          @relation(fields: [contractId], references: [id])
+  sourceType     String            @map("source_type") // sales_order_line | return_line | consignment_statement | pos_sale
+  sourceId       String            @map("source_id")
+  quantity       Int
+  unitBaseAmount Decimal           @map("unit_base_amount") @db.Decimal(10, 2)
+  rateApplied    Decimal           @map("rate_applied") @db.Decimal(5, 4)
+  amount         Decimal           @db.Decimal(12, 2) // positif ou négatif (retour)
+  computedAt     DateTime          @default(now()) @map("computed_at")
+  statementId    String?           @map("statement_id")
+  statement      RoyaltyStatement? @relation(fields: [statementId], references: [id])
+
+  @@map("royalty_entries")
+}
+
+enum RoyaltyStatementStatus {
+  draft
+  issued
+  paid
+}
+
+model RoyaltyStatement {
+  id              String                 @id @default(uuid())
+  contractId      String                 @map("contract_id")
+  contract        Contract               @relation(fields: [contractId], references: [id])
+  periodStart     DateTime               @map("period_start")
+  periodEnd       DateTime               @map("period_end")
+  totalEarned     Decimal                @map("total_earned") @db.Decimal(12, 2)
+  advanceRecouped Decimal                @default(0) @map("advance_recouped") @db.Decimal(12, 2)
+  balanceDue      Decimal                @map("balance_due") @db.Decimal(12, 2)
+  status          RoyaltyStatementStatus @default(draft)
+  documentId      String?                @map("document_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  entries  RoyaltyEntry[]
+  payments RoyaltyPayment[]
+
+  @@map("royalty_statements")
+}
+
+// partnerId : bénéficiaire réellement payé par cette ligne (revue opérateur
+// du 04/07/2026, répartition multi-bénéficiaires) — le contrat peut avoir
+// plusieurs royalty_payments pour un même relevé, un par bénéficiaire et par
+// paiement partiel.
+model RoyaltyPayment {
+  id          String           @id @default(uuid())
+  statementId String           @map("statement_id")
+  statement   RoyaltyStatement @relation(fields: [statementId], references: [id])
+  partnerId   String?          @map("partner_id")
+  partner     Partner?         @relation(fields: [partnerId], references: [id])
+  paidAt      DateTime         @default(now()) @map("paid_at")
+  amount      Decimal          @db.Decimal(12, 2)
+  taxWithheld Decimal          @default(0) @map("tax_withheld") @db.Decimal(12, 2)
+  paymentId   String?          @unique @map("payment_id")
+  payment     Payment?         @relation(fields: [paymentId], references: [id])
+
+  @@map("royalty_payments")
+}
+
+// ============================================================
+// Lot 5 — Finance et comptabilité (Ch. 18) — Option B (décision opérateur
+// du 04/07/2026) : gestion financière opérationnelle + exports normalisés,
+// pas de comptabilité générale intégrée (pas de plan comptable/grand livre).
+// ============================================================
+
+enum InvoiceType {
+  invoice
+  credit_note
+}
+
+enum InvoiceStatus {
+  issued
+  paid
+  cancelled
+}
+
+// Jamais modifiée après émission (Ch. 18 §18.2) : une correction est un
+// avoir (credit_note, parent_invoice_id) suivi d'une nouvelle facture.
+model Invoice {
+  id              String        @id @default(uuid())
+  invoiceNumber   String        @unique @map("invoice_number")
+  type            InvoiceType   @default(invoice)
+  parentInvoiceId String?       @map("parent_invoice_id")
+  parentInvoice   Invoice?      @relation("InvoiceCreditNotes", fields: [parentInvoiceId], references: [id])
+  creditNotes     Invoice[]     @relation("InvoiceCreditNotes")
+  customerId      String        @map("customer_id")
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  sourceType      String        @map("source_type") // delivery | consignment_statement | pos_sale
+  sourceId        String        @map("source_id")
+  totalHt         Decimal       @map("total_ht") @db.Decimal(12, 2)
+  totalTax        Decimal       @map("total_tax") @db.Decimal(12, 2)
+  totalTtc        Decimal       @map("total_ttc") @db.Decimal(12, 2)
+  currency        String        @default("XOF")
+  dueDate         DateTime?     @map("due_date")
+  status          InvoiceStatus @default(issued)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  lines              InvoiceLine[]
+  paymentAllocations PaymentAllocation[]
+
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id          String  @id @default(uuid())
+  invoiceId   String  @map("invoice_id")
+  invoice     Invoice @relation(fields: [invoiceId], references: [id])
+  isbnId      String? @map("isbn_id")
+  isbn        Isbn?   @relation(fields: [isbnId], references: [id])
+  description String
+  quantity    Int
+  unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
+  taxRate     Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  lineTotal   Decimal @map("line_total") @db.Decimal(12, 2)
+
+  @@map("invoice_lines")
+}
+
+enum PaymentDirection {
+  in
+  out
+}
+
+// "card" ajouté par rapport à la liste du Ch. 18 §18.3 (virement/chèque/
+// espèces/mobile money) pour couvrir la vente directe par carte (Ch. 17 §17.7).
+enum PaymentMethod {
+  transfer
+  cheque
+  cash
+  card
+  mobile_money
+}
+
+model Payment {
+  id            String           @id @default(uuid())
+  direction     PaymentDirection
+  method        PaymentMethod
+  amount        Decimal          @db.Decimal(12, 2)
+  receivedAt    DateTime         @default(now()) @map("received_at")
+  bankAccountId String?          @map("bank_account_id")
+  bankAccount   BankAccount?     @relation(fields: [bankAccountId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  allocations    PaymentAllocation[]
+  royaltyPayment RoyaltyPayment?
+
+  @@map("payments")
+}
+
+// Lettrage paiement ↔ facture (Ch. 18 §18.3) : total, partiel ou acompte.
+model PaymentAllocation {
+  id        String  @id @default(uuid())
+  paymentId String  @map("payment_id")
+  payment   Payment @relation(fields: [paymentId], references: [id])
+  invoiceId String  @map("invoice_id")
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+  amount    Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("payment_allocations")
+}
+
+enum ExpenseCategory {
+  loyer
+  salaire
+  prestation
+  transport
+  communication
+  autre
+}
+
+// en_attente_dg : dépense au-delà du seuil de délégation (Ch. 18 §18.11),
+// validée une première fois (finance:administration) mais dont la validation
+// finale est réservée au rôle Direction générale — simplification documentée
+// d'un circuit "demandeur → responsable hiérarchique → DAF → DG" complet :
+// aucun organigramme RH n'existe avant le Lot 6, donc pas de "responsable
+// hiérarchique" personnel identifiable ; le circuit retenu a deux paliers
+// (validation courante, puis DG au-delà du seuil).
+enum ExpenseStatus {
+  a_valider
+  en_attente_dg
+  validee
+  payee
+  rejetee
+}
+
+// Dépenses hors commandes d'impression (celles-ci sont déjà engagées via
+// purchase_orders, Ch. 15 §15.4) — circuit de validation par seuils.
+model Expense {
+  id                String          @id @default(uuid())
+  category          ExpenseCategory
+  amount            Decimal         @db.Decimal(12, 2)
+  status            ExpenseStatus   @default(a_valider)
+  supplier          String?
+  manuscriptId      String?         @map("manuscript_id")
+  manuscript        Manuscript?     @relation(fields: [manuscriptId], references: [id])
+  description       String?
+  approvedBy        String?         @map("approved_by")
+  financeValidatedBy String?        @map("finance_validated_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  costEntries CostEntry[]
+
+  @@map("expenses")
+}
+
+enum CostType {
+  advance
+  royalties
+  editorial_services
+  manufacturing
+  promotion
+  overhead_allocation
+}
+
+// Comptabilité analytique par ouvrage (Ch. 18 §18.5) : chaque ouvrage est un
+// centre de coûts et de recettes. Marge/point d'équilibre = vues calculées
+// croisant cost_entries et ventes nettes, pas des colonnes stockées.
+model CostEntry {
+  id           String     @id @default(uuid())
+  manuscriptId String     @map("manuscript_id")
+  manuscript   Manuscript @relation(fields: [manuscriptId], references: [id])
+  costType     CostType   @map("cost_type")
+  sourceType   String     @map("source_type") // purchase_order | expense | royalty_statement
+  sourceId     String     @map("source_id")
+  amount       Decimal    @db.Decimal(12, 2)
+  committed    Boolean    @default(true) // engagé (true) vs réalisé (false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  expenseId String?  @map("expense_id")
+  expense   Expense? @relation(fields: [expenseId], references: [id])
+
+  @@map("cost_entries")
+}
+
+// Budget prévisionnel par ouvrage ou par département (Ch. 18 §18.6).
+model Budget {
+  id           String      @id @default(uuid())
+  manuscriptId String?     @map("manuscript_id")
+  manuscript   Manuscript? @relation(fields: [manuscriptId], references: [id])
+  departmentId String?     @map("department_id")
+  department   Department? @relation(fields: [departmentId], references: [id])
+  label        String
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  lines BudgetLine[]
+
+  @@map("budgets")
+}
+
+model BudgetLine {
+  id             String   @id @default(uuid())
+  budgetId       String   @map("budget_id")
+  budget         Budget   @relation(fields: [budgetId], references: [id])
+  costType       CostType @map("cost_type")
+  plannedAmount  Decimal  @map("planned_amount") @db.Decimal(12, 2)
+  revisedAmount  Decimal? @map("revised_amount") @db.Decimal(12, 2)
+  revisionReason String?  @map("revision_reason")
+
+  @@map("budget_lines")
+}
+
+// "caisse" ajouté par rapport à la seule distinction banque/mobile money du
+// Lot 5 initial : une maison d'édition tient aussi une caisse espèces
+// (comptoir, salons) distincte des comptes bancaires (Ch. 18 §18.8).
+enum BankAccountType {
+  banque
+  caisse
+  mobile_money
+}
+
+model BankAccount {
+  id       String          @id @default(uuid())
+  label    String
+  type     BankAccountType @default(banque)
+  currency String          @default("XOF")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  payments        Payment[]
+  statements      BankStatement[]
+  transfersOut    AccountTransfer[] @relation("TransferFrom")
+  transfersIn     AccountTransfer[] @relation("TransferTo")
+
+  @@map("bank_accounts")
+}
+
+// Virement interne entre deux comptes/caisses propres à la maison — ne
+// modifie pas la position de trésorerie globale (Ch. 18 §18.8), seulement la
+// répartition entre comptes.
+model AccountTransfer {
+  id             String      @id @default(uuid())
+  fromAccountId  String      @map("from_account_id")
+  fromAccount    BankAccount @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccountId    String      @map("to_account_id")
+  toAccount      BankAccount @relation("TransferTo", fields: [toAccountId], references: [id])
+  amount         Decimal     @db.Decimal(12, 2)
+  reason         String?
+  transferredAt  DateTime    @default(now()) @map("transferred_at")
+  createdBy      String?     @map("created_by")
+
+  @@map("account_transfers")
+}
+
+model BankStatement {
+  id            String      @id @default(uuid())
+  bankAccountId String      @map("bank_account_id")
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  periodStart   DateTime    @map("period_start")
+  periodEnd     DateTime    @map("period_end")
+  importedAt    DateTime    @default(now()) @map("imported_at")
+
+  lines StatementLine[]
+
+  @@map("bank_statements")
+}
+
+model StatementLine {
+  id               String        @id @default(uuid())
+  statementId      String        @map("statement_id")
+  statement        BankStatement @relation(fields: [statementId], references: [id])
+  transactionDate  DateTime      @map("transaction_date")
+  label            String
+  amount           Decimal       @db.Decimal(12, 2)
+  matchedPaymentId String?       @unique @map("matched_payment_id")
+  reconciledAt     DateTime?     @map("reconciled_at")
+
+  @@map("statement_lines")
+}
+
+// Taxes par pays et type de produit (Ch. 18 §18.9) — le livre bénéficie
+// souvent d'un taux réduit ou d'une exonération selon les pays.
+model TaxRate {
+  id          String  @id @default(uuid())
+  country     String
+  productType String  @map("product_type")
+  rate        Decimal @db.Decimal(5, 2)
+
+  @@unique([country, productType])
+  @@map("tax_rates")
+}
+
+enum AccountingPeriodStatus {
+  open
+  closed
+}
+
+// Une période clôturée n'accepte plus d'écriture (Ch. 18 §18.11) ; correction
+// = écriture sur période ouverte, tracée.
+model AccountingPeriod {
+  id        String                 @id @default(uuid())
+  periodKey String                 @unique @map("period_key") // ex. "2026-07"
+  status    AccountingPeriodStatus @default(open)
+  closedAt  DateTime?              @map("closed_at")
+  closedBy  String?                @map("closed_by")
+
+  @@map("accounting_periods")
+}
+
+enum DunningLevel {
+  rappel
+  mise_en_demeure
+}
+
+// Relance graduée (Ch. 18 §18.3) : rappel courtois puis mise en demeure,
+// tracée au dossier client — l'encours est figé au moment de l'envoi.
+model Dunning {
+  id                String       @id @default(uuid())
+  customerId        String       @map("customer_id")
+  customer          Customer     @relation(fields: [customerId], references: [id])
+  level             DunningLevel
+  outstandingAmount Decimal      @map("outstanding_amount") @db.Decimal(12, 2)
+  sentAt            DateTime     @default(now()) @map("sent_at")
+  createdBy         String?      @map("created_by")
+
+  @@map("dunnings")
+}
+
+enum AccountingExportFormat {
+  csv
+}
+
+// Export normalisé vers un logiciel/cabinet comptable externe (Option B,
+// décision opérateur du 04/07/2026, Ch. 18 §18.10) — contrôle d'exhaustivité :
+// toute opération de la période se retrouve dans l'export, une seule fois.
+model AccountingExport {
+  id        String                 @id @default(uuid())
+  periodKey String                 @map("period_key")
+  format    AccountingExportFormat @default(csv)
+  lineCount Int                    @map("line_count")
+  checksum  String
+  filePath  String?                @map("file_path")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@map("accounting_exports")
+}
+
+// ============================================================
+// Lot 6 — Direction générale, pilotage intelligent et rapports
+// (Ch. 5, Ch. 20). Module transverse : lit les données des autres modules,
+// n'écrit que ses propres artefacts (recommandations, exécutions de rapport,
+// analyses enregistrées).
+// ============================================================
+
+enum RecommendationPriority {
+  faible
+  moyenne
+  elevee
+  critique
+}
+
+enum RecommendationStatus {
+  open
+  treated
+  ignored
+  postponed
+}
+
+// Règle configurable du centre de pilotage intelligent (Ch. 5 §5.9, Ch. 20
+// §20.6) : seuils de blocage, écart budgétaire, vitesse d'écoulement des
+// stocks... Pas de tâche planifiée dans le projet — les règles sont évaluées
+// à la demande (POST /recommendations/generate), pas en tâche de fond.
+model SmartRule {
+  id          String                 @id @default(uuid())
+  code        String                 @unique
+  label       String
+  description String?
+  params      Json
+  priority    RecommendationPriority @default(moyenne)
+  isActive    Boolean                @default(true) @map("is_active")
+
+  recommendations Recommendation[]
+
+  @@map("smart_rules")
+}
+
+// Instance générée par une règle. Historique conservé (pas de suppression)
+// pour évaluer a posteriori la pertinence des règles (§5.9).
+model Recommendation {
+  id              String                 @id @default(uuid())
+  ruleId          String                 @map("rule_id")
+  rule            SmartRule              @relation(fields: [ruleId], references: [id])
+  entityType      String                 @map("entity_type")
+  entityId        String                 @map("entity_id")
+  message         String
+  priority        RecommendationPriority
+  status          RecommendationStatus   @default(open)
+  treatedBy       String?                @map("treated_by")
+  treatedAt       DateTime?              @map("treated_at")
+  decisionComment String?                @map("decision_comment")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("recommendations")
+}
+
+// Dictionnaire des indicateurs (Ch. 20 §20.2) : une définition et une formule
+// documentées par indicateur diffusé — une seule source de vérité.
+model KpiDefinition {
+  id         String @id @default(uuid())
+  code       String @unique
+  label      String
+  definition String
+  formula    String
+  version    Int    @default(1)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("kpi_definitions")
+}
+
+enum ReportDomain {
+  editorial
+  production
+  commercial
+  financier
+  rh
+}
+
+// Catalogue de rapports standards (Ch. 20 §20.3). scheduleCron/recipients
+// sont des métadonnées de gouvernance (§20.7) : aucune tâche planifiée
+// n'existe dans le projet pour les exploiter automatiquement — la
+// génération reste une action volontaire (POST /reports/:id/run).
+model Report {
+  id           String       @id @default(uuid())
+  key          String       @unique
+  label        String
+  domain       ReportDomain
+  description  String?
+  ownerId      String?      @map("owner_id")
+  scheduleCron String?      @map("schedule_cron")
+  recipients   String[]     @default([])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  runs                 ReportRun[]
+  promotedFromAnalysis SavedAnalysis?
+
+  @@map("reports")
+}
+
+// Journal des générations (§20.7 : traçabilité de qui a reçu quoi, quand) —
+// génération synchrone (pas de file de tâches asynchrones dans le projet).
+model ReportRun {
+  id          String   @id @default(uuid())
+  reportId    String   @map("report_id")
+  report      Report   @relation(fields: [reportId], references: [id])
+  params      Json?
+  generatedAt DateTime @default(now()) @map("generated_at")
+  generatedBy String?  @map("generated_by")
+  rowCount    Int?     @map("row_count")
+
+  @@map("report_runs")
+}
+
+// Explorateur d'analyses (Ch. 20 §20.4) : dimensions/métriques contraintes au
+// registre KPI plutôt qu'un moteur de tableau croisé entièrement libre
+// (portée volontairement réduite, cf. docs/JOURNAL_TECHNIQUE.md).
+model SavedAnalysis {
+  id               String   @id @default(uuid())
+  label            String
+  ownerId          String   @map("owner_id")
+  definition       Json
+  sharedWith       String[] @default([]) @map("shared_with")
+  promotedReportId String?  @unique @map("promoted_report_id")
+  promotedReport   Report?  @relation(fields: [promotedReportId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("saved_analyses")
+}

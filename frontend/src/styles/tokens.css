@@ -1,0 +1,45 @@
+/* Jetons du guide de style (docs/04_Guide_de_style_UI.md §2-3).
+   Polices : fallback système uniquement au Lot 0, pour l'économie de bande
+   passante (Ch. 21 §21.6) — les polices de marque (Fraunces, Public Sans,
+   IBM Plex Mono) pourront être auto-hébergées plus tard si la maison le
+   souhaite, sans changer ces jetons. */
+:root {
+  --ink: #1e2430;
+  --chrome: #232b3e;
+  --chrome-2: #2c3650;
+  --paper: #f7f6f2;
+  --card: #ffffff;
+  --line: #e4e2da;
+  --eclosion: #b18414;
+  --eclosion-soft: #f7efda;
+  --amber: #c4661f;
+  --amber-soft: #f9e9db;
+  --alert: #c24b3a;
+  --alert-soft: #f9e9e6;
+  --muted: #6b7280;
+
+  --font-title: Georgia, serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "IBM Plex Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+
+button {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--eclosion);
+  outline-offset: 2px;
+}

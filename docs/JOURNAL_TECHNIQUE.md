@@ -5,6 +5,7 @@ Document vivant : chaque choix technique structurant y est consigné avec sa jus
 | Date | Choix | Raison |
 |---|---|---|
 | 04/07/2026 | Hébergement : **Cloud** (D-004) | Décidé par l'opérateur. Fournisseur et région précis à choisir avant la mise en production (Ch. 21 §21.7) ; en dev, tout tourne en local via Docker pour ne pas dépendre du choix final. |
+| 05/07/2026 | Fournisseur cloud : **Scalingo** (PaaS français, région Paris) (D-004-bis) | Décidé par l'opérateur après comparaison de 4 options (Scalingo, VPS Hetzner/OVH, Render, grand cloud AWS/OVHcloud avancé). Retenu pour : support/documentation en français, PostgreSQL managé (sauvegardes et mises à jour de sécurité assurées par le prestataire — pas d'équipe technique interne pour les opérer), déploiement par `git push` sans administration serveur, coût prévisible, bonne latence réseau France ↔ Cameroun. Détail dans `06_Registre_des_decisions.md`. |
 | 04/07/2026 | Backend : **Node.js + TypeScript + Fastify** | Un seul langage (TypeScript) du backend au frontend : plus simple à relire pour un chef de projet non-développeur. Fastify est léger, rapide, peu gourmand en ressources — cohérent avec l'exigence de sobriété (Ch. 21 §21.6) et un hébergement cloud à coût maîtrisé. |
 | 04/07/2026 | ORM/migrations : **Prisma** | Schéma déclaratif proche du modèle de données déjà écrit (`02_Modele_de_donnees.md`) : UUID, champs d'audit, snake_case via `@map`. Migrations versionnées, lisibles en revue. |
 | 04/07/2026 | Base de données : **PostgreSQL** | Imposé par le cahier des charges (Ch. 21 §21.3) et l'hypothèse H4 du modèle de données. |
@@ -160,4 +161,4 @@ Couche transverse du projet : contrairement aux lots précédents, ce lot ne sai
 ## Environnements
 
 - **Développement** : Docker Compose local (PostgreSQL + backend + frontend), aucune donnée réelle (Ch. 21 §21.4).
-- **Recette** et **Production** : à provisionner chez le fournisseur cloud retenu, une fois choisi ; les migrations Prisma et les seeds sont identiques d'un environnement à l'autre.
+- **Recette** et **Production** : à provisionner chez **Scalingo** (région Paris, D-004-bis), une application par environnement, PostgreSQL managé Scalingo pour chacune. Les migrations Prisma et les seeds sont identiques d'un environnement à l'autre. Reste à faire : création des comptes/applications, configuration des variables d'environnement (secrets de session, clés de hachage, connexion base de données), premier déploiement, test réel dans un navigateur par l'opérateur.

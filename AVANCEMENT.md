@@ -247,3 +247,9 @@ M. Noah Mbala a validé le Lot 6 après correction du blocage au chargement. Les
 - Explorateur d'analyses contraint au registre d'indicateurs existant, pas un moteur de tableau croisé entièrement libre.
 
 **Prochaine étape :** aucune au titre du plan de développement initial ; évolutions futures à discuter avec l'opérateur (hébergement de production, périmètre paie, points ouverts ci-dessus).
+
+### 05/07/2026 (suite) — Décision opérateur sur l'hébergement de production (D-004-bis)
+
+Quatre options comparées (PaaS francophone Scalingo, VPS économique Hetzner/OVH, PaaS anglophone Render, grand cloud AWS/OVHcloud avancé). M. Noah Mbala a choisi **Scalingo** (PaaS français, région Paris) : support en français, PostgreSQL géré (sauvegardes et mises à jour de sécurité assurées par le prestataire, sans avoir à administrer un serveur), déploiement par `git push`, coût prévisible, bonne latence réseau France ↔ Cameroun. Décision consignée dans `docs/06_Registre_des_decisions.md` (D-004-bis) et `docs/JOURNAL_TECHNIQUE.md`.
+
+**Prochaine étape :** créer le compte Scalingo, connecter le dépôt Git, provisionner une application + une base PostgreSQL managée par environnement (recette, puis production), configurer les variables d'environnement (secrets), premier déploiement, puis test réel dans un navigateur par l'opérateur lui-même — la première vérification en conditions réelles depuis le début du projet.

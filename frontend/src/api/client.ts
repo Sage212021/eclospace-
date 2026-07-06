@@ -1138,10 +1138,30 @@ export function getWorkload(filters?: { department_id?: string; person_id?: stri
 
 // Ch. 5 : Direction générale — tableau de bord, recherche, alertes.
 export interface DirectionDashboard {
-  editorial: unknown;
-  production: unknown;
-  commercial: unknown;
-  financial: unknown | null;
+  editorial: {
+    total: number;
+    by_status: { code: string; label: string; step_order: number; count: number }[];
+  };
+  production: {
+    projects_in_progress: number;
+    tasks_done: number;
+    tasks_late: number;
+    on_time_rate_pct: number | null;
+    open_tasks_by_step: number;
+  };
+  commercial: {
+    units_sold: number;
+    revenue_total: number;
+    best_sellers: { title: string; units: number; revenue: number }[];
+    stock_outs: number;
+  };
+  financial: {
+    production_cost_total: number;
+    expenses_engaged: number;
+    royalties_due: number;
+    invoices_pending: number;
+    treasury_position: number;
+  } | null;
 }
 
 export function getDirectionDashboard() {

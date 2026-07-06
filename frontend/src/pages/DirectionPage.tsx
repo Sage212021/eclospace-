@@ -95,7 +95,8 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
       )}
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Tableau de bord consolidé (Ch. 5 §5.1)</div>
+        {/* Ch. 5 §5.1 */}
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Tableau de bord consolidé</div>
         {dashboard ? (
           <pre style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 12, whiteSpace: "pre-wrap", background: "var(--bg, #f7f7f7)", padding: 10, borderRadius: 6 }}>
             {JSON.stringify(dashboard, null, 2)}
@@ -106,7 +107,8 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
       </div>
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Recherche globale (Ch. 5 §5.4)</div>
+        {/* Ch. 5 §5.4 */}
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Recherche globale</div>
         <form onSubmit={handleSearch} style={{ display: "flex", gap: 10 }}>
           <input
             type="text"
@@ -127,7 +129,8 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
       </div>
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Alertes automatiques (Ch. 5 §5.6)</div>
+        {/* Ch. 5 §5.6 */}
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Alertes automatiques</div>
         {alerts.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune alerte.</p>}
         {alerts.map((alert, i) => (
           <div key={i} style={{ borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13, color: PRIORITY_COLORS[alert.priority] }}>
@@ -138,7 +141,8 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Centre de pilotage intelligent (Ch. 5 §5.9)</div>
+          {/* Ch. 5 §5.9 */}
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Centre de pilotage intelligent</div>
           <button onClick={handleGenerate} style={secondaryButtonStyle}>
             Générer les recommandations
           </button>

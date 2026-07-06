@@ -126,7 +126,8 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
       )}
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Dictionnaire d'indicateurs (Ch. 20 §20.2)</div>
+        {/* Ch. 20 §20.2 */}
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Dictionnaire d'indicateurs</div>
         {kpis.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun indicateur.</p>}
         {kpis.map((kpi) => (
           <div key={kpi.code} style={{ borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
@@ -137,7 +138,8 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
       </div>
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Bibliothèque de rapports standards (Ch. 20 §20.3)</div>
+        {/* Ch. 20 §20.3 */}
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Bibliothèque de rapports standards</div>
         {reports.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun rapport catalogué.</p>}
         {reports.map((report) => (
           <div key={report.id}>
@@ -160,7 +162,8 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Explorateur d'analyses personnelles (Ch. 20 §20.4)</div>
+          {/* Ch. 20 §20.4 */}
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Explorateur d'analyses personnelles</div>
           {canCreateAnalysis && (
             <button onClick={handleCreateAnalysis} style={secondaryButtonStyle}>
               + Analyse
@@ -189,7 +192,8 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Simulation de tirage (Ch. 20 §20.6)</div>
+          {/* Ch. 20 §20.6 */}
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Simulation de tirage</div>
           <button onClick={handleSimulation} style={secondaryButtonStyle}>
             Simuler
           </button>

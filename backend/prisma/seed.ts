@@ -354,7 +354,8 @@ async function main() {
     {
       code: "stock_seuil_proche",
       label: "Stock proche du seuil d'alerte",
-      description: "Projection de rupture au rythme de vente courant (Ch. 16).",
+      // Ch. 16
+      description: "Projection de rupture au rythme de vente courant.",
       params: { projection_days: 7 },
       priority: "moyenne" as const,
     },

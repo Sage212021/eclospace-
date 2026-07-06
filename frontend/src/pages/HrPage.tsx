@@ -257,7 +257,8 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Dossiers collaborateurs (Ch. 19 §19.2)</div>
+          {/* Ch. 19 §19.2 */}
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Dossiers collaborateurs</div>
           {canManage && (
             <button onClick={handleCreateEmployee} style={secondaryButtonStyle}>
               + Collaborateur
@@ -318,7 +319,8 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Absences (Ch. 19 §19.5)</div>
+          {/* Ch. 19 §19.5 */}
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Absences</div>
           {canManage && (
             <button onClick={handleCreateAbsence} style={secondaryButtonStyle}>
               + Demande
@@ -347,7 +349,8 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {canManage && (
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Anomalies d'accès (Ch. 19 §19.4)</div>
+          {/* Ch. 19 §19.4 */}
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Anomalies d'accès</div>
           {anomalies.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune anomalie détectée.</p>}
           {anomalies.map((anomaly, i) => (
             <div key={i} style={{ borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13, color: "var(--late, #C4661F)" }}>
@@ -360,7 +363,8 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       {canManage && (
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Revue périodique des habilitations (Ch. 19 §19.4)</div>
+            {/* Ch. 19 §19.4 */}
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Revue périodique des habilitations</div>
             {canAdminister && (
               <button onClick={handleCreateReview} style={secondaryButtonStyle}>
                 + Lancer une campagne

@@ -274,7 +274,8 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       </div>
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Encours et relance client (Ch. 18 §18.3)</div>
+        {/* Ch. 18 §18.3 */}
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Encours et relance client</div>
         <label style={{ fontSize: 12 }}>
           Client
           <select value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)} style={inputStyle}>
@@ -302,7 +303,8 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       </div>
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Dépenses (Ch. 18 §18.4)</div>
+        {/* Ch. 18 §18.4 */}
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Dépenses</div>
         {expenses.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune dépense.</p>}
         {expenses.map((expense) => (
           <div key={expense.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
@@ -321,7 +323,8 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       </div>
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Relevés de droits d'auteur (Ch. 9 §9.5, Ch. 18 §18.7)</div>
+        {/* Ch. 9 §9.5, Ch. 18 §18.7 */}
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Relevés de droits d'auteur</div>
         {royaltyStatements.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun relevé.</p>}
         {royaltyStatements.map((statement) => (
           <div key={statement.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
@@ -349,7 +352,8 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       </div>
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Frais de port par zone (Ch. 17 §17.5)</div>
+        {/* Ch. 17 §17.5 */}
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Frais de port par zone</div>
         {(Object.keys(ZONE_LABELS) as ShippingZone[]).map((zone) => {
           const rate = shippingRates.find((r) => r.zone === zone);
           return (
@@ -371,7 +375,8 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       </div>
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Trésorerie : comptes, caisses et virements (Ch. 18 §18.8)</div>
+        {/* Ch. 18 §18.8 */}
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Trésorerie : comptes, caisses et virements</div>
         {bankAccounts.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun compte.</p>}
         {bankAccounts.map((account) => (
           <div key={account.id} style={{ fontSize: 13, padding: "4px 0" }}>

@@ -33,6 +33,7 @@ import directionRoutes from "./routes/direction.js";
 import pilotageRoutes from "./routes/pilotage.js";
 import reportsRoutes from "./routes/reports.js";
 import settingsRoutes from "./routes/settings.js";
+import auditRoutes from "./routes/audit.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
@@ -74,6 +75,7 @@ export async function buildApp() {
   await app.register(pilotageRoutes);
   await app.register(reportsRoutes);
   await app.register(settingsRoutes);
+  await app.register(auditRoutes);
 
   // En production, le frontend compilé (frontend/dist) est copié dans backend/public
   // par le script de build racine (npm run build) : une seule application déployée,

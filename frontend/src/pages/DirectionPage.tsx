@@ -11,6 +11,7 @@ import {
   type Manuscript,
   type Recommendation,
 } from "../api/client";
+import { DataTable } from "../components/DataTable";
 
 const PRIORITY_COLORS: Record<string, string> = {
   faible: "var(--muted)",
@@ -98,9 +99,60 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
         {/* Ch. 5 §5.1 */}
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Tableau de bord consolidé</div>
         {dashboard ? (
-          <pre style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 12, whiteSpace: "pre-wrap", background: "var(--bg, #f7f7f7)", padding: 10, borderRadius: 6 }}>
-            {JSON.stringify(dashboard, null, 2)}
-          </pre>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <DomainBlock title="Éditorial">
+              <TileRow>
+                <StatTile label="Manuscrits" value={dashboard.editorial.total} />
+                <StatTile label="Statuts actifs" value={dashboard.editorial.by_status.length} />
+              </TileRow>
+              <DataTable
+                rows={dashboard.editorial.by_status.map(({ code: _code, ...rest }) => rest)}
+                emptyLabel="Aucun manuscrit."
+              />
+            </DomainBlock>
+
+            <DomainBlock title="Production">
+              <TileRow>
+                <StatTile label="Projets en cours" value={dashboard.production.projects_in_progress} />
+                <StatTile label="Tâches terminées" value={dashboard.production.tasks_done} />
+                <StatTile label="Tâches en retard" value={dashboard.production.tasks_late} tone={dashboard.production.tasks_late > 0 ? "late" : undefined} />
+                <StatTile
+                  label="Respect des délais"
+                  value={dashboard.production.on_time_rate_pct === null ? "—" : `${dashboard.production.on_time_rate_pct} %`}
+                />
+              </TileRow>
+            </DomainBlock>
+
+            <DomainBlock title="Commercial">
+              <TileRow>
+                <StatTile label="Exemplaires vendus" value={dashboard.commercial.units_sold} />
+                <StatTile label="Chiffre d'affaires" value={dashboard.commercial.revenue_total} />
+                <StatTile label="Ruptures de stock" value={dashboard.commercial.stock_outs} tone={dashboard.commercial.stock_outs > 0 ? "alert" : undefined} />
+              </TileRow>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Meilleures ventes</div>
+              <DataTable rows={dashboard.commercial.best_sellers} emptyLabel="Aucune vente enregistrée." />
+            </DomainBlock>
+
+            <DomainBlock title="Financier">
+              {dashboard.financial ? (
+                <TileRow>
+                  <StatTile label="Coût de production" value={dashboard.financial.production_cost_total} />
+                  <StatTile label="Dépenses engagées" value={dashboard.financial.expenses_engaged} />
+                  <StatTile label="Droits d'auteur dus" value={dashboard.financial.royalties_due} />
+                  <StatTile label="Factures en attente" value={dashboard.financial.invoices_pending} />
+                  <StatTile
+                    label="Position de trésorerie"
+                    value={dashboard.financial.treasury_position}
+                    tone={dashboard.financial.treasury_position < 0 ? "alert" : undefined}
+                  />
+                </TileRow>
+              ) : (
+                <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>
+                  Réservé aux profils habilités (consultation financière).
+                </p>
+              )}
+            </DomainBlock>
+          </div>
         ) : (
           <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
         )}
@@ -169,6 +221,35 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Bloc d'un domaine du tableau de bord (Éditorial, Production…).
+function DomainBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--eclosion)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// Rangée de cartes-chiffres, repliable sur les petits écrans.
+function TileRow({ children }: { children: React.ReactNode }) {
+  return <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>{children}</div>;
+}
+
+// Carte-chiffre : un indicateur unique (guide de style §3, chiffre en chasse fixe).
+function StatTile({ label, value, tone }: { label: string; value: number | string; tone?: "late" | "alert" }) {
+  const color = tone === "alert" ? "var(--alert)" : tone === "late" ? "var(--amber)" : "var(--ink)";
+  const display = typeof value === "number" ? value.toLocaleString("fr-FR") : value;
+  return (
+    <div style={{ flex: "1 1 140px", minWidth: 140, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px" }}>
+      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 600, color }}>{display}</div>
     </div>
   );
 }

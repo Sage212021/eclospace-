@@ -138,7 +138,21 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
           <div>
             {quote.printer.partner.firstName} {quote.printer.partner.lastName} — {quote.status} — tirages : {quote.quantities.join(", ")}
           </div>
-          {quote.amounts && <div style={{ fontSize: 12, color: "var(--muted)" }}>Montants : {JSON.stringify(quote.amounts)}</div>}
+          {quote.amounts && (
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, display: "flex", flexWrap: "wrap", gap: 12 }}>
+              {Object.entries(quote.amounts).map(([quantity, total]) => {
+                const qty = Number(quantity);
+                const unit = qty > 0 ? Math.round((total / qty) * 100) / 100 : null;
+                return (
+                  <span key={quantity}>
+                    {qty.toLocaleString("fr-FR")} ex. →{" "}
+                    <span style={{ fontFamily: "var(--font-mono)" }}>{total.toLocaleString("fr-FR")}</span>
+                    {unit !== null && <span style={{ fontFamily: "var(--font-mono)" }}> ({unit.toLocaleString("fr-FR")}/u)</span>}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           {canManage && quote.status === "requested" && (
             <button onClick={() => handleRecordAmounts(quote)} style={secondaryButtonStyle}>
               Saisir le devis reçu

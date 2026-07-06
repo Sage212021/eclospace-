@@ -13,6 +13,7 @@ import {
   type ReportDomain,
   type SavedAnalysis,
 } from "../api/client";
+import { DataTable } from "../components/DataTable";
 
 const DOMAIN_LABELS: Record<ReportDomain, string> = {
   editorial: "Éditorial",
@@ -34,6 +35,7 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
   const [reports, setReports] = useState<Report[]>([]);
   const [analyses, setAnalyses] = useState<SavedAnalysis[]>([]);
   const [reportRows, setReportRows] = useState<{ reportId: string; rows: unknown[] } | null>(null);
+  const [analysisResults, setAnalysisResults] = useState<Record<string, { metric: string; value: unknown }>>({});
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -75,7 +77,7 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
   async function handleRunAnalysis(analysis: SavedAnalysis) {
     try {
       const result = await runAnalysis(analysis.id);
-      window.alert(`${result.metric} = ${JSON.stringify(result.value)}`);
+      setAnalysisResults((prev) => ({ ...prev, [analysis.id]: result }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec du calcul.");
     }
@@ -152,9 +154,10 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
               </button>
             </div>
             {reportRows?.reportId === report.id && (
-              <pre style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 11, whiteSpace: "pre-wrap", background: "var(--bg, #f7f7f7)", padding: 10, borderRadius: 6, marginTop: 6 }}>
-                {JSON.stringify(reportRows.rows, null, 2)}
-              </pre>
+              <DataTable
+                rows={reportRows.rows as Record<string, unknown>[]}
+                emptyLabel="Aucune donnée pour ce rapport."
+              />
             )}
           </div>
         ))}
@@ -172,20 +175,23 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
         </div>
         {analyses.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune analyse enregistrée.</p>}
         {analyses.map((analysis) => (
-          <div key={analysis.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
-            <span>
-              {analysis.label} — <span style={{ fontFamily: "var(--font-mono, monospace)" }}>{analysis.definition.metric}</span>
-            </span>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => handleRunAnalysis(analysis)} style={secondaryButtonStyle}>
-                Calculer
-              </button>
-              {canPromoteAnalysis && (
-                <button onClick={() => handlePromote(analysis)} style={secondaryButtonStyle}>
-                  Promouvoir
+          <div key={analysis.id} style={{ borderTop: "1px solid var(--line)", padding: "6px 0" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
+              <span>
+                {analysis.label} — <span style={{ fontFamily: "var(--font-mono)" }}>{analysis.definition.metric}</span>
+              </span>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => handleRunAnalysis(analysis)} style={secondaryButtonStyle}>
+                  Calculer
                 </button>
-              )}
+                {canPromoteAnalysis && (
+                  <button onClick={() => handlePromote(analysis)} style={secondaryButtonStyle}>
+                    Promouvoir
+                  </button>
+                )}
+              </div>
             </div>
+            {analysisResults[analysis.id] && <AnalysisResult value={analysisResults[analysis.id].value} />}
           </div>
         ))}
       </div>
@@ -199,6 +205,25 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Résultat d'un indicateur calculé : soit un nombre unique (affiché en chasse
+// fixe), soit une répartition (tableau). Remplace l'ancienne pop-up JSON.
+function AnalysisResult({ value }: { value: unknown }) {
+  if (Array.isArray(value)) {
+    return <DataTable rows={value as Record<string, unknown>[]} emptyLabel="Aucune donnée." />;
+  }
+  const display =
+    typeof value === "number"
+      ? value.toLocaleString("fr-FR")
+      : value === null || value === undefined
+        ? "—"
+        : String(value);
+  return (
+    <div style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 600, color: "var(--eclosion)" }}>
+      {display}
     </div>
   );
 }

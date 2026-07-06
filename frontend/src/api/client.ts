@@ -1,4 +1,12 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3000";
+// En production, le frontend compilé est servi par le backend sur la MÊME
+// origine : on utilise donc des URL relatives ("") pour que les appels partent
+// vers le bon hôte quel que soit le domaine de déploiement (Scalingo…).
+// En développement, le frontend (Vite, port 5173) doit viser le backend sur le
+// port 3000. VITE_API_BASE reste surchargeable si besoin.
+// Auparavant, le repli sur "http://localhost:3000" en production faisait échouer
+// silencieusement la connexion (requête bloquée pour contenu mixte sur une page
+// HTTPS) — le bouton « Se connecter » semblait alors ne rien faire.
+const API_BASE = import.meta.env.VITE_API_BASE ?? (import.meta.env.DEV ? "http://localhost:3000" : "");
 
 export interface EffectiveUser {
   id: string;
@@ -1280,4 +1288,25 @@ export function simulatePrintRun(manuscriptId: string, quantities: number[]) {
     daily_sale_rate: number;
     simulations: { quantity: number; total_cost: number | null; unit_cost: number | null; estimated_days_to_sell_out: number | null }[];
   }>("/api/v1/simulations/print-run", { method: "POST", body: JSON.stringify({ manuscript_id: manuscriptId, quantities }) });
+}
+
+// Paramètres (table settings) : seuils, pondérations et calendriers ajustables
+// sans redéploiement (Ch. 21 §21.5).
+export interface AppSetting {
+  key: string;
+  value: unknown;
+  version: number;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+export function listSettings() {
+  return request<AppSetting[]>("/api/v1/settings");
+}
+
+export function updateSetting(key: string, value: unknown) {
+  return request<AppSetting>(`/api/v1/settings/${encodeURIComponent(key)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ value }),
+  });
 }

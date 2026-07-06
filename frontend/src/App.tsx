@@ -11,6 +11,7 @@ import { FinancePage } from "./pages/FinancePage";
 import { HrPage } from "./pages/HrPage";
 import { DirectionPage } from "./pages/DirectionPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { Sidebar, type NavItem } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 
@@ -24,6 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: "hr", label: "Ressources humaines", permission: "rh:consultation" },
   { key: "direction", label: "Direction générale", permission: "direction:consultation" },
   { key: "reports", label: "Rapports", permission: "rapports:consultation" },
+  { key: "settings", label: "Paramètres", permission: "settings:consultation" },
 ];
 
 type View =
@@ -36,7 +38,8 @@ type View =
   | { key: "finance" }
   | { key: "hr" }
   | { key: "direction" }
-  | { key: "reports" };
+  | { key: "reports" }
+  | { key: "settings" };
 
 export function App() {
   const [user, setUser] = useState<EffectiveUser | null>(null);
@@ -117,6 +120,7 @@ export function App() {
         {view.key === "reports" && (
           <ReportsPage canCreateAnalysis={permissions.has("rapports:saisie")} canPromoteAnalysis={permissions.has("rapports:administration")} />
         )}
+        {view.key === "settings" && <SettingsPage canAdminister={permissions.has("settings:administration")} />}
       </div>
     </div>
   );

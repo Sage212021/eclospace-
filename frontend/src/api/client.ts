@@ -1304,6 +1304,29 @@ export function listSettings() {
   return request<AppSetting[]>("/api/v1/settings");
 }
 
+// Journal d'activité inviolable (Ch. 5 §5.8) — lecture seule.
+export interface AuditEntry {
+  id: string;
+  occurredAt: string;
+  username: string | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  oldValues: unknown;
+  newValues: unknown;
+  ipAddress: string | null;
+}
+
+export function listAuditLog(filters?: { entity_type?: string; action?: string; limit?: number; offset?: number }) {
+  const params = new URLSearchParams();
+  if (filters?.entity_type) params.set("entity_type", filters.entity_type);
+  if (filters?.action) params.set("action", filters.action);
+  if (filters?.limit) params.set("limit", String(filters.limit));
+  if (filters?.offset) params.set("offset", String(filters.offset));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return request<{ total: number; limit: number; offset: number; entries: AuditEntry[] }>(`/api/v1/audit-log${query}`);
+}
+
 export function updateSetting(key: string, value: unknown) {
   return request<AppSetting>(`/api/v1/settings/${encodeURIComponent(key)}`, {
     method: "PATCH",

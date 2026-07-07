@@ -267,10 +267,11 @@ model User {
   deletedAt DateTime? @map("deleted_at")
   deletedBy String?   @map("deleted_by")
 
-  userRoles       UserRole[]
-  notifications   Notification[]
-  auditEntries    AuditLog[]
-  loginChallenges LoginChallenge[]
+  userRoles                UserRole[]
+  notifications            Notification[]
+  auditEntries             AuditLog[]
+  loginChallenges          LoginChallenge[]
+  identifierChangeRequests IdentifierChangeRequest[]
 
   ownedManuscripts   Manuscript[]        @relation("ManuscriptOwner")
   managedManuscripts Manuscript[]        @relation("ManuscriptProjectManager")
@@ -502,6 +503,24 @@ model AuditLog {
   ipAddress  String?     @map("ip_address")
 
   @@map("audit_log")
+}
+
+// Demande de changement d'identifiant/e-mail de connexion (Ch. 2, sécurité du
+// compte) : le changement n'est appliqué qu'après confirmation par un jeton
+// envoyé par e-mail (durée de vie limitée). Une ligne par demande, tracée.
+model IdentifierChangeRequest {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id])
+  newUsername String?   @map("new_username")
+  newEmail    String?   @map("new_email")
+  token       String    @unique
+  expiresAt   DateTime  @map("expires_at")
+  confirmedAt DateTime? @map("confirmed_at")
+  ipAddress   String?   @map("ip_address")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("identifier_change_requests")
 }
 
 // Paramétrage clé/valeur versionné (seuils, pondérations, calendriers...).

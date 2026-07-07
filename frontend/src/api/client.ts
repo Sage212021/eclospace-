@@ -53,6 +53,28 @@ export function verifyTwoFactor(challengeId: string, code: string) {
   });
 }
 
+// Sécurité du compte (Ch. 2)
+export function changePassword(currentPassword: string, newPassword: string) {
+  return request<{ ok: true }>("/api/v1/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
+export function requestIdentifierChange(input: { current_password: string; new_username?: string; new_email?: string }) {
+  return request<{ ok: true; email_sent: boolean; confirmation_url?: string }>("/api/v1/auth/request-identifier-change", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function confirmIdentifierChange(token: string) {
+  return request<{ ok: true }>("/api/v1/auth/confirm-identifier-change", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
 export interface Notification {
   id: string;
   title: string;

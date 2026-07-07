@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { listSettings, updateSetting, type AppSetting } from "../api/client";
+import { listSettings, updateSetting, type AppSetting, type EffectiveUser } from "../api/client";
+import { AccountSecurity } from "../components/AccountSecurity";
 
 interface SettingsPageProps {
   canAdminister: boolean;
+  user: EffectiveUser;
 }
 
 // Libellés et descriptions lisibles pour les paramètres seedés. Toute clé
@@ -40,7 +42,7 @@ const SETTING_LABELS: Record<string, { label: string; description: string }> = {
   },
 };
 
-export function SettingsPage({ canAdminister }: SettingsPageProps) {
+export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
   const [settings, setSettings] = useState<AppSetting[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +86,8 @@ export function SettingsPage({ canAdminister }: SettingsPageProps) {
         Seuils, pondérations et réglages métier, ajustables sans redéploiement.
         {!canAdminister && " Consultation seule : la modification requiert l'habilitation d'administration."}
       </p>
+
+      <AccountSecurity user={user} />
 
       {error && (
         <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>

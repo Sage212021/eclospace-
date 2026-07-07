@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchMe, logout, type EffectiveUser } from "./api/client";
+import { confirmIdentifierChange, fetchMe, logout, type EffectiveUser } from "./api/client";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Manuscripts } from "./pages/Manuscripts";
@@ -127,6 +127,7 @@ export function App() {
   const [user, setUser] = useState<EffectiveUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>({ kind: "leaf", key: "dashboard" });
+  const [confirmBanner, setConfirmBanner] = useState<{ tone: "ok" | "alert"; text: string } | null>(null);
 
   const refreshUser = () => fetchMe().then(setUser).catch(() => setUser(null));
 
@@ -134,10 +135,49 @@ export function App() {
     refreshUser().finally(() => setLoading(false));
   }, []);
 
+  // Confirmation d'un changement d'identifiant/e-mail via le lien reçu par
+  // e-mail (?identifier_token=...). Public : le jeton fait foi.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("identifier_token");
+    if (!token) return;
+    confirmIdentifierChange(token)
+      .then(() => {
+        setConfirmBanner({ tone: "ok", text: "Vos identifiants de connexion ont été mis à jour. Utilisez-les à la prochaine connexion." });
+        refreshUser();
+      })
+      .catch((e) => setConfirmBanner({ tone: "alert", text: e instanceof Error ? e.message : "Lien de confirmation invalide ou expiré." }))
+      .finally(() => {
+        params.delete("identifier_token");
+        const q = params.toString();
+        window.history.replaceState({}, "", window.location.pathname + (q ? `?${q}` : ""));
+      });
+  }, []);
+
   if (loading) return null;
 
+  const confirmBannerNode = confirmBanner && (
+    <div
+      style={{
+        background: confirmBanner.tone === "alert" ? "var(--alert-soft)" : "var(--eclosion-soft)",
+        color: confirmBanner.tone === "alert" ? "var(--alert)" : "var(--eclosion)",
+        borderRadius: 6,
+        padding: "10px 14px",
+        fontSize: 13,
+        margin: "12px 24px 0",
+      }}
+    >
+      {confirmBanner.text}
+    </div>
+  );
+
   if (!user) {
-    return <Login onAuthenticated={() => refreshUser()} />;
+    return (
+      <>
+        {confirmBannerNode}
+        <Login onAuthenticated={() => refreshUser()} />
+      </>
+    );
   }
 
   const permissions = new Set(user.permissions);
@@ -173,6 +213,8 @@ export function App() {
             Se déconnecter
           </button>
         </div>
+
+        {confirmBannerNode}
 
         {view.kind === "manuscript-detail" && (
           <ManuscriptDetail
@@ -225,7 +267,9 @@ export function App() {
           <ReportsPage canCreateAnalysis={permissions.has("rapports:saisie")} canPromoteAnalysis={permissions.has("rapports:administration")} />
         )}
         {leaf && "page" in leaf && leaf.page === "audit" && <AuditLogPage />}
-        {leaf && "page" in leaf && leaf.page === "settings" && <SettingsPage canAdminister={permissions.has("settings:administration")} />}
+        {leaf && "page" in leaf && leaf.page === "settings" && (
+          <SettingsPage canAdminister={permissions.has("settings:administration")} user={user} />
+        )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
       </div>
     </div>

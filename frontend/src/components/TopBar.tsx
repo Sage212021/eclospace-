@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { listUnreadNotifications } from "../api/client";
 
-// Barre supérieure (guide §6) : recherche globale + cloche de notifications.
-// La recherche globale (Ch. 5 §5.4) n'est pas encore spécifiée côté API au
-// Lot 0 : le champ est affiché à titre de coquille, sans appel réseau.
-export function TopBar() {
+interface TopBarProps {
+  // Utilisateurs actuellement connectés à l'application (présence temps réel).
+  connectedUsers: { userId: string; username: string }[];
+}
+
+// Barre supérieure (guide §6) : recherche globale + indicateur de présence
+// global (utilisateurs connectés, visible en permanence) + cloche de notifications.
+export function TopBar({ connectedUsers }: TopBarProps) {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -37,6 +41,17 @@ export function TopBar() {
           color: "var(--muted)",
         }}
       />
+      <div
+        title={
+          connectedUsers.length > 0
+            ? `Connectés : ${connectedUsers.map((u) => u.username).join(", ")}`
+            : "Aucun autre utilisateur connecté"
+        }
+        style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }}
+      >
+        <span style={{ width: 9, height: 9, borderRadius: 999, background: "var(--eclosion)", display: "inline-block" }} />
+        <span style={{ fontFamily: "var(--font-mono)" }}>{connectedUsers.length}</span> en ligne
+      </div>
       <div style={{ position: "relative", fontSize: 18 }} title={`${unreadCount} notification(s) non lue(s)`}>
         🔔
         {unreadCount > 0 && (

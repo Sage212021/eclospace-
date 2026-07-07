@@ -21,6 +21,9 @@ interface SidebarProps {
   activeKey: string;
   onSelect: (key: string) => void;
   username: string;
+  // Présence temps réel : noms d'utilisateurs actifs par pôle et par module.
+  presenceByPole: Record<string, string[]>;
+  presenceByModule: Record<string, string[]>;
 }
 
 // Barre latérale sombre (guide de style §6). Menu en 6 pôles dépliables
@@ -28,7 +31,16 @@ interface SidebarProps {
 // déroule ses sous-modules et referme les autres (un seul ouvert à la fois),
 // avec une transition légère. Ne montre que les modules autorisés (permission
 // et, le cas échéant, rôle) ; un pôle sans sous-module visible est masqué.
-export function Sidebar({ poles, permissions, roles, activeKey, onSelect, username }: SidebarProps) {
+export function Sidebar({
+  poles,
+  permissions,
+  roles,
+  activeKey,
+  onSelect,
+  username,
+  presenceByPole,
+  presenceByModule,
+}: SidebarProps) {
   const visiblePoles = poles
     .map((pole) => ({
       ...pole,
@@ -59,7 +71,13 @@ export function Sidebar({ poles, permissions, roles, activeKey, onSelect, userna
           return (
             <ul key={`flat-${idx}`} style={listStyle}>
               {pole.items.map((item) => (
-                <LeafButton key={item.key} item={item} active={item.key === activeKey} onSelect={onSelect} />
+                <LeafButton
+                  key={item.key}
+                  item={item}
+                  active={item.key === activeKey}
+                  onSelect={onSelect}
+                  presentUsers={presenceByModule[item.key] ?? []}
+                />
               ))}
             </ul>
           );
@@ -87,7 +105,10 @@ export function Sidebar({ poles, permissions, roles, activeKey, onSelect, userna
                 cursor: "pointer",
               }}
             >
-              <span>{pole.label}</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {pole.label}
+                <PresenceDot names={presenceByPole[pole.label] ?? []} />
+              </span>
               <span
                 style={{
                   fontSize: 10,
@@ -109,7 +130,14 @@ export function Sidebar({ poles, permissions, roles, activeKey, onSelect, userna
             >
               <ul style={listStyle}>
                 {pole.items.map((item) => (
-                  <LeafButton key={item.key} item={item} active={item.key === activeKey} onSelect={onSelect} indented />
+                  <LeafButton
+                    key={item.key}
+                    item={item}
+                    active={item.key === activeKey}
+                    onSelect={onSelect}
+                    indented
+                    presentUsers={presenceByModule[item.key] ?? []}
+                  />
                 ))}
               </ul>
             </div>
@@ -129,18 +157,23 @@ function LeafButton({
   active,
   onSelect,
   indented,
+  presentUsers,
 }: {
   item: NavLeaf;
   active: boolean;
   onSelect: (key: string) => void;
   indented?: boolean;
+  presentUsers: string[];
 }) {
   return (
     <li>
       <button
         onClick={() => onSelect(item.key)}
         style={{
-          display: "block",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 6,
           width: "100%",
           textAlign: "left",
           padding: indented ? "8px 20px 8px 32px" : "10px 20px",
@@ -152,9 +185,27 @@ function LeafButton({
           cursor: "pointer",
         }}
       >
-        {item.label}
+        <span>{item.label}</span>
+        <PresenceDot names={presentUsers} />
       </button>
     </li>
+  );
+}
+
+// Voyant de présence : point vert si au moins un utilisateur est actif ici,
+// badge numérique si plusieurs, info-bulle au survol listant les noms.
+function PresenceDot({ names }: { names: string[] }) {
+  if (names.length === 0) return null;
+  return (
+    <span
+      title={`Actif : ${names.join(", ")}`}
+      style={{ display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0 }}
+    >
+      <span style={{ width: 8, height: 8, borderRadius: 999, background: "#3fb950", display: "inline-block" }} />
+      {names.length > 1 && (
+        <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "#3fb950" }}>{names.length}</span>
+      )}
+    </span>
   );
 }
 

@@ -17,6 +17,7 @@ import { UsersRolesPage } from "./pages/UsersRolesPage";
 import { DiagnosticsPage } from "./pages/DiagnosticsPage";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
+import { usePresence } from "./hooks/usePresence";
 
 // Cible d'un élément de menu : soit une page dédiée, soit une liste de
 // manuscrits filtrée sur une étape du workflow (option « liste filtrée »).
@@ -121,6 +122,13 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "pi-journal": { page: "audit" },
 };
 
+// Association sous-module (clé de feuille) → pôle (libellé), pour signaler la
+// présence au bon endroit. Les éléments à plat (accueil) n'ont pas de pôle.
+const LEAF_TO_POLE: Record<string, string> = {};
+for (const pole of NAV_POLES) {
+  if (pole.label) for (const item of pole.items) LEAF_TO_POLE[item.key] = pole.label;
+}
+
 type View = { kind: "leaf"; key: string } | { kind: "manuscript-detail"; id: string; originKey: string };
 
 export function App() {
@@ -129,11 +137,20 @@ export function App() {
   const [view, setView] = useState<View>({ kind: "leaf", key: "dashboard" });
   const [confirmBanner, setConfirmBanner] = useState<{ tone: "ok" | "alert"; text: string } | null>(null);
 
+  const { presence, join } = usePresence(Boolean(user));
+
   const refreshUser = () => fetchMe().then(setUser).catch(() => setUser(null));
 
   useEffect(() => {
     refreshUser().finally(() => setLoading(false));
   }, []);
+
+  // Signale le pôle/module courant à chaque changement de vue (présence).
+  useEffect(() => {
+    if (!user) return;
+    const active = view.kind === "manuscript-detail" ? view.originKey : view.key;
+    join(LEAF_TO_POLE[active] ?? null, active);
+  }, [view, user, join]);
 
   // Confirmation d'un changement d'identifiant/e-mail via le lien reçu par
   // e-mail (?identifier_token=...). Public : le jeton fait foi.
@@ -195,9 +212,11 @@ export function App() {
         activeKey={activeKey}
         onSelect={(key) => setView({ kind: "leaf", key })}
         username={user.username}
+        presenceByPole={presence.byPole}
+        presenceByModule={presence.byModule}
       />
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        <TopBar />
+        <TopBar connectedUsers={presence.connectedUsers} />
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 24px" }}>
           <button
             onClick={() => logout().then(() => setUser(null))}

@@ -183,6 +183,7 @@ export function App() {
             heading={leaf.heading}
             canCreate={permissions.has("manuscripts:saisie")}
             onOpenManuscript={openManuscript}
+            onGoToManuscripts={() => setView({ kind: "leaf", key: "ed-manuscrits" })}
           />
         )}
 

@@ -8,9 +8,11 @@ interface ManuscriptsProps {
   // le titre. La création n'est proposée que sur la vue « Manuscrits » globale.
   statusFilter?: string;
   heading?: string;
+  // Raccourci « Aller à Manuscrits » proposé dans l'état vide d'un sous-module.
+  onGoToManuscripts?: () => void;
 }
 
-export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading }: ManuscriptsProps) {
+export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading, onGoToManuscripts }: ManuscriptsProps) {
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +64,9 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
         />
       )}
 
+      {manuscripts.length === 0 ? (
+        <EmptyState isStageView={isStageView} heading={heading} onGoToManuscripts={onGoToManuscripts} />
+      ) : (
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden", marginTop: 16 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
@@ -103,18 +108,80 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
                 </td>
               </tr>
             ))}
-            {manuscripts.length === 0 && (
-              <tr>
-                <td colSpan={5} style={{ padding: 20, textAlign: "center", color: "var(--muted)" }}>
-                  {isStageView
-                    ? "Aucun manuscrit à cette étape pour le moment."
-                    : "Aucun manuscrit enregistré — les nouveaux dépôts apparaîtront ici."}
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
+      )}
+    </div>
+  );
+}
+
+// État vide guidé : explique ce que liste le module et comment un ouvrage y
+// arrive, plutôt qu'un tableau vide. Les formulaires de saisie d'un ouvrage
+// vivent dans sa fiche, à l'étape correspondante — voir la démonstration
+// remise à l'opérateur.
+function EmptyState({
+  isStageView,
+  heading,
+  onGoToManuscripts,
+}: {
+  isStageView: boolean;
+  heading?: string;
+  onGoToManuscripts?: () => void;
+}) {
+  return (
+    <div
+      style={{
+        background: "var(--card)",
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+        padding: 28,
+        marginTop: 16,
+        maxWidth: 720,
+      }}
+    >
+      {isStageView ? (
+        <>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
+            Aucun ouvrage à l'étape « {heading} » pour le moment.
+          </div>
+          <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, margin: "0 0 8px" }}>
+            Ce module liste les ouvrages qui sont <strong>actuellement</strong> à cette étape du circuit de production.
+            Un ouvrage y apparaît <strong>automatiquement</strong> dès qu'il l'atteint ; c'est alors, en ouvrant sa fiche,
+            que l'on saisit les informations de l'étape (contrat, correction, maquette, ISBN, BAT, impression…).
+          </p>
+          <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, margin: "0 0 16px" }}>
+            Pour démarrer, créez un ouvrage dans <strong>Manuscrits</strong> ; il progressera ensuite d'étape en étape
+            et arrivera ici le moment venu.
+          </p>
+          {onGoToManuscripts && (
+            <button
+              onClick={onGoToManuscripts}
+              style={{
+                background: "var(--eclosion)",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                padding: "8px 16px",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Aller à Manuscrits
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Aucun ouvrage enregistré pour le moment.</div>
+          <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, margin: 0 }}>
+            Cliquez sur <strong>« + Nouveau manuscrit »</strong> ci-dessus pour créer le premier. Chaque ouvrage suit
+            ensuite les étapes du circuit — du dépôt à l'archivage — et apparaît dans les modules correspondants
+            (Comité de lecture, Correction, Maquette, BAT, Impression…) au fil de son avancement.
+          </p>
+        </>
+      )}
     </div>
   );
 }

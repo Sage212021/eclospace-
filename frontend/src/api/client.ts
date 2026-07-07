@@ -118,8 +118,10 @@ export function listUsers() {
   return request<UserSummary[]>("/api/v1/users");
 }
 
-export function listManuscripts() {
-  return request<Manuscript[]>("/api/v1/manuscripts?sort=priority");
+export function listManuscripts(filters?: { status?: string }) {
+  const params = new URLSearchParams({ sort: "priority" });
+  if (filters?.status) params.set("status", filters.status);
+  return request<Manuscript[]>(`/api/v1/manuscripts?${params.toString()}`);
 }
 
 export function getManuscript(id: string) {
@@ -1052,6 +1054,30 @@ export function grantRole(userId: string, roleCode: string, justification: strin
 
 export function revokeRole(userRoleId: string, justification: string) {
   return request(`/api/v1/user-roles/${userRoleId}/revoke`, { method: "PATCH", body: JSON.stringify({ justification }) });
+}
+
+// Utilisateurs & rôles (Ch. 2) — écran dédié de gestion des habilitations.
+export interface RoleSummary {
+  id: string;
+  code: string;
+  label: string;
+  department: string | null;
+}
+
+export interface UserWithRoles {
+  id: string;
+  username: string;
+  email: string;
+  status: string;
+  roles: { userRoleId: string; code: string; label: string }[];
+}
+
+export function listRoles() {
+  return request<RoleSummary[]>("/api/v1/roles");
+}
+
+export function listUsersWithRoles() {
+  return request<UserWithRoles[]>("/api/v1/users-with-roles");
 }
 
 export interface AccessAnomaly {

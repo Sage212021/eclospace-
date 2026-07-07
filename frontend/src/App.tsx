@@ -13,41 +13,116 @@ import { DirectionPage } from "./pages/DirectionPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
-import { Sidebar, type NavItem } from "./components/Sidebar";
+import { UsersRolesPage } from "./pages/UsersRolesPage";
+import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 
-const NAV_ITEMS: NavItem[] = [
-  { key: "dashboard", label: "Tableau de bord" },
-  { key: "manuscripts", label: "Manuscrits", permission: "manuscripts:consultation" },
-  { key: "my-readings", label: "Mes lectures", permission: "comite_lecture:saisie" },
-  { key: "stock", label: "Stock", permission: "stock:consultation" },
-  { key: "commercial", label: "Commercial", permission: "commercial:consultation" },
-  { key: "finance", label: "Finance", permission: "finance:consultation" },
-  { key: "hr", label: "Ressources humaines", permission: "rh:consultation" },
-  { key: "direction", label: "Direction générale", permission: "direction:consultation" },
-  { key: "reports", label: "Rapports", permission: "rapports:consultation" },
-  { key: "audit", label: "Journal d'activité", permission: "direction:consultation" },
-  { key: "settings", label: "Paramètres", permission: "settings:consultation" },
+// Cible d'un élément de menu : soit une page dédiée, soit une liste de
+// manuscrits filtrée sur une étape du workflow (option « liste filtrée »).
+type PageId =
+  | "dashboard"
+  | "manuscripts"
+  | "my-readings"
+  | "stock"
+  | "commercial"
+  | "finance"
+  | "hr"
+  | "direction"
+  | "reports"
+  | "audit"
+  | "settings"
+  | "users-roles";
+
+type LeafView = { page: PageId } | { stage: string; heading: string };
+
+// Menu organisé en 6 pôles (+ accueil à plat). Chaque sous-module est filtré
+// par sa permission ; un pôle sans sous-module visible est masqué (Sidebar).
+// Les sous-modules « par étape » ouvrent la liste des manuscrits filtrée sur
+// le statut de workflow correspondant, d'où la permission manuscripts:consultation.
+const NAV_POLES: NavPole[] = [
+  { label: null, items: [{ key: "dashboard", label: "Tableau de bord" }] },
+  {
+    label: "Éditorial",
+    items: [
+      { key: "ed-manuscrits", label: "Manuscrits", permission: "manuscripts:consultation" },
+      { key: "ed-comite", label: "Comité de lecture", permission: "manuscripts:consultation" },
+      { key: "ed-mes-lectures", label: "Mes lectures", permission: "comite_lecture:saisie" },
+      { key: "ed-direction", label: "Direction éditoriale", permission: "manuscripts:consultation" },
+      { key: "ed-correction", label: "Correction éditoriale", permission: "manuscripts:consultation" },
+    ],
+  },
+  {
+    label: "Production",
+    items: [
+      { key: "pr-maquette", label: "Maquette", permission: "manuscripts:consultation" },
+      { key: "pr-infographie", label: "Infographie & couvertures", permission: "manuscripts:consultation" },
+      { key: "pr-isbn", label: "ISBN & dépôt légal", permission: "manuscripts:consultation" },
+      { key: "pr-bat", label: "BAT & contrôle qualité", permission: "manuscripts:consultation" },
+      { key: "pr-impression", label: "Impression", permission: "manuscripts:consultation" },
+    ],
+  },
+  {
+    label: "Commercial",
+    items: [
+      { key: "co-stock", label: "Stock & magasin", permission: "stock:consultation" },
+      { key: "co-ventes", label: "Commercial & ventes", permission: "commercial:consultation" },
+    ],
+  },
+  {
+    label: "Juridique & Finance",
+    items: [
+      { key: "jf-contrats", label: "Contrats & droits d'auteur", permission: "manuscripts:consultation" },
+      { key: "jf-finance", label: "Finance & comptabilité", permission: "finance:consultation" },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { key: "ad-rh", label: "Ressources humaines", permission: "rh:consultation" },
+      { key: "ad-users", label: "Utilisateurs & rôles", permission: "users:consultation" },
+      { key: "ad-parametres", label: "Paramètres", permission: "settings:consultation" },
+    ],
+  },
+  {
+    label: "Pilotage",
+    items: [
+      { key: "pi-direction", label: "Direction générale", permission: "direction:consultation" },
+      { key: "pi-rapports", label: "Rapports & statistiques", permission: "rapports:consultation" },
+      { key: "pi-journal", label: "Journal d'activité", permission: "direction:consultation" },
+    ],
+  },
 ];
 
-type View =
-  | { key: "dashboard" }
-  | { key: "manuscripts" }
-  | { key: "my-readings" }
-  | { key: "manuscript-detail"; id: string }
-  | { key: "stock" }
-  | { key: "commercial" }
-  | { key: "finance" }
-  | { key: "hr" }
-  | { key: "direction" }
-  | { key: "reports" }
-  | { key: "audit" }
-  | { key: "settings" };
+const LEAF_VIEWS: Record<string, LeafView> = {
+  dashboard: { page: "dashboard" },
+  "ed-manuscrits": { page: "manuscripts" },
+  "ed-comite": { stage: "COMITE_LECTURE", heading: "Comité de lecture" },
+  "ed-mes-lectures": { page: "my-readings" },
+  "ed-direction": { stage: "DECISION_EDITORIALE", heading: "Direction éditoriale" },
+  "ed-correction": { stage: "CORRECTION", heading: "Correction éditoriale" },
+  "pr-maquette": { stage: "MISE_EN_PAGE", heading: "Maquette & mise en page" },
+  "pr-infographie": { stage: "INFOGRAPHIE", heading: "Infographie & couvertures" },
+  "pr-isbn": { stage: "ATTRIBUTION_REFERENCES", heading: "ISBN & dépôt légal" },
+  "pr-bat": { stage: "VALIDATION_BAT", heading: "BAT & contrôle qualité" },
+  "pr-impression": { stage: "IMPRESSION", heading: "Impression" },
+  "co-stock": { page: "stock" },
+  "co-ventes": { page: "commercial" },
+  "jf-contrats": { stage: "CONTRACTUALISATION", heading: "Contrats & droits d'auteur" },
+  "jf-finance": { page: "finance" },
+  "ad-rh": { page: "hr" },
+  "ad-users": { page: "users-roles" },
+  "ad-parametres": { page: "settings" },
+  "pi-direction": { page: "direction" },
+  "pi-rapports": { page: "reports" },
+  "pi-journal": { page: "audit" },
+};
+
+type View = { kind: "leaf"; key: string } | { kind: "manuscript-detail"; id: string; originKey: string };
 
 export function App() {
   const [user, setUser] = useState<EffectiveUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<View>({ key: "dashboard" });
+  const [view, setView] = useState<View>({ kind: "leaf", key: "dashboard" });
 
   const refreshUser = () => fetchMe().then(setUser).catch(() => setUser(null));
 
@@ -62,15 +137,17 @@ export function App() {
   }
 
   const permissions = new Set(user.permissions);
-  const activeKey = view.key === "manuscript-detail" ? "manuscripts" : view.key;
+  const activeKey = view.kind === "manuscript-detail" ? view.originKey : view.key;
+  const leaf = view.kind === "leaf" ? LEAF_VIEWS[view.key] : undefined;
+  const openManuscript = (id: string) => setView({ kind: "manuscript-detail", id, originKey: activeKey });
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar
-        items={NAV_ITEMS}
+        poles={NAV_POLES}
         permissions={permissions}
         activeKey={activeKey}
-        onSelect={(key) => setView({ key } as View)}
+        onSelect={(key) => setView({ kind: "leaf", key })}
         username={user.username}
       />
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
@@ -91,25 +168,39 @@ export function App() {
           </button>
         </div>
 
-        {view.key === "dashboard" && <Dashboard user={user} />}
-        {view.key === "manuscripts" && (
-          <Manuscripts
-            canCreate={permissions.has("manuscripts:saisie")}
-            onOpenManuscript={(id) => setView({ key: "manuscript-detail", id })}
+        {view.kind === "manuscript-detail" && (
+          <ManuscriptDetail
+            manuscriptId={view.id}
+            permissions={permissions}
+            onBack={() => setView({ kind: "leaf", key: activeKey })}
           />
         )}
-        {view.key === "manuscript-detail" && (
-          <ManuscriptDetail manuscriptId={view.id} permissions={permissions} onBack={() => setView({ key: "manuscripts" })} />
+
+        {leaf && "stage" in leaf && (
+          <Manuscripts
+            key={leaf.stage}
+            statusFilter={leaf.stage}
+            heading={leaf.heading}
+            canCreate={permissions.has("manuscripts:saisie")}
+            onOpenManuscript={openManuscript}
+          />
         )}
-        {view.key === "my-readings" && <MyReadings />}
-        {view.key === "stock" && <StockPage canManage={permissions.has("stock:saisie")} canAdminister={permissions.has("stock:administration")} />}
-        {view.key === "commercial" && (
+
+        {leaf && "page" in leaf && leaf.page === "dashboard" && <Dashboard user={user} />}
+        {leaf && "page" in leaf && leaf.page === "manuscripts" && (
+          <Manuscripts canCreate={permissions.has("manuscripts:saisie")} onOpenManuscript={openManuscript} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "my-readings" && <MyReadings />}
+        {leaf && "page" in leaf && leaf.page === "stock" && (
+          <StockPage canManage={permissions.has("stock:saisie")} canAdminister={permissions.has("stock:administration")} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "commercial" && (
           <CommercialPage canManage={permissions.has("commercial:saisie")} canValidate={permissions.has("commercial:administration")} />
         )}
-        {view.key === "finance" && (
+        {leaf && "page" in leaf && leaf.page === "finance" && (
           <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} />
         )}
-        {view.key === "hr" && (
+        {leaf && "page" in leaf && leaf.page === "hr" && (
           <HrPage
             canManage={permissions.has("rh:saisie")}
             canAdminister={permissions.has("rh:administration")}
@@ -119,12 +210,15 @@ export function App() {
             canWriteConfidential={permissions.has("rh_confidentiel:saisie")}
           />
         )}
-        {view.key === "direction" && <DirectionPage canTreatRecommendations={permissions.has("pilotage:saisie")} />}
-        {view.key === "reports" && (
+        {leaf && "page" in leaf && leaf.page === "users-roles" && (
+          <UsersRolesPage canAdminister={permissions.has("users:administration")} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "direction" && <DirectionPage canTreatRecommendations={permissions.has("pilotage:saisie")} />}
+        {leaf && "page" in leaf && leaf.page === "reports" && (
           <ReportsPage canCreateAnalysis={permissions.has("rapports:saisie")} canPromoteAnalysis={permissions.has("rapports:administration")} />
         )}
-        {view.key === "audit" && <AuditLogPage />}
-        {view.key === "settings" && <SettingsPage canAdminister={permissions.has("settings:administration")} />}
+        {leaf && "page" in leaf && leaf.page === "audit" && <AuditLogPage />}
+        {leaf && "page" in leaf && leaf.page === "settings" && <SettingsPage canAdminister={permissions.has("settings:administration")} />}
       </div>
     </div>
   );

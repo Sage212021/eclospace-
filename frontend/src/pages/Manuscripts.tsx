@@ -4,24 +4,33 @@ import { createManuscript, listGenres, listManuscripts, listUsers, type Genre, t
 interface ManuscriptsProps {
   onOpenManuscript: (id: string) => void;
   canCreate: boolean;
+  // Sous-module par étape : filtre la liste sur un statut de workflow et adapte
+  // le titre. La création n'est proposée que sur la vue « Manuscrits » globale.
+  statusFilter?: string;
+  heading?: string;
 }
 
-export function Manuscripts({ onOpenManuscript, canCreate }: ManuscriptsProps) {
+export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading }: ManuscriptsProps) {
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isStageView = Boolean(statusFilter);
 
-  const refresh = () => listManuscripts().then(setManuscripts).catch((e) => setError(e.message));
+  const refresh = () =>
+    listManuscripts(statusFilter ? { status: statusFilter } : undefined)
+      .then(setManuscripts)
+      .catch((e) => setError(e.message));
 
   useEffect(() => {
     refresh();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
 
   return (
     <div style={{ padding: 32 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Manuscrits</h1>
-        {canCreate && (
+        <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>{heading ?? "Manuscrits"}</h1>
+        {canCreate && !isStageView && (
           <button
             onClick={() => setShowForm((v) => !v)}
             style={{
@@ -97,7 +106,9 @@ export function Manuscripts({ onOpenManuscript, canCreate }: ManuscriptsProps) {
             {manuscripts.length === 0 && (
               <tr>
                 <td colSpan={5} style={{ padding: 20, textAlign: "center", color: "var(--muted)" }}>
-                  Aucun manuscrit enregistré — les nouveaux dépôts apparaîtront ici.
+                  {isStageView
+                    ? "Aucun manuscrit à cette étape pour le moment."
+                    : "Aucun manuscrit enregistré — les nouveaux dépôts apparaîtront ici."}
                 </td>
               </tr>
             )}

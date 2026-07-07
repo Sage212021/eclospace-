@@ -14,6 +14,7 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { UsersRolesPage } from "./pages/UsersRolesPage";
+import { DiagnosticsPage } from "./pages/DiagnosticsPage";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 
@@ -31,7 +32,8 @@ type PageId =
   | "reports"
   | "audit"
   | "settings"
-  | "users-roles";
+  | "users-roles"
+  | "diagnostics";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
 
@@ -81,6 +83,7 @@ const NAV_POLES: NavPole[] = [
       { key: "ad-rh", label: "Ressources humaines", permission: "rh:consultation" },
       { key: "ad-users", label: "Utilisateurs & rôles", permission: "users:consultation" },
       { key: "ad-parametres", label: "Paramètres", permission: "settings:consultation" },
+      { key: "ad-diagnostics", label: "Diagnostics système", role: "ADMIN_GENERAL" },
     ],
   },
   {
@@ -112,6 +115,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ad-rh": { page: "hr" },
   "ad-users": { page: "users-roles" },
   "ad-parametres": { page: "settings" },
+  "ad-diagnostics": { page: "diagnostics" },
   "pi-direction": { page: "direction" },
   "pi-rapports": { page: "reports" },
   "pi-journal": { page: "audit" },
@@ -137,6 +141,7 @@ export function App() {
   }
 
   const permissions = new Set(user.permissions);
+  const roles = new Set(user.roles);
   const activeKey = view.kind === "manuscript-detail" ? view.originKey : view.key;
   const leaf = view.kind === "leaf" ? LEAF_VIEWS[view.key] : undefined;
   const openManuscript = (id: string) => setView({ kind: "manuscript-detail", id, originKey: activeKey });
@@ -146,6 +151,7 @@ export function App() {
       <Sidebar
         poles={NAV_POLES}
         permissions={permissions}
+        roles={roles}
         activeKey={activeKey}
         onSelect={(key) => setView({ kind: "leaf", key })}
         username={user.username}
@@ -219,6 +225,7 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "audit" && <AuditLogPage />}
         {leaf && "page" in leaf && leaf.page === "settings" && <SettingsPage canAdminister={permissions.has("settings:administration")} />}
+        {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
       </div>
     </div>
   );

@@ -4,6 +4,8 @@ export interface NavLeaf {
   key: string;
   label: string;
   permission?: string;
+  // Restriction par rôle exact (ex. "ADMIN_GENERAL" pour Diagnostics système).
+  role?: string;
 }
 
 export interface NavPole {
@@ -15,28 +17,29 @@ export interface NavPole {
 interface SidebarProps {
   poles: NavPole[];
   permissions: Set<string>;
+  roles: Set<string>;
   activeKey: string;
   onSelect: (key: string) => void;
   username: string;
 }
 
-// Barre latérale sombre (guide de style §6) : menu en 6 pôles dépliables
-// (accordéon). Ne montre que les modules autorisés par les permissions
-// effectives (§1.3 du guide) ; un pôle sans aucun sous-module visible est masqué.
-export function Sidebar({ poles, permissions, activeKey, onSelect, username }: SidebarProps) {
+// Barre latérale sombre (guide de style §6). Menu en 6 pôles dépliables
+// (accordéon) : au chargement tous les pôles sont fermés ; cliquer un pôle
+// déroule ses sous-modules et referme les autres (un seul ouvert à la fois),
+// avec une transition légère. Ne montre que les modules autorisés (permission
+// et, le cas échéant, rôle) ; un pôle sans sous-module visible est masqué.
+export function Sidebar({ poles, permissions, roles, activeKey, onSelect, username }: SidebarProps) {
   const visiblePoles = poles
-    .map((pole) => ({ ...pole, items: pole.items.filter((i) => !i.permission || permissions.has(i.permission)) }))
+    .map((pole) => ({
+      ...pole,
+      items: pole.items.filter(
+        (i) => (!i.permission || permissions.has(i.permission)) && (!i.role || roles.has(i.role)),
+      ),
+    }))
     .filter((pole) => pole.items.length > 0);
 
-  // Pôles ouverts par défaut (découvrabilité de tous les modules) ; chacun
-  // reste repliable pour désencombrer.
-  const [open, setOpen] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    for (const pole of visiblePoles) {
-      if (pole.label) initial[pole.label] = true;
-    }
-    return initial;
-  });
+  // Un seul pôle ouvert à la fois ; null = tous fermés (état par défaut).
+  const [openPole, setOpenPole] = useState<string | null>(null);
 
   return (
     <nav
@@ -61,11 +64,12 @@ export function Sidebar({ poles, permissions, activeKey, onSelect, username }: S
             </ul>
           );
         }
-        const isOpen = open[pole.label];
+        const isOpen = openPole === pole.label;
         return (
           <div key={pole.label}>
             <button
-              onClick={() => setOpen((o) => ({ ...o, [pole.label as string]: !o[pole.label as string] }))}
+              onClick={() => setOpenPole((cur) => (cur === pole.label ? null : (pole.label as string)))}
+              aria-expanded={isOpen}
               style={{
                 display: "flex",
                 justifyContent: "space-between",
@@ -84,15 +88,31 @@ export function Sidebar({ poles, permissions, activeKey, onSelect, username }: S
               }}
             >
               <span>{pole.label}</span>
-              <span style={{ fontSize: 10 }}>{isOpen ? "▾" : "▸"}</span>
+              <span
+                style={{
+                  fontSize: 10,
+                  display: "inline-block",
+                  transition: "transform 200ms ease",
+                  transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
+                }}
+              >
+                ▸
+              </span>
             </button>
-            {isOpen && (
+            <div
+              style={{
+                overflow: "hidden",
+                maxHeight: isOpen ? pole.items.length * 40 + 8 : 0,
+                opacity: isOpen ? 1 : 0,
+                transition: "max-height 200ms ease, opacity 200ms ease",
+              }}
+            >
               <ul style={listStyle}>
                 {pole.items.map((item) => (
                   <LeafButton key={item.key} item={item} active={item.key === activeKey} onSelect={onSelect} indented />
                 ))}
               </ul>
-            )}
+            </div>
           </div>
         );
       })}

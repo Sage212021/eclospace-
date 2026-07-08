@@ -142,10 +142,55 @@ export function listUsers() {
   return request<UserSummary[]>("/api/v1/users");
 }
 
-export function listManuscripts(filters?: { status?: string }) {
-  const params = new URLSearchParams({ sort: "priority" });
-  if (filters?.status) params.set("status", filters.status);
+export interface CatalogueFilters {
+  status?: string;
+  genre?: string;
+  collection?: string;
+  language?: string;
+  back_catalogue?: "true" | "false";
+  published_from?: string;
+  published_to?: string;
+  q?: string;
+  sort?: "priority" | "received_at" | "publication_date" | "title";
+  order?: "asc" | "desc";
+}
+
+export function listManuscripts(filters?: CatalogueFilters) {
+  const params = new URLSearchParams();
+  params.set("sort", filters?.sort ?? "priority");
+  for (const key of ["status", "genre", "collection", "language", "back_catalogue", "published_from", "published_to", "q", "order"] as const) {
+    const value = filters?.[key];
+    if (value) params.set(key, value);
+  }
   return request<Manuscript[]>(`/api/v1/manuscripts?${params.toString()}`);
+}
+
+// --- Domaines & collections (gestion du catalogue, spéc. fonctionnelle §6) ---
+
+export interface Collection {
+  id: string;
+  code: string;
+  label: string;
+}
+
+export function listCollections() {
+  return request<Collection[]>("/api/v1/collections");
+}
+
+export function createGenre(label: string, code?: string) {
+  return request<Genre>("/api/v1/genres", { method: "POST", body: JSON.stringify({ label, ...(code ? { code } : {}) }) });
+}
+
+export function deleteGenre(id: string) {
+  return request<{ ok: true }>(`/api/v1/genres/${id}`, { method: "DELETE" });
+}
+
+export function createCollection(label: string, code?: string) {
+  return request<Collection>("/api/v1/collections", { method: "POST", body: JSON.stringify({ label, ...(code ? { code } : {}) }) });
+}
+
+export function deleteCollection(id: string) {
+  return request<{ ok: true }>(`/api/v1/collections/${id}`, { method: "DELETE" });
 }
 
 export function getManuscript(id: string) {

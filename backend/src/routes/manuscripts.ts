@@ -76,11 +76,21 @@ function startOfToday(): Date {
   return d;
 }
 
+// Catalogue & classements (spéc. fonctionnelle §5/§6) : filtres multicritères
+// et tri configurable. Les raccourcis par période (année, mois…) sont traduits
+// côté client en bornes published_from/published_to.
 const listQuerySchema = z.object({
   status: z.string().optional(),
   collection: z.string().uuid().optional(),
+  genre: z.string().uuid().optional(),
+  language: z.string().optional(),
+  back_catalogue: z.enum(["true", "false"]).optional(),
+  published_from: z.coerce.date().optional(),
+  published_to: z.coerce.date().optional(),
+  q: z.string().optional(),
   priority_min: z.coerce.number().optional(),
-  sort: z.enum(["priority", "received_at"]).optional(),
+  sort: z.enum(["priority", "received_at", "publication_date", "title"]).optional(),
+  order: z.enum(["asc", "desc"]).optional(),
 });
 
 // Secrétariat éditorial (Ch. 6) : point d'entrée unique de tout manuscrit.
@@ -286,17 +296,38 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     if (!parsed.success) {
       return reply.code(400).send({ code: "validation_error", message: "Paramètres invalides.", details: parsed.error.issues });
     }
-    const { status, collection, priority_min, sort } = parsed.data;
+    const { status, collection, genre, language, back_catalogue, published_from, published_to, q, priority_min, sort, order } = parsed.data;
+
+    // Bornes de période sur la date de parution (raccourci « cette année »,
+    // « ce mois-ci »… traduits en dates par le client).
+    const publicationDateFilter =
+      published_from || published_to
+        ? { publicationDate: { ...(published_from ? { gte: published_from } : {}), ...(published_to ? { lte: published_to } : {}) } }
+        : {};
+
+    const orderByField =
+      sort === "title"
+        ? { title: order ?? "asc" }
+        : sort === "publication_date"
+          ? { publicationDate: order ?? "desc" }
+          : sort === "received_at"
+            ? { receivedAt: order ?? "desc" }
+            : { priorityScore: order ?? "desc" };
 
     const manuscripts = await prisma.manuscript.findMany({
       where: {
         deletedAt: null,
         ...(status ? { status: { code: status } } : {}),
         ...(collection ? { collectionId: collection } : {}),
+        ...(genre ? { genreId: genre } : {}),
+        ...(language ? { language } : {}),
+        ...(back_catalogue ? { isBackCatalogue: back_catalogue === "true" } : {}),
+        ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}),
+        ...publicationDateFilter,
         ...(priority_min !== undefined ? { priorityScore: { gte: priority_min } } : {}),
       },
       include: { status: true, genre: true, collection: true },
-      orderBy: sort === "priority" ? { priorityScore: "desc" } : { receivedAt: "desc" },
+      orderBy: orderByField,
     });
     return reply.send(manuscripts);
   });

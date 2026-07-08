@@ -296,3 +296,14 @@ Deuxième phase des nouvelles spécifications fonctionnelles (points §5/§8 : d
 - **4 tests automatisés** ajoutés (import avec date historique + statut post-publication + trace d'audit ; refus d'une date future ; antidatage d'un ouvrage existant tracé ; refus 403 sans habilitation). Suite complète : **133 tests passent**. Parcours vérifié dans un navigateur réel (import d'un ouvrage daté du 10/05/2019, badge « ouvrage déjà paru », puis modification de la date en 20/11/2018 avec confirmation).
 
 **Prochaine étape :** Phase 3 — catalogue & classements (raccourcis par période, tri/filtre multicritère, mémorisation du dernier tri, gestion des domaines/collections).
+
+### 08/07/2026 (suite) — Phase 3 (Catalogue & classements)
+
+Troisième phase des nouvelles spécifications fonctionnelles (points §5/§6 : classement rapide par période + classement multicritère + gestion des domaines/collections). **Phase 3 livrée :**
+
+- **Barre de classement du catalogue** sur l'écran Manuscrits (vue globale) : **raccourcis par période** de parution (Tout, Cette année, Année dernière, Ce mois-ci) + bornes de date personnalisées ; **filtres multicritères** (recherche par titre, domaine, collection, ouvrages déjà parus / entrés en production) ; **tri** configurable (priorité, titre, date de parution, date de réception) avec choix de l'ordre. L'API `GET /api/v1/manuscripts` accepte désormais ces paramètres.
+- **Mémorisation du dernier tri/filtre** (§6) : les préférences de classement sont enregistrées dans le navigateur (`localStorage`) et restaurées à la session suivante. État vide dédié quand aucun ouvrage ne correspond aux critères (avec bouton « Réinitialiser les filtres »).
+- **Gestion des domaines & collections** (§6) : nouvel écran « Domaines & collections » (pôle Éditorial) — ajout/retrait, code court généré automatiquement, **retrait logique refusé tant qu'un ouvrage utilise l'entrée** (message explicite), chaque opération journalisée. Endpoints `POST/DELETE /api/v1/genres` et `/api/v1/collections`, réservés au niveau `manuscripts:administration`.
+- **5 tests automatisés** ajoutés (filtre par période + tri par date ; filtre « déjà parus » + recherche titre ; création/retrait d'un domaine + refus si utilisé ; gestion collections + refus code déjà pris ; refus 403 sans habilitation). Suite complète : **139 tests passent**. Parcours vérifié dans un navigateur réel (filtre 2020-2025, ajout du domaine « Bande dessinée »).
+
+**Prochaine étape :** Phase 4 — archivage hiérarchique (arborescence année/mois/jour, collection, auteur, catégorie).

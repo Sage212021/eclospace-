@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { changePassword, requestIdentifierChange, type EffectiveUser } from "../api/client";
+import { PasswordInput } from "./PasswordInput";
 
 // Section « Sécurité du compte » (Ch. 2) : changement de mot de passe (règles
 // de complexité) et de l'identifiant/e-mail de connexion (confirmation par
@@ -66,13 +67,13 @@ function PasswordForm() {
       {error && <Banner tone="alert">{error}</Banner>}
       {message && <Banner tone="ok">{message}</Banner>}
       <Field label="Mot de passe actuel">
-        <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required style={inputStyle} />
+        <PasswordInput value={current} onChange={(e) => setCurrent(e.target.value)} required style={inputStyle} />
       </Field>
       <Field label="Nouveau mot de passe (min. 8 caractères, une majuscule, un chiffre)">
-        <input type="password" value={next} onChange={(e) => setNext(e.target.value)} required style={inputStyle} />
+        <PasswordInput value={next} onChange={(e) => setNext(e.target.value)} required style={inputStyle} />
       </Field>
       <Field label="Confirmer le nouveau mot de passe">
-        <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required style={inputStyle} />
+        <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} required style={inputStyle} />
       </Field>
       <button type="submit" disabled={submitting} style={primaryButtonStyle(submitting)}>
         Modifier le mot de passe
@@ -137,7 +138,7 @@ function IdentifierForm({ user }: { user: EffectiveUser }) {
         <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={inputStyle} />
       </Field>
       <Field label="Mot de passe actuel (pour confirmer votre identité)">
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required style={inputStyle} />
+        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required style={inputStyle} />
       </Field>
       <button type="submit" disabled={submitting || !changed} style={primaryButtonStyle(submitting || !changed)}>
         Demander le changement

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { grantRole, listRoles, listUsersWithRoles, revokeRole, type RoleSummary, type UserWithRoles } from "../api/client";
+import { grantRole, listRoles, listUsersWithRoles, resetUserPassword, revokeRole, type RoleSummary, type UserWithRoles } from "../api/client";
 
 interface UsersRolesPageProps {
   canAdminister: boolean;
@@ -36,6 +36,22 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de l'attribution.");
+    }
+  }
+
+  async function handleResetPassword(user: UserWithRoles) {
+    const newPassword = window.prompt(
+      `Nouveau mot de passe pour ${user.username} (min. 8 caractères, une majuscule, un chiffre). ` +
+        `Communiquez-le à l'utilisateur, qui pourra le changer ensuite.`,
+    );
+    if (!newPassword) return;
+    setError(null);
+    setMessage(null);
+    try {
+      await resetUserPassword(user.id, newPassword);
+      setMessage(`Mot de passe réinitialisé pour ${user.username}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de la réinitialisation.");
     }
   }
 
@@ -78,9 +94,28 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
               <span style={{ fontSize: 14, fontWeight: 600 }}>{user.username}</span>
               <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>{user.email}</span>
             </div>
-            <span style={{ fontSize: 11, color: user.status === "active" ? "var(--eclosion)" : "var(--muted)" }}>
-              {user.status === "active" ? "Actif" : user.status}
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {canAdminister && (
+                <button
+                  onClick={() => handleResetPassword(user)}
+                  title="Définir un nouveau mot de passe pour ce compte"
+                  style={{
+                    border: "1px solid var(--line)",
+                    background: "#fff",
+                    color: "var(--ink)",
+                    borderRadius: 6,
+                    padding: "4px 10px",
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  Réinitialiser le mot de passe
+                </button>
+              )}
+              <span style={{ fontSize: 11, color: user.status === "active" ? "var(--eclosion)" : "var(--muted)" }}>
+                {user.status === "active" ? "Actif" : user.status}
+              </span>
+            </div>
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>

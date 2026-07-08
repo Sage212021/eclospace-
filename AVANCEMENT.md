@@ -275,3 +275,13 @@ Quatre options comparées (PaaS francophone Scalingo, VPS économique Hetzner/OV
 - Compte administrateur de départ : identifiant **`admin`**, mot de passe = variable `ADMIN_INITIAL_PASSWORD` (à définir dans l'onglet Environment de Scalingo, valeur forte), à changer dès la première connexion.
 
 **Prochaine étape :** l'opérateur configure l'application Scalingo (branche `main`, addon PostgreSQL, variables `SESSION_SECRET` et `ADMIN_INITIAL_PASSWORD`), déclenche le premier déploiement et se connecte dans un navigateur réel — première vérification en conditions réelles du projet.
+
+### 08/07/2026 — Nouvelles spécifications fonctionnelles, Phase 1 (Sécurité & confort)
+
+Suite à un nouveau cahier de spécifications fonctionnelles (9 points : icône œil, gestion des comptes, droits configurables par pôle, passe-partout admin, classement rapide/multicritère, archivage hiérarchique, antidatage, journal de traçabilité), plan validé par l'opérateur en 5 phases. **Phase 1 livrée :**
+
+- **Icône « œil » sur les champs sensibles (§1)** : nouveau composant réutilisable `frontend/src/components/PasswordInput.tsx` — bouton afficher/masquer, champ masqué par défaut. Appliqué à l'écran de connexion (`Login.tsx`) et à la section « Sécurité du compte » (`AccountSecurity.tsx`, 4 champs). Vérifié dans un navigateur réel (captures : point masqué → texte en clair, icône alignée au bord droit du champ).
+- **Réinitialisation d'un mot de passe par l'administrateur (§1)** : nouvel endpoint `POST /api/v1/users/:id/reset-password`, réservé au niveau `users:administration`. L'admin fixe un nouveau mot de passe pour un compte (utilisateur ayant perdu le sien) ; règles de complexité appliquées, opération tracée au journal d'audit **sans jamais y écrire le mot de passe**. Bouton « Réinitialiser le mot de passe » ajouté sur chaque compte de l'écran « Utilisateurs & rôles ».
+- **4 tests automatisés** ajoutés (réinitialisation réussie + reconnexion avec le nouveau mot de passe, ancien mot de passe rejeté, trace d'audit, refus d'un mot de passe faible en 400, refus 403 sans habilitation). Suite complète : **125 tests passent**.
+
+**Prochaine étape :** Phase 2 — dates & antidatage (date de publication/parution historique sur les ouvrages + import des livres déjà parus avec leur date réelle, tracé).

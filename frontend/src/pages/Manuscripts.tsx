@@ -1,5 +1,37 @@
 import { useEffect, useState } from "react";
-import { createManuscript, importManuscript, listGenres, listManuscripts, listUsers, type Genre, type Manuscript, type UserSummary } from "../api/client";
+import {
+  createManuscript,
+  importManuscript,
+  listCollections,
+  listGenres,
+  listManuscripts,
+  listUsers,
+  type CatalogueFilters,
+  type Collection,
+  type Genre,
+  type Manuscript,
+  type UserSummary,
+} from "../api/client";
+
+const CATALOGUE_STORAGE_KEY = "eclospace.catalogue.filters";
+
+// Raccourcis par période (spéc. fonctionnelle §5) : traduisent un libellé en
+// bornes de date de parution. Renvoie { from, to } au format AAAA-MM-JJ.
+function periodBounds(key: string): { from?: string; to?: string } {
+  const now = new Date();
+  const y = now.getFullYear();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  switch (key) {
+    case "this_year":
+      return { from: `${y}-01-01`, to: `${y}-12-31` };
+    case "last_year":
+      return { from: `${y - 1}-01-01`, to: `${y - 1}-12-31` };
+    case "this_month":
+      return { from: iso(new Date(y, now.getMonth(), 1)), to: iso(new Date(y, now.getMonth() + 1, 0)) };
+    default:
+      return {};
+  }
+}
 
 interface ManuscriptsProps {
   onOpenManuscript: (id: string) => void;
@@ -19,15 +51,32 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
   const [error, setError] = useState<string | null>(null);
   const isStageView = Boolean(statusFilter);
 
+  // Mémorisation du dernier tri/filtre (spéc. fonctionnelle §6) : on restaure
+  // les préférences de l'opérateur d'une session à l'autre, sur la vue globale.
+  const [filters, setFilters] = useState<CatalogueFilters>(() => {
+    if (statusFilter) return {};
+    try {
+      return JSON.parse(localStorage.getItem(CATALOGUE_STORAGE_KEY) ?? "{}") as CatalogueFilters;
+    } catch {
+      return {};
+    }
+  });
+  const filtersKey = JSON.stringify(filters);
+
+  useEffect(() => {
+    if (isStageView) return;
+    localStorage.setItem(CATALOGUE_STORAGE_KEY, filtersKey);
+  }, [filtersKey, isStageView]);
+
   const refresh = () =>
-    listManuscripts(statusFilter ? { status: statusFilter } : undefined)
+    listManuscripts(statusFilter ? { status: statusFilter } : filters)
       .then(setManuscripts)
       .catch((e) => setError(e.message));
 
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
+  }, [statusFilter, filtersKey]);
 
   return (
     <div style={{ padding: 32 }}>
@@ -100,8 +149,25 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
         />
       )}
 
+      {!isStageView && <CatalogueFilterBar filters={filters} onChange={setFilters} />}
+
       {manuscripts.length === 0 ? (
-        <EmptyState isStageView={isStageView} heading={heading} onGoToManuscripts={onGoToManuscripts} />
+        !isStageView && hasActiveFilters(filters) ? (
+          <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 24, marginTop: 16, maxWidth: 720 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Aucun ouvrage ne correspond à ces critères.</div>
+            <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 0 12px" }}>
+              Élargissez la période ou retirez un filtre pour voir davantage d'ouvrages.
+            </p>
+            <button
+              onClick={() => setFilters({})}
+              style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}
+            >
+              Réinitialiser les filtres
+            </button>
+          </div>
+        ) : (
+          <EmptyState isStageView={isStageView} heading={heading} onGoToManuscripts={onGoToManuscripts} />
+        )
       ) : (
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden", marginTop: 16 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -152,6 +218,120 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
         </table>
       </div>
       )}
+    </div>
+  );
+}
+
+function hasActiveFilters(f: CatalogueFilters): boolean {
+  return Boolean(f.genre || f.collection || f.language || f.back_catalogue || f.published_from || f.published_to || f.q);
+}
+
+// Barre de classement du catalogue (spéc. fonctionnelle §5/§6) : raccourcis par
+// période, filtres multicritères et tri. Les choix sont mémorisés (localStorage,
+// géré par le parent) pour être restaurés à la session suivante.
+function CatalogueFilterBar({ filters, onChange }: { filters: CatalogueFilters; onChange: (f: CatalogueFilters) => void }) {
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+
+  useEffect(() => {
+    listGenres().then(setGenres).catch(() => {});
+    listCollections().then(setCollections).catch(() => {});
+  }, []);
+
+  const set = (patch: Partial<CatalogueFilters>) => onChange({ ...filters, ...patch });
+  const applyPeriod = (key: string) => {
+    const { from, to } = periodBounds(key);
+    set({ published_from: from, published_to: to });
+  };
+  const activePeriod = (() => {
+    for (const key of ["this_year", "last_year", "this_month"]) {
+      const b = periodBounds(key);
+      if (b.from === filters.published_from && b.to === filters.published_to) return key;
+    }
+    if (!filters.published_from && !filters.published_to) return "all";
+    return "custom";
+  })();
+
+  const chip = (active: boolean): React.CSSProperties => ({
+    border: `1px solid ${active ? "var(--eclosion)" : "var(--line)"}`,
+    background: active ? "var(--eclosion-soft)" : "#fff",
+    color: active ? "var(--eclosion)" : "var(--ink)",
+    borderRadius: 999,
+    padding: "4px 12px",
+    fontSize: 12,
+    cursor: "pointer",
+  });
+  const field: React.CSSProperties = { padding: "6px 8px", fontSize: 12, border: "1px solid var(--line)", borderRadius: 6, background: "#fff" };
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 16 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase" }}>Période de parution</span>
+        <button style={chip(activePeriod === "all")} onClick={() => set({ published_from: undefined, published_to: undefined })}>
+          Tout
+        </button>
+        <button style={chip(activePeriod === "this_year")} onClick={() => applyPeriod("this_year")}>
+          Cette année
+        </button>
+        <button style={chip(activePeriod === "last_year")} onClick={() => applyPeriod("last_year")}>
+          Année dernière
+        </button>
+        <button style={chip(activePeriod === "this_month")} onClick={() => applyPeriod("this_month")}>
+          Ce mois-ci
+        </button>
+        <span style={{ fontSize: 11, color: "var(--muted)" }}>du</span>
+        <input type="date" value={filters.published_from ?? ""} onChange={(e) => set({ published_from: e.target.value || undefined })} style={field} />
+        <span style={{ fontSize: 11, color: "var(--muted)" }}>au</span>
+        <input type="date" value={filters.published_to ?? ""} onChange={(e) => set({ published_to: e.target.value || undefined })} style={field} />
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <input
+          placeholder="Rechercher un titre…"
+          value={filters.q ?? ""}
+          onChange={(e) => set({ q: e.target.value || undefined })}
+          style={{ ...field, minWidth: 180 }}
+        />
+        <select value={filters.genre ?? ""} onChange={(e) => set({ genre: e.target.value || undefined })} style={field}>
+          <option value="">Tous les domaines</option>
+          {genres.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.label}
+            </option>
+          ))}
+        </select>
+        <select value={filters.collection ?? ""} onChange={(e) => set({ collection: e.target.value || undefined })} style={field}>
+          <option value="">Toutes les collections</option>
+          {collections.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <select value={filters.back_catalogue ?? ""} onChange={(e) => set({ back_catalogue: (e.target.value || undefined) as CatalogueFilters["back_catalogue"] })} style={field}>
+          <option value="">Tous les ouvrages</option>
+          <option value="true">Déjà parus (importés)</option>
+          <option value="false">Entrés en production</option>
+        </select>
+        <span style={{ width: 1, height: 20, background: "var(--line)" }} />
+        <span style={{ fontSize: 11, color: "var(--muted)" }}>Trier par</span>
+        <select value={filters.sort ?? "priority"} onChange={(e) => set({ sort: e.target.value as CatalogueFilters["sort"] })} style={field}>
+          <option value="priority">Priorité</option>
+          <option value="title">Titre</option>
+          <option value="publication_date">Date de parution</option>
+          <option value="received_at">Date de réception</option>
+        </select>
+        <select value={filters.order ?? ""} onChange={(e) => set({ order: (e.target.value || undefined) as CatalogueFilters["order"] })} style={field}>
+          <option value="">Ordre par défaut</option>
+          <option value="desc">Décroissant</option>
+          <option value="asc">Croissant</option>
+        </select>
+        {hasActiveFilters(filters) && (
+          <button onClick={() => onChange({ sort: filters.sort, order: filters.order })} style={{ ...field, cursor: "pointer", color: "var(--muted)" }}>
+            Effacer les filtres
+          </button>
+        )}
+      </div>
     </div>
   );
 }

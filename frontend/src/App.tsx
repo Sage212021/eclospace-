@@ -3,6 +3,7 @@ import { confirmIdentifierChange, fetchMe, logout, type EffectiveUser } from "./
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Manuscripts } from "./pages/Manuscripts";
+import { CatalogueReferencePage } from "./pages/CatalogueReferencePage";
 import { ManuscriptDetail } from "./pages/ManuscriptDetail";
 import { MyReadings } from "./pages/MyReadings";
 import { StockPage } from "./pages/StockPage";
@@ -25,6 +26,7 @@ type PageId =
   | "dashboard"
   | "manuscripts"
   | "my-readings"
+  | "catalogue-ref"
   | "stock"
   | "commercial"
   | "finance"
@@ -52,6 +54,7 @@ const NAV_POLES: NavPole[] = [
       { key: "ed-mes-lectures", label: "Mes lectures", permission: "comite_lecture:saisie" },
       { key: "ed-direction", label: "Direction éditoriale", permission: "manuscripts:consultation" },
       { key: "ed-correction", label: "Correction éditoriale", permission: "manuscripts:consultation" },
+      { key: "ed-catalogue-ref", label: "Domaines & collections", permission: "manuscripts:consultation" },
     ],
   },
   {
@@ -104,6 +107,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-mes-lectures": { page: "my-readings" },
   "ed-direction": { stage: "DECISION_EDITORIALE", heading: "Direction éditoriale" },
   "ed-correction": { stage: "CORRECTION", heading: "Correction éditoriale" },
+  "ed-catalogue-ref": { page: "catalogue-ref" },
   "pr-maquette": { stage: "MISE_EN_PAGE", heading: "Maquette & mise en page" },
   "pr-infographie": { stage: "INFOGRAPHIE", heading: "Infographie & couvertures" },
   "pr-isbn": { stage: "ATTRIBUTION_REFERENCES", heading: "ISBN & dépôt légal" },
@@ -259,6 +263,9 @@ export function App() {
           <Manuscripts canCreate={permissions.has("manuscripts:saisie")} onOpenManuscript={openManuscript} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-readings" && <MyReadings />}
+        {leaf && "page" in leaf && leaf.page === "catalogue-ref" && (
+          <CatalogueReferencePage canManage={permissions.has("manuscripts:administration")} />
+        )}
         {leaf && "page" in leaf && leaf.page === "stock" && (
           <StockPage canManage={permissions.has("stock:saisie")} canAdminister={permissions.has("stock:administration")} />
         )}

@@ -45,6 +45,37 @@ const priorityOverrideSchema = z.object({
   justification: z.string().min(1),
 });
 
+// Import d'un ouvrage déjà paru (spéc. fonctionnelle §8) : on saisit son état
+// actuel, dont sa date de parution historique — pas un manuscrit qui démarre
+// le circuit.
+const importManuscriptSchema = z.object({
+  title: z.string().min(1),
+  subtitle: z.string().optional(),
+  collection_id: z.string().uuid().optional(),
+  genre_id: z.string().uuid(),
+  language: z.string().min(2),
+  estimated_pages: z.number().int().positive().optional(),
+  summary: z.string().optional(),
+  keywords: z.array(z.string()).default([]),
+  owner_id: z.string().uuid(),
+  author: authorSchema,
+  publication_date: z.coerce.date(),
+});
+
+// Antidatage de la date de parution (spéc. fonctionnelle §8) : renseigner
+// après coup la date réelle de parution d'un ouvrage, avec conservation de la
+// date de saisie effective au journal (§9).
+const publicationDateSchema = z.object({
+  publication_date: z.coerce.date(),
+  note: z.string().optional(),
+});
+
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 const listQuerySchema = z.object({
   status: z.string().optional(),
   collection: z.string().uuid().optional(),
@@ -156,6 +187,94 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       entityType: "manuscript",
       entityId: manuscript.id,
       newValues: { manuscriptNumber, title: body.title },
+      ipAddress: request.ip,
+    });
+
+    return reply.code(201).send(manuscript);
+  });
+
+  // Import d'un ouvrage déjà paru (spéc. fonctionnelle §8) : entrée directe
+  // dans le catalogue avec sa date de parution historique, sans dérouler le
+  // circuit de production. Le suivi post-publication devient son étape courante.
+  fastify.post("/api/v1/manuscripts/import", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
+    const parsed = importManuscriptSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const body = parsed.data;
+
+    if (body.publication_date > startOfToday()) {
+      return reply.code(400).send({
+        code: "future_publication_date",
+        message: "La date de parution d'un ouvrage déjà paru ne peut pas être postérieure à aujourd'hui.",
+      });
+    }
+
+    const publishedStatus = await prisma.workflowStatus.findUnique({ where: { code: "SUIVI_POST_PUBLICATION" } });
+    if (!publishedStatus) {
+      return reply.code(500).send({ code: "referential_missing", message: "Statut SUIVI_POST_PUBLICATION absent du référentiel (seed manquant)." });
+    }
+
+    const manuscriptNumber = await nextManuscriptNumber();
+    const recordedAt = new Date();
+
+    const manuscript = await prisma.$transaction(async (tx) => {
+      const author =
+        "author_id" in body.author
+          ? await tx.partner.findUniqueOrThrow({ where: { id: body.author.author_id } })
+          : await tx.partner.create({
+              data: {
+                category: "auteur",
+                firstName: body.author.first_name,
+                lastName: body.author.last_name,
+                penName: body.author.pen_name,
+                createdBy: request.user!.id,
+                updatedBy: request.user!.id,
+              },
+            });
+
+      return tx.manuscript.create({
+        data: {
+          manuscriptNumber,
+          title: body.title,
+          subtitle: body.subtitle,
+          collectionId: body.collection_id,
+          genreId: body.genre_id,
+          language: body.language,
+          estimatedPages: body.estimated_pages,
+          summary: body.summary,
+          keywords: body.keywords,
+          origin: "soumission",
+          statusId: publishedStatus.id,
+          ownerId: body.owner_id,
+          // Un ouvrage déjà paru n'a pas de « date de réception » : on aligne
+          // sur sa parution pour rester cohérent dans les listes.
+          receivedAt: body.publication_date,
+          publicationDate: body.publication_date,
+          isBackCatalogue: true,
+          createdBy: request.user!.id,
+          updatedBy: request.user!.id,
+          workContributors: { create: { partnerId: author.id, role: "author", displayOrder: 0 } },
+        },
+      });
+    });
+
+    // Traçabilité (§9) : on conserve la date de parution historique ET la date
+    // de saisie effective, pour distinguer l'antidatage d'une saisie au fil de l'eau.
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "create",
+      entityType: "manuscript",
+      entityId: manuscript.id,
+      newValues: {
+        manuscriptNumber,
+        title: body.title,
+        imported: true,
+        back_catalogue: true,
+        publication_date: body.publication_date.toISOString(),
+        recorded_at: recordedAt.toISOString(),
+        antidated: body.publication_date < startOfToday(),
+      },
       ipAddress: request.ip,
     });
 
@@ -312,6 +431,50 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         entityId: id,
         oldValues: { priorityOverride: existing.priorityOverride },
         newValues: parsed.data,
+        ipAddress: request.ip,
+      });
+
+      return reply.send(updated);
+    },
+  );
+
+  // Date de parution / antidatage (spéc. fonctionnelle §8) : renseigner ou
+  // corriger la date réelle de parution d'un ouvrage. Le journal conserve la
+  // date de saisie effective et signale l'antidatage (date antérieure à ce jour).
+  fastify.post(
+    "/api/v1/manuscripts/:id/publication-date",
+    { preHandler: requirePermission("manuscripts", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = publicationDateSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Date invalide.", details: parsed.error.issues });
+      }
+
+      const existing = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!existing) {
+        return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      }
+
+      const recordedAt = new Date();
+      const updated = await prisma.manuscript.update({
+        where: { id },
+        data: { publicationDate: parsed.data.publication_date, updatedBy: request.user!.id },
+      });
+
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "manuscript",
+        entityId: id,
+        oldValues: { publication_date: existing.publicationDate?.toISOString() ?? null },
+        newValues: {
+          change: "publication_date",
+          publication_date: parsed.data.publication_date.toISOString(),
+          recorded_at: recordedAt.toISOString(),
+          antidated: parsed.data.publication_date < startOfToday(),
+          ...(parsed.data.note ? { note: parsed.data.note } : {}),
+        },
         ipAddress: request.ip,
       });
 

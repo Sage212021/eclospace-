@@ -4,6 +4,7 @@ import {
   getManuscript,
   getManuscriptTimeline,
   listUsers,
+  setPublicationDate,
   submitEditorialDecision,
   validateStep,
   type Manuscript,
@@ -81,6 +82,13 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         Auteur : {manuscript.workContributors.map((c) => `${c.partner.firstName} ${c.partner.lastName}`).join(", ")} · Genre :{" "}
         {manuscript.genre?.label ?? "—"} · Responsable : {manuscript.owner.username}
       </p>
+
+      <PublicationDateBlock
+        manuscript={manuscript}
+        canEdit={permissions.has("manuscripts:saisie")}
+        onSaved={(msg) => handle(async () => {}, msg)}
+        onError={setError}
+      />
 
       <Spine steps={timeline} currentStatusCode={manuscript.status.code} />
 
@@ -198,6 +206,82 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           autorisés (couvertures, contrats scannés, pièces finance, archivage…). */}
       {permissions.has("documents:consultation") && (
         <AttachmentsSection manuscriptId={manuscript.id} canManage={permissions.has("documents:saisie")} />
+      )}
+    </div>
+  );
+}
+
+// Date de parution / antidatage (spéc. fonctionnelle §8) : affiche la date de
+// parution et, pour les profils habilités, permet de la renseigner ou de la
+// corriger. Toute saisie est datée du jour au journal (l'antidatage y est
+// signalé), qu'il s'agisse d'un ouvrage déjà paru ou d'une parution à venir.
+function PublicationDateBlock({
+  manuscript,
+  canEdit,
+  onSaved,
+  onError,
+}: {
+  manuscript: ManuscriptWithExtras;
+  canEdit: boolean;
+  onSaved: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const current = manuscript.publicationDate ? manuscript.publicationDate.slice(0, 10) : "";
+  const [editing, setEditing] = useState(false);
+  const [date, setDate] = useState(current);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!date) return;
+    setSaving(true);
+    try {
+      await setPublicationDate(manuscript.id, date);
+      setEditing(false);
+      onSaved("Date de parution enregistrée.");
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de l'enregistrement de la date de parution.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 4, fontSize: 13 }}>
+      <span style={{ color: "var(--muted)" }}>Date de parution :</span>
+      <strong style={{ fontFamily: "var(--font-mono)" }}>
+        {manuscript.publicationDate ? new Date(manuscript.publicationDate).toLocaleDateString("fr-FR") : "non renseignée"}
+      </strong>
+      {manuscript.isBackCatalogue && (
+        <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 999, padding: "1px 8px", fontSize: 11 }}>
+          ouvrage déjà paru
+        </span>
+      )}
+      {canEdit && !editing && (
+        <button
+          onClick={() => {
+            setDate(current);
+            setEditing(true);
+          }}
+          className="linklike"
+          style={{ background: "none", border: "none", color: "var(--eclosion)", cursor: "pointer", fontSize: 12, padding: 0 }}
+        >
+          {manuscript.publicationDate ? "Modifier" : "Renseigner"}
+        </button>
+      )}
+      {canEdit && editing && (
+        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ padding: 4, fontSize: 12 }} />
+          <button
+            onClick={save}
+            disabled={saving || !date}
+            style={{ background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: saving ? "default" : "pointer" }}
+          >
+            Enregistrer
+          </button>
+          <button onClick={() => setEditing(false)} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12 }}>
+            Annuler
+          </button>
+        </span>
       )}
     </div>
   );

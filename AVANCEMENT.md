@@ -285,3 +285,14 @@ Suite à un nouveau cahier de spécifications fonctionnelles (9 points : icône 
 - **4 tests automatisés** ajoutés (réinitialisation réussie + reconnexion avec le nouveau mot de passe, ancien mot de passe rejeté, trace d'audit, refus d'un mot de passe faible en 400, refus 403 sans habilitation). Suite complète : **125 tests passent**.
 
 **Prochaine étape :** Phase 2 — dates & antidatage (date de publication/parution historique sur les ouvrages + import des livres déjà parus avec leur date réelle, tracé).
+
+### 08/07/2026 (suite) — Phase 2 (Dates & antidatage)
+
+Deuxième phase des nouvelles spécifications fonctionnelles (points §5/§8 : date de parution réelle + saisie rétroactive des ouvrages déjà parus). **Phase 2 livrée :**
+
+- **Date de parution sur les ouvrages** : nouveau champ `publication_date` (nul tant que le livre n'est pas paru) + drapeau `is_back_catalogue` (ouvrage déjà paru saisi rétroactivement). Migration `add_manuscript_publication_date`. La colonne « Paru le » apparaît dans la liste des manuscrits ; la date figure sur la fiche de l'ouvrage.
+- **Antidatage tracé (§8)** : endpoint `POST /api/v1/manuscripts/:id/publication-date` — renseigner ou corriger la date de parution réelle. Le journal d'audit conserve **la date de parution historique ET la date de saisie effective** (`recorded_at`), et signale l'antidatage (`antidated: true` si la date est antérieure à ce jour). Sur la fiche, un lien « Renseigner / Modifier » ouvre une saisie de date pour les profils habilités (`manuscripts:saisie`).
+- **Import d'un ouvrage déjà paru (§8)** : endpoint `POST /api/v1/manuscripts/import` + bouton « + Importer un ouvrage déjà paru » sur l'écran Manuscrits. L'ouvrage entre **directement au « Suivi post-publication »** avec sa date de parution historique, sans dérouler le circuit de production — pour constituer le catalogue existant de la maison. Refus explicite d'une date de parution future. Traçabilité complète au journal (`imported`, `back_catalogue`, date historique, date de saisie, antidatage).
+- **4 tests automatisés** ajoutés (import avec date historique + statut post-publication + trace d'audit ; refus d'une date future ; antidatage d'un ouvrage existant tracé ; refus 403 sans habilitation). Suite complète : **133 tests passent**. Parcours vérifié dans un navigateur réel (import d'un ouvrage daté du 10/05/2019, badge « ouvrage déjà paru », puis modification de la date en 20/11/2018 avec confirmation).
+
+**Prochaine étape :** Phase 3 — catalogue & classements (raccourcis par période, tri/filtre multicritère, mémorisation du dernier tri, gestion des domaines/collections).

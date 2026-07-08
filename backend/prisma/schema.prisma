@@ -655,6 +655,14 @@ model Manuscript {
   projectManager   User?   @relation("ManuscriptProjectManager", fields: [projectManagerId], references: [id])
 
   receivedAt        DateTime @map("received_at")
+  // Date de parution réelle de l'ouvrage (spéc. fonctionnelle §5/§8). Nulle
+  // tant que le livre n'est pas paru ; renseignée avec sa date historique pour
+  // les ouvrages déjà publiés importés dans le catalogue (antidatage tracé).
+  publicationDate   DateTime? @map("publication_date")
+  // Ouvrage déjà paru saisi rétroactivement (hors circuit de production) pour
+  // constituer le catalogue existant — se distingue d'un manuscrit entré en
+  // production dans l'ERP.
+  isBackCatalogue   Boolean  @default(false) @map("is_back_catalogue")
   requiresExpertise Boolean  @default(false) @map("requires_expertise")
   // Décision opérateur (04/07/2026) : étape Réécriture activée mais
   // facultative — déclenchée par la correction ou l'expertise (Ch. 4 §4.3),

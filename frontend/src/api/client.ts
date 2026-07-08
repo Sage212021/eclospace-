@@ -116,6 +116,8 @@ export interface Manuscript {
   priorityScore: string;
   priorityOverride: string | null;
   receivedAt: string;
+  publicationDate: string | null;
+  isBackCatalogue: boolean;
   status: { code: string; label: string; stepOrder: number };
   genre: Genre | null;
   collection: { id: string; label: string } | null;
@@ -167,6 +169,27 @@ export function createManuscript(input: {
   author: { first_name: string; last_name: string };
 }) {
   return request<Manuscript>("/api/v1/manuscripts", { method: "POST", body: JSON.stringify(input) });
+}
+
+// Import d'un ouvrage déjà paru (spéc. fonctionnelle §8) : saisie directe dans
+// le catalogue avec sa date de parution historique.
+export function importManuscript(input: {
+  title: string;
+  genre_id: string;
+  language: string;
+  owner_id: string;
+  author: { first_name: string; last_name: string };
+  publication_date: string;
+}) {
+  return request<Manuscript>("/api/v1/manuscripts/import", { method: "POST", body: JSON.stringify(input) });
+}
+
+// Renseigner / corriger la date de parution d'un ouvrage (antidatage tracé, §8).
+export function setPublicationDate(manuscriptId: string, publicationDate: string, note?: string) {
+  return request<Manuscript>(`/api/v1/manuscripts/${manuscriptId}/publication-date`, {
+    method: "POST",
+    body: JSON.stringify({ publication_date: publicationDate, ...(note ? { note } : {}) }),
+  });
 }
 
 export function validateStep(

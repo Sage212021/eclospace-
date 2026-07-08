@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createManuscript, listGenres, listManuscripts, listUsers, type Genre, type Manuscript, type UserSummary } from "../api/client";
+import { createManuscript, importManuscript, listGenres, listManuscripts, listUsers, type Genre, type Manuscript, type UserSummary } from "../api/client";
 
 interface ManuscriptsProps {
   onOpenManuscript: (id: string) => void;
@@ -15,6 +15,7 @@ interface ManuscriptsProps {
 export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading, onGoToManuscripts }: ManuscriptsProps) {
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isStageView = Boolean(statusFilter);
 
@@ -33,21 +34,45 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>{heading ?? "Manuscrits"}</h1>
         {canCreate && !isStageView && (
-          <button
-            onClick={() => setShowForm((v) => !v)}
-            style={{
-              background: "var(--eclosion)",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              padding: "8px 14px",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            {showForm ? "Annuler" : "+ Nouveau manuscrit"}
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => {
+                setShowImport(false);
+                setShowForm((v) => !v);
+              }}
+              style={{
+                background: "var(--eclosion)",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                padding: "8px 14px",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {showForm ? "Annuler" : "+ Nouveau manuscrit"}
+            </button>
+            <button
+              onClick={() => {
+                setShowForm(false);
+                setShowImport((v) => !v);
+              }}
+              title="Enregistrer un ouvrage déjà publié, avec sa date de parution réelle"
+              style={{
+                background: "#fff",
+                color: "var(--eclosion)",
+                border: "1px solid var(--eclosion)",
+                borderRadius: 6,
+                padding: "8px 14px",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {showImport ? "Annuler" : "+ Importer un ouvrage déjà paru"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -57,6 +82,17 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
         <NewManuscriptForm
           onCreated={(m) => {
             setShowForm(false);
+            refresh();
+            onOpenManuscript(m.id);
+          }}
+          onError={setError}
+        />
+      )}
+
+      {showImport && (
+        <ImportBookForm
+          onImported={(m) => {
+            setShowImport(false);
             refresh();
             onOpenManuscript(m.id);
           }}
@@ -76,6 +112,7 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
               <th style={{ padding: 10 }}>Genre</th>
               <th style={{ padding: 10 }}>Étape</th>
               <th style={{ padding: 10 }}>Reçu le</th>
+              <th style={{ padding: 10 }}>Paru le</th>
             </tr>
           </thead>
           <tbody>
@@ -105,6 +142,9 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
                 </td>
                 <td style={{ padding: 10, fontFamily: "var(--font-mono)" }}>
                   {new Date(m.receivedAt).toLocaleDateString("fr-FR")}
+                </td>
+                <td style={{ padding: 10, fontFamily: "var(--font-mono)" }}>
+                  {m.publicationDate ? new Date(m.publicationDate).toLocaleDateString("fr-FR") : "—"}
                 </td>
               </tr>
             ))}
@@ -281,6 +321,129 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
         }}
       >
         Enregistrer le dossier
+      </button>
+      <style>{`
+        label input, label select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+      `}</style>
+    </form>
+  );
+}
+
+// Import d'un ouvrage déjà paru (spéc. fonctionnelle §8) : mêmes champs que la
+// création, plus la date de parution réelle (obligatoire). L'ouvrage entre
+// directement dans le catalogue au « suivi post-publication », sans repasser
+// par le circuit de production.
+function ImportBookForm({ onImported, onError }: { onImported: (m: Manuscript) => void; onError: (m: string) => void }) {
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [title, setTitle] = useState("");
+  const [genreId, setGenreId] = useState("");
+  const [language, setLanguage] = useState("fr");
+  const [ownerId, setOwnerId] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [publicationDate, setPublicationDate] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const today = new Date().toISOString().slice(0, 10);
+
+  useEffect(() => {
+    listGenres().then((g) => {
+      setGenres(g);
+      if (g[0]) setGenreId(g[0].id);
+    });
+    listUsers().then((u) => {
+      setUsers(u);
+      if (u[0]) setOwnerId(u[0].id);
+    });
+  }, []);
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    try {
+      const manuscript = await importManuscript({
+        title,
+        genre_id: genreId,
+        language,
+        owner_id: ownerId,
+        author: { first_name: firstName, last_name: lastName },
+        publication_date: publicationDate,
+      });
+      onImported(manuscript);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Erreur lors de l'import.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginBottom: 8, marginTop: 8 }}
+    >
+      <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 0 12px", lineHeight: 1.6 }}>
+        Enregistrez un ouvrage <strong>déjà publié</strong> pour le faire figurer au catalogue avec sa{" "}
+        <strong>date de parution réelle</strong>. La saisie est datée du jour et l'antidatage est conservé au journal.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <LabeledInput label="Titre de l'ouvrage">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+        </LabeledInput>
+        <LabeledInput label="Date de parution (réelle)">
+          <input
+            type="date"
+            value={publicationDate}
+            max={today}
+            onChange={(e) => setPublicationDate(e.target.value)}
+            required
+          />
+        </LabeledInput>
+        <LabeledInput label="Langue">
+          <input value={language} onChange={(e) => setLanguage(e.target.value)} required />
+        </LabeledInput>
+        <LabeledInput label="Domaine">
+          <select value={genreId} onChange={(e) => setGenreId(e.target.value)} required>
+            {genres.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.label}
+              </option>
+            ))}
+          </select>
+        </LabeledInput>
+        <LabeledInput label="Responsable du dossier">
+          <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} required>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.username}
+              </option>
+            ))}
+          </select>
+        </LabeledInput>
+        <LabeledInput label="Prénom de l'auteur">
+          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+        </LabeledInput>
+        <LabeledInput label="Nom de l'auteur">
+          <input value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+        </LabeledInput>
+      </div>
+      <button
+        type="submit"
+        disabled={submitting}
+        style={{
+          marginTop: 14,
+          background: "var(--eclosion)",
+          color: "#fff",
+          border: "none",
+          borderRadius: 6,
+          padding: "8px 16px",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: submitting ? "default" : "pointer",
+          opacity: submitting ? 0.6 : 1,
+        }}
+      >
+        Importer l'ouvrage
       </button>
       <style>{`
         label input, label select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }

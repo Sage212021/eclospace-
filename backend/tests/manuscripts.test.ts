@@ -189,4 +189,94 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
     const detail = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscript.id}`, headers: { cookie: adminCookie } });
     expect(detail.json().status.code).toBe("ARCHIVAGE");
   });
+
+  // Phase 2 — Dates & antidatage (spéc. fonctionnelle §8)
+  it("importe un ouvrage déjà paru avec sa date de parution historique, hors circuit de production", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/manuscripts/import",
+      headers: { cookie: adminCookie },
+      payload: {
+        title: "Ouvrage historique",
+        genre_id: genreId,
+        language: "fr",
+        owner_id: adminId,
+        author: { first_name: "Ancien", last_name: "Auteur" },
+        publication_date: "2019-05-10",
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const imported = res.json();
+    expect(imported.isBackCatalogue).toBe(true);
+    expect(imported.publicationDate.slice(0, 10)).toBe("2019-05-10");
+
+    // Entré directement au suivi post-publication (pas à l'étape 1).
+    const detail = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${imported.id}`, headers: { cookie: adminCookie } });
+    expect(detail.json().status.code).toBe("SUIVI_POST_PUBLICATION");
+
+    // Traçabilité (§9) : le journal conserve la date historique ET marque l'antidatage.
+    const audit = await prisma.auditLog.findFirst({
+      where: { entityType: "manuscript", entityId: imported.id, action: "create" },
+      orderBy: { occurredAt: "desc" },
+    });
+    const values = audit?.newValues as Record<string, unknown> | null;
+    expect(values?.imported).toBe(true);
+    expect(values?.antidated).toBe(true);
+    expect(values?.publication_date).toContain("2019-05-10");
+    expect(typeof values?.recorded_at).toBe("string");
+  });
+
+  it("refuse d'importer un ouvrage « déjà paru » avec une date de parution future", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/manuscripts/import",
+      headers: { cookie: adminCookie },
+      payload: {
+        title: "Ouvrage du futur",
+        genre_id: genreId,
+        language: "fr",
+        owner_id: adminId,
+        author: { first_name: "X", last_name: "Y" },
+        publication_date: "2999-01-01",
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe("future_publication_date");
+  });
+
+  it("renseigne la date de parution d'un ouvrage et trace l'antidatage au journal", async () => {
+    const manuscript = await createManuscript("Ouvrage à dater");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscript.id}/publication-date`,
+      headers: { cookie: adminCookie },
+      payload: { publication_date: "2020-03-15", note: "Reconstitution d'après le dépôt légal." },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().publicationDate.slice(0, 10)).toBe("2020-03-15");
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { entityType: "manuscript", entityId: manuscript.id, action: "update" },
+      orderBy: { occurredAt: "desc" },
+    });
+    const values = audit?.newValues as Record<string, unknown> | null;
+    expect(values?.change).toBe("publication_date");
+    expect(values?.antidated).toBe(true);
+    expect(values?.note).toBe("Reconstitution d'après le dépôt légal.");
+    expect(typeof values?.recorded_at).toBe("string");
+  });
+
+  it("refuse l'antidatage à un profil sans permission manuscripts:saisie (403)", async () => {
+    const manuscript = await createManuscript("Ouvrage protégé");
+    await createUserWithRole("correcteur_antidate_test", "CORRECTEUR", "Correcteur123!");
+    const cookie = await loginCookie(app, "correcteur_antidate_test", "Correcteur123!");
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscript.id}/publication-date`,
+      headers: { cookie },
+      payload: { publication_date: "2020-03-15" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
 });

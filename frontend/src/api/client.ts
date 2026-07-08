@@ -378,6 +378,15 @@ export function documentVersionDownloadUrl(versionId: string): string {
   return `${API_BASE}/api/v1/document-versions/${versionId}/download`;
 }
 
+// « Signaler au pôle » : notifier les titulaires d'un rôle qu'une pièce est
+// disponible (la pièce ne bouge pas).
+export function notifyDocument(documentId: string, roleCode: string) {
+  return request<{ ok: true }>(`/api/v1/documents/${documentId}/notify`, {
+    method: "POST",
+    body: JSON.stringify({ role_code: roleCode }),
+  });
+}
+
 export function listDocuments(entityType: string, entityId: string) {
   return request<DocumentSummary[]>(`/api/v1/documents?entity_type=${entityType}&entity_id=${entityId}`);
 }

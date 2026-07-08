@@ -4,9 +4,12 @@ import {
   documentVersionDownloadUrl,
   listDocumentVersions,
   listDocuments,
+  listRoles,
+  notifyDocument,
   uploadDocumentVersion,
   type DocumentSummary,
   type DocumentVersionSummary,
+  type RoleSummary,
 } from "../api/client";
 
 // Pièces jointes d'un ouvrage (GED, Ch. 21 §21.9) : chaque pôle dépose,
@@ -49,6 +52,7 @@ const CONFIDENTIALITY_LABELS: Record<string, string> = {
 export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: string; canManage: boolean }) {
   const [docs, setDocs] = useState<DocumentSummary[]>([]);
   const [versionsByDoc, setVersionsByDoc] = useState<Record<string, DocumentVersionSummary[]>>({});
+  const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -67,8 +71,20 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
 
   useEffect(() => {
     load();
+    listRoles().then(setRoles).catch(() => setRoles([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manuscriptId]);
+
+  async function handleNotify(doc: DocumentSummary, roleCode: string) {
+    setError(null);
+    try {
+      await notifyDocument(doc.id, roleCode);
+      const roleLabel = roles.find((r) => r.code === roleCode)?.label ?? roleCode;
+      setMessage(`« ${doc.title} » signalée à : ${roleLabel}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Échec du signalement.");
+    }
+  }
 
   async function handleNewVersion(doc: DocumentSummary, file: File) {
     setError(null);
@@ -123,6 +139,24 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
                     {canManage && (
                       <FilePicker label="Nouvelle version" onFile={(file) => handleNewVersion(doc, file)} />
                     )}
+                    <select
+                      defaultValue=""
+                      title="Prévenir un pôle qu'une pièce est disponible"
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleNotify(doc, e.target.value);
+                          e.target.value = "";
+                        }
+                      }}
+                      style={{ fontSize: 11, border: "1px solid var(--line)", borderRadius: 6, padding: "3px 6px", background: "#fff" }}
+                    >
+                      <option value="">Signaler au pôle…</option>
+                      {roles.map((r) => (
+                        <option key={r.id} value={r.code}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
                   </span>
                 </div>
               </div>

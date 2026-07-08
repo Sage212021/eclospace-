@@ -5,6 +5,9 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
+import { notifyRole } from "../lib/notify.js";
+
+const notifyDocumentSchema = z.object({ role_code: z.string().min(1) });
 
 const createDocumentSchema = z.object({
   entity_type: z.string().min(1),
@@ -138,6 +141,59 @@ export default async function documentRoutes(fastify: FastifyInstance) {
       const buffer = await readStoredFile(version.filePath);
       reply.header("content-type", version.mimeType);
       return reply.send(buffer);
+    },
+  );
+
+  // « Signaler au pôle » (spec pièces jointes) : prévenir les titulaires d'un
+  // rôle qu'une pièce est disponible sur un ouvrage — la pièce ne bouge pas,
+  // seule une notification est envoyée. Tracé au journal d'audit.
+  fastify.post(
+    "/api/v1/documents/:id/notify",
+    { preHandler: requirePermission("documents", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = notifyDocumentSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Rôle destinataire manquant." });
+      }
+
+      const document = await prisma.document.findFirst({ where: { id, deletedAt: null } });
+      if (!document) {
+        return reply.code(404).send({ code: "not_found", message: "Pièce introuvable." });
+      }
+
+      const role = await prisma.role.findUnique({ where: { code: parsed.data.role_code } });
+      if (!role) {
+        return reply.code(400).send({ code: "validation_error", message: `Rôle inconnu : ${parsed.data.role_code}.` });
+      }
+
+      // Contexte lisible : titre de l'ouvrage si la pièce est rattachée à un manuscrit.
+      let contexte = "";
+      if (document.entityType === "manuscript") {
+        const manuscript = await prisma.manuscript.findUnique({ where: { id: document.entityId } });
+        if (manuscript) contexte = ` sur l'ouvrage « ${manuscript.title} » (${manuscript.manuscriptNumber})`;
+      }
+
+      await notifyRole({
+        roleCode: role.code,
+        type: "autre",
+        priority: "medium",
+        title: "Pièce jointe disponible",
+        body: `La pièce « ${document.title} » est disponible${contexte}.`,
+        entityType: document.entityType,
+        entityId: document.entityId,
+      });
+
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "document",
+        entityId: document.id,
+        newValues: { signaled_to_role: role.code },
+        ipAddress: request.ip,
+      });
+
+      return reply.send({ ok: true });
     },
   );
 }

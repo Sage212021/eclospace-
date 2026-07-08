@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { login, verifyTwoFactor } from "../api/client";
+import { PasswordInput } from "../components/PasswordInput";
 
 interface LoginProps {
   onAuthenticated: () => void;
@@ -81,8 +82,7 @@ export function Login({ onAuthenticated }: LoginProps) {
               />
             </Field>
             <Field label="Mot de passe">
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

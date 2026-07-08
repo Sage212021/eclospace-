@@ -1101,6 +1101,15 @@ export function revokeRole(userRoleId: string, justification: string) {
   return request(`/api/v1/user-roles/${userRoleId}/revoke`, { method: "PATCH", body: JSON.stringify({ justification }) });
 }
 
+// Réinitialisation du mot de passe d'un compte par un administrateur (spéc.
+// fonctionnelle §1) — réservé au niveau « administration ».
+export function resetUserPassword(userId: string, newPassword: string) {
+  return request<{ ok: true }>(`/api/v1/users/${userId}/reset-password`, {
+    method: "POST",
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+}
+
 // Utilisateurs & rôles (Ch. 2) — écran dédié de gestion des habilitations.
 export interface RoleSummary {
   id: string;

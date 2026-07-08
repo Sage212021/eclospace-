@@ -158,6 +158,14 @@ Couche transverse du projet : contrairement aux lots précédents, ce lot ne sai
 
 **Frontend** : trois écrans ajoutés (`HrPage`, `DirectionPage`, `ReportsPage`), suivant le même style que les écrans des lots précédents (cartes, formulaires par invites navigateur pour les identifiants d'entités liées faute de sélecteurs dédiés — même limitation déjà acceptée dans `FinancePage`). Vérifiés en navigateur (Playwright) : connexion, navigation vers les trois écrans, génération d'un rapport standard avec affichage des lignes, génération des recommandations — aucune erreur console au-delà du bruit habituel (favicon, vérification de session avant connexion).
 
+## Présence temps réel (Socket.IO) — 07/07/2026
+
+| Date | Choix | Raison |
+|---|---|---|
+| 07/07/2026 | **Socket.IO attaché au serveur HTTP de Fastify** (`attachPresence(app.server)` dans `server.ts`), même port que le trafic HTTP | Sur Scalingo tout le trafic passe par un seul `$PORT` ; pas de serveur ni de port dédié. La socket est authentifiée par le **cookie de session existant** (`verifySessionToken`), sans toucher au RBAC. |
+| 07/07/2026 | **État de présence en mémoire, mono-instance** (`lib/presence.ts`) : une `Map` socket → { userId, pôle, module }, diffusée à chaque changement via `presence:update` | Suffisant pour la recette (1 conteneur web). ⚠️ **En cas de passage à plusieurs conteneurs web** (scaling horizontal / `WEB_CONCURRENCY > 1`), la présence ne serait plus cohérente entre instances : il faudrait un **adaptateur partagé** (`@socket.io/redis-adapter` + **addon Redis Scalingo**). Repli explicitement accepté par l'opérateur pour ce lot. |
+| 07/07/2026 | Événements `presence:join` / `presence:leave` / `disconnect` ; le client émet le pôle+module courant à chaque changement de vue | La déconnexion (`disconnect`, fermeture d'onglet incluse) nettoie l'état pour éviter les voyants « fantômes ». Indicateurs : compteur global en header (utilisateurs connectés), voyant vert par pôle (visible même replié) et par module (au déroulé), badge numérique + info-bulle des noms si plusieurs. |
+
 ## Environnements
 
 - **Développement** : Docker Compose local (PostgreSQL + backend + frontend), aucune donnée réelle (Ch. 21 §21.4).

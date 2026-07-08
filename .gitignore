@@ -6,3 +6,4 @@ build/
 .DS_Store
 backend/uploads/
 backend/public/
+uploads/

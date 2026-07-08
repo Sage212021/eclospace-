@@ -18,6 +18,7 @@ import { ProductionSection } from "../components/ProductionSection";
 import { IsbnSection } from "../components/IsbnSection";
 import { BatSection } from "../components/BatSection";
 import { PrintingSection } from "../components/PrintingSection";
+import { AttachmentsSection } from "../components/AttachmentsSection";
 
 interface ManuscriptDetailProps {
   manuscriptId: string;
@@ -191,6 +192,12 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           canManage={permissions.has("printing:saisie")}
           canValidate={permissions.has("printing:validation")}
         />
+      )}
+
+      {/* Pièces jointes : disponibles à toutes les étapes, pour tous les pôles
+          autorisés (couvertures, contrats scannés, pièces finance, archivage…). */}
+      {permissions.has("documents:consultation") && (
+        <AttachmentsSection manuscriptId={manuscript.id} canManage={permissions.has("documents:saisie")} />
       )}
     </div>
   );

@@ -350,6 +350,8 @@ export function resolveTaskComment(id: string) {
 export interface DocumentSummary {
   id: string;
   title: string;
+  category: string;
+  confidentiality: string;
 }
 
 export interface DocumentVersionSummary {
@@ -360,8 +362,20 @@ export interface DocumentVersionSummary {
   uploadedAt: string;
 }
 
-export function createDocument(input: { entity_type: string; entity_id: string; category: string; title: string }) {
+export function createDocument(input: {
+  entity_type: string;
+  entity_id: string;
+  category: string;
+  title: string;
+  confidentiality?: string;
+}) {
   return request<DocumentSummary>("/api/v1/documents", { method: "POST", body: JSON.stringify(input) });
+}
+
+// Lien de téléchargement d'une version (le navigateur envoie le cookie de
+// session sur la même origine ; l'accès est contrôlé côté serveur).
+export function documentVersionDownloadUrl(versionId: string): string {
+  return `${API_BASE}/api/v1/document-versions/${versionId}/download`;
 }
 
 export function listDocuments(entityType: string, entityId: string) {

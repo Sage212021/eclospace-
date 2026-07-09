@@ -227,7 +227,10 @@ export function App() {
         presenceByPole={presence.byPole}
         presenceByModule={presence.byModule}
       />
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      {/* minWidth:0 + overflowX:hidden : la colonne principale se réduit à côté
+          de la barre latérale à largeur fixe et ne provoque jamais de défilement
+          horizontal sur mobile (débordements décoratifs éventuels rognés). */}
+      <div style={{ flex: 1, minWidth: 0, overflowX: "hidden", display: "flex", flexDirection: "column" }}>
         <TopBar connectedUsers={presence.connectedUsers} />
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 24px" }}>
           <button

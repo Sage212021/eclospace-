@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listSettings, updateSetting, type AppSetting, type EffectiveUser } from "../api/client";
 import { AccountSecurity } from "../components/AccountSecurity";
+import { SettingCard } from "../components/SettingCard";
 
 interface SettingsPageProps {
   canAdminister: boolean;
@@ -80,7 +81,7 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
   }
 
   return (
-    <div style={{ padding: 32, maxWidth: 1040 }}>
+    <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 1040 }}>
       <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Paramètres</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>
         Seuils, pondérations et réglages métier, ajustables sans redéploiement.
@@ -102,42 +103,22 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
 
       {settings.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun paramètre.</p>}
 
-      {settings.map((setting) => {
-        const isNumber = typeof setting.value === "number";
-        const dirty = drafts[setting.key] !== formatValue(setting.value);
-        return (
-          <div key={setting.key} style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{labelOf(setting.key)}</div>
-            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{descriptionOf(setting.key)}</div>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, fontFamily: "var(--font-mono)" }}>{setting.key} · v{setting.version}</div>
-
-            <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-              {isNumber ? (
-                <input
-                  type="number"
-                  value={drafts[setting.key] ?? ""}
-                  onChange={(e) => setDrafts((d) => ({ ...d, [setting.key]: e.target.value }))}
-                  disabled={!canAdminister}
-                  style={{ padding: 8, fontSize: 14, fontFamily: "var(--font-mono)", width: 200, border: "1px solid var(--line)", borderRadius: 6 }}
-                />
-              ) : (
-                <textarea
-                  value={drafts[setting.key] ?? ""}
-                  onChange={(e) => setDrafts((d) => ({ ...d, [setting.key]: e.target.value }))}
-                  disabled={!canAdminister}
-                  rows={4}
-                  style={{ padding: 8, fontSize: 12, fontFamily: "var(--font-mono)", width: 360, maxWidth: "100%", border: "1px solid var(--line)", borderRadius: 6 }}
-                />
-              )}
-              {canAdminister && dirty && (
-                <button onClick={() => handleSave(setting)} style={primaryButtonStyle}>
-                  Enregistrer
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {settings.map((setting) => (
+        <SettingCard
+          key={setting.key}
+          label={labelOf(setting.key)}
+          description={descriptionOf(setting.key)}
+          techKey={setting.key}
+          version={setting.version}
+          isNumber={typeof setting.value === "number"}
+          currentValue={setting.value}
+          draft={drafts[setting.key] ?? ""}
+          onDraftChange={(value) => setDrafts((d) => ({ ...d, [setting.key]: value }))}
+          canAdminister={canAdminister}
+          dirty={drafts[setting.key] !== formatValue(setting.value)}
+          onSave={() => handleSave(setting)}
+        />
+      ))}
     </div>
   );
 }
@@ -164,14 +145,3 @@ function parseValue(raw: string, current: unknown): unknown {
   }
   return JSON.parse(raw);
 }
-
-const primaryButtonStyle: React.CSSProperties = {
-  background: "var(--eclosion)",
-  color: "#fff",
-  border: "none",
-  borderRadius: 6,
-  padding: "8px 16px",
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: "pointer",
-};

@@ -56,6 +56,20 @@ export function getDashboardStats() {
   return request<DashboardStats>("/api/v1/dashboard/stats");
 }
 
+// Recherche rapide de la barre supérieure : un aperçu léger et cliquable par
+// ouvrage (titre, auteur, ISBN). Filtrée côté serveur selon les droits.
+export interface QuickSearchResult {
+  id: string;
+  manuscriptNumber: string;
+  title: string;
+  author: string | null;
+  isbn: string | null;
+}
+
+export function quickSearch(q: string) {
+  return request<{ results: QuickSearchResult[] }>(`/api/v1/quick-search?q=${encodeURIComponent(q)}`);
+}
+
 export function login(username: string, password: string) {
   return request<{ requires_2fa: boolean; challenge_id?: string }>("/api/v1/auth/login", {
     method: "POST",

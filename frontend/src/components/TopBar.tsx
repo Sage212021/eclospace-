@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { listUnreadNotifications } from "../api/client";
+import { useEffect, useRef, useState } from "react";
+import { listUnreadNotifications, quickSearch, type QuickSearchResult } from "../api/client";
 
 interface TopBarProps {
   // Utilisateurs actuellement connectés à l'application (présence temps réel).
@@ -10,6 +10,8 @@ interface TopBarProps {
   user: { username: string; email: string };
   onLogout: () => void;
   onOpenSettings?: () => void;
+  // Ouvre la fiche d'un ouvrage depuis un résultat de recherche.
+  onOpenManuscript?: (id: string) => void;
 }
 
 function initials(username: string): string {
@@ -20,15 +22,60 @@ function initials(username: string): string {
 
 // Barre supérieure (guide §6) : recherche globale + présence + notifications +
 // menu de profil (avatar) à droite, façon Microsoft 365 / Notion.
-export function TopBar({ connectedUsers, onMenu, user, onLogout, onOpenSettings }: TopBarProps) {
+export function TopBar({ connectedUsers, onMenu, user, onLogout, onOpenSettings, onOpenManuscript }: TopBarProps) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Recherche rapide : requête saisie, résultats et état d'ouverture du menu
+  // déroulant. La recherche part après une courte pause de frappe (anti-rebond)
+  // pour ne pas solliciter le serveur à chaque touche.
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<QuickSearchResult[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     listUnreadNotifications()
       .then((notifications) => setUnreadCount(notifications.length))
       .catch(() => setUnreadCount(0));
   }, []);
+
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length === 0) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const handle = setTimeout(() => {
+      quickSearch(term)
+        .then((data) => setResults(data.results))
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [query]);
+
+  // Ferme le menu déroulant quand on clique en dehors de la zone de recherche.
+  useEffect(() => {
+    if (!searchOpen) return;
+    function onClickOutside(event: MouseEvent) {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(event.target as Node)) {
+        setSearchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [searchOpen]);
+
+  function openResult(id: string) {
+    setSearchOpen(false);
+    setQuery("");
+    setResults([]);
+    onOpenManuscript?.(id);
+  }
 
   return (
     <header
@@ -48,20 +95,82 @@ export function TopBar({ connectedUsers, onMenu, user, onLogout, onOpenSettings 
           ☰
         </button>
       )}
-      <input
-        placeholder="Rechercher un ouvrage, un auteur, un ISBN…"
-        disabled
-        style={{
-          flex: 1,
-          minWidth: 0,
-          maxWidth: 420,
-          padding: "8px 12px",
-          border: "1px solid var(--line)",
-          borderRadius: 6,
-          fontSize: 13,
-          color: "var(--muted)",
-        }}
-      />
+      {/* Recherche rapide : au fil de la frappe, un menu déroulant présente les
+          ouvrages correspondants (titre, auteur, ISBN). Cliquer un résultat
+          ouvre sa fiche. La présentation générale reste inchangée : le champ
+          garde sa place et son style, seul le déroulé s'ajoute au clic. */}
+      <div ref={searchBoxRef} style={{ position: "relative", flex: 1, minWidth: 0, maxWidth: 420 }}>
+        <input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setSearchOpen(true);
+          }}
+          onFocus={() => setSearchOpen(true)}
+          placeholder="Rechercher un ouvrage, un auteur, un ISBN…"
+          aria-label="Recherche rapide"
+          style={{
+            width: "100%",
+            padding: "8px 12px",
+            border: "1px solid var(--line)",
+            borderRadius: 6,
+            fontSize: 13,
+            color: "var(--ink)",
+          }}
+        />
+        {searchOpen && query.trim().length > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 6px)",
+              left: 0,
+              right: 0,
+              zIndex: 61,
+              background: "var(--card)",
+              border: "1px solid var(--line)",
+              borderRadius: 12,
+              boxShadow: "0 12px 32px rgba(9, 16, 33, 0.18)",
+              overflow: "hidden",
+              maxHeight: 360,
+              overflowY: "auto",
+            }}
+          >
+            {searching && results.length === 0 && (
+              <div style={{ padding: "12px 14px", fontSize: 13, color: "var(--muted)" }}>Recherche…</div>
+            )}
+            {!searching && results.length === 0 && (
+              <div style={{ padding: "12px 14px", fontSize: 13, color: "var(--muted)" }}>
+                Aucun ouvrage ne correspond à « {query.trim()} ».
+              </div>
+            )}
+            {results.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => openResult(r.id)}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: "1px solid var(--line)",
+                  padding: "10px 14px",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#f4f6fa")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>{r.title}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: "var(--font-mono)" }}>{r.manuscriptNumber}</span>
+                  {r.author && <span>· {r.author}</span>}
+                  {r.isbn && <span style={{ fontFamily: "var(--font-mono)" }}>· {r.isbn}</span>}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <div
         title={
           connectedUsers.length > 0

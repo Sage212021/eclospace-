@@ -273,6 +273,7 @@ export function App() {
           user={{ username: user.username, email: user.email }}
           onLogout={handleLogout}
           onOpenSettings={() => selectLeaf("ad-parametres")}
+          onOpenManuscript={openManuscript}
         />
 
         {user.impersonating && (

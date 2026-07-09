@@ -104,9 +104,11 @@ describe("archivage hiérarchique & gouvernance (Phases 4-5)", () => {
   });
 
   it("empêche l'administrateur de supprimer son propre compte", async () => {
+    // Le compte admin est aussi le compte passe-partout protégé : la suppression
+    // est refusée (par la protection, qui prime sur le garde-fou « soi-même »).
     const res = await app.inject({ method: "DELETE", url: `/api/v1/users/${adminId}`, headers: { cookie: adminCookie } });
     expect(res.statusCode).toBe(409);
-    expect(res.json().code).toBe("cannot_delete_self");
+    expect(["cannot_delete_self", "protected_account"]).toContain(res.json().code);
   });
 
   // --- Phase 5 : matrice des droits éditable ---

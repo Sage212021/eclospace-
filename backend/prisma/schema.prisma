@@ -259,6 +259,10 @@ model User {
   mfaSecret    String?    @map("mfa_secret")
   status       UserStatus @default(active)
   lastLoginAt  DateTime?  @map("last_login_at")
+  // Compte « passe-partout » (super-administrateur) : ne peut être ni suspendu,
+  // ni supprimé, ni privé de son rôle ; seul compte éligible au mot de passe
+  // maître de secours. Posé sur le compte admin initial par le seed.
+  isProtected  Boolean    @default(false) @map("is_protected")
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")

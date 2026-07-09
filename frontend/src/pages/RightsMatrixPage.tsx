@@ -6,6 +6,7 @@ import {
   listDepartments,
   listPermissions,
   listRoles,
+  setDepartmentPermission,
   setRolePermission,
   type Department,
   type PermissionRef,
@@ -46,7 +47,104 @@ export function RightsMatrixPage({ canManage }: { canManage: boolean }) {
       )}
 
       <RightsMatrix canManage={canManage} onError={setError} onMessage={setMessage} />
+      {canManage && <BulkPoleRights onError={setError} onMessage={setMessage} />}
       <DepartmentsPanel canManage={canManage} onError={setError} onMessage={setMessage} />
+    </div>
+  );
+}
+
+// Réglage groupé par pôle (spéc. fonctionnelle §3) : accorder ou retirer un
+// droit à TOUS les rôles d'un pôle en une seule opération.
+function BulkPoleRights({ onError, onMessage }: { onError: (m: string | null) => void; onMessage: (m: string | null) => void }) {
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [permissions, setPermissions] = useState<PermissionRef[]>([]);
+  const [deptId, setDeptId] = useState("");
+  const [module, setModule] = useState("");
+  const [action, setAction] = useState("consultation");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    Promise.all([listDepartments(), listPermissions()])
+      .then(([d, p]) => {
+        setDepartments(d);
+        setPermissions(p);
+        if (d[0]) setDeptId(d[0].id);
+        const mods = [...new Set(p.map((x) => x.module))].sort();
+        if (mods[0]) setModule(mods[0]);
+      })
+      .catch((e) => onError(e instanceof Error ? e.message : "Échec du chargement."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const modules = [...new Set(permissions.map((p) => p.module))].sort();
+  const actionsForModule = ACTIONS.filter((a) => permissions.some((p) => p.module === module && p.action === a.key));
+
+  async function apply(granted: boolean) {
+    if (!deptId || !module) return;
+    setBusy(true);
+    onError(null);
+    onMessage(null);
+    try {
+      const res = await setDepartmentPermission(deptId, module, action, granted);
+      const dept = departments.find((d) => d.id === deptId);
+      onMessage(`Droit ${granted ? "accordé" : "retiré"} pour ${res.roles_affected} rôle(s) du pôle « ${dept?.name ?? ""} ».`);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec du réglage groupé.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const field: React.CSSProperties = { padding: "6px 8px", fontSize: 13, border: "1px solid var(--line)", borderRadius: 6, background: "#fff" };
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Réglage groupé par pôle</div>
+      <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 12px" }}>
+        Accordez ou retirez un droit à <strong>tous les rôles d'un pôle</strong> en une seule opération (le rôle
+        Administrateur général n'est jamais affecté).
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <select value={deptId} onChange={(e) => setDeptId(e.target.value)} style={field}>
+          {departments.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={module}
+          onChange={(e) => setModule(e.target.value)}
+          style={field}
+        >
+          {modules.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <select value={action} onChange={(e) => setAction(e.target.value)} style={field}>
+          {actionsForModule.map((a) => (
+            <option key={a.key} value={a.key}>
+              {a.label}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={() => apply(true)}
+          disabled={busy}
+          style={{ background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}
+        >
+          Accorder à tout le pôle
+        </button>
+        <button
+          onClick={() => apply(false)}
+          disabled={busy}
+          style={{ background: "#fff", color: "var(--alert)", border: "1px solid var(--alert)", borderRadius: 6, padding: "6px 12px", fontSize: 13, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}
+        >
+          Retirer à tout le pôle
+        </button>
+      </div>
     </div>
   );
 }

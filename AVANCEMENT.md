@@ -324,3 +324,16 @@ Quatrième et cinquième phases livrées ensemble (à la demande de l'opérateur
 - **9 tests automatisés** ajoutés (archives + axes ; création/suspension/réactivation de compte + connexion ; mot de passe faible refusé ; anti-auto-suppression ; matrice appliquée immédiatement ; super-admin protégé ; création/retrait de pôle + refus si utilisé ; refus 403 sans habilitation). Suite complète : **151 tests passent**. Parcours vérifié au navigateur (arbre des archives, création de compte, matrice de droits, ajout d'un pôle).
 
 **Prochaine étape :** consolidation / retours de l'opérateur — les 5 phases des nouvelles spécifications fonctionnelles sont couvertes.
+
+### 09/07/2026 (suite) — Renforcement gouvernance : passe-partout, usurpation d'identité, mot de passe maître, droits par pôle
+
+À la demande de l'opérateur, quatre fonctionnalités d'administration avancée (précisions des points §2/§3/§4).
+
+- **Compte passe-partout inbloquable** : champ `is_protected` sur les comptes (posé sur `admin` par le seed ; migration `add_user_is_protected`). Le compte protégé ne peut être ni suspendu, ni supprimé, ni privé de son rôle d'administrateur général — garantie d'un accès de secours permanent.
+- **« Se connecter en tant que » (usurpation d'identité)** : `POST /api/v1/users/:id/impersonate` — un administrateur voit l'application sous l'identité d'un autre compte (assistance). Un **bandeau orange** l'indique en permanence avec un bouton « Revenir à mon compte » (`POST /api/v1/auth/stop-impersonation`). Début et fin tracés au journal ; interdit de viser le compte passe-partout ou soi-même ; l'identité réelle de l'administrateur est conservée dans la session.
+- **Mot de passe maître de secours (« bris de glace »)** : `lib/masterPassword.ts` + variable `MASTER_PASSWORD_HASH` (empreinte argon2, jamais le mot de passe en clair). **Désactivé par défaut.** N'ouvre **que** le compte passe-partout, contourne le second facteur (perte d'appareil), et journalise chaque usage en priorité haute. Choix de conception assumé : pas de mot de passe unique ouvrant n'importe quel compte (anti-pattern) — l'accès aux autres comptes passe par l'usurpation d'identité, tracée et réversible.
+- **Droits par pôle en une opération** : `POST /api/v1/departments/:id/permissions` applique (ou retire) un droit à **tous les rôles d'un pôle** d'un coup (le rôle administrateur général n'est jamais affecté). Section « Réglage groupé par pôle » sur l'écran Droits & pôles.
+- **Correctif transverse** : le client HTTP ne déclarait `Content-Type: application/json` que par défaut, ce qui faisait échouer les requêtes POST **sans corps** (usurpation, retour, déconnexion) avec une erreur Fastify « corps vide ». Le type n'est désormais envoyé que lorsqu'un corps est présent.
+- **7 tests automatisés** ajoutés (passe-partout non suspensible/supprimable ; mot de passe maître ouvre le compte protégé et pas un compte ordinaire, tracé ; usurpation + retour reflétés par /me ; usurpation du passe-partout interdite ; droit appliqué à tout un pôle ; refus 403 sans habilitation). Suite complète : **149 tests passent**. Usurpation et réglage par pôle vérifiés dans un navigateur réel (bandeau, bascule de vue, retour au compte).
+
+**Prochaine étape :** consolidation / retours de l'opérateur.

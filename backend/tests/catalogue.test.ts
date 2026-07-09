@@ -108,12 +108,13 @@ describe("catalogue & classements (Phase 3)", () => {
   });
 
   it("gère les collections et refuse un code déjà pris (409)", async () => {
+    const code = `COLL_DUP_${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
     const label = `Collection ${Math.random().toString(36).slice(2, 7)}`;
     const create = await app.inject({
       method: "POST",
       url: "/api/v1/collections",
       headers: { cookie: adminCookie },
-      payload: { label, code: "COLL_TEST_DUP" },
+      payload: { label, code },
     });
     expect(create.statusCode).toBe(201);
 
@@ -121,7 +122,7 @@ describe("catalogue & classements (Phase 3)", () => {
       method: "POST",
       url: "/api/v1/collections",
       headers: { cookie: adminCookie },
-      payload: { label: "Autre", code: "COLL_TEST_DUP" },
+      payload: { label: "Autre", code },
     });
     expect(dup.statusCode).toBe(409);
     expect(dup.json().code).toBe("code_taken");

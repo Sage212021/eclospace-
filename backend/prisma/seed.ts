@@ -529,12 +529,14 @@ async function main() {
   const passwordHash = await argon2.hash(adminPassword);
   const adminUser = await prisma.user.upsert({
     where: { username: "admin" },
-    update: {},
+    // Compte passe-partout : marqué protégé même sur une base déjà seedée.
+    update: { isProtected: true },
     create: {
       username: "admin",
       email: "admin@eclospace.local",
       passwordHash,
       status: "active",
+      isProtected: true,
     },
   });
 

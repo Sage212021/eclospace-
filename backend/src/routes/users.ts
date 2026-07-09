@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
+import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "../lib/session.js";
 
 const resetPasswordSchema = z.object({ new_password: z.string().min(1) });
 
@@ -208,6 +209,9 @@ export default async function userRoutes(fastify: FastifyInstance) {
     }
     const { username, email, status } = parsed.data;
 
+    if (status === "suspended" && target.isProtected) {
+      return reply.code(409).send({ code: "protected_account", message: "Le compte passe-partout ne peut pas être suspendu." });
+    }
     if (status === "suspended" && target.id === request.user!.id) {
       return reply.code(409).send({ code: "cannot_suspend_self", message: "Vous ne pouvez pas suspendre votre propre compte." });
     }
@@ -247,6 +251,9 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const target = await prisma.user.findFirst({ where: { id, deletedAt: null } });
     if (!target) {
       return reply.code(404).send({ code: "not_found", message: "Compte introuvable." });
+    }
+    if (target.isProtected) {
+      return reply.code(409).send({ code: "protected_account", message: "Le compte passe-partout ne peut pas être supprimé." });
     }
     if (target.id === request.user!.id) {
       return reply.code(409).send({ code: "cannot_delete_self", message: "Vous ne pouvez pas supprimer votre propre compte." });
@@ -404,5 +411,87 @@ export default async function userRoutes(fastify: FastifyInstance) {
       ipAddress: request.ip,
     });
     return reply.send({ ok: true });
+  });
+
+  // Réglage des droits pour TOUT un pôle en une opération (spéc. fonctionnelle
+  // §3) : applique un droit à tous les rôles du département, sauf le rôle
+  // super-administrateur (protégé). Chaque rôle touché reste tracé globalement.
+  fastify.post("/api/v1/departments/:id/permissions", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = permissionToggleSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const department = await prisma.department.findFirst({ where: { id, deletedAt: null } });
+    if (!department) {
+      return reply.code(404).send({ code: "not_found", message: "Pôle introuvable." });
+    }
+    const permission = await prisma.permission.findUnique({
+      where: { module_action: { module: parsed.data.module, action: parsed.data.action } },
+    });
+    if (!permission) {
+      return reply.code(400).send({ code: "unknown_permission", message: "Permission inconnue." });
+    }
+
+    const roles = await prisma.role.findMany({ where: { departmentId: id, deletedAt: null, code: { not: SUPERADMIN_ROLE } } });
+    for (const role of roles) {
+      if (parsed.data.granted) {
+        await prisma.rolePermission.upsert({
+          where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
+          update: {},
+          create: { roleId: role.id, permissionId: permission.id, createdBy: request.user!.id },
+        });
+      } else {
+        await prisma.rolePermission.deleteMany({ where: { roleId: role.id, permissionId: permission.id } });
+      }
+    }
+
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "department",
+      entityId: id,
+      newValues: {
+        bulk_permission: `${parsed.data.module}:${parsed.data.action}`,
+        granted: parsed.data.granted,
+        roles_affected: roles.length,
+      },
+      ipAddress: request.ip,
+    });
+
+    return reply.send({ ok: true, roles_affected: roles.length });
+  });
+
+  // « Se connecter en tant que » (usurpation d'identité, spéc. fonctionnelle
+  // §4) : un administrateur agit sous l'identité d'un autre compte pour
+  // l'assistance. Bracketé au journal (début/fin) et signalé par un bandeau
+  // côté interface. Interdit de viser le compte passe-partout ou soi-même.
+  fastify.post("/api/v1/users/:id/impersonate", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    if (id === request.user!.id) {
+      return reply.code(409).send({ code: "cannot_impersonate_self", message: "Vous êtes déjà connecté avec ce compte." });
+    }
+    const target = await prisma.user.findFirst({ where: { id, deletedAt: null } });
+    if (!target) {
+      return reply.code(404).send({ code: "not_found", message: "Compte introuvable." });
+    }
+    if (target.status !== "active") {
+      return reply.code(409).send({ code: "inactive_account", message: "Ce compte n'est pas actif." });
+    }
+    if (target.isProtected) {
+      return reply.code(409).send({ code: "protected_account", message: "Le compte passe-partout ne peut pas être usurpé." });
+    }
+
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "user",
+      entityId: target.id,
+      newValues: { impersonation: "start", target: target.username },
+      ipAddress: request.ip,
+    });
+
+    reply.setCookie(SESSION_COOKIE, createSessionToken(target.id, request.user!.id), sessionCookieOptions());
+    return reply.send({ ok: true, impersonating: target.username });
   });
 }

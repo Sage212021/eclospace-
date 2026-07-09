@@ -1,3 +1,5 @@
+import { Button } from "./Button";
+
 // Carte de réglage (page Paramètres) harmonisée au design system : coins
 // arrondis, ombre légère, clé technique reléguée en badge discret, valeur
 // numérique formatée avec séparateur de milliers (format FR). Purement visuel :
@@ -95,9 +97,9 @@ export function SettingCard({
                 }}
               />
               {dirty && (
-                <button onClick={onSave} style={saveButtonStyle}>
+                <Button variant="add" onClick={onSave}>
                   Enregistrer
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -123,9 +125,9 @@ export function SettingCard({
           />
           {canAdminister && dirty && (
             <div style={{ marginTop: 8 }}>
-              <button onClick={onSave} style={saveButtonStyle}>
+              <Button variant="add" onClick={onSave}>
                 Enregistrer
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -133,14 +135,3 @@ export function SettingCard({
     </div>
   );
 }
-
-const saveButtonStyle: React.CSSProperties = {
-  background: "var(--eclosion)",
-  color: "#fff",
-  border: "none",
-  borderRadius: 8,
-  padding: "7px 16px",
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: "pointer",
-};

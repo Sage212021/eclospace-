@@ -26,8 +26,10 @@
   /* Sémantique métier (inchangée) */
   --amber: #c4661f; /* retard */
   --amber-soft: #f9e9db;
-  --alert: #c24b3a; /* critique */
+  --alert: #c24b3a; /* critique / suppression */
   --alert-soft: #f9e9e6;
+  --success: #2f8f52; /* validation / export */
+  --success-soft: #e7f3ec;
 
   --font-title: Georgia, serif;
   --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -63,4 +65,98 @@ textarea:not([disabled]):focus {
   outline: none;
   border-color: var(--eclosion) !important;
   box-shadow: 0 0 0 3px rgba(200, 154, 27, 0.18);
+}
+
+/* Boutons sémantiques (composant <Button>) : chaque intention a sa couleur.
+   Ajouter = or · Modifier = bleu marine · Voir = contour · Supprimer = rouge
+   discret · Exporter = vert. Palette d'accent maîtrisée (identité premium). */
+.ecl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: filter 120ms ease, box-shadow 120ms ease, background 120ms ease, transform 60ms ease;
+}
+.ecl-btn--sm {
+  padding: 5px 11px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+.ecl-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.ecl-btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+/* Ajouter / action principale : or */
+.ecl-btn--add {
+  background: linear-gradient(180deg, var(--eclosion-light) 0%, var(--eclosion) 100%);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(200, 154, 27, 0.28);
+}
+.ecl-btn--add:not(:disabled):hover {
+  filter: brightness(1.06);
+  box-shadow: 0 6px 16px rgba(200, 154, 27, 0.38);
+}
+
+/* Modifier : bleu marine */
+.ecl-btn--edit {
+  background: var(--chrome-2);
+  color: #fff;
+}
+.ecl-btn--edit:not(:disabled):hover {
+  background: var(--navy);
+}
+
+/* Voir / action neutre : contour bleu marine */
+.ecl-btn--view {
+  background: #fff;
+  color: var(--navy);
+  border-color: var(--line);
+}
+.ecl-btn--view:not(:disabled):hover {
+  border-color: var(--navy);
+  background: #f4f6fa;
+}
+
+/* Supprimer : rouge discret (contour, se remplit au survol) */
+.ecl-btn--danger {
+  background: #fff;
+  color: var(--alert);
+  border-color: var(--alert);
+}
+.ecl-btn--danger:not(:disabled):hover {
+  background: var(--alert);
+  color: #fff;
+}
+
+/* Exporter : vert */
+.ecl-btn--export {
+  background: var(--success);
+  color: #fff;
+}
+.ecl-btn--export:not(:disabled):hover {
+  filter: brightness(1.06);
+}
+
+/* Discret / tertiaire : texte seul */
+.ecl-btn--subtle {
+  background: transparent;
+  color: var(--muted);
+  border-color: transparent;
+  font-weight: 500;
+}
+.ecl-btn--subtle:not(:disabled):hover {
+  background: #f0f2f6;
+  color: var(--ink);
 }

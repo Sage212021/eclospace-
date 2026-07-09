@@ -12,6 +12,7 @@ import {
   type PermissionRef,
   type RoleSummary,
 } from "../api/client";
+import { Button } from "../components/Button";
 
 const ACTIONS: { key: string; label: string }[] = [
   { key: "consultation", label: "Consulter" },
@@ -130,20 +131,12 @@ function BulkPoleRights({ onError, onMessage }: { onError: (m: string | null) =>
             </option>
           ))}
         </select>
-        <button
-          onClick={() => apply(true)}
-          disabled={busy}
-          style={{ background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}
-        >
+        <Button variant="add" size="sm" onClick={() => apply(true)} disabled={busy}>
           Accorder à tout le pôle
-        </button>
-        <button
-          onClick={() => apply(false)}
-          disabled={busy}
-          style={{ background: "#fff", color: "var(--alert)", border: "1px solid var(--alert)", borderRadius: 6, padding: "6px 12px", fontSize: 13, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}
-        >
+        </Button>
+        <Button variant="danger" size="sm" onClick={() => apply(false)} disabled={busy}>
           Retirer à tout le pôle
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -348,13 +341,9 @@ function DepartmentsPanel({ canManage, onError, onMessage }: { canManage: boolea
             placeholder="Nouveau pôle…"
             style={{ flex: 1, padding: "6px 8px", fontSize: 13, border: "1px solid var(--line)", borderRadius: 6 }}
           />
-          <button
-            type="submit"
-            disabled={submitting || !name.trim()}
-            style={{ background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: submitting || !name.trim() ? "default" : "pointer", opacity: submitting || !name.trim() ? 0.6 : 1 }}
-          >
+          <Button variant="add" size="sm" type="submit" disabled={submitting || !name.trim()}>
             Ajouter
-          </button>
+          </Button>
         </form>
       )}
     </div>

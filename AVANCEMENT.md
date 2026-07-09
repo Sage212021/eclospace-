@@ -389,3 +389,15 @@ Dernier point de la refonte visuelle proposée par l'opérateur.
 **Refonte visuelle premium : tous les points proposés par l'opérateur sont couverts** (palette navy/or/blanc, connexion, menu actif + tiroir mobile, cartes, boutons sémantiques, tableaux, indicateurs KPI).
 
 **Prochaine étape :** retours de l'opérateur.
+
+### 09/07/2026 (suite) — Finitions premium : barre de profil + icônes de navigation
+
+Deux finitions optionnelles demandées par l'opérateur.
+
+- **Barre supérieure — menu de profil** (façon Microsoft 365 / Notion) : un **avatar** (initiales, fond doré) en haut à droite ouvre un menu déroulant — identité + e-mail, « Paramètres du compte », « Se déconnecter ». Le bouton « Se déconnecter » isolé disparaît. Bonus : l'accès aux **Paramètres** (donc à la sécurité du compte / changement de mot de passe) est désormais offert à **tous** via ce menu ; la page Paramètres reste accessible sans habilitation « settings » (elle n'affiche alors que la « Sécurité du compte », sans erreur).
+- **Icônes de navigation** : jeu d'icônes monochromes (trait), sobres et premium (`components/icons.tsx`) — un pictogramme par pôle (livre, production, panier, finance, utilisateurs, graphique) et pour le tableau de bord (maison), **teinté d'or quand le pôle est actif**. Les **puces de présence vertes** sont remplacées par une **petite silhouette dorée** (+ nombre si plusieurs).
+- Vérifié au navigateur : avatar + menu déroulant (identité, Paramètres, Déconnexion fonctionnelle), icônes de pôles dorées à l'ouverture, présence en silhouette dorée.
+
+**Refonte visuelle premium : terminée** (palette, connexion, menu + icônes + tiroir mobile, cartes, boutons sémantiques, tableaux, indicateurs KPI, barre de profil).
+
+**Prochaine étape :** retours de l'opérateur.

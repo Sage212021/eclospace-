@@ -1,4 +1,38 @@
 import { useState } from "react";
+import {
+  IconAdmin,
+  IconBook,
+  IconCommercial,
+  IconFinance,
+  IconHome,
+  IconPilotage,
+  IconPresence,
+  IconProduction,
+} from "./icons";
+
+// Icône de chaque pôle (par libellé) et des éléments à plat (par clé).
+function poleIcon(label: string) {
+  switch (label) {
+    case "Éditorial":
+      return <IconBook />;
+    case "Production":
+      return <IconProduction />;
+    case "Commercial":
+      return <IconCommercial />;
+    case "Juridique & Finance":
+      return <IconFinance />;
+    case "Administration":
+      return <IconAdmin />;
+    case "Pilotage":
+      return <IconPilotage />;
+    default:
+      return null;
+  }
+}
+function leafIcon(key: string) {
+  if (key === "dashboard") return <IconHome />;
+  return null;
+}
 
 export interface NavLeaf {
   key: string;
@@ -83,6 +117,9 @@ export function Sidebar({
           );
         }
         const isOpen = openPole === pole.label;
+        const containsActive = pole.items.some((i) => i.key === activeKey);
+        // Icône dorée quand le pôle est ouvert ou contient la vue active.
+        const accent = isOpen || containsActive;
         return (
           <div key={pole.label}>
             <button
@@ -97,7 +134,7 @@ export function Sidebar({
                 padding: "10px 20px",
                 background: "transparent",
                 border: "none",
-                color: "#a9b0c2",
+                color: accent ? "#fff" : "#a9b0c2",
                 fontSize: 11,
                 fontWeight: 700,
                 letterSpacing: 0.6,
@@ -105,7 +142,10 @@ export function Sidebar({
                 cursor: "pointer",
               }}
             >
-              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                <span style={{ color: accent ? "var(--eclosion-light)" : "#8891a8", display: "inline-flex" }}>
+                  {poleIcon(pole.label)}
+                </span>
                 {pole.label}
                 <PresenceDot names={presenceByPole[pole.label] ?? []} />
               </span>
@@ -165,6 +205,7 @@ function LeafButton({
   indented?: boolean;
   presentUsers: string[];
 }) {
+  const icon = leafIcon(item.key);
   return (
     <li>
       <button
@@ -190,25 +231,30 @@ function LeafButton({
           cursor: "pointer",
         }}
       >
-        <span>{item.label}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          {icon && (
+            <span style={{ color: active ? "var(--eclosion-light)" : "#8891a8", display: "inline-flex" }}>{icon}</span>
+          )}
+          {item.label}
+        </span>
         <PresenceDot names={presentUsers} />
       </button>
     </li>
   );
 }
 
-// Voyant de présence : point vert si au moins un utilisateur est actif ici,
-// badge numérique si plusieurs, info-bulle au survol listant les noms.
+// Voyant de présence : petite silhouette dorée si au moins un utilisateur est
+// actif ici, avec le nombre si plusieurs et une info-bulle listant les noms.
 function PresenceDot({ names }: { names: string[] }) {
   if (names.length === 0) return null;
   return (
     <span
       title={`Actif : ${names.join(", ")}`}
-      style={{ display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0 }}
+      style={{ display: "inline-flex", alignItems: "center", gap: 2, flexShrink: 0, color: "var(--eclosion-light)" }}
     >
-      <span style={{ width: 8, height: 8, borderRadius: 999, background: "#3fb950", display: "inline-block" }} />
+      <IconPresence size={13} />
       {names.length > 1 && (
-        <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "#3fb950" }}>{names.length}</span>
+        <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--eclosion-light)" }}>{names.length}</span>
       )}
     </span>
   );

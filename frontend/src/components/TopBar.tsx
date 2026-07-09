@@ -23,7 +23,7 @@ export function TopBar({ connectedUsers }: TopBarProps) {
         display: "flex",
         alignItems: "center",
         gap: 16,
-        padding: "12px 24px",
+        padding: "12px clamp(12px, 3vw, 24px)",
         borderBottom: "1px solid var(--line)",
         background: "var(--card)",
       }}
@@ -33,6 +33,9 @@ export function TopBar({ connectedUsers }: TopBarProps) {
         disabled
         style={{
           flex: 1,
+          // minWidth:0 laisse le champ se réduire sous sa largeur intrinsèque
+          // (sinon il force un débordement horizontal sur mobile).
+          minWidth: 0,
           maxWidth: 420,
           padding: "8px 12px",
           border: "1px solid var(--line)",

@@ -141,6 +141,10 @@ for (const pole of NAV_POLES) {
   if (pole.label) for (const item of pole.items) LEAF_TO_POLE[item.key] = pole.label;
 }
 
+// Libellés des pôles dans l'ordre du menu — base des tuiles de la fenêtre
+// « Hall / Présence » (chaque pôle affiché actif/inactif avec son effectif).
+const POLE_LABELS: string[] = NAV_POLES.filter((p): p is typeof p & { label: string } => Boolean(p.label)).map((p) => p.label);
+
 type View = { kind: "leaf"; key: string } | { kind: "manuscript-detail"; id: string; originKey: string };
 
 export function App() {
@@ -269,6 +273,7 @@ export function App() {
       <div className="app-main">
         <TopBar
           connectedTotal={presence.total}
+          poles={POLE_LABELS.map((label) => ({ label, count: presence.byPole[label] ?? 0 }))}
           onMenu={() => setNavOpen(true)}
           user={{ username: user.username, email: user.email }}
           onLogout={handleLogout}

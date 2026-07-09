@@ -4,6 +4,8 @@ import { listUnreadNotifications, quickSearch, type QuickSearchResult } from "..
 interface TopBarProps {
   // Nombre de personnes connectées (présence temps réel, sans identités).
   connectedTotal: number;
+  // Effectif présent par pôle (compteurs seuls) pour la fenêtre « Hall ».
+  poles: { label: string; count: number }[];
   // Sur mobile : ouvre le menu latéral escamotable (bouton ☰ à gauche).
   onMenu?: () => void;
   // Profil courant + actions du menu (déconnexion, accès aux paramètres).
@@ -22,9 +24,10 @@ function initials(username: string): string {
 
 // Barre supérieure (guide §6) : recherche globale + présence + notifications +
 // menu de profil (avatar) à droite, façon Microsoft 365 / Notion.
-export function TopBar({ connectedTotal, onMenu, user, onLogout, onOpenSettings, onOpenManuscript }: TopBarProps) {
+export function TopBar({ connectedTotal, poles, onMenu, user, onLogout, onOpenSettings, onOpenManuscript }: TopBarProps) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hallOpen, setHallOpen] = useState(false);
 
   // Recherche rapide : requête saisie, résultats et état d'ouverture du menu
   // déroulant. La recherche part après une courte pause de frappe (anti-rebond)
@@ -172,14 +175,103 @@ export function TopBar({ connectedTotal, onMenu, user, onLogout, onOpenSettings,
         )}
       </div>
       {/* Présence : nombre de personnes connectées, sans aucune identité
-          (confidentialité). Le détail par pôle reste consultable par les seuls
-          profils habilités via la fenêtre dédiée. */}
-      <div
-        title={`${connectedTotal} personne(s) connectée(s)`}
-        style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }}
-      >
-        <span style={{ width: 9, height: 9, borderRadius: 999, background: "var(--eclosion)", display: "inline-block" }} />
-        <span style={{ fontFamily: "var(--font-mono)" }}>{connectedTotal}</span> en ligne
+          (confidentialité). Cliquer ouvre la fenêtre « Hall / Présence » qui
+          détaille l'activité pôle par pôle (actif/inactif + effectif), toujours
+          sans nommer personne. */}
+      <div style={{ position: "relative" }}>
+        <button
+          onClick={() => setHallOpen((v) => !v)}
+          aria-label="Voir la présence par pôle"
+          aria-expanded={hallOpen}
+          title={`${connectedTotal} personne(s) connectée(s) — voir par pôle`}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 12,
+            color: "var(--muted)",
+            whiteSpace: "nowrap",
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            padding: "4px 2px",
+          }}
+        >
+          <span style={{ width: 9, height: 9, borderRadius: 999, background: "var(--eclosion)", display: "inline-block" }} />
+          <span style={{ fontFamily: "var(--font-mono)" }}>{connectedTotal}</span> en ligne
+        </button>
+
+        {hallOpen && (
+          <>
+            <div onClick={() => setHallOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60 }} aria-hidden="true" />
+            <div
+              style={{
+                position: "absolute",
+                top: "calc(100% + 8px)",
+                right: 0,
+                zIndex: 61,
+                width: 288,
+                maxWidth: "80vw",
+                background: "var(--card)",
+                border: "1px solid var(--line)",
+                borderRadius: 12,
+                boxShadow: "0 12px 32px rgba(9, 16, 33, 0.18)",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>Hall — présence</span>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{connectedTotal}</span> en ligne
+                </span>
+              </div>
+              <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                {poles.map((p) => {
+                  const active = p.count > 0;
+                  return (
+                    <div
+                      key={p.label}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        padding: "10px 14px",
+                        borderBottom: "1px solid var(--line)",
+                      }}
+                    >
+                      <span style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "var(--ink)" }}>
+                        <span
+                          style={{
+                            width: 9,
+                            height: 9,
+                            borderRadius: 999,
+                            background: active ? "var(--success)" : "var(--line)",
+                            display: "inline-block",
+                            flexShrink: 0,
+                          }}
+                        />
+                        {p.label}
+                      </span>
+                      <span style={{ fontSize: 12, color: active ? "var(--ink)" : "var(--muted)" }}>
+                        {active ? (
+                          <>
+                            <span style={{ fontFamily: "var(--font-mono)" }}>{p.count}</span> présent{p.count > 1 ? "s" : ""}
+                          </>
+                        ) : (
+                          "personne"
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ padding: "8px 14px", fontSize: 11, color: "var(--muted)" }}>
+                Effectifs par pôle — sans identités (confidentialité).
+              </div>
+            </div>
+          </>
+        )}
       </div>
       <div style={{ position: "relative", fontSize: 18 }} title={`${unreadCount} notification(s) non lue(s)`}>
         🔔

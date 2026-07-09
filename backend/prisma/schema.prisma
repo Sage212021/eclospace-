@@ -490,6 +490,8 @@ enum AuditAction {
   status_change
   validate
   login
+  logout
+  access_denied
   view_sensitive
   export
 }

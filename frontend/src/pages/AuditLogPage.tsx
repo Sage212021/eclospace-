@@ -8,6 +8,8 @@ const ACTION_LABELS: Record<string, string> = {
   status_change: "Changement de statut",
   validate: "Validation",
   login: "Connexion",
+  logout: "Déconnexion",
+  access_denied: "Accès refusé",
   view_sensitive: "Consultation sensible",
   export: "Export",
 };

@@ -12,6 +12,7 @@ import {
   type Manuscript,
   type UserSummary,
 } from "../api/client";
+import { Button } from "../components/Button";
 
 const CATALOGUE_STORAGE_KEY = "eclospace.catalogue.filters";
 
@@ -83,44 +84,26 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>{heading ?? "Manuscrits"}</h1>
         {canCreate && !isStageView && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button
+              variant={showForm ? "view" : "add"}
               onClick={() => {
                 setShowImport(false);
                 setShowForm((v) => !v);
               }}
-              style={{
-                background: "var(--eclosion)",
-                color: "#fff",
-                border: "none",
-                borderRadius: 6,
-                padding: "8px 14px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
             >
               {showForm ? "Annuler" : "+ Nouveau manuscrit"}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="view"
               onClick={() => {
                 setShowForm(false);
                 setShowImport((v) => !v);
               }}
               title="Enregistrer un ouvrage déjà publié, avec sa date de parution réelle"
-              style={{
-                background: "#fff",
-                color: "var(--eclosion)",
-                border: "1px solid var(--eclosion)",
-                borderRadius: 6,
-                padding: "8px 14px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
             >
               {showImport ? "Annuler" : "+ Importer un ouvrage déjà paru"}
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -158,12 +141,9 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
             <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 0 12px" }}>
               Élargissez la période ou retirez un filtre pour voir davantage d'ouvrages.
             </p>
-            <button
-              onClick={() => setFilters({})}
-              style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}
-            >
+            <Button variant="view" size="sm" onClick={() => setFilters({})}>
               Réinitialiser les filtres
-            </button>
+            </Button>
           </div>
         ) : (
           <EmptyState isStageView={isStageView} heading={heading} onGoToManuscripts={onGoToManuscripts} />
@@ -375,21 +355,9 @@ function EmptyState({
             et arrivera ici le moment venu.
           </p>
           {onGoToManuscripts && (
-            <button
-              onClick={onGoToManuscripts}
-              style={{
-                background: "var(--eclosion)",
-                color: "#fff",
-                border: "none",
-                borderRadius: 6,
-                padding: "8px 16px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
+            <Button variant="add" onClick={onGoToManuscripts}>
               Aller à Manuscrits
-            </button>
+            </Button>
           )}
         </>
       ) : (
@@ -484,24 +452,11 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
           <input value={lastName} onChange={(e) => setLastName(e.target.value)} required />
         </LabeledInput>
       </div>
-      <button
-        type="submit"
-        disabled={submitting}
-        style={{
-          marginTop: 14,
-          background: "var(--eclosion)",
-          color: "#fff",
-          border: "none",
-          borderRadius: 6,
-          padding: "8px 16px",
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: submitting ? "default" : "pointer",
-          opacity: submitting ? 0.6 : 1,
-        }}
-      >
-        Enregistrer le dossier
-      </button>
+      <div style={{ marginTop: 14 }}>
+        <Button variant="add" type="submit" disabled={submitting}>
+          Enregistrer le dossier
+        </Button>
+      </div>
       <style>{`
         label input, label select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
       `}</style>
@@ -607,24 +562,11 @@ function ImportBookForm({ onImported, onError }: { onImported: (m: Manuscript) =
           <input value={lastName} onChange={(e) => setLastName(e.target.value)} required />
         </LabeledInput>
       </div>
-      <button
-        type="submit"
-        disabled={submitting}
-        style={{
-          marginTop: 14,
-          background: "var(--eclosion)",
-          color: "#fff",
-          border: "none",
-          borderRadius: 6,
-          padding: "8px 16px",
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: submitting ? "default" : "pointer",
-          opacity: submitting ? 0.6 : 1,
-        }}
-      >
-        Importer l'ouvrage
-      </button>
+      <div style={{ marginTop: 14 }}>
+        <Button variant="add" type="submit" disabled={submitting}>
+          Importer l'ouvrage
+        </Button>
+      </div>
       <style>{`
         label input, label select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
       `}</style>

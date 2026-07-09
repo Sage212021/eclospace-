@@ -12,6 +12,7 @@ import {
   type RoleSummary,
   type UserWithRoles,
 } from "../api/client";
+import { Button } from "../components/Button";
 
 interface UsersRolesPageProps {
   canAdminister: boolean;
@@ -129,12 +130,9 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Utilisateurs & rôles</h1>
         {canAdminister && (
-          <button
-            onClick={() => setShowCreate((v) => !v)}
-            style={{ background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-          >
+          <Button variant={showCreate ? "view" : "add"} onClick={() => setShowCreate((v) => !v)}>
             {showCreate ? "Annuler" : "+ Nouveau compte"}
-          </button>
+          </Button>
         )}
       </div>
       <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>
@@ -175,20 +173,20 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               {canAdminister && (
                 <>
-                  <button onClick={() => handleResetPassword(user)} title="Définir un nouveau mot de passe" style={ghostBtn}>
+                  <Button variant="view" size="sm" onClick={() => handleResetPassword(user)} title="Définir un nouveau mot de passe">
                     Réinitialiser le mot de passe
-                  </button>
-                  <button onClick={() => handleToggleStatus(user)} title={user.status === "active" ? "Suspendre" : "Réactiver"} style={ghostBtn}>
+                  </Button>
+                  <Button variant="edit" size="sm" onClick={() => handleToggleStatus(user)} title={user.status === "active" ? "Suspendre" : "Réactiver"}>
                     {user.status === "active" ? "Suspendre" : "Réactiver"}
-                  </button>
+                  </Button>
                   {user.status === "active" && (
-                    <button onClick={() => handleImpersonate(user)} title="Voir l'application comme cet utilisateur" style={ghostBtn}>
+                    <Button variant="view" size="sm" onClick={() => handleImpersonate(user)} title="Voir l'application comme cet utilisateur">
                       Se connecter en tant que
-                    </button>
+                    </Button>
                   )}
-                  <button onClick={() => handleDelete(user)} title="Supprimer ce compte" style={{ ...ghostBtn, color: "var(--alert)", borderColor: "var(--alert)" }}>
+                  <Button variant="danger" size="sm" onClick={() => handleDelete(user)} title="Supprimer ce compte">
                     Supprimer
-                  </button>
+                  </Button>
                 </>
               )}
               <span
@@ -264,16 +262,6 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
   );
 }
 
-const ghostBtn: React.CSSProperties = {
-  border: "1px solid var(--line)",
-  background: "#fff",
-  color: "var(--ink)",
-  borderRadius: 6,
-  padding: "4px 10px",
-  fontSize: 12,
-  cursor: "pointer",
-};
-
 // Création d'un compte (spéc. fonctionnelle §2) : identifiant, e-mail, mot de
 // passe conforme aux règles, et rôles initiaux facultatifs.
 function CreateAccountForm({
@@ -332,13 +320,11 @@ function CreateAccountForm({
           </select>
         </Labeled>
       </div>
-      <button
-        type="submit"
-        disabled={submitting}
-        style={{ marginTop: 14, background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.6 : 1 }}
-      >
-        Créer le compte
-      </button>
+      <div style={{ marginTop: 14 }}>
+        <Button variant="add" type="submit" disabled={submitting}>
+          Créer le compte
+        </Button>
+      </div>
     </form>
   );
 }

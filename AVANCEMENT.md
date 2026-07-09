@@ -351,3 +351,12 @@ Nouvelle identité visuelle validée par l'opérateur : bleu marine (confiance, 
 **Proposé pour les phases suivantes** (plus lourdes, à valider) : boutons sémantiques (`<Button variant>` : Ajouter=or, Modifier=navy, Voir=contour, Supprimer=rouge, Exporter=vert), refonte des tableaux (en-tête navy, zébrage, survol or), grands indicateurs KPI du tableau de bord (nécessite des endpoints de comptage), barre supérieure avec menu profil/avatar, jeu d'icônes modernes en remplacement des puces.
 
 **Prochaine étape :** retour de l'opérateur sur la fondation visuelle, puis phases suivantes de l'identité.
+
+### 09/07/2026 (suite) — Identité visuelle : boutons sémantiques + menu mobile escamotable
+
+- **Barre latérale responsive** (retour opérateur : sur téléphone, la barre fixe occupait ~65 % de l'écran) : sous 900 px, elle passe en **tiroir escamotable** (hook `useIsMobile`, bouton ☰ dans la barre supérieure, voile cliquable, fermeture après sélection) ; comportement inchangé sur grand écran. Vérifié en 390 px.
+- **Boutons sémantiques** : nouveau composant `<Button variant>` (styles dans `tokens.css`, jeton vert `--success` ajouté) — **Ajouter = or, Modifier = bleu marine, Voir = contour, Supprimer = rouge discret, Exporter = vert**, avec états survol/actif/désactivé. Déployé sur les écrans à forte densité d'actions : Utilisateurs & rôles, Manuscrits (nouveau/import/enregistrer), Domaines & collections, Droits & pôles (réglages groupés), Paramètres (cartes de seuils + sécurité du compte). Chaque action est désormais reconnaissable à sa couleur. Vérifié au navigateur.
+
+**Proposé pour la suite** : refonte des tableaux (en-tête navy, zébrage, survol or) puis grands indicateurs KPI du tableau de bord.
+
+**Prochaine étape :** tableaux premium, puis KPI du tableau de bord.

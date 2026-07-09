@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { changePassword, requestIdentifierChange, type EffectiveUser } from "../api/client";
 import { PasswordInput } from "./PasswordInput";
+import { Button } from "./Button";
 
 // Section « Sécurité du compte » (Ch. 2) : changement de mot de passe (règles
 // de complexité) et de l'identifiant/e-mail de connexion (confirmation par
@@ -75,9 +76,9 @@ function PasswordForm() {
       <Field label="Confirmer le nouveau mot de passe">
         <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} required style={inputStyle} />
       </Field>
-      <button type="submit" disabled={submitting} style={primaryButtonStyle(submitting)}>
+      <Button variant="add" type="submit" disabled={submitting}>
         Modifier le mot de passe
-      </button>
+      </Button>
     </form>
   );
 }
@@ -140,9 +141,9 @@ function IdentifierForm({ user }: { user: EffectiveUser }) {
       <Field label="Mot de passe actuel (pour confirmer votre identité)">
         <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required style={inputStyle} />
       </Field>
-      <button type="submit" disabled={submitting || !changed} style={primaryButtonStyle(submitting || !changed)}>
+      <Button variant="add" type="submit" disabled={submitting || !changed}>
         Demander le changement
-      </button>
+      </Button>
     </form>
   );
 }
@@ -183,17 +184,3 @@ const inputStyle: React.CSSProperties = {
   borderRadius: 6,
   fontSize: 14,
 };
-
-function primaryButtonStyle(disabled: boolean): React.CSSProperties {
-  return {
-    background: "var(--eclosion)",
-    color: "#fff",
-    border: "none",
-    borderRadius: 6,
-    padding: "8px 16px",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: disabled ? "default" : "pointer",
-    opacity: disabled ? 0.6 : 1,
-  };
-}

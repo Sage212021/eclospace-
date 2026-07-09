@@ -9,6 +9,7 @@ import {
   type Collection,
   type Genre,
 } from "../api/client";
+import { Button } from "../components/Button";
 
 // Gestion des domaines & collections (spéc. fonctionnelle §6). Le secrétariat
 // éditorial complète le catalogue selon la réalité de la maison (Ch. 6 §6.2).
@@ -164,23 +165,9 @@ function ReferencePanel({
             placeholder={`Nouveau ${noun}…`}
             style={{ flex: 1, padding: "6px 8px", fontSize: 13, border: "1px solid var(--line)", borderRadius: 6 }}
           />
-          <button
-            type="submit"
-            disabled={submitting || !label.trim()}
-            style={{
-              background: "var(--eclosion)",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              padding: "6px 12px",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: submitting || !label.trim() ? "default" : "pointer",
-              opacity: submitting || !label.trim() ? 0.6 : 1,
-            }}
-          >
+          <Button variant="add" size="sm" type="submit" disabled={submitting || !label.trim()}>
             Ajouter
-          </button>
+          </Button>
         </form>
       )}
     </div>

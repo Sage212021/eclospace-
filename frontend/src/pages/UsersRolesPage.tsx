@@ -1,20 +1,30 @@
 import { useEffect, useState } from "react";
-import { grantRole, listRoles, listUsersWithRoles, resetUserPassword, revokeRole, type RoleSummary, type UserWithRoles } from "../api/client";
+import {
+  createUser,
+  deleteUser,
+  grantRole,
+  listRoles,
+  listUsersWithRoles,
+  resetUserPassword,
+  revokeRole,
+  updateUser,
+  type RoleSummary,
+  type UserWithRoles,
+} from "../api/client";
 
 interface UsersRolesPageProps {
   canAdminister: boolean;
 }
 
-// Gestion des utilisateurs et de leurs habilitations (Ch. 2 §2.4). Consolide
-// les endpoints existants : liste des comptes avec rôles actifs, référentiel
-// des rôles, attribution et retrait (justification obligatoire, tracés à
-// l'audit côté serveur). La création/désactivation de compte relève du dossier
-// RH (Ch. 19), écran Ressources humaines.
+// Gestion des comptes et de leurs habilitations (spéc. fonctionnelle §2, Ch. 2
+// §2.4) : création, suspension/réactivation, suppression, réinitialisation du
+// mot de passe, attribution/retrait de rôle (justifiés et tracés à l'audit).
 export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
   const [users, setUsers] = useState<UserWithRoles[]>([]);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   const refresh = async () => {
     const [userList, roleList] = await Promise.all([listUsersWithRoles(), listRoles()]);
@@ -25,6 +35,33 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
   useEffect(() => {
     refresh().catch((e) => setError(e instanceof Error ? e.message : "Échec du chargement."));
   }, []);
+
+  async function handleToggleStatus(user: UserWithRoles) {
+    const suspend = user.status === "active";
+    if (!window.confirm(suspend ? `Suspendre le compte ${user.username} ?` : `Réactiver le compte ${user.username} ?`)) return;
+    setError(null);
+    setMessage(null);
+    try {
+      await updateUser(user.id, { status: suspend ? "suspended" : "active" });
+      setMessage(suspend ? `Compte ${user.username} suspendu.` : `Compte ${user.username} réactivé.`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec du changement de statut.");
+    }
+  }
+
+  async function handleDelete(user: UserWithRoles) {
+    if (!window.confirm(`Supprimer définitivement le compte ${user.username} ? Cette action est tracée et irréversible.`)) return;
+    setError(null);
+    setMessage(null);
+    try {
+      await deleteUser(user.id);
+      setMessage(`Compte ${user.username} supprimé.`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de la suppression.");
+    }
+  }
 
   async function handleGrant(user: UserWithRoles, roleCode: string) {
     const justification = window.prompt(`Justification de l'attribution du rôle à ${user.username}`);
@@ -70,11 +107,33 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
 
   return (
     <div style={{ padding: 32, maxWidth: 1040 }}>
-      <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Utilisateurs & rôles</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Utilisateurs & rôles</h1>
+        {canAdminister && (
+          <button
+            onClick={() => setShowCreate((v) => !v)}
+            style={{ background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+          >
+            {showCreate ? "Annuler" : "+ Nouveau compte"}
+          </button>
+        )}
+      </div>
       <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>
-        Comptes et habilitations. La création et la désactivation des comptes se font depuis les Ressources humaines ;
-        ici, on attribue et retire les rôles (chaque changement est justifié et journalisé).
+        Comptes et habilitations : créez et gérez les comptes, attribuez ou retirez les rôles. Chaque changement est
+        justifié et journalisé.
       </p>
+
+      {showCreate && canAdminister && (
+        <CreateAccountForm
+          roles={roles}
+          onCreated={(name) => {
+            setShowCreate(false);
+            setMessage(`Compte ${name} créé.`);
+            refresh().catch(() => {});
+          }}
+          onError={setError}
+        />
+      )}
 
       {error && (
         <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>
@@ -96,24 +155,25 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               {canAdminister && (
-                <button
-                  onClick={() => handleResetPassword(user)}
-                  title="Définir un nouveau mot de passe pour ce compte"
-                  style={{
-                    border: "1px solid var(--line)",
-                    background: "#fff",
-                    color: "var(--ink)",
-                    borderRadius: 6,
-                    padding: "4px 10px",
-                    fontSize: 12,
-                    cursor: "pointer",
-                  }}
-                >
-                  Réinitialiser le mot de passe
-                </button>
+                <>
+                  <button onClick={() => handleResetPassword(user)} title="Définir un nouveau mot de passe" style={ghostBtn}>
+                    Réinitialiser le mot de passe
+                  </button>
+                  <button onClick={() => handleToggleStatus(user)} title={user.status === "active" ? "Suspendre" : "Réactiver"} style={ghostBtn}>
+                    {user.status === "active" ? "Suspendre" : "Réactiver"}
+                  </button>
+                  <button onClick={() => handleDelete(user)} title="Supprimer ce compte" style={{ ...ghostBtn, color: "var(--alert)", borderColor: "var(--alert)" }}>
+                    Supprimer
+                  </button>
+                </>
               )}
-              <span style={{ fontSize: 11, color: user.status === "active" ? "var(--eclosion)" : "var(--muted)" }}>
-                {user.status === "active" ? "Actif" : user.status}
+              <span
+                style={{
+                  fontSize: 11,
+                  color: user.status === "active" ? "var(--eclosion)" : user.status === "suspended" ? "var(--amber)" : "var(--muted)",
+                }}
+              >
+                {user.status === "active" ? "Actif" : user.status === "suspended" ? "Suspendu" : user.status}
               </span>
             </div>
           </div>
@@ -177,5 +237,93 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
 
       {users.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun utilisateur.</p>}
     </div>
+  );
+}
+
+const ghostBtn: React.CSSProperties = {
+  border: "1px solid var(--line)",
+  background: "#fff",
+  color: "var(--ink)",
+  borderRadius: 6,
+  padding: "4px 10px",
+  fontSize: 12,
+  cursor: "pointer",
+};
+
+// Création d'un compte (spéc. fonctionnelle §2) : identifiant, e-mail, mot de
+// passe conforme aux règles, et rôles initiaux facultatifs.
+function CreateAccountForm({
+  roles,
+  onCreated,
+  onError,
+}: {
+  roles: RoleSummary[];
+  onCreated: (username: string) => void;
+  onError: (m: string) => void;
+}) {
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [roleCode, setRoleCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    onError("");
+    setSubmitting(true);
+    try {
+      const created = await createUser({ username, email, password, role_codes: roleCode ? [roleCode] : [] });
+      onCreated(created.username);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de la création du compte.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const field: React.CSSProperties = { width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 };
+
+  return (
+    <form onSubmit={handleSubmit} style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Nouveau compte</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Labeled label="Identifiant">
+          <input value={username} onChange={(e) => setUsername(e.target.value)} required minLength={3} style={field} />
+        </Labeled>
+        <Labeled label="E-mail">
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={field} />
+        </Labeled>
+        <Labeled label="Mot de passe (min. 8 car., une majuscule, un chiffre)">
+          <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} required style={field} />
+        </Labeled>
+        <Labeled label="Rôle initial (facultatif)">
+          <select value={roleCode} onChange={(e) => setRoleCode(e.target.value)} style={field}>
+            <option value="">Aucun rôle</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.code}>
+                {r.label}
+                {r.department ? ` — ${r.department}` : ""}
+              </option>
+            ))}
+          </select>
+        </Labeled>
+      </div>
+      <button
+        type="submit"
+        disabled={submitting}
+        style={{ marginTop: 14, background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.6 : 1 }}
+      >
+        Créer le compte
+      </button>
+    </form>
+  );
+}
+
+function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ fontSize: 12, color: "var(--muted)" }}>
+      <span style={{ display: "block", marginBottom: 4 }}>{label}</span>
+      {children}
+    </label>
   );
 }

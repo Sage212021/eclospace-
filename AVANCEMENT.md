@@ -337,3 +337,17 @@ Quatrième et cinquième phases livrées ensemble (à la demande de l'opérateur
 - **7 tests automatisés** ajoutés (passe-partout non suspensible/supprimable ; mot de passe maître ouvre le compte protégé et pas un compte ordinaire, tracé ; usurpation + retour reflétés par /me ; usurpation du passe-partout interdite ; droit appliqué à tout un pôle ; refus 403 sans habilitation). Suite complète : **149 tests passent**. Usurpation et réglage par pôle vérifiés dans un navigateur réel (bandeau, bascule de vue, retour au compte).
 
 **Prochaine étape :** consolidation / retours de l'opérateur.
+
+### 09/07/2026 (suite) — Identité visuelle premium (fondation navy / or / blanc)
+
+Nouvelle identité visuelle validée par l'opérateur : bleu marine (confiance, ~70 %), blanc (clarté, ~20 %), or (prestige/marque, accent ~10 %). **Fondation livrée** (le reste est proposé en phases) :
+
+- **Palette officielle centralisée** dans `frontend/src/styles/tokens.css` : bleu marine `#16233D`/`#1E2A44`/`#223252`, fond `#F8F9FB`, cartes `#FFFFFF`, or `#C89A1B` (+ or clair `#D9B24C`, or foncé `#A87D14`). Comme toute l'application lit ces jetons, **l'ensemble de l'interface est reskinné d'un coup** (barre latérale, cartes, accents, fonds, titres en bleu marine). La référence de couleur du guide (CLAUDE.md §5) est mise à jour.
+- **Champs de saisie** : halo doré discret au focus (règle CSS globale) — effet « logiciel soigné » sans toucher chaque champ.
+- **Page de connexion premium** : fond bleu marine en dégradé, carte blanche très arrondie (18 px) et ombrée, logo centré agrandi, bouton or en dégradé avec halo et brillance au survol.
+- **Menu latéral** : élément sélectionné = fond or très léger + **barre dorée de 4 px** + texte blanc renforcé.
+- Vérifié au navigateur (connexion + pages internes) : rendu haut de gamme, lisibilité conservée.
+
+**Proposé pour les phases suivantes** (plus lourdes, à valider) : boutons sémantiques (`<Button variant>` : Ajouter=or, Modifier=navy, Voir=contour, Supprimer=rouge, Exporter=vert), refonte des tableaux (en-tête navy, zébrage, survol or), grands indicateurs KPI du tableau de bord (nécessite des endpoints de comptage), barre supérieure avec menu profil/avatar, jeu d'icônes modernes en remplacement des puces.
+
+**Prochaine étape :** retour de l'opérateur sur la fondation visuelle, puis phases suivantes de l'identité.

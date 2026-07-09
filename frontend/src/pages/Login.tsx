@@ -56,19 +56,21 @@ export function Login({ onAuthenticated }: LoginProps) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "var(--chrome)",
+        padding: 20,
+        background: "linear-gradient(155deg, #16233d 0%, #1e2a44 55%, #223252 100%)",
       }}
     >
       <div
         style={{
           background: "var(--card)",
-          borderRadius: 10,
-          padding: "40px 36px",
-          width: 360,
-          boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+          borderRadius: 18,
+          padding: "44px 40px",
+          width: 380,
+          maxWidth: "100%",
+          boxShadow: "0 24px 70px rgba(9, 16, 33, 0.45)",
         }}
       >
-        <img src="/eclospace-logo.jpg" alt="Eclospace" style={{ width: "100%", marginBottom: 24 }} />
+        <img src="/eclospace-logo.jpg" alt="Eclospace" style={{ width: "88%", display: "block", margin: "0 auto 28px" }} />
 
         {step.kind === "credentials" ? (
           <form onSubmit={handleCredentialsSubmit}>
@@ -132,10 +134,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <style>{`
         label input {
           width: 100%;
-          padding: 10px 12px;
+          padding: 11px 13px;
           border: 1px solid var(--line);
-          border-radius: 6px;
+          border-radius: 9px;
           font-size: 14px;
+          transition: border-color 120ms ease, box-shadow 120ms ease;
         }
       `}</style>
     </label>
@@ -162,23 +165,31 @@ function ErrorBanner({ message }: { message: string }) {
 }
 
 function PrimaryButton({ children, disabled }: { children: React.ReactNode; disabled?: boolean }) {
+  // Bouton or « premium » : léger dégradé, halo doré et brillance au survol.
   return (
     <button
       type="submit"
       disabled={disabled}
+      className="eclospace-cta"
       style={{
         width: "100%",
-        background: "var(--eclosion)",
+        background: "linear-gradient(180deg, var(--eclosion-light) 0%, var(--eclosion) 100%)",
         color: "#fff",
         border: "none",
-        borderRadius: 6,
-        padding: "10px 16px",
+        borderRadius: 9,
+        padding: "12px 16px",
         fontSize: 14,
         fontWeight: 600,
         cursor: disabled ? "default" : "pointer",
         opacity: disabled ? 0.6 : 1,
+        boxShadow: "0 8px 20px rgba(200, 154, 27, 0.35)",
+        transition: "filter 120ms ease, box-shadow 120ms ease, transform 60ms ease",
       }}
     >
+      <style>{`
+        .eclospace-cta:not(:disabled):hover { filter: brightness(1.06); box-shadow: 0 10px 26px rgba(200,154,27,0.45); }
+        .eclospace-cta:not(:disabled):active { transform: translateY(1px); }
+      `}</style>
       {children}
     </button>
   );

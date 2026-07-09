@@ -22,7 +22,7 @@ Eclospace est l'ERP éditorial de la maison d'édition Éclosion Édition : un s
 2. **Le cahier des charges fait foi.** En cas d'ambiguïté, poser la question à l'opérateur plutôt que d'inventer. Toute dérogation doit être signalée explicitement.
 3. **Contraintes d'intégrité** (Modèle de données §13) : suppression logique uniquement, audit_log append-only, factures immuables, ISBN jamais réutilisé, versionnage de tous les documents, transactions atomiques pour vente/stock/droits.
 4. **Tests automatisés obligatoires** sur les règles critiques (Plan §4.1) : workflow, calcul des droits d'auteur, cohérence du stock, numérotation des factures, permissions. Aucun module n'est terminé sans ses tests.
-5. **Interface en français**, conforme au guide de style : or #B18414 = marque/positif, orange #C4661F = retard, rouge #C24B3A = critique. Chiffres en police à chasse fixe. Erreurs explicites (« Encours dépassé : 4,9 M pour un plafond de 4,0 M »), jamais « une erreur est survenue ».
+5. **Interface en français**, conforme au guide de style et à l'identité visuelle Éclospace (validée le 09/07/2026) : bleu marine #16233D (fond/confiance) + blanc #F8F9FB (clarté) + or #C89A1B = marque/positif (accent ~10 %) ; orange #C4661F = retard, rouge #C24B3A = critique. Chiffres en police à chasse fixe. Erreurs explicites (« Encours dépassé : 4,9 M pour un plafond de 4,0 M »), jamais « une erreur est survenue ».
 6. **Simplicité technique** : stack éprouvée et économe (l'application doit fonctionner avec une connexion modeste). Pas de dépendance exotique. Documenter chaque choix dans `docs/JOURNAL_TECHNIQUE.md`.
 7. **À chaque session** : commencer par résumer l'état du lot en cours et ce qui reste à faire ; terminer par un commit clair et la mise à jour de `AVANCEMENT.md`.
 

@@ -20,6 +20,7 @@ import { UsersRolesPage } from "./pages/UsersRolesPage";
 import { DiagnosticsPage } from "./pages/DiagnosticsPage";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
+import { PresenceToasts } from "./components/PresenceToasts";
 import { usePresence } from "./hooks/usePresence";
 
 // Cible d'un élément de menu : soit une page dédiée, soit une liste de
@@ -261,6 +262,8 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {/* Notifications discrètes de connexion/déconnexion (sans identités). */}
+      <PresenceToasts total={presence.total} />
       {/* Layout responsive piloté par CSS (média-requêtes) : fiable sur un vrai
           téléphone, indépendant du JavaScript. La classe --open ne fait glisser
           le tiroir que sous 900px ; au-dessus, la barre reste fixe en flux. */}

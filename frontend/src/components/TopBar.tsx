@@ -30,25 +30,10 @@ export function TopBar({ connectedUsers, onMenu }: TopBarProps) {
         background: "var(--card)",
       }}
     >
+      {/* Bouton ☰ : la classe app-menu-btn le masque sur grand écran et
+          l'affiche sous 900px (média-requête, pas de JS). */}
       {onMenu && (
-        <button
-          onClick={onMenu}
-          aria-label="Ouvrir le menu"
-          style={{
-            flexShrink: 0,
-            width: 38,
-            height: 38,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "var(--chrome)",
-            color: "#fff",
-            border: "none",
-            borderRadius: 9,
-            fontSize: 18,
-            cursor: "pointer",
-          }}
-        >
+        <button onClick={onMenu} aria-label="Ouvrir le menu" className="app-menu-btn">
           ☰
         </button>
       )}

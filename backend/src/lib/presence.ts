@@ -57,24 +57,32 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
     next();
   });
 
+  // Confidentialité (exigence de sécurité du 09/07/2026) : le canal temps réel
+  // ne diffuse QUE des compteurs — jamais l'identité des personnes connectées.
+  // Chacun voit « où » et « combien » (pôle actif + nombre), mais les noms ne
+  // transitent pas par la diffusion générale. Ils ne sont révélés que sur
+  // demande, à un profil habilité (Direction générale, super-administrateur, ou
+  // responsable pour son propre pôle), via une route REST vérifiée côté serveur.
   function broadcast() {
-    const connectedById = new Map<string, string>();
+    const connectedUserIds = new Set<string>();
     const byPole: Record<string, Set<string>> = {};
     const byModule: Record<string, Set<string>> = {};
 
     for (const s of states.values()) {
-      connectedById.set(s.userId, s.username);
-      if (s.poleId) (byPole[s.poleId] ??= new Set()).add(s.username);
-      if (s.moduleId) (byModule[s.moduleId] ??= new Set()).add(s.username);
+      connectedUserIds.add(s.userId);
+      // On dénombre des personnes distinctes (par userId), pas des onglets : un
+      // même utilisateur ouvert deux fois ne compte qu'une fois par pôle/module.
+      if (s.poleId) (byPole[s.poleId] ??= new Set()).add(s.userId);
+      if (s.moduleId) (byModule[s.moduleId] ??= new Set()).add(s.userId);
     }
 
-    const toArrays = (map: Record<string, Set<string>>) =>
-      Object.fromEntries(Object.entries(map).map(([k, set]) => [k, [...set]]));
+    const toCounts = (map: Record<string, Set<string>>) =>
+      Object.fromEntries(Object.entries(map).map(([k, set]) => [k, set.size]));
 
     io.emit("presence:update", {
-      connectedUsers: [...connectedById.entries()].map(([userId, username]) => ({ userId, username })),
-      byPole: toArrays(byPole),
-      byModule: toArrays(byModule),
+      total: connectedUserIds.size,
+      byPole: toCounts(byPole),
+      byModule: toCounts(byModule),
     });
   }
 

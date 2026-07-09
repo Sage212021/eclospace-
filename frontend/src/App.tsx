@@ -268,7 +268,7 @@ export function App() {
       />
       <div className="app-main">
         <TopBar
-          connectedUsers={presence.connectedUsers}
+          connectedTotal={presence.total}
           onMenu={() => setNavOpen(true)}
           user={{ username: user.username, email: user.email }}
           onLogout={handleLogout}

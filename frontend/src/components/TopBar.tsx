@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { listUnreadNotifications, quickSearch, type QuickSearchResult } from "../api/client";
 
 interface TopBarProps {
-  // Utilisateurs actuellement connectés à l'application (présence temps réel).
-  connectedUsers: { userId: string; username: string }[];
+  // Nombre de personnes connectées (présence temps réel, sans identités).
+  connectedTotal: number;
   // Sur mobile : ouvre le menu latéral escamotable (bouton ☰ à gauche).
   onMenu?: () => void;
   // Profil courant + actions du menu (déconnexion, accès aux paramètres).
@@ -22,7 +22,7 @@ function initials(username: string): string {
 
 // Barre supérieure (guide §6) : recherche globale + présence + notifications +
 // menu de profil (avatar) à droite, façon Microsoft 365 / Notion.
-export function TopBar({ connectedUsers, onMenu, user, onLogout, onOpenSettings, onOpenManuscript }: TopBarProps) {
+export function TopBar({ connectedTotal, onMenu, user, onLogout, onOpenSettings, onOpenManuscript }: TopBarProps) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -171,16 +171,15 @@ export function TopBar({ connectedUsers, onMenu, user, onLogout, onOpenSettings,
           </div>
         )}
       </div>
+      {/* Présence : nombre de personnes connectées, sans aucune identité
+          (confidentialité). Le détail par pôle reste consultable par les seuls
+          profils habilités via la fenêtre dédiée. */}
       <div
-        title={
-          connectedUsers.length > 0
-            ? `Connectés : ${connectedUsers.map((u) => u.username).join(", ")}`
-            : "Aucun autre utilisateur connecté"
-        }
+        title={`${connectedTotal} personne(s) connectée(s)`}
         style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }}
       >
         <span style={{ width: 9, height: 9, borderRadius: 999, background: "var(--eclosion)", display: "inline-block" }} />
-        <span style={{ fontFamily: "var(--font-mono)" }}>{connectedUsers.length}</span> en ligne
+        <span style={{ fontFamily: "var(--font-mono)" }}>{connectedTotal}</span> en ligne
       </div>
       <div style={{ position: "relative", fontSize: 18 }} title={`${unreadCount} notification(s) non lue(s)`}>
         🔔

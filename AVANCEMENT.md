@@ -401,3 +401,19 @@ Deux finitions optionnelles demandées par l'opérateur.
 **Refonte visuelle premium : terminée** (palette, connexion, menu + icônes + tiroir mobile, cartes, boutons sémantiques, tableaux, indicateurs KPI, barre de profil).
 
 **Prochaine étape :** retours de l'opérateur.
+
+### 09/07/2026 (suite) — Refonte des accès (lot 1/2) : recherche, journalisation, présence confidentielle
+
+Première tranche de la « refonte du système de connexion et de gestion des accès » demandée par l'opérateur, en respectant la consigne : **ne rien changer à la présentation générale ; les ajouts se font en fenêtres qui se déroulent au clic.** Branche `claude/eclospace-next-steps-1a32bp`.
+
+1. **Recherche rapide fonctionnelle** (corrige « la barre de recherche ne renvoie à rien ») : le champ de la barre supérieure était décoratif (désactivé). Il retrouve désormais un ouvrage par **titre, numéro de manuscrit, auteur** (nom/prénom/nom de plume) **ou ISBN**, via un **menu déroulant** qui s'ouvre à la frappe ; un clic ouvre la fiche. Nouvel endpoint `GET /api/v1/quick-search` (accès à tout profil pouvant consulter les ouvrages, distinct du moteur avancé Direction `GET /api/v1/search`, Ch. 5 §5.4) ; sans droit de consultation, résultats masqués (liste vide), jamais d'erreur. **5 tests.**
+2. **Journalisation renforcée** : ajout des actions **« logout »** (chaque déconnexion, symétrique du login) et **« access_denied »** (toute tentative d'accès refusée en 403, avec la permission manquante + méthode/URL) au journal inviolable (migration `add_audit_logout_access_denied`). La page Journal les affiche et filtre automatiquement. **2 tests.**
+3. **Confidentialité de la présence** : le canal temps réel (Socket.IO) ne diffuse plus la **liste nominative** des connectés — seulement des **compteurs** (`total`, par pôle, par module ; décompte par personne, pas par onglet). Les voyants et le « N en ligne » restent identiques ; les info-bulles deviennent génériques (nombre seul).
+4. **Fenêtre « Hall / Présence »** : l'indicateur « N en ligne » devient cliquable et déroule une fenêtre listant chaque **pôle actif/inactif + effectif** et le total — **sans identités** (rappel de confidentialité en pied).
+5. **Notifications discrètes** de connexion/déconnexion : petit bandeau éphémère (bas d'écran), **générique** (« Une personne s'est connectée. », jamais de nom), déclenché par la variation du total en ligne, stabilisé sur 700 ms pour absorber les rebonds de transport.
+
+Suite complète : **159 tests passent**. Chaque point vérifié au navigateur (recherche + ouverture de fiche ; payload de présence sans noms ; fenêtre Hall ; bandeaux uniques connexion/déconnexion).
+
+**Reste à décider (reporté, question à l'opérateur)** : révéler les **noms** des connectés dans la fenêtre Hall aux seuls profils habilités (Direction générale, super-administrateur, et **responsable de son propre pôle**). Le « responsable de pôle » n'est pas encore identifié de façon univoque dans le modèle — décision de structuration à confirmer avant de l'implémenter (règle 2 du CLAUDE.md).
+
+**Prochaine étape :** retours de l'opérateur (notamment sur la révélation des noms aux profils habilités).

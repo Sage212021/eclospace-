@@ -4,11 +4,13 @@ import { listUnreadNotifications } from "../api/client";
 interface TopBarProps {
   // Utilisateurs actuellement connectés à l'application (présence temps réel).
   connectedUsers: { userId: string; username: string }[];
+  // Sur mobile : ouvre le menu latéral escamotable (bouton ☰ à gauche).
+  onMenu?: () => void;
 }
 
 // Barre supérieure (guide §6) : recherche globale + indicateur de présence
 // global (utilisateurs connectés, visible en permanence) + cloche de notifications.
-export function TopBar({ connectedUsers }: TopBarProps) {
+export function TopBar({ connectedUsers, onMenu }: TopBarProps) {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -28,6 +30,28 @@ export function TopBar({ connectedUsers }: TopBarProps) {
         background: "var(--card)",
       }}
     >
+      {onMenu && (
+        <button
+          onClick={onMenu}
+          aria-label="Ouvrir le menu"
+          style={{
+            flexShrink: 0,
+            width: 38,
+            height: 38,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "var(--chrome)",
+            color: "#fff",
+            border: "none",
+            borderRadius: 9,
+            fontSize: 18,
+            cursor: "pointer",
+          }}
+        >
+          ☰
+        </button>
+      )}
       <input
         placeholder="Rechercher un ouvrage, un auteur, un ISBN…"
         disabled

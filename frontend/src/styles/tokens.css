@@ -67,6 +67,67 @@ textarea:not([disabled]):focus {
   box-shadow: 0 0 0 3px rgba(200, 154, 27, 0.18);
 }
 
+/* Coquille applicative responsive — piloté par MÉDIA-REQUÊTES (et non par du
+   JavaScript) : c'est le seul moyen fiable sur un vrai téléphone. Sur grand
+   écran, la barre latérale est fixe ; sous 900px, elle devient un tiroir
+   escamotable (bouton ☰) glissant par-dessus le contenu. */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+.app-main {
+  flex: 1;
+  min-width: 0; /* laisse la colonne se réduire (pas de débordement) */
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* Bouton ☰ : masqué sur grand écran, affiché sous 900px. */
+.app-menu-btn {
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  background: var(--chrome);
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  font-size: 18px;
+  cursor: pointer;
+}
+.app-backdrop {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 220ms ease;
+    overflow-y: auto;
+  }
+  .app-sidebar--open {
+    transform: translateX(0);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+  }
+  .app-backdrop--show {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(9, 16, 33, 0.5);
+    z-index: 40;
+  }
+  .app-menu-btn {
+    display: inline-flex;
+  }
+}
+
 /* Boutons sémantiques (composant <Button>) : chaque intention a sa couleur.
    Ajouter = or · Modifier = bleu marine · Voir = contour · Supprimer = rouge
    discret · Exporter = vert. Palette d'accent maîtrisée (identité premium). */

@@ -359,4 +359,13 @@ Nouvelle identité visuelle validée par l'opérateur : bleu marine (confiance, 
 
 **Proposé pour la suite** : refonte des tableaux (en-tête navy, zébrage, survol or) puis grands indicateurs KPI du tableau de bord.
 
+**Prochaine étape (avant les tableaux) :** fiabiliser le menu mobile (ci-dessous).
+
+### 09/07/2026 (suite) — Fiabilisation du menu mobile (piloté par CSS)
+
+Retour opérateur : sur un vrai téléphone, la barre latérale réapparaissait en mode fixe (contenu écrasé), alors que l'émulation navigateur montrait le tiroir fonctionner. Cause : le basculement mobile reposait sur du **JavaScript** (`matchMedia`), qui peut ne pas se déclencher sur un appareil réel (mode « site pour ordinateur », particularités du navigateur).
+
+- **Layout responsive repassé en CSS pur** (média-requêtes `@media (max-width: 900px)` dans `tokens.css`) : sous 900 px, la barre latérale devient un tiroir escamotable (classes `app-shell` / `app-sidebar` / `app-menu-btn` / `app-backdrop`) ; au-dessus, barre fixe en flux. Le JavaScript ne sert plus qu'à ouvrir/fermer le tiroir (bouton ☰). Hook `useIsMobile` supprimé (plus nécessaire).
+- Vérifié au navigateur avec une fenêtre **390 px « nue »** (sans forcer le mode mobile, au plus près d'un vrai navigateur) : barre hors écran + ☰ visible + contenu pleine largeur ; ouverture du tiroir avec voile ; et en 1200 px, barre fixe sans ☰. Aucun débordement horizontal.
+
 **Prochaine étape :** tableaux premium, puis KPI du tableau de bord.

@@ -176,12 +176,17 @@ function LeafButton({
           gap: 6,
           width: "100%",
           textAlign: "left",
-          padding: indented ? "8px 20px 8px 32px" : "10px 20px",
-          background: active ? "var(--chrome-2)" : "transparent",
-          borderLeft: active ? "3px solid var(--eclosion)" : "3px solid transparent",
-          border: "none",
+          padding: indented ? "8px 20px 8px 30px" : "10px 20px",
+          // Sélection : fond or très léger + barre dorée de 4 px + texte blanc
+          // renforcé, pour attirer l'œil sans surcharger (identité premium).
+          background: active ? "rgba(200, 154, 27, 0.16)" : "transparent",
+          borderLeft: active ? "4px solid var(--eclosion)" : "4px solid transparent",
+          borderTop: "none",
+          borderRight: "none",
+          borderBottom: "none",
           color: "#fff",
           fontSize: 13,
+          fontWeight: active ? 600 : 400,
           cursor: "pointer",
         }}
       >

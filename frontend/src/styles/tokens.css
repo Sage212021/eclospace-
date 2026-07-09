@@ -1,22 +1,33 @@
-/* Jetons du guide de style (docs/04_Guide_de_style_UI.md §2-3).
-   Polices : fallback système uniquement au Lot 0, pour l'économie de bande
-   passante (Ch. 21 §21.6) — les polices de marque (Fraunces, Public Sans,
-   IBM Plex Mono) pourront être auto-hébergées plus tard si la maison le
-   souhaite, sans changer ces jetons. */
+/* Identité visuelle Éclospace — bleu marine (confiance) · blanc (clarté) ·
+   or (prestige, accent ~10%). Palette officielle validée par l'opérateur
+   (09/07/2026), remplaçant les teintes de départ du guide §2-3.
+   Toute l'application lit ces jetons : les modifier ici reskin l'ensemble. */
 :root {
-  --ink: #1e2430;
-  --chrome: #232b3e;
-  --chrome-2: #2c3650;
-  --paper: #f7f6f2;
-  --card: #ffffff;
-  --line: #e4e2da;
-  --eclosion: #b18414;
-  --eclosion-soft: #f7efda;
-  --amber: #c4661f;
+  /* Bleu marine */
+  --navy: #16233d; /* fond principal / titres */
+  --chrome: #1e2a44; /* barre latérale */
+  --chrome-2: #223252; /* en-tête, survols et bandeaux navy */
+
+  /* Blanc / gris clairs */
+  --paper: #f8f9fb; /* fond général */
+  --card: #ffffff; /* cartes */
+  --line: #e6e9ef; /* lignes et bordures (gris bleuté clair) */
+
+  /* Texte */
+  --ink: #16233d; /* texte principal / titres, en bleu marine */
+  --muted: #6b7280; /* texte secondaire */
+
+  /* Or (accent d'identité) */
+  --eclosion: #c89a1b; /* or principal */
+  --eclosion-light: #d9b24c; /* or clair (dégradés, survols) */
+  --eclosion-dark: #a87d14; /* or foncé (états actifs) */
+  --eclosion-soft: #f6efd8; /* fond or très clair (badges, sélection) */
+
+  /* Sémantique métier (inchangée) */
+  --amber: #c4661f; /* retard */
   --amber-soft: #f9e9db;
-  --alert: #c24b3a;
+  --alert: #c24b3a; /* critique */
   --alert-soft: #f9e9e6;
-  --muted: #6b7280;
 
   --font-title: Georgia, serif;
   --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -42,4 +53,14 @@ button {
 :focus-visible {
   outline: 2px solid var(--eclosion);
   outline-offset: 2px;
+}
+
+/* Focus doré sur les champs de saisie (halo discret) : donne l'impression
+   d'un logiciel soigné sans toucher à chaque champ individuellement. */
+input:not([disabled]):focus,
+select:not([disabled]):focus,
+textarea:not([disabled]):focus {
+  outline: none;
+  border-color: var(--eclosion) !important;
+  box-shadow: 0 0 0 3px rgba(200, 154, 27, 0.18);
 }

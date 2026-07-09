@@ -149,9 +149,28 @@ export function App() {
   const [view, setView] = useState<View>({ kind: "leaf", key: "dashboard" });
   const [confirmBanner, setConfirmBanner] = useState<{ tone: "ok" | "alert"; text: string } | null>(null);
 
-  const { presence, join } = usePresence(Boolean(user));
+  const { presence, join, disconnect } = usePresence(Boolean(user));
 
   const refreshUser = () => fetchMe().then(setUser).catch(() => setUser(null));
+
+  // Déconnexion robuste (Paramètres/en-tête) : on ferme d'abord la socket de
+  // présence, on demande au serveur de clore la session (best effort), puis on
+  // repasse toujours à l'écran de connexion — même si l'appel échoue (session
+  // déjà expirée, réseau, 401/500). Un échec serveur est signalé sans bloquer.
+  const handleLogout = async () => {
+    disconnect();
+    try {
+      await logout();
+    } catch {
+      setConfirmBanner({
+        tone: "alert",
+        text: "La déconnexion côté serveur n'a pas abouti (session peut-être déjà expirée). Vous avez tout de même été déconnecté de cet appareil.",
+      });
+    } finally {
+      setView({ kind: "leaf", key: "dashboard" });
+      setUser(null);
+    }
+  };
 
   useEffect(() => {
     refreshUser().finally(() => setLoading(false));
@@ -231,7 +250,7 @@ export function App() {
         <TopBar connectedUsers={presence.connectedUsers} />
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 24px" }}>
           <button
-            onClick={() => logout().then(() => setUser(null))}
+            onClick={handleLogout}
             style={{
               background: "none",
               border: "1px solid var(--line)",

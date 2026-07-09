@@ -38,5 +38,13 @@ export function usePresence(enabled: boolean) {
     socketRef.current?.emit("presence:join", { poleId, moduleId });
   }, []);
 
-  return { presence, join };
+  // Fermeture explicite de la socket (à la déconnexion), pour éviter tout
+  // voyant « connecté » fantôme jusqu'au nettoyage du hook.
+  const disconnect = useCallback(() => {
+    socketRef.current?.disconnect();
+    socketRef.current = null;
+    setPresence(EMPTY);
+  }, []);
+
+  return { presence, join, disconnect };
 }

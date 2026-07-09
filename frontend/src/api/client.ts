@@ -15,6 +15,8 @@ export interface EffectiveUser {
   mfa_enabled: boolean;
   roles: string[];
   permissions: string[];
+  impersonating?: boolean;
+  impersonator?: { id: string; username: string } | null;
 }
 
 interface ApiError {
@@ -26,7 +28,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    // Ne déclarer le type JSON que s'il y a un corps : sinon Fastify rejette une
+    // requête POST sans corps (FST_ERR_CTP_EMPTY_JSON_BODY).
+    headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...init?.headers },
   });
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as ApiError | null;
@@ -1220,6 +1224,23 @@ export function updateUser(id: string, patch: { username?: string; email?: strin
 
 export function deleteUser(id: string) {
   return request<{ ok: true }>(`/api/v1/users/${id}`, { method: "DELETE" });
+}
+
+// Se connecter en tant qu'un utilisateur (usurpation d'identité, §4).
+export function impersonateUser(id: string) {
+  return request<{ ok: true; impersonating: string }>(`/api/v1/users/${id}/impersonate`, { method: "POST" });
+}
+
+export function stopImpersonation() {
+  return request<{ ok: true }>("/api/v1/auth/stop-impersonation", { method: "POST" });
+}
+
+// Réglage d'un droit pour tout un pôle en une opération (§3).
+export function setDepartmentPermission(departmentId: string, module: string, action: string, granted: boolean) {
+  return request<{ ok: true; roles_affected: number }>(`/api/v1/departments/${departmentId}/permissions`, {
+    method: "POST",
+    body: JSON.stringify({ module, action, granted }),
+  });
 }
 
 export interface PermissionRef {

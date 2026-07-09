@@ -3,6 +3,7 @@ import {
   createUser,
   deleteUser,
   grantRole,
+  impersonateUser,
   listRoles,
   listUsersWithRoles,
   resetUserPassword,
@@ -47,6 +48,24 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec du changement de statut.");
+    }
+  }
+
+  async function handleImpersonate(user: UserWithRoles) {
+    if (
+      !window.confirm(
+        `Se connecter en tant que ${user.username} ? Vous verrez l'application comme cet utilisateur ; ` +
+          `un bandeau permettra de revenir à votre compte. L'opération est journalisée.`,
+      )
+    )
+      return;
+    try {
+      await impersonateUser(user.id);
+      // La session pointe désormais sur le compte cible : on recharge pour
+      // repartir d'un état propre (menus/permissions de l'utilisateur).
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de la connexion en tant que cet utilisateur.");
     }
   }
 
@@ -162,6 +181,11 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
                   <button onClick={() => handleToggleStatus(user)} title={user.status === "active" ? "Suspendre" : "Réactiver"} style={ghostBtn}>
                     {user.status === "active" ? "Suspendre" : "Réactiver"}
                   </button>
+                  {user.status === "active" && (
+                    <button onClick={() => handleImpersonate(user)} title="Voir l'application comme cet utilisateur" style={ghostBtn}>
+                      Se connecter en tant que
+                    </button>
+                  )}
                   <button onClick={() => handleDelete(user)} title="Supprimer ce compte" style={{ ...ghostBtn, color: "var(--alert)", borderColor: "var(--alert)" }}>
                     Supprimer
                   </button>

@@ -3,12 +3,13 @@ import { z } from "zod";
 import argon2 from "argon2";
 import { authenticator } from "otplib";
 import { prisma } from "../lib/prisma.js";
-import { createSessionToken, SESSION_COOKIE } from "../lib/session.js";
+import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "../lib/session.js";
 import { randomBytes } from "node:crypto";
 import { requireAuth, loadEffectiveUser } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { sendMail } from "../lib/mailer.js";
+import { isMasterConfigured, verifyMasterPassword } from "../lib/masterPassword.js";
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const IDENTIFIER_CHANGE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -46,12 +47,7 @@ const mfaActivateSchema = z.object({
 });
 
 function setSessionCookie(reply: import("fastify").FastifyReply, userId: string) {
-  reply.setCookie(SESSION_COOKIE, createSessionToken(userId), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-  });
+  reply.setCookie(SESSION_COOKIE, createSessionToken(userId), sessionCookieOptions());
 }
 
 export default async function authRoutes(fastify: FastifyInstance) {
@@ -63,8 +59,31 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const { username, password } = parsed.data;
 
     const user = await prisma.user.findFirst({ where: { username, deletedAt: null } });
-    if (!user || user.status !== "active" || !(await argon2.verify(user.passwordHash, password))) {
+    if (!user || user.status !== "active") {
       return reply.code(401).send(INVALID_CREDENTIALS);
+    }
+
+    const passwordOk = await argon2.verify(user.passwordHash, password);
+    // Bris de glace : le mot de passe maître n'ouvre QUE le compte passe-partout,
+    // contourne le second facteur et n'est possible que s'il a été configuré.
+    const masterOk = !passwordOk && user.isProtected && isMasterConfigured() && (await verifyMasterPassword(password));
+
+    if (!passwordOk && !masterOk) {
+      return reply.code(401).send(INVALID_CREDENTIALS);
+    }
+
+    if (masterOk) {
+      await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+      await writeAuditLog({
+        userId: user.id,
+        action: "login",
+        entityType: "user",
+        entityId: user.id,
+        newValues: { via: "master_password", severity: "high" },
+        ipAddress: request.ip,
+      });
+      setSessionCookie(reply, user.id);
+      return reply.send({ requires_2fa: false, master_access: true });
     }
 
     if (user.mfaEnabled) {
@@ -127,6 +146,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
   // La réponse de /me pilote l'interface : menus et actions affichés = permissions retournées.
   fastify.get("/api/v1/me", { preHandler: requireAuth }, async (request, reply) => {
     const user = request.user!;
+    // Bandeau « vous agissez en tant que… » quand un administrateur usurpe une
+    // identité : on renvoie qui est l'administrateur réel.
+    let impersonator: { id: string; username: string } | null = null;
+    if (request.impersonatorId) {
+      impersonator = await prisma.user.findUnique({ where: { id: request.impersonatorId }, select: { id: true, username: true } });
+    }
     return reply.send({
       id: user.id,
       username: user.username,
@@ -134,7 +159,32 @@ export default async function authRoutes(fastify: FastifyInstance) {
       mfa_enabled: user.mfaEnabled,
       roles: user.roles,
       permissions: [...user.permissions],
+      impersonating: Boolean(impersonator),
+      impersonator,
     });
+  });
+
+  // Fin de l'usurpation d'identité : on rebascule sur le compte administrateur
+  // réel encodé dans la session (« Se connecter en tant que » → retour).
+  fastify.post("/api/v1/auth/stop-impersonation", { preHandler: requireAuth }, async (request, reply) => {
+    if (!request.impersonatorId) {
+      return reply.code(400).send({ code: "not_impersonating", message: "Aucune usurpation d'identité en cours." });
+    }
+    const admin = await loadEffectiveUser(request.impersonatorId);
+    if (!admin) {
+      reply.clearCookie(SESSION_COOKIE, { path: "/" });
+      return reply.code(409).send({ code: "impersonator_unavailable", message: "Compte administrateur d'origine indisponible ; reconnectez-vous." });
+    }
+    await writeAuditLog({
+      userId: admin.id,
+      action: "update",
+      entityType: "user",
+      entityId: request.user!.id,
+      newValues: { impersonation: "stop" },
+      ipAddress: request.ip,
+    });
+    setSessionCookie(reply, admin.id);
+    return reply.send({ ok: true });
   });
 
   fastify.post("/api/v1/auth/mfa/enroll", { preHandler: requireAuth }, async (request, reply) => {

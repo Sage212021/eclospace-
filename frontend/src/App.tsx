@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { confirmIdentifierChange, fetchMe, logout, type EffectiveUser } from "./api/client";
+import { confirmIdentifierChange, fetchMe, logout, stopImpersonation, type EffectiveUser } from "./api/client";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Manuscripts } from "./pages/Manuscripts";
@@ -244,6 +244,34 @@ export function App() {
             Se déconnecter
           </button>
         </div>
+
+        {user.impersonating && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              background: "var(--amber)",
+              color: "#fff",
+              padding: "8px 24px",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            <span>
+              Vous agissez en tant que <strong>{user.username}</strong>
+              {user.impersonator ? ` (session ouverte par ${user.impersonator.username})` : ""}.
+            </span>
+            <button
+              onClick={() => stopImpersonation().then(() => window.location.reload())}
+              style={{ background: "#fff", color: "var(--amber)", border: "none", borderRadius: 6, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
+              Revenir à mon compte
+            </button>
+          </div>
+        )}
 
         {confirmBannerNode}
 

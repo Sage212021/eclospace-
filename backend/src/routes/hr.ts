@@ -380,6 +380,14 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
       }
+      // Le compte passe-partout ne peut pas être privé de son rôle de secours.
+      const existingRole = await prisma.userRole.findUnique({
+        where: { id },
+        include: { user: { select: { isProtected: true } }, role: { select: { code: true } } },
+      });
+      if (existingRole?.user.isProtected && existingRole.role.code === "ADMIN_GENERAL") {
+        return reply.code(409).send({ code: "protected_account", message: "Le rôle du compte passe-partout ne peut pas être retiré." });
+      }
       const userRole = await prisma.userRole.update({
         where: { id },
         data: { revokedAt: new Date(), justification: parsed.data.justification },

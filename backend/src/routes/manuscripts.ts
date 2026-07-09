@@ -203,6 +203,46 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     return reply.code(201).send(manuscript);
   });
 
+  // Archivage hiérarchique (spéc. fonctionnelle §7) : projection légère de tous
+  // les ouvrages avec les axes de classement (date de parution, collection,
+  // domaine, auteur, étape). L'arborescence (année/mois/jour, collection…) est
+  // construite côté client à partir de ces axes, dans l'ordre choisi par
+  // l'opérateur — pas de combinatoire d'endpoints côté serveur.
+  fastify.get("/api/v1/archives", { preHandler: requirePermission("manuscripts", "consultation") }, async (_request, reply) => {
+    const rows = await prisma.manuscript.findMany({
+      where: { deletedAt: null },
+      include: {
+        genre: { select: { label: true } },
+        collection: { select: { label: true } },
+        status: { select: { code: true, label: true } },
+        workContributors: {
+          where: { role: "author" },
+          orderBy: { displayOrder: "asc" },
+          take: 1,
+          include: { partner: { select: { firstName: true, lastName: true, penName: true } } },
+        },
+      },
+      orderBy: { publicationDate: "desc" },
+    });
+
+    return reply.send(
+      rows.map((m) => {
+        const partner = m.workContributors[0]?.partner;
+        return {
+          id: m.id,
+          manuscriptNumber: m.manuscriptNumber,
+          title: m.title,
+          publicationDate: m.publicationDate,
+          isBackCatalogue: m.isBackCatalogue,
+          genre: m.genre?.label ?? null,
+          collection: m.collection?.label ?? null,
+          status: m.status,
+          author: partner ? partner.penName || `${partner.firstName} ${partner.lastName}` : null,
+        };
+      }),
+    );
+  });
+
   // Import d'un ouvrage déjà paru (spéc. fonctionnelle §8) : entrée directe
   // dans le catalogue avec sa date de parution historique, sans dérouler le
   // circuit de production. Le suivi post-publication devient son étape courante.

@@ -4,6 +4,8 @@ import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Manuscripts } from "./pages/Manuscripts";
 import { CatalogueReferencePage } from "./pages/CatalogueReferencePage";
+import { ArchivesPage } from "./pages/ArchivesPage";
+import { RightsMatrixPage } from "./pages/RightsMatrixPage";
 import { ManuscriptDetail } from "./pages/ManuscriptDetail";
 import { MyReadings } from "./pages/MyReadings";
 import { StockPage } from "./pages/StockPage";
@@ -27,6 +29,8 @@ type PageId =
   | "manuscripts"
   | "my-readings"
   | "catalogue-ref"
+  | "archives"
+  | "rights-matrix"
   | "stock"
   | "commercial"
   | "finance"
@@ -55,6 +59,7 @@ const NAV_POLES: NavPole[] = [
       { key: "ed-direction", label: "Direction éditoriale", permission: "manuscripts:consultation" },
       { key: "ed-correction", label: "Correction éditoriale", permission: "manuscripts:consultation" },
       { key: "ed-catalogue-ref", label: "Domaines & collections", permission: "manuscripts:consultation" },
+      { key: "ed-archives", label: "Archives", permission: "manuscripts:consultation" },
     ],
   },
   {
@@ -86,6 +91,7 @@ const NAV_POLES: NavPole[] = [
     items: [
       { key: "ad-rh", label: "Ressources humaines", permission: "rh:consultation" },
       { key: "ad-users", label: "Utilisateurs & rôles", permission: "users:consultation" },
+      { key: "ad-rights", label: "Droits & pôles", permission: "users:administration" },
       { key: "ad-parametres", label: "Paramètres", permission: "settings:consultation" },
       { key: "ad-diagnostics", label: "Diagnostics système", role: "ADMIN_GENERAL" },
     ],
@@ -108,6 +114,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-direction": { stage: "DECISION_EDITORIALE", heading: "Direction éditoriale" },
   "ed-correction": { stage: "CORRECTION", heading: "Correction éditoriale" },
   "ed-catalogue-ref": { page: "catalogue-ref" },
+  "ed-archives": { page: "archives" },
   "pr-maquette": { stage: "MISE_EN_PAGE", heading: "Maquette & mise en page" },
   "pr-infographie": { stage: "INFOGRAPHIE", heading: "Infographie & couvertures" },
   "pr-isbn": { stage: "ATTRIBUTION_REFERENCES", heading: "ISBN & dépôt légal" },
@@ -119,6 +126,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "jf-finance": { page: "finance" },
   "ad-rh": { page: "hr" },
   "ad-users": { page: "users-roles" },
+  "ad-rights": { page: "rights-matrix" },
   "ad-parametres": { page: "settings" },
   "ad-diagnostics": { page: "diagnostics" },
   "pi-direction": { page: "direction" },
@@ -265,6 +273,10 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "my-readings" && <MyReadings />}
         {leaf && "page" in leaf && leaf.page === "catalogue-ref" && (
           <CatalogueReferencePage canManage={permissions.has("manuscripts:administration")} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "archives" && <ArchivesPage onOpenManuscript={openManuscript} />}
+        {leaf && "page" in leaf && leaf.page === "rights-matrix" && (
+          <RightsMatrixPage canManage={permissions.has("users:administration")} />
         )}
         {leaf && "page" in leaf && leaf.page === "stock" && (
           <StockPage canManage={permissions.has("stock:saisie")} canAdminister={permissions.has("stock:administration")} />

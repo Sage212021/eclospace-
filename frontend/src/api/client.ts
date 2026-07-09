@@ -1202,6 +1202,90 @@ export function listUsersWithRoles() {
   return request<UserWithRoles[]>("/api/v1/users-with-roles");
 }
 
+// --- Gouvernance : comptes, matrice des droits, pôles (spéc. fonctionnelle §2/§3) ---
+
+export function createUser(input: { username: string; email: string; password: string; role_codes?: string[] }) {
+  return request<{ id: string; username: string; email: string; status: string }>("/api/v1/users", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateUser(id: string, patch: { username?: string; email?: string; status?: "active" | "suspended" }) {
+  return request<{ id: string; username: string; email: string; status: string }>(`/api/v1/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteUser(id: string) {
+  return request<{ ok: true }>(`/api/v1/users/${id}`, { method: "DELETE" });
+}
+
+export interface PermissionRef {
+  id: string;
+  module: string;
+  action: string;
+}
+
+export interface RolePermissions {
+  role: { id: string; code: string; label: string };
+  editable: boolean;
+  permissions: string[];
+}
+
+export function listPermissions() {
+  return request<PermissionRef[]>("/api/v1/permissions");
+}
+
+export function getRolePermissions(roleId: string) {
+  return request<RolePermissions>(`/api/v1/roles/${roleId}/permissions`);
+}
+
+export function setRolePermission(roleId: string, module: string, action: string, granted: boolean) {
+  return request<{ ok: true }>(`/api/v1/roles/${roleId}/permissions`, {
+    method: "POST",
+    body: JSON.stringify({ module, action, granted }),
+  });
+}
+
+export interface Department {
+  id: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+}
+
+export function listDepartments() {
+  return request<Department[]>("/api/v1/departments");
+}
+
+export function createDepartment(name: string, code?: string) {
+  return request<Department>("/api/v1/departments", { method: "POST", body: JSON.stringify({ name, ...(code ? { code } : {}) }) });
+}
+
+export function deleteDepartment(id: string) {
+  return request<{ ok: true }>(`/api/v1/departments/${id}`, { method: "DELETE" });
+}
+
+// --- Archivage hiérarchique (spéc. fonctionnelle §7) ---
+
+export interface ArchiveItem {
+  id: string;
+  manuscriptNumber: string;
+  title: string;
+  publicationDate: string | null;
+  isBackCatalogue: boolean;
+  genre: string | null;
+  collection: string | null;
+  author: string | null;
+  status: { code: string; label: string };
+}
+
+export function listArchives() {
+  return request<ArchiveItem[]>("/api/v1/archives");
+}
+
 export interface AccessAnomaly {
   type: string;
   user_id: string;

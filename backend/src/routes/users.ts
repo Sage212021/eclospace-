@@ -1,12 +1,53 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import argon2 from "argon2";
+import { PermissionAction } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 
 const resetPasswordSchema = z.object({ new_password: z.string().min(1) });
+
+// Rôle super-administrateur : conserve toujours l'accès complet. Sa matrice de
+// droits n'est pas modifiable (garde-fou anti-verrouillage) et il ne peut être
+// vidé de ses titulaires.
+const SUPERADMIN_ROLE = "ADMIN_GENERAL";
+
+const createUserSchema = z.object({
+  username: z.string().min(3).max(60),
+  email: z.string().email(),
+  password: z.string().min(1),
+  role_codes: z.array(z.string()).default([]),
+});
+
+const patchUserSchema = z
+  .object({
+    username: z.string().min(3).max(60).optional(),
+    email: z.string().email().optional(),
+    status: z.enum(["active", "suspended"]).optional(),
+  })
+  .refine((v) => v.username || v.email || v.status, { message: "Aucune modification fournie." });
+
+const permissionToggleSchema = z.object({
+  module: z.string().min(1),
+  action: z.nativeEnum(PermissionAction),
+  granted: z.boolean(),
+});
+
+const departmentSchema = z.object({ name: z.string().min(1), code: z.string().min(1).max(30).optional() });
+
+function slugCode(label: string): string {
+  return (
+    label
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 30) || "POLE"
+  );
+}
 
 // Comptes et habilitations (Ch. 2). La liste minimale des comptes actifs sert
 // aux sélecteurs "responsable du dossier" / "lecteur affecté" (Ch. 6, Ch. 7) ;
@@ -102,4 +143,266 @@ export default async function userRoutes(fastify: FastifyInstance) {
       return reply.send({ ok: true });
     },
   );
+
+  // --- Gestion des comptes (spéc. fonctionnelle §2) : création, modification,
+  // suspension/réactivation, suppression logique. Réservé à l'administration. ---
+
+  fastify.post("/api/v1/users", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const parsed = createUserSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const { username, email, password, role_codes } = parsed.data;
+
+    const complexityError = validatePasswordComplexity(password);
+    if (complexityError) {
+      return reply.code(400).send({ code: "weak_password", message: complexityError });
+    }
+    if (await prisma.user.findFirst({ where: { username, deletedAt: null } })) {
+      return reply.code(409).send({ code: "username_taken", message: `L'identifiant « ${username} » est déjà utilisé.` });
+    }
+    if (await prisma.user.findFirst({ where: { email, deletedAt: null } })) {
+      return reply.code(409).send({ code: "email_taken", message: `L'e-mail « ${email} » est déjà utilisé.` });
+    }
+
+    const roles = role_codes.length ? await prisma.role.findMany({ where: { code: { in: role_codes } } }) : [];
+    if (roles.length !== role_codes.length) {
+      return reply.code(400).send({ code: "unknown_role", message: "Un des rôles indiqués est inconnu." });
+    }
+
+    const passwordHash = await argon2.hash(password);
+    const user = await prisma.user.create({
+      data: {
+        username,
+        email,
+        passwordHash,
+        status: "active",
+        createdBy: request.user!.id,
+        updatedBy: request.user!.id,
+        userRoles: { create: roles.map((r) => ({ roleId: r.id, grantedBy: request.user!.id })) },
+      },
+      select: { id: true, username: true, email: true, status: true },
+    });
+
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "create",
+      entityType: "user",
+      entityId: user.id,
+      newValues: { username, email, roles: role_codes },
+      ipAddress: request.ip,
+    });
+
+    return reply.code(201).send(user);
+  });
+
+  fastify.patch("/api/v1/users/:id", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = patchUserSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: parsed.error.issues[0]?.message ?? "Champs invalides." });
+    }
+    const target = await prisma.user.findFirst({ where: { id, deletedAt: null } });
+    if (!target) {
+      return reply.code(404).send({ code: "not_found", message: "Compte introuvable." });
+    }
+    const { username, email, status } = parsed.data;
+
+    if (status === "suspended" && target.id === request.user!.id) {
+      return reply.code(409).send({ code: "cannot_suspend_self", message: "Vous ne pouvez pas suspendre votre propre compte." });
+    }
+    if (username && username !== target.username && (await prisma.user.findFirst({ where: { username, deletedAt: null, id: { not: id } } }))) {
+      return reply.code(409).send({ code: "username_taken", message: `L'identifiant « ${username} » est déjà utilisé.` });
+    }
+    if (email && email !== target.email && (await prisma.user.findFirst({ where: { email, deletedAt: null, id: { not: id } } }))) {
+      return reply.code(409).send({ code: "email_taken", message: `L'e-mail « ${email} » est déjà utilisé.` });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(username ? { username } : {}),
+        ...(email ? { email } : {}),
+        ...(status ? { status } : {}),
+        updatedBy: request.user!.id,
+      },
+      select: { id: true, username: true, email: true, status: true },
+    });
+
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: status ? "status_change" : "update",
+      entityType: "user",
+      entityId: id,
+      oldValues: { username: target.username, email: target.email, status: target.status },
+      newValues: parsed.data,
+      ipAddress: request.ip,
+    });
+
+    return reply.send(updated);
+  });
+
+  fastify.delete("/api/v1/users/:id", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const target = await prisma.user.findFirst({ where: { id, deletedAt: null } });
+    if (!target) {
+      return reply.code(404).send({ code: "not_found", message: "Compte introuvable." });
+    }
+    if (target.id === request.user!.id) {
+      return reply.code(409).send({ code: "cannot_delete_self", message: "Vous ne pouvez pas supprimer votre propre compte." });
+    }
+
+    // Garde-fou : ne jamais retirer le dernier administrateur général actif.
+    const isTargetAdmin = await prisma.userRole.findFirst({
+      where: { userId: id, revokedAt: null, role: { code: SUPERADMIN_ROLE } },
+    });
+    if (isTargetAdmin) {
+      const otherAdmins = await prisma.userRole.count({
+        where: { revokedAt: null, role: { code: SUPERADMIN_ROLE }, userId: { not: id }, user: { status: "active", deletedAt: null } },
+      });
+      if (otherAdmins === 0) {
+        return reply.code(409).send({ code: "last_admin", message: "Impossible de supprimer le dernier administrateur général actif." });
+      }
+    }
+
+    await prisma.user.update({ where: { id }, data: { deletedAt: new Date(), status: "disabled", updatedBy: request.user!.id } });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "user",
+      entityId: id,
+      oldValues: { username: target.username },
+      newValues: { removed: true },
+      ipAddress: request.ip,
+    });
+    return reply.send({ ok: true });
+  });
+
+  // --- Matrice des droits éditable (spéc. fonctionnelle §3, décision A) :
+  // l'administrateur ajuste les permissions par rôle. Le super-administrateur
+  // reste intouchable pour garantir un accès de secours. ---
+
+  fastify.get("/api/v1/permissions", { preHandler: requirePermission("users", "administration") }, async (_request, reply) => {
+    const permissions = await prisma.permission.findMany({ orderBy: [{ module: "asc" }, { action: "asc" }] });
+    return reply.send(permissions.map((p) => ({ id: p.id, module: p.module, action: p.action })));
+  });
+
+  fastify.get("/api/v1/roles/:id/permissions", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const role = await prisma.role.findFirst({ where: { id, deletedAt: null }, include: { rolePermissions: { include: { permission: true } } } });
+    if (!role) {
+      return reply.code(404).send({ code: "not_found", message: "Rôle introuvable." });
+    }
+    return reply.send({
+      role: { id: role.id, code: role.code, label: role.label },
+      editable: role.code !== SUPERADMIN_ROLE,
+      permissions: role.rolePermissions.map((rp) => `${rp.permission.module}:${rp.permission.action}`),
+    });
+  });
+
+  fastify.post("/api/v1/roles/:id/permissions", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = permissionToggleSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const role = await prisma.role.findFirst({ where: { id, deletedAt: null } });
+    if (!role) {
+      return reply.code(404).send({ code: "not_found", message: "Rôle introuvable." });
+    }
+    if (role.code === SUPERADMIN_ROLE) {
+      return reply.code(409).send({ code: "role_protected", message: "Les droits de l'administrateur général ne sont pas modifiables." });
+    }
+    const permission = await prisma.permission.findUnique({
+      where: { module_action: { module: parsed.data.module, action: parsed.data.action } },
+    });
+    if (!permission) {
+      return reply.code(400).send({ code: "unknown_permission", message: "Permission inconnue." });
+    }
+
+    if (parsed.data.granted) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: id, permissionId: permission.id } },
+        update: {},
+        create: { roleId: id, permissionId: permission.id, createdBy: request.user!.id },
+      });
+    } else {
+      await prisma.rolePermission.deleteMany({ where: { roleId: id, permissionId: permission.id } });
+    }
+
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "role",
+      entityId: id,
+      newValues: { permission: `${parsed.data.module}:${parsed.data.action}`, granted: parsed.data.granted },
+      ipAddress: request.ip,
+    });
+
+    return reply.send({ ok: true });
+  });
+
+  // --- Gestion des pôles / départements (spéc. fonctionnelle §3, décision A :
+  // pôle = département, créable par l'administrateur). ---
+
+  fastify.get("/api/v1/departments", { preHandler: requirePermission("users", "consultation") }, async (_request, reply) => {
+    const departments = await prisma.department.findMany({
+      where: { deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, code: true, name: true, isActive: true },
+    });
+    return reply.send(departments);
+  });
+
+  fastify.post("/api/v1/departments", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const parsed = departmentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Nom du pôle requis.", details: parsed.error.issues });
+    }
+    const code = parsed.data.code ?? slugCode(parsed.data.name);
+    const existing = await prisma.department.findUnique({ where: { code } });
+    if (existing && !existing.deletedAt) {
+      return reply.code(409).send({ code: "code_taken", message: `Un pôle avec le code « ${code} » existe déjà.` });
+    }
+    const department = existing
+      ? await prisma.department.update({ where: { id: existing.id }, data: { name: parsed.data.name, deletedAt: null, isActive: true, updatedBy: request.user!.id } })
+      : await prisma.department.create({ data: { code, name: parsed.data.name, createdBy: request.user!.id, updatedBy: request.user!.id } });
+
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: existing ? "update" : "create",
+      entityType: "department",
+      entityId: department.id,
+      newValues: { code: department.code, name: department.name },
+      ipAddress: request.ip,
+    });
+    return reply.code(201).send({ id: department.id, code: department.code, name: department.name, isActive: department.isActive });
+  });
+
+  fastify.delete("/api/v1/departments/:id", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const department = await prisma.department.findFirst({ where: { id, deletedAt: null } });
+    if (!department) {
+      return reply.code(404).send({ code: "not_found", message: "Pôle introuvable." });
+    }
+    const rolesCount = await prisma.role.count({ where: { departmentId: id, deletedAt: null } });
+    const employeesCount = await prisma.employee.count({ where: { departmentId: id, deletedAt: null } });
+    if (rolesCount > 0 || employeesCount > 0) {
+      return reply.code(409).send({
+        code: "department_in_use",
+        message: `Ce pôle est rattaché à ${rolesCount} rôle(s) et ${employeesCount} employé(s) ; il ne peut pas être retiré.`,
+      });
+    }
+    await prisma.department.update({ where: { id }, data: { deletedAt: new Date(), isActive: false, updatedBy: request.user!.id } });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "department",
+      entityId: id,
+      oldValues: { code: department.code, name: department.name },
+      newValues: { removed: true },
+      ipAddress: request.ip,
+    });
+    return reply.send({ ok: true });
+  });
 }

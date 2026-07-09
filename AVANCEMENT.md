@@ -307,3 +307,20 @@ Troisième phase des nouvelles spécifications fonctionnelles (points §5/§6 : 
 - **5 tests automatisés** ajoutés (filtre par période + tri par date ; filtre « déjà parus » + recherche titre ; création/retrait d'un domaine + refus si utilisé ; gestion collections + refus code déjà pris ; refus 403 sans habilitation). Suite complète : **139 tests passent**. Parcours vérifié dans un navigateur réel (filtre 2020-2025, ajout du domaine « Bande dessinée »).
 
 **Prochaine étape :** Phase 4 — archivage hiérarchique (arborescence année/mois/jour, collection, auteur, catégorie).
+
+### 09/07/2026 — Phases 4 & 5 (Archivage hiérarchique + Gouvernance admin)
+
+Quatrième et cinquième phases livrées ensemble (à la demande de l'opérateur), sur une même branche/PR.
+
+**Phase 4 — Archivage hiérarchique (§7) :**
+- Nouvel écran « Archives » (pôle Éditorial) : classement hiérarchique de tous les ouvrages, arborescence dépliable avec compteurs. Axes sélectionnables : **Année › Mois**, **Année › Mois › Jour**, **Collection › Année**, **Domaine › Année**, **Auteur**. Les ouvrages sans date de parution sont regroupés sous « Date inconnue ». Un clic sur un ouvrage ouvre sa fiche.
+- Endpoint `GET /api/v1/archives` : projection légère (date de parution, collection, domaine, auteur, étape) ; l'arbre est reconstruit côté client selon l'ordre d'axes choisi — pas de combinatoire d'endpoints.
+
+**Phase 5 — Gouvernance admin (§2, §3 ; décision A) :**
+- **Gestion des comptes** (écran Utilisateurs & rôles enrichi) : création de compte (identifiant, e-mail, mot de passe conforme, rôle initial), **suspension/réactivation**, **suppression logique**. Garde-fous : pas d'auto-suspension, pas d'auto-suppression, **jamais le dernier administrateur général**. Endpoints `POST/PATCH/DELETE /api/v1/users`.
+- **Matrice des droits éditable** (écran « Droits & pôles ») : pour chaque rôle, l'administrateur coche/décoche les actions (consulter/saisir/valider/administrer) par module. Effet immédiat (vérifié : un rôle passe de 403 à 200 après ajout). L'**Administrateur général reste en lecture seule** (accès de secours). Endpoints `GET /api/v1/permissions`, `GET/POST /api/v1/roles/:id/permissions`.
+- **Gestion des pôles** (départements) : ajout (code auto-généré) / retrait logique, **refusé si des rôles ou employés y sont rattachés**. Endpoints `GET/POST/DELETE /api/v1/departments`. Décision A actée : pôle = département créable, profil = rôle, niveau = action.
+- Toutes ces opérations sont réservées au niveau `users:administration` et journalisées.
+- **9 tests automatisés** ajoutés (archives + axes ; création/suspension/réactivation de compte + connexion ; mot de passe faible refusé ; anti-auto-suppression ; matrice appliquée immédiatement ; super-admin protégé ; création/retrait de pôle + refus si utilisé ; refus 403 sans habilitation). Suite complète : **151 tests passent**. Parcours vérifié au navigateur (arbre des archives, création de compte, matrice de droits, ajout d'un pôle).
+
+**Prochaine étape :** consolidation / retours de l'opérateur — les 5 phases des nouvelles spécifications fonctionnelles sont couvertes.

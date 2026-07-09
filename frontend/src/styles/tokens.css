@@ -221,3 +221,42 @@ textarea:not([disabled]):focus {
   background: #f0f2f6;
   color: var(--ink);
 }
+
+/* Tableaux premium : en-tête bleu marine + texte blanc, lignes alternées
+   (blanc / gris très clair), survol en or très pâle. Lecture plus agréable
+   des listes (ouvrages, journal, rapports…). */
+.ecl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.ecl-table thead th {
+  background: var(--chrome);
+  color: #fff;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+.ecl-table tbody td {
+  padding: 9px 12px;
+  border-top: 1px solid var(--line);
+}
+.ecl-table tbody tr:nth-child(even) {
+  background: #f5f7fb;
+}
+.ecl-table tbody tr:hover {
+  background: var(--eclosion-soft);
+}
+/* Cellule quantité : chiffres à chasse fixe, alignés à droite. */
+.ecl-table td.num {
+  font-family: var(--font-mono);
+  text-align: right;
+}
+/* Cellule identifiant / date : chasse fixe, alignée à gauche. */
+.ecl-table td.mono {
+  font-family: var(--font-mono);
+}

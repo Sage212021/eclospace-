@@ -77,25 +77,12 @@ export function DataTable({ rows, emptyLabel = "Aucune donnée." }: DataTablePro
   }
 
   return (
-    <div style={{ overflowX: "auto", marginTop: 8 }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+    <div style={{ overflowX: "auto", marginTop: 8, borderRadius: 10, border: "1px solid var(--line)" }}>
+      <table className="ecl-table">
         <thead>
           <tr>
             {columns.map((col) => (
-              <th
-                key={col}
-                style={{
-                  textAlign: "left",
-                  padding: "6px 10px",
-                  borderBottom: "2px solid var(--line)",
-                  color: "var(--muted)",
-                  fontWeight: 600,
-                  fontSize: 12,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {humanize(col)}
-              </th>
+              <th key={col}>{humanize(col)}</th>
             ))}
           </tr>
         </thead>
@@ -105,16 +92,7 @@ export function DataTable({ rows, emptyLabel = "Aucune donnée." }: DataTablePro
               {columns.map((col) => {
                 const { text, numeric } = formatCell(row[col]);
                 return (
-                  <td
-                    key={col}
-                    style={{
-                      padding: "6px 10px",
-                      borderBottom: "1px solid var(--line)",
-                      fontFamily: numeric ? "var(--font-mono)" : undefined,
-                      textAlign: numeric ? "right" : "left",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                  <td key={col} className={numeric ? "num" : undefined} style={{ whiteSpace: "nowrap" }}>
                     {text}
                   </td>
                 );

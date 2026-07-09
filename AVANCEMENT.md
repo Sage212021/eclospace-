@@ -377,3 +377,15 @@ Retour opérateur : sur un vrai téléphone, la barre latérale réapparaissait 
 - Vérifié au navigateur : en-têtes marine, zébrage, lisibilité nettement améliorée des listes.
 
 **Prochaine étape :** grands indicateurs KPI du tableau de bord (nécessite des endpoints de comptage + tests).
+
+### 09/07/2026 (suite) — Tableau de bord : grands indicateurs (KPI)
+
+Dernier point de la refonte visuelle proposée par l'opérateur.
+
+- **Backend** : nouvel endpoint `GET /api/v1/dashboard/stats` (`requireAuth`) renvoyant quatre indicateurs — **Ouvrages** (manuscrits), **Utilisateurs** (comptes actifs), **Ventes** (commandes de vente), **Stock** (total d'exemplaires physiques). Chaque indicateur n'est calculé et renvoyé que si l'utilisateur a la permission de consultation correspondante (`manuscripts` / `users` / `commercial` / `stock`) — sinon `null`, respect de la confidentialité par module.
+- **Frontend** : le tableau de bord affiche ces indicateurs en tête, chacun dans une **carte blanche avec icône dorée** et un **grand chiffre** formaté (séparateur de milliers), au-dessus du rappel de session. Seules les cartes autorisées s'affichent.
+- **3 tests automatisés** (cohérence des chiffres pour l'admin ; masquage `null` hors périmètre ; 401 sans session). Suite complète : **152 tests passent**. Vérifié au navigateur (78 ouvrages, 43 utilisateurs, 19 ventes, 3 802 en stock).
+
+**Refonte visuelle premium : tous les points proposés par l'opérateur sont couverts** (palette navy/or/blanc, connexion, menu actif + tiroir mobile, cartes, boutons sémantiques, tableaux, indicateurs KPI).
+
+**Prochaine étape :** retours de l'opérateur.

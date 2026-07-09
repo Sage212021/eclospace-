@@ -43,6 +43,19 @@ export function fetchMe(): Promise<EffectiveUser> {
   return request<EffectiveUser>("/api/v1/me");
 }
 
+// Grands indicateurs du tableau de bord. Chaque valeur est null si l'utilisateur
+// n'a pas la permission de consultation correspondante (l'indicateur est alors masqué).
+export interface DashboardStats {
+  ouvrages: number | null;
+  utilisateurs: number | null;
+  ventes: number | null;
+  stock: number | null;
+}
+
+export function getDashboardStats() {
+  return request<DashboardStats>("/api/v1/dashboard/stats");
+}
+
 export function login(username: string, password: string) {
   return request<{ requires_2fa: boolean; challenge_id?: string }>("/api/v1/auth/login", {
     method: "POST",

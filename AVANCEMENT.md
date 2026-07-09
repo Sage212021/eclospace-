@@ -369,3 +369,11 @@ Retour opérateur : sur un vrai téléphone, la barre latérale réapparaissait 
 - Vérifié au navigateur avec une fenêtre **390 px « nue »** (sans forcer le mode mobile, au plus près d'un vrai navigateur) : barre hors écran + ☰ visible + contenu pleine largeur ; ouverture du tiroir avec voile ; et en 1200 px, barre fixe sans ☰. Aucun débordement horizontal.
 
 **Prochaine étape :** tableaux premium, puis KPI du tableau de bord.
+
+### 09/07/2026 (suite) — Identité visuelle : tableaux premium
+
+- **Classe `.ecl-table`** (dans `tokens.css`) : en-tête **bleu marine + texte blanc** (majuscules), **lignes alternées** (blanc / gris très clair), **survol en or très pâle** ; cellules `.mono` (identifiants/dates, chasse fixe alignée à gauche) et `.num` (quantités, chasse fixe alignée à droite).
+- Appliquée aux tableaux : **liste des ouvrages** (Manuscrits), **Journal d'activité**, **matrice des droits** (Droits & pôles), et au composant générique **`DataTable`** — ce qui reskin aussi les tableaux de **Direction générale** et **Rapports & statistiques**.
+- Vérifié au navigateur : en-têtes marine, zébrage, lisibilité nettement améliorée des listes.
+
+**Prochaine étape :** grands indicateurs KPI du tableau de bord (nécessite des endpoints de comptage + tests).

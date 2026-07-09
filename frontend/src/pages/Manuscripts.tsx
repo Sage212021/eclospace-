@@ -150,52 +150,45 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
         )
       ) : (
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden", marginTop: 16 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <div style={{ overflowX: "auto" }}>
+        <table className="ecl-table">
           <thead>
-            <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>
-              <th style={{ padding: 10 }}>N°</th>
-              <th style={{ padding: 10 }}>Titre</th>
-              <th style={{ padding: 10 }}>Genre</th>
-              <th style={{ padding: 10 }}>Étape</th>
-              <th style={{ padding: 10 }}>Reçu le</th>
-              <th style={{ padding: 10 }}>Paru le</th>
+            <tr>
+              <th>N°</th>
+              <th>Titre</th>
+              <th>Genre</th>
+              <th>Étape</th>
+              <th>Reçu le</th>
+              <th>Paru le</th>
             </tr>
           </thead>
           <tbody>
             {manuscripts.map((m) => (
-              <tr
-                key={m.id}
-                onClick={() => onOpenManuscript(m.id)}
-                style={{ borderTop: "1px solid var(--line)", cursor: "pointer" }}
-              >
-                <td style={{ padding: 10, fontFamily: "var(--font-mono)" }}>{m.manuscriptNumber}</td>
-                <td style={{ padding: 10 }} className="linklike">
-                  {m.title}
-                </td>
-                <td style={{ padding: 10 }}>{m.genre?.label ?? "—"}</td>
-                <td style={{ padding: 10 }}>
+              <tr key={m.id} onClick={() => onOpenManuscript(m.id)} style={{ cursor: "pointer" }}>
+                <td className="mono">{m.manuscriptNumber}</td>
+                <td className="linklike">{m.title}</td>
+                <td>{m.genre?.label ?? "—"}</td>
+                <td>
                   <span
                     style={{
                       background: "var(--eclosion-soft)",
-                      color: "var(--eclosion)",
+                      color: "var(--eclosion-dark)",
                       borderRadius: 999,
                       padding: "2px 10px",
                       fontSize: 11,
+                      whiteSpace: "nowrap",
                     }}
                   >
                     {m.status.label}
                   </span>
                 </td>
-                <td style={{ padding: 10, fontFamily: "var(--font-mono)" }}>
-                  {new Date(m.receivedAt).toLocaleDateString("fr-FR")}
-                </td>
-                <td style={{ padding: 10, fontFamily: "var(--font-mono)" }}>
-                  {m.publicationDate ? new Date(m.publicationDate).toLocaleDateString("fr-FR") : "—"}
-                </td>
+                <td className="mono">{new Date(m.receivedAt).toLocaleDateString("fr-FR")}</td>
+                <td className="mono">{m.publicationDate ? new Date(m.publicationDate).toLocaleDateString("fr-FR") : "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       </div>
       )}
     </div>

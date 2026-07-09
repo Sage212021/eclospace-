@@ -222,13 +222,13 @@ function RightsMatrix({ canManage, onError, onMessage }: { canManage: boolean; o
         )}
       </div>
 
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+      <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid var(--line)" }}>
+        <table className="ecl-table">
           <thead>
-            <tr style={{ color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>
-              <th style={{ textAlign: "left", padding: "6px 8px" }}>Module</th>
+            <tr>
+              <th>Module</th>
               {availableActions.map((a) => (
-                <th key={a.key} style={{ padding: "6px 8px" }}>
+                <th key={a.key} style={{ textAlign: "center" }}>
                   {a.label}
                 </th>
               ))}
@@ -237,7 +237,7 @@ function RightsMatrix({ canManage, onError, onMessage }: { canManage: boolean; o
           <tbody>
             {modules.map((module) => (
               <tr key={module}>
-                <td style={{ ...cell, textAlign: "left", fontWeight: 600 }}>{module}</td>
+                <td style={{ fontWeight: 600 }}>{module}</td>
                 {availableActions.map((a) => {
                   const key = `${module}:${a.key}`;
                   const has = granted.has(key);

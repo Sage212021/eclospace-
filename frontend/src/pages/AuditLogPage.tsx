@@ -83,27 +83,25 @@ export function AuditLogPage() {
         </div>
 
         {entries.length > 0 && (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+          <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid var(--line)" }}>
+            <table className="ecl-table">
               <thead>
                 <tr>
                   {["Date et heure", "Utilisateur", "Action", "Type", "Référence"].map((h) => (
-                    <th key={h} style={thStyle}>
-                      {h}
-                    </th>
+                    <th key={h}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {entries.map((entry) => (
                   <tr key={entry.id}>
-                    <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>
+                    <td className="mono" style={{ whiteSpace: "nowrap" }}>
                       {new Date(entry.occurredAt).toLocaleString("fr-FR")}
                     </td>
-                    <td style={tdStyle}>{entry.username ?? "—"}</td>
-                    <td style={tdStyle}>{ACTION_LABELS[entry.action] ?? entry.action}</td>
-                    <td style={tdStyle}>{entry.entityType}</td>
-                    <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>{entry.entityId}</td>
+                    <td>{entry.username ?? "—"}</td>
+                    <td>{ACTION_LABELS[entry.action] ?? entry.action}</td>
+                    <td>{entry.entityType}</td>
+                    <td className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>{entry.entityId}</td>
                   </tr>
                 ))}
               </tbody>
@@ -132,22 +130,6 @@ const selectStyle: React.CSSProperties = {
   border: "1px solid var(--line)",
   borderRadius: 6,
   background: "#fff",
-};
-
-const thStyle: React.CSSProperties = {
-  textAlign: "left",
-  padding: "6px 10px",
-  borderBottom: "2px solid var(--line)",
-  color: "var(--muted)",
-  fontWeight: 600,
-  fontSize: 12,
-  whiteSpace: "nowrap",
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "6px 10px",
-  borderBottom: "1px solid var(--line)",
-  verticalAlign: "top",
 };
 
 function pagerStyle(disabled: boolean): React.CSSProperties {

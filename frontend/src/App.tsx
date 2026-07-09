@@ -267,22 +267,13 @@ export function App() {
         aria-hidden="true"
       />
       <div className="app-main">
-        <TopBar connectedUsers={presence.connectedUsers} onMenu={() => setNavOpen(true)} />
-        <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 24px" }}>
-          <button
-            onClick={handleLogout}
-            style={{
-              background: "none",
-              border: "1px solid var(--line)",
-              borderRadius: 6,
-              padding: "6px 12px",
-              fontSize: 12,
-              cursor: "pointer",
-            }}
-          >
-            Se déconnecter
-          </button>
-        </div>
+        <TopBar
+          connectedUsers={presence.connectedUsers}
+          onMenu={() => setNavOpen(true)}
+          user={{ username: user.username, email: user.email }}
+          onLogout={handleLogout}
+          onOpenSettings={() => selectLeaf("ad-parametres")}
+        />
 
         {user.impersonating && (
           <div

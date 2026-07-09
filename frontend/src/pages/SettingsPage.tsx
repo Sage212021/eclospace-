@@ -58,7 +58,10 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
   };
 
   useEffect(() => {
-    refresh().catch((e) => setError(e instanceof Error ? e.message : "Échec du chargement."));
+    // Sans habilitation « settings », la liste des seuils n'est pas chargée :
+    // on laisse la page accessible pour la seule « Sécurité du compte » (accès
+    // au mot de passe pour tous depuis le menu de profil), sans erreur bloquante.
+    refresh().catch(() => setSettings([]));
   }, []);
 
   async function handleSave(setting: AppSetting) {

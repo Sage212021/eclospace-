@@ -21,6 +21,7 @@ import { DiagnosticsPage } from "./pages/DiagnosticsPage";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { usePresence } from "./hooks/usePresence";
+import { useIsMobile } from "./hooks/useIsMobile";
 
 // Cible d'un élément de menu : soit une page dédiée, soit une liste de
 // manuscrits filtrée sur une étape du workflow (option « liste filtrée »).
@@ -148,6 +149,9 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>({ kind: "leaf", key: "dashboard" });
   const [confirmBanner, setConfirmBanner] = useState<{ tone: "ok" | "alert"; text: string } | null>(null);
+  // Barre latérale : en tiroir escamotable sur mobile (fermée par défaut).
+  const isMobile = useIsMobile();
+  const [navOpen, setNavOpen] = useState(false);
 
   const { presence, join, disconnect } = usePresence(Boolean(user));
 
@@ -234,23 +238,60 @@ export function App() {
   const leaf = view.kind === "leaf" ? LEAF_VIEWS[view.key] : undefined;
   const openManuscript = (id: string) => setView({ kind: "manuscript-detail", id, originKey: activeKey });
 
+  const selectLeaf = (key: string) => {
+    setView({ kind: "leaf", key });
+    setNavOpen(false); // referme le tiroir après navigation (mobile)
+  };
+
+  const sidebar = (
+    <Sidebar
+      poles={NAV_POLES}
+      permissions={permissions}
+      roles={roles}
+      activeKey={activeKey}
+      onSelect={selectLeaf}
+      username={user.username}
+      presenceByPole={presence.byPole}
+      presenceByModule={presence.byModule}
+    />
+  );
+
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar
-        poles={NAV_POLES}
-        permissions={permissions}
-        roles={roles}
-        activeKey={activeKey}
-        onSelect={(key) => setView({ kind: "leaf", key })}
-        username={user.username}
-        presenceByPole={presence.byPole}
-        presenceByModule={presence.byModule}
-      />
+      {isMobile ? (
+        <>
+          {/* Voile cliquable derrière le tiroir ouvert. */}
+          {navOpen && (
+            <div
+              onClick={() => setNavOpen(false)}
+              style={{ position: "fixed", inset: 0, background: "rgba(9, 16, 33, 0.5)", zIndex: 40 }}
+            />
+          )}
+          {/* Tiroir escamotable : hors écran quand fermé. */}
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              height: "100vh",
+              zIndex: 50,
+              transform: navOpen ? "translateX(0)" : "translateX(-100%)",
+              transition: "transform 220ms ease",
+              boxShadow: navOpen ? "0 0 40px rgba(0,0,0,0.5)" : "none",
+              overflowY: "auto",
+            }}
+          >
+            {sidebar}
+          </div>
+        </>
+      ) : (
+        sidebar
+      )}
       {/* minWidth:0 + overflowX:hidden : la colonne principale se réduit à côté
           de la barre latérale à largeur fixe et ne provoque jamais de défilement
           horizontal sur mobile (débordements décoratifs éventuels rognés). */}
       <div style={{ flex: 1, minWidth: 0, overflowX: "hidden", display: "flex", flexDirection: "column" }}>
-        <TopBar connectedUsers={presence.connectedUsers} />
+        <TopBar connectedUsers={presence.connectedUsers} onMenu={isMobile ? () => setNavOpen(true) : undefined} />
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 24px" }}>
           <button
             onClick={handleLogout}

@@ -179,7 +179,7 @@ function LeafButton({
           padding: indented ? "8px 20px 8px 30px" : "10px 20px",
           // Sélection : fond or très léger + barre dorée de 4 px + texte blanc
           // renforcé, pour attirer l'œil sans surcharger (identité premium).
-          background: active ? "rgba(200, 154, 27, 0.16)" : "transparent",
+          background: active ? "rgba(216, 178, 76, 0.22)" : "transparent",
           borderLeft: active ? "4px solid var(--eclosion)" : "4px solid transparent",
           borderTop: "none",
           borderRight: "none",

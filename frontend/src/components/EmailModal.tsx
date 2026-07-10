@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
+import { getKnownEmails, rememberEmail } from "../lib/emailMemory";
 
 interface Preview {
   subject: string;
@@ -30,6 +31,8 @@ export function EmailModal({ title, initialMessage, loadPreview, onSend, onClose
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  // Adresses déjà utilisées (mémoire locale) proposées en suggestion.
+  const [known, setKnown] = useState<string[]>(() => getKnownEmails());
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Charge (et recharge à la frappe, avec anti-rebond) l'aperçu.
@@ -41,6 +44,11 @@ export function EmailModal({ title, initialMessage, loadPreview, onSend, onClose
           setPreview(p);
           // Pré-remplit le destinataire connu tant que l'utilisateur n'y a pas touché.
           if (!touchedTo && p.default_to) setTo((cur) => cur || p.default_to || "");
+          // Le destinataire connu (client/auteur) devient une adresse mémorisée.
+          if (p.default_to) {
+            rememberEmail(p.default_to);
+            setKnown(getKnownEmails());
+          }
         })
         .catch((e) => setError(e instanceof Error ? e.message : "Aperçu indisponible."));
     }, 300);
@@ -59,6 +67,9 @@ export function EmailModal({ title, initialMessage, loadPreview, onSend, onClose
     setSending(true);
     try {
       const r = await onSend(to.trim(), message);
+      // Mémorise l'adresse utilisée pour la reproposer ensuite.
+      rememberEmail(to.trim());
+      setKnown(getKnownEmails());
       setResult(
         r.sent
           ? `E-mail envoyé à ${to.trim()}.`
@@ -100,8 +111,18 @@ export function EmailModal({ title, initialMessage, loadPreview, onSend, onClose
                 type="email"
                 value={to}
                 onChange={(e) => { setTo(e.target.value); setTouchedTo(true); }}
+                onBlur={() => { rememberEmail(to); setKnown(getKnownEmails()); }}
                 placeholder="adresse@exemple.com"
+                list="ecl-known-emails"
+                autoComplete="email"
               />
+              {known.length > 0 && (
+                <datalist id="ecl-known-emails">
+                  {known.map((e) => (
+                    <option key={e} value={e} />
+                  ))}
+                </datalist>
+              )}
             </div>
             <div className="ecl-field" style={{ flex: "1 1 240px" }}>
               <label>Objet</label>

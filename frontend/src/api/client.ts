@@ -1005,6 +1005,22 @@ export function getInvoice(id: string) {
   return request<InvoiceDetail>(`/api/v1/invoices/${id}`);
 }
 
+// Envoi d'une facture par e-mail (le corps de l'e-mail est le document).
+// `previewInvoiceEmail` renvoie l'aperçu sans envoyer ; `sendInvoiceEmail` envoie.
+export function previewInvoiceEmail(id: string, message: string) {
+  return request<{ subject: string; html: string; default_to: string | null }>(`/api/v1/invoices/${id}/email`, {
+    method: "POST",
+    body: JSON.stringify({ message, preview: true }),
+  });
+}
+
+export function sendInvoiceEmail(id: string, to: string, message: string) {
+  return request<{ sent: boolean; to: string }>(`/api/v1/invoices/${id}/email`, {
+    method: "POST",
+    body: JSON.stringify({ to, message }),
+  });
+}
+
 // Taux de TVA paramétrables (Ch. 18 §18.9), par pays × type de produit.
 export interface TaxRate {
   id: string;

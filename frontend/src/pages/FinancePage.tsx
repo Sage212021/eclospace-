@@ -29,9 +29,10 @@ import {
   type ShippingRate,
   type ShippingZone,
 } from "../api/client";
-import { getInvoice, getRoyaltyStatement, listTaxRates, setTaxRate, type TaxRate } from "../api/client";
+import { getInvoice, getRoyaltyStatement, listTaxRates, previewInvoiceEmail, sendInvoiceEmail, setTaxRate, type TaxRate } from "../api/client";
 import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
+import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
 import { IconFinance } from "../components/icons";
 import { printInvoice, printRoyaltyStatement } from "../lib/print";
@@ -94,6 +95,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [modal, setModal] = useState<FinanceModal | null>(null);
+  const [emailInvoice, setEmailInvoice] = useState<Invoice | null>(null);
 
   const refresh = async () => {
     const [invoiceList, customerList, expenseList, statementList, shippingRateList, bankAccountList] = await Promise.all([
@@ -288,8 +290,9 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
                   <Amount value={invoice.totalTtc} />
                   <StatusChip label={STATUS_LABELS[invoice.status] ?? invoice.status} />
                 </div>
-                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
                   <Button variant="view" size="sm" onClick={() => handlePrintInvoice(invoice.id)}>Imprimer / PDF</Button>
+                  <Button variant="view" size="sm" onClick={() => setEmailInvoice(invoice)}>Envoyer par e-mail</Button>
                   {canManage && invoice.type === "invoice" && invoice.status === "issued" && (
                     <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, amount: String(invoice.totalTtc) })}>
                       Encaisser
@@ -455,6 +458,16 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
           </div>
         )}
       </Card>
+
+      {emailInvoice && (
+        <EmailModal
+          title={`Envoyer la facture ${emailInvoice.invoiceNumber}`}
+          initialMessage={`Madame, Monsieur,\n\nVeuillez trouver ci-dessous votre facture ${emailInvoice.invoiceNumber}. Nous vous en souhaitons bonne réception.\n\nCordialement,\nÉclosion Édition`}
+          loadPreview={(msg) => previewInvoiceEmail(emailInvoice.id, msg)}
+          onSend={(to, msg) => sendInvoiceEmail(emailInvoice.id, to, msg)}
+          onClose={() => setEmailInvoice(null)}
+        />
+      )}
 
       {/* ── Fenêtres intégrées ─────────────────────────────────────────────── */}
       {modal?.kind === "pay-invoice" && (

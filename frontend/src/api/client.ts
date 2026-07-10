@@ -399,6 +399,17 @@ export interface RoyaltyTier {
   rate: number;
 }
 
+export type SignatureParty = "author" | "publisher";
+
+export interface ContractSignature {
+  id: string;
+  party: SignatureParty;
+  signerName: string;
+  signedAt: string;
+  termsHash: string;
+  note: string | null;
+}
+
 export interface ContractDetail extends Contract {
   effectiveAt?: string | null;
   durationMonths?: number | null;
@@ -412,10 +423,20 @@ export interface ContractDetail extends Contract {
     taxWithholdingPct: string | null;
     statementPeriodicity: string | null;
   } | null;
+  signatures?: ContractSignature[];
 }
 
 export function getContract(id: string) {
   return request<ContractDetail>(`/api/v1/contracts/${id}`);
+}
+
+// Signature « simple / interne » d'une partie (Phase B) : accord horodaté, lié à
+// une empreinte des clauses, tracé au journal. Renvoie le contrat rafraîchi.
+export function signContract(
+  id: string,
+  input: { party: SignatureParty; signer_name: string; consent: boolean; note?: string },
+) {
+  return request<ContractDetail>(`/api/v1/contracts/${id}/sign`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export function createContract(input: {

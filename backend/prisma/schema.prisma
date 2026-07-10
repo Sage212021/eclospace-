@@ -285,6 +285,7 @@ model User {
   assignedTasks      Task[]
   taskComments       TaskComment[]
   batSignatures      BatSignature[]
+  contractSignatures ContractSignature[]
 
   @@map("users")
 }
@@ -983,8 +984,36 @@ model Contract {
   royaltyStatements   RoyaltyStatement[]
   royaltyBeneficiaries ContractBeneficiary[]
   hrContracts         HrContract[]
+  signatures          ContractSignature[]
 
   @@map("contracts")
+}
+
+// Partie qui appose une signature (Ch. 9 §9.3) : la « partie contractante »
+// (auteur/prestataire, portée par la fiche Partenaire) ou la maison d'édition.
+enum SignatureParty {
+  author
+  publisher
+}
+
+// Signature « simple / interne » d'un contrat (décision opérateur du 10/07/2026,
+// Phase B) : l'accord d'une partie est enregistré dans l'ERP, horodaté, lié à
+// une empreinte des clauses signées (terms_hash) pour garantir que la signature
+// porte bien sur la version acceptée — et tracé au journal inviolable. Le modèle
+// reprend l'approche éprouvée de BatSignature (empreinte + signataire).
+model ContractSignature {
+  id           String         @id @default(uuid())
+  contractId   String         @map("contract_id")
+  contract     Contract       @relation(fields: [contractId], references: [id])
+  party        SignatureParty
+  signerName   String         @map("signer_name")
+  recordedById String         @map("recorded_by")
+  recordedBy   User           @relation(fields: [recordedById], references: [id])
+  signedAt     DateTime       @default(now()) @map("signed_at")
+  termsHash    String         @map("terms_hash")
+  note         String?
+
+  @@map("contract_signatures")
 }
 
 enum RoyaltyBase {

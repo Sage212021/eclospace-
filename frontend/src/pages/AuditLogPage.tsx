@@ -49,7 +49,7 @@ export function AuditLogPage() {
   const to = Math.min(offset + PAGE_SIZE, total);
 
   return (
-    <div style={{ padding: 32, maxWidth: 1040 }}>
+    <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 1040 }}>
       <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Journal d'activité</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>
         Registre inviolable de toutes les opérations (append-only) : qui a fait quoi, quand.

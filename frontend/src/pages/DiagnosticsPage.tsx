@@ -12,7 +12,7 @@ export function DiagnosticsPage({ user }: DiagnosticsPageProps) {
 
   if (!isAdmin) {
     return (
-      <div style={{ padding: 32, maxWidth: 640 }}>
+      <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 640 }}>
         <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20 }}>Diagnostics système</h1>
         <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "8px 12px", fontSize: 13 }}>
           Réservé à l'administrateur général.
@@ -22,7 +22,7 @@ export function DiagnosticsPage({ user }: DiagnosticsPageProps) {
   }
 
   return (
-    <div style={{ padding: 32, maxWidth: 760 }}>
+    <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 760 }}>
       <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Diagnostics système</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>
         Audit des droits d'accès (RBAC) de la session courante : rôles et permissions effectives résolues côté serveur.

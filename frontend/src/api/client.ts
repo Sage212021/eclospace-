@@ -393,6 +393,31 @@ export function listContracts(manuscriptId?: string) {
   return request<Contract[]>(`/api/v1/contracts${query}`);
 }
 
+// Fiche contractuelle détaillée (pour l'impression) : portée et clauses de droits.
+export interface RoyaltyTier {
+  up_to: number | null;
+  rate: number;
+}
+
+export interface ContractDetail extends Contract {
+  effectiveAt?: string | null;
+  durationMonths?: number | null;
+  territories: string[];
+  languages: string[];
+  formats: string[];
+  royaltyTerms?: {
+    base: string;
+    tiers: RoyaltyTier[];
+    advanceAmount: string | null;
+    taxWithholdingPct: string | null;
+    statementPeriodicity: string | null;
+  } | null;
+}
+
+export function getContract(id: string) {
+  return request<ContractDetail>(`/api/v1/contracts/${id}`);
+}
+
 export function createContract(input: {
   type: string;
   manuscript_id?: string;
@@ -767,6 +792,12 @@ export interface PurchaseOrder {
   status: string;
   amount: string;
   orderedQuantity: number;
+  currency?: string;
+  deliveryDue?: string | null;
+  quantityTolerancePct?: string | null;
+  printer?: { partner: { firstName: string; lastName: string } };
+  quote?: { manuscript?: { title: string; manuscriptNumber: string } | null };
+  deliveryLocation?: { label: string } | null;
 }
 
 export function createPurchaseOrder(quoteId: string, input: { delivery_due?: string; delivery_location_id?: string; quantity_tolerance_pct?: number }) {
@@ -954,6 +985,58 @@ export function listInvoices(filters?: { customer_id?: string; type?: string }) 
   return request<Invoice[]>(`/api/v1/invoices${query}`);
 }
 
+// Facture détaillée (pour l'impression / export PDF) : lignes, totaux et devise.
+export interface InvoiceLine {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: string;
+  taxRate: string;
+  lineTotal: string;
+}
+
+export interface InvoiceDetail extends Invoice {
+  currency: string;
+  lines: InvoiceLine[];
+  customer: { name: string; category?: CustomerCategory };
+}
+
+export function getInvoice(id: string) {
+  return request<InvoiceDetail>(`/api/v1/invoices/${id}`);
+}
+
+// Envoi d'une facture par e-mail (le corps de l'e-mail est le document).
+// `previewInvoiceEmail` renvoie l'aperçu sans envoyer ; `sendInvoiceEmail` envoie.
+export function previewInvoiceEmail(id: string, message: string) {
+  return request<{ subject: string; html: string; default_to: string | null }>(`/api/v1/invoices/${id}/email`, {
+    method: "POST",
+    body: JSON.stringify({ message, preview: true }),
+  });
+}
+
+export function sendInvoiceEmail(id: string, to: string, message: string) {
+  return request<{ sent: boolean; to: string }>(`/api/v1/invoices/${id}/email`, {
+    method: "POST",
+    body: JSON.stringify({ to, message }),
+  });
+}
+
+// Taux de TVA paramétrables (Ch. 18 §18.9), par pays × type de produit.
+export interface TaxRate {
+  id: string;
+  country: string;
+  productType: string;
+  rate: string;
+}
+
+export function listTaxRates() {
+  return request<TaxRate[]>("/api/v1/tax-rates");
+}
+
+export function setTaxRate(input: { country: string; product_type: string; rate: number }) {
+  return request<TaxRate>("/api/v1/tax-rates", { method: "POST", body: JSON.stringify(input) });
+}
+
 export interface AgingBalance {
   not_due: number;
   d30: number;
@@ -1057,8 +1140,36 @@ export function listRoyaltyStatements(contractId?: string) {
   return request<RoyaltyStatement[]>(`/api/v1/royalty-statements${query}`);
 }
 
+// Relevé détaillé (pour l'impression) : lignes de calcul des droits.
+export interface RoyaltyEntry {
+  id: string;
+  sourceType: string;
+  quantity: number;
+  unitBaseAmount: string;
+  rateApplied: string;
+  amount: string;
+}
+
+export interface RoyaltyStatementDetail extends RoyaltyStatement {
+  entries: RoyaltyEntry[];
+}
+
 export function getRoyaltyStatement(statementId: string) {
-  return request<RoyaltyStatement>(`/api/v1/royalty-statements/${statementId}`);
+  return request<RoyaltyStatementDetail>(`/api/v1/royalty-statements/${statementId}`);
+}
+
+export function previewRoyaltyStatementEmail(id: string, message: string) {
+  return request<{ subject: string; html: string; default_to: string | null }>(`/api/v1/royalty-statements/${id}/email`, {
+    method: "POST",
+    body: JSON.stringify({ message, preview: true }),
+  });
+}
+
+export function sendRoyaltyStatementEmail(id: string, to: string, message: string) {
+  return request<{ sent: boolean; to: string }>(`/api/v1/royalty-statements/${id}/email`, {
+    method: "POST",
+    body: JSON.stringify({ to, message }),
+  });
 }
 
 export function generateRoyaltyStatement(contractId: string, input: { period_start: string; period_end: string }) {

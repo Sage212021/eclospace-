@@ -336,7 +336,13 @@ export default async function printingRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
       const orders = await prisma.purchaseOrder.findMany({
         where: { quote: { manuscriptId: id } },
-        include: { milestones: true, goodsReceipts: true, printer: { include: { partner: true } } },
+        include: {
+          milestones: true,
+          goodsReceipts: true,
+          printer: { include: { partner: true } },
+          quote: { include: { manuscript: { select: { title: true, manuscriptNumber: true } } } },
+          deliveryLocation: { select: { label: true } },
+        },
         orderBy: { createdAt: "desc" },
       });
       return reply.send(orders);

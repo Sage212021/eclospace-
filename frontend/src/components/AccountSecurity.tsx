@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { changePassword, requestIdentifierChange, type EffectiveUser } from "../api/client";
 import { PasswordInput } from "./PasswordInput";
+import { EmailInput } from "./EmailInput";
 import { Button } from "./Button";
 
 // Section « Sécurité du compte » (Ch. 2) : changement de mot de passe (règles
@@ -136,7 +137,7 @@ function IdentifierForm({ user }: { user: EffectiveUser }) {
         <input value={username} onChange={(e) => setUsername(e.target.value)} required style={inputStyle} />
       </Field>
       <Field label="E-mail de connexion">
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={inputStyle} />
+        <EmailInput value={email} onChange={(e) => setEmail(e.target.value)} required style={inputStyle} />
       </Field>
       <Field label="Mot de passe actuel (pour confirmer votre identité)">
         <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required style={inputStyle} />

@@ -474,3 +474,35 @@ Retour opérateur : certaines pages (Rapports, Finance, RH…) faisaient « donn
 - Marges responsives : confortable sur téléphone (vérifié sur écran 390 px, sans débordement horizontal).
 
 **Prochaine étape :** retours de l'opérateur.
+
+### 10/07/2026 (suite) — Envoi des e-mails « au nom » du pôle / de l'agent connecté
+
+Demande opérateur : les e-mails de l'ERP (factures, avoirs, relevés de droits) doivent partir des adresses **de chaque pôle** — l'adresse professionnelle de l'utilisateur connecté (boîtes du personnel hébergées chez **Hostinger**), un pôle pouvant avoir 2-3 adresses ; et la maison doit en **conserver une copie**.
+
+**Ce qui a été fait (sans nouvelle dépendance)** :
+- Chaque envoi porte désormais un **nom d'expéditeur** identifiant l'agent/pôle et un **« Répondre à »** = l'e-mail professionnel de l'utilisateur connecté ⇒ les réponses arrivent directement dans la boîte du bon pôle (celle de la personne réellement connectée, même si le pôle a plusieurs adresses).
+- La maison reçoit une **copie invisible (BCC)** de chaque envoi (« joindre le mail officiel »).
+- L'adresse affichée en « De » reste la boîte authentifiée du domaine de la maison, **pour la délivrabilité** (un serveur SMTP refuse d'expédier au nom d'une adresse qu'il n'authentifie pas — sinon le message part en indésirable).
+
+**Réglages (à saisir sur Scalingo, jamais dans le code)** : `SMTP_HOST=smtp.hostinger.com`, `SMTP_PORT=465`, `SMTP_USER`/`SMTP_PASS` (boîte du domaine), `SMTP_FROM`, `SMTP_FROM_NAME`, `SMTP_ARCHIVE_TO`. Détail et justification : `docs/JOURNAL_TECHNIQUE.md`. Backend recompilé (typecheck OK), suite Finance : **21 tests passent**.
+
+**Point à valider avec l'opérateur** : si l'on veut que le « De » porte réellement l'adresse de chaque pôle (et non le « Répondre à »), il faut soit une boîte SMTP par pôle, soit activer l'envoi « send-as » chez Hostinger — décision d'exploitation, non nécessaire au fonctionnement.
+
+### 10/07/2026 (suite) — Mémoire des adresses e-mail, généralisée à tous les écrans
+
+À la demande de l'opérateur, les adresses e-mail déjà utilisées sont **mémorisées** et **reproposées en suggestion** — plus besoin de retaper une adresse connue.
+
+- **Où** : fenêtre d'envoi d'un document (facture/relevé), création de compte (Utilisateurs & rôles), changement d'e-mail de connexion (Sécurité du compte). Brique commune `<EmailInput>` : un champ e-mail qui propose les adresses connues et mémorise la saisie en quittant le champ.
+- **Comment** : stockage **local au navigateur** (aucune donnée envoyée au serveur, aucune synchronisation entre postes), les plus récentes en tête, limite 100 adresses. Aucune nouvelle dépendance.
+- Typecheck et build front OK.
+
+### 10/07/2026 (suite) — Alertes par e-mail (fin de la Phase A)
+
+Dernier point de la Phase A : les alertes de l'ERP sont désormais **doublées d'un e-mail**, en plus de la cloche déjà présente dans l'application.
+
+- **Quelles alertes** : seulement les niveaux **importantes** et **critiques** (stock critique, encours dépassé, BAT/impression en retard, droits d'auteur…). Les notifications de routine restent, elles, dans la cloche uniquement — pour ne pas encombrer les boîtes mail.
+- **À qui** : à l'adresse professionnelle de chaque destinataire **actif** du rôle concerné. L'e-mail reprend le papier à en-tête maison, avec un bandeau de couleur selon la gravité (rouge = critique, orange = important).
+- **Robustesse** : envoi « au meilleur effort » — si l'e-mail échoue (ou n'est pas encore configuré), l'alerte reste visible dans l'application et **l'opération métier n'est jamais bloquée**. Tant que le SMTP n'est pas renseigné, aucun e-mail n'est tenté.
+- **Tests** : `tests/notification-email.test.ts` (contenu de l'e-mail + non-régression des notifications). Suites liées (stock, BAT, impression, commercial, documents) : **31 tests passent**. Backend typecheck OK.
+
+**Phase A terminée** : impression/PDF des documents (factures, relevés, bons de commande, contrats) sur papier à en-tête + logo ; TVA livres à 0 % réglable ; envoi des documents par e-mail avec aperçu ; identité d'expéditeur par pôle (Répondre-à) + copie maison ; mémoire des adresses e-mail ; alertes par e-mail.

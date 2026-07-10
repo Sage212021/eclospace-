@@ -8,6 +8,14 @@ import { writeAuditLog } from "../lib/audit.js";
 import { assertPeriodOpen, PeriodClosedError, periodKeyFor } from "../lib/accountingPeriod.js";
 import { computeCustomerOutstandingBalance } from "../lib/finance.js";
 import { SYSCOHADA_ACCOUNTS, JOURNAL_CODES, expenseCategoryToAccount } from "../lib/accountingMapping.js";
+import { sendMail, senderIdentity } from "../lib/mailer.js";
+import { buildInvoiceEmail } from "../lib/documentEmail.js";
+
+const invoiceEmailSchema = z.object({
+  to: z.string().email().optional(),
+  message: z.string().max(4000).optional(),
+  preview: z.boolean().optional(),
+});
 
 const paymentSchema = z.object({
   method: z.nativeEnum(PaymentMethod),
@@ -79,6 +87,54 @@ export default async function financeRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
     }
     return reply.send(invoice);
+  });
+
+  // Envoi d'une facture par e-mail (Phase A) : le corps de l'e-mail EST le
+  // document (rendu serveur). `preview` renvoie l'aperçu sans envoyer ; sinon on
+  // envoie et on journalise. Réservé à la consultation finance (comme
+  // l'impression), chaque envoi étant tracé.
+  fastify.post("/api/v1/invoices/:id/email", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = invoiceEmailSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const invoice = await prisma.invoice.findUnique({ where: { id }, include: { lines: true, customer: true } });
+    if (!invoice) {
+      return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    }
+    const built = buildInvoiceEmail(invoice, parsed.data.message ?? "");
+
+    if (parsed.data.preview) {
+      return reply.send({ subject: built.subject, html: built.html, default_to: invoice.customer.email ?? null });
+    }
+
+    const to = parsed.data.to?.trim();
+    if (!to) {
+      return reply.code(400).send({ code: "missing_recipient", message: "Renseignez l'adresse e-mail du destinataire." });
+    }
+    let sent: boolean;
+    try {
+      const sender = senderIdentity(request.user!);
+      sent = await sendMail({ to, subject: built.subject, text: built.text, html: built.html, ...sender });
+    } catch (err) {
+      if (err instanceof Error && err.message === "mail_not_configured") {
+        return reply.code(503).send({
+          code: "mail_not_configured",
+          message: "L'envoi d'e-mails n'est pas encore configuré (paramètres SMTP à renseigner sur l'hébergement).",
+        });
+      }
+      throw err;
+    }
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "export",
+      entityType: "invoice_email",
+      entityId: id,
+      newValues: { to, sent },
+      ipAddress: request.ip,
+    });
+    return reply.send({ sent, to });
   });
 
   // --- Encaissements et créances (Ch. 18 §18.3) ---

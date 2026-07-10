@@ -553,6 +553,15 @@ async function main() {
     await prisma.userRole.create({ data: { userId: adminUser.id, roleId: adminRoleId } });
   }
 
+  // TVA (Ch. 18 §18.9) : au Cameroun, les livres sont exonérés — taux par défaut
+  // à 0 %. Création seule (update vide) : un changement fait depuis l'écran
+  // Finance n'est jamais écrasé lors d'un redéploiement.
+  await prisma.taxRate.upsert({
+    where: { country_productType: { country: "default", productType: "livre" } },
+    update: {},
+    create: { country: "default", productType: "livre", rate: 0 },
+  });
+
   console.log("Seed Lot 0 terminé.");
   console.log(`Compte administrateur : admin / ${adminPassword} (à changer immédiatement)`);
 }

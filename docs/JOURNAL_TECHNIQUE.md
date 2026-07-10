@@ -206,3 +206,67 @@ Couche transverse du projet : contrairement aux lots précédents, ce lot ne sai
 | `ADMIN_INITIAL_PASSWORD` | À définir manuellement **avant le premier déploiement**, valeur forte | Mot de passe du compte `admin` créé par le seed. Sans effet une fois le mot de passe changé depuis l'interface. À défaut, une valeur par défaut connue (`ChangeMoiImmediatement!`) est utilisée — à éviter. |
 | `FRONTEND_ORIGIN` | Optionnelle, sans effet utile en production (même origine) | Peut rester non définie |
 | `UPLOAD_DIR` | Optionnelle | Voir point bloquant ci-dessus avant toute donnée réelle |
+
+## Envoi d'e-mails « documents » et identité de l'expéditeur (Phase A — 10/07/2026)
+
+Les factures, avoirs et relevés de droits peuvent être envoyés par e-mail depuis
+l'ERP (le corps du message EST le document, mis en page sur le papier à en-tête).
+Boîtes du personnel hébergées chez **Hostinger** (domaine de la maison).
+
+**Décision d'implémentation (délivrabilité).** Un serveur SMTP n'expédie qu'au
+nom d'une adresse qu'il **authentifie** ; il refuse d'« usurper » une adresse
+tierce (sinon SPF/DKIM échouent et le message part en indésirable). On ne peut
+donc pas mettre en « De » l'adresse de chaque pôle si l'ERP se connecte avec une
+seule boîte. Choix retenu, robuste et sans configuration exotique :
+
+- **De (From)** = boîte authentifiée du domaine de la maison (`SMTP_FROM`), avec
+  un **nom affiché** identifiant l'agent/pôle (`SMTP_FROM_NAME` — marque + nom de
+  l'utilisateur connecté).
+- **Répondre à (Reply-To)** = e-mail **professionnel de l'utilisateur connecté**
+  (`request.user.email`). Toute réponse arrive donc dans la boîte du bon pôle,
+  même si le pôle possède 2-3 adresses : c'est celle de la personne réellement
+  connectée qui reçoit les réponses.
+- **Copie invisible (BCC)** = `SMTP_ARCHIVE_TO` (défaut : `SMTP_FROM`) — la maison
+  conserve une copie de chaque envoi (« joindre le mail officiel de la maison »).
+
+Cette approche fonctionne dès aujourd'hui avec Hostinger sans réglage particulier.
+*Évolution possible* si l'on veut que le « De » porte réellement l'adresse du
+pôle : créer une boîte SMTP par pôle (identifiants distincts) ou activer un envoi
+« send-as » côté Hostinger — décision d'exploitation à valider avec l'opérateur,
+non requise pour le fonctionnement.
+
+### Variables SMTP (à renseigner sur Scalingo — jamais dans le code ni le dépôt)
+
+| Variable | Valeur Hostinger | Remarque |
+|---|---|---|
+| `SMTP_HOST` | `smtp.hostinger.com` | — |
+| `SMTP_PORT` | `465` (SSL) ou `587` (STARTTLS) | Le code active TLS automatiquement si port 465 |
+| `SMTP_USER` | Adresse complète de la boîte d'envoi (ex. `contact@…`) | Boîte du domaine de la maison chez Hostinger |
+| `SMTP_PASS` | Mot de passe de cette boîte | **Secret** : saisir directement dans Scalingo, jamais en clair dans le chat/dépôt |
+| `SMTP_FROM` | Adresse affichée en « De » | Généralement identique à `SMTP_USER` |
+| `SMTP_FROM_NAME` | Nom affiché par défaut (ex. `Éclosion Édition`) | Optionnelle |
+| `SMTP_ARCHIVE_TO` | Adresse conservant une copie invisible | Optionnelle (défaut : `SMTP_FROM`) |
+
+Tant que ces variables ne sont pas définies, l'envoi est **simulé** (journalisé)
+en développement et refusé explicitement en production (code `mail_not_configured`,
+message clair), conformément à la règle « erreurs explicites ».
+
+### Alertes par e-mail branchées sur les notifications (Phase A — 10/07/2026)
+
+Le modèle `Notification` prévoyait déjà un canal `email`. Les alertes sont
+désormais **doublées d'un e-mail** pour les niveaux **`high` et `critical`**
+uniquement (stock critique, encours dépassé, BAT/impression en retard, droits…),
+afin de ne pas noyer les boîtes sous les notifications de routine. Les
+notifications de tout niveau restent visibles dans la cloche de l'application.
+
+- Point d'ancrage unique : `lib/notify.ts` → `notifyRole()`. Après création des
+  notifications in-app, si la priorité est importante/critique **et** que le SMTP
+  est configuré, un e-mail (papier à en-tête, bandeau de priorité aux couleurs de
+  l'identité) est envoyé à l'adresse professionnelle de chaque destinataire
+  **actif**. Les rangées concernées sont tracées `channel = email`, `sent_at`.
+- **Meilleur effort** : l'envoi est encapsulé, une panne d'e-mail est journalisée
+  puis ignorée — elle ne doit jamais interrompre l'opération métier (vente, BAT,
+  stock) qui a déclenché l'alerte. Sans SMTP configuré, on ne tente rien (la
+  cloche in-app suffit) : pas de faux marquage `email`.
+- Constructeur d'e-mail : `buildNotificationEmail()` dans `lib/documentEmail.ts`.
+  Tests : `tests/notification-email.test.ts`.

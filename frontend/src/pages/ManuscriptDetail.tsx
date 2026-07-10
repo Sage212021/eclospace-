@@ -52,7 +52,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
     refresh().catch((e) => setError(e.message));
   }, [manuscriptId]);
 
-  if (!manuscript) return <div style={{ padding: 32 }}>Chargement…</div>;
+  if (!manuscript) return <div style={{ padding: "clamp(16px, 4vw, 32px)" }}>Chargement…</div>;
 
   const canValidate = permissions.has("manuscripts:validation");
   const canAssignReader = permissions.has("comite_lecture:saisie");
@@ -71,7 +71,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
   }
 
   return (
-    <div style={{ padding: 32, maxWidth: 760 }}>
+    <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 760 }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 12 }}>
         ← Manuscrits
       </button>

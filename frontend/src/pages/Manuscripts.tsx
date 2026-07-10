@@ -80,7 +80,7 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
   }, [statusFilter, filtersKey]);
 
   return (
-    <div style={{ padding: 32 }}>
+    <div style={{ padding: "clamp(16px, 4vw, 32px)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>{heading ?? "Manuscrits"}</h1>
         {canCreate && !isStageView && (

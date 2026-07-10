@@ -74,7 +74,7 @@ export function ArchivesPage({ onOpenManuscript }: { onOpenManuscript: (id: stri
   const tree = useMemo(() => buildTree(items, dims), [items, dims]);
 
   return (
-    <div style={{ padding: 32, maxWidth: 900 }}>
+    <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 900 }}>
       <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Archives</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>
         Classement hiérarchique de tous les ouvrages ({items.length}). Dépliez les niveaux pour parcourir le fonds ; cliquez un

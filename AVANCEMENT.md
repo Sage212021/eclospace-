@@ -445,3 +445,15 @@ Décision de l'opérateur : le responsable d'un pôle = **Chef de département**
 **Refonte des accès (points 1, 2, 9, 10, 11 + révélation habilitée) : livrée.** Reste ouvert : les points non retenus de la refonte initiale (hall pré-connexion, connexion par pôle) — en attente de votre décision.
 
 **Prochaine étape :** retours de l'opérateur.
+
+### 10/07/2026 (correctif) — Chef de département = niveau des grands pôles
+
+Précision de l'opérateur : le « Chef de département » raisonne au niveau des **grands pôles** du menu (Éditorial, Production, Commercial, Juridique & Finance, Administration, Pilotage), pas des 17 départements fins. Correctif appliqué :
+
+- Table de rattachement de chaque département fin → grand pôle (`DEPARTMENT_CODE_TO_POLE`, calée sur la composition du menu : Archives → Éditorial, Contrôle qualité → Production, Stock → Commercial, Finance → Juridique & Finance, RH → Administration, Direction générale → Pilotage…).
+- La révélation des noms (`GET /api/v1/presence/names`) regroupe désormais par **grand pôle** ; un chef voit **tout son grand pôle** (borné à celui-ci).
+- Effectif par pôle compté par **appartenance** (fiche employé), cohérent avec les noms ; le voyant par module reste l'activité de navigation.
+- Les noms s'affichent directement sous chaque pôle dans le Hall.
+- Vérifié au navigateur : le chef de la Correction (→ Éditorial) voit tout l'Éditorial, dont un collègue du Secrétariat, et **pas** la Production. **164 tests passent.**
+
+**Note d'exploitation** : pour qu'un chef voie son pôle, l'administration lui attribue le rôle « Chef de département » et rattache sa fiche employé à un département (le rattachement département → grand pôle est automatique).

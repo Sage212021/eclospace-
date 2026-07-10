@@ -954,6 +954,26 @@ export function listInvoices(filters?: { customer_id?: string; type?: string }) 
   return request<Invoice[]>(`/api/v1/invoices${query}`);
 }
 
+// Facture détaillée (pour l'impression / export PDF) : lignes, totaux et devise.
+export interface InvoiceLine {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: string;
+  taxRate: string;
+  lineTotal: string;
+}
+
+export interface InvoiceDetail extends Invoice {
+  currency: string;
+  lines: InvoiceLine[];
+  customer: { name: string; category?: CustomerCategory };
+}
+
+export function getInvoice(id: string) {
+  return request<InvoiceDetail>(`/api/v1/invoices/${id}`);
+}
+
 export interface AgingBalance {
   not_due: number;
   d30: number;

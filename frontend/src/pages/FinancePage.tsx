@@ -29,10 +29,12 @@ import {
   type ShippingRate,
   type ShippingZone,
 } from "../api/client";
+import { getInvoice } from "../api/client";
 import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconFinance } from "../components/icons";
+import { printInvoice } from "../lib/print";
 
 const ZONE_LABELS: Record<ShippingZone, string> = {
   yaounde: "Yaoundé",
@@ -125,6 +127,16 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
   function fail(err: unknown, fallback: string) {
     setError(err instanceof Error ? err.message : fallback);
+  }
+
+  // Impression / export PDF d'une facture : on récupère son détail (lignes,
+  // totaux) puis on ouvre la fenêtre d'impression du navigateur.
+  async function handlePrintInvoice(invoiceId: string) {
+    try {
+      printInvoice(await getInvoice(invoiceId));
+    } catch (err) {
+      fail(err, "Échec de l'ouverture de la facture.");
+    }
   }
 
   async function submitPayInvoice() {
@@ -266,11 +278,14 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
                   <Amount value={invoice.totalTtc} />
                   <StatusChip label={STATUS_LABELS[invoice.status] ?? invoice.status} />
                 </div>
-                {canManage && invoice.type === "invoice" && invoice.status === "issued" && (
-                  <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, amount: String(invoice.totalTtc) })}>
-                    Encaisser
-                  </Button>
-                )}
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <Button variant="view" size="sm" onClick={() => handlePrintInvoice(invoice.id)}>Imprimer / PDF</Button>
+                  {canManage && invoice.type === "invoice" && invoice.status === "issued" && (
+                    <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, amount: String(invoice.totalTtc) })}>
+                      Encaisser
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

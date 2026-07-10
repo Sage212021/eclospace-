@@ -1093,8 +1093,22 @@ export function listRoyaltyStatements(contractId?: string) {
   return request<RoyaltyStatement[]>(`/api/v1/royalty-statements${query}`);
 }
 
+// Relevé détaillé (pour l'impression) : lignes de calcul des droits.
+export interface RoyaltyEntry {
+  id: string;
+  sourceType: string;
+  quantity: number;
+  unitBaseAmount: string;
+  rateApplied: string;
+  amount: string;
+}
+
+export interface RoyaltyStatementDetail extends RoyaltyStatement {
+  entries: RoyaltyEntry[];
+}
+
 export function getRoyaltyStatement(statementId: string) {
-  return request<RoyaltyStatement>(`/api/v1/royalty-statements/${statementId}`);
+  return request<RoyaltyStatementDetail>(`/api/v1/royalty-statements/${statementId}`);
 }
 
 export function generateRoyaltyStatement(contractId: string, input: { period_start: string; period_end: string }) {

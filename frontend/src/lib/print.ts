@@ -5,7 +5,7 @@
 // **« Enregistrer au format PDF »** (option native de tous les navigateurs).
 // Aucune bibliothèque PDF lourde, fonctionne avec une connexion modeste.
 
-import type { InvoiceDetail } from "../api/client";
+import type { InvoiceDetail, RoyaltyStatementDetail } from "../api/client";
 
 // Coordonnées officielles de la maison — source unique pour tous les documents
 // imprimés (facture, avoir, et à venir : relevés, bons de commande, contrats).
@@ -158,6 +158,61 @@ export function printInvoice(invoice: InvoiceDetail): void {
 }
 
 function statusLabel(status: string): string {
-  const map: Record<string, string> = { issued: "Émise", paid: "Réglée", cancelled: "Annulée", credit_note: "Avoir" };
+  const map: Record<string, string> = { issued: "Émise", paid: "Réglée", cancelled: "Annulée", credit_note: "Avoir", draft: "Brouillon" };
   return map[status] ?? status;
+}
+
+const ROYALTY_SOURCE_LABELS: Record<string, string> = {
+  sales_order_line: "Vente",
+  delivery: "Livraison",
+  return_line: "Retour",
+  consignment_statement: "Dépôt-vente",
+  pos_sale: "Vente au comptoir",
+};
+
+// Relevé de droits d'auteur prêt à imprimer (Ch. 9 §9.5, Ch. 18 §18.7). Détaille
+// les lignes (base, quantité, taux appliqué, montant) puis récapitule droits
+// acquis, à-valoir amorti et solde dû. Montants tels qu'enregistrés.
+export function printRoyaltyStatement(st: RoyaltyStatementDetail): void {
+  const cur = "XAF";
+  const start = new Date(st.periodStart).toLocaleDateString("fr-FR");
+  const end = new Date(st.periodEnd).toLocaleDateString("fr-FR");
+  const author = `${st.contract.partner.firstName} ${st.contract.partner.lastName}`;
+
+  const rows = st.entries
+    .map(
+      (e) => `<tr>
+        <td>${escapeHtml(ROYALTY_SOURCE_LABELS[e.sourceType] ?? e.sourceType)}</td>
+        <td class="r num">${e.quantity}</td>
+        <td class="r num">${money(e.unitBaseAmount, cur)}</td>
+        <td class="r num">${(Number(e.rateApplied) * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %</td>
+        <td class="r num">${money(e.amount, cur)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const remaining = st.remaining_balance ?? Number(st.balanceDue);
+  const body = `
+    <div class="doc__title">Relevé de droits d'auteur</div>
+    <div class="meta">
+      <span>Contrat <b class="num">${escapeHtml(st.contract.contractNumber)}</b></span>
+      <span>Période <b class="num">${escapeHtml(start)}</b> → <b class="num">${escapeHtml(end)}</b></span>
+      <span><span class="badge">${escapeHtml(statusLabel(st.status))}</span></span>
+    </div>
+    <div class="party">
+      <div class="party__label">Bénéficiaire</div>
+      <div class="party__name">${escapeHtml(author)}</div>
+    </div>
+    <table class="lines">
+      <thead><tr><th>Nature</th><th class="r">Qté</th><th class="r">Base unitaire</th><th class="r">Taux</th><th class="r">Droits</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="5">Aucune ligne sur la période.</td></tr>`}</tbody>
+    </table>
+    <div class="totals">
+      <div><span>Droits acquis</span><span class="num">${money(st.totalEarned, cur)}</span></div>
+      <div><span>À-valoir amorti</span><span class="num">− ${money(st.advanceRecouped, cur)}</span></div>
+      <div><span>Solde du relevé</span><span class="num">${money(st.balanceDue, cur)}</span></div>
+      <div class="ttc"><span>Restant à payer</span><span class="num">${money(remaining, cur)}</span></div>
+    </div>`;
+
+  openPrintWindow(`Relevé de droits ${st.contract.contractNumber}`, body);
 }

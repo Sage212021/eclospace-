@@ -29,12 +29,12 @@ import {
   type ShippingRate,
   type ShippingZone,
 } from "../api/client";
-import { getInvoice, listTaxRates, setTaxRate, type TaxRate } from "../api/client";
+import { getInvoice, getRoyaltyStatement, listTaxRates, setTaxRate, type TaxRate } from "../api/client";
 import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconFinance } from "../components/icons";
-import { printInvoice } from "../lib/print";
+import { printInvoice, printRoyaltyStatement } from "../lib/print";
 
 const ZONE_LABELS: Record<ShippingZone, string> = {
   yaounde: "Yaoundé",
@@ -59,6 +59,7 @@ const STATUS_LABELS: Record<string, string> = {
   credit_note: "Avoir",
   a_valider: "À valider",
   validee: "Validée",
+  draft: "Brouillon",
 };
 
 interface FinancePageProps {
@@ -136,6 +137,15 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       printInvoice(await getInvoice(invoiceId));
     } catch (err) {
       fail(err, "Échec de l'ouverture de la facture.");
+    }
+  }
+
+  // Impression / export PDF d'un relevé de droits d'auteur.
+  async function handlePrintStatement(statementId: string) {
+    try {
+      printRoyaltyStatement(await getRoyaltyStatement(statementId));
+    } catch (err) {
+      fail(err, "Échec de l'ouverture du relevé.");
     }
   }
 
@@ -374,9 +384,12 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
                   <span className="ecl-row__desc" style={{ margin: 0 }}>dû : <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{statement.balanceDue}</strong></span>
                   <StatusChip label={STATUS_LABELS[statement.status] ?? statement.status} />
                 </div>
-                {canAdminister && statement.status !== "paid" && Number(statement.remaining_balance ?? statement.balanceDue) > 0 && (
-                  <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-statement", statement, amount: "" })}>Payer</Button>
-                )}
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <Button variant="view" size="sm" onClick={() => handlePrintStatement(statement.id)}>Imprimer / PDF</Button>
+                  {canAdminister && statement.status !== "paid" && Number(statement.remaining_balance ?? statement.balanceDue) > 0 && (
+                    <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-statement", statement, amount: "" })}>Payer</Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

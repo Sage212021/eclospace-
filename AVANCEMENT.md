@@ -487,3 +487,11 @@ Demande opérateur : les e-mails de l'ERP (factures, avoirs, relevés de droits)
 **Réglages (à saisir sur Scalingo, jamais dans le code)** : `SMTP_HOST=smtp.hostinger.com`, `SMTP_PORT=465`, `SMTP_USER`/`SMTP_PASS` (boîte du domaine), `SMTP_FROM`, `SMTP_FROM_NAME`, `SMTP_ARCHIVE_TO`. Détail et justification : `docs/JOURNAL_TECHNIQUE.md`. Backend recompilé (typecheck OK), suite Finance : **21 tests passent**.
 
 **Point à valider avec l'opérateur** : si l'on veut que le « De » porte réellement l'adresse de chaque pôle (et non le « Répondre à »), il faut soit une boîte SMTP par pôle, soit activer l'envoi « send-as » chez Hostinger — décision d'exploitation, non nécessaire au fonctionnement.
+
+### 10/07/2026 (suite) — Mémoire des adresses e-mail, généralisée à tous les écrans
+
+À la demande de l'opérateur, les adresses e-mail déjà utilisées sont **mémorisées** et **reproposées en suggestion** — plus besoin de retaper une adresse connue.
+
+- **Où** : fenêtre d'envoi d'un document (facture/relevé), création de compte (Utilisateurs & rôles), changement d'e-mail de connexion (Sécurité du compte). Brique commune `<EmailInput>` : un champ e-mail qui propose les adresses connues et mémorise la saisie en quittant le champ.
+- **Comment** : stockage **local au navigateur** (aucune donnée envoyée au serveur, aucune synchronisation entre postes), les plus récentes en tête, limite 100 adresses. Aucune nouvelle dépendance.
+- Typecheck et build front OK.

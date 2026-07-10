@@ -14,6 +14,7 @@ import {
 } from "../api/client";
 import { Button } from "../components/Button";
 import { Modal, Field } from "../components/Modal";
+import { EmailInput } from "../components/EmailInput";
 
 interface UsersRolesPageProps {
   canAdminister: boolean;
@@ -311,7 +312,7 @@ function CreateAccountForm({
       <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
           <Field label="Identifiant"><input value={username} onChange={(e) => setUsername(e.target.value)} required minLength={3} /></Field>
-          <Field label="E-mail"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></Field>
+          <Field label="E-mail"><EmailInput value={email} onChange={(e) => setEmail(e.target.value)} required /></Field>
           <Field label="Mot de passe (min. 8 car., une majuscule, un chiffre)"><input type="text" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>
           <Field label="Rôle initial (facultatif)">
             <select value={roleCode} onChange={(e) => setRoleCode(e.target.value)}>

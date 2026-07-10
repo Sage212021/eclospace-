@@ -277,6 +277,7 @@ export function App() {
         <TopBar
           connectedTotal={presence.total}
           poles={POLE_LABELS.map((label) => ({ label, count: presence.byPole[label] ?? 0 }))}
+          canSeePresenceNames={permissions.has("direction:consultation")}
           onMenu={() => setNavOpen(true)}
           user={{ username: user.username, email: user.email }}
           onLogout={handleLogout}

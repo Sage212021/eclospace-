@@ -17,6 +17,30 @@ interface SocketState {
   moduleId: string | null;
 }
 
+// Référence au registre de présence en mémoire, exposée pour la seule route
+// REST de révélation des noms (réservée aux profils habilités). Le canal
+// temps réel, lui, ne diffuse jamais d'identités (voir broadcast ci-dessous).
+let liveStates: Map<string, SocketState> | null = null;
+
+// Noms des personnes connectées, regroupés par pôle — servis UNIQUEMENT à un
+// appelant habilité (vérifié côté route). Dédoublonné par personne (userId) :
+// un même utilisateur sur deux onglets n'apparaît qu'une fois par pôle.
+export function getPresenceNamesByPole(): { total: number; byPole: Record<string, string[]> } {
+  const byPoleIds: Record<string, Map<string, string>> = {};
+  const everyone = new Set<string>();
+  if (liveStates) {
+    for (const s of liveStates.values()) {
+      everyone.add(s.userId);
+      if (s.poleId) (byPoleIds[s.poleId] ??= new Map()).set(s.userId, s.username);
+    }
+  }
+  const byPole: Record<string, string[]> = {};
+  for (const [pole, users] of Object.entries(byPoleIds)) {
+    byPole[pole] = [...users.values()].sort((a, b) => a.localeCompare(b, "fr"));
+  }
+  return { total: everyone.size, byPole };
+}
+
 interface JoinPayload {
   poleId?: string | null;
   moduleId?: string | null;
@@ -43,6 +67,8 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
   });
 
   const states = new Map<string, SocketState>();
+  // Partage le registre avec getPresenceNamesByPole (révélation habilitée).
+  liveStates = states;
 
   // Authentification de la socket par le cookie de session existant (RBAC
   // inchangé : on réutilise verifySessionToken).

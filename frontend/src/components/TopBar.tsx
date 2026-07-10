@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { listUnreadNotifications, quickSearch, type QuickSearchResult } from "../api/client";
+import { getPresenceNames, listUnreadNotifications, quickSearch, type QuickSearchResult } from "../api/client";
 
 interface TopBarProps {
   // Nombre de personnes connectées (présence temps réel, sans identités).
   connectedTotal: number;
   // Effectif présent par pôle (compteurs seuls) pour la fenêtre « Hall ».
   poles: { label: string; count: number }[];
+  // Profil habilité à voir les identités des connectés (DG, super-admin).
+  canSeePresenceNames?: boolean;
   // Sur mobile : ouvre le menu latéral escamotable (bouton ☰ à gauche).
   onMenu?: () => void;
   // Profil courant + actions du menu (déconnexion, accès aux paramètres).
@@ -24,10 +26,28 @@ function initials(username: string): string {
 
 // Barre supérieure (guide §6) : recherche globale + présence + notifications +
 // menu de profil (avatar) à droite, façon Microsoft 365 / Notion.
-export function TopBar({ connectedTotal, poles, onMenu, user, onLogout, onOpenSettings, onOpenManuscript }: TopBarProps) {
+export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, user, onLogout, onOpenSettings, onOpenManuscript }: TopBarProps) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hallOpen, setHallOpen] = useState(false);
+  // Noms par pôle, chargés à la demande à l'ouverture du Hall, pour les seuls
+  // profils habilités. Rechargés à chaque ouverture pour rester à jour.
+  const [presenceNames, setPresenceNames] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    if (!hallOpen || !canSeePresenceNames) return;
+    let cancelled = false;
+    getPresenceNames()
+      .then((data) => {
+        if (!cancelled) setPresenceNames(data.byPole);
+      })
+      .catch(() => {
+        if (!cancelled) setPresenceNames({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hallOpen, canSeePresenceNames, connectedTotal]);
 
   // Recherche rapide : requête saisie, résultats et état d'ouverture du menu
   // déroulant. La recherche part après une courte pause de frappe (anti-rebond)
@@ -228,46 +248,47 @@ export function TopBar({ connectedTotal, poles, onMenu, user, onLogout, onOpenSe
               <div style={{ maxHeight: 320, overflowY: "auto" }}>
                 {poles.map((p) => {
                   const active = p.count > 0;
+                  const names = canSeePresenceNames ? presenceNames[p.label] ?? [] : [];
                   return (
-                    <div
-                      key={p.label}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        padding: "10px 14px",
-                        borderBottom: "1px solid var(--line)",
-                      }}
-                    >
-                      <span style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "var(--ink)" }}>
-                        <span
-                          style={{
-                            width: 9,
-                            height: 9,
-                            borderRadius: 999,
-                            background: active ? "var(--success)" : "var(--line)",
-                            display: "inline-block",
-                            flexShrink: 0,
-                          }}
-                        />
-                        {p.label}
-                      </span>
-                      <span style={{ fontSize: 12, color: active ? "var(--ink)" : "var(--muted)" }}>
-                        {active ? (
-                          <>
-                            <span style={{ fontFamily: "var(--font-mono)" }}>{p.count}</span> présent{p.count > 1 ? "s" : ""}
-                          </>
-                        ) : (
-                          "personne"
-                        )}
-                      </span>
+                    <div key={p.label} style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "var(--ink)" }}>
+                          <span
+                            style={{
+                              width: 9,
+                              height: 9,
+                              borderRadius: 999,
+                              background: active ? "var(--success)" : "var(--line)",
+                              display: "inline-block",
+                              flexShrink: 0,
+                            }}
+                          />
+                          {p.label}
+                        </span>
+                        <span style={{ fontSize: 12, color: active ? "var(--ink)" : "var(--muted)" }}>
+                          {active ? (
+                            <>
+                              <span style={{ fontFamily: "var(--font-mono)" }}>{p.count}</span> présent{p.count > 1 ? "s" : ""}
+                            </>
+                          ) : (
+                            "personne"
+                          )}
+                        </span>
+                      </div>
+                      {/* Identités réservées aux profils habilités (DG, super-admin). */}
+                      {names.length > 0 && (
+                        <div style={{ marginTop: 4, marginLeft: 18, fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
+                          {names.join(", ")}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
               <div style={{ padding: "8px 14px", fontSize: 11, color: "var(--muted)" }}>
-                Effectifs par pôle — sans identités (confidentialité).
+                {canSeePresenceNames
+                  ? "Identités visibles au titre de la Direction générale."
+                  : "Effectifs par pôle — sans identités (confidentialité)."}
               </div>
             </div>
           </>

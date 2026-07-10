@@ -97,3 +97,37 @@ describe("recherche globale (barre supérieure)", () => {
     expect(res.json().results).toEqual([]);
   });
 });
+
+describe("présence : révélation habilitée des identités", () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    app = await buildApp();
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await prisma.$disconnect();
+  });
+
+  it("expose les noms par pôle à un profil d'oversight (Direction générale / super-admin)", async () => {
+    const cookie = await loginCookie(app, "admin", ADMIN_PASSWORD);
+    const res = await app.inject({ method: "GET", url: "/api/v1/presence/names", headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(typeof body.total).toBe("number");
+    expect(typeof body.byPole).toBe("object");
+  });
+
+  it("refuse la révélation des noms à un profil ordinaire (403)", async () => {
+    await createUserWithRole("correcteur_presence_test", "CORRECTEUR", "Correcteur123!");
+    const cookie = await loginCookie(app, "correcteur_presence_test", "Correcteur123!");
+    const res = await app.inject({ method: "GET", url: "/api/v1/presence/names", headers: { cookie } });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("exige une session (401 sans authentification)", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/v1/presence/names" });
+    expect(res.statusCode).toBe(401);
+  });
+});

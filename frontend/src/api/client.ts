@@ -70,6 +70,12 @@ export function quickSearch(q: string) {
   return request<{ results: QuickSearchResult[] }>(`/api/v1/quick-search?q=${encodeURIComponent(q)}`);
 }
 
+// Noms des personnes connectées, par pôle. Réservé aux profils habilités
+// (Direction générale, super-administrateur) : renvoie 403 sinon.
+export function getPresenceNames() {
+  return request<{ total: number; byPole: Record<string, string[]> }>("/api/v1/presence/names");
+}
+
 export function login(username: string, password: string) {
   return request<{ requires_2fa: boolean; challenge_id?: string }>("/api/v1/auth/login", {
     method: "POST",

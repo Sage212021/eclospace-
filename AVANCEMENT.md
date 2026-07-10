@@ -474,3 +474,16 @@ Retour opérateur : certaines pages (Rapports, Finance, RH…) faisaient « donn
 - Marges responsives : confortable sur téléphone (vérifié sur écran 390 px, sans débordement horizontal).
 
 **Prochaine étape :** retours de l'opérateur.
+
+### 10/07/2026 (suite) — Envoi des e-mails « au nom » du pôle / de l'agent connecté
+
+Demande opérateur : les e-mails de l'ERP (factures, avoirs, relevés de droits) doivent partir des adresses **de chaque pôle** — l'adresse professionnelle de l'utilisateur connecté (boîtes du personnel hébergées chez **Hostinger**), un pôle pouvant avoir 2-3 adresses ; et la maison doit en **conserver une copie**.
+
+**Ce qui a été fait (sans nouvelle dépendance)** :
+- Chaque envoi porte désormais un **nom d'expéditeur** identifiant l'agent/pôle et un **« Répondre à »** = l'e-mail professionnel de l'utilisateur connecté ⇒ les réponses arrivent directement dans la boîte du bon pôle (celle de la personne réellement connectée, même si le pôle a plusieurs adresses).
+- La maison reçoit une **copie invisible (BCC)** de chaque envoi (« joindre le mail officiel »).
+- L'adresse affichée en « De » reste la boîte authentifiée du domaine de la maison, **pour la délivrabilité** (un serveur SMTP refuse d'expédier au nom d'une adresse qu'il n'authentifie pas — sinon le message part en indésirable).
+
+**Réglages (à saisir sur Scalingo, jamais dans le code)** : `SMTP_HOST=smtp.hostinger.com`, `SMTP_PORT=465`, `SMTP_USER`/`SMTP_PASS` (boîte du domaine), `SMTP_FROM`, `SMTP_FROM_NAME`, `SMTP_ARCHIVE_TO`. Détail et justification : `docs/JOURNAL_TECHNIQUE.md`. Backend recompilé (typecheck OK), suite Finance : **21 tests passent**.
+
+**Point à valider avec l'opérateur** : si l'on veut que le « De » porte réellement l'adresse de chaque pôle (et non le « Répondre à »), il faut soit une boîte SMTP par pôle, soit activer l'envoi « send-as » chez Hostinger — décision d'exploitation, non nécessaire au fonctionnement.

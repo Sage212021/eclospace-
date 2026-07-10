@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { assertPeriodOpen, PeriodClosedError } from "../lib/accountingPeriod.js";
-import { sendMail } from "../lib/mailer.js";
+import { sendMail, senderIdentity } from "../lib/mailer.js";
 import { buildRoyaltyStatementEmail } from "../lib/documentEmail.js";
 
 const statementEmailSchema = z.object({
@@ -185,7 +185,8 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
       }
       let sent: boolean;
       try {
-        sent = await sendMail({ to, subject: built.subject, text: built.text, html: built.html });
+        const sender = senderIdentity(request.user!);
+        sent = await sendMail({ to, subject: built.subject, text: built.text, html: built.html, ...sender });
       } catch (err) {
         if (err instanceof Error && err.message === "mail_not_configured") {
           return reply.code(503).send({

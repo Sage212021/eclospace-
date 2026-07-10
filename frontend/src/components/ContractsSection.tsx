@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   createContract,
   createPartner,
+  getContract,
   listContracts,
   listPartners,
   updateContractStatus,
@@ -10,6 +11,7 @@ import {
   type Partner,
   type PartnerCategory,
 } from "../api/client";
+import { printContract } from "../lib/print";
 
 const STATUS_CHAIN: ContractStatus[] = ["preparation", "legal_review", "direction_approval", "awaiting_signature", "active"];
 const STATUS_LABELS: Record<ContractStatus, string> = {
@@ -105,6 +107,9 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
             <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 999, padding: "2px 10px", fontSize: 11 }}>
               {STATUS_LABELS[contract.status]}
             </span>
+            <button onClick={() => getContract(contract.id).then(printContract).catch((e) => setError(e.message))} style={secondaryButtonStyle}>
+              Imprimer / PDF
+            </button>
             {canValidate && STATUS_CHAIN.indexOf(contract.status) >= 0 && STATUS_CHAIN.indexOf(contract.status) < STATUS_CHAIN.length - 1 && (
               <button onClick={() => advance(contract)} style={secondaryButtonStyle}>
                 Faire avancer →

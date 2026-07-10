@@ -393,6 +393,31 @@ export function listContracts(manuscriptId?: string) {
   return request<Contract[]>(`/api/v1/contracts${query}`);
 }
 
+// Fiche contractuelle détaillée (pour l'impression) : portée et clauses de droits.
+export interface RoyaltyTier {
+  up_to: number | null;
+  rate: number;
+}
+
+export interface ContractDetail extends Contract {
+  effectiveAt?: string | null;
+  durationMonths?: number | null;
+  territories: string[];
+  languages: string[];
+  formats: string[];
+  royaltyTerms?: {
+    base: string;
+    tiers: RoyaltyTier[];
+    advanceAmount: string | null;
+    taxWithholdingPct: string | null;
+    statementPeriodicity: string | null;
+  } | null;
+}
+
+export function getContract(id: string) {
+  return request<ContractDetail>(`/api/v1/contracts/${id}`);
+}
+
 export function createContract(input: {
   type: string;
   manuscript_id?: string;

@@ -5,7 +5,7 @@
 // **« Enregistrer au format PDF »** (option native de tous les navigateurs).
 // Aucune bibliothèque PDF lourde, fonctionne avec une connexion modeste.
 
-import type { InvoiceDetail, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
+import type { ContractDetail, InvoiceDetail, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
 
 // Coordonnées officielles de la maison — source unique pour tous les documents
 // imprimés (facture, avoir, et à venir : relevés, bons de commande, contrats).
@@ -267,4 +267,94 @@ export function printPurchaseOrder(po: PurchaseOrder): void {
     </div>`;
 
   openPrintWindow(`Bon de commande ${po.poNumber}`, body);
+}
+
+const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  edition: "Contrat d'édition",
+  cession: "Contrat de cession",
+  prestation: "Contrat de prestation",
+  coedition: "Contrat de coédition",
+  traduction: "Contrat de traduction",
+};
+const CONTRACT_STATUS_LABELS: Record<string, string> = {
+  preparation: "En préparation",
+  legal_review: "Revue juridique",
+  direction_approval: "Approbation direction",
+  awaiting_signature: "En attente de signature",
+  active: "Actif",
+  expired: "Expiré",
+  terminated: "Résilié",
+};
+const ROYALTY_BASE_LABELS: Record<string, string> = {
+  prix_public_ht: "Prix public HT",
+  prix_net_editeur: "Prix net éditeur",
+};
+const PERIODICITY_LABELS: Record<string, string> = {
+  mensuelle: "Mensuelle",
+  trimestrielle: "Trimestrielle",
+  semestrielle: "Semestrielle",
+  annuelle: "Annuelle",
+};
+
+// Fiche contractuelle prête à imprimer (Ch. 9). Récapitule les parties, l'ouvrage,
+// la portée (territoires, langues, formats) et les clauses de droits d'auteur
+// (base, paliers, à-valoir, retenue, périodicité). Résumé structuré du contrat.
+export function printContract(c: ContractDetail): void {
+  const cur = "XAF";
+  const partner = `${c.partner.firstName} ${c.partner.lastName}`;
+  const signed = c.signedAt ? new Date(c.signedAt).toLocaleDateString("fr-FR") : "—";
+  const effective = c.effectiveAt ? new Date(c.effectiveAt).toLocaleDateString("fr-FR") : "—";
+  const duration = c.durationMonths ? `${c.durationMonths} mois` : "—";
+  const list = (arr: string[]) => (arr && arr.length ? arr.map(escapeHtml).join(", ") : "—");
+
+  const rt = c.royaltyTerms;
+  const tiersRows = rt?.tiers?.length
+    ? rt.tiers
+        .map(
+          (t) => `<tr>
+            <td>${t.up_to == null ? "Au-delà" : `Jusqu'à ${t.up_to.toLocaleString("fr-FR")} ex.`}</td>
+            <td class="r num">${(Number(t.rate) * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %</td>
+          </tr>`,
+        )
+        .join("")
+    : "";
+
+  const royaltyBlock = rt
+    ? `
+      <div class="party__label" style="margin-top:20px">Droits d'auteur</div>
+      <div class="meta" style="margin:6px 0 8px">
+        <span>Base : <b>${escapeHtml(ROYALTY_BASE_LABELS[rt.base] ?? rt.base)}</b></span>
+        ${rt.advanceAmount ? `<span>À-valoir : <b class="num">${money(rt.advanceAmount, cur)}</b></span>` : ""}
+        ${rt.taxWithholdingPct ? `<span>Retenue fiscale : <b>${Number(rt.taxWithholdingPct)} %</b></span>` : ""}
+        ${rt.statementPeriodicity ? `<span>Relevés : <b>${escapeHtml(PERIODICITY_LABELS[rt.statementPeriodicity] ?? rt.statementPeriodicity)}</b></span>` : ""}
+      </div>
+      ${tiersRows ? `<table class="lines"><thead><tr><th>Palier de ventes</th><th class="r">Taux</th></tr></thead><tbody>${tiersRows}</tbody></table>` : ""}`
+    : "";
+
+  const body = `
+    <div class="doc__title">${escapeHtml(CONTRACT_TYPE_LABELS[c.type] ?? "Contrat")}</div>
+    <div class="meta">
+      <span>N° <b class="num">${escapeHtml(c.contractNumber)}</b></span>
+      <span>Signé le <b class="num">${escapeHtml(signed)}</b></span>
+      <span>Effet <b class="num">${escapeHtml(effective)}</b></span>
+      <span>Durée <b>${escapeHtml(duration)}</b></span>
+      <span><span class="badge">${escapeHtml(CONTRACT_STATUS_LABELS[c.status] ?? c.status)}</span></span>
+    </div>
+    <div style="display:flex; gap:40px; flex-wrap:wrap; margin-bottom:6px">
+      <div class="party"><div class="party__label">Éditeur</div><div class="party__name">Éclosion Édition</div></div>
+      <div class="party"><div class="party__label">Cocontractant</div><div class="party__name">${escapeHtml(partner)}</div></div>
+    </div>
+    ${c.manuscript ? `<div class="party"><div class="party__label">Ouvrage</div><div class="party__name">${escapeHtml(c.manuscript.title)} <span class="num" style="font-weight:400;color:#6b7280">(${escapeHtml(c.manuscript.manuscriptNumber)})</span></div></div>` : ""}
+    <div class="meta" style="margin-top:14px">
+      <span>Territoires : <b>${list(c.territories)}</b></span>
+      <span>Langues : <b>${list(c.languages)}</b></span>
+      <span>Formats : <b>${list(c.formats)}</b></span>
+    </div>
+    ${royaltyBlock}
+    <div style="margin-top:40px; display:flex; gap:60px; flex-wrap:wrap">
+      <div style="flex:1; min-width:200px"><div class="party__label">L'éditeur</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature &amp; cachet</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">Le cocontractant</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature</div></div>
+    </div>`;
+
+  openPrintWindow(`Contrat ${c.contractNumber}`, body);
 }

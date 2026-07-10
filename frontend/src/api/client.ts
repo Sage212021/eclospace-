@@ -70,10 +70,17 @@ export function quickSearch(q: string) {
   return request<{ results: QuickSearchResult[] }>(`/api/v1/quick-search?q=${encodeURIComponent(q)}`);
 }
 
-// Noms des personnes connectées, par pôle. Réservé aux profils habilités
-// (Direction générale, super-administrateur) : renvoie 403 sinon.
+// Noms des personnes connectées, regroupés par département réel. Réservé aux
+// profils habilités : Direction générale et super-administrateur (tous les
+// départements), ou chef de département (son seul département). 403 sinon.
+export interface DepartmentPresence {
+  departmentId: string | null;
+  departmentName: string;
+  users: string[];
+}
+
 export function getPresenceNames() {
-  return request<{ total: number; byPole: Record<string, string[]> }>("/api/v1/presence/names");
+  return request<{ total: number; departments: DepartmentPresence[] }>("/api/v1/presence/names");
 }
 
 export function login(username: string, password: string) {

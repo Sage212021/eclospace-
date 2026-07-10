@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { getPresenceNames, listUnreadNotifications, quickSearch, type QuickSearchResult } from "../api/client";
+import {
+  getPresenceNames,
+  listUnreadNotifications,
+  quickSearch,
+  type DepartmentPresence,
+  type QuickSearchResult,
+} from "../api/client";
 
 interface TopBarProps {
   // Nombre de personnes connectées (présence temps réel, sans identités).
@@ -30,19 +36,19 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hallOpen, setHallOpen] = useState(false);
-  // Noms par pôle, chargés à la demande à l'ouverture du Hall, pour les seuls
-  // profils habilités. Rechargés à chaque ouverture pour rester à jour.
-  const [presenceNames, setPresenceNames] = useState<Record<string, string[]>>({});
+  // Noms par département réel, chargés à la demande à l'ouverture du Hall, pour
+  // les seuls profils habilités. Rechargés à chaque ouverture pour rester à jour.
+  const [presenceDepartments, setPresenceDepartments] = useState<DepartmentPresence[]>([]);
 
   useEffect(() => {
     if (!hallOpen || !canSeePresenceNames) return;
     let cancelled = false;
     getPresenceNames()
       .then((data) => {
-        if (!cancelled) setPresenceNames(data.byPole);
+        if (!cancelled) setPresenceDepartments(data.departments);
       })
       .catch(() => {
-        if (!cancelled) setPresenceNames({});
+        if (!cancelled) setPresenceDepartments([]);
       });
     return () => {
       cancelled = true;
@@ -248,46 +254,65 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
               <div style={{ maxHeight: 320, overflowY: "auto" }}>
                 {poles.map((p) => {
                   const active = p.count > 0;
-                  const names = canSeePresenceNames ? presenceNames[p.label] ?? [] : [];
                   return (
-                    <div key={p.label} style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                        <span style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "var(--ink)" }}>
-                          <span
-                            style={{
-                              width: 9,
-                              height: 9,
-                              borderRadius: 999,
-                              background: active ? "var(--success)" : "var(--line)",
-                              display: "inline-block",
-                              flexShrink: 0,
-                            }}
-                          />
-                          {p.label}
-                        </span>
-                        <span style={{ fontSize: 12, color: active ? "var(--ink)" : "var(--muted)" }}>
-                          {active ? (
-                            <>
-                              <span style={{ fontFamily: "var(--font-mono)" }}>{p.count}</span> présent{p.count > 1 ? "s" : ""}
-                            </>
-                          ) : (
-                            "personne"
-                          )}
-                        </span>
-                      </div>
-                      {/* Identités réservées aux profils habilités (DG, super-admin). */}
-                      {names.length > 0 && (
-                        <div style={{ marginTop: 4, marginLeft: 18, fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
-                          {names.join(", ")}
-                        </div>
-                      )}
+                    <div
+                      key={p.label}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        padding: "10px 14px",
+                        borderBottom: "1px solid var(--line)",
+                      }}
+                    >
+                      <span style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "var(--ink)" }}>
+                        <span
+                          style={{
+                            width: 9,
+                            height: 9,
+                            borderRadius: 999,
+                            background: active ? "var(--success)" : "var(--line)",
+                            display: "inline-block",
+                            flexShrink: 0,
+                          }}
+                        />
+                        {p.label}
+                      </span>
+                      <span style={{ fontSize: 12, color: active ? "var(--ink)" : "var(--muted)" }}>
+                        {active ? (
+                          <>
+                            <span style={{ fontFamily: "var(--font-mono)" }}>{p.count}</span> présent{p.count > 1 ? "s" : ""}
+                          </>
+                        ) : (
+                          "personne"
+                        )}
+                      </span>
                     </div>
                   );
                 })}
+
+                {/* Détail nominatif — réservé aux profils habilités (Direction
+                    générale et super-administrateur pour tous les départements ;
+                    chef de département pour son seul département). Regroupé par
+                    département réel. */}
+                {canSeePresenceNames && presenceDepartments.length > 0 && (
+                  <div style={{ padding: "10px 14px", background: "var(--paper)" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>
+                      Personnes présentes
+                    </div>
+                    {presenceDepartments.map((d) => (
+                      <div key={d.departmentId ?? d.departmentName} style={{ marginBottom: 6 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)" }}>{d.departmentName}</div>
+                        <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>{d.users.join(", ")}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div style={{ padding: "8px 14px", fontSize: 11, color: "var(--muted)" }}>
                 {canSeePresenceNames
-                  ? "Identités visibles au titre de la Direction générale."
+                  ? "Identités visibles au titre de votre habilitation (par département)."
                   : "Effectifs par pôle — sans identités (confidentialité)."}
               </div>
             </div>

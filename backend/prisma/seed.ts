@@ -45,6 +45,12 @@ const roles: { code: string; label: string; departmentCode: string | null }[] = 
   { code: "RESP_IMPRESSION", label: "Responsable production/impression", departmentCode: "IMPR" },
   { code: "CHARGE_COMMUNICATION", label: "Chargé de communication", departmentCode: "MKT" },
   { code: "RESP_RH", label: "Responsable RH", departmentCode: "RH" },
+  // Rôle transverse « marqueur » (décision opérateur du 10/07/2026) : désigne le
+  // responsable d'un département. Assigné en plus du rôle métier de la personne ;
+  // son périmètre (le département) vient de la fiche employé, pas du rôle — d'où
+  // departmentCode null. Sert notamment à révéler, dans le Hall, les noms des
+  // personnes présentes de son seul département.
+  { code: "CHEF_DEPARTEMENT", label: "Chef de département", departmentCode: null },
 ];
 
 // Modules exposés par l'API (Ch. 2 §2.3 : 4 niveaux d'action), ajoutés lot par lot.

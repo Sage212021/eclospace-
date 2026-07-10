@@ -55,9 +55,10 @@ interface SidebarProps {
   activeKey: string;
   onSelect: (key: string) => void;
   username: string;
-  // Présence temps réel : noms d'utilisateurs actifs par pôle et par module.
-  presenceByPole: Record<string, string[]>;
-  presenceByModule: Record<string, string[]>;
+  // Présence temps réel : nombre de personnes actives par pôle et par module
+  // (compteurs uniquement — aucune identité, par confidentialité).
+  presenceByPole: Record<string, number>;
+  presenceByModule: Record<string, number>;
 }
 
 // Barre latérale sombre (guide de style §6). Menu en 6 pôles dépliables
@@ -110,7 +111,7 @@ export function Sidebar({
                   item={item}
                   active={item.key === activeKey}
                   onSelect={onSelect}
-                  presentUsers={presenceByModule[item.key] ?? []}
+                  presentCount={presenceByModule[item.key] ?? 0}
                 />
               ))}
             </ul>
@@ -147,7 +148,7 @@ export function Sidebar({
                   {poleIcon(pole.label)}
                 </span>
                 {pole.label}
-                <PresenceDot names={presenceByPole[pole.label] ?? []} />
+                <PresenceDot count={presenceByPole[pole.label] ?? 0} />
               </span>
               <span
                 style={{
@@ -176,7 +177,7 @@ export function Sidebar({
                     active={item.key === activeKey}
                     onSelect={onSelect}
                     indented
-                    presentUsers={presenceByModule[item.key] ?? []}
+                    presentCount={presenceByModule[item.key] ?? 0}
                   />
                 ))}
               </ul>
@@ -197,13 +198,13 @@ function LeafButton({
   active,
   onSelect,
   indented,
-  presentUsers,
+  presentCount,
 }: {
   item: NavLeaf;
   active: boolean;
   onSelect: (key: string) => void;
   indented?: boolean;
-  presentUsers: string[];
+  presentCount: number;
 }) {
   const icon = leafIcon(item.key);
   return (
@@ -237,24 +238,25 @@ function LeafButton({
           )}
           {item.label}
         </span>
-        <PresenceDot names={presentUsers} />
+        <PresenceDot count={presentCount} />
       </button>
     </li>
   );
 }
 
-// Voyant de présence : petite silhouette dorée si au moins un utilisateur est
-// actif ici, avec le nombre si plusieurs et une info-bulle listant les noms.
-function PresenceDot({ names }: { names: string[] }) {
-  if (names.length === 0) return null;
+// Voyant de présence : petite silhouette dorée si au moins une personne est
+// active ici, avec le nombre s'il y en a plusieurs. Info-bulle volontairement
+// générique (nombre seul, jamais de noms) — confidentialité de la présence.
+function PresenceDot({ count }: { count: number }) {
+  if (count <= 0) return null;
   return (
     <span
-      title={`Actif : ${names.join(", ")}`}
+      title={`${count} personne(s) active(s) ici`}
       style={{ display: "inline-flex", alignItems: "center", gap: 2, flexShrink: 0, color: "var(--eclosion-light)" }}
     >
       <IconPresence size={13} />
-      {names.length > 1 && (
-        <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--eclosion-light)" }}>{names.length}</span>
+      {count > 1 && (
+        <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--eclosion-light)" }}>{count}</span>
       )}
     </span>
   );

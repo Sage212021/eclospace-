@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { PermissionAction } from "@prisma/client";
 import { prisma } from "./prisma.js";
+import { writeAuditLog } from "./audit.js";
 
 export interface EffectiveUser {
   id: string;
@@ -83,6 +84,19 @@ export function requirePermission(module: string, action: PermissionAction) {
       return;
     }
     if (!request.user.permissions.has(permKey(module, action))) {
+      // Tentative d'accès refusée (Ch. 21 §21.6) : tracée au journal inviolable
+      // pour la sécurité, avec la permission manquante et la cible visée. Sans
+      // bloquer la réponse (journalisation en arrière-plan) et sans jamais faire
+      // échouer la requête si l'écriture du journal échoue.
+      const req = request;
+      void writeAuditLog({
+        userId: req.user!.id,
+        action: "access_denied",
+        entityType: "permission",
+        entityId: permKey(module, action),
+        newValues: { method: req.method, url: req.url },
+        ipAddress: req.ip,
+      }).catch(() => {});
       reply.code(403).send({
         code: "forbidden",
         message: `Action non autorisée : ${module}:${action} requis.`,

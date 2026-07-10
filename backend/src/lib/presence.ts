@@ -17,6 +17,30 @@ interface SocketState {
   moduleId: string | null;
 }
 
+// Référence au registre de présence en mémoire, exposée pour la seule route
+// REST de révélation des noms (réservée aux profils habilités). Le canal
+// temps réel, lui, ne diffuse jamais d'identités (voir broadcast ci-dessous).
+let liveStates: Map<string, SocketState> | null = null;
+
+// Noms des personnes connectées, regroupés par pôle — servis UNIQUEMENT à un
+// appelant habilité (vérifié côté route). Dédoublonné par personne (userId) :
+// un même utilisateur sur deux onglets n'apparaît qu'une fois par pôle.
+export function getPresenceNamesByPole(): { total: number; byPole: Record<string, string[]> } {
+  const byPoleIds: Record<string, Map<string, string>> = {};
+  const everyone = new Set<string>();
+  if (liveStates) {
+    for (const s of liveStates.values()) {
+      everyone.add(s.userId);
+      if (s.poleId) (byPoleIds[s.poleId] ??= new Map()).set(s.userId, s.username);
+    }
+  }
+  const byPole: Record<string, string[]> = {};
+  for (const [pole, users] of Object.entries(byPoleIds)) {
+    byPole[pole] = [...users.values()].sort((a, b) => a.localeCompare(b, "fr"));
+  }
+  return { total: everyone.size, byPole };
+}
+
 interface JoinPayload {
   poleId?: string | null;
   moduleId?: string | null;
@@ -43,6 +67,8 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
   });
 
   const states = new Map<string, SocketState>();
+  // Partage le registre avec getPresenceNamesByPole (révélation habilitée).
+  liveStates = states;
 
   // Authentification de la socket par le cookie de session existant (RBAC
   // inchangé : on réutilise verifySessionToken).
@@ -57,24 +83,32 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
     next();
   });
 
+  // Confidentialité (exigence de sécurité du 09/07/2026) : le canal temps réel
+  // ne diffuse QUE des compteurs — jamais l'identité des personnes connectées.
+  // Chacun voit « où » et « combien » (pôle actif + nombre), mais les noms ne
+  // transitent pas par la diffusion générale. Ils ne sont révélés que sur
+  // demande, à un profil habilité (Direction générale, super-administrateur, ou
+  // responsable pour son propre pôle), via une route REST vérifiée côté serveur.
   function broadcast() {
-    const connectedById = new Map<string, string>();
+    const connectedUserIds = new Set<string>();
     const byPole: Record<string, Set<string>> = {};
     const byModule: Record<string, Set<string>> = {};
 
     for (const s of states.values()) {
-      connectedById.set(s.userId, s.username);
-      if (s.poleId) (byPole[s.poleId] ??= new Set()).add(s.username);
-      if (s.moduleId) (byModule[s.moduleId] ??= new Set()).add(s.username);
+      connectedUserIds.add(s.userId);
+      // On dénombre des personnes distinctes (par userId), pas des onglets : un
+      // même utilisateur ouvert deux fois ne compte qu'une fois par pôle/module.
+      if (s.poleId) (byPole[s.poleId] ??= new Set()).add(s.userId);
+      if (s.moduleId) (byModule[s.moduleId] ??= new Set()).add(s.userId);
     }
 
-    const toArrays = (map: Record<string, Set<string>>) =>
-      Object.fromEntries(Object.entries(map).map(([k, set]) => [k, [...set]]));
+    const toCounts = (map: Record<string, Set<string>>) =>
+      Object.fromEntries(Object.entries(map).map(([k, set]) => [k, set.size]));
 
     io.emit("presence:update", {
-      connectedUsers: [...connectedById.entries()].map(([userId, username]) => ({ userId, username })),
-      byPole: toArrays(byPole),
-      byModule: toArrays(byModule),
+      total: connectedUserIds.size,
+      byPole: toCounts(byPole),
+      byModule: toCounts(byModule),
     });
   }
 

@@ -5,13 +5,16 @@ import { io, type Socket } from "socket.io-client";
 // en développement (Vite :5173).
 const API_BASE = import.meta.env.VITE_API_BASE ?? (import.meta.env.DEV ? "http://localhost:3000" : "");
 
+// Présence diffusée en temps réel : uniquement des compteurs (confidentialité).
+// Aucune identité ne transite par ce canal — les noms sont obtenus séparément,
+// sur demande, par un profil habilité (voir la fenêtre « Hall / Présence »).
 export interface PresenceState {
-  connectedUsers: { userId: string; username: string }[];
-  byPole: Record<string, string[]>;
-  byModule: Record<string, string[]>;
+  total: number;
+  byPole: Record<string, number>;
+  byModule: Record<string, number>;
 }
 
-const EMPTY: PresenceState = { connectedUsers: [], byPole: {}, byModule: {} };
+const EMPTY: PresenceState = { total: 0, byPole: {}, byModule: {} };
 
 // Présence temps réel via Socket.IO (Ch. 5). Connecte une socket authentifiée
 // par le cookie de session, écoute l'état de présence diffusé, et expose une

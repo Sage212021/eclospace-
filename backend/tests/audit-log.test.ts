@@ -50,4 +50,35 @@ describe("journal d'activité (audit-log)", () => {
     // Aucune route POST déclarée -> 404 (jamais une écriture acceptée).
     expect(post.statusCode).toBe(404);
   });
+
+  it("journalise la déconnexion (symétrique de la connexion)", async () => {
+    const user = await createUserWithRole("logout_audit_test", "CORRECTEUR", "Correcteur123!");
+    const cookie = await loginCookie(app, "logout_audit_test", "Correcteur123!");
+
+    const before = await prisma.auditLog.count({ where: { userId: user.id, action: "logout" } });
+    const res = await app.inject({ method: "POST", url: "/api/v1/auth/logout", headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const after = await prisma.auditLog.count({ where: { userId: user.id, action: "logout" } });
+    expect(after).toBe(before + 1);
+  });
+
+  it("journalise toute tentative d'accès refusée (403) avec la permission manquante", async () => {
+    const user = await createUserWithRole("denied_audit_test", "CORRECTEUR", "Correcteur123!");
+    const cookie = await loginCookie(app, "denied_audit_test", "Correcteur123!");
+
+    // Le correcteur n'a pas « direction:consultation » : l'accès au journal est
+    // refusé (403) et cette tentative doit elle-même être tracée.
+    const res = await app.inject({ method: "GET", url: "/api/v1/audit-log", headers: { cookie } });
+    expect(res.statusCode).toBe(403);
+
+    // L'écriture du journal est asynchrone (non bloquante) : petite attente.
+    await new Promise((r) => setTimeout(r, 100));
+    const entry = await prisma.auditLog.findFirst({
+      where: { userId: user.id, action: "access_denied", entityId: "direction:consultation" },
+      orderBy: { occurredAt: "desc" },
+    });
+    expect(entry).not.toBeNull();
+    const values = entry?.newValues as Record<string, unknown> | null;
+    expect(values?.url).toContain("/api/v1/audit-log");
+  });
 });

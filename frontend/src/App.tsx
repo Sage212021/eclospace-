@@ -20,6 +20,7 @@ import { UsersRolesPage } from "./pages/UsersRolesPage";
 import { DiagnosticsPage } from "./pages/DiagnosticsPage";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
+import { PresenceToasts } from "./components/PresenceToasts";
 import { usePresence } from "./hooks/usePresence";
 
 // Cible d'un élément de menu : soit une page dédiée, soit une liste de
@@ -141,6 +142,10 @@ for (const pole of NAV_POLES) {
   if (pole.label) for (const item of pole.items) LEAF_TO_POLE[item.key] = pole.label;
 }
 
+// Libellés des pôles dans l'ordre du menu — base des tuiles de la fenêtre
+// « Hall / Présence » (chaque pôle affiché actif/inactif avec son effectif).
+const POLE_LABELS: string[] = NAV_POLES.filter((p): p is typeof p & { label: string } => Boolean(p.label)).map((p) => p.label);
+
 type View = { kind: "leaf"; key: string } | { kind: "manuscript-detail"; id: string; originKey: string };
 
 export function App() {
@@ -257,6 +262,8 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {/* Notifications discrètes de connexion/déconnexion (sans identités). */}
+      <PresenceToasts total={presence.total} />
       {/* Layout responsive piloté par CSS (média-requêtes) : fiable sur un vrai
           téléphone, indépendant du JavaScript. La classe --open ne fait glisser
           le tiroir que sous 900px ; au-dessus, la barre reste fixe en flux. */}
@@ -268,11 +275,14 @@ export function App() {
       />
       <div className="app-main">
         <TopBar
-          connectedUsers={presence.connectedUsers}
+          connectedTotal={presence.total}
+          poles={POLE_LABELS.map((label) => ({ label, count: presence.byPole[label] ?? 0 }))}
+          canSeePresenceNames={permissions.has("direction:consultation")}
           onMenu={() => setNavOpen(true)}
           user={{ username: user.username, email: user.email }}
           onLogout={handleLogout}
           onOpenSettings={() => selectLeaf("ad-parametres")}
+          onOpenManuscript={openManuscript}
         />
 
         {user.impersonating && (

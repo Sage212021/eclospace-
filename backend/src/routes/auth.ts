@@ -139,6 +139,15 @@ export default async function authRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/api/v1/auth/logout", { preHandler: requireAuth }, async (request, reply) => {
+    // Journalisation de la déconnexion (Ch. 21 §21.6) : symétrique du login,
+    // pour tracer le cycle de vie complet de chaque session.
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "logout",
+      entityType: "user",
+      entityId: request.user!.id,
+      ipAddress: request.ip,
+    });
     reply.clearCookie(SESSION_COOKIE, { path: "/" });
     return reply.send({ ok: true });
   });

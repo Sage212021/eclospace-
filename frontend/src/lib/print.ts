@@ -7,9 +7,27 @@
 
 import type { InvoiceDetail } from "../api/client";
 
+// Coordonnées officielles de la maison — source unique pour tous les documents
+// imprimés (facture, avoir, et à venir : relevés, bons de commande, contrats).
+// Modifier ici met à jour l'en-tête et le pied de TOUS les documents.
+const HOUSE = {
+  legalName: "ECLOSION EDITION SARL",
+  brand: "Éclosion",
+  brandSuffix: "Édition",
+  tagline: "L'avenir du livre",
+  address: "Carrefour INSTIC – Nouvelle route Kondengui, Yaoundé, Cameroun",
+  poBox: "B.P. 33071 Yaoundé",
+  phone: "(+237) 698 03 15 02 / 678 70 40 86",
+  email: "eclosionedition@gmail.com",
+  website: "https://eclosioneditions.cm",
+  rccm: "RC/YAO/2019/B/144",
+  niu: "M021912751174Y",
+  cnps: "C-YAO-2019-0144",
+};
+
 // En-tête et pied communs à tous les documents officiels (papier à en-tête
-// Éclosion Édition, identité Éclospace). Styles inlinés : la fenêtre
-// d'impression est isolée de l'application.
+// Éclosion Édition). Styles inlinés : la fenêtre d'impression est isolée de
+// l'application.
 function documentShell(title: string, body: string): string {
   const now = new Date().toLocaleString("fr-FR");
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
@@ -18,11 +36,14 @@ function documentShell(title: string, body: string): string {
     * { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #16233d; margin: 0; font-size: 12.5px; line-height: 1.5; }
     .doc { max-width: 720px; margin: 0 auto; padding: 8px; }
-    .brand { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #16233d; padding-bottom: 12px; }
-    .brand__house { font-family: Georgia, serif; font-size: 20px; font-weight: 700; color: #16233d; }
-    .brand__sub { font-size: 11px; color: #6b7280; letter-spacing: .5px; }
-    .brand__tag { text-align: right; }
-    .brand__gold { display: inline-block; height: 6px; width: 46px; background: #c89a1b; border-radius: 3px; margin-top: 6px; }
+    .lh { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+    .lh__mark { font-family: Georgia, serif; font-size: 26px; font-weight: 700; color: #16233d; line-height: 1; }
+    .lh__mark b { color: #c89a1b; }
+    .lh__suffix { font-weight: 400; }
+    .lh__tag { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #a87d14; margin-top: 5px; }
+    .lh__contact { text-align: right; font-size: 10.5px; color: #4b5563; line-height: 1.7; max-width: 340px; }
+    .lh__contact a { color: #4b5563; text-decoration: none; }
+    .lh__rule { height: 3px; background: linear-gradient(90deg, #16233d 62%, #c89a1b 62%); border-radius: 2px; margin: 10px 0 4px; }
     .doc__title { font-family: Georgia, serif; font-size: 22px; margin: 20px 0 2px; }
     .num { font-family: ui-monospace, "IBM Plex Mono", monospace; }
     .meta { display: flex; gap: 28px; flex-wrap: wrap; margin: 6px 0 20px; font-size: 12px; color: #444; }
@@ -40,25 +61,31 @@ function documentShell(title: string, body: string): string {
     .totals .ttc { border-top: 2px solid #16233d; margin-top: 6px; padding-top: 8px; font-size: 15px; font-weight: 700; }
     .totals .ttc .num { color: #16233d; }
     .badge { display: inline-block; border: 1px solid #c89a1b; color: #a87d14; border-radius: 999px; padding: 1px 10px; font-size: 11px; font-weight: 600; }
-    .foot { margin-top: 34px; border-top: 1px solid #e6e9ef; padding-top: 10px; font-size: 10.5px; color: #6b7280; }
+    .foot { margin-top: 34px; border-top: 1px solid #e6e9ef; padding-top: 10px; font-size: 10px; color: #6b7280; line-height: 1.6; }
+    .foot__legal { color: #16233d; font-weight: 600; }
     .actions { text-align: center; margin: 18px 0 4px; }
     .actions button { font: inherit; background: #16233d; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; cursor: pointer; }
     @media print { .actions { display: none; } .doc { padding: 0; } }
   </style></head>
   <body>
     <div class="doc">
-      <div class="brand">
+      <div class="lh">
         <div>
-          <div class="brand__house">Éclosion Édition</div>
-          <div class="brand__sub">Maison d'édition</div>
+          <div class="lh__mark"><b>${HOUSE.brand}</b> <span class="lh__suffix">${HOUSE.brandSuffix}</span></div>
+          <div class="lh__tag">${HOUSE.tagline}</div>
         </div>
-        <div class="brand__tag">
-          <div class="brand__sub">Éclospace — ERP éditorial</div>
-          <span class="brand__gold"></span>
+        <div class="lh__contact">
+          ${escapeHtml(HOUSE.address)}<br>
+          ${escapeHtml(HOUSE.poBox)} · Tél. ${escapeHtml(HOUSE.phone)}<br>
+          <a href="mailto:${HOUSE.email}">${HOUSE.email}</a> · <a href="${HOUSE.website}">${escapeHtml(HOUSE.website)}</a>
         </div>
       </div>
+      <div class="lh__rule"></div>
       ${body}
-      <div class="foot">Document généré par Éclospace le ${escapeHtml(now)}.</div>
+      <div class="foot">
+        <div class="foot__legal">${escapeHtml(HOUSE.legalName)} · RCCM : ${escapeHtml(HOUSE.rccm)} · NIU : ${escapeHtml(HOUSE.niu)} · N° Affil. CNPS : ${escapeHtml(HOUSE.cnps)}</div>
+        <div>Document généré par Éclospace le ${escapeHtml(now)}.</div>
+      </div>
       <div class="actions"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>
     </div>
     <script>window.addEventListener('load', function(){ setTimeout(function(){ window.focus(); window.print(); }, 250); });</script>

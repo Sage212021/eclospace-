@@ -12,11 +12,15 @@ import {
   type Recommendation,
 } from "../api/client";
 import { DataTable } from "../components/DataTable";
+import { Card } from "../components/Card";
+import { Modal, Field } from "../components/Modal";
+import { Button } from "../components/Button";
+import { IconPilotage } from "../components/icons";
 
 const PRIORITY_COLORS: Record<string, string> = {
   faible: "var(--muted)",
-  moyenne: "var(--eclosion)",
-  elevee: "var(--late, #C4661F)",
+  moyenne: "var(--eclosion-dark)",
+  elevee: "var(--amber)",
   critique: "var(--alert)",
 };
 
@@ -34,6 +38,7 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
   const [results, setResults] = useState<Manuscript[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [decideFor, setDecideFor] = useState<{ recommendation: Recommendation; status: "treated" | "ignored" | "postponed"; comment: string } | null>(null);
 
   const refresh = async () => {
     const [dashboardData, alertList, recommendationList] = await Promise.all([
@@ -70,34 +75,30 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
     }
   }
 
-  async function handleDecide(recommendation: Recommendation, status: "treated" | "ignored" | "postponed") {
-    const comment = window.prompt("Commentaire (optionnel)") ?? undefined;
+  async function submitDecision() {
+    if (!decideFor) return;
     try {
-      await decideRecommendation(recommendation.id, status, comment || undefined);
+      await decideRecommendation(decideFor.recommendation.id, decideFor.status, decideFor.comment || undefined);
       setMessage("Recommandation traitée.");
+      setDecideFor(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec du traitement.");
     }
   }
 
-  return (
-    <div style={{ padding: 32, maxWidth: 1040 }}>
-      <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Direction générale</h1>
-      {error && (
-        <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>
-          {error}
-        </div>
-      )}
-      {message && (
-        <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>
-          {message}
-        </div>
-      )}
+  const DECISION_LABELS = { treated: "Traiter", postponed: "Reporter", ignored: "Ignorer" } as const;
 
-      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        {/* Ch. 5 §5.1 */}
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Tableau de bord consolidé</div>
+  return (
+    <div className="ecl-page">
+      <h1 className="ecl-page__title">Direction générale</h1>
+      <p className="ecl-page__lead">Vue consolidée, recherche globale, alertes et recommandations de pilotage.</p>
+
+      {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
+      {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
+
+      {/* Ch. 5 §5.1 — Tableau de bord consolidé */}
+      <Card title="Tableau de bord consolidé" icon={<IconPilotage />} subtitle="Indicateurs clés par domaine.">
         {dashboard ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <DomainBlock title="Éditorial">
@@ -105,10 +106,7 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
                 <StatTile label="Manuscrits" value={dashboard.editorial.total} />
                 <StatTile label="Statuts actifs" value={dashboard.editorial.by_status.length} />
               </TileRow>
-              <DataTable
-                rows={dashboard.editorial.by_status.map(({ code: _code, ...rest }) => rest)}
-                emptyLabel="Aucun manuscrit."
-              />
+              <DataTable rows={dashboard.editorial.by_status.map(({ code: _code, ...rest }) => rest)} emptyLabel="Aucun manuscrit." />
             </DomainBlock>
 
             <DomainBlock title="Production">
@@ -116,10 +114,7 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
                 <StatTile label="Projets en cours" value={dashboard.production.projects_in_progress} />
                 <StatTile label="Tâches terminées" value={dashboard.production.tasks_done} />
                 <StatTile label="Tâches en retard" value={dashboard.production.tasks_late} tone={dashboard.production.tasks_late > 0 ? "late" : undefined} />
-                <StatTile
-                  label="Respect des délais"
-                  value={dashboard.production.on_time_rate_pct === null ? "—" : `${dashboard.production.on_time_rate_pct} %`}
-                />
+                <StatTile label="Respect des délais" value={dashboard.production.on_time_rate_pct === null ? "—" : `${dashboard.production.on_time_rate_pct} %`} />
               </TileRow>
             </DomainBlock>
 
@@ -140,126 +135,153 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
                   <StatTile label="Dépenses engagées" value={dashboard.financial.expenses_engaged} />
                   <StatTile label="Droits d'auteur dus" value={dashboard.financial.royalties_due} />
                   <StatTile label="Factures en attente" value={dashboard.financial.invoices_pending} />
-                  <StatTile
-                    label="Position de trésorerie"
-                    value={dashboard.financial.treasury_position}
-                    tone={dashboard.financial.treasury_position < 0 ? "alert" : undefined}
-                  />
+                  <StatTile label="Position de trésorerie" value={dashboard.financial.treasury_position} tone={dashboard.financial.treasury_position < 0 ? "alert" : undefined} />
                 </TileRow>
               ) : (
-                <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>
-                  Réservé aux profils habilités (consultation financière).
-                </p>
+                <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Réservé aux profils habilités (consultation financière).</p>
               )}
             </DomainBlock>
           </div>
         ) : (
           <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
         )}
-      </div>
+      </Card>
 
-      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        {/* Ch. 5 §5.4 */}
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Recherche globale</div>
-        <form onSubmit={handleSearch} style={{ display: "flex", gap: 10 }}>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Numéro, titre, contributeur, collection, ISBN…"
-            style={{ ...inputStyle, marginTop: 0, flex: 1 }}
-          />
-          <button type="submit" style={secondaryButtonStyle}>
-            Rechercher
-          </button>
+      {/* Ch. 5 §5.4 — Recherche globale */}
+      <Card title="Recherche globale" icon={<IconPilotage />} subtitle="Numéro, titre, contributeur, collection, ISBN.">
+        <form onSubmit={handleSearch} style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+          <div className="ecl-field" style={{ flex: 1 }}>
+            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher…" />
+          </div>
+          <Button variant="view" size="sm" type="submit">Rechercher</Button>
         </form>
-        {results.map((manuscript) => (
-          <div key={manuscript.id} style={{ borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
-            {manuscript.manuscriptNumber} — {manuscript.title} — {manuscript.status.label}
-          </div>
-        ))}
-      </div>
-
-      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        {/* Ch. 5 §5.6 */}
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Alertes automatiques</div>
-        {alerts.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune alerte.</p>}
-        {alerts.map((alert, i) => (
-          <div key={i} style={{ borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13, color: PRIORITY_COLORS[alert.priority] }}>
-            [{alert.priority}] {alert.message}
-          </div>
-        ))}
-      </div>
-
-      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          {/* Ch. 5 §5.9 */}
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Centre de pilotage intelligent</div>
-          <button onClick={handleGenerate} style={secondaryButtonStyle}>
-            Générer les recommandations
-          </button>
-        </div>
-        {recommendations.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune recommandation ouverte.</p>}
-        {recommendations.map((recommendation) => (
-          <div key={recommendation.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
-            <span style={{ color: PRIORITY_COLORS[recommendation.priority] }}>
-              [{recommendation.priority}] {recommendation.message}
-            </span>
-            {canTreatRecommendations && (
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => handleDecide(recommendation, "treated")} style={secondaryButtonStyle}>
-                  Traiter
-                </button>
-                <button onClick={() => handleDecide(recommendation, "postponed")} style={secondaryButtonStyle}>
-                  Reporter
-                </button>
-                <button onClick={() => handleDecide(recommendation, "ignored")} style={secondaryButtonStyle}>
-                  Ignorer
-                </button>
+        {results.length > 0 && (
+          <div className="ecl-list" style={{ marginTop: 12 }}>
+            {results.map((manuscript) => (
+              <div key={manuscript.id} className="ecl-row">
+                <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{manuscript.manuscriptNumber}</span>
+                  <span className="ecl-row__desc" style={{ margin: 0 }}>{manuscript.title}</span>
+                </div>
+                <StatusChip label={manuscript.status.label} />
               </div>
-            )}
+            ))}
           </div>
-        ))}
-      </div>
+        )}
+      </Card>
+
+      {/* Ch. 5 §5.6 — Alertes automatiques */}
+      <Card title="Alertes automatiques" icon={<IconPilotage />} subtitle="Signaux nécessitant une attention.">
+        {alerts.length === 0 ? (
+          <Empty>Aucune alerte.</Empty>
+        ) : (
+          <div className="ecl-list">
+            {alerts.map((alert, i) => (
+              <div key={i} className="ecl-row">
+                <span className="ecl-row__title" style={{ fontWeight: 500 }}>{alert.message}</span>
+                <PriorityChip priority={alert.priority} />
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Ch. 5 §5.9 — Centre de pilotage intelligent */}
+      <Card
+        title="Centre de pilotage intelligent"
+        icon={<IconPilotage />}
+        subtitle="Recommandations générées à partir des indicateurs."
+        action={<Button variant="add" size="sm" onClick={handleGenerate}>Générer</Button>}
+      >
+        {recommendations.length === 0 ? (
+          <Empty>Aucune recommandation ouverte.</Empty>
+        ) : (
+          <div className="ecl-list">
+            {recommendations.map((recommendation) => (
+              <div key={recommendation.id} className="ecl-row" style={{ flexWrap: "wrap", gap: 8 }}>
+                <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <PriorityChip priority={recommendation.priority} />
+                  <span className="ecl-row__title" style={{ fontWeight: 500 }}>{recommendation.message}</span>
+                </div>
+                {canTreatRecommendations && (
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <Button variant="add" size="sm" onClick={() => setDecideFor({ recommendation, status: "treated", comment: "" })}>Traiter</Button>
+                    <Button variant="view" size="sm" onClick={() => setDecideFor({ recommendation, status: "postponed", comment: "" })}>Reporter</Button>
+                    <Button variant="danger" size="sm" onClick={() => setDecideFor({ recommendation, status: "ignored", comment: "" })}>Ignorer</Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {decideFor && (
+        <Modal
+          title={`${DECISION_LABELS[decideFor.status]} la recommandation`}
+          onClose={() => setDecideFor(null)}
+          footer={
+            <>
+              <Button variant="view" size="sm" onClick={() => setDecideFor(null)}>Annuler</Button>
+              <Button variant="add" size="sm" onClick={submitDecision}>Confirmer</Button>
+            </>
+          }
+        >
+          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{decideFor.recommendation.message}</p>
+          <Field label="Commentaire (optionnel)">
+            <textarea rows={3} value={decideFor.comment} onChange={(e) => setDecideFor({ ...decideFor, comment: e.target.value })} autoFocus />
+          </Field>
+        </Modal>
+      )}
     </div>
   );
 }
 
-// Bloc d'un domaine du tableau de bord (Éditorial, Production…).
 function DomainBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--eclosion)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
-        {title}
-      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--eclosion-dark)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>{title}</div>
       {children}
     </div>
   );
 }
 
-// Rangée de cartes-chiffres, repliable sur les petits écrans.
 function TileRow({ children }: { children: React.ReactNode }) {
   return <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>{children}</div>;
 }
 
-// Carte-chiffre : un indicateur unique (guide de style §3, chiffre en chasse fixe).
 function StatTile({ label, value, tone }: { label: string; value: number | string; tone?: "late" | "alert" }) {
   const color = tone === "alert" ? "var(--alert)" : tone === "late" ? "var(--amber)" : "var(--ink)";
   const display = typeof value === "number" ? value.toLocaleString("fr-FR") : value;
   return (
-    <div style={{ flex: "1 1 140px", minWidth: 140, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px" }}>
+    <div style={{ flex: "1 1 140px", minWidth: 140, border: "1px solid var(--line)", borderRadius: 10, padding: "12px 14px", background: "var(--paper)" }}>
       <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 600, color }}>{display}</div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color }}>{display}</div>
     </div>
   );
 }
 
-const inputStyle: React.CSSProperties = { display: "block", width: "100%", padding: 6, marginTop: 4, fontSize: 13 };
-const secondaryButtonStyle: React.CSSProperties = {
-  background: "#fff",
-  border: "1px solid var(--line)",
-  borderRadius: 6,
-  padding: "6px 12px",
-  fontSize: 12,
-  cursor: "pointer",
-};
+function PriorityChip({ priority }: { priority: string }) {
+  const color = PRIORITY_COLORS[priority] ?? "var(--muted)";
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, color, border: `1px solid ${color}`, borderRadius: 999, padding: "1px 9px", whiteSpace: "nowrap", textTransform: "capitalize" }}>
+      {priority}
+    </span>
+  );
+}
+
+function StatusChip({ label }: { label: string }) {
+  return (
+    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>
+      {label}
+    </span>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>{children}</p>;
+}
+
+function bannerStyle(bg: string, color: string): React.CSSProperties {
+  return { background: bg, color, borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 12 };
+}

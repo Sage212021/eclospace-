@@ -70,10 +70,16 @@ export function quickSearch(q: string) {
   return request<{ results: QuickSearchResult[] }>(`/api/v1/quick-search?q=${encodeURIComponent(q)}`);
 }
 
-// Noms des personnes connectées, par pôle. Réservé aux profils habilités
-// (Direction générale, super-administrateur) : renvoie 403 sinon.
+// Noms des personnes connectées, regroupés par grand pôle. Réservé aux profils
+// habilités : Direction générale et super-administrateur (tous les pôles), ou
+// chef de département (son seul grand pôle). 403 sinon.
+export interface PolePresence {
+  pole: string;
+  users: string[];
+}
+
 export function getPresenceNames() {
-  return request<{ total: number; byPole: Record<string, string[]> }>("/api/v1/presence/names");
+  return request<{ total: number; poles: PolePresence[] }>("/api/v1/presence/names");
 }
 
 export function login(username: string, password: string) {

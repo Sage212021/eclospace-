@@ -15,6 +15,54 @@ interface SocketState {
   username: string;
   poleId: string | null;
   moduleId: string | null;
+  // Grand pôle d'appartenance de la personne (déduit du département de sa fiche
+  // employé), fixe pour la session — sert à regrouper les noms révélés par grand
+  // pôle, indépendamment de la navigation courante.
+  pole: string | null;
+}
+
+// Rattachement de chaque département (code de la fiche employé) à l'un des 6
+// grands pôles du menu. Décision opérateur (10/07/2026) : le « Chef de
+// département » raisonne au niveau des GRANDS PÔLES (Éditorial, Production,
+// Commercial, Juridique & Finance, Administration, Pilotage), pas des
+// départements fins. Rattachements calés sur la composition du menu (Archives →
+// Éditorial, Contrôle qualité → Production, Stock → Commercial, Finance →
+// Juridique & Finance, RH → Administration, Direction générale → Pilotage…) ;
+// Marketing/communication rangé au Commercial. À ajuster ici si besoin.
+const DEPARTMENT_CODE_TO_POLE: Record<string, string> = {
+  SECR: "Éditorial",
+  COMLEC: "Éditorial",
+  DIRED: "Éditorial",
+  CORR: "Éditorial",
+  EXPERT: "Éditorial",
+  ARCH: "Éditorial",
+  MAQ: "Production",
+  INFOG: "Production",
+  CQ: "Production",
+  IMPR: "Production",
+  STOCK: "Commercial",
+  COM: "Commercial",
+  MKT: "Commercial",
+  JURID: "Juridique & Finance",
+  FIN: "Juridique & Finance",
+  RH: "Administration",
+  DG: "Pilotage",
+};
+
+export function poleForDepartmentCode(code: string | null | undefined): string | null {
+  if (!code) return null;
+  return DEPARTMENT_CODE_TO_POLE[code] ?? null;
+}
+
+// Grand pôle de repli pour une personne connectée sans rattachement opérationnel
+// (super-administrateur et comptes sans fiche/département). Sans cela, ces
+// personnes seraient comptées dans le total « en ligne » mais n'apparaîtraient
+// dans aucun pôle du Hall (incohérence « N en ligne » vs tous les pôles vides).
+// L'Administrateur général relève naturellement de l'« Administration ».
+const FALLBACK_POLE = "Administration";
+
+export function poleForPresence(code: string | null | undefined): string {
+  return poleForDepartmentCode(code) ?? FALLBACK_POLE;
 }
 
 // Référence au registre de présence en mémoire, exposée pour la seule route
@@ -22,23 +70,52 @@ interface SocketState {
 // temps réel, lui, ne diffuse jamais d'identités (voir broadcast ci-dessous).
 let liveStates: Map<string, SocketState> | null = null;
 
-// Noms des personnes connectées, regroupés par pôle — servis UNIQUEMENT à un
-// appelant habilité (vérifié côté route). Dédoublonné par personne (userId) :
-// un même utilisateur sur deux onglets n'apparaît qu'une fois par pôle.
-export function getPresenceNamesByPole(): { total: number; byPole: Record<string, string[]> } {
-  const byPoleIds: Record<string, Map<string, string>> = {};
+export interface PolePresence {
+  pole: string;
+  users: string[];
+}
+
+// Noms des personnes connectées, regroupés par GRAND PÔLE (déduit du département
+// de la fiche employé) — servis UNIQUEMENT à un appelant habilité (vérifié côté
+// route). Dédoublonné par personne (userId). `onlyPole` restreint le résultat à
+// un seul grand pôle (cas du chef de département, borné à son propre pôle) ;
+// absent = tous les pôles (Direction générale / super-administrateur).
+export function getPresenceNamesByPole(onlyPole?: string | null): {
+  total: number;
+  poles: PolePresence[];
+} {
+  const byPole = new Map<string, Map<string, string>>();
   const everyone = new Set<string>();
+  const UNASSIGNED = "__none__";
   if (liveStates) {
     for (const s of liveStates.values()) {
       everyone.add(s.userId);
-      if (s.poleId) (byPoleIds[s.poleId] ??= new Map()).set(s.userId, s.username);
+      const key = s.pole ?? UNASSIGNED;
+      let users = byPole.get(key);
+      if (!users) {
+        users = new Map();
+        byPole.set(key, users);
+      }
+      users.set(s.userId, s.username);
     }
   }
-  const byPole: Record<string, string[]> = {};
-  for (const [pole, users] of Object.entries(byPoleIds)) {
-    byPole[pole] = [...users.values()].sort((a, b) => a.localeCompare(b, "fr"));
+
+  let entries = [...byPole.entries()];
+  if (onlyPole !== undefined) {
+    // Chef de département : borné à son seul grand pôle (jamais « sans pôle »
+    // ni les autres équipes).
+    entries = entries.filter(([key]) => key === (onlyPole ?? UNASSIGNED));
   }
-  return { total: everyone.size, byPole };
+
+  const poles: PolePresence[] = entries
+    .filter(([key]) => key !== UNASSIGNED)
+    .map(([key, users]) => ({
+      pole: key,
+      users: [...users.values()].sort((a, b) => a.localeCompare(b, "fr")),
+    }))
+    .sort((a, b) => a.pole.localeCompare(b.pole, "fr"));
+
+  return { total: everyone.size, poles };
 }
 
 interface JoinPayload {
@@ -76,10 +153,16 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
     const cookies = parseCookies(socket.handshake.headers.cookie);
     const userId = verifySessionToken(cookies[SESSION_COOKIE]);
     if (!userId) return next(new Error("unauthorized"));
-    const user = await prisma.user.findFirst({ where: { id: userId, deletedAt: null } });
+    const user = await prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      include: { employee: { include: { department: true } } },
+    });
     if (!user) return next(new Error("unauthorized"));
     socket.data.userId = user.id;
     socket.data.username = user.username;
+    // Repli « Administration » pour les comptes sans pôle opérationnel (dont le
+    // super-administrateur) : ils restent visibles dans le Hall.
+    socket.data.pole = poleForPresence(user.employee?.department?.code ?? null);
     next();
   });
 
@@ -97,8 +180,11 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
     for (const s of states.values()) {
       connectedUserIds.add(s.userId);
       // On dénombre des personnes distinctes (par userId), pas des onglets : un
-      // même utilisateur ouvert deux fois ne compte qu'une fois par pôle/module.
-      if (s.poleId) (byPole[s.poleId] ??= new Set()).add(s.userId);
+      // même utilisateur ouvert deux fois ne compte qu'une fois.
+      // Effectif par grand pôle = appartenance (fiche employé), pour rester
+      // cohérent avec les noms révélés dans le Hall (même regroupement). Le
+      // voyant par module, lui, reflète l'activité en cours (navigation).
+      if (s.pole) (byPole[s.pole] ??= new Set()).add(s.userId);
       if (s.moduleId) (byModule[s.moduleId] ??= new Set()).add(s.userId);
     }
 
@@ -118,6 +204,7 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
       username: socket.data.username,
       poleId: null,
       moduleId: null,
+      pole: socket.data.pole ?? null,
     });
     broadcast();
 

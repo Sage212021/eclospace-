@@ -30,19 +30,22 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hallOpen, setHallOpen] = useState(false);
-  // Noms par pôle, chargés à la demande à l'ouverture du Hall, pour les seuls
-  // profils habilités. Rechargés à chaque ouverture pour rester à jour.
-  const [presenceNames, setPresenceNames] = useState<Record<string, string[]>>({});
+  // Noms par grand pôle, chargés à la demande à l'ouverture du Hall, pour les
+  // seuls profils habilités. Rechargés à chaque ouverture pour rester à jour.
+  const [namesByPole, setNamesByPole] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (!hallOpen || !canSeePresenceNames) return;
     let cancelled = false;
     getPresenceNames()
       .then((data) => {
-        if (!cancelled) setPresenceNames(data.byPole);
+        if (cancelled) return;
+        const map: Record<string, string[]> = {};
+        for (const p of data.poles) map[p.pole] = p.users;
+        setNamesByPole(map);
       })
       .catch(() => {
-        if (!cancelled) setPresenceNames({});
+        if (!cancelled) setNamesByPole({});
       });
     return () => {
       cancelled = true;
@@ -224,21 +227,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
         {hallOpen && (
           <>
             <div onClick={() => setHallOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60 }} aria-hidden="true" />
-            <div
-              style={{
-                position: "absolute",
-                top: "calc(100% + 8px)",
-                right: 0,
-                zIndex: 61,
-                width: 288,
-                maxWidth: "80vw",
-                background: "var(--card)",
-                border: "1px solid var(--line)",
-                borderRadius: 12,
-                boxShadow: "0 12px 32px rgba(9, 16, 33, 0.18)",
-                overflow: "hidden",
-              }}
-            >
+            <div className="ecl-hall-panel">
               <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>Hall — présence</span>
                 <span style={{ fontSize: 12, color: "var(--muted)" }}>
@@ -248,7 +237,9 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
               <div style={{ maxHeight: 320, overflowY: "auto" }}>
                 {poles.map((p) => {
                   const active = p.count > 0;
-                  const names = canSeePresenceNames ? presenceNames[p.label] ?? [] : [];
+                  // Noms révélés pour ce pôle (profils habilités uniquement) :
+                  // un chef ne reçoit que son propre pôle, la DG les reçoit tous.
+                  const names = canSeePresenceNames ? namesByPole[p.label] ?? [] : [];
                   return (
                     <div key={p.label} style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -275,7 +266,6 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
                           )}
                         </span>
                       </div>
-                      {/* Identités réservées aux profils habilités (DG, super-admin). */}
                       {names.length > 0 && (
                         <div style={{ marginTop: 4, marginLeft: 18, fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
                           {names.join(", ")}
@@ -287,7 +277,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
               </div>
               <div style={{ padding: "8px 14px", fontSize: 11, color: "var(--muted)" }}>
                 {canSeePresenceNames
-                  ? "Identités visibles au titre de la Direction générale."
+                  ? "Identités visibles au titre de votre habilitation."
                   : "Effectifs par pôle — sans identités (confidentialité)."}
               </div>
             </div>

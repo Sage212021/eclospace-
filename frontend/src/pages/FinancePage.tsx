@@ -29,7 +29,17 @@ import {
   type ShippingRate,
   type ShippingZone,
 } from "../api/client";
-import { getInvoice, getRoyaltyStatement, listTaxRates, previewInvoiceEmail, sendInvoiceEmail, setTaxRate, type TaxRate } from "../api/client";
+import {
+  getInvoice,
+  getRoyaltyStatement,
+  listTaxRates,
+  previewInvoiceEmail,
+  previewRoyaltyStatementEmail,
+  sendInvoiceEmail,
+  sendRoyaltyStatementEmail,
+  setTaxRate,
+  type TaxRate,
+} from "../api/client";
 import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
 import { EmailModal } from "../components/EmailModal";
@@ -96,6 +106,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [modal, setModal] = useState<FinanceModal | null>(null);
   const [emailInvoice, setEmailInvoice] = useState<Invoice | null>(null);
+  const [emailStatement, setEmailStatement] = useState<RoyaltyStatement | null>(null);
 
   const refresh = async () => {
     const [invoiceList, customerList, expenseList, statementList, shippingRateList, bankAccountList] = await Promise.all([
@@ -387,8 +398,9 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
                   <span className="ecl-row__desc" style={{ margin: 0 }}>dû : <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{statement.balanceDue}</strong></span>
                   <StatusChip label={STATUS_LABELS[statement.status] ?? statement.status} />
                 </div>
-                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
                   <Button variant="view" size="sm" onClick={() => handlePrintStatement(statement.id)}>Imprimer / PDF</Button>
+                  <Button variant="view" size="sm" onClick={() => setEmailStatement(statement)}>Envoyer par e-mail</Button>
                   {canAdminister && statement.status !== "paid" && Number(statement.remaining_balance ?? statement.balanceDue) > 0 && (
                     <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-statement", statement, amount: "" })}>Payer</Button>
                   )}
@@ -466,6 +478,16 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
           loadPreview={(msg) => previewInvoiceEmail(emailInvoice.id, msg)}
           onSend={(to, msg) => sendInvoiceEmail(emailInvoice.id, to, msg)}
           onClose={() => setEmailInvoice(null)}
+        />
+      )}
+
+      {emailStatement && (
+        <EmailModal
+          title={`Envoyer le relevé ${emailStatement.contract.contractNumber}`}
+          initialMessage={`Cher auteur, chère auteure,\n\nVeuillez trouver ci-dessous votre relevé de droits d'auteur pour le contrat ${emailStatement.contract.contractNumber}.\n\nBien cordialement,\nÉclosion Édition`}
+          loadPreview={(msg) => previewRoyaltyStatementEmail(emailStatement.id, msg)}
+          onSend={(to, msg) => sendRoyaltyStatementEmail(emailStatement.id, to, msg)}
+          onClose={() => setEmailStatement(null)}
         />
       )}
 

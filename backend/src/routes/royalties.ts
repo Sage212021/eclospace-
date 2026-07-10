@@ -5,6 +5,14 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { assertPeriodOpen, PeriodClosedError } from "../lib/accountingPeriod.js";
+import { sendMail } from "../lib/mailer.js";
+import { buildRoyaltyStatementEmail } from "../lib/documentEmail.js";
+
+const statementEmailSchema = z.object({
+  to: z.string().email().optional(),
+  message: z.string().max(4000).optional(),
+  preview: z.boolean().optional(),
+});
 
 const statementSchema = z.object({
   period_start: z.string().datetime(),
@@ -141,6 +149,61 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
       const settled = await computeSettledAmount(prisma, id);
       const remainingBalance = Math.round((Number(statement.balanceDue) - settled) * 100) / 100;
       return reply.send({ ...statement, remaining_balance: remainingBalance });
+    },
+  );
+
+  // Envoi d'un relevé de droits par e-mail (Phase A) : le corps de l'e-mail EST
+  // le relevé (rendu serveur). `preview` renvoie l'aperçu sans envoyer. Le
+  // destinataire connu est l'e-mail de l'auteur (partenaire) du contrat.
+  fastify.post(
+    "/api/v1/royalty-statements/:id/email",
+    { preHandler: requirePermission("royalties", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = statementEmailSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const statement = await prisma.royaltyStatement.findUnique({
+        where: { id },
+        include: { contract: { include: { partner: true } }, entries: true },
+      });
+      if (!statement) {
+        return reply.code(404).send({ code: "not_found", message: "Relevé de droits introuvable." });
+      }
+      const settled = await computeSettledAmount(prisma, id);
+      const remaining = Math.round((Number(statement.balanceDue) - settled) * 100) / 100;
+      const built = buildRoyaltyStatementEmail({ ...statement, remaining_balance: remaining }, parsed.data.message ?? "");
+
+      if (parsed.data.preview) {
+        return reply.send({ subject: built.subject, html: built.html, default_to: statement.contract.partner.email ?? null });
+      }
+
+      const to = parsed.data.to?.trim();
+      if (!to) {
+        return reply.code(400).send({ code: "missing_recipient", message: "Renseignez l'adresse e-mail du destinataire." });
+      }
+      let sent: boolean;
+      try {
+        sent = await sendMail({ to, subject: built.subject, text: built.text, html: built.html });
+      } catch (err) {
+        if (err instanceof Error && err.message === "mail_not_configured") {
+          return reply.code(503).send({
+            code: "mail_not_configured",
+            message: "L'envoi d'e-mails n'est pas encore configuré (paramètres SMTP à renseigner sur l'hébergement).",
+          });
+        }
+        throw err;
+      }
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "export",
+        entityType: "royalty_statement_email",
+        entityId: id,
+        newValues: { to, sent },
+        ipAddress: request.ip,
+      });
+      return reply.send({ sent, to });
     },
   );
 

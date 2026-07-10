@@ -124,3 +124,68 @@ export function buildInvoiceEmail(inv: InvoiceForEmail, message: string): Docume
   const text = `${message ? message.trim() + "\n\n" : ""}${label} ${inv.invoiceNumber}\nClient : ${inv.customer.name}\nTotal TTC : ${money(inv.totalTtc as string, cur)}\n\n${HOUSE.legalName} · ${HOUSE.website}`;
   return { subject, html: emailShell({ title: subject, message, body }), text };
 }
+
+const ROYALTY_SOURCE: Record<string, string> = {
+  sales_order_line: "Vente",
+  delivery: "Livraison",
+  return_line: "Retour",
+  consignment_statement: "Dépôt-vente",
+  pos_sale: "Vente au comptoir",
+};
+
+interface StatementForEmail {
+  contract: { contractNumber: string; partner: { firstName: string; lastName: string } };
+  periodStart: Date;
+  periodEnd: Date;
+  totalEarned: unknown;
+  advanceRecouped: unknown;
+  balanceDue: unknown;
+  entries: { sourceType: string; quantity: number; unitBaseAmount: unknown; rateApplied: unknown; amount: unknown }[];
+  remaining_balance?: number;
+}
+
+// E-mail d'un relevé de droits d'auteur : récapitulatif dans le corps.
+export function buildRoyaltyStatementEmail(st: StatementForEmail, message: string): DocumentEmail {
+  const cur = "XAF";
+  const start = new Date(st.periodStart).toLocaleDateString("fr-FR");
+  const end = new Date(st.periodEnd).toLocaleDateString("fr-FR");
+  const author = `${st.contract.partner.firstName} ${st.contract.partner.lastName}`;
+
+  const rows = st.entries
+    .map(
+      (e) => `<tr>
+        <td style="padding:8px 10px;border-bottom:1px solid #e6e9ef">${esc(ROYALTY_SOURCE[e.sourceType] ?? e.sourceType)}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e6e9ef;text-align:right">${e.quantity}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e6e9ef;text-align:right">${money(e.unitBaseAmount as string, cur)}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e6e9ef;text-align:right">${(Number(e.rateApplied) * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e6e9ef;text-align:right">${money(e.amount as string, cur)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const remaining = st.remaining_balance ?? Number(st.balanceDue);
+  const body = `
+    <div style="font-family:Georgia,serif;font-size:20px;margin:0 0 4px">Relevé de droits d'auteur</div>
+    <div style="font-size:13px;color:#4b5563;margin-bottom:16px">Contrat ${esc(st.contract.contractNumber)} · Période du ${esc(start)} au ${esc(end)}</div>
+    <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Bénéficiaire</div>
+    <div style="font-size:15px;font-weight:bold;margin-bottom:14px">${esc(author)}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#16233d;color:#fff">
+        <th style="padding:8px 10px;text-align:left">Nature</th>
+        <th style="padding:8px 10px;text-align:right">Qté</th>
+        <th style="padding:8px 10px;text-align:right">Base unit.</th>
+        <th style="padding:8px 10px;text-align:right">Taux</th>
+        <th style="padding:8px 10px;text-align:right">Droits</th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="5" style="padding:8px 10px">Aucune ligne sur la période.</td></tr>`}</tbody>
+    </table>
+    <table style="margin-top:14px;margin-left:auto;font-size:13px">
+      <tr><td style="padding:3px 10px;color:#4b5563">Droits acquis</td><td style="padding:3px 0;text-align:right">${money(st.totalEarned as string, cur)}</td></tr>
+      <tr><td style="padding:3px 10px;color:#4b5563">À-valoir amorti</td><td style="padding:3px 0;text-align:right">− ${money(st.advanceRecouped as string, cur)}</td></tr>
+      <tr><td style="padding:8px 10px;font-weight:bold;border-top:2px solid #16233d">Restant à payer</td><td style="padding:8px 0;text-align:right;font-weight:bold;border-top:2px solid #16233d">${money(remaining, cur)}</td></tr>
+    </table>`;
+
+  const subject = `Relevé de droits ${st.contract.contractNumber} — ${HOUSE.brand}`;
+  const text = `${message ? message.trim() + "\n\n" : ""}Relevé de droits d'auteur ${st.contract.contractNumber}\nBénéficiaire : ${author}\nRestant à payer : ${money(remaining, cur)}\n\n${HOUSE.legalName} · ${HOUSE.website}`;
+  return { subject, html: emailShell({ title: subject, message, body }), text };
+}

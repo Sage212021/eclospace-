@@ -1158,6 +1158,20 @@ export function getRoyaltyStatement(statementId: string) {
   return request<RoyaltyStatementDetail>(`/api/v1/royalty-statements/${statementId}`);
 }
 
+export function previewRoyaltyStatementEmail(id: string, message: string) {
+  return request<{ subject: string; html: string; default_to: string | null }>(`/api/v1/royalty-statements/${id}/email`, {
+    method: "POST",
+    body: JSON.stringify({ message, preview: true }),
+  });
+}
+
+export function sendRoyaltyStatementEmail(id: string, to: string, message: string) {
+  return request<{ sent: boolean; to: string }>(`/api/v1/royalty-statements/${id}/email`, {
+    method: "POST",
+    body: JSON.stringify({ to, message }),
+  });
+}
+
 export function generateRoyaltyStatement(contractId: string, input: { period_start: string; period_end: string }) {
   return request<RoyaltyStatement>(`/api/v1/contracts/${contractId}/royalty-statements`, { method: "POST", body: JSON.stringify(input) });
 }

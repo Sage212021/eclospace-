@@ -227,21 +227,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
         {hallOpen && (
           <>
             <div onClick={() => setHallOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60 }} aria-hidden="true" />
-            <div
-              style={{
-                position: "absolute",
-                top: "calc(100% + 8px)",
-                right: 0,
-                zIndex: 61,
-                width: 288,
-                maxWidth: "80vw",
-                background: "var(--card)",
-                border: "1px solid var(--line)",
-                borderRadius: 12,
-                boxShadow: "0 12px 32px rgba(9, 16, 33, 0.18)",
-                overflow: "hidden",
-              }}
-            >
+            <div className="ecl-hall-panel">
               <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>Hall — présence</span>
                 <span style={{ fontSize: 12, color: "var(--muted)" }}>

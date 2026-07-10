@@ -54,6 +54,17 @@ export function poleForDepartmentCode(code: string | null | undefined): string |
   return DEPARTMENT_CODE_TO_POLE[code] ?? null;
 }
 
+// Grand pôle de repli pour une personne connectée sans rattachement opérationnel
+// (super-administrateur et comptes sans fiche/département). Sans cela, ces
+// personnes seraient comptées dans le total « en ligne » mais n'apparaîtraient
+// dans aucun pôle du Hall (incohérence « N en ligne » vs tous les pôles vides).
+// L'Administrateur général relève naturellement de l'« Administration ».
+const FALLBACK_POLE = "Administration";
+
+export function poleForPresence(code: string | null | undefined): string {
+  return poleForDepartmentCode(code) ?? FALLBACK_POLE;
+}
+
 // Référence au registre de présence en mémoire, exposée pour la seule route
 // REST de révélation des noms (réservée aux profils habilités). Le canal
 // temps réel, lui, ne diffuse jamais d'identités (voir broadcast ci-dessous).
@@ -149,7 +160,9 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
     if (!user) return next(new Error("unauthorized"));
     socket.data.userId = user.id;
     socket.data.username = user.username;
-    socket.data.pole = poleForDepartmentCode(user.employee?.department?.code ?? null);
+    // Repli « Administration » pour les comptes sans pôle opérationnel (dont le
+    // super-administrateur) : ils restent visibles dans le Hall.
+    socket.data.pole = poleForPresence(user.employee?.department?.code ?? null);
     next();
   });
 

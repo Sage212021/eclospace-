@@ -13,6 +13,7 @@ import {
   type RoleSummary,
 } from "../api/client";
 import { Button } from "../components/Button";
+import { Modal } from "../components/Modal";
 
 const ACTIONS: { key: string; label: string }[] = [
   { key: "consultation", label: "Consulter" },
@@ -29,20 +30,20 @@ export function RightsMatrixPage({ canManage }: { canManage: boolean }) {
   const [message, setMessage] = useState<string | null>(null);
 
   return (
-    <div style={{ padding: 32, maxWidth: 1040 }}>
-      <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Droits & pôles</h1>
-      <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>
+    <div className="ecl-page">
+      <h1 className="ecl-page__title">Droits & pôles</h1>
+      <p className="ecl-page__lead">
         Ajustez les droits de chaque profil (rôle) par module, et gérez les pôles de la maison. Toute modification est
         appliquée immédiatement et journalisée.
       </p>
 
       {error && (
-        <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>
+        <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 12 }}>
           {error}
         </div>
       )}
       {message && (
-        <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>
+        <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 12 }}>
           {message}
         </div>
       )}
@@ -99,8 +100,8 @@ function BulkPoleRights({ onError, onMessage }: { onError: (m: string | null) =>
   const field: React.CSSProperties = { padding: "6px 8px", fontSize: 13, border: "1px solid var(--line)", borderRadius: 6, background: "#fff" };
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Réglage groupé par pôle</div>
+    <div className="ecl-card">
+      <div className="ecl-card__title" style={{ marginBottom: 4 }}>Réglage groupé par pôle</div>
       <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 12px" }}>
         Accordez ou retirez un droit à <strong>tous les rôles d'un pôle</strong> en une seule opération (le rôle
         Administrateur général n'est jamais affecté).
@@ -202,9 +203,9 @@ function RightsMatrix({ canManage, onError, onMessage }: { canManage: boolean; o
   const cell: React.CSSProperties = { padding: "6px 8px", textAlign: "center", borderTop: "1px solid var(--line)" };
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
+    <div className="ecl-card">
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>Droits du profil</span>
+        <span className="ecl-card__title">Droits du profil</span>
         <select
           value={roleId}
           onChange={(e) => setRoleId(e.target.value)}
@@ -271,6 +272,7 @@ function DepartmentsPanel({ canManage, onError, onMessage }: { canManage: boolea
   const [departments, setDepartments] = useState<Department[]>([]);
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDept, setConfirmDept] = useState<Department | null>(null);
 
   const refresh = () => listDepartments().then(setDepartments).catch((e) => onError(e instanceof Error ? e.message : "Échec du chargement des pôles."));
 
@@ -297,13 +299,14 @@ function DepartmentsPanel({ canManage, onError, onMessage }: { canManage: boolea
     }
   }
 
-  async function handleRemove(dept: Department) {
-    if (!window.confirm(`Retirer le pôle « ${dept.name} » ?`)) return;
+  async function confirmRemove() {
+    if (!confirmDept) return;
     onError(null);
     onMessage(null);
     try {
-      await deleteDepartment(dept.id);
-      onMessage(`Pôle « ${dept.name} » retiré.`);
+      await deleteDepartment(confirmDept.id);
+      onMessage(`Pôle « ${confirmDept.name} » retiré.`);
+      setConfirmDept(null);
       await refresh();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Échec du retrait du pôle.");
@@ -311,21 +314,22 @@ function DepartmentsPanel({ canManage, onError, onMessage }: { canManage: boolea
   }
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16, maxWidth: 520 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+    <div className="ecl-card" style={{ maxWidth: 520 }}>
+      <div className="ecl-card__title" style={{ marginBottom: 12 }}>
         Pôles <span style={{ color: "var(--muted)", fontWeight: 400 }}>({departments.length})</span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div className="ecl-list">
         {departments.map((d) => (
-          <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--line)", padding: "4px 0" }}>
-            <span style={{ fontSize: 13 }}>
-              {d.name} <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>{d.code}</span>
+          <div key={d.id} className="ecl-row" style={{ padding: "9px 12px" }}>
+            <span className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="ecl-row__title" style={{ fontWeight: 500 }}>{d.name}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>{d.code}</span>
             </span>
             {canManage && (
               <button
-                onClick={() => handleRemove(d)}
+                onClick={() => setConfirmDept(d)}
                 title="Retirer"
-                style={{ border: "none", background: "transparent", color: "var(--alert)", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 4px" }}
+                style={{ border: "none", background: "transparent", color: "var(--alert)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px" }}
               >
                 ×
               </button>
@@ -334,17 +338,27 @@ function DepartmentsPanel({ canManage, onError, onMessage }: { canManage: boolea
         ))}
       </div>
       {canManage && (
-        <form onSubmit={handleCreate} style={{ display: "flex", gap: 6, marginTop: 12 }}>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Nouveau pôle…"
-            style={{ flex: 1, padding: "6px 8px", fontSize: 13, border: "1px solid var(--line)", borderRadius: 6 }}
-          />
-          <Button variant="add" size="sm" type="submit" disabled={submitting || !name.trim()}>
-            Ajouter
-          </Button>
+        <form onSubmit={handleCreate} style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <div className="ecl-field" style={{ flex: 1 }}>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nouveau pôle…" />
+          </div>
+          <Button variant="add" size="sm" type="submit" disabled={submitting || !name.trim()}>Ajouter</Button>
         </form>
+      )}
+
+      {confirmDept && (
+        <Modal
+          title="Confirmer le retrait du pôle"
+          onClose={() => setConfirmDept(null)}
+          footer={
+            <>
+              <Button variant="view" size="sm" onClick={() => setConfirmDept(null)}>Annuler</Button>
+              <Button variant="danger" size="sm" onClick={confirmRemove}>Retirer</Button>
+            </>
+          }
+        >
+          <p style={{ margin: 0, fontSize: 13 }}>Retirer le pôle « <strong>{confirmDept.name}</strong> » ?</p>
+        </Modal>
       )}
     </div>
   );

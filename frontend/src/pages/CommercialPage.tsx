@@ -14,6 +14,10 @@ import {
   type SalesOrder,
   type StockLocation,
 } from "../api/client";
+import { Card } from "../components/Card";
+import { Modal, Field } from "../components/Modal";
+import { Button } from "../components/Button";
+import { IconCommercial } from "../components/icons";
 
 const CATEGORY_LABELS: Record<CustomerCategory, string> = {
   librairie: "Librairie",
@@ -22,6 +26,14 @@ const CATEGORY_LABELS: Record<CustomerCategory, string> = {
   particulier: "Particulier",
   plateforme: "Plateforme en ligne",
 };
+
+const ZONE_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "— non applicable —" },
+  { value: "yaounde", label: "Yaoundé" },
+  { value: "douala", label: "Douala" },
+  { value: "autres_villes_cameroun", label: "Autres villes (Cameroun)" },
+  { value: "international", label: "International" },
+];
 
 interface CommercialPageProps {
   canManage: boolean;
@@ -37,6 +49,7 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [newCustomer, setNewCustomer] = useState<{ name: string; category: CustomerCategory; zone: string } | null>(null);
 
   const refresh = async () => {
     const [customerList, orderList, isbnList, locationList] = await Promise.all([
@@ -55,13 +68,11 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
     refresh().catch((e) => setError(e.message));
   }, []);
 
-  async function handleCreateCustomer() {
-    const name = window.prompt("Nom du client");
-    if (!name) return;
-    const category = (window.prompt(`Catégorie (${Object.keys(CATEGORY_LABELS).join(", ")})`, "librairie") ?? "librairie") as CustomerCategory;
-    const shippingZoneInput = window.prompt("Zone de livraison (yaounde, douala, autres_villes_cameroun, international) — laisser vide si non applicable", "");
+  async function submitCustomer() {
+    if (!newCustomer || !newCustomer.name.trim()) return;
     try {
-      await createCustomer({ category, name, shipping_zone: shippingZoneInput || undefined });
+      await createCustomer({ category: newCustomer.category, name: newCustomer.name.trim(), shipping_zone: newCustomer.zone || undefined });
+      setNewCustomer(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de la création du client.");
@@ -79,76 +90,88 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
   }
 
   return (
-    <div style={{ padding: 32, maxWidth: 960 }}>
-      <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Commercial, distribution et ventes</h1>
-      {error && (
-        <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>
-          {error}
-        </div>
-      )}
-      {message && (
-        <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>
-          {message}
-        </div>
-      )}
+    <div className="ecl-page" style={{ maxWidth: 960 }}>
+      <h1 className="ecl-page__title">Commercial, distribution et ventes</h1>
+      <p className="ecl-page__lead">Clients, commandes et ventes directes.</p>
 
-      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Clients</div>
-          {canManage && (
-            <button onClick={handleCreateCustomer} style={secondaryButtonStyle}>
-              + Nouveau client
-            </button>
-          )}
-        </div>
-        {customers.map((customer) => (
-          <div key={customer.id} style={{ fontSize: 13, padding: "4px 0" }}>
-            {customer.name} ({CATEGORY_LABELS[customer.category]})
-            {customer.creditLimit && <span style={{ color: "var(--muted)" }}> — plafond {customer.creditLimit}</span>}
-          </div>
-        ))}
-      </div>
+      {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
+      {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
-      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Commandes</div>
-        {orders.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune commande.</p>}
-        {orders.map((order) => (
-          <div key={order.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
-            <span>
-              {order.orderNumber} — {order.customer.name} — {order.status}
-              {order.blockReason && <span style={{ color: "var(--alert)" }}> ({order.blockReason})</span>}
-            </span>
-            {canValidate && order.status === "blocked_credit" && (
-              <button onClick={() => handleApprove(order)} style={secondaryButtonStyle}>
-                Débloquer
-              </button>
-            )}
+      <Card
+        title="Clients"
+        icon={<IconCommercial />}
+        subtitle="Librairies, distributeurs, institutions…"
+        action={canManage ? <Button variant="add" size="sm" onClick={() => setNewCustomer({ name: "", category: "librairie", zone: "" })}>+ Client</Button> : undefined}
+      >
+        {customers.length === 0 ? (
+          <Empty>Aucun client.</Empty>
+        ) : (
+          <div className="ecl-list">
+            {customers.map((customer) => (
+              <div key={customer.id} className="ecl-row">
+                <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span className="ecl-row__title">{customer.name}</span>
+                  <StatusChip label={CATEGORY_LABELS[customer.category]} />
+                </div>
+                {customer.creditLimit && <span className="ecl-row__desc" style={{ margin: 0 }}>plafond <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{customer.creditLimit}</strong></span>}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        )}
+      </Card>
+
+      <Card title="Commandes" icon={<IconCommercial />} subtitle="Suivi et déblocage des commandes.">
+        {orders.length === 0 ? (
+          <Empty>Aucune commande.</Empty>
+        ) : (
+          <div className="ecl-list">
+            {orders.map((order) => (
+              <div key={order.id} className="ecl-row">
+                <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{order.orderNumber}</span>
+                  <span className="ecl-row__desc" style={{ margin: 0 }}>{order.customer.name}</span>
+                  <StatusChip label={order.status} />
+                  {order.blockReason && <span style={{ color: "var(--alert)", fontSize: 12 }}>{order.blockReason}</span>}
+                </div>
+                {canValidate && order.status === "blocked_credit" && (
+                  <Button variant="add" size="sm" onClick={() => handleApprove(order)}>Débloquer</Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {canManage && (
         <>
-          <NewOrderForm
-            customers={customers}
-            isbns={isbns}
-            locations={locations}
-            onCreated={(msg) => {
-              setMessage(msg);
-              refresh();
-            }}
-            onError={setError}
-          />
-          <PosSaleForm
-            isbns={isbns}
-            locations={locations}
-            onCreated={() => {
-              setMessage("Vente au comptoir enregistrée.");
-              refresh();
-            }}
-            onError={setError}
-          />
+          <NewOrderForm customers={customers} isbns={isbns} locations={locations} onCreated={(msg) => { setMessage(msg); refresh(); }} onError={setError} />
+          <PosSaleForm isbns={isbns} locations={locations} onCreated={() => { setMessage("Vente au comptoir enregistrée."); refresh(); }} onError={setError} />
         </>
+      )}
+
+      {newCustomer && (
+        <Modal
+          title="Nouveau client"
+          onClose={() => setNewCustomer(null)}
+          footer={
+            <>
+              <Button variant="view" size="sm" onClick={() => setNewCustomer(null)}>Annuler</Button>
+              <Button variant="add" size="sm" onClick={submitCustomer}>Créer</Button>
+            </>
+          }
+        >
+          <Field label="Nom du client"><input value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} autoFocus /></Field>
+          <Field label="Catégorie">
+            <select value={newCustomer.category} onChange={(e) => setNewCustomer({ ...newCustomer, category: e.target.value as CustomerCategory })}>
+              {Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label="Zone de livraison">
+            <select value={newCustomer.zone} onChange={(e) => setNewCustomer({ ...newCustomer, zone: e.target.value })}>
+              {ZONE_OPTIONS.map((z) => <option key={z.value} value={z.value}>{z.label}</option>)}
+            </select>
+          </Field>
+        </Modal>
       )}
     </div>
   );
@@ -199,52 +222,36 @@ function NewOrderForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Nouvelle commande</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-        <label style={{ fontSize: 12 }}>
-          Client
-          <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} style={inputStyle}>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ fontSize: 12 }}>
-          Référence (ISBN)
-          <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)} style={inputStyle}>
-            {isbns.map((isbn) => (
-              <option key={isbn.id} value={isbn.id}>
-                {isbn.isbn13} — {isbn.manuscript?.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ fontSize: 12 }}>
-          Lieu d'expédition
-          <select value={locationId} onChange={(e) => setLocationId(e.target.value)} style={inputStyle}>
-            {locations.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ fontSize: 12 }}>
-          Quantité
-          <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} style={inputStyle} />
-        </label>
-        <label style={{ fontSize: 12 }}>
-          Prix unitaire
-          <input type="number" min={0} value={unitPrice} onChange={(e) => setUnitPrice(Number(e.target.value))} style={inputStyle} />
-        </label>
-      </div>
-      <button type="submit" style={{ ...secondaryButtonStyle, marginTop: 10, background: "var(--eclosion)", color: "#fff", border: "none" }}>
-        Créer la commande
-      </button>
-    </form>
+    <Card title="Nouvelle commande" icon={<IconCommercial />} subtitle="Créer une commande client.">
+      <form onSubmit={handleSubmit}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+          <Field label="Client">
+            <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+              {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Référence (ISBN)">
+            <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)}>
+              {isbns.map((isbn) => <option key={isbn.id} value={isbn.id}>{isbn.isbn13} — {isbn.manuscript?.title}</option>)}
+            </select>
+          </Field>
+          <Field label="Lieu d'expédition">
+            <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+              {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Quantité">
+            <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} />
+          </Field>
+          <Field label="Prix unitaire">
+            <input type="number" min={0} value={unitPrice} onChange={(e) => setUnitPrice(Number(e.target.value))} />
+          </Field>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <Button variant="add" size="md" type="submit">Créer la commande</Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 
@@ -281,59 +288,53 @@ function PosSaleForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Vente au comptoir / salon</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-        <label style={{ fontSize: 12 }}>
-          Référence (ISBN)
-          <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)} style={inputStyle}>
-            {isbns.map((isbn) => (
-              <option key={isbn.id} value={isbn.id}>
-                {isbn.isbn13} — {isbn.manuscript?.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ fontSize: 12 }}>
-          Lieu
-          <select value={locationId} onChange={(e) => setLocationId(e.target.value)} style={inputStyle}>
-            {locations.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ fontSize: 12 }}>
-          Quantité
-          <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} style={inputStyle} />
-        </label>
-        <label style={{ fontSize: 12 }}>
-          Prix unitaire
-          <input type="number" min={0} value={unitPrice} onChange={(e) => setUnitPrice(Number(e.target.value))} style={inputStyle} />
-        </label>
-        <label style={{ fontSize: 12 }}>
-          Encaissement
-          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as typeof paymentMethod)} style={inputStyle}>
-            <option value="cash">Espèces</option>
-            <option value="card">Carte</option>
-            <option value="mobile_money">Mobile money</option>
-          </select>
-        </label>
-      </div>
-      <button type="submit" style={{ ...secondaryButtonStyle, marginTop: 10, background: "var(--eclosion)", color: "#fff", border: "none" }}>
-        Encaisser
-      </button>
-    </form>
+    <Card title="Vente au comptoir / salon" icon={<IconCommercial />} subtitle="Encaisser une vente directe.">
+      <form onSubmit={handleSubmit}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+          <Field label="Référence (ISBN)">
+            <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)}>
+              {isbns.map((isbn) => <option key={isbn.id} value={isbn.id}>{isbn.isbn13} — {isbn.manuscript?.title}</option>)}
+            </select>
+          </Field>
+          <Field label="Lieu">
+            <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+              {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Quantité">
+            <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} />
+          </Field>
+          <Field label="Prix unitaire">
+            <input type="number" min={0} value={unitPrice} onChange={(e) => setUnitPrice(Number(e.target.value))} />
+          </Field>
+          <Field label="Encaissement">
+            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as typeof paymentMethod)}>
+              <option value="cash">Espèces</option>
+              <option value="card">Carte</option>
+              <option value="mobile_money">Mobile money</option>
+            </select>
+          </Field>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <Button variant="add" size="md" type="submit">Encaisser</Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 
-const inputStyle: React.CSSProperties = { display: "block", width: "100%", padding: 6, marginTop: 4, fontSize: 13 };
-const secondaryButtonStyle: React.CSSProperties = {
-  background: "#fff",
-  border: "1px solid var(--line)",
-  borderRadius: 6,
-  padding: "6px 12px",
-  fontSize: 12,
-  cursor: "pointer",
-};
+function StatusChip({ label }: { label: string }) {
+  return (
+    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>
+      {label}
+    </span>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>{children}</p>;
+}
+
+function bannerStyle(bg: string, color: string): React.CSSProperties {
+  return { background: bg, color, borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 12 };
+}

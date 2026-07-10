@@ -457,3 +457,20 @@ Précision de l'opérateur : le « Chef de département » raisonne au niveau de
 - Vérifié au navigateur : le chef de la Correction (→ Éditorial) voit tout l'Éditorial, dont un collègue du Secrétariat, et **pas** la Production. **164 tests passent.**
 
 **Note d'exploitation** : pour qu'un chef voie son pôle, l'administration lui attribue le rôle « Chef de département » et rattache sa fiche employé à un département (le rattachement département → grand pôle est automatique).
+
+### 10/07/2026 (suite) — Habillage « soft » des pages opérationnelles
+
+Retour opérateur : certaines pages (Rapports, Finance, RH…) faisaient « données brutes dans un cadre », pas une interface soignée. Refonte visuelle de toutes les pages concernées, dans un style moderne, sans changer le fonctionnement.
+
+**Briques réutilisables** : `<Card>` (carte premium : coins arrondis, ombre douce, marges responsives, en-tête icône + titre + sous-titre + action), `<Modal>`/`<Field>` (fenêtre intégrée à l'app remplaçant les pop-up du navigateur), et des styles CSS (`.ecl-page`, `.ecl-card`, `.ecl-list`/`.ecl-row` rangées aérées, `.ecl-tech` repli « détail technique », `.ecl-modal`, `.ecl-field`).
+
+**Pages refondues (10)** : Rapports et indicateurs, Finance & comptabilité, Mes lectures, Direction générale, Stock & magasin, Commercial & ventes, Ressources humaines, Domaines & collections, Droits & pôles, Utilisateurs & rôles.
+
+**Améliorations transverses** :
+- Listes aérées (rangées arrondies + survol) au lieu de lignes collées séparées par un filet.
+- Jargon technique (codes, formules SQL des indicateurs) replié dans un « Détail technique » discret.
+- Boutons premium (dorés/marine/contour/rouge) partout, pastilles de statut/domaine/priorité.
+- **Toutes** les saisies par pop-up du navigateur (`window.prompt/alert/confirm`) remplacées par des fenêtres intégrées (voile flouté, fermeture Échap). Plus aucun dialogue natif dans les pages.
+- Marges responsives : confortable sur téléphone (vérifié sur écran 390 px, sans débordement horizontal).
+
+**Prochaine étape :** retours de l'opérateur.

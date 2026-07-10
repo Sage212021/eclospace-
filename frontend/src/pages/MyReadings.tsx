@@ -6,6 +6,14 @@ import {
   type EvaluationCriterion,
   type ReadingAssignment,
 } from "../api/client";
+import { Button } from "../components/Button";
+import { Field } from "../components/Modal";
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: "À évaluer",
+  submitted: "Remise",
+  cancelled: "Annulée",
+};
 
 // Vue lecteur du comité de lecture (Ch. 7 §7.3) : missions attribuées et
 // formulaire de notation pondérée (Ch. 7 §7.4-7.5).
@@ -21,32 +29,36 @@ export function MyReadings() {
   }, []);
 
   return (
-    <div style={{ padding: 32, maxWidth: 640 }}>
-      <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20 }}>Mes lectures</h1>
+    <div className="ecl-page" style={{ maxWidth: 680 }}>
+      <h1 className="ecl-page__title">Mes lectures</h1>
+      <p className="ecl-page__lead">Vos missions de lecture et la remise de vos évaluations.</p>
+
       {message && (
-        <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginBottom: 12 }}>
+        <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 12 }}>
           {message}
         </div>
       )}
       {assignments.length === 0 && (
-        <p style={{ color: "var(--muted)" }}>Aucune mission en cours — les nouvelles affectations apparaîtront ici.</p>
+        <p style={{ color: "var(--muted)", marginTop: 16 }}>Aucune mission en cours — les nouvelles affectations apparaîtront ici.</p>
       )}
       {assignments.map((assignment) => (
-        <div key={assignment.id} style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginBottom: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{assignment.manuscript?.title}</div>
-              <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                Échéance : {new Date(assignment.dueAt).toLocaleDateString("fr-FR")} · Statut : {assignment.status}
+        <section key={assignment.id} className="ecl-card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14.5, color: "var(--ink)" }}>{assignment.manuscript?.title}</div>
+              <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <span>Échéance : {new Date(assignment.dueAt).toLocaleDateString("fr-FR")}</span>
+                <StatusChip label={STATUS_LABELS[assignment.status] ?? assignment.status} />
               </div>
             </div>
             {assignment.status === "pending" && (
-              <button
+              <Button
+                variant={openAssignmentId === assignment.id ? "view" : "add"}
+                size="sm"
                 onClick={() => setOpenAssignmentId(openAssignmentId === assignment.id ? null : assignment.id)}
-                style={{ background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}
               >
-                Évaluer
-              </button>
+                {openAssignmentId === assignment.id ? "Fermer" : "Évaluer"}
+              </Button>
             )}
           </div>
           {openAssignmentId === assignment.id && (
@@ -59,7 +71,7 @@ export function MyReadings() {
               }}
             />
           )}
-        </div>
+        </section>
       ))}
     </div>
   );
@@ -101,14 +113,14 @@ function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; o
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+    <form onSubmit={handleSubmit} style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 16 }}>
       {criteria.map((criterion) => (
-        <div key={criterion.id} style={{ marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+        <div key={criterion.id} style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
             <span>
               {criterion.label} <span style={{ color: "var(--muted)" }}>(coef. {criterion.coefficient})</span>
             </span>
-            <span style={{ fontFamily: "var(--font-mono)" }}>{scores[criterion.id] ?? 0}/10</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{scores[criterion.id] ?? 0}/10</span>
           </div>
           <input
             type="range"
@@ -122,14 +134,13 @@ function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; o
         </div>
       ))}
 
-      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 14px", padding: "8px 12px", background: "var(--paper)", borderRadius: 8 }}>
         Score global indicatif (recalculé et validé par le serveur à la remise) :{" "}
         <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{livePreview.toFixed(2)}</strong>
       </div>
 
-      <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
-        Recommandation
-        <select value={recommendation} onChange={(e) => setRecommendation(e.target.value as typeof recommendation)} style={{ display: "block", padding: 6, marginTop: 4 }}>
+      <Field label="Recommandation">
+        <select value={recommendation} onChange={(e) => setRecommendation(e.target.value as typeof recommendation)}>
           <option value="accept">Acceptation sans modification</option>
           <option value="accept_minor">Acceptation sous réserve de corrections mineures</option>
           <option value="accept_major">Acceptation sous réserve de corrections majeures</option>
@@ -137,26 +148,27 @@ function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; o
           <option value="new_expertise">Nouvelle expertise</option>
           <option value="reject">Refus motivé</option>
         </select>
-      </label>
+      </Field>
 
-      <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
-        Appréciation générale
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          rows={3}
-          style={{ display: "block", width: "100%", padding: 8, marginTop: 4, fontFamily: "inherit", fontSize: 13 }}
-        />
-      </label>
+      <div style={{ marginTop: 12 }}>
+        <Field label="Appréciation générale">
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} />
+        </Field>
+      </div>
 
-      {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
+      {error && <p style={{ color: "var(--alert)", fontSize: 12.5, marginTop: 10 }}>{error}</p>}
 
-      <button
-        type="submit"
-        style={{ background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-      >
-        Remettre mon rapport
-      </button>
+      <div style={{ marginTop: 14 }}>
+        <Button variant="add" size="md" type="submit">Remettre mon rapport</Button>
+      </div>
     </form>
+  );
+}
+
+function StatusChip({ label }: { label: string }) {
+  return (
+    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>
+      {label}
+    </span>
   );
 }

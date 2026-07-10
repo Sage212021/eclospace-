@@ -26,6 +26,10 @@ import {
   type Employee,
   type EmployeeStatus,
 } from "../api/client";
+import { Card } from "../components/Card";
+import { Modal, Field } from "../components/Modal";
+import { Button } from "../components/Button";
+import { IconAdmin } from "../components/icons";
 
 const STATUS_LABELS: Record<EmployeeStatus, string> = {
   salarie: "Salarié",
@@ -56,6 +60,16 @@ interface HrPageProps {
   canWriteConfidential: boolean;
 }
 
+type HrModal =
+  | { kind: "employee"; firstName: string; lastName: string; position: string; departmentId: string }
+  | { kind: "mobility"; employee: Employee; position: string }
+  | { kind: "departure"; employee: Employee; date: string }
+  | { kind: "view-confidential"; employee: Employee; baseSalary: string; notes: string }
+  | { kind: "edit-confidential"; employee: Employee; baseSalary: string }
+  | { kind: "grant-role"; employee: Employee; roleCode: string; justification: string }
+  | { kind: "absence"; employeeId: string; type: AbsenceType; from: string; to: string }
+  | { kind: "review"; label: string };
+
 // Ch. 19 : Ressources humaines — dossier collaborateur, cycle de vie du
 // compte, absences, revue des accès (couche transverse du Lot 6).
 export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential }: HrPageProps) {
@@ -67,6 +81,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   const [reviewItems, setReviewItems] = useState<AccessReviewItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [modal, setModal] = useState<HrModal | null>(null);
 
   const refresh = async () => {
     const [employeeList, absenceList] = await Promise.all([listEmployees(), listAbsences()]);
@@ -91,327 +106,343 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
     listAccessReviewItems(selectedReviewId).then(setReviewItems).catch((e) => setError(e.message));
   }, [selectedReviewId]);
 
-  async function handleCreateEmployee() {
-    const firstName = window.prompt("Prénom");
-    if (!firstName) return;
-    const lastName = window.prompt("Nom");
-    if (!lastName) return;
-    const position = window.prompt("Poste (laisser vide si non applicable)", "") || undefined;
-    const departmentId = window.prompt("ID département (laisser vide si non applicable)", "") || undefined;
+  function fail(err: unknown, fallback: string) {
+    setError(err instanceof Error ? err.message : fallback);
+  }
+
+  async function submitEmployee() {
+    if (modal?.kind !== "employee" || !modal.firstName.trim() || !modal.lastName.trim()) return;
     try {
-      await createEmployee({ first_name: firstName, last_name: lastName, position, department_id: departmentId });
+      await createEmployee({ first_name: modal.firstName.trim(), last_name: modal.lastName.trim(), position: modal.position || undefined, department_id: modal.departmentId || undefined });
       setMessage("Dossier collaborateur créé.");
+      setModal(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la création du dossier.");
+      fail(err, "Échec de la création du dossier.");
     }
   }
 
-  async function handleMobility(employee: Employee) {
-    const position = window.prompt("Nouveau poste", employee.position ?? "");
-    if (position === null) return;
+  async function submitMobility() {
+    if (modal?.kind !== "mobility") return;
     try {
-      await updateEmployee(employee.id, { position });
+      await updateEmployee(modal.employee.id, { position: modal.position });
       setMessage("Mobilité enregistrée.");
+      setModal(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la mise à jour.");
+      fail(err, "Échec de la mise à jour.");
     }
   }
 
-  async function handleDeparture(employee: Employee) {
-    const date = window.prompt("Date de départ (AAAA-MM-JJ)", new Date().toISOString().slice(0, 10));
-    if (!date) return;
+  async function submitDeparture() {
+    if (modal?.kind !== "departure" || !modal.date) return;
     try {
-      await setEmployeeDeparture(employee.id, new Date(date).toISOString());
+      await setEmployeeDeparture(modal.employee.id, new Date(modal.date).toISOString());
       setMessage("Date de départ enregistrée.");
+      setModal(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'enregistrement du départ.");
+      fail(err, "Échec de l'enregistrement du départ.");
+    }
+  }
+
+  async function openConfidential(employee: Employee) {
+    try {
+      const c = await getEmployeeConfidential(employee.id);
+      setModal({ kind: "view-confidential", employee, baseSalary: c.baseSalary != null ? String(c.baseSalary) : "Non renseigné", notes: c.notes ?? "—" });
+    } catch (err) {
+      fail(err, "Échec de la consultation.");
+    }
+  }
+
+  async function submitEditConfidential() {
+    if (modal?.kind !== "edit-confidential") return;
+    try {
+      await updateEmployeeConfidential(modal.employee.id, { base_salary: modal.baseSalary ? Number(modal.baseSalary) : undefined });
+      setMessage("Données confidentielles mises à jour.");
+      setModal(null);
+    } catch (err) {
+      fail(err, "Échec de la mise à jour.");
+    }
+  }
+
+  async function submitGrantRole() {
+    if (modal?.kind !== "grant-role" || !modal.employee.user || !modal.roleCode.trim() || !modal.justification.trim()) return;
+    try {
+      await grantRole(modal.employee.user.id, modal.roleCode.trim(), modal.justification.trim());
+      setMessage("Rôle attribué.");
+      setModal(null);
+    } catch (err) {
+      fail(err, "Échec de l'attribution du rôle.");
+    }
+  }
+
+  async function submitAbsence() {
+    if (modal?.kind !== "absence" || !modal.employeeId || !modal.from || !modal.to) return;
+    try {
+      await createAbsence({ employee_id: modal.employeeId, type: modal.type, from_date: new Date(modal.from).toISOString(), to_date: new Date(modal.to).toISOString() });
+      setMessage("Demande d'absence enregistrée.");
+      setModal(null);
+      await refresh();
+    } catch (err) {
+      fail(err, "Échec de l'enregistrement.");
+    }
+  }
+
+  async function submitReview() {
+    if (modal?.kind !== "review" || !modal.label.trim()) return;
+    try {
+      await createAccessReview(modal.label.trim());
+      setMessage("Campagne de revue lancée.");
+      setModal(null);
+      await refresh();
+    } catch (err) {
+      fail(err, "Échec du lancement de la campagne.");
     }
   }
 
   async function handleSuspend(employee: Employee) {
-    try {
-      await suspendEmployee(employee.id);
-      setMessage("Compte suspendu.");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la suspension.");
-    }
+    try { await suspendEmployee(employee.id); setMessage("Compte suspendu."); await refresh(); } catch (err) { fail(err, "Échec de la suspension."); }
   }
-
   async function handleReinstate(employee: Employee) {
-    try {
-      await reinstateEmployee(employee.id);
-      setMessage("Compte réactivé.");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la réactivation.");
-    }
+    try { await reinstateEmployee(employee.id); setMessage("Compte réactivé."); await refresh(); } catch (err) { fail(err, "Échec de la réactivation."); }
   }
-
-  async function handleViewConfidential(employee: Employee) {
-    try {
-      const confidential = await getEmployeeConfidential(employee.id);
-      window.alert(`Salaire de base : ${confidential.baseSalary ?? "non renseigné"}\nNotes : ${confidential.notes ?? "—"}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la consultation.");
-    }
-  }
-
-  async function handleEditConfidential(employee: Employee) {
-    const baseSalary = window.prompt("Salaire de base");
-    if (baseSalary === null) return;
-    try {
-      await updateEmployeeConfidential(employee.id, { base_salary: baseSalary ? Number(baseSalary) : undefined });
-      setMessage("Données confidentielles mises à jour.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la mise à jour.");
-    }
-  }
-
-  async function handleGrantRole(employee: Employee) {
-    if (!employee.user) {
-      setError("Ce dossier n'a pas de compte utilisateur associé.");
-      return;
-    }
-    const roleCode = window.prompt("Code du rôle à attribuer");
-    if (!roleCode) return;
-    const justification = window.prompt("Justification");
-    if (!justification) return;
-    try {
-      await grantRole(employee.user.id, roleCode, justification);
-      setMessage("Rôle attribué.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'attribution du rôle.");
-    }
-  }
-
-  async function handleCreateAbsence() {
-    const employeeId = window.prompt("ID du collaborateur");
-    if (!employeeId) return;
-    const type = (window.prompt("Type (conge, maladie, mission, teletravail)", "conge") ?? "conge") as AbsenceType;
-    const fromDate = window.prompt("Du (AAAA-MM-JJ)");
-    const toDate = window.prompt("Au (AAAA-MM-JJ)");
-    if (!fromDate || !toDate) return;
-    try {
-      await createAbsence({
-        employee_id: employeeId,
-        type,
-        from_date: new Date(fromDate).toISOString(),
-        to_date: new Date(toDate).toISOString(),
-      });
-      setMessage("Demande d'absence enregistrée.");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'enregistrement.");
-    }
-  }
-
   async function handleDecideAbsence(absence: Absence, decision: "validee" | "refusee") {
-    try {
-      await decideAbsence(absence.id, decision);
-      setMessage(decision === "validee" ? "Absence validée." : "Absence refusée.");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la décision.");
-    }
+    try { await decideAbsence(absence.id, decision); setMessage(decision === "validee" ? "Absence validée." : "Absence refusée."); await refresh(); } catch (err) { fail(err, "Échec de la décision."); }
   }
-
-  async function handleCreateReview() {
-    const label = window.prompt("Libellé de la campagne de revue des accès");
-    if (!label) return;
-    try {
-      await createAccessReview(label);
-      setMessage("Campagne de revue lancée.");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec du lancement de la campagne.");
-    }
-  }
-
   async function handleDecideReviewItem(item: AccessReviewItem, decision: "confirme" | "anomalie_signalee") {
-    try {
-      await decideAccessReviewItem(item.id, decision);
-      setMessage("Décision enregistrée.");
-      setReviewItems(await listAccessReviewItems(selectedReviewId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'enregistrement.");
-    }
+    try { await decideAccessReviewItem(item.id, decision); setMessage("Décision enregistrée."); setReviewItems(await listAccessReviewItems(selectedReviewId)); } catch (err) { fail(err, "Échec de l'enregistrement."); }
   }
 
   return (
-    <div style={{ padding: 32, maxWidth: 1040 }}>
-      <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>Ressources humaines</h1>
-      {error && (
-        <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>
-          {error}
-        </div>
-      )}
-      {message && (
-        <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>
-          {message}
-        </div>
-      )}
+    <div className="ecl-page">
+      <h1 className="ecl-page__title">Ressources humaines</h1>
+      <p className="ecl-page__lead">Dossiers collaborateurs, absences et revue des habilitations.</p>
 
-      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          {/* Ch. 19 §19.2 */}
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Dossiers collaborateurs</div>
-          {canManage && (
-            <button onClick={handleCreateEmployee} style={secondaryButtonStyle}>
-              + Collaborateur
-            </button>
-          )}
-        </div>
-        {employees.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun collaborateur.</p>}
-        {employees.map((employee) => (
-          <div key={employee.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
-            <span>
-              {employee.firstName} {employee.lastName} — {STATUS_LABELS[employee.status]}
-              {employee.position ? ` — ${employee.position}` : ""}
-              {employee.department ? ` — ${employee.department.name}` : ""}
-              {employee.departureDate && <span style={{ color: "var(--late, #C4661F)" }}> — départ : {employee.departureDate.slice(0, 10)}</span>}
-              {" — solde congés : "}
-              <span style={{ fontFamily: "var(--font-mono, monospace)" }}>{employee.leaveBalanceDays}</span>
-            </span>
-            <div style={{ display: "flex", gap: 6 }}>
-              {canManage && (
-                <button onClick={() => handleMobility(employee)} style={secondaryButtonStyle}>
-                  Mobilité
-                </button>
-              )}
-              {canAdminister && !employee.departureDate && (
-                <button onClick={() => handleDeparture(employee)} style={secondaryButtonStyle}>
-                  Départ
-                </button>
-              )}
-              {canAdminister && employee.user?.status === "active" && (
-                <button onClick={() => handleSuspend(employee)} style={secondaryButtonStyle}>
-                  Suspendre
-                </button>
-              )}
-              {canAdminister && employee.user?.status === "suspended" && (
-                <button onClick={() => handleReinstate(employee)} style={secondaryButtonStyle}>
-                  Réactiver
-                </button>
-              )}
-              {canReadConfidential && (
-                <button onClick={() => handleViewConfidential(employee)} style={secondaryButtonStyle}>
-                  Confidentiel
-                </button>
-              )}
-              {canWriteConfidential && (
-                <button onClick={() => handleEditConfidential(employee)} style={secondaryButtonStyle}>
-                  Modifier confidentiel
-                </button>
-              )}
-              {canManageUsers && (
-                <button onClick={() => handleGrantRole(employee)} style={secondaryButtonStyle}>
-                  Attribuer un rôle
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+      {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
+      {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
-      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          {/* Ch. 19 §19.5 */}
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Absences</div>
-          {canManage && (
-            <button onClick={handleCreateAbsence} style={secondaryButtonStyle}>
-              + Demande
-            </button>
-          )}
-        </div>
-        {absences.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune demande.</p>}
-        {absences.map((absence) => (
-          <div key={absence.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
-            <span>
-              {ABSENCE_TYPE_LABELS[absence.type]} — {absence.fromDate.slice(0, 10)} au {absence.toDate.slice(0, 10)} — {ABSENCE_STATUS_LABELS[absence.status]}
-            </span>
-            {canValidateAbsence && absence.status === "en_attente" && (
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => handleDecideAbsence(absence, "validee")} style={secondaryButtonStyle}>
-                  Valider
-                </button>
-                <button onClick={() => handleDecideAbsence(absence, "refusee")} style={secondaryButtonStyle}>
-                  Refuser
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {canManage && (
-        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-          {/* Ch. 19 §19.4 */}
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Anomalies d'accès</div>
-          {anomalies.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune anomalie détectée.</p>}
-          {anomalies.map((anomaly, i) => (
-            <div key={i} style={{ borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13, color: "var(--late, #C4661F)" }}>
-              {anomaly.username} — {anomaly.detail}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {canManage && (
-        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            {/* Ch. 19 §19.4 */}
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Revue périodique des habilitations</div>
-            {canAdminister && (
-              <button onClick={handleCreateReview} style={secondaryButtonStyle}>
-                + Lancer une campagne
-              </button>
-            )}
-          </div>
-          <label style={{ fontSize: 12 }}>
-            Campagne
-            <select value={selectedReviewId} onChange={(e) => setSelectedReviewId(e.target.value)} style={inputStyle}>
-              <option value="">— sélectionner —</option>
-              {reviews.map((review) => (
-                <option key={review.id} value={review.id}>
-                  {review.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {reviewItems.map((item) => (
-            <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 13 }}>
-              <span>
-                {item.employee.firstName} {item.employee.lastName} — réviseur : {item.reviewer.firstName} {item.reviewer.lastName}
-                {item.decision && ` — ${item.decision === "confirme" ? "Confirmé" : "Anomalie signalée"}`}
-              </span>
-              {!item.decision && (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => handleDecideReviewItem(item, "confirme")} style={secondaryButtonStyle}>
-                    Confirmer
-                  </button>
-                  <button onClick={() => handleDecideReviewItem(item, "anomalie_signalee")} style={secondaryButtonStyle}>
-                    Signaler
-                  </button>
+      {/* Ch. 19 §19.2 — Dossiers collaborateurs */}
+      <Card
+        title="Dossiers collaborateurs"
+        icon={<IconAdmin />}
+        subtitle="Statut, poste, congés et cycle de vie du compte."
+        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "employee", firstName: "", lastName: "", position: "", departmentId: "" })}>+ Collaborateur</Button> : undefined}
+      >
+        {employees.length === 0 ? (
+          <Empty>Aucun collaborateur.</Empty>
+        ) : (
+          <div className="ecl-list">
+            {employees.map((employee) => (
+              <div key={employee.id} className="ecl-row" style={{ flexWrap: "wrap", gap: 10 }}>
+                <div className="ecl-row__main">
+                  <div className="ecl-row__title" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    {employee.firstName} {employee.lastName}
+                    <StatusChip label={STATUS_LABELS[employee.status]} />
+                  </div>
+                  <div className="ecl-row__desc">
+                    {[employee.position, employee.department?.name].filter(Boolean).join(" · ")}
+                    {employee.department || employee.position ? " · " : ""}
+                    solde congés : <span style={{ fontFamily: "var(--font-mono)" }}>{employee.leaveBalanceDays}</span>
+                    {employee.departureDate && <span style={{ color: "var(--amber)" }}> · départ : {employee.departureDate.slice(0, 10)}</span>}
+                  </div>
                 </div>
-              )}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, position: employee.position ?? "" })}>Mobilité</Button>}
+                  {canAdminister && !employee.departureDate && <Button variant="view" size="sm" onClick={() => setModal({ kind: "departure", employee, date: new Date().toISOString().slice(0, 10) })}>Départ</Button>}
+                  {canAdminister && employee.user?.status === "active" && <Button variant="danger" size="sm" onClick={() => handleSuspend(employee)}>Suspendre</Button>}
+                  {canAdminister && employee.user?.status === "suspended" && <Button variant="add" size="sm" onClick={() => handleReinstate(employee)}>Réactiver</Button>}
+                  {canReadConfidential && <Button variant="view" size="sm" onClick={() => openConfidential(employee)}>Confidentiel</Button>}
+                  {canWriteConfidential && <Button variant="edit" size="sm" onClick={() => setModal({ kind: "edit-confidential", employee, baseSalary: "" })}>Modifier conf.</Button>}
+                  {canManageUsers && <Button variant="edit" size="sm" onClick={() => setModal({ kind: "grant-role", employee, roleCode: "", justification: "" })}>Attribuer un rôle</Button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Ch. 19 §19.5 — Absences */}
+      <Card
+        title="Absences"
+        icon={<IconAdmin />}
+        subtitle="Congés, maladies, missions et télétravail."
+        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "absence", employeeId: employees[0]?.id ?? "", type: "conge", from: "", to: "" })}>+ Demande</Button> : undefined}
+      >
+        {absences.length === 0 ? (
+          <Empty>Aucune demande.</Empty>
+        ) : (
+          <div className="ecl-list">
+            {absences.map((absence) => (
+              <div key={absence.id} className="ecl-row">
+                <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span className="ecl-row__title">{ABSENCE_TYPE_LABELS[absence.type]}</span>
+                  <span className="ecl-row__desc" style={{ margin: 0 }}>{absence.fromDate.slice(0, 10)} → {absence.toDate.slice(0, 10)}</span>
+                  <StatusChip label={ABSENCE_STATUS_LABELS[absence.status]} />
+                </div>
+                {canValidateAbsence && absence.status === "en_attente" && (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <Button variant="add" size="sm" onClick={() => handleDecideAbsence(absence, "validee")}>Valider</Button>
+                    <Button variant="danger" size="sm" onClick={() => handleDecideAbsence(absence, "refusee")}>Refuser</Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Ch. 19 §19.4 — Anomalies d'accès */}
+      {canManage && (
+        <Card title="Anomalies d'accès" icon={<IconAdmin />} subtitle="Écarts détectés entre comptes et habilitations.">
+          {anomalies.length === 0 ? (
+            <Empty>Aucune anomalie détectée.</Empty>
+          ) : (
+            <div className="ecl-list">
+              {anomalies.map((anomaly, i) => (
+                <div key={i} className="ecl-row">
+                  <span className="ecl-row__title">{anomaly.username}</span>
+                  <span style={{ color: "var(--amber)", fontSize: 12.5 }}>{anomaly.detail}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </Card>
+      )}
+
+      {/* Ch. 19 §19.4 — Revue périodique des habilitations */}
+      {canManage && (
+        <Card
+          title="Revue périodique des habilitations"
+          icon={<IconAdmin />}
+          subtitle="Campagnes de vérification des accès."
+          action={canAdminister ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "review", label: "" })}>+ Campagne</Button> : undefined}
+        >
+          <div className="ecl-field" style={{ maxWidth: 360 }}>
+            <label>Campagne</label>
+            <select value={selectedReviewId} onChange={(e) => setSelectedReviewId(e.target.value)}>
+              <option value="">— sélectionner —</option>
+              {reviews.map((review) => <option key={review.id} value={review.id}>{review.label}</option>)}
+            </select>
+          </div>
+          {reviewItems.length > 0 && (
+            <div className="ecl-list" style={{ marginTop: 12 }}>
+              {reviewItems.map((item) => (
+                <div key={item.id} className="ecl-row">
+                  <div className="ecl-row__main">
+                    <div className="ecl-row__title">{item.employee.firstName} {item.employee.lastName}</div>
+                    <div className="ecl-row__desc">
+                      Réviseur : {item.reviewer.firstName} {item.reviewer.lastName}
+                      {item.decision && ` · ${item.decision === "confirme" ? "Confirmé" : "Anomalie signalée"}`}
+                    </div>
+                  </div>
+                  {!item.decision && (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <Button variant="add" size="sm" onClick={() => handleDecideReviewItem(item, "confirme")}>Confirmer</Button>
+                      <Button variant="danger" size="sm" onClick={() => handleDecideReviewItem(item, "anomalie_signalee")}>Signaler</Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* ── Fenêtres intégrées ─────────────────────────────────────────────── */}
+      {modal?.kind === "employee" && (
+        <Modal title="Nouveau dossier collaborateur" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitEmployee} confirmLabel="Créer" />}>
+          <Field label="Prénom"><input value={modal.firstName} onChange={(e) => setModal({ ...modal, firstName: e.target.value })} autoFocus /></Field>
+          <Field label="Nom"><input value={modal.lastName} onChange={(e) => setModal({ ...modal, lastName: e.target.value })} /></Field>
+          <Field label="Poste (optionnel)"><input value={modal.position} onChange={(e) => setModal({ ...modal, position: e.target.value })} /></Field>
+          <Field label="Identifiant du département (optionnel)"><input value={modal.departmentId} onChange={(e) => setModal({ ...modal, departmentId: e.target.value })} /></Field>
+        </Modal>
+      )}
+
+      {modal?.kind === "mobility" && (
+        <Modal title="Mobilité interne" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitMobility} confirmLabel="Enregistrer" />}>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
+          <Field label="Nouveau poste"><input value={modal.position} onChange={(e) => setModal({ ...modal, position: e.target.value })} autoFocus /></Field>
+        </Modal>
+      )}
+
+      {modal?.kind === "departure" && (
+        <Modal title="Enregistrer un départ" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitDeparture} confirmLabel="Enregistrer" />}>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
+          <Field label="Date de départ"><input type="date" value={modal.date} onChange={(e) => setModal({ ...modal, date: e.target.value })} /></Field>
+        </Modal>
+      )}
+
+      {modal?.kind === "view-confidential" && (
+        <Modal title="Données confidentielles" onClose={() => setModal(null)} footer={<Button variant="view" size="sm" onClick={() => setModal(null)}>Fermer</Button>}>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
+          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>Salaire de base</div><div style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "var(--ink)" }}>{modal.baseSalary}</div></div>
+          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>Notes</div><div style={{ fontSize: 13 }}>{modal.notes}</div></div>
+        </Modal>
+      )}
+
+      {modal?.kind === "edit-confidential" && (
+        <Modal title="Modifier les données confidentielles" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitEditConfidential} confirmLabel="Enregistrer" />}>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
+          <Field label="Salaire de base"><input type="number" min={0} value={modal.baseSalary} onChange={(e) => setModal({ ...modal, baseSalary: e.target.value })} autoFocus /></Field>
+        </Modal>
+      )}
+
+      {modal?.kind === "grant-role" && (
+        <Modal title="Attribuer un rôle" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitGrantRole} confirmLabel="Attribuer" />}>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
+          <Field label="Code du rôle"><input value={modal.roleCode} onChange={(e) => setModal({ ...modal, roleCode: e.target.value })} autoFocus /></Field>
+          <Field label="Justification"><input value={modal.justification} onChange={(e) => setModal({ ...modal, justification: e.target.value })} /></Field>
+        </Modal>
+      )}
+
+      {modal?.kind === "absence" && (
+        <Modal title="Nouvelle demande d'absence" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitAbsence} confirmLabel="Enregistrer" />}>
+          <Field label="Collaborateur">
+            <select value={modal.employeeId} onChange={(e) => setModal({ ...modal, employeeId: e.target.value })}>
+              {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>)}
+            </select>
+          </Field>
+          <Field label="Type">
+            <select value={modal.type} onChange={(e) => setModal({ ...modal, type: e.target.value as AbsenceType })}>
+              {Object.entries(ABSENCE_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label="Du"><input type="date" value={modal.from} onChange={(e) => setModal({ ...modal, from: e.target.value })} /></Field>
+          <Field label="Au"><input type="date" value={modal.to} onChange={(e) => setModal({ ...modal, to: e.target.value })} /></Field>
+        </Modal>
+      )}
+
+      {modal?.kind === "review" && (
+        <Modal title="Lancer une campagne de revue" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitReview} confirmLabel="Lancer" />}>
+          <Field label="Libellé de la campagne"><input value={modal.label} onChange={(e) => setModal({ ...modal, label: e.target.value })} autoFocus /></Field>
+        </Modal>
       )}
     </div>
   );
 }
 
-const inputStyle: React.CSSProperties = { display: "block", width: "100%", padding: 6, marginTop: 4, fontSize: 13 };
-const secondaryButtonStyle: React.CSSProperties = {
-  background: "#fff",
-  border: "1px solid var(--line)",
-  borderRadius: 6,
-  padding: "6px 12px",
-  fontSize: 12,
-  cursor: "pointer",
-};
+function ModalActions({ onCancel, onConfirm, confirmLabel }: { onCancel: () => void; onConfirm: () => void; confirmLabel: string }) {
+  return (
+    <>
+      <Button variant="view" size="sm" onClick={onCancel}>Annuler</Button>
+      <Button variant="add" size="sm" onClick={onConfirm}>{confirmLabel}</Button>
+    </>
+  );
+}
+
+function StatusChip({ label }: { label: string }) {
+  return (
+    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>
+      {label}
+    </span>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>{children}</p>;
+}
+
+function bannerStyle(bg: string, color: string): React.CSSProperties {
+  return { background: bg, color, borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 12 };
+}

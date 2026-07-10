@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  getPresenceNames,
-  listUnreadNotifications,
-  quickSearch,
-  type DepartmentPresence,
-  type QuickSearchResult,
-} from "../api/client";
+import { getPresenceNames, listUnreadNotifications, quickSearch, type QuickSearchResult } from "../api/client";
 
 interface TopBarProps {
   // Nombre de personnes connectées (présence temps réel, sans identités).
@@ -36,19 +30,22 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hallOpen, setHallOpen] = useState(false);
-  // Noms par département réel, chargés à la demande à l'ouverture du Hall, pour
-  // les seuls profils habilités. Rechargés à chaque ouverture pour rester à jour.
-  const [presenceDepartments, setPresenceDepartments] = useState<DepartmentPresence[]>([]);
+  // Noms par grand pôle, chargés à la demande à l'ouverture du Hall, pour les
+  // seuls profils habilités. Rechargés à chaque ouverture pour rester à jour.
+  const [namesByPole, setNamesByPole] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (!hallOpen || !canSeePresenceNames) return;
     let cancelled = false;
     getPresenceNames()
       .then((data) => {
-        if (!cancelled) setPresenceDepartments(data.departments);
+        if (cancelled) return;
+        const map: Record<string, string[]> = {};
+        for (const p of data.poles) map[p.pole] = p.users;
+        setNamesByPole(map);
       })
       .catch(() => {
-        if (!cancelled) setPresenceDepartments([]);
+        if (!cancelled) setNamesByPole({});
       });
     return () => {
       cancelled = true;
@@ -254,65 +251,47 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
               <div style={{ maxHeight: 320, overflowY: "auto" }}>
                 {poles.map((p) => {
                   const active = p.count > 0;
+                  // Noms révélés pour ce pôle (profils habilités uniquement) :
+                  // un chef ne reçoit que son propre pôle, la DG les reçoit tous.
+                  const names = canSeePresenceNames ? namesByPole[p.label] ?? [] : [];
                   return (
-                    <div
-                      key={p.label}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        padding: "10px 14px",
-                        borderBottom: "1px solid var(--line)",
-                      }}
-                    >
-                      <span style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "var(--ink)" }}>
-                        <span
-                          style={{
-                            width: 9,
-                            height: 9,
-                            borderRadius: 999,
-                            background: active ? "var(--success)" : "var(--line)",
-                            display: "inline-block",
-                            flexShrink: 0,
-                          }}
-                        />
-                        {p.label}
-                      </span>
-                      <span style={{ fontSize: 12, color: active ? "var(--ink)" : "var(--muted)" }}>
-                        {active ? (
-                          <>
-                            <span style={{ fontFamily: "var(--font-mono)" }}>{p.count}</span> présent{p.count > 1 ? "s" : ""}
-                          </>
-                        ) : (
-                          "personne"
-                        )}
-                      </span>
+                    <div key={p.label} style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "var(--ink)" }}>
+                          <span
+                            style={{
+                              width: 9,
+                              height: 9,
+                              borderRadius: 999,
+                              background: active ? "var(--success)" : "var(--line)",
+                              display: "inline-block",
+                              flexShrink: 0,
+                            }}
+                          />
+                          {p.label}
+                        </span>
+                        <span style={{ fontSize: 12, color: active ? "var(--ink)" : "var(--muted)" }}>
+                          {active ? (
+                            <>
+                              <span style={{ fontFamily: "var(--font-mono)" }}>{p.count}</span> présent{p.count > 1 ? "s" : ""}
+                            </>
+                          ) : (
+                            "personne"
+                          )}
+                        </span>
+                      </div>
+                      {names.length > 0 && (
+                        <div style={{ marginTop: 4, marginLeft: 18, fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
+                          {names.join(", ")}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
-
-                {/* Détail nominatif — réservé aux profils habilités (Direction
-                    générale et super-administrateur pour tous les départements ;
-                    chef de département pour son seul département). Regroupé par
-                    département réel. */}
-                {canSeePresenceNames && presenceDepartments.length > 0 && (
-                  <div style={{ padding: "10px 14px", background: "var(--paper)" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>
-                      Personnes présentes
-                    </div>
-                    {presenceDepartments.map((d) => (
-                      <div key={d.departmentId ?? d.departmentName} style={{ marginBottom: 6 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)" }}>{d.departmentName}</div>
-                        <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>{d.users.join(", ")}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
               <div style={{ padding: "8px 14px", fontSize: 11, color: "var(--muted)" }}>
                 {canSeePresenceNames
-                  ? "Identités visibles au titre de votre habilitation (par département)."
+                  ? "Identités visibles au titre de votre habilitation."
                   : "Effectifs par pôle — sans identités (confidentialité)."}
               </div>
             </div>

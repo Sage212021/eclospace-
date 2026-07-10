@@ -111,18 +111,19 @@ describe("présence : révélation habilitée des identités", () => {
     await prisma.$disconnect();
   });
 
-  it("expose les noms par département à un profil d'oversight (Direction générale / super-admin)", async () => {
+  it("expose les noms par grand pôle à un profil d'oversight (Direction générale / super-admin)", async () => {
     const cookie = await loginCookie(app, "admin", ADMIN_PASSWORD);
     const res = await app.inject({ method: "GET", url: "/api/v1/presence/names", headers: { cookie } });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(typeof body.total).toBe("number");
-    expect(Array.isArray(body.departments)).toBe(true);
+    expect(Array.isArray(body.poles)).toBe(true);
   });
 
-  it("autorise un chef de département rattaché à un département", async () => {
-    // Un chef de département (rôle CHEF_DEPARTEMENT) avec une fiche employé
-    // rattachée à un département accède à la révélation, bornée à ce département.
+  it("autorise un chef de département rattaché à un grand pôle", async () => {
+    // Un chef (rôle CHEF_DEPARTEMENT) dont la fiche employé est dans un
+    // département rangé sous un grand pôle (CORR → Éditorial) accède à la
+    // révélation, bornée à son grand pôle.
     const department = await prisma.department.findFirstOrThrow({ where: { code: "CORR" } });
     const employee = await prisma.employee.create({
       data: { firstName: "Chef", lastName: `Corr${tag}`, departmentId: department.id },
@@ -133,11 +134,11 @@ describe("présence : révélation habilitée des identités", () => {
     const cookie = await loginCookie(app, `chef_corr_${tag}`, "ChefDept123!");
     const res = await app.inject({ method: "GET", url: "/api/v1/presence/names", headers: { cookie } });
     expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.json().departments)).toBe(true);
+    expect(Array.isArray(res.json().poles)).toBe(true);
   });
 
-  it("refuse un chef de département sans département rattaché (403)", async () => {
-    // Rôle CHEF_DEPARTEMENT mais aucune fiche/département : rien à révéler.
+  it("refuse un chef de département sans grand pôle rattachable (403)", async () => {
+    // Rôle CHEF_DEPARTEMENT mais aucune fiche/département : aucun grand pôle.
     await createUserWithRole(`chef_sans_dept_${tag}`, "CHEF_DEPARTEMENT", "ChefDept123!");
     const cookie = await loginCookie(app, `chef_sans_dept_${tag}`, "ChefDept123!");
     const res = await app.inject({ method: "GET", url: "/api/v1/presence/names", headers: { cookie } });

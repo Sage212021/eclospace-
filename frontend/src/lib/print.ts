@@ -5,7 +5,7 @@
 // **« Enregistrer au format PDF »** (option native de tous les navigateurs).
 // Aucune bibliothèque PDF lourde, fonctionne avec une connexion modeste.
 
-import type { InvoiceDetail, RoyaltyStatementDetail } from "../api/client";
+import type { InvoiceDetail, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
 
 // Coordonnées officielles de la maison — source unique pour tous les documents
 // imprimés (facture, avoir, et à venir : relevés, bons de commande, contrats).
@@ -215,4 +215,56 @@ export function printRoyaltyStatement(st: RoyaltyStatementDetail): void {
     </div>`;
 
   openPrintWindow(`Relevé de droits ${st.contract.contractNumber}`, body);
+}
+
+const PO_STATUS_LABELS: Record<string, string> = {
+  draft: "Brouillon",
+  approved: "Approuvé",
+  sent: "Transmis",
+  in_production: "En production",
+  received: "Reçu",
+  closed: "Clôturé",
+  cancelled: "Annulé",
+};
+
+// Bon de commande imprimeur prêt à imprimer (Ch. 15 §15.4). Récapitule le
+// fournisseur, l'ouvrage, la quantité, le montant et les conditions de livraison.
+export function printPurchaseOrder(po: PurchaseOrder): void {
+  const cur = po.currency || "XAF";
+  const printer = po.printer ? `${po.printer.partner.firstName} ${po.printer.partner.lastName}` : "—";
+  const book = po.quote?.manuscript;
+  const due = po.deliveryDue ? new Date(po.deliveryDue).toLocaleDateString("fr-FR") : "—";
+  const tolerance = po.quantityTolerancePct != null && po.quantityTolerancePct !== "" ? `± ${Number(po.quantityTolerancePct)} %` : "—";
+  const location = po.deliveryLocation?.label ?? "—";
+
+  const body = `
+    <div class="doc__title">Bon de commande</div>
+    <div class="meta">
+      <span>N° <b class="num">${escapeHtml(po.poNumber)}</b></span>
+      <span>Livraison attendue <b class="num">${escapeHtml(due)}</b></span>
+      <span><span class="badge">${escapeHtml(PO_STATUS_LABELS[po.status] ?? po.status)}</span></span>
+    </div>
+    <div class="party">
+      <div class="party__label">Fournisseur (imprimeur)</div>
+      <div class="party__name">${escapeHtml(printer)}</div>
+    </div>
+    <table class="lines">
+      <thead><tr><th>Désignation</th><th class="r">Quantité</th><th class="r">Montant</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Impression — ${escapeHtml(book?.title ?? "Ouvrage")}${book?.manuscriptNumber ? ` <span class="num">(${escapeHtml(book.manuscriptNumber)})</span>` : ""}</td>
+          <td class="r num">${po.orderedQuantity}</td>
+          <td class="r num">${money(po.amount, cur)}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="meta" style="margin-top:14px">
+      <span>Lieu de livraison : <b>${escapeHtml(location)}</b></span>
+      <span>Tolérance de quantité : <b>${escapeHtml(tolerance)}</b></span>
+    </div>
+    <div class="totals">
+      <div class="ttc"><span>Total commande</span><span class="num">${money(po.amount, cur)}</span></div>
+    </div>`;
+
+  openPrintWindow(`Bon de commande ${po.poNumber}`, body);
 }

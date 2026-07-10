@@ -767,6 +767,12 @@ export interface PurchaseOrder {
   status: string;
   amount: string;
   orderedQuantity: number;
+  currency?: string;
+  deliveryDue?: string | null;
+  quantityTolerancePct?: string | null;
+  printer?: { partner: { firstName: string; lastName: string } };
+  quote?: { manuscript?: { title: string; manuscriptNumber: string } | null };
+  deliveryLocation?: { label: string } | null;
 }
 
 export function createPurchaseOrder(quoteId: string, input: { delivery_due?: string; delivery_location_id?: string; quantity_tolerance_pct?: number }) {

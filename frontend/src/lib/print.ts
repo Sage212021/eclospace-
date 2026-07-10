@@ -36,11 +36,8 @@ function documentShell(title: string, body: string): string {
     * { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #16233d; margin: 0; font-size: 12.5px; line-height: 1.5; }
     .doc { max-width: 720px; margin: 0 auto; padding: 8px; }
-    .lh { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
-    .lh__mark { font-family: Georgia, serif; font-size: 26px; font-weight: 700; color: #16233d; line-height: 1; }
-    .lh__mark b { color: #c89a1b; }
-    .lh__suffix { font-weight: 400; }
-    .lh__tag { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #a87d14; margin-top: 5px; }
+    .lh { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
+    .lh__logo { height: 62px; width: auto; }
     .lh__contact { text-align: right; font-size: 10.5px; color: #4b5563; line-height: 1.7; max-width: 340px; }
     .lh__contact a { color: #4b5563; text-decoration: none; }
     .lh__rule { height: 3px; background: linear-gradient(90deg, #16233d 62%, #c89a1b 62%); border-radius: 2px; margin: 10px 0 4px; }
@@ -70,10 +67,7 @@ function documentShell(title: string, body: string): string {
   <body>
     <div class="doc">
       <div class="lh">
-        <div>
-          <div class="lh__mark"><b>${HOUSE.brand}</b> <span class="lh__suffix">${HOUSE.brandSuffix}</span></div>
-          <div class="lh__tag">${HOUSE.tagline}</div>
-        </div>
+        <img class="lh__logo" src="${window.location.origin}/eclosion-logo.png" alt="${HOUSE.brand} ${HOUSE.brandSuffix} — ${HOUSE.tagline}">
         <div class="lh__contact">
           ${escapeHtml(HOUSE.address)}<br>
           ${escapeHtml(HOUSE.poBox)} · Tél. ${escapeHtml(HOUSE.phone)}<br>

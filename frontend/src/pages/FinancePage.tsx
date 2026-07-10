@@ -29,7 +29,7 @@ import {
   type ShippingRate,
   type ShippingZone,
 } from "../api/client";
-import { getInvoice } from "../api/client";
+import { getInvoice, listTaxRates, setTaxRate, type TaxRate } from "../api/client";
 import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
@@ -409,6 +409,9 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
         </div>
       </Card>
 
+      {/* Ch. 18 §18.9 — Taux de TVA */}
+      <TaxRatesCard canAdminister={canAdminister} onError={setError} onMessage={setMessage} />
+
       {/* Ch. 18 §18.8 — Trésorerie */}
       <Card
         title="Trésorerie : comptes, caisses et virements"
@@ -556,6 +559,127 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
         </Modal>
       )}
     </div>
+  );
+}
+
+// Réglage des taux de TVA (Ch. 18 §18.9). Le taux appliqué aux nouvelles
+// factures est celui du type de produit concerné (« livre » par défaut). Les
+// factures déjà émises ne sont jamais recalculées (elles sont immuables) : un
+// changement ne vaut que pour l'avenir.
+const PRODUCT_LABELS: Record<string, string> = { livre: "Livres", autre: "Autres produits" };
+function productLabel(t: string): string {
+  return PRODUCT_LABELS[t] ?? t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function TaxRatesCard({
+  canAdminister,
+  onError,
+  onMessage,
+}: {
+  canAdminister: boolean;
+  onError: (m: string | null) => void;
+  onMessage: (m: string | null) => void;
+}) {
+  const [rates, setRates] = useState<TaxRate[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [adding, setAdding] = useState<{ productType: string; rate: string } | null>(null);
+
+  const refresh = async () => {
+    const list = await listTaxRates();
+    setRates(list);
+    setDrafts(Object.fromEntries(list.map((r) => [r.id, String(r.rate)])));
+  };
+
+  useEffect(() => {
+    refresh().catch((e) => onError(e instanceof Error ? e.message : "Échec du chargement des taux."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function save(country: string, productType: string, rateStr: string) {
+    const rate = Number(rateStr);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+      onError("Le taux doit être un pourcentage entre 0 et 100.");
+      return;
+    }
+    onError(null);
+    try {
+      await setTaxRate({ country, product_type: productType, rate });
+      onMessage(`Taux de TVA « ${productLabel(productType)} » enregistré à ${rate} %. Il s'applique aux nouvelles factures.`);
+      setAdding(null);
+      await refresh();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de l'enregistrement du taux.");
+    }
+  }
+
+  return (
+    <Card
+      title="Taux de TVA"
+      icon={<IconFinance />}
+      subtitle="Appliqué aux nouvelles factures. Les factures déjà émises ne changent pas."
+      action={
+        canAdminister && !adding ? (
+          <Button variant="view" size="sm" onClick={() => setAdding({ productType: "", rate: "" })}>+ Type de produit</Button>
+        ) : undefined
+      }
+    >
+      {rates.length === 0 && !adding ? (
+        <Empty>Aucun taux défini — la TVA vaut 0 % tant qu'aucun taux n'est enregistré.</Empty>
+      ) : (
+        <div className="ecl-list">
+          {rates.map((r) => (
+            <div key={r.id} className="ecl-row">
+              <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span className="ecl-row__title">{productLabel(r.productType)}</span>
+                {r.country !== "default" && <StatusChip label={r.country} />}
+              </div>
+              {canAdminister ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      value={drafts[r.id] ?? ""}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [r.id]: e.target.value }))}
+                      style={{ width: 76, padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, textAlign: "right", fontFamily: "var(--font-mono)" }}
+                    />
+                    <span style={{ color: "var(--muted)", fontSize: 13 }}>%</span>
+                  </div>
+                  <Button variant="add" size="sm" onClick={() => save(r.country, r.productType, drafts[r.id] ?? "")} disabled={drafts[r.id] === String(r.rate)}>
+                    Enregistrer
+                  </Button>
+                </div>
+              ) : (
+                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--ink)" }}>{Number(r.rate)} %</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {adding && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginTop: 12, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+          <div className="ecl-field" style={{ flex: "1 1 200px" }}>
+            <label>Type de produit</label>
+            <input value={adding.productType} onChange={(e) => setAdding({ ...adding, productType: e.target.value })} placeholder="Ex. livre, papeterie…" autoFocus />
+          </div>
+          <div className="ecl-field" style={{ flex: "0 0 120px" }}>
+            <label>Taux (%)</label>
+            <input type="number" min={0} max={100} step="0.01" value={adding.rate} onChange={(e) => setAdding({ ...adding, rate: e.target.value })} />
+          </div>
+          <Button variant="add" size="sm" onClick={() => save("default", adding.productType.trim() || "livre", adding.rate)} disabled={!adding.productType.trim() || adding.rate === ""}>
+            Enregistrer
+          </Button>
+          <Button variant="view" size="sm" onClick={() => setAdding(null)}>Annuler</Button>
+        </div>
+      )}
+
+      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "12px 0 0" }}>
+        Au Cameroun, les livres peuvent être exonérés de TVA (0 %). Renseignez le taux légal qui vous concerne.
+      </p>
+    </Card>
   );
 }
 

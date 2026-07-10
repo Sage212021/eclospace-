@@ -974,6 +974,22 @@ export function getInvoice(id: string) {
   return request<InvoiceDetail>(`/api/v1/invoices/${id}`);
 }
 
+// Taux de TVA paramétrables (Ch. 18 §18.9), par pays × type de produit.
+export interface TaxRate {
+  id: string;
+  country: string;
+  productType: string;
+  rate: string;
+}
+
+export function listTaxRates() {
+  return request<TaxRate[]>("/api/v1/tax-rates");
+}
+
+export function setTaxRate(input: { country: string; product_type: string; rate: number }) {
+  return request<TaxRate>("/api/v1/tax-rates", { method: "POST", body: JSON.stringify(input) });
+}
+
 export interface AgingBalance {
   not_due: number;
   d30: number;

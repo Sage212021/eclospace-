@@ -417,3 +417,15 @@ Suite complète : **159 tests passent**. Chaque point vérifié au navigateur (r
 **Reste à décider (reporté, question à l'opérateur)** : révéler les **noms** des connectés dans la fenêtre Hall aux seuls profils habilités (Direction générale, super-administrateur, et **responsable de son propre pôle**). Le « responsable de pôle » n'est pas encore identifié de façon univoque dans le modèle — décision de structuration à confirmer avant de l'implémenter (règle 2 du CLAUDE.md).
 
 **Prochaine étape :** retours de l'opérateur (notamment sur la révélation des noms aux profils habilités).
+
+### 10/07/2026 — Hall : révélation des identités aux profils habilités
+
+Suite de la refonte des accès. La fenêtre « Hall / Présence » révèle désormais les **noms** des personnes connectées, mais **uniquement** aux profils d'oversight : **Direction générale** et **super-administrateur**. Tout autre profil garde la vue par effectifs seuls.
+
+- **Backend** : `GET /api/v1/presence/names`, gardé par `direction:consultation` — ce garde vise exactement la DG (qui détient la permission) et le super-admin (qui détient toutes les permissions). Tout autre profil reçoit **403**, refus lui-même journalisé (`access_denied`). Le registre de présence en mémoire n'est exposé que par cette route ; le canal temps réel continue de ne diffuser que des compteurs. **3 tests** (autorisé / refusé 403 / 401). Suite complète : **162 tests passent**.
+- **Frontend** : à l'ouverture du Hall, un profil habilité charge les noms à la demande et les affiche sous chaque pôle ; le pied de fenêtre précise la base de la révélation. Rien ne change pour les autres.
+- Vérifié au navigateur : la DG voit « Production — 1 présent — admin » ; un correcteur voit « Production — 1 présent » sans nom.
+
+**Reste ouvert** : la révélation par **« responsable de son propre pôle »**. Décision prise avec l'opérateur : implémenter d'abord les deux profils univoques (DG + super-admin) ; le « responsable de pôle » suppose de le **désigner formellement** (rôle dédié à assigner, rattaché à un pôle) — à acter avant implémentation.
+
+**Prochaine étape :** retours de l'opérateur.

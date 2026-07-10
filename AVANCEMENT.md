@@ -495,3 +495,14 @@ Demande opérateur : les e-mails de l'ERP (factures, avoirs, relevés de droits)
 - **Où** : fenêtre d'envoi d'un document (facture/relevé), création de compte (Utilisateurs & rôles), changement d'e-mail de connexion (Sécurité du compte). Brique commune `<EmailInput>` : un champ e-mail qui propose les adresses connues et mémorise la saisie en quittant le champ.
 - **Comment** : stockage **local au navigateur** (aucune donnée envoyée au serveur, aucune synchronisation entre postes), les plus récentes en tête, limite 100 adresses. Aucune nouvelle dépendance.
 - Typecheck et build front OK.
+
+### 10/07/2026 (suite) — Alertes par e-mail (fin de la Phase A)
+
+Dernier point de la Phase A : les alertes de l'ERP sont désormais **doublées d'un e-mail**, en plus de la cloche déjà présente dans l'application.
+
+- **Quelles alertes** : seulement les niveaux **importantes** et **critiques** (stock critique, encours dépassé, BAT/impression en retard, droits d'auteur…). Les notifications de routine restent, elles, dans la cloche uniquement — pour ne pas encombrer les boîtes mail.
+- **À qui** : à l'adresse professionnelle de chaque destinataire **actif** du rôle concerné. L'e-mail reprend le papier à en-tête maison, avec un bandeau de couleur selon la gravité (rouge = critique, orange = important).
+- **Robustesse** : envoi « au meilleur effort » — si l'e-mail échoue (ou n'est pas encore configuré), l'alerte reste visible dans l'application et **l'opération métier n'est jamais bloquée**. Tant que le SMTP n'est pas renseigné, aucun e-mail n'est tenté.
+- **Tests** : `tests/notification-email.test.ts` (contenu de l'e-mail + non-régression des notifications). Suites liées (stock, BAT, impression, commercial, documents) : **31 tests passent**. Backend typecheck OK.
+
+**Phase A terminée** : impression/PDF des documents (factures, relevés, bons de commande, contrats) sur papier à en-tête + logo ; TVA livres à 0 % réglable ; envoi des documents par e-mail avec aperçu ; identité d'expéditeur par pôle (Répondre-à) + copie maison ; mémoire des adresses e-mail ; alertes par e-mail.

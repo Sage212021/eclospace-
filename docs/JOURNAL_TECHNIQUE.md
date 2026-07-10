@@ -250,3 +250,23 @@ non requise pour le fonctionnement.
 Tant que ces variables ne sont pas définies, l'envoi est **simulé** (journalisé)
 en développement et refusé explicitement en production (code `mail_not_configured`,
 message clair), conformément à la règle « erreurs explicites ».
+
+### Alertes par e-mail branchées sur les notifications (Phase A — 10/07/2026)
+
+Le modèle `Notification` prévoyait déjà un canal `email`. Les alertes sont
+désormais **doublées d'un e-mail** pour les niveaux **`high` et `critical`**
+uniquement (stock critique, encours dépassé, BAT/impression en retard, droits…),
+afin de ne pas noyer les boîtes sous les notifications de routine. Les
+notifications de tout niveau restent visibles dans la cloche de l'application.
+
+- Point d'ancrage unique : `lib/notify.ts` → `notifyRole()`. Après création des
+  notifications in-app, si la priorité est importante/critique **et** que le SMTP
+  est configuré, un e-mail (papier à en-tête, bandeau de priorité aux couleurs de
+  l'identité) est envoyé à l'adresse professionnelle de chaque destinataire
+  **actif**. Les rangées concernées sont tracées `channel = email`, `sent_at`.
+- **Meilleur effort** : l'envoi est encapsulé, une panne d'e-mail est journalisée
+  puis ignorée — elle ne doit jamais interrompre l'opération métier (vente, BAT,
+  stock) qui a déclenché l'alerte. Sans SMTP configuré, on ne tente rien (la
+  cloche in-app suffit) : pas de faux marquage `email`.
+- Constructeur d'e-mail : `buildNotificationEmail()` dans `lib/documentEmail.ts`.
+  Tests : `tests/notification-email.test.ts`.

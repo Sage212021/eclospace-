@@ -65,6 +65,30 @@ function emailShell(opts: { title: string; message: string; body: string }): str
   </body></html>`;
 }
 
+// --- E-mail d'alerte (notification) ---------------------------------------
+// Reprend le papier à en-tête maison. Un bandeau de priorité reprend le code
+// couleur de l'identité visuelle : rouge = critique, orange = retard/important.
+const PRIORITY_STYLE: Record<string, { label: string; color: string }> = {
+  critical: { label: "Critique", color: "#C24B3A" },
+  high: { label: "Important", color: "#C4661F" },
+  medium: { label: "Information", color: "#16233d" },
+  low: { label: "Information", color: "#16233d" },
+};
+
+export function buildNotificationEmail(opts: { title: string; body: string; priority: string }): DocumentEmail {
+  const p = PRIORITY_STYLE[opts.priority] ?? PRIORITY_STYLE.medium;
+  const body = `
+    <div style="display:inline-block;padding:4px 12px;border-radius:999px;background:${p.color};color:#fff;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:.5px">${esc(p.label)}</div>
+    <div style="font-family:Georgia,serif;font-size:19px;margin:12px 0 10px;color:#16233d">${esc(opts.title)}</div>
+    <p style="white-space:pre-wrap;font-size:14px;line-height:1.6;margin:0">${esc(opts.body)}</p>
+    <p style="font-size:12px;color:#6b7280;margin-top:18px">Alerte émise automatiquement par Eclospace. Connectez-vous à l'ERP pour la traiter.</p>`;
+
+  const prefix = opts.priority === "critical" ? "Alerte critique — " : opts.priority === "high" ? "Alerte — " : "";
+  const subject = `${prefix}${opts.title} — ${HOUSE.brand}`;
+  const text = `${p.label} : ${opts.title}\n\n${opts.body}\n\nAlerte émise par Eclospace.\n${HOUSE.legalName} · ${HOUSE.website}`;
+  return { subject, html: emailShell({ title: subject, message: "", body }), text };
+}
+
 const INVOICE_STATUS: Record<string, string> = { issued: "Émise", paid: "Réglée", cancelled: "Annulée", credit_note: "Avoir" };
 
 interface InvoiceForEmail {

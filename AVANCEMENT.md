@@ -429,3 +429,19 @@ Suite de la refonte des accès. La fenêtre « Hall / Présence » révèle dés
 **Reste ouvert** : la révélation par **« responsable de son propre pôle »**. Décision prise avec l'opérateur : implémenter d'abord les deux profils univoques (DG + super-admin) ; le « responsable de pôle » suppose de le **désigner formellement** (rôle dédié à assigner, rattaché à un pôle) — à acter avant implémentation.
 
 **Prochaine étape :** retours de l'opérateur.
+
+### 10/07/2026 (suite) — Hall : le chef de département voit son équipe présente
+
+Décision de l'opérateur : le responsable d'un pôle = **Chef de département**. La révélation des noms dans le Hall s'étend à ce profil, **borné à son seul département**.
+
+- **Rôle « marqueur » `CHEF_DEPARTEMENT`** (transverse, ajouté au seed) : assigné **en plus** du rôle métier de la personne ; son périmètre (le département) vient de sa **fiche employé**, pas du rôle.
+- La présence retient le **département réel** de chaque personne (fiche employé), fixe pour la session : les noms révélés sont regroupés par **département réel**, sans dépendre de la navigation ni d'un rattachement de pôle deviné.
+- `GET /api/v1/presence/names` : Direction générale / super-admin → **tous** les départements ; chef de département → **son seul** département ; chef sans département rattaché ou autre profil → **403** (journalisé).
+- **Hall** : sous les effectifs par pôle (inchangés, visibles de tous), une section « Personnes présentes » regroupe les noms par département, pour les seuls profils habilités.
+- **5 tests** de périmètre. Suite complète : **164 tests passent**. Vérifié au navigateur : le chef de la Correction voit « Correction éditoriale : chef_correction, membre_correction » et **pas** la personne d'un autre département ; un membre ordinaire ne voit aucun nom.
+
+**À la mise en production** : le rôle `CHEF_DEPARTEMENT` est créé par le seed (à rejouer au déploiement). Pour qu'un chef voie son équipe, l'administration doit (1) lui **assigner ce rôle** et (2) s'assurer que sa **fiche employé est rattachée à un département**.
+
+**Refonte des accès (points 1, 2, 9, 10, 11 + révélation habilitée) : livrée.** Reste ouvert : les points non retenus de la refonte initiale (hall pré-connexion, connexion par pôle) — en attente de votre décision.
+
+**Prochaine étape :** retours de l'opérateur.

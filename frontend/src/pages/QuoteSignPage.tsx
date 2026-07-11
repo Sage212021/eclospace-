@@ -7,7 +7,7 @@ const HOUSE = {
   legalName: "ECLOSION EDITION SARL",
   address: "Carrefour INSTIC – Nouvelle route Kondengui, Yaoundé, Cameroun",
   poBox: "B.P. 33071 Yaoundé",
-  phone: "(+237) 698 03 15 02 / 678 70 40 86",
+  phone: "(+237) 654 366 663 / 698 03 15 02 / 678 70 40 86",
   email: "eclosionedition@gmail.com",
   website: "https://eclosioneditions.cm",
   rccm: "RC/YAO/2019/B/144",

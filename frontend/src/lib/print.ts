@@ -28,14 +28,42 @@ const HOUSE = {
 // En-tête et pied communs à tous les documents officiels (papier à en-tête
 // Éclosion Édition). Styles inlinés : la fenêtre d'impression est isolée de
 // l'application.
-function documentShell(title: string, body: string): string {
+// `letterhead` = impression sur PAPIER À EN-TÊTE physique : on retire le logo et
+// toutes les mentions (adresse, RCCM, NIU, CNPS…) — le papier les porte déjà —
+// et on réserve un espace en haut/bas pour l'en-tête et le pied pré-imprimés. La
+// version numérique complète (avec logo et mentions) reste l'option par défaut.
+function documentShell(title: string, body: string, opts?: { letterhead?: boolean }): string {
   const now = new Date().toLocaleString("fr-FR");
+  const letterhead = opts?.letterhead ?? false;
+
+  const head = letterhead
+    ? `<div class="lh-space" aria-hidden="true"></div>`
+    : `<div class="lh">
+        <img class="lh__logo" src="${window.location.origin}/eclosion-logo.png" alt="${HOUSE.brand} ${HOUSE.brandSuffix} — ${HOUSE.tagline}">
+        <div class="lh__contact">
+          ${escapeHtml(HOUSE.address)}<br>
+          ${escapeHtml(HOUSE.poBox)} · Tél. ${escapeHtml(HOUSE.phone)}<br>
+          <a href="mailto:${HOUSE.email}">${HOUSE.email}</a> · <a href="${HOUSE.website}">${escapeHtml(HOUSE.website)}</a>
+        </div>
+      </div>
+      <div class="lh__rule"></div>`;
+
+  const foot = letterhead
+    ? `<div class="lh-foot-space" aria-hidden="true"></div>`
+    : `<div class="foot">
+        <div class="foot__legal">${escapeHtml(HOUSE.legalName)} · RCCM : ${escapeHtml(HOUSE.rccm)} · NIU : ${escapeHtml(HOUSE.niu)} · N° Affil. CNPS : ${escapeHtml(HOUSE.cnps)}</div>
+        <div>Document généré par Éclospace le ${escapeHtml(now)}.</div>
+      </div>`;
+
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
   <style>
     @page { size: A4; margin: 18mm 16mm; }
     * { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #16233d; margin: 0; font-size: 12.5px; line-height: 1.5; }
     .doc { max-width: 720px; margin: 0 auto; padding: 8px; }
+    /* Espace réservé à l'en-tête / au pied pré-imprimés du papier à en-tête. */
+    .lh-space { height: 26mm; }
+    .lh-foot-space { height: 20mm; }
     .lh { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
     .lh__logo { height: 62px; width: auto; }
     .lh__contact { text-align: right; font-size: 10.5px; color: #4b5563; line-height: 1.7; max-width: 340px; }
@@ -66,27 +94,16 @@ function documentShell(title: string, body: string): string {
   </style></head>
   <body>
     <div class="doc">
-      <div class="lh">
-        <img class="lh__logo" src="${window.location.origin}/eclosion-logo.png" alt="${HOUSE.brand} ${HOUSE.brandSuffix} — ${HOUSE.tagline}">
-        <div class="lh__contact">
-          ${escapeHtml(HOUSE.address)}<br>
-          ${escapeHtml(HOUSE.poBox)} · Tél. ${escapeHtml(HOUSE.phone)}<br>
-          <a href="mailto:${HOUSE.email}">${HOUSE.email}</a> · <a href="${HOUSE.website}">${escapeHtml(HOUSE.website)}</a>
-        </div>
-      </div>
-      <div class="lh__rule"></div>
+      ${head}
       ${body}
-      <div class="foot">
-        <div class="foot__legal">${escapeHtml(HOUSE.legalName)} · RCCM : ${escapeHtml(HOUSE.rccm)} · NIU : ${escapeHtml(HOUSE.niu)} · N° Affil. CNPS : ${escapeHtml(HOUSE.cnps)}</div>
-        <div>Document généré par Éclospace le ${escapeHtml(now)}.</div>
-      </div>
+      ${foot}
       <div class="actions"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>
     </div>
     <script>window.addEventListener('load', function(){ setTimeout(function(){ window.focus(); window.print(); }, 250); });</script>
   </body></html>`;
 }
 
-function openPrintWindow(title: string, body: string): void {
+function openPrintWindow(title: string, body: string, opts?: { letterhead?: boolean }): void {
   const w = window.open("", "_blank", "width=860,height=1000");
   if (!w) {
     // Bloqueur de pop-up : on informe plutôt que d'échouer en silence.
@@ -94,7 +111,7 @@ function openPrintWindow(title: string, body: string): void {
     return;
   }
   w.document.open();
-  w.document.write(documentShell(title, body));
+  w.document.write(documentShell(title, body, opts));
   w.document.close();
 }
 
@@ -180,7 +197,7 @@ const QUOTE_METHOD_LABELS: Record<string, string> = {
 // Devis de prestation éditoriale prêt à imprimer / PDF (compte d'auteur). Reprend
 // le papier à en-tête. Mentionne l'exclusion (impression/communication) et, si le
 // devis est signé, l'acceptation de l'auteur (nom, date, mode).
-export function printEditorialQuote(quote: EditorialQuote): void {
+export function printEditorialQuote(quote: EditorialQuote, opts?: { letterhead?: boolean }): void {
   const cur = quote.currency || "XAF";
   const validUntil = quote.validUntil ? new Date(quote.validUntil).toLocaleDateString("fr-FR") : null;
   const author = `${quote.partner.firstName} ${quote.partner.lastName}`;
@@ -232,7 +249,7 @@ export function printEditorialQuote(quote: EditorialQuote): void {
     ${quote.exclusionsNote ? `<p style="margin-top:16px;font-size:12px;color:#555;font-style:italic">${escapeHtml(quote.exclusionsNote)}</p>` : ""}
     ${acceptance}`;
 
-  openPrintWindow(`Devis ${quote.quoteNumber}`, body);
+  openPrintWindow(`Devis ${quote.quoteNumber}`, body, opts);
 }
 
 const ROYALTY_SOURCE_LABELS: Record<string, string> = {

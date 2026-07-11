@@ -76,7 +76,7 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
   // libre est réservée par le padding du bloc document.
   const embedStyle = embed
     ? `body { background: url("${window.location.origin}/eclosion-papier-entete.png") top center / 210mm 297mm no-repeat; }
-       .doc { max-width: none; padding: 44mm 20mm 46mm; }
+       .doc { max-width: none; padding: 58mm 20mm 58mm; }
        body, .doc { -webkit-print-color-adjust: exact; print-color-adjust: exact; }`
     : "";
 
@@ -86,10 +86,10 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     * { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #16233d; margin: 0; font-size: 12.5px; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .doc { max-width: 720px; margin: 0 auto; padding: 8px; }
-    /* Espace réservé à l'en-tête / au pied pré-imprimés (bandeaux ~40 mm ;
+    /* Espace réservé à l'en-tête / au pied pré-imprimés (bandeaux ~56 mm ;
        la marge @page de 18 mm compte déjà, on complète ici). */
-    .lh-space { height: 24mm; }
-    .lh-foot-space { height: 26mm; }
+    .lh-space { height: 40mm; }
+    .lh-foot-space { height: 40mm; }
     ${embedStyle}
     .lh { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
     .lh__logo { height: 62px; width: auto; }

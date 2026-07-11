@@ -1218,6 +1218,21 @@ export function getPaymentReport(params?: { from?: string; to?: string }) {
   return request<PaymentReport>(`/api/v1/finance/payment-report${qs ? `?${qs}` : ""}`);
 }
 
+// Échéancier de crédit d'une facture.
+export interface InvoiceSchedule {
+  invoice_id: string;
+  total_ttc: number;
+  settled: number;
+  planned: number;
+  installments: { id: string; due_date: string; amount: number; note: string | null; status: "paid" | "partial" | "pending" | "overdue" }[];
+}
+export function getInvoiceSchedule(id: string) {
+  return request<InvoiceSchedule>(`/api/v1/invoices/${id}/schedule`);
+}
+export function setInvoiceSchedule(id: string, installments: { due_date: string; amount: number; note?: string }[]) {
+  return request<InvoiceSchedule>(`/api/v1/invoices/${id}/schedule`, { method: "POST", body: JSON.stringify({ installments }) });
+}
+
 // Ch. 18 : Finance et comptabilité (Lot 5).
 export interface Invoice {
   id: string;

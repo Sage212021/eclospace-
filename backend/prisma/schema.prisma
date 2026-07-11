@@ -2271,8 +2271,27 @@ model Invoice {
   lines              InvoiceLine[]
   paymentAllocations PaymentAllocation[]
   editorialQuote     EditorialQuote?
+  installments       Installment[]
 
   @@map("invoices")
+}
+
+// Échéancier de crédit (décision opérateur du 11/07/2026) : une facture réglée à
+// crédit peut être découpée en échéances planifiées (paiement en 2-3 fois). Plan
+// indicatif : le rapprochement avec les encaissements se fait par les montants
+// réglés cumulés (allocations), pas par un lettrage échéance par échéance.
+model Installment {
+  id        String   @id @default(uuid())
+  invoiceId String   @map("invoice_id")
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  dueDate   DateTime @map("due_date")
+  amount    Decimal  @db.Decimal(12, 2)
+  note      String?
+  sortOrder Int      @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("installments")
 }
 
 // --- Compte d'auteur : devis puis facture de prestation éditoriale ----------

@@ -43,9 +43,12 @@ import {
   createPaymentMethod,
   updatePaymentMethod,
   getPaymentReport,
+  getInvoiceSchedule,
+  setInvoiceSchedule,
   type PaymentMethodDef,
   type PaymentMethodKind,
   type PaymentReport,
+  type InvoiceSchedule,
 } from "../api/client";
 import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
@@ -117,6 +120,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
   const [modal, setModal] = useState<FinanceModal | null>(null);
   const [emailInvoice, setEmailInvoice] = useState<Invoice | null>(null);
   const [emailStatement, setEmailStatement] = useState<RoyaltyStatement | null>(null);
+  const [scheduleInvoice, setScheduleInvoice] = useState<Invoice | null>(null);
 
   const refresh = async () => {
     const [invoiceList, customerList, expenseList, statementList, shippingRateList, bankAccountList, methodList] = await Promise.all([
@@ -330,9 +334,12 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
                   <DocPrintMenu onPrint={(o) => handlePrintInvoice(invoice.id, o)} />
                   <Button variant="view" size="sm" onClick={() => setEmailInvoice(invoice)}>Envoyer par e-mail</Button>
                   {canManage && invoice.type === "invoice" && invoice.status === "issued" && (
-                    <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, tenders: [{ method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: String(invoice.totalTtc) }] })}>
-                      Encaisser
-                    </Button>
+                    <>
+                      <Button variant="view" size="sm" onClick={() => setScheduleInvoice(invoice)}>Échéancier</Button>
+                      <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, tenders: [{ method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: String(invoice.totalTtc) }] })}>
+                        Encaisser
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -582,6 +589,10 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
             Total saisi : {modal.tenders.reduce((s, t) => s + (Number(t.amount) || 0), 0)}
           </div>
         </Modal>
+      )}
+
+      {scheduleInvoice && (
+        <ScheduleModal invoice={scheduleInvoice} onClose={() => setScheduleInvoice(null)} onError={(m) => setError(m)} onSaved={() => setMessage("Échéancier enregistré.")} />
       )}
 
       {modal?.kind === "payment-methods" && (
@@ -864,6 +875,86 @@ function ModalActions({ onCancel, onConfirm, confirmLabel, confirmVariant }: { o
       <Button variant="view" size="sm" onClick={onCancel}>Annuler</Button>
       <Button variant={confirmVariant} size="sm" onClick={onConfirm}>{confirmLabel}</Button>
     </>
+  );
+}
+
+const SCHEDULE_STATUS: Record<string, { label: string; color: string }> = {
+  paid: { label: "Réglée", color: "var(--eclosion)" },
+  partial: { label: "Partielle", color: "#C4661F" },
+  pending: { label: "À venir", color: "var(--muted)" },
+  overdue: { label: "En retard", color: "var(--alert)" },
+};
+
+// Échéancier de crédit : plan de paiement en plusieurs fois d'une facture.
+function ScheduleModal({ invoice, onClose, onError, onSaved }: { invoice: Invoice; onClose: () => void; onError: (m: string) => void; onSaved: () => void }) {
+  const [schedule, setSchedule] = useState<InvoiceSchedule | null>(null);
+  const [rows, setRows] = useState<{ due_date: string; amount: string; note: string }[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getInvoiceSchedule(invoice.id)
+      .then((s) => {
+        setSchedule(s);
+        setRows(s.installments.map((i) => ({ due_date: i.due_date.slice(0, 10), amount: String(i.amount), note: i.note ?? "" })));
+      })
+      .catch((e) => onError(e instanceof Error ? e.message : "Chargement impossible."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoice.id]);
+
+  const money = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF", maximumFractionDigits: 0 }).format(n);
+  const planned = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+
+  async function save() {
+    const clean = rows.filter((r) => r.due_date && Number(r.amount) > 0);
+    if (clean.length === 0) {
+      onError("Ajoutez au moins une échéance.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const s = await setInvoiceSchedule(invoice.id, clean.map((r) => ({ due_date: new Date(r.due_date).toISOString(), amount: Number(r.amount), note: r.note || undefined })));
+      setSchedule(s);
+      onSaved();
+      onClose();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Échec de l'enregistrement.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={`Échéancier — ${invoice.invoiceNumber}`}
+      wide
+      onClose={onClose}
+      footer={<ModalActions onCancel={onClose} onConfirm={save} confirmLabel={busy ? "…" : "Enregistrer"} confirmVariant="add" />}
+    >
+      <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+        Total facture : {money(Number(invoice.totalTtc))}
+        {schedule ? ` · déjà réglé : ${money(schedule.settled)}` : ""}
+      </p>
+      <div style={{ margin: "10px 0" }}>
+        {rows.map((r, i) => {
+          const st = schedule?.installments[i]?.status;
+          return (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "140px 120px 1fr 90px 28px", gap: 8, alignItems: "center", marginBottom: 6 }}>
+              <input type="date" value={r.due_date} onChange={(e) => setRows((c) => c.map((x, idx) => (idx === i ? { ...x, due_date: e.target.value } : x)))} />
+              <input type="number" min={0} placeholder="Montant" value={r.amount} onChange={(e) => setRows((c) => c.map((x, idx) => (idx === i ? { ...x, amount: e.target.value } : x)))} />
+              <input placeholder="Note (facultatif)" value={r.note} onChange={(e) => setRows((c) => c.map((x, idx) => (idx === i ? { ...x, note: e.target.value } : x)))} />
+              <span style={{ fontSize: 11, color: st ? SCHEDULE_STATUS[st].color : "var(--muted)" }}>{st ? SCHEDULE_STATUS[st].label : "—"}</span>
+              <button type="button" onClick={() => setRows((c) => c.filter((_, idx) => idx !== i))} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, cursor: "pointer" }}>✕</button>
+            </div>
+          );
+        })}
+        <button type="button" onClick={() => setRows((c) => [...c, { due_date: "", amount: "", note: "" }])} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>
+          + Échéance
+        </button>
+      </div>
+      <div style={{ textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 600, color: planned - Number(invoice.totalTtc) > 0.01 ? "var(--alert)" : "var(--ink)" }}>
+        Total planifié : {money(planned)} / {money(Number(invoice.totalTtc))}
+      </div>
+    </Modal>
   );
 }
 

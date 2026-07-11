@@ -573,7 +573,8 @@ Sur analyse de la proposition « modes de paiement + comptes financiers » : **l
 - **Incrément 2 (fait)** : écran **Finance → « Modes de paiement »** (admin : activer/désactiver, compte par défaut, ajouter un mode personnalisé) ; **encaissement enrichi** (choix du **mode** + **compte** + **référence**, et **paiement mixte** = plusieurs modes sur une même facture). Vérifié au navigateur.
 - **Incrément 3 (fait — dimension point de vente)** : modèle **`points_of_sale`** (librairie, salon, boutique en ligne…), champ `point_of_sale_id` sur les ventes au comptoir, endpoints CRUD (`/points-of-sale`, commercial:administration). Migration additive.
 - **Incrément 5 (fait — rapports)** : endpoint `GET /finance/payment-report?from&to` — agrégats **par mode de paiement**, **par compte financier**, **ventes par point de vente** ; **carte « Rapport d'encaissements »** sur l'écran Finance (filtre période + 3 tableaux). Vérifié au navigateur. **+3 tests** (`finance-reports.test.ts`).
-- **Reste (incrément 4)** : échéancier de crédit ; et le petit câblage UI du sélecteur point de vente sur la saisie de vente au comptoir (l'API est prête).
+- **Incrément 4 (fait — échéancier de crédit)** : table `installments` (échéances d'une facture), endpoints `POST/GET /invoices/:id/schedule` (plan limité au total TTC), statut par échéance (réglée / partielle / à venir / **en retard**) calculé sur le montant réglé cumulé. **Écran** : bouton « Échéancier » sur chaque facture → fenêtre de définition + statuts. **188 tests** (+2). Migration additive.
+- **Module Paiements — 5 incréments livrés.** Reste optionnel : câblage UI du sélecteur point de vente sur la saisie de vente au comptoir (l'API est prête).
 
 ### 11/07/2026 (suite) — Rapports hebdomadaires par agent (Demande 3, backend)
 

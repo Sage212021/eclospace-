@@ -34,6 +34,12 @@ const paymentMethodSchema = z.object({
   sort_order: z.number().int().optional(),
 });
 
+const scheduleSchema = z.object({
+  installments: z
+    .array(z.object({ due_date: z.coerce.date(), amount: z.number().positive(), note: z.string().max(200).optional() }))
+    .min(1, "Au moins une échéance."),
+});
+
 const paymentMethodPatchSchema = z.object({
   label: z.string().trim().min(1).max(80).optional(),
   kind: z.nativeEnum(PaymentMethodKind).optional(),
@@ -267,6 +273,39 @@ export default async function financeRoutes(fastify: FastifyInstance) {
     });
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payment_method", entityId: id, newValues: b as Prisma.InputJsonValue, ipAddress: request.ip });
     return reply.send(updated);
+  });
+
+  // --- Échéancier de crédit d'une facture -----------------------------------
+  // Définit (remplace) le plan d'échéances d'une facture. Somme des échéances
+  // limitée au total TTC (paiement en plusieurs fois).
+  fastify.post("/api/v1/invoices/:id/schedule", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = scheduleSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    const sum = parsed.data.installments.reduce((s, i) => s + i.amount, 0);
+    if (sum - Number(invoice.totalTtc) > 0.01) {
+      return reply.code(400).send({ code: "schedule_exceeds_total", message: `Le total des échéances (${sum}) dépasse le montant de la facture (${invoice.totalTtc}).` });
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.installment.deleteMany({ where: { invoiceId: id } });
+      let order = 0;
+      for (const i of parsed.data.installments.sort((a, b) => a.due_date.getTime() - b.due_date.getTime())) {
+        await tx.installment.create({ data: { invoiceId: id, dueDate: i.due_date, amount: i.amount, note: i.note, sortOrder: order++ } });
+      }
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "invoice_schedule", entityId: id, newValues: { count: parsed.data.installments.length, total: sum }, ipAddress: request.ip });
+    return reply.send(await buildSchedule(id));
+  });
+
+  fastify.get("/api/v1/invoices/:id/schedule", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    return reply.send(await buildSchedule(id));
   });
 
   // Rapport d'encaissements : agrégats par mode de paiement, par compte
@@ -1097,4 +1136,28 @@ async function validateExpenseAndPostCostEntry(id: string, approvedBy: string) {
 
 function createHashOf(content: string): string {
   return createHash("sha256").update(content).digest("hex");
+}
+
+// Échéancier enrichi : chaque échéance reçoit un statut à partir du cumul
+// planifié et du montant déjà réglé (allocations), avec repérage des retards.
+async function buildSchedule(invoiceId: string) {
+  const [invoice, installments, alloc] = await Promise.all([
+    prisma.invoice.findUnique({ where: { id: invoiceId } }),
+    prisma.installment.findMany({ where: { invoiceId }, orderBy: [{ sortOrder: "asc" }, { dueDate: "asc" }] }),
+    prisma.paymentAllocation.aggregate({ where: { invoiceId }, _sum: { amount: true } }),
+  ]);
+  const settled = Number(alloc._sum.amount ?? 0);
+  const now = new Date();
+  let cumulative = 0;
+  const rows = installments.map((i) => {
+    const start = cumulative;
+    cumulative += Number(i.amount);
+    let status: "paid" | "partial" | "pending" | "overdue";
+    if (settled >= cumulative - 0.01) status = "paid";
+    else if (settled > start + 0.01) status = "partial";
+    else status = "pending";
+    if (status !== "paid" && i.dueDate < now) status = "overdue";
+    return { id: i.id, due_date: i.dueDate, amount: Number(i.amount), note: i.note, status };
+  });
+  return { invoice_id: invoiceId, total_ttc: Number(invoice?.totalTtc ?? 0), settled, planned: cumulative, installments: rows };
 }

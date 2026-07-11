@@ -570,7 +570,8 @@ Sur analyse de la proposition « modes de paiement + comptes financiers » : **l
 - **Association automatique** au **compte financier par défaut** du mode si non précisé.
 - **Devise XAF** (F CFA Cameroun) par défaut partout + reprise des lignes en XOF.
 - Migration **en place** (aucune donnée perdue : conversion du mode enum→code, colonnes ajoutées). **184 tests** (+3 : liste/ajout/unicité, mode inconnu refusé, compte par défaut + référence).
-- **Reste (incréments suivants)** : écran d'admin des modes + encaissement enrichi (mode + compte + référence + paiement mixte) ; point de vente ; échéancier ; rapports par mode/caisse/utilisateur/période/client/point de vente.
+- **Incrément 2 (fait)** : écran **Finance → « Modes de paiement »** (admin : activer/désactiver, compte par défaut, ajouter un mode personnalisé) ; **encaissement enrichi** (choix du **mode** + **compte** + **référence**, et **paiement mixte** = plusieurs modes sur une même facture). Vérifié au navigateur.
+- **Reste (incréments suivants)** : point de vente (dimension) ; échéancier de crédit ; rapports par mode/caisse/utilisateur/période/client/point de vente.
 
 ### 11/07/2026 (suite) — Rapports hebdomadaires par agent (Demande 3, backend)
 

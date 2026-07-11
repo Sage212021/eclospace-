@@ -1271,11 +1271,41 @@ export function getCustomerAging(customerId: string) {
 }
 
 export function createPayment(input: {
-  method: "transfer" | "cheque" | "cash" | "card" | "mobile_money";
+  method: string;
+  reference?: string;
+  bank_account_id?: string;
   amount: number;
   allocations: { invoice_id: string; amount: number }[];
 }) {
   return request(`/api/v1/payments`, { method: "POST", body: JSON.stringify(input) });
+}
+
+// Modes de paiement configurables (paramétrables par l'administrateur).
+export type PaymentMethodKind = "especes" | "virement" | "cheque" | "carte" | "mobile_money" | "autre";
+
+export interface PaymentMethodDef {
+  id: string;
+  code: string;
+  label: string;
+  kind: PaymentMethodKind;
+  active: boolean;
+  sortOrder: number;
+  defaultAccountId: string | null;
+}
+
+export function listPaymentMethods() {
+  return request<PaymentMethodDef[]>(`/api/v1/payment-methods`);
+}
+
+export function createPaymentMethod(input: { code: string; label: string; kind: PaymentMethodKind; default_account_id?: string | null; sort_order?: number }) {
+  return request<PaymentMethodDef>(`/api/v1/payment-methods`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updatePaymentMethod(
+  id: string,
+  input: { label?: string; kind?: PaymentMethodKind; active?: boolean; default_account_id?: string | null; sort_order?: number },
+) {
+  return request<PaymentMethodDef>(`/api/v1/payment-methods/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
 export interface Dunning {

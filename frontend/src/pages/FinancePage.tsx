@@ -39,6 +39,11 @@ import {
   sendRoyaltyStatementEmail,
   setTaxRate,
   type TaxRate,
+  listPaymentMethods,
+  createPaymentMethod,
+  updatePaymentMethod,
+  type PaymentMethodDef,
+  type PaymentMethodKind,
 } from "../api/client";
 import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
@@ -81,7 +86,8 @@ interface FinancePageProps {
 
 // Fenêtres intégrées de la page (remplacent les pop-up du navigateur).
 type FinanceModal =
-  | { kind: "pay-invoice"; invoice: Invoice; amount: string }
+  | { kind: "pay-invoice"; invoice: Invoice; tenders: { method: string; bankAccountId: string; reference: string; amount: string }[] }
+  | { kind: "payment-methods" }
   | { kind: "generate-statement"; contractId: string; start: string; end: string }
   | { kind: "pay-statement"; statement: RoyaltyStatement; amount: string }
   | { kind: "beneficiaries"; contractId: string; rows: { partnerId: string; sharePct: string }[] }
@@ -100,6 +106,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
   const [royaltyStatements, setRoyaltyStatements] = useState<RoyaltyStatement[]>([]);
   const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodDef[]>([]);
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [aging, setAging] = useState<AgingBalance | null>(null);
@@ -110,13 +117,14 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
   const [emailStatement, setEmailStatement] = useState<RoyaltyStatement | null>(null);
 
   const refresh = async () => {
-    const [invoiceList, customerList, expenseList, statementList, shippingRateList, bankAccountList] = await Promise.all([
+    const [invoiceList, customerList, expenseList, statementList, shippingRateList, bankAccountList, methodList] = await Promise.all([
       listInvoices(),
       listCustomers(),
       listExpenses(),
       listRoyaltyStatements(),
       listShippingRates(),
       listBankAccounts(),
+      listPaymentMethods(),
     ]);
     setInvoices(invoiceList);
     setCustomers(customerList);
@@ -124,6 +132,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
     setRoyaltyStatements(statementList);
     setShippingRates(shippingRateList);
     setBankAccounts(bankAccountList);
+    setPaymentMethods(methodList);
     const balanceEntries = await Promise.all(bankAccountList.map(async (a) => [a.id, (await getBankAccountBalance(a.id)).balance] as const));
     setBalances(Object.fromEntries(balanceEntries));
   };
@@ -165,11 +174,24 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
   async function submitPayInvoice() {
     if (modal?.kind !== "pay-invoice") return;
-    const amount = Number(modal.amount);
-    if (!Number.isFinite(amount) || amount <= 0) return;
+    // Paiement simple ou mixte : chaque « mode » saisi devient un encaissement
+    // rattaché à la facture (mode + compte + référence propres).
+    const tenders = modal.tenders.filter((t) => Number(t.amount) > 0);
+    if (tenders.length === 0) return;
     try {
-      await createPayment({ method: "transfer", amount, allocations: [{ invoice_id: modal.invoice.id, amount }] });
-      setMessage(`Encaissement de ${amount} enregistré pour ${modal.invoice.invoiceNumber}.`);
+      let total = 0;
+      for (const t of tenders) {
+        const amount = Number(t.amount);
+        await createPayment({
+          method: t.method,
+          reference: t.reference.trim() || undefined,
+          bank_account_id: t.bankAccountId || undefined,
+          amount,
+          allocations: [{ invoice_id: modal.invoice.id, amount }],
+        });
+        total += amount;
+      }
+      setMessage(`Encaissement de ${total} enregistré pour ${modal.invoice.invoiceNumber}${tenders.length > 1 ? ` (${tenders.length} modes)` : ""}.`);
       setModal(null);
       await refresh();
     } catch (err) {
@@ -306,7 +328,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
                   <DocPrintMenu onPrint={(o) => handlePrintInvoice(invoice.id, o)} />
                   <Button variant="view" size="sm" onClick={() => setEmailInvoice(invoice)}>Envoyer par e-mail</Button>
                   {canManage && invoice.type === "invoice" && invoice.status === "issued" && (
-                    <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, amount: String(invoice.totalTtc) })}>
+                    <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, tenders: [{ method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: String(invoice.totalTtc) }] })}>
                       Encaisser
                     </Button>
                   )}
@@ -441,6 +463,26 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       {/* Ch. 18 §18.9 — Taux de TVA */}
       <TaxRatesCard canAdminister={canAdminister} onError={setError} onMessage={setMessage} />
 
+      {/* Modes de paiement configurables */}
+      <Card
+        title="Modes de paiement"
+        icon={<IconFinance />}
+        subtitle="Espèces, virement, chèque, Mobile Money… paramétrables."
+        action={canAdminister ? <Button variant="view" size="sm" onClick={() => setModal({ kind: "payment-methods" })}>Gérer</Button> : undefined}
+      >
+        <div className="ecl-list">
+          {paymentMethods.filter((m) => m.active).map((m) => (
+            <div key={m.id} className="ecl-row" style={{ justifyContent: "space-between" }}>
+              <span>{m.label}</span>
+              <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>
+                {m.code}
+                {m.defaultAccountId ? ` · → ${bankAccounts.find((a) => a.id === m.defaultAccountId)?.label ?? "compte"}` : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
       {/* Ch. 18 §18.8 — Trésorerie */}
       <Card
         title="Trésorerie : comptes, caisses et virements"
@@ -496,14 +538,55 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       {modal?.kind === "pay-invoice" && (
         <Modal
           title={`Encaisser ${modal.invoice.invoiceNumber}`}
+          wide
           onClose={() => setModal(null)}
           footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitPayInvoice} confirmLabel="Encaisser" confirmVariant="add" />}
         >
-          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>Client : <strong style={{ color: "var(--ink)" }}>{modal.invoice.customer.name}</strong> · solde {modal.invoice.totalTtc}</p>
-          <Field label="Montant encaissé">
-            <input type="number" min={0} value={modal.amount} onChange={(e) => setModal({ ...modal, amount: e.target.value })} autoFocus />
-          </Field>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+            Client : <strong style={{ color: "var(--ink)" }}>{modal.invoice.customer.name}</strong> · solde {modal.invoice.totalTtc}
+          </p>
+          <div style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 8px" }}>
+            Un ou plusieurs modes (paiement mixte). Compte laissé sur « Auto » = compte par défaut du mode.
+          </div>
+          {modal.tenders.map((t, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1.1fr 1.1fr 1fr 0.9fr 28px", gap: 8, alignItems: "center", marginBottom: 8 }}>
+              <select value={t.method} onChange={(e) => setModal({ ...modal, tenders: modal.tenders.map((x, idx) => (idx === i ? { ...x, method: e.target.value } : x)) })}>
+                {paymentMethods.filter((m) => m.active).map((m) => (
+                  <option key={m.code} value={m.code}>{m.label}</option>
+                ))}
+              </select>
+              <select value={t.bankAccountId} onChange={(e) => setModal({ ...modal, tenders: modal.tenders.map((x, idx) => (idx === i ? { ...x, bankAccountId: e.target.value } : x)) })}>
+                <option value="">Auto (compte par défaut)</option>
+                {bankAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.label}</option>
+                ))}
+              </select>
+              <input placeholder="Référence (n° chèque, ID MoMo…)" value={t.reference} onChange={(e) => setModal({ ...modal, tenders: modal.tenders.map((x, idx) => (idx === i ? { ...x, reference: e.target.value } : x)) })} />
+              <input type="number" min={0} placeholder="Montant" value={t.amount} onChange={(e) => setModal({ ...modal, tenders: modal.tenders.map((x, idx) => (idx === i ? { ...x, amount: e.target.value } : x)) })} />
+              <button type="button" title="Retirer" disabled={modal.tenders.length === 1} onClick={() => setModal({ ...modal, tenders: modal.tenders.filter((_, idx) => idx !== i) })} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, cursor: "pointer", padding: "6px 6px" }}>✕</button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setModal({ ...modal, tenders: [...modal.tenders, { method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: "" }] })}
+            style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}
+          >
+            + Ajouter un mode (paiement mixte)
+          </button>
+          <div style={{ textAlign: "right", marginTop: 8, fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+            Total saisi : {modal.tenders.reduce((s, t) => s + (Number(t.amount) || 0), 0)}
+          </div>
         </Modal>
+      )}
+
+      {modal?.kind === "payment-methods" && (
+        <PaymentMethodsModal
+          methods={paymentMethods}
+          bankAccounts={bankAccounts}
+          onClose={() => setModal(null)}
+          onChanged={async () => setPaymentMethods(await listPaymentMethods())}
+          onError={(m) => setError(m)}
+        />
       )}
 
       {modal?.kind === "generate-statement" && (
@@ -776,6 +859,96 @@ function ModalActions({ onCancel, onConfirm, confirmLabel, confirmVariant }: { o
       <Button variant="view" size="sm" onClick={onCancel}>Annuler</Button>
       <Button variant={confirmVariant} size="sm" onClick={onConfirm}>{confirmLabel}</Button>
     </>
+  );
+}
+
+const KIND_LABELS: Record<PaymentMethodKind, string> = {
+  especes: "Espèces",
+  virement: "Virement",
+  cheque: "Chèque",
+  carte: "Carte",
+  mobile_money: "Mobile Money",
+  autre: "Autre",
+};
+
+// Gestion des modes de paiement (administrateur) : activer/désactiver, changer
+// le compte financier par défaut, ajouter un mode personnalisé (PayPal, Wave…).
+function PaymentMethodsModal({
+  methods,
+  bankAccounts,
+  onClose,
+  onChanged,
+  onError,
+}: {
+  methods: PaymentMethodDef[];
+  bankAccounts: BankAccount[];
+  onClose: () => void;
+  onChanged: () => Promise<void>;
+  onError: (m: string) => void;
+}) {
+  const [code, setCode] = useState("");
+  const [label, setLabel] = useState("");
+  const [kind, setKind] = useState<PaymentMethodKind>("autre");
+  const [busy, setBusy] = useState(false);
+
+  async function add() {
+    if (!code.trim() || !label.trim()) return;
+    setBusy(true);
+    try {
+      await createPaymentMethod({ code: code.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_"), label: label.trim(), kind });
+      setCode("");
+      setLabel("");
+      setKind("autre");
+      await onChanged();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Échec de l'ajout.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function patch(id: string, input: Parameters<typeof updatePaymentMethod>[1]) {
+    try {
+      await updatePaymentMethod(id, input);
+      await onChanged();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Échec de la mise à jour.");
+    }
+  }
+
+  return (
+    <Modal title="Modes de paiement" wide onClose={onClose} footer={<Button variant="view" size="sm" onClick={onClose}>Fermer</Button>}>
+      <div className="ecl-list" style={{ marginBottom: 12 }}>
+        {methods.map((m) => (
+          <div key={m.id} className="ecl-row" style={{ display: "grid", gridTemplateColumns: "1.2fr 0.9fr 1.3fr 0.8fr", gap: 8, alignItems: "center" }}>
+            <span><strong>{m.label}</strong> <span style={{ fontSize: 11, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{m.code}</span></span>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>{KIND_LABELS[m.kind]}</span>
+            <select value={m.defaultAccountId ?? ""} onChange={(e) => patch(m.id, { default_account_id: e.target.value || null })} title="Compte financier par défaut">
+              <option value="">Aucun compte par défaut</option>
+              {bankAccounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.label}</option>
+              ))}
+            </select>
+            <label style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}>
+              <input type="checkbox" checked={m.active} onChange={(e) => patch(m.id, { active: e.target.checked })} /> Actif
+            </label>
+          </div>
+        ))}
+      </div>
+      <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Ajouter un mode</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8 }}>
+          <input placeholder="Code (ex. paypal)" value={code} onChange={(e) => setCode(e.target.value)} />
+          <input placeholder="Libellé (ex. PayPal)" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <select value={kind} onChange={(e) => setKind(e.target.value as PaymentMethodKind)}>
+            {(Object.keys(KIND_LABELS) as PaymentMethodKind[]).map((k) => (
+              <option key={k} value={k}>{KIND_LABELS[k]}</option>
+            ))}
+          </select>
+          <Button variant="add" size="sm" onClick={add} disabled={busy || !code.trim() || !label.trim()}>Ajouter</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

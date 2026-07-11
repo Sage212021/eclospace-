@@ -27,6 +27,7 @@ import printingRoutes from "./routes/printing.js";
 import stockRoutes from "./routes/stock.js";
 import commercialRoutes from "./routes/commercial.js";
 import financeRoutes from "./routes/finance.js";
+import editorialQuoteRoutes from "./routes/editorialQuotes.js";
 import royaltiesRoutes from "./routes/royalties.js";
 import hrRoutes from "./routes/hr.js";
 import directionRoutes from "./routes/direction.js";
@@ -72,6 +73,7 @@ export async function buildApp() {
   await app.register(stockRoutes);
   await app.register(commercialRoutes);
   await app.register(financeRoutes);
+  await app.register(editorialQuoteRoutes);
   await app.register(royaltiesRoutes);
   await app.register(hrRoutes);
   await app.register(directionRoutes);

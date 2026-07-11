@@ -518,3 +518,20 @@ Décision opérateur : **signature simple/interne** (sans coût, sans prestatair
 - **Tests** : `tests/contract-signature.test.ts` (activation, empreinte, trace, refus hors état, consentement, unicité par partie). **170 tests passent** (backend), build front OK.
 
 **Phase B, point 2 (SMS)** : reporté à la décision budgétaire/fournisseur de l'opérateur.
+
+### 11/07/2026 — Compte d'auteur : devis → signature → facture de prestation (backend)
+
+Nouvelle extension décidée avec l'opérateur : facturer à l'**auteur** le **travail éditorial** (relecture, correction, proposition de couverture, maquette… jusqu'au livre fini), **hors impression et communication**. Modèle « compte d'auteur », en complément du « compte d'éditeur » du cahier des charges. Parcours : **devis → l'auteur le valide/signe → facture générée depuis le devis**.
+
+**Fait (fondations backend, testées)** :
+- **Devis de prestation** (`editorial_quotes` + lignes) : création, totaux HT/TVA/TTC, mention d'exclusion (impression/communication) par défaut, numérotation sécurisée `DE-AAAA-NNNN`.
+- **Trois modes de signature** (au choix selon le contexte / l'accessibilité de l'auteur) :
+  - **③ en ligne** (principal) : envoi d'un **lien unique** (jeton aléatoire, à usage unique, expirant 30 j) ; page publique sans compte ; l'auteur consulte et **signe en ligne**.
+  - **① interne** : un agent enregistre l'accord de l'auteur.
+  - **② papier** : devis imprimé, signé, scanné, renvoyé (accord enregistré, scan rattaché).
+  - Dans tous les cas : **empreinte des montants signés** + **trace au journal**.
+- **Facture de prestation** générée depuis le devis **accepté** : reprend les lignes, **aucun droit d'auteur généré**, facturée à un **client-auteur** miroir (lié au Partenaire, dédoublonné), immuable, même série `FA-…`.
+- **Garde-fous** : facture impossible avant acceptation ; consentement explicite obligatoire ; lien à usage unique.
+- Migrations **additives** (aucune donnée touchée). **175 tests** (dont 5 nouveaux sur ce parcours).
+
+**Reste à faire (prochain incrément)** : écran de gestion des devis (fiche manuscrit), **page publique de signature**, **impression PDF** du devis et de la facture de prestation, **envoi par e-mail** du lien de signature ; puis consigner la décision au registre.

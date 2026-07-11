@@ -590,6 +590,8 @@ model Partner {
   metadataExports      MetadataExport[]
   royaltyBeneficiaries ContractBeneficiary[]
   royaltyPayments      RoyaltyPayment[]
+  billingCustomer      Customer?
+  editorialQuotes      EditorialQuote[]
 
   @@map("partners")
 }
@@ -702,6 +704,7 @@ model Manuscript {
   expenses           Expense[]
   costEntries        CostEntry[]
   budgets            Budget[]
+  editorialQuotes    EditorialQuote[]
 
   @@map("manuscripts")
 }
@@ -1822,6 +1825,7 @@ enum CustomerCategory {
   institution
   particulier
   plateforme
+  auteur
 }
 
 enum RelationMode {
@@ -1872,6 +1876,12 @@ model Customer {
   creditLimit  Decimal?         @map("credit_limit") @db.Decimal(12, 2)
   taxId        String?          @map("tax_id")
   shippingZone ShippingZone?    @map("shipping_zone")
+
+  // Lien optionnel vers l'auteur (Partenaire) quand ce client est le « miroir de
+  // facturation » d'un auteur en compte d'auteur (prestation éditoriale). Permet
+  // de ne créer qu'une seule fiche client par auteur (dédoublonnage).
+  partnerId String?  @unique @map("partner_id")
+  partner   Partner? @relation(fields: [partnerId], references: [id])
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -2231,8 +2241,86 @@ model Invoice {
 
   lines              InvoiceLine[]
   paymentAllocations PaymentAllocation[]
+  editorialQuote     EditorialQuote?
 
   @@map("invoices")
+}
+
+// --- Compte d'auteur : devis puis facture de prestation éditoriale ----------
+// Modèle « compte d'auteur » (décision opérateur du 10/07/2026), en complément
+// du « compte d'éditeur » du cahier des charges. L'auteur reçoit un DEVIS de
+// prestation (relecture, correction, couverture, maquette…), le valide/signe,
+// puis une FACTURE est générée depuis le devis accepté. Hors impression et
+// communication. Aucun droit d'auteur généré (c'est un service vendu).
+enum EditorialQuoteStatus {
+  draft
+  sent
+  accepted
+  refused
+  expired
+  invoiced
+}
+
+// Comment l'accord de l'auteur a été recueilli (les trois modes coexistent,
+// choisis selon le contexte et l'accessibilité de l'auteur).
+enum QuoteAcceptanceMethod {
+  online_link // ③ l'auteur signe en ligne via un lien reçu par e-mail
+  internal    // ① accord enregistré par un agent (en personne / téléphone)
+  paper       // ② devis imprimé, signé à la main, scanné et renvoyé
+}
+
+model EditorialQuote {
+  id           String               @id @default(uuid())
+  quoteNumber  String               @unique @map("quote_number")
+  partnerId    String               @map("partner_id")
+  partner      Partner              @relation(fields: [partnerId], references: [id])
+  manuscriptId String?              @map("manuscript_id")
+  manuscript   Manuscript?          @relation(fields: [manuscriptId], references: [id])
+  status       EditorialQuoteStatus @default(draft)
+  currency     String               @default("XAF")
+  totalHt      Decimal              @map("total_ht") @db.Decimal(12, 2)
+  totalTax     Decimal              @map("total_tax") @db.Decimal(12, 2)
+  totalTtc     Decimal              @map("total_ttc") @db.Decimal(12, 2)
+  validUntil   DateTime?            @map("valid_until")
+  notes        String?
+  // Mention explicite d'exclusion (impression, communication) portée au devis.
+  exclusionsNote String?            @map("exclusions_note")
+
+  // Signature / acceptation (mode ③ par jeton, ou ① / ② enregistrés par un agent)
+  signToken          String?               @unique @map("sign_token")
+  signTokenExpiresAt DateTime?             @map("sign_token_expires_at")
+  acceptedAt         DateTime?             @map("accepted_at")
+  acceptanceMethod   QuoteAcceptanceMethod? @map("acceptance_method")
+  signerName         String?               @map("signer_name")
+  termsHash          String?               @map("terms_hash")
+  acceptanceNote     String?               @map("acceptance_note")
+  acceptanceIp       String?               @map("acceptance_ip")
+
+  invoiceId String?  @unique @map("invoice_id")
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+
+  lines EditorialQuoteLine[]
+
+  @@map("editorial_quotes")
+}
+
+model EditorialQuoteLine {
+  id          String         @id @default(uuid())
+  quoteId     String         @map("quote_id")
+  quote       EditorialQuote @relation(fields: [quoteId], references: [id])
+  description String
+  quantity    Int
+  unitPrice   Decimal        @map("unit_price") @db.Decimal(10, 2)
+  taxRate     Decimal        @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  lineTotal   Decimal        @map("line_total") @db.Decimal(12, 2)
+
+  @@map("editorial_quote_lines")
 }
 
 model InvoiceLine {

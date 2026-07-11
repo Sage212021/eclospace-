@@ -4,10 +4,13 @@ import {
   createEditorialQuote,
   getEditorialQuote,
   invoiceEditorialQuote,
+  listCustomers,
   listEditorialQuotes,
   sendEditorialQuote,
+  type Customer,
   type EditorialQuote,
   type EditorialQuoteStatus,
+  type ServiceType,
 } from "../api/client";
 import { printEditorialQuote, printInvoice } from "../lib/print";
 import { Modal, Field } from "./Modal";
@@ -23,16 +26,41 @@ const STATUS_LABELS: Record<EditorialQuoteStatus, string> = {
   invoiced: "Facturé",
 };
 
-// Catalogue de départ des prestations éditoriales (compte d'auteur). Libre : on
-// peut saisir toute autre description.
-const SERVICE_CATALOG = [
-  "Relecture",
-  "Correction (orthographe / typographie)",
-  "Proposition de couverture",
-  "Création de couverture",
-  "Maquette intérieure (mise en page)",
-  "Accompagnement éditorial",
-];
+const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
+  editorial: "Éditoriale",
+  impression: "Impression",
+  communication: "Communication",
+};
+
+// Catalogues de départ par métier (libres : on peut saisir toute autre ligne).
+const SERVICE_CATALOGS: Record<ServiceType, string[]> = {
+  editorial: [
+    "Relecture",
+    "Correction (orthographe / typographie)",
+    "Proposition de couverture",
+    "Création de couverture",
+    "Maquette intérieure (mise en page)",
+    "Accompagnement éditorial",
+  ],
+  impression: [
+    "Tirage offset",
+    "Tirage numérique",
+    "Papier (fourniture)",
+    "Façonnage",
+    "Reliure",
+    "Pelliculage",
+    "Découpe / massicot",
+  ],
+  communication: [
+    "Création de logo",
+    "Cartes de visite",
+    "Flyers / dépliants",
+    "Affiches",
+    "Banderole / kakémono",
+    "Community management (mensuel)",
+    "Charte graphique",
+  ],
+};
 
 interface Props {
   manuscriptId: string;
@@ -88,7 +116,7 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>Prestation éditoriale (compte d'auteur)</div>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Devis de prestation</div>
         {canCreate && (
           <button onClick={() => setShowForm((v) => !v)} style={secondaryButtonStyle}>
             {showForm ? "Annuler" : "+ Nouveau devis"}
@@ -96,7 +124,7 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
         )}
       </div>
       <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
-        Travail éditorial facturé à l'auteur — hors frais d'impression et de communication.
+        Éditoriale (facturée à l'auteur), impression ou communication (facturées à un client) — devis → signature → facture.
       </div>
 
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
@@ -119,7 +147,10 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
       {quotes.map((q) => (
         <div key={q.id} style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 10, fontSize: 13 }}>
           <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>{q.quoteNumber}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>
+              {q.quoteNumber} · {SERVICE_TYPE_LABELS[q.serviceType]}
+              {q.partner ? ` · ${q.partner.firstName} ${q.partner.lastName}` : q.customer ? ` · ${q.customer.name}` : ""}
+            </span>
             <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>
               {new Intl.NumberFormat("fr-FR", { style: "currency", currency: q.currency || "XAF", maximumFractionDigits: 0 }).format(Number(q.totalTtc))}
             </span>
@@ -171,7 +202,9 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
 // Enregistrement de l'accord de l'auteur en interne (① agent) ou papier (② scan).
 function AcceptModal({ quote, onClose, onAccepted }: { quote: EditorialQuote; onClose: () => void; onAccepted: () => void }) {
   const [method, setMethod] = useState<"internal" | "paper">("internal");
-  const [signerName, setSignerName] = useState(`${quote.partner.firstName} ${quote.partner.lastName}`);
+  const [signerName, setSignerName] = useState(
+    quote.partner ? `${quote.partner.firstName} ${quote.partner.lastName}` : quote.customer?.name ?? "",
+  );
   const [note, setNote] = useState("");
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -248,8 +281,17 @@ function NewQuoteForm({
   onCreated: () => void;
   onError: (m: string) => void;
 }) {
-  const [lines, setLines] = useState<QuoteLineDraft[]>([{ description: "Relecture", quantity: 1, unit_price: 0 }]);
+  const [serviceType, setServiceType] = useState<ServiceType>("editorial");
+  // Destinataire : l'auteur du manuscrit, ou un client commercial (choix C).
+  const [targetKind, setTargetKind] = useState<"author" | "customer">(defaultPartnerId ? "author" : "customer");
+  const [customerId, setCustomerId] = useState("");
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [lines, setLines] = useState<QuoteLineDraft[]>([{ description: "", quantity: 1, unit_price: 0 }]);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    listCustomers().then(setCustomers).catch(() => setCustomers([]));
+  }, []);
 
   const total = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
 
@@ -259,8 +301,12 @@ function NewQuoteForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!defaultPartnerId) {
-      onError("Aucun auteur rattaché à ce manuscrit pour établir le devis.");
+    if (targetKind === "author" && !defaultPartnerId) {
+      onError("Aucun auteur rattaché à ce manuscrit — choisissez un client.");
+      return;
+    }
+    if (targetKind === "customer" && !customerId) {
+      onError("Sélectionnez le client à facturer.");
       return;
     }
     const clean = lines.filter((l) => l.description.trim() && l.quantity > 0);
@@ -271,7 +317,8 @@ function NewQuoteForm({
     setBusy(true);
     try {
       await createEditorialQuote({
-        partner_id: defaultPartnerId,
+        service_type: serviceType,
+        ...(targetKind === "author" ? { partner_id: defaultPartnerId } : { customer_id: customerId }),
         manuscript_id: manuscriptId,
         lines: clean.map((l) => ({ description: l.description.trim(), quantity: l.quantity, unit_price: l.unit_price, tax_rate: 0 })),
       });
@@ -284,8 +331,52 @@ function NewQuoteForm({
 
   return (
     <form onSubmit={handleSubmit} style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <label style={{ fontSize: 12 }}>
+          Type de prestation
+          <select
+            value={serviceType}
+            onChange={(e) => {
+              const t = e.target.value as ServiceType;
+              setServiceType(t);
+              // L'éditorial vise l'auteur ; impression/communication un client.
+              setTargetKind(t === "editorial" && defaultPartnerId ? "author" : "customer");
+            }}
+            style={inputStyle}
+          >
+            <option value="editorial">Éditoriale (auteur)</option>
+            <option value="impression">Impression (client)</option>
+            <option value="communication">Communication (client)</option>
+          </select>
+        </label>
+        <label style={{ fontSize: 12 }}>
+          Facturé à
+          {targetKind === "author" ? (
+            <select value="author" onChange={(e) => setTargetKind(e.target.value as "author" | "customer")} style={inputStyle}>
+              <option value="author">Auteur du manuscrit</option>
+              <option value="customer">Un client…</option>
+            </select>
+          ) : (
+            <select
+              value={customerId}
+              onChange={(e) => {
+                if (e.target.value === "__author__") setTargetKind("author");
+                else setCustomerId(e.target.value);
+              }}
+              style={inputStyle}
+            >
+              <option value="">— Choisir un client —</option>
+              {defaultPartnerId && <option value="__author__">↩︎ Facturer l'auteur du manuscrit</option>}
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
+        </label>
+      </div>
+
       <datalist id="ecl-service-catalog">
-        {SERVICE_CATALOG.map((s) => (
+        {SERVICE_CATALOGS[serviceType].map((s) => (
           <option key={s} value={s} />
         ))}
       </datalist>

@@ -499,6 +499,20 @@ async function main() {
     create: { key: "stock_default_alert_threshold", value: 20 },
   });
 
+  // Rapports hebdomadaires (Demande opérateur du 11/07/2026) — paramétrables :
+  // mode de validation ("dg" par défaut, ou "chef" = chef de département) et
+  // périodicité ("weekly" par défaut, "biweekly" ou "monthly").
+  await prisma.setting.upsert({
+    where: { key: "weekly_report_validation_mode" },
+    update: {},
+    create: { key: "weekly_report_validation_mode", value: "dg" },
+  });
+  await prisma.setting.upsert({
+    where: { key: "weekly_report_periodicity" },
+    update: {},
+    create: { key: "weekly_report_periodicity", value: "weekly" },
+  });
+
   // Grille de remise par défaut par catégorie de client (Ch. 17 §17.4).
   const discountGrids: { category: CustomerCategory; discountPct: number }[] = [
     { category: "librairie", discountPct: 35 },

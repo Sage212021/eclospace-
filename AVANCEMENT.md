@@ -559,4 +559,29 @@ Sur retour opérateur, tous les documents officiels (facture, devis, relevé de 
 - Hauteurs réservées (mode vierge / intégré) ajustables si le bandeau du papier diffère.
 - **Données de référence = celles des documents numériques** (décision opérateur du 11/07/2026) : téléphones `(+237) 698 03 15 02 / 678 70 40 86`, e-mail `eclosionedition@gmail.com`, site `eclosioneditions.cm`, N° de contribuable `M021912751174Y`, RC `RC/YAO/2019/B/144`. C'est le **papier à en-tête** qui a été corrigé pour s'y conformer (nouvelle image fournie), pas l'inverse. Source unique du numérique dans trois fichiers (`frontend/src/lib/print.ts`, `backend/src/lib/documentEmail.ts`, `frontend/src/pages/QuoteSignPage.tsx`).
 - **Papier à en-tête officiel corrigé** enregistré (`frontend/public/eclosion-papier-entete.png`, A4 1054×1492). Bandeaux mesurés ~56 mm (haut) et ~56 mm (bas) → hauteurs réservées : mode « en-tête intégré » padding 58/58 mm ; mode « papier vierge » espaces 40/40 mm en plus de la marge @page de 18 mm.
-- **Petit écart restant à trancher** : le papier corrigé liste **3 téléphones** (dont `654 366 663`), le numérique n'en a que 2 — à aligner si l'opérateur le souhaite.
+- **Petit écart restant à trancher** : le papier corrigé liste **3 téléphones** (dont `654 366 663`), le numérique n'en a que 2 — à aligner si l'opérateur le souhaite. *(Fait : 3e numéro ajouté au numérique.)*
+
+### 11/07/2026 (suite) — Rapports hebdomadaires par agent (Demande 3, backend)
+
+Nouveau module : chaque agent rédige un compte-rendu périodique relié à ses **objectifs** (chiffrés et/ou libres) et à sa **recherche/veille** ; la hiérarchie suit et valide.
+
+- **Objectifs** (`objectives`) : intitulé + cible chiffrée facultative (valeur + unité) + période + poids ; fixés par un **chef de département** (son pôle) ou la **DG**.
+- **Rapport** (`weekly_reports`) : sections *réalisations, recherche, difficultés, plan suivant* + lignes d'**avancement d'objectifs** (`weekly_report_objectives`, % + commentaire ; objectif lié = chiffré, ou libellé libre). Cycle **brouillon → soumis → validé / retourné**. Un rapport par agent et par période.
+- **Paramétrable** (table `settings`) : `weekly_report_validation_mode` (**dg** par défaut, ou **chef**) et `weekly_report_periodicity` (**weekly**, biweekly, monthly).
+- **Confidentialité** (modèle « présence/names ») : agent = ses rapports ; chef = son pôle ; DG (`direction:consultation`) + super-admin = tout. Refus tracés (`access_denied`).
+- **API** : objectifs (create/list), rapports (create période courante, list, get, patch, submit, validate/return). Migration **additive**. **181 tests** (+4 : cycle, confidentialité, habilitation validation, objectifs réservés).
+- **Écrans (fait)** : page **« Mes rapports hebdo »** (menu, accessible à tous) — *Mon rapport de la période* (objectifs + avancement, réalisations, recherche/veille, difficultés, plan ; Enregistrer/Soumettre), *Mes objectifs*, et *Suivi des rapports* (chef/DG : consulter, valider/retourner). Vérifié au navigateur.
+- Les deux réglages (mode de validation, périodicité) sont modifiables depuis l'écran **Paramètres** (clé/valeur, `settings:administration`).
+
+### 11/07/2026 (suite) — Devis/facture Impression et Communication (Demande 2, choix C)
+
+Le circuit devis → signature → facture est **généralisé aux trois métiers** de la maison : **Éditoriale** (facturée à l'auteur), **Impression** et **Communication** (facturées à un client). Décision opérateur : **choix C** — un devis peut viser un **auteur (Partenaire) OU un client (Customer)**, au choix.
+
+- **Backend** : `EditorialQuote` gagne `serviceType` (enum `ServiceType`) et un destinataire au choix (`partnerId` **ou** `customerId`, au moins l'un des deux ; `partner_id` devient nullable). La facture est adressée au **client** si fixé, sinon au **client-auteur** miroir. Source de facture `${serviceType}_quote`. Migration **additive**.
+- **Frontend** : le formulaire de devis (fiche manuscrit) propose le **type de prestation** (catalogue de lignes adapté à chaque métier) et le **destinataire** (auteur du manuscrit ou client). Titre du devis imprimé adapté (« Devis d'impression », « Devis de communication »…).
+- **Tests** : +2 (`editorial-quotes.test.ts` : devis impression facturé à un client, refus sans destinataire). **177 tests passent.**
+- **Reste** : Demande 3 (rapports hebdomadaires) — prochain incrément.
+
+### 11/07/2026 (suite) — Filigrane d'authenticité sur les documents numériques
+
+Retour opérateur : conserver la présentation numérique **élégante** d'origine (logo + coordonnées + pied légal), et y ajouter **uniquement l'ampoule** du papier à en-tête, en filigrane au centre, comme **signature d'authenticité**. Le relook « design en-tête par défaut » est annulé. Les **3 présentations** d'impression sont conservées (Numérique / En-tête intégré / Papier vierge). Filigrane extrait du papier à en-tête (`frontend/public/eclosion-filigrane.png`, blanc rendu transparent), affiché en très léger sur la seule version numérique. Vérifié au navigateur.

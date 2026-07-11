@@ -238,10 +238,14 @@ export async function createInvoiceFromEditorialQuote(tx: Tx, quoteId: string) {
     throw new Error("quote_already_invoiced");
   }
 
-  const customer = await ensureAuthorCustomer(tx, quote.partnerId);
+  // Destinataire (choix C) : un client commercial (customer) s'il est fixé,
+  // sinon l'auteur (Partenaire), via son client-miroir.
+  const customer = quote.customerId
+    ? await tx.customer.findUniqueOrThrow({ where: { id: quote.customerId } })
+    : await ensureAuthorCustomer(tx, quote.partnerId!);
   const invoice = await createInvoiceRecord(tx, {
     customerId: customer.id,
-    sourceType: "editorial_quote",
+    sourceType: `${quote.serviceType}_quote`,
     sourceId: quote.id,
     lines: quote.lines.map((l) => ({
       isbnId: null,

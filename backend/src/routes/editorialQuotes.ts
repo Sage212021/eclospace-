@@ -15,7 +15,12 @@ import { buildQuoteSignEmail } from "../lib/documentEmail.js";
 // ③ en ligne par lien) → FACTURE générée depuis le devis accepté. Hors
 // impression et communication ; aucun droit d'auteur généré.
 
-const DEFAULT_EXCLUSIONS = "Prestation éditoriale — hors frais d'impression et de communication.";
+// Mention d'exclusion par défaut selon le métier facturé.
+const DEFAULT_EXCLUSIONS: Record<string, string> = {
+  editorial: "Prestation éditoriale — hors frais d'impression et de communication.",
+  impression: "Travaux d'imprimerie — hors conception éditoriale et graphique.",
+  communication: "Conception et réalisation de supports de communication.",
+};
 
 const lineSchema = z.object({
   description: z.string().trim().min(1).max(300),
@@ -24,15 +29,24 @@ const lineSchema = z.object({
   tax_rate: z.number().min(0).max(100).default(0),
 });
 
-const createQuoteSchema = z.object({
-  partner_id: z.string().uuid(),
-  manuscript_id: z.string().uuid().optional(),
-  currency: z.string().min(3).max(3).default("XAF"),
-  valid_until: z.coerce.date().optional(),
-  notes: z.string().max(2000).optional(),
-  exclusions_note: z.string().max(500).optional(),
-  lines: z.array(lineSchema).min(1, "Au moins une ligne de prestation."),
-});
+// Devis de prestation (choix C) : type de métier + destinataire = auteur
+// (Partenaire) OU client commercial (Customer) — au moins l'un des deux.
+const createQuoteSchema = z
+  .object({
+    service_type: z.enum(["editorial", "impression", "communication"]).default("editorial"),
+    partner_id: z.string().uuid().optional(),
+    customer_id: z.string().uuid().optional(),
+    manuscript_id: z.string().uuid().optional(),
+    currency: z.string().min(3).max(3).default("XAF"),
+    valid_until: z.coerce.date().optional(),
+    notes: z.string().max(2000).optional(),
+    exclusions_note: z.string().max(500).optional(),
+    lines: z.array(lineSchema).min(1, "Au moins une ligne de prestation."),
+  })
+  .refine((d) => d.partner_id || d.customer_id, {
+    message: "Indiquez un destinataire : un auteur (partenaire) ou un client.",
+    path: ["partner_id"],
+  });
 
 const acceptInternalSchema = z.object({
   // ① accord enregistré par un agent, ② devis papier signé et scanné.
@@ -51,13 +65,14 @@ const publicSignSchema = z.object({
 // lignes et totaux (intégrité), indépendamment des champs d'audit.
 function quoteTermsHash(quote: {
   quoteNumber: string;
-  partnerId: string;
+  partnerId: string | null;
+  customerId?: string | null;
   currency: string;
   lines: { description: string; quantity: number; unitPrice: unknown; taxRate: unknown }[];
 }): string {
   const canonical = JSON.stringify({
     quoteNumber: quote.quoteNumber,
-    partnerId: quote.partnerId,
+    target: quote.partnerId ?? quote.customerId ?? "",
     currency: quote.currency,
     lines: quote.lines.map((l) => ({
       description: l.description,
@@ -81,6 +96,7 @@ function computeTotals(lines: { quantity: number; unit_price: number; tax_rate: 
 
 const quoteInclude = {
   partner: { select: { id: true, firstName: true, lastName: true, email: true } },
+  customer: { select: { id: true, name: true, email: true } },
   manuscript: { select: { id: true, manuscriptNumber: true, title: true } },
   lines: true,
 } as const;
@@ -93,9 +109,18 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
     }
     const body = parsed.data;
-    const partner = await prisma.partner.findFirst({ where: { id: body.partner_id, deletedAt: null } });
-    if (!partner) {
-      return reply.code(404).send({ code: "not_found", message: "Auteur (partenaire) introuvable." });
+    // Vérifie le destinataire choisi (auteur et/ou client).
+    if (body.partner_id) {
+      const partner = await prisma.partner.findFirst({ where: { id: body.partner_id, deletedAt: null } });
+      if (!partner) {
+        return reply.code(404).send({ code: "not_found", message: "Auteur (partenaire) introuvable." });
+      }
+    }
+    if (body.customer_id) {
+      const customer = await prisma.customer.findFirst({ where: { id: body.customer_id, deletedAt: null } });
+      if (!customer) {
+        return reply.code(404).send({ code: "not_found", message: "Client introuvable." });
+      }
     }
     const totals = computeTotals(body.lines);
     const quoteNumber = await nextQuoteNumber();
@@ -103,12 +128,14 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
     const quote = await prisma.editorialQuote.create({
       data: {
         quoteNumber,
+        serviceType: body.service_type,
         partnerId: body.partner_id,
+        customerId: body.customer_id,
         manuscriptId: body.manuscript_id,
         currency: body.currency,
         validUntil: body.valid_until,
         notes: body.notes,
-        exclusionsNote: body.exclusions_note ?? DEFAULT_EXCLUSIONS,
+        exclusionsNote: body.exclusions_note ?? DEFAULT_EXCLUSIONS[body.service_type],
         totalHt: totals.totalHt,
         totalTax: totals.totalTax,
         totalTtc: totals.totalTtc,
@@ -132,7 +159,7 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
       action: "create",
       entityType: "editorial_quote",
       entityId: quote.id,
-      newValues: { quoteNumber, partnerId: body.partner_id, totalTtc: totals.totalTtc },
+      newValues: { quoteNumber, serviceType: body.service_type, partnerId: body.partner_id, customerId: body.customer_id, totalTtc: totals.totalTtc },
       ipAddress: request.ip,
     });
     return reply.code(201).send(quote);
@@ -196,11 +223,14 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
     // Envoi automatique du lien à l'auteur (③) si une adresse est connue et le
     // SMTP configuré. Au meilleur effort : une panne d'e-mail ne bloque pas.
     let emailSent = false;
-    const to = updated.partner.email?.trim();
+    const targetName = updated.partner
+      ? `${updated.partner.firstName} ${updated.partner.lastName}`
+      : updated.customer?.name ?? "";
+    const to = (updated.partner?.email ?? updated.customer?.email)?.trim();
     if (to && isMailConfigured()) {
       try {
         const built = buildQuoteSignEmail({
-          authorName: `${updated.partner.firstName} ${updated.partner.lastName}`,
+          authorName: targetName,
           quoteNumber: updated.quoteNumber,
           totalTtc: String(updated.totalTtc),
           currency: updated.currency,
@@ -295,16 +325,24 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
     const { token } = request.params as { token: string };
     const quote = await prisma.editorialQuote.findFirst({
       where: { signToken: token, deletedAt: null },
-      include: { partner: { select: { firstName: true, lastName: true } }, manuscript: { select: { title: true } }, lines: true },
+      include: {
+        partner: { select: { firstName: true, lastName: true } },
+        customer: { select: { name: true } },
+        manuscript: { select: { title: true } },
+        lines: true,
+      },
     });
     if (!quote) return reply.code(404).send({ code: "not_found", message: "Devis introuvable ou lien invalide." });
     if (quote.signTokenExpiresAt && quote.signTokenExpiresAt < new Date()) {
       return reply.code(410).send({ code: "link_expired", message: "Ce lien de signature a expiré. Contactez la maison d'édition." });
     }
+    const targetName = quote.partner
+      ? `${quote.partner.firstName} ${quote.partner.lastName}`
+      : quote.customer?.name ?? "";
     return reply.send({
       quote_number: quote.quoteNumber,
       status: quote.status,
-      author: `${quote.partner.firstName} ${quote.partner.lastName}`,
+      author: targetName,
       manuscript_title: quote.manuscript?.title ?? null,
       currency: quote.currency,
       exclusions_note: quote.exclusionsNote,

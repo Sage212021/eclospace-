@@ -25,6 +25,7 @@ const CATEGORY_LABELS: Record<CustomerCategory, string> = {
   institution: "Institution",
   particulier: "Particulier",
   plateforme: "Plateforme en ligne",
+  auteur: "Auteur",
 };
 
 const ZONE_OPTIONS: { value: string; label: string }[] = [

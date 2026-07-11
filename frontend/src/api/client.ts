@@ -452,9 +452,10 @@ export function updateContractStatus(id: string, status: ContractStatus) {
   return request<Contract>(`/api/v1/contracts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
 }
 
-// --- Compte d'auteur : devis de prestation éditoriale ---------------------
+// --- Devis de prestation (éditoriale / impression / communication) --------
 export type EditorialQuoteStatus = "draft" | "sent" | "accepted" | "refused" | "expired" | "invoiced";
 export type QuoteAcceptanceMethod = "online_link" | "internal" | "paper";
+export type ServiceType = "editorial" | "impression" | "communication";
 
 export interface EditorialQuoteLine {
   id: string;
@@ -468,6 +469,7 @@ export interface EditorialQuoteLine {
 export interface EditorialQuote {
   id: string;
   quoteNumber: string;
+  serviceType: ServiceType;
   status: EditorialQuoteStatus;
   currency: string;
   totalHt: string;
@@ -480,7 +482,8 @@ export interface EditorialQuote {
   acceptanceMethod: QuoteAcceptanceMethod | null;
   signerName: string | null;
   invoiceId: string | null;
-  partner: { id: string; firstName: string; lastName: string; email: string | null };
+  partner: { id: string; firstName: string; lastName: string; email: string | null } | null;
+  customer: { id: string; name: string; email: string | null } | null;
   manuscript: { id: string; manuscriptNumber: string; title: string } | null;
   lines: EditorialQuoteLine[];
 }
@@ -495,7 +498,9 @@ export function getEditorialQuote(id: string) {
 }
 
 export function createEditorialQuote(input: {
-  partner_id: string;
+  service_type?: ServiceType;
+  partner_id?: string;
+  customer_id?: string;
   manuscript_id?: string;
   currency?: string;
   valid_until?: string;
@@ -548,6 +553,104 @@ export function signPublicQuote(token: string, input: { signer_name: string; con
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+// --- Rapports hebdomadaires + objectifs (Demande 3) -----------------------
+export interface Objective {
+  id: string;
+  userId: string;
+  title: string;
+  description: string | null;
+  targetValue: string | null;
+  unit: string | null;
+  periodStart: string;
+  periodEnd: string;
+  weight: number;
+  status: "active" | "achieved" | "archived";
+  user?: { id: string; username: string };
+}
+
+export function listObjectives(userId?: string) {
+  const q = userId ? `?user_id=${userId}` : "";
+  return request<Objective[]>(`/api/v1/objectives${q}`);
+}
+
+export function createObjective(input: {
+  user_id: string;
+  title: string;
+  description?: string;
+  target_value?: number;
+  unit?: string;
+  period_start: string;
+  period_end: string;
+  weight?: number;
+}) {
+  return request<Objective>("/api/v1/objectives", { method: "POST", body: JSON.stringify(input) });
+}
+
+export type WeeklyReportStatus = "draft" | "submitted" | "validated" | "returned";
+
+export interface WeeklyReportObjectiveLine {
+  id: string;
+  objectiveId: string | null;
+  label: string | null;
+  progressPct: number;
+  comment: string | null;
+  objective?: { id: string; title: string; targetValue: string | null; unit: string | null } | null;
+}
+
+export interface WeeklyReport {
+  id: string;
+  userId: string;
+  pole: string;
+  periodStart: string;
+  periodEnd: string;
+  status: WeeklyReportStatus;
+  achievements: string | null;
+  research: string | null;
+  difficulties: string | null;
+  nextPlan: string | null;
+  submittedAt: string | null;
+  validatedAt: string | null;
+  validationComment: string | null;
+  user?: { id: string; username: string };
+  validatedBy?: { id: string; username: string } | null;
+  objectives: WeeklyReportObjectiveLine[];
+}
+
+// Récupère (ou crée) le rapport de l'agent pour la période courante.
+export function currentWeeklyReport() {
+  return request<WeeklyReport>("/api/v1/weekly-reports", { method: "POST" });
+}
+
+export function listWeeklyReports(params?: { status?: string; user_id?: string }) {
+  const qs = new URLSearchParams(params as Record<string, string>).toString();
+  return request<WeeklyReport[]>(`/api/v1/weekly-reports${qs ? `?${qs}` : ""}`);
+}
+
+export function getWeeklyReport(id: string) {
+  return request<WeeklyReport>(`/api/v1/weekly-reports/${id}`);
+}
+
+export function patchWeeklyReport(
+  id: string,
+  input: {
+    achievements?: string;
+    research?: string;
+    difficulties?: string;
+    next_plan?: string;
+    objectives?: { objective_id?: string; label?: string; progress_pct: number; comment?: string }[];
+  },
+) {
+  return request<WeeklyReport>(`/api/v1/weekly-reports/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function submitWeeklyReport(id: string) {
+  return request<WeeklyReport>(`/api/v1/weekly-reports/${id}/submit`, { method: "POST" });
+}
+
+export function validateWeeklyReport(id: string, input: { decision: "validate" | "return"; comment?: string }) {
+  return request<WeeklyReport>(`/api/v1/weekly-reports/${id}/validate`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export type TaskStatus = "non_commencee" | "en_cours" | "suspendue" | "terminee" | "validee";
@@ -1021,7 +1124,7 @@ export function createStockMovement(input: {
   return request(`/api/v1/stock-movements`, { method: "POST", body: JSON.stringify(input) });
 }
 
-export type CustomerCategory = "librairie" | "distributeur" | "institution" | "particulier" | "plateforme";
+export type CustomerCategory = "librairie" | "distributeur" | "institution" | "particulier" | "plateforme" | "auteur";
 
 export interface Customer {
   id: string;

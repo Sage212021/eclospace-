@@ -1,6 +1,20 @@
 import { useEffect, useState } from "react";
 import { getPublicQuote, signPublicQuote, type PublicQuote } from "../api/client";
 
+// Coordonnées officielles de la maison — identiques à l'en-tête/pied des
+// documents imprimés (facture, devis) et des e-mails. Source unique ici.
+const HOUSE = {
+  legalName: "ECLOSION EDITION SARL",
+  address: "Carrefour INSTIC – Nouvelle route Kondengui, Yaoundé, Cameroun",
+  poBox: "B.P. 33071 Yaoundé",
+  phone: "(+237) 698 03 15 02 / 678 70 40 86",
+  email: "eclosionedition@gmail.com",
+  website: "https://eclosioneditions.cm",
+  rccm: "RC/YAO/2019/B/144",
+  niu: "M021912751174Y",
+  cnps: "C-YAO-2019-0144",
+};
+
 // Page publique de signature d'un devis de prestation éditoriale (③). Accessible
 // sans compte, via le lien unique reçu par e-mail. Mise en page sobre aux
 // couleurs de la maison ; l'auteur consulte son devis et signe en un clic.
@@ -54,21 +68,30 @@ export function QuoteSignPage({ token }: { token: string }) {
     <div style={page}>
       <div style={card}>
         <div style={header}>
-          <img
-            src="/eclosion-logo.png"
-            alt="Éclosion Édition — L'avenir du livre"
-            style={{ height: 56, width: "auto", display: "block" }}
-            // Repli discret si le logo ne se charge pas : on affiche le nom.
-            onError={(e) => {
-              const img = e.currentTarget;
-              img.style.display = "none";
-              const fb = img.nextElementSibling as HTMLElement | null;
-              if (fb) fb.style.display = "block";
-            }}
-          />
-          <div style={{ display: "none" }}>
-            <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700 }}>Éclosion Édition</div>
-            <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#C89A1B" }}>L'avenir du livre</div>
+          <div>
+            <img
+              src="/eclosion-logo.png"
+              alt="Éclosion Édition — L'avenir du livre"
+              style={{ height: 56, width: "auto", display: "block" }}
+              // Repli discret si le logo ne se charge pas : on affiche le nom.
+              onError={(e) => {
+                const img = e.currentTarget;
+                img.style.display = "none";
+                const fb = img.nextElementSibling as HTMLElement | null;
+                if (fb) fb.style.display = "block";
+              }}
+            />
+            <div style={{ display: "none" }}>
+              <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700 }}>Éclosion Édition</div>
+              <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#C89A1B" }}>L'avenir du livre</div>
+            </div>
+          </div>
+          <div style={{ textAlign: "right", fontSize: 10.5, color: "#4b5563", lineHeight: 1.7, maxWidth: 300 }}>
+            {HOUSE.address}
+            <br />
+            {HOUSE.poBox} · Tél. {HOUSE.phone}
+            <br />
+            {HOUSE.email} · {HOUSE.website}
           </div>
         </div>
 
@@ -152,7 +175,12 @@ export function QuoteSignPage({ token }: { token: string }) {
           )}
         </div>
 
-        <div style={footer}>ECLOSION EDITION SARL · Carrefour INSTIC, Yaoundé · https://eclosioneditions.cm</div>
+        <div style={footer}>
+          <div style={{ color: "#16233D", fontWeight: 700 }}>{HOUSE.legalName}</div>
+          RCCM : {HOUSE.rccm} · NIU : {HOUSE.niu} · N° Affil. CNPS : {HOUSE.cnps}
+          <br />
+          {HOUSE.address} · {HOUSE.poBox} · Tél. {HOUSE.phone}
+        </div>
       </div>
     </div>
   );
@@ -160,7 +188,7 @@ export function QuoteSignPage({ token }: { token: string }) {
 
 const page: React.CSSProperties = { minHeight: "100vh", background: "#eef1f6", display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "24px 12px", fontFamily: "Arial, Helvetica, sans-serif", color: "#16233D" };
 const card: React.CSSProperties = { width: "100%", maxWidth: 640, background: "#fff", border: "1px solid #e6e9ef", borderRadius: 12, overflow: "hidden", boxShadow: "0 8px 30px rgba(22,35,61,.08)" };
-const header: React.CSSProperties = { padding: "20px 26px", borderBottom: "3px solid #16233D" };
+const header: React.CSSProperties = { padding: "20px 26px", borderBottom: "3px solid #16233D", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" };
 const footer: React.CSSProperties = { padding: "14px 26px", borderTop: "1px solid #e6e9ef", fontSize: 11, color: "#6b7280" };
 const table: React.CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: 13.5 };
 const thL: React.CSSProperties = { textAlign: "left", background: "#16233D", color: "#fff", padding: "8px 10px" };

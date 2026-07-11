@@ -71,6 +71,14 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
         <div>Document généré par Éclospace le ${escapeHtml(now)}.</div>
       </div>`;
 
+  // Filigrane d'authenticité : l'ampoule du papier à en-tête, en très léger, au
+  // centre — uniquement sur la version numérique élégante (ni en-tête intégré,
+  // qui la porte déjà, ni papier vierge, imprimé sur le papier physique).
+  const digital = !embed && !letterhead;
+  const watermarkStyle = digital
+    ? `body { background: url("${window.location.origin}/eclosion-filigrane.png") center 54% / 52% auto no-repeat; }`
+    : "";
+
   const pageMargin = embed ? "0" : "18mm 16mm";
   // Fond « papier à en-tête » A4 officiel (forcé à l'impression). La zone centrale
   // libre est réservée par le padding du bloc document.
@@ -91,6 +99,7 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     .lh-space { height: 40mm; }
     .lh-foot-space { height: 40mm; }
     ${embedStyle}
+    ${watermarkStyle}
     .lh { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
     .lh__logo { height: 62px; width: auto; }
     .lh__contact { text-align: right; font-size: 10.5px; color: #4b5563; line-height: 1.7; max-width: 340px; }

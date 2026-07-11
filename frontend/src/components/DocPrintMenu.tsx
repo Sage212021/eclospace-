@@ -15,9 +15,9 @@ export function DocPrintMenu({ onPrint, label = "Imprimer / PDF" }: { onPrint: (
     <details ref={ref} style={{ position: "relative", display: "inline-block" }}>
       <summary style={summaryStyle}>{label} ▾</summary>
       <div style={menuStyle}>
-        <button style={itemStyle} onClick={() => choose({ embed: true })}>Numérique / PDF (avec en-tête)</button>
+        <button style={itemStyle} onClick={() => choose({})}>Numérique / PDF</button>
+        <button style={itemStyle} onClick={() => choose({ embed: true })}>Avec papier à en-tête intégré</button>
         <button style={itemStyle} onClick={() => choose({ letterhead: true })}>Sur papier à en-tête vierge</button>
-        <button style={itemStyle} onClick={() => choose({})}>Version sobre (logo seul)</button>
       </div>
     </details>
   );

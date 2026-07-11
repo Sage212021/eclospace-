@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
+import { createHash } from "node:crypto";
 import { z } from "zod";
-import { ContractType, ContractStatus, RoyaltyBase, StatementPeriodicity } from "@prisma/client";
+import { ContractType, ContractStatus, RoyaltyBase, SignatureParty, StatementPeriodicity } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -43,6 +44,14 @@ const STATUS_CHAIN: ContractStatus[] = [
 const patchStatusSchema = z.object({
   status: z.nativeEnum(ContractStatus),
   signed_at: z.coerce.date().optional(),
+});
+
+const signContractSchema = z.object({
+  party: z.nativeEnum(SignatureParty),
+  signer_name: z.string().trim().min(2, "Nom du signataire requis.").max(200),
+  note: z.string().max(1000).optional(),
+  // Confirmation explicite de l'accord — la signature est un acte volontaire.
+  consent: z.boolean(),
 });
 
 const listQuerySchema = z.object({
@@ -153,7 +162,13 @@ export default async function contractRoutes(fastify: FastifyInstance) {
 
     const contract = await prisma.contract.findFirst({
       where: { id, deletedAt: null },
-      include: { partner: true, manuscript: true, royaltyTerms: true, amendments: true },
+      include: {
+        partner: true,
+        manuscript: true,
+        royaltyTerms: true,
+        amendments: true,
+        signatures: { orderBy: { signedAt: "asc" } },
+      },
     });
     if (!contract) {
       return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
@@ -207,4 +222,128 @@ export default async function contractRoutes(fastify: FastifyInstance) {
       return reply.send(updated);
     },
   );
+
+  // Signature « simple / interne » d'un contrat (Phase B, décision opérateur du
+  // 10/07/2026). L'accord d'une partie (auteur/prestataire ou maison) est
+  // enregistré, horodaté et lié à une empreinte des clauses signées — puis
+  // tracé au journal inviolable. Le contrat n'est activé qu'une fois la partie
+  // contractante (auteur) engagée. Réservé à la validation juridique, comme le
+  // circuit de statut, et n'est possible qu'en « attente de signature ».
+  fastify.post(
+    "/api/v1/contracts/:id/sign",
+    { preHandler: requirePermission("contracts", "validation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = signContractSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      if (!parsed.data.consent) {
+        return reply.code(400).send({
+          code: "consent_required",
+          message: "La signature exige la confirmation explicite de l'accord de la partie signataire.",
+        });
+      }
+
+      const contract = await prisma.contract.findFirst({
+        where: { id, deletedAt: null },
+        include: { partner: true, royaltyTerms: true, signatures: true },
+      });
+      if (!contract) {
+        return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
+      }
+      if (contract.status !== "awaiting_signature" && contract.status !== "active") {
+        return reply.code(409).send({
+          code: "not_awaiting_signature",
+          message: `La signature n'est possible qu'en « attente de signature » (statut actuel : « ${contract.status} »).`,
+        });
+      }
+
+      // Une même partie ne signe qu'une fois (idempotence métier).
+      if (contract.signatures.some((s) => s.party === parsed.data.party)) {
+        return reply.code(409).send({
+          code: "already_signed",
+          message: `La partie « ${parsed.data.party === "author" ? "contractante" : "maison"} » a déjà signé ce contrat.`,
+        });
+      }
+
+      // Empreinte des clauses effectivement signées : garantit que la signature
+      // porte sur cette version des termes (intégrité). Ne dépend que du contenu.
+      const termsHash = contractTermsHash(contract);
+
+      // La partie contractante (auteur) engage le contrat → activation.
+      const activates = parsed.data.party === "author" && contract.status === "awaiting_signature";
+      const signedAtDate = new Date();
+
+      await prisma.$transaction(async (tx) => {
+        await tx.contractSignature.create({
+          data: {
+            contractId: id,
+            party: parsed.data.party,
+            signerName: parsed.data.signer_name.trim(),
+            recordedById: request.user!.id,
+            termsHash,
+            note: parsed.data.note?.trim() || null,
+          },
+        });
+        if (activates) {
+          await tx.contract.update({
+            where: { id },
+            data: { status: "active", signedAt: contract.signedAt ?? signedAtDate, updatedBy: request.user!.id },
+          });
+        }
+      });
+
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "contract",
+        entityId: id,
+        newValues: {
+          signature: { party: parsed.data.party, signer_name: parsed.data.signer_name.trim(), terms_hash: termsHash },
+          ...(activates ? { status: "active" } : {}),
+        },
+        ipAddress: request.ip,
+      });
+
+      const refreshed = await prisma.contract.findFirst({
+        where: { id },
+        include: {
+          partner: true,
+          manuscript: true,
+          royaltyTerms: true,
+          amendments: true,
+          signatures: { orderBy: { signedAt: "asc" } },
+        },
+      });
+      return reply.send(refreshed);
+    },
+  );
+}
+
+// Empreinte stable des clauses signées : uniquement le contenu contractuel
+// (numéro, type, partie, portée, durée, termes financiers). Indépendante des
+// champs d'audit, pour qu'une même version de termes produise toujours la même
+// empreinte.
+function contractTermsHash(contract: {
+  contractNumber: string;
+  type: string;
+  partnerId: string;
+  territories: string[];
+  languages: string[];
+  formats: string[];
+  durationMonths: number | null;
+  financialTerms: unknown;
+}): string {
+  const canonical = JSON.stringify({
+    contractNumber: contract.contractNumber,
+    type: contract.type,
+    partnerId: contract.partnerId,
+    territories: [...contract.territories].sort(),
+    languages: [...contract.languages].sort(),
+    formats: [...contract.formats].sort(),
+    durationMonths: contract.durationMonths,
+    financialTerms: contract.financialTerms,
+  });
+  return createHash("sha256").update(canonical).digest("hex");
 }

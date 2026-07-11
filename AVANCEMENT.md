@@ -506,3 +506,15 @@ Dernier point de la Phase A : les alertes de l'ERP sont désormais **doublées d
 - **Tests** : `tests/notification-email.test.ts` (contenu de l'e-mail + non-régression des notifications). Suites liées (stock, BAT, impression, commercial, documents) : **31 tests passent**. Backend typecheck OK.
 
 **Phase A terminée** : impression/PDF des documents (factures, relevés, bons de commande, contrats) sur papier à en-tête + logo ; TVA livres à 0 % réglable ; envoi des documents par e-mail avec aperçu ; identité d'expéditeur par pôle (Répondre-à) + copie maison ; mémoire des adresses e-mail ; alertes par e-mail.
+
+### 10/07/2026 (suite) — Phase B, point 1 : signature électronique simple / interne
+
+Décision opérateur : **signature simple/interne** (sans coût, sans prestataire) ; **SMS reporté**.
+
+- **Principe** : l'accord d'une partie (la **partie contractante** — auteur/prestataire — ou la **maison**) est enregistré dans l'ERP, **horodaté**, lié à une **empreinte des clauses signées** (garantit que la signature porte bien sur cette version des termes), et **inscrit au journal inviolable**. La signature de la partie contractante **active** le contrat.
+- **Garde-fous** : signature possible uniquement en « attente de signature » ; **confirmation d'accord explicite** obligatoire (case à cocher) ; une même partie ne signe qu'une fois. Réservé à la validation juridique.
+- **Écran** : depuis la fiche d'un manuscrit → Contrats → bouton **« ✍️ Signer »** (quand le contrat attend une signature). Fenêtre montrant les signatures déjà apposées + formulaire d'accord. Le suivi de statut par « Faire avancer » reste pour les étapes amont ; l'activation passe désormais par la signature.
+- **Base de données** : nouvelle table `contract_signatures` (migration **additive**, aucune donnée existante touchée).
+- **Tests** : `tests/contract-signature.test.ts` (activation, empreinte, trace, refus hors état, consentement, unicité par partie). **170 tests passent** (backend), build front OK.
+
+**Phase B, point 2 (SMS)** : reporté à la décision budgétaire/fournisseur de l'opérateur.

@@ -5,13 +5,23 @@ import {
   getContract,
   listContracts,
   listPartners,
+  signContract,
   updateContractStatus,
   type Contract,
+  type ContractSignature,
   type ContractStatus,
   type Partner,
   type PartnerCategory,
+  type SignatureParty,
 } from "../api/client";
 import { printContract } from "../lib/print";
+import { Modal, Field } from "./Modal";
+import { Button } from "./Button";
+
+const SIGNATURE_PARTY_LABELS: Record<SignatureParty, string> = {
+  author: "Partie contractante (auteur / prestataire)",
+  publisher: "Maison d'édition (Éclosion Édition)",
+};
 
 const STATUS_CHAIN: ContractStatus[] = ["preparation", "legal_review", "direction_approval", "awaiting_signature", "active"];
 const STATUS_LABELS: Record<ContractStatus, string> = {
@@ -51,6 +61,7 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signing, setSigning] = useState<Contract | null>(null);
 
   const refresh = () => listContracts(manuscriptId).then(setContracts).catch((e) => setError(e.message));
 
@@ -110,15 +121,144 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
             <button onClick={() => getContract(contract.id).then(printContract).catch((e) => setError(e.message))} style={secondaryButtonStyle}>
               Imprimer / PDF
             </button>
-            {canValidate && STATUS_CHAIN.indexOf(contract.status) >= 0 && STATUS_CHAIN.indexOf(contract.status) < STATUS_CHAIN.length - 1 && (
-              <button onClick={() => advance(contract)} style={secondaryButtonStyle}>
-                Faire avancer →
+            {canValidate && contract.status === "awaiting_signature" && (
+              <button onClick={() => setSigning(contract)} style={{ ...secondaryButtonStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)", fontWeight: 600 }}>
+                ✍️ Signer
               </button>
             )}
+            {canValidate &&
+              STATUS_CHAIN.indexOf(contract.status) >= 0 &&
+              contract.status !== "awaiting_signature" &&
+              STATUS_CHAIN.indexOf(contract.status) < STATUS_CHAIN.length - 1 && (
+                <button onClick={() => advance(contract)} style={secondaryButtonStyle}>
+                  Faire avancer →
+                </button>
+              )}
           </div>
         </div>
       ))}
+
+      {signing && (
+        <SignatureModal
+          contract={signing}
+          onClose={() => setSigning(null)}
+          onSigned={() => {
+            setSigning(null);
+            refresh();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+// Signature « simple / interne » (Phase B) : on affiche les signatures déjà
+// apposées et, tant que le contrat attend une signature, un formulaire d'accord
+// explicite. La signature de la partie contractante (auteur) active le contrat.
+function SignatureModal({ contract, onClose, onSigned }: { contract: Contract; onClose: () => void; onSigned: () => void }) {
+  const [signatures, setSignatures] = useState<ContractSignature[]>([]);
+  const [party, setParty] = useState<SignatureParty>("author");
+  const [signerName, setSignerName] = useState(`${contract.partner.firstName} ${contract.partner.lastName}`);
+  const [note, setNote] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getContract(contract.id)
+      .then((c) => setSignatures(c.signatures ?? []))
+      .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
+  }, [contract.id]);
+
+  // Le nom par défaut suit la partie choisie (auteur = partenaire ; maison = à saisir).
+  function onPartyChange(next: SignatureParty) {
+    setParty(next);
+    setSignerName(next === "author" ? `${contract.partner.firstName} ${contract.partner.lastName}` : "");
+  }
+
+  const alreadySigned = new Set(signatures.map((s) => s.party));
+
+  async function handleSign() {
+    if (!consent) {
+      setError("Cochez la confirmation d'accord pour signer.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await signContract(contract.id, { party, signer_name: signerName.trim(), consent, note: note || undefined });
+      setSignatures(updated.signatures ?? []);
+      onSigned();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Échec de la signature.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={`Signature — ${contract.contractNumber}`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="view" size="sm" onClick={onClose}>Fermer</Button>
+          {!alreadySigned.has(party) && (
+            <Button variant="add" size="sm" onClick={handleSign} disabled={busy || !signerName.trim() || !consent}>
+              {busy ? "Enregistrement…" : "Signer"}
+            </Button>
+          )}
+        </>
+      }
+    >
+      <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>
+        {contract.type} — {contract.partner.firstName} {contract.partner.lastName}
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Signatures enregistrées</div>
+        {signatures.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--muted)" }}>Aucune signature pour l'instant.</div>
+        ) : (
+          signatures.map((s) => (
+            <div key={s.id} style={{ fontSize: 13, padding: "6px 0", borderBottom: "1px solid var(--line)" }}>
+              <strong>{SIGNATURE_PARTY_LABELS[s.party]}</strong> — {s.signerName}
+              <div style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>
+                {new Date(s.signedAt).toLocaleString("fr-FR")} · empreinte {s.termsHash.slice(0, 12)}…
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <Field label="Partie qui signe">
+        <select value={party} onChange={(e) => onPartyChange(e.target.value as SignatureParty)}>
+          <option value="author">{SIGNATURE_PARTY_LABELS.author}</option>
+          <option value="publisher">{SIGNATURE_PARTY_LABELS.publisher}</option>
+        </select>
+      </Field>
+
+      {alreadySigned.has(party) ? (
+        <p style={{ fontSize: 13, color: "var(--eclosion)" }}>Cette partie a déjà signé ce contrat.</p>
+      ) : (
+        <>
+          <Field label="Nom du signataire">
+            <input value={signerName} onChange={(e) => setSignerName(e.target.value)} placeholder="Nom et prénom" />
+          </Field>
+          <Field label="Note (facultatif)">
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex. signé en présence de…" />
+          </Field>
+          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, marginTop: 4 }}>
+            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} style={{ marginTop: 3 }} />
+            <span>
+              Je confirme l'accord de cette partie sur les clauses du contrat. La signature sera horodatée et inscrite au journal
+              inviolable. La signature de la partie contractante active le contrat.
+            </span>
+          </label>
+        </>
+      )}
+
+      {error && <p style={{ color: "var(--alert)", fontSize: 13, marginTop: 8 }}>{error}</p>}
+    </Modal>
   );
 }
 

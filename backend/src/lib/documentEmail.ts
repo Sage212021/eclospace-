@@ -11,11 +11,11 @@ const HOUSE = {
   tagline: "L'avenir du livre",
   address: "Carrefour INSTIC – Nouvelle route Kondengui, Yaoundé, Cameroun",
   poBox: "B.P. 33071 Yaoundé",
-  phone: "(+237) 677 157 326 / 678 704 086 / 698 031 502",
-  email: "editioneclosion@gmail.com",
-  website: "https://eclosionedition.cm",
+  phone: "(+237) 698 03 15 02 / 678 70 40 86",
+  email: "eclosionedition@gmail.com",
+  website: "https://eclosioneditions.cm",
   rccm: "RC/YAO/2019/B/144",
-  niu: "MÀ2019127511744Y",
+  niu: "M021912751174Y",
   cnps: "C-YAO-2019-0144",
 };
 

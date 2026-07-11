@@ -561,6 +561,17 @@ Sur retour opérateur, tous les documents officiels (facture, devis, relevé de 
 - **Papier à en-tête officiel corrigé** enregistré (`frontend/public/eclosion-papier-entete.png`, A4 1054×1492). Bandeaux mesurés ~56 mm (haut) et ~56 mm (bas) → hauteurs réservées : mode « en-tête intégré » padding 58/58 mm ; mode « papier vierge » espaces 40/40 mm en plus de la marge @page de 18 mm.
 - **Petit écart restant à trancher** : le papier corrigé liste **3 téléphones** (dont `654 366 663`), le numérique n'en a que 2 — à aligner si l'opérateur le souhaite. *(Fait : 3e numéro ajouté au numérique.)*
 
+### 11/07/2026 (suite) — Module Paiements enrichi (socle backend)
+
+Sur analyse de la proposition « modes de paiement + comptes financiers » : **l'essentiel existait déjà** (comptes bancaires/caisses/mobile money, virements, trésorerie, encaissements liés à un compte, rapprochement, relances). Socle d'enrichissement livré (décisions opérateur du 11/07/2026 — tout confirmé) :
+
+- **Modes de paiement 100 % configurables** : l'enum figé devient une **table `payment_methods`** (code, libellé, nature, actif, compte par défaut). L'administrateur ajoute/modifie librement (PayPal, Wave…). Les 5 modes historiques conservés (codes stables). Endpoints : `GET/POST /payment-methods`, `PATCH /payment-methods/:id` (admin).
+- **Référence de transaction** sur chaque paiement (ID Mobile Money, n° chèque, réf. virement).
+- **Association automatique** au **compte financier par défaut** du mode si non précisé.
+- **Devise XAF** (F CFA Cameroun) par défaut partout + reprise des lignes en XOF.
+- Migration **en place** (aucune donnée perdue : conversion du mode enum→code, colonnes ajoutées). **184 tests** (+3 : liste/ajout/unicité, mode inconnu refusé, compte par défaut + référence).
+- **Reste (incréments suivants)** : écran d'admin des modes + encaissement enrichi (mode + compte + référence + paiement mixte) ; point de vente ; échéancier ; rapports par mode/caisse/utilisateur/période/client/point de vente.
+
 ### 11/07/2026 (suite) — Rapports hebdomadaires par agent (Demande 3, backend)
 
 Nouveau module : chaque agent rédige un compte-rendu périodique relié à ses **objectifs** (chiffrés et/ou libres) et à sa **recherche/veille** ; la hiérarchie suit et valide.

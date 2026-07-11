@@ -513,6 +513,19 @@ async function main() {
     create: { key: "weekly_report_periodicity", value: "weekly" },
   });
 
+  // Modes de paiement configurables — 5 modes historiques (codes stables). Créés
+  // aussi par la migration ; l'upsert garantit leur présence sur base neuve.
+  const basePaymentMethods = [
+    { code: "cash", label: "Espèces", kind: "especes" as const, sortOrder: 10 },
+    { code: "transfer", label: "Virement bancaire", kind: "virement" as const, sortOrder: 20 },
+    { code: "cheque", label: "Chèque", kind: "cheque" as const, sortOrder: 30 },
+    { code: "card", label: "Carte bancaire", kind: "carte" as const, sortOrder: 40 },
+    { code: "mobile_money", label: "Mobile Money", kind: "mobile_money" as const, sortOrder: 50 },
+  ];
+  for (const m of basePaymentMethods) {
+    await prisma.paymentMethodDef.upsert({ where: { code: m.code }, update: {}, create: m });
+  }
+
   // Grille de remise par défaut par catégorie de client (Ch. 17 §17.4).
   const discountGrids: { category: CustomerCategory; discountPct: number }[] = [
     { category: "librairie", discountPct: 35 },

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { Prisma, PaymentMethod, ExpenseCategory, CostType, BankAccountType, ShippingZone } from "@prisma/client";
+import { Prisma, PaymentMethodKind, ExpenseCategory, CostType, BankAccountType, ShippingZone } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -18,10 +18,28 @@ const invoiceEmailSchema = z.object({
 });
 
 const paymentSchema = z.object({
-  method: z.nativeEnum(PaymentMethod),
+  // Code d'un mode de paiement configurable (validé contre payment_methods).
+  method: z.string().min(1),
+  reference: z.string().max(120).optional(),
   amount: z.number().positive(),
   bank_account_id: z.string().uuid().optional(),
   allocations: z.array(z.object({ invoice_id: z.string().uuid(), amount: z.number().positive() })).min(1),
+});
+
+const paymentMethodSchema = z.object({
+  code: z.string().trim().min(2).max(40).regex(/^[a-z0-9_]+$/, "Code en minuscules, chiffres et _ uniquement."),
+  label: z.string().trim().min(1).max(80),
+  kind: z.nativeEnum(PaymentMethodKind).default("autre"),
+  default_account_id: z.string().uuid().nullable().optional(),
+  sort_order: z.number().int().optional(),
+});
+
+const paymentMethodPatchSchema = z.object({
+  label: z.string().trim().min(1).max(80).optional(),
+  kind: z.nativeEnum(PaymentMethodKind).optional(),
+  active: z.boolean().optional(),
+  default_account_id: z.string().uuid().nullable().optional(),
+  sort_order: z.number().int().optional(),
 });
 
 const expenseSchema = z.object({
@@ -42,7 +60,7 @@ const budgetSchema = z.object({
 const bankAccountSchema = z.object({
   label: z.string().min(1),
   type: z.nativeEnum(BankAccountType).default("banque"),
-  currency: z.string().default("XOF"),
+  currency: z.string().default("XAF"),
 });
 
 const taxRateSchema = z.object({
@@ -153,6 +171,14 @@ export default async function financeRoutes(fastify: FastifyInstance) {
       });
     }
 
+    // Mode de paiement : doit exister et être actif (liste configurable).
+    const methodDef = await prisma.paymentMethodDef.findUnique({ where: { code: body.method } });
+    if (!methodDef || !methodDef.active) {
+      return reply.code(400).send({ code: "invalid_payment_method", message: "Mode de paiement inconnu ou désactivé." });
+    }
+    // Association automatique au compte financier par défaut du mode, à défaut de choix explicite.
+    const bankAccountId = body.bank_account_id ?? methodDef.defaultAccountId ?? null;
+
     try {
       const payment = await prisma.$transaction(async (tx) => {
         await assertPeriodOpen(tx);
@@ -160,8 +186,9 @@ export default async function financeRoutes(fastify: FastifyInstance) {
           data: {
             direction: "in",
             method: body.method,
+            reference: body.reference,
             amount: body.amount,
-            bankAccountId: body.bank_account_id,
+            bankAccountId,
             createdBy: request.user!.id,
           },
         });
@@ -194,6 +221,52 @@ export default async function financeRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/payments", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
     const payments = await prisma.payment.findMany({ include: { allocations: true }, orderBy: { receivedAt: "desc" } });
     return reply.send(payments);
+  });
+
+  // --- Modes de paiement (paramétrables par l'administrateur) ---------------
+  fastify.get("/api/v1/payment-methods", { preHandler: requirePermission("finance", "consultation") }, async (_request, reply) => {
+    const methods = await prisma.paymentMethodDef.findMany({ orderBy: [{ sortOrder: "asc" }, { label: "asc" }] });
+    return reply.send(methods);
+  });
+
+  fastify.post("/api/v1/payment-methods", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+    const parsed = paymentMethodSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const b = parsed.data;
+    const existing = await prisma.paymentMethodDef.findUnique({ where: { code: b.code } });
+    if (existing) {
+      return reply.code(409).send({ code: "duplicate_code", message: `Le code « ${b.code} » existe déjà.` });
+    }
+    const method = await prisma.paymentMethodDef.create({
+      data: { code: b.code, label: b.label, kind: b.kind, defaultAccountId: b.default_account_id ?? null, sortOrder: b.sort_order ?? 0 },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "payment_method", entityId: method.id, newValues: { code: b.code, label: b.label }, ipAddress: request.ip });
+    return reply.code(201).send(method);
+  });
+
+  fastify.patch("/api/v1/payment-methods/:id", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = paymentMethodPatchSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const b = parsed.data;
+    const method = await prisma.paymentMethodDef.findUnique({ where: { id } });
+    if (!method) return reply.code(404).send({ code: "not_found", message: "Mode de paiement introuvable." });
+    const updated = await prisma.paymentMethodDef.update({
+      where: { id },
+      data: {
+        ...(b.label !== undefined ? { label: b.label } : {}),
+        ...(b.kind !== undefined ? { kind: b.kind } : {}),
+        ...(b.active !== undefined ? { active: b.active } : {}),
+        ...(b.default_account_id !== undefined ? { defaultAccountId: b.default_account_id } : {}),
+        ...(b.sort_order !== undefined ? { sortOrder: b.sort_order } : {}),
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payment_method", entityId: id, newValues: b as Prisma.InputJsonValue, ipAddress: request.ip });
+    return reply.send(updated);
   });
 
   // Ch. 18 §18.3 : créances par ancienneté (non échu / 30 / 60 / 90+ jours).

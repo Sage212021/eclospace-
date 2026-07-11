@@ -571,7 +571,9 @@ Sur analyse de la proposition « modes de paiement + comptes financiers » : **l
 - **Devise XAF** (F CFA Cameroun) par défaut partout + reprise des lignes en XOF.
 - Migration **en place** (aucune donnée perdue : conversion du mode enum→code, colonnes ajoutées). **184 tests** (+3 : liste/ajout/unicité, mode inconnu refusé, compte par défaut + référence).
 - **Incrément 2 (fait)** : écran **Finance → « Modes de paiement »** (admin : activer/désactiver, compte par défaut, ajouter un mode personnalisé) ; **encaissement enrichi** (choix du **mode** + **compte** + **référence**, et **paiement mixte** = plusieurs modes sur une même facture). Vérifié au navigateur.
-- **Reste (incréments suivants)** : point de vente (dimension) ; échéancier de crédit ; rapports par mode/caisse/utilisateur/période/client/point de vente.
+- **Incrément 3 (fait — dimension point de vente)** : modèle **`points_of_sale`** (librairie, salon, boutique en ligne…), champ `point_of_sale_id` sur les ventes au comptoir, endpoints CRUD (`/points-of-sale`, commercial:administration). Migration additive.
+- **Incrément 5 (fait — rapports)** : endpoint `GET /finance/payment-report?from&to` — agrégats **par mode de paiement**, **par compte financier**, **ventes par point de vente** ; **carte « Rapport d'encaissements »** sur l'écran Finance (filtre période + 3 tableaux). Vérifié au navigateur. **+3 tests** (`finance-reports.test.ts`).
+- **Reste (incrément 4)** : échéancier de crédit ; et le petit câblage UI du sélecteur point de vente sur la saisie de vente au comptoir (l'API est prête).
 
 ### 11/07/2026 (suite) — Rapports hebdomadaires par agent (Demande 3, backend)
 

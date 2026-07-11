@@ -269,6 +269,47 @@ export default async function financeRoutes(fastify: FastifyInstance) {
     return reply.send(updated);
   });
 
+  // Rapport d'encaissements : agrégats par mode de paiement, par compte
+  // financier (caisse/banque/mobile money) et ventes au comptoir par point de
+  // vente — filtrables par période (from/to). Base des rapports demandés.
+  fastify.get("/api/v1/finance/payment-report", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const q = request.query as { from?: string; to?: string };
+    const range: Prisma.DateTimeFilter = {};
+    if (q.from) range.gte = new Date(q.from);
+    if (q.to) range.lte = new Date(q.to);
+    const hasRange = Boolean(q.from || q.to);
+    const paymentWhere = { direction: "in" as const, ...(hasRange ? { receivedAt: range } : {}) };
+
+    const [byMethodRaw, byAccountRaw, methods, accounts, posSales, points] = await Promise.all([
+      prisma.payment.groupBy({ by: ["method"], where: paymentWhere, _sum: { amount: true }, _count: true }),
+      prisma.payment.groupBy({ by: ["bankAccountId"], where: paymentWhere, _sum: { amount: true }, _count: true }),
+      prisma.paymentMethodDef.findMany(),
+      prisma.bankAccount.findMany(),
+      prisma.posSale.findMany({ where: hasRange ? { soldAt: range } : {}, select: { pointOfSaleId: true, quantity: true, unitPrice: true } }),
+      prisma.pointOfSale.findMany(),
+    ]);
+
+    const methodLabel = new Map(methods.map((m) => [m.code, m.label]));
+    const accountLabel = new Map(accounts.map((a) => [a.id, a.label]));
+    const pointLabel = new Map(points.map((p) => [p.id, p.name]));
+
+    const byMethod = byMethodRaw.map((r) => ({ method: r.method, label: methodLabel.get(r.method) ?? r.method, total: Number(r._sum.amount ?? 0), count: r._count }));
+    const byAccount = byAccountRaw.map((r) => ({ account_id: r.bankAccountId, label: r.bankAccountId ? accountLabel.get(r.bankAccountId) ?? "Compte" : "(non affecté)", total: Number(r._sum.amount ?? 0), count: r._count }));
+
+    const posMap = new Map<string, { total: number; count: number }>();
+    for (const s of posSales) {
+      const key = s.pointOfSaleId ?? "__none__";
+      const cur = posMap.get(key) ?? { total: 0, count: 0 };
+      cur.total += Number(s.unitPrice) * s.quantity;
+      cur.count += 1;
+      posMap.set(key, cur);
+    }
+    const byPointOfSale = [...posMap.entries()].map(([key, v]) => ({ point_of_sale_id: key === "__none__" ? null : key, name: key === "__none__" ? "(non précisé)" : pointLabel.get(key) ?? "Point de vente", total: v.total, count: v.count }));
+
+    const totalIn = byMethod.reduce((s, m) => s + m.total, 0);
+    return reply.send({ from: q.from ?? null, to: q.to ?? null, total_in: totalIn, by_method: byMethod, by_account: byAccount, by_point_of_sale: byPointOfSale });
+  });
+
   // Ch. 18 §18.3 : créances par ancienneté (non échu / 30 / 60 / 90+ jours).
   fastify.get("/api/v1/customers/:id/aging", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };

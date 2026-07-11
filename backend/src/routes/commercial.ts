@@ -81,6 +81,18 @@ const posSaleSchema = z.object({
   unit_price: z.number().positive(),
   payment_method: z.nativeEnum(PosPaymentMethod),
   event_label: z.string().optional(),
+  point_of_sale_id: z.string().uuid().optional(),
+});
+
+const pointOfSaleSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  type: z.enum(["librairie", "salon", "en_ligne", "autre"]).default("librairie"),
+});
+
+const pointOfSalePatchSchema = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  type: z.enum(["librairie", "salon", "en_ligne", "autre"]).optional(),
+  active: z.boolean().optional(),
 });
 
 const customerReturnSchema = z.object({
@@ -666,6 +678,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
             unitPrice: parsed.data.unit_price,
             paymentMethod: parsed.data.payment_method,
             eventLabel: parsed.data.event_label,
+            pointOfSaleId: parsed.data.point_of_sale_id,
             soldBy: request.user!.id,
           },
         });
@@ -710,6 +723,34 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/pos-sales", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
     const sales = await prisma.posSale.findMany({ orderBy: { soldAt: "desc" }, take: 200 });
     return reply.send(sales);
+  });
+
+  // --- Points de vente (librairie, salon, boutique en ligne…) ---------------
+  fastify.get("/api/v1/points-of-sale", { preHandler: requirePermission("commercial", "consultation") }, async (_request, reply) => {
+    const points = await prisma.pointOfSale.findMany({ orderBy: { name: "asc" } });
+    return reply.send(points);
+  });
+
+  fastify.post("/api/v1/points-of-sale", { preHandler: requirePermission("commercial", "administration") }, async (request, reply) => {
+    const parsed = pointOfSaleSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const point = await prisma.pointOfSale.create({ data: { name: parsed.data.name, type: parsed.data.type } });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "point_of_sale", entityId: point.id, newValues: { name: point.name }, ipAddress: request.ip });
+    return reply.code(201).send(point);
+  });
+
+  fastify.patch("/api/v1/points-of-sale/:id", { preHandler: requirePermission("commercial", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = pointOfSalePatchSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const point = await prisma.pointOfSale.findUnique({ where: { id } });
+    if (!point) return reply.code(404).send({ code: "not_found", message: "Point de vente introuvable." });
+    const updated = await prisma.pointOfSale.update({ where: { id }, data: parsed.data });
+    return reply.send(updated);
   });
 
   // Ch. 17 §17.9 : autorisation, réception, verdict exemplaire par exemplaire.

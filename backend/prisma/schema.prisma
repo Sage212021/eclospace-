@@ -2092,10 +2092,35 @@ model PosSale {
   unitPrice     Decimal          @map("unit_price") @db.Decimal(10, 2)
   paymentMethod PosPaymentMethod @map("payment_method")
   eventLabel    String?          @map("event_label")
+  // Point de vente (dimension structurée, pour les rapports par point de vente).
+  pointOfSaleId String?          @map("point_of_sale_id")
+  pointOfSale   PointOfSale?     @relation(fields: [pointOfSaleId], references: [id])
   soldBy        String?          @map("sold_by")
   soldAt        DateTime         @default(now()) @map("sold_at")
 
   @@map("pos_sales")
+}
+
+// Point de vente (décision opérateur du 11/07/2026) : librairie, salon du livre,
+// boutique en ligne… Liste configurable, sert de dimension aux rapports.
+enum PointOfSaleType {
+  librairie
+  salon
+  en_ligne
+  autre
+}
+
+model PointOfSale {
+  id       String          @id @default(uuid())
+  name     String
+  type     PointOfSaleType @default(librairie)
+  active   Boolean         @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  posSales PosSale[]
+
+  @@map("points_of_sale")
 }
 
 enum ReturnLineVerdict {

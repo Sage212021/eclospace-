@@ -42,8 +42,10 @@ import {
   listPaymentMethods,
   createPaymentMethod,
   updatePaymentMethod,
+  getPaymentReport,
   type PaymentMethodDef,
   type PaymentMethodKind,
+  type PaymentReport,
 } from "../api/client";
 import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
@@ -483,6 +485,9 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
         </div>
       </Card>
 
+      {/* Rapport d'encaissements par mode / compte / point de vente */}
+      <PaymentReportCard />
+
       {/* Ch. 18 §18.8 — Trésorerie */}
       <Card
         title="Trésorerie : comptes, caisses et virements"
@@ -859,6 +864,76 @@ function ModalActions({ onCancel, onConfirm, confirmLabel, confirmVariant }: { o
       <Button variant="view" size="sm" onClick={onCancel}>Annuler</Button>
       <Button variant={confirmVariant} size="sm" onClick={onConfirm}>{confirmLabel}</Button>
     </>
+  );
+}
+
+// Rapport d'encaissements : totaux par mode de paiement, par compte financier
+// et ventes au comptoir par point de vente — filtrable par période.
+function PaymentReportCard() {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [report, setReport] = useState<PaymentReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () => {
+    getPaymentReport({ ...(from ? { from } : {}), ...(to ? { to } : {}) })
+      .then(setReport)
+      .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
+  };
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const money = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF", maximumFractionDigits: 0 }).format(n);
+
+  return (
+    <Card
+      title="Rapport d'encaissements"
+      icon={<IconFinance />}
+      subtitle="Par mode de paiement, par compte et par point de vente."
+      action={
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} title="Depuis" style={{ fontSize: 12 }} />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} title="Jusqu'à" style={{ fontSize: 12 }} />
+          <Button variant="view" size="sm" onClick={load}>Actualiser</Button>
+        </div>
+      }
+    >
+      {error && <p style={{ color: "var(--alert)", fontSize: 13 }}>{error}</p>}
+      {!report ? (
+        <Empty>Chargement…</Empty>
+      ) : (
+        <>
+          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, marginBottom: 10 }}>Total encaissé : {money(report.total_in)}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 16 }}>
+            <ReportTable title="Par mode de paiement" rows={report.by_method.map((r) => ({ label: r.label, total: r.total, count: r.count }))} money={money} />
+            <ReportTable title="Par compte financier" rows={report.by_account.map((r) => ({ label: r.label, total: r.total, count: r.count }))} money={money} />
+            <ReportTable title="Ventes par point de vente" rows={report.by_point_of_sale.map((r) => ({ label: r.name, total: r.total, count: r.count }))} money={money} />
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function ReportTable({ title, rows, money }: { title: string; rows: { label: string; total: number; count: number }[]; money: (n: number) => string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{title}</div>
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 13, color: "var(--muted)" }}>—</div>
+      ) : (
+        <div className="ecl-list">
+          {rows.sort((a, b) => b.total - a.total).map((r, i) => (
+            <div key={i} className="ecl-row" style={{ justifyContent: "space-between", fontSize: 13 }}>
+              <span>{r.label} <span style={{ color: "var(--muted)", fontSize: 11 }}>×{r.count}</span></span>
+              <span style={{ fontFamily: "var(--font-mono)" }}>{money(r.total)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -5,7 +5,7 @@
 // **« Enregistrer au format PDF »** (option native de tous les navigateurs).
 // Aucune bibliothèque PDF lourde, fonctionne avec une connexion modeste.
 
-import type { ContractDetail, InvoiceDetail, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
+import type { ContractDetail, EditorialQuote, InvoiceDetail, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
 
 // Coordonnées officielles de la maison — source unique pour tous les documents
 // imprimés (facture, avoir, et à venir : relevés, bons de commande, contrats).
@@ -160,6 +160,79 @@ export function printInvoice(invoice: InvoiceDetail): void {
 function statusLabel(status: string): string {
   const map: Record<string, string> = { issued: "Émise", paid: "Réglée", cancelled: "Annulée", credit_note: "Avoir", draft: "Brouillon" };
   return map[status] ?? status;
+}
+
+const QUOTE_STATUS_LABELS: Record<string, string> = {
+  draft: "Brouillon",
+  sent: "Envoyé",
+  accepted: "Accepté / signé",
+  refused: "Refusé",
+  expired: "Expiré",
+  invoiced: "Facturé",
+};
+
+const QUOTE_METHOD_LABELS: Record<string, string> = {
+  online_link: "en ligne",
+  internal: "enregistrée par la maison",
+  paper: "sur devis papier signé",
+};
+
+// Devis de prestation éditoriale prêt à imprimer / PDF (compte d'auteur). Reprend
+// le papier à en-tête. Mentionne l'exclusion (impression/communication) et, si le
+// devis est signé, l'acceptation de l'auteur (nom, date, mode).
+export function printEditorialQuote(quote: EditorialQuote): void {
+  const cur = quote.currency || "XAF";
+  const validUntil = quote.validUntil ? new Date(quote.validUntil).toLocaleDateString("fr-FR") : null;
+  const author = `${quote.partner.firstName} ${quote.partner.lastName}`;
+
+  const rows = quote.lines
+    .map(
+      (l) => `<tr>
+        <td>${escapeHtml(l.description)}</td>
+        <td class="r num">${l.quantity}</td>
+        <td class="r num">${money(l.unitPrice, cur)}</td>
+        <td class="r num">${Number(l.taxRate)} %</td>
+        <td class="r num">${money(l.lineTotal, cur)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const acceptance =
+    quote.acceptedAt && quote.signerName
+      ? `<div class="party" style="margin-top:18px">
+           <div class="party__label">Devis accepté et signé</div>
+           <div class="party__name">${escapeHtml(quote.signerName)}</div>
+           <div style="font-size:12px;color:#555">Le ${escapeHtml(new Date(quote.acceptedAt).toLocaleDateString("fr-FR"))}${
+             quote.acceptanceMethod ? ` · signature ${escapeHtml(QUOTE_METHOD_LABELS[quote.acceptanceMethod] ?? quote.acceptanceMethod)}` : ""
+           }</div>
+         </div>`
+      : "";
+
+  const body = `
+    <div class="doc__title">Devis de prestation éditoriale</div>
+    <div class="meta">
+      <span>N° <b class="num">${escapeHtml(quote.quoteNumber)}</b></span>
+      ${validUntil ? `<span>Valable jusqu'au <b class="num">${escapeHtml(validUntil)}</b></span>` : ""}
+      <span><span class="badge">${escapeHtml(QUOTE_STATUS_LABELS[quote.status] ?? quote.status)}</span></span>
+    </div>
+    <div class="party">
+      <div class="party__label">Établi pour</div>
+      <div class="party__name">${escapeHtml(author)}</div>
+      ${quote.manuscript ? `<div style="font-size:12px;color:#555">Ouvrage : ${escapeHtml(quote.manuscript.title)}</div>` : ""}
+    </div>
+    <table class="lines">
+      <thead><tr><th>Prestation</th><th class="r">Qté</th><th class="r">P.U. HT</th><th class="r">TVA</th><th class="r">Total HT</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="5">Aucune ligne.</td></tr>`}</tbody>
+    </table>
+    <div class="totals">
+      <div><span>Total HT</span><span class="num">${money(quote.totalHt, cur)}</span></div>
+      <div><span>TVA</span><span class="num">${money(quote.totalTax, cur)}</span></div>
+      <div class="ttc"><span>Total TTC</span><span class="num">${money(quote.totalTtc, cur)}</span></div>
+    </div>
+    ${quote.exclusionsNote ? `<p style="margin-top:16px;font-size:12px;color:#555;font-style:italic">${escapeHtml(quote.exclusionsNote)}</p>` : ""}
+    ${acceptance}`;
+
+  openPrintWindow(`Devis ${quote.quoteNumber}`, body);
 }
 
 const ROYALTY_SOURCE_LABELS: Record<string, string> = {

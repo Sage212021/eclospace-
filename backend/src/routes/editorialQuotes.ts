@@ -7,6 +7,8 @@ import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { nextQuoteNumber } from "../lib/quoteNumber.js";
 import { createInvoiceFromEditorialQuote } from "../lib/invoicing.js";
+import { isMailConfigured, sendMail } from "../lib/mailer.js";
+import { buildQuoteSignEmail } from "../lib/documentEmail.js";
 
 // Compte d'auteur (décision opérateur du 10/07/2026) : DEVIS de prestation
 // éditoriale → validation/signature de l'auteur (① interne, ② papier scanné,
@@ -186,8 +188,31 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
       ipAddress: request.ip,
     });
 
-    const base = process.env.APP_BASE_URL?.replace(/\/$/, "") ?? "";
-    return reply.send({ quote: updated, sign_path: `/signer-devis/${token}`, sign_url: base ? `${base}/signer-devis/${token}` : null });
+    // URL publique de signature : APP_BASE_URL si défini, sinon déduite de la
+    // requête (même origine que l'application servie).
+    const base = (process.env.APP_BASE_URL?.replace(/\/$/, "") || `${request.protocol}://${request.headers.host}`).replace(/\/$/, "");
+    const signUrl = `${base}/signer-devis/${token}`;
+
+    // Envoi automatique du lien à l'auteur (③) si une adresse est connue et le
+    // SMTP configuré. Au meilleur effort : une panne d'e-mail ne bloque pas.
+    let emailSent = false;
+    const to = updated.partner.email?.trim();
+    if (to && isMailConfigured()) {
+      try {
+        const built = buildQuoteSignEmail({
+          authorName: `${updated.partner.firstName} ${updated.partner.lastName}`,
+          quoteNumber: updated.quoteNumber,
+          totalTtc: String(updated.totalTtc),
+          currency: updated.currency,
+          signUrl,
+        });
+        emailSent = await sendMail({ to, subject: built.subject, text: built.text, html: built.html, replyTo: request.user!.email });
+      } catch (err) {
+        console.error(`[editorial-quote] échec de l'envoi du lien de signature à ${to}:`, err);
+      }
+    }
+
+    return reply.send({ quote: updated, sign_path: `/signer-devis/${token}`, sign_url: signUrl, email_sent: emailSent });
   });
 
   // Acceptation « interne » (① agent) ou « papier » (② scan renvoyé) — enregistrée

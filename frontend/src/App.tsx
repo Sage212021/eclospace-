@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { confirmIdentifierChange, fetchMe, logout, stopImpersonation, type EffectiveUser } from "./api/client";
 import { Login } from "./pages/Login";
+import { QuoteSignPage } from "./pages/QuoteSignPage";
 import { Dashboard } from "./pages/Dashboard";
 import { Manuscripts } from "./pages/Manuscripts";
 import { CatalogueReferencePage } from "./pages/CatalogueReferencePage";
@@ -209,6 +210,11 @@ export function App() {
         window.history.replaceState({}, "", window.location.pathname + (q ? `?${q}` : ""));
       });
   }, []);
+
+  // Page publique de signature d'un devis (③), accessible sans compte via le
+  // lien reçu par e-mail : /signer-devis/:token. Court-circuite l'application.
+  const signMatch = window.location.pathname.match(/^\/signer-devis\/([A-Za-z0-9]+)\/?$/);
+  if (signMatch) return <QuoteSignPage token={signMatch[1]} />;
 
   if (loading) return null;
 

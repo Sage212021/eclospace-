@@ -452,6 +452,104 @@ export function updateContractStatus(id: string, status: ContractStatus) {
   return request<Contract>(`/api/v1/contracts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
 }
 
+// --- Compte d'auteur : devis de prestation éditoriale ---------------------
+export type EditorialQuoteStatus = "draft" | "sent" | "accepted" | "refused" | "expired" | "invoiced";
+export type QuoteAcceptanceMethod = "online_link" | "internal" | "paper";
+
+export interface EditorialQuoteLine {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: string;
+  taxRate: string;
+  lineTotal: string;
+}
+
+export interface EditorialQuote {
+  id: string;
+  quoteNumber: string;
+  status: EditorialQuoteStatus;
+  currency: string;
+  totalHt: string;
+  totalTax: string;
+  totalTtc: string;
+  validUntil: string | null;
+  notes: string | null;
+  exclusionsNote: string | null;
+  acceptedAt: string | null;
+  acceptanceMethod: QuoteAcceptanceMethod | null;
+  signerName: string | null;
+  invoiceId: string | null;
+  partner: { id: string; firstName: string; lastName: string; email: string | null };
+  manuscript: { id: string; manuscriptNumber: string; title: string } | null;
+  lines: EditorialQuoteLine[];
+}
+
+export function listEditorialQuotes(manuscriptId?: string) {
+  const q = manuscriptId ? `?manuscript=${manuscriptId}` : "";
+  return request<EditorialQuote[]>(`/api/v1/editorial-quotes${q}`);
+}
+
+export function getEditorialQuote(id: string) {
+  return request<EditorialQuote>(`/api/v1/editorial-quotes/${id}`);
+}
+
+export function createEditorialQuote(input: {
+  partner_id: string;
+  manuscript_id?: string;
+  currency?: string;
+  valid_until?: string;
+  notes?: string;
+  lines: { description: string; quantity: number; unit_price: number; tax_rate?: number }[];
+}) {
+  return request<EditorialQuote>("/api/v1/editorial-quotes", { method: "POST", body: JSON.stringify(input) });
+}
+
+// Prépare l'envoi pour signature en ligne : renvoie le lien (et l'envoie par
+// e-mail à l'auteur si une adresse est connue).
+export function sendEditorialQuote(id: string) {
+  return request<{ quote: EditorialQuote; sign_path: string; sign_url: string | null; email_sent: boolean }>(
+    `/api/v1/editorial-quotes/${id}/send`,
+    { method: "POST" },
+  );
+}
+
+// Enregistre l'accord de l'auteur en interne (①) ou par devis papier scanné (②).
+export function acceptEditorialQuote(id: string, input: { method: "internal" | "paper"; signer_name: string; consent: boolean; note?: string }) {
+  return request<EditorialQuote>(`/api/v1/editorial-quotes/${id}/accept`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function invoiceEditorialQuote(id: string) {
+  return request<InvoiceDetail>(`/api/v1/editorial-quotes/${id}/invoice`, { method: "POST" });
+}
+
+// --- Signature en ligne par l'auteur (page publique, sans compte) ----------
+export interface PublicQuote {
+  quote_number: string;
+  status: EditorialQuoteStatus;
+  author: string;
+  manuscript_title: string | null;
+  currency: string;
+  exclusions_note: string | null;
+  valid_until: string | null;
+  total_ht: string;
+  total_tax: string;
+  total_ttc: string;
+  accepted_at: string | null;
+  lines: { description: string; quantity: number; unit_price: string; tax_rate: string; line_total: string }[];
+}
+
+export function getPublicQuote(token: string) {
+  return request<PublicQuote>(`/api/v1/public/editorial-quotes/${token}`);
+}
+
+export function signPublicQuote(token: string, input: { signer_name: string; consent: boolean }) {
+  return request<{ ok: boolean; quote_number: string }>(`/api/v1/public/editorial-quotes/${token}/sign`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export type TaskStatus = "non_commencee" | "en_cours" | "suspendue" | "terminee" | "validee";
 
 export interface Task {

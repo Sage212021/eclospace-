@@ -1,0 +1,324 @@
+import { useEffect, useState } from "react";
+import {
+  acceptEditorialQuote,
+  createEditorialQuote,
+  getEditorialQuote,
+  invoiceEditorialQuote,
+  listEditorialQuotes,
+  sendEditorialQuote,
+  type EditorialQuote,
+  type EditorialQuoteStatus,
+} from "../api/client";
+import { printEditorialQuote, printInvoice } from "../lib/print";
+import { Modal, Field } from "./Modal";
+import { Button } from "./Button";
+
+const STATUS_LABELS: Record<EditorialQuoteStatus, string> = {
+  draft: "Brouillon",
+  sent: "Envoyé — en attente de signature",
+  accepted: "Accepté / signé",
+  refused: "Refusé",
+  expired: "Expiré",
+  invoiced: "Facturé",
+};
+
+// Catalogue de départ des prestations éditoriales (compte d'auteur). Libre : on
+// peut saisir toute autre description.
+const SERVICE_CATALOG = [
+  "Relecture",
+  "Correction (orthographe / typographie)",
+  "Proposition de couverture",
+  "Création de couverture",
+  "Maquette intérieure (mise en page)",
+  "Accompagnement éditorial",
+];
+
+interface Props {
+  manuscriptId: string;
+  defaultPartnerId: string;
+  canCreate: boolean; // finance:saisie
+  canValidate: boolean; // finance:validation
+}
+
+// Compte d'auteur (Phase B) : gestion des devis de prestation éditoriale d'un
+// manuscrit — création, envoi pour signature en ligne, signature interne/papier,
+// puis génération de la facture. Hors impression et communication.
+export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCreate, canValidate }: Props) {
+  const [quotes, setQuotes] = useState<EditorialQuote[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [accepting, setAccepting] = useState<EditorialQuote | null>(null);
+
+  const refresh = () => listEditorialQuotes(manuscriptId).then(setQuotes).catch((e) => setError(e.message));
+  useEffect(() => {
+    refresh();
+  }, [manuscriptId]);
+
+  async function handleSend(q: EditorialQuote) {
+    setError(null);
+    setInfo(null);
+    try {
+      const r = await sendEditorialQuote(q.id);
+      setInfo(
+        r.email_sent
+          ? `Devis envoyé à l'auteur par e-mail pour signature en ligne.`
+          : `Lien de signature prêt (l'e-mail n'a pas été envoyé — adresse auteur ou SMTP manquant). À transmettre à l'auteur : ${r.sign_url}`,
+      );
+      refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Échec de l'envoi.");
+    }
+  }
+
+  async function handleInvoice(q: EditorialQuote) {
+    setError(null);
+    setInfo(null);
+    try {
+      const invoice = await invoiceEditorialQuote(q.id);
+      setInfo(`Facture ${invoice.invoiceNumber} générée depuis le devis ${q.quoteNumber}.`);
+      refresh();
+      printInvoice(invoice);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Échec de la génération de la facture.");
+    }
+  }
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Prestation éditoriale (compte d'auteur)</div>
+        {canCreate && (
+          <button onClick={() => setShowForm((v) => !v)} style={secondaryButtonStyle}>
+            {showForm ? "Annuler" : "+ Nouveau devis"}
+          </button>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
+        Travail éditorial facturé à l'auteur — hors frais d'impression et de communication.
+      </div>
+
+      {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
+      {info && <p style={{ color: "var(--eclosion)", fontSize: 12, wordBreak: "break-all" }}>{info}</p>}
+
+      {showForm && (
+        <NewQuoteForm
+          manuscriptId={manuscriptId}
+          defaultPartnerId={defaultPartnerId}
+          onCreated={() => {
+            setShowForm(false);
+            refresh();
+          }}
+          onError={setError}
+        />
+      )}
+
+      {quotes.length === 0 && !showForm && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun devis de prestation pour ce manuscrit.</p>}
+
+      {quotes.map((q) => (
+        <div key={q.id} style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 10, fontSize: 13 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>{q.quoteNumber}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+              {new Intl.NumberFormat("fr-FR", { style: "currency", currency: q.currency || "XAF", maximumFractionDigits: 0 }).format(Number(q.totalTtc))}
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+            <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 999, padding: "2px 10px", fontSize: 11 }}>
+              {STATUS_LABELS[q.status]}
+            </span>
+            <button onClick={() => getEditorialQuote(q.id).then(printEditorialQuote).catch((e) => setError(e.message))} style={secondaryButtonStyle}>
+              Imprimer / PDF
+            </button>
+            {canCreate && (q.status === "draft" || q.status === "sent") && (
+              <button onClick={() => handleSend(q)} style={secondaryButtonStyle}>
+                {q.status === "sent" ? "Renvoyer le lien" : "✉️ Envoyer pour signature"}
+              </button>
+            )}
+            {canValidate && (q.status === "draft" || q.status === "sent") && (
+              <button onClick={() => setAccepting(q)} style={secondaryButtonStyle}>
+                ✍️ Signer (interne / papier)
+              </button>
+            )}
+            {canCreate && q.status === "accepted" && (
+              <button onClick={() => handleInvoice(q)} style={{ ...secondaryButtonStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)", fontWeight: 600 }}>
+                Générer la facture
+              </button>
+            )}
+          </div>
+          {q.acceptedAt && q.signerName && (
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+              Signé par {q.signerName} le {new Date(q.acceptedAt).toLocaleDateString("fr-FR")}
+              {q.acceptanceMethod === "online_link" ? " (en ligne)" : q.acceptanceMethod === "paper" ? " (devis papier)" : ""}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {accepting && (
+        <AcceptModal
+          quote={accepting}
+          onClose={() => setAccepting(null)}
+          onAccepted={() => {
+            setAccepting(null);
+            refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Enregistrement de l'accord de l'auteur en interne (① agent) ou papier (② scan).
+function AcceptModal({ quote, onClose, onAccepted }: { quote: EditorialQuote; onClose: () => void; onAccepted: () => void }) {
+  const [method, setMethod] = useState<"internal" | "paper">("internal");
+  const [signerName, setSignerName] = useState(`${quote.partner.firstName} ${quote.partner.lastName}`);
+  const [note, setNote] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleAccept() {
+    if (!consent) {
+      setError("Cochez la confirmation d'accord de l'auteur.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await acceptEditorialQuote(quote.id, { method, signer_name: signerName.trim(), consent, note: note || undefined });
+      onAccepted();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Échec de l'enregistrement.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={`Signer le devis — ${quote.quoteNumber}`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="view" size="sm" onClick={onClose}>Annuler</Button>
+          <Button variant="add" size="sm" onClick={handleAccept} disabled={busy || !signerName.trim() || !consent}>
+            {busy ? "Enregistrement…" : "Enregistrer la signature"}
+          </Button>
+        </>
+      }
+    >
+      <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 0 }}>
+        Pour une signature <b>en ligne par l'auteur</b>, utilisez plutôt « Envoyer pour signature ». Ce formulaire enregistre un accord
+        recueilli autrement.
+      </p>
+      <Field label="Mode de recueil de l'accord">
+        <select value={method} onChange={(e) => setMethod(e.target.value as "internal" | "paper")}>
+          <option value="internal">① En interne (en personne / téléphone)</option>
+          <option value="paper">② Devis papier signé et scanné</option>
+        </select>
+      </Field>
+      <Field label="Nom du signataire (l'auteur)">
+        <input value={signerName} onChange={(e) => setSignerName(e.target.value)} placeholder="Nom et prénom" />
+      </Field>
+      <Field label="Note (facultatif)">
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex. scan reçu par e-mail le…" />
+      </Field>
+      <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, marginTop: 4 }}>
+        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} style={{ marginTop: 3 }} />
+        <span>Je confirme l'accord de l'auteur sur ce devis. L'acceptation sera horodatée et inscrite au journal.</span>
+      </label>
+      {error && <p style={{ color: "var(--alert)", fontSize: 13, marginTop: 8 }}>{error}</p>}
+    </Modal>
+  );
+}
+
+interface QuoteLineDraft {
+  description: string;
+  quantity: number;
+  unit_price: number;
+}
+
+function NewQuoteForm({
+  manuscriptId,
+  defaultPartnerId,
+  onCreated,
+  onError,
+}: {
+  manuscriptId: string;
+  defaultPartnerId: string;
+  onCreated: () => void;
+  onError: (m: string) => void;
+}) {
+  const [lines, setLines] = useState<QuoteLineDraft[]>([{ description: "Relecture", quantity: 1, unit_price: 0 }]);
+  const [busy, setBusy] = useState(false);
+
+  const total = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
+
+  function update(i: number, patch: Partial<QuoteLineDraft>) {
+    setLines((cur) => cur.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!defaultPartnerId) {
+      onError("Aucun auteur rattaché à ce manuscrit pour établir le devis.");
+      return;
+    }
+    const clean = lines.filter((l) => l.description.trim() && l.quantity > 0);
+    if (clean.length === 0) {
+      onError("Ajoutez au moins une ligne de prestation.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await createEditorialQuote({
+        partner_id: defaultPartnerId,
+        manuscript_id: manuscriptId,
+        lines: clean.map((l) => ({ description: l.description.trim(), quantity: l.quantity, unit_price: l.unit_price, tax_rate: 0 })),
+      });
+      onCreated();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de la création.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginBottom: 10 }}>
+      <datalist id="ecl-service-catalog">
+        {SERVICE_CATALOG.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
+      {lines.map((l, i) => (
+        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 70px 120px 32px", gap: 8, marginBottom: 8, alignItems: "center" }}>
+          <input list="ecl-service-catalog" value={l.description} onChange={(e) => update(i, { description: e.target.value })} placeholder="Prestation" style={inputStyle} />
+          <input type="number" min={1} value={l.quantity} onChange={(e) => update(i, { quantity: Number(e.target.value) })} style={inputStyle} title="Quantité" />
+          <input type="number" min={0} value={l.unit_price} onChange={(e) => update(i, { unit_price: Number(e.target.value) })} placeholder="P.U. FCFA" style={inputStyle} title="Prix unitaire" />
+          <button type="button" onClick={() => setLines((cur) => cur.filter((_, idx) => idx !== i))} disabled={lines.length === 1} style={{ ...secondaryButtonStyle, padding: "6px 8px" }} title="Retirer">
+            ✕
+          </button>
+        </div>
+      ))}
+      <button type="button" onClick={() => setLines((cur) => [...cur, { description: "", quantity: 1, unit_price: 0 }])} style={secondaryButtonStyle}>
+        + Ligne
+      </button>
+      <div style={{ textAlign: "right", marginTop: 10, fontSize: 14, fontWeight: 600, fontFamily: "var(--font-mono)" }}>
+        Total : {new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF", maximumFractionDigits: 0 }).format(total)}
+      </div>
+      <button type="submit" disabled={busy} style={{ ...secondaryButtonStyle, marginTop: 8, background: "var(--eclosion)", color: "#fff", border: "none" }}>
+        {busy ? "Création…" : "Créer le devis"}
+      </button>
+    </form>
+  );
+}
+
+const inputStyle: React.CSSProperties = { display: "block", width: "100%", padding: 6, fontSize: 13, boxSizing: "border-box" };
+const secondaryButtonStyle: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid var(--line)",
+  borderRadius: 6,
+  padding: "6px 12px",
+  fontSize: 12,
+  cursor: "pointer",
+};

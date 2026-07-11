@@ -535,3 +535,14 @@ Nouvelle extension décidée avec l'opérateur : facturer à l'**auteur** le **t
 - Migrations **additives** (aucune donnée touchée). **175 tests** (dont 5 nouveaux sur ce parcours).
 
 **Reste à faire (prochain incrément)** : écran de gestion des devis (fiche manuscrit), **page publique de signature**, **impression PDF** du devis et de la facture de prestation, **envoi par e-mail** du lien de signature ; puis consigner la décision au registre.
+
+### 11/07/2026 (suite) — Compte d'auteur : écrans, signature en ligne, PDF, e-mail (terminé)
+
+Partie visible construite et **vérifiée au navigateur** :
+- **Écran de gestion des devis** sur la fiche du manuscrit (section « Prestation éditoriale (compte d'auteur) ») : création (catalogue de prestations + lignes libres, total en direct), **envoi pour signature**, **signature interne/papier**, **génération de la facture**, **impression/PDF** du devis.
+- **Page publique de signature** (`/signer-devis/:jeton`) : accessible **sans compte**, aux couleurs de la maison ; l'auteur voit son devis (lignes, total, mention d'exclusion) et **signe en un clic** → écran de confirmation « Devis signé — merci ». *(Vérifié de bout en bout : consultation via le lien, signature, confirmation.)*
+- **Envoi automatique par e-mail** du lien de signature à l'auteur quand « Envoyer pour signature » est cliqué (réutilise le SMTP configuré ; au meilleur effort).
+- **Impression PDF** du devis (papier à en-tête, mention d'exclusion, bloc d'acceptation si signé) et de la facture de prestation (via l'impression facture existante).
+- **Décision consignée** au registre : **D-006** (extension « compte d'auteur »).
+
+Typecheck + build front OK ; suite backend inchangée (175 tests). Reste éventuel : ajuster les formulations de la page de signature selon retours.

@@ -286,6 +286,9 @@ model User {
   taskComments       TaskComment[]
   batSignatures      BatSignature[]
   contractSignatures ContractSignature[]
+  objectives         Objective[]         @relation("UserObjectives")
+  weeklyReports      WeeklyReport[]       @relation("UserWeeklyReports")
+  validatedReports   WeeklyReport[]       @relation("WeeklyReportValidator")
 
   @@map("users")
 }
@@ -2775,4 +2778,96 @@ model SavedAnalysis {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("saved_analyses")
+}
+
+// --- Rapports hebdomadaires par agent (Demande opérateur du 11/07/2026) ------
+// Chaque agent rédige, selon une périodicité paramétrable, un compte-rendu relié
+// à ses objectifs (chiffrés et/ou libres) et à sa veille/recherche. La hiérarchie
+// (chef de département sur son pôle, Direction générale sur tout) suit et valide.
+// Le mode de validation (DG ou chef) et la périodicité sont paramétrables (table
+// `settings`). Confidentialité : agent = ses rapports, chef = son pôle, DG = tout.
+
+enum ObjectiveStatus {
+  active
+  achieved
+  archived
+}
+
+model Objective {
+  id          String          @id @default(uuid())
+  userId      String          @map("user_id")
+  user        User            @relation("UserObjectives", fields: [userId], references: [id])
+  title       String
+  description String?
+  // Cible chiffrée facultative (objectif « chiffré » vs « libre »).
+  targetValue Decimal?        @map("target_value") @db.Decimal(12, 2)
+  unit        String?
+  periodStart DateTime        @map("period_start")
+  periodEnd   DateTime        @map("period_end")
+  weight      Int             @default(1)
+  status      ObjectiveStatus @default(active)
+
+  createdBy String?   @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  reportLines WeeklyReportObjective[]
+
+  @@map("objectives")
+}
+
+enum WeeklyReportStatus {
+  draft
+  submitted
+  validated
+  returned
+}
+
+model WeeklyReport {
+  id          String             @id @default(uuid())
+  userId      String             @map("user_id")
+  user        User               @relation("UserWeeklyReports", fields: [userId], references: [id])
+  // Grand pôle figé à la création (déduit de la fiche employé) : périmètre de
+  // visibilité du chef de département.
+  pole        String
+  periodStart DateTime           @map("period_start")
+  periodEnd   DateTime           @map("period_end")
+  status      WeeklyReportStatus @default(draft)
+
+  achievements String? // réalisations de la période
+  research     String? // recherche / veille
+  difficulties String? // difficultés / besoins
+  nextPlan     String? @map("next_plan") // plan de la période suivante
+
+  submittedAt       DateTime? @map("submitted_at")
+  validatedById     String?   @map("validated_by")
+  validatedBy       User?     @relation("WeeklyReportValidator", fields: [validatedById], references: [id])
+  validatedAt       DateTime? @map("validated_at")
+  validationComment String?   @map("validation_comment")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  objectives WeeklyReportObjective[]
+
+  // Un seul rapport par agent et par période.
+  @@unique([userId, periodStart])
+  @@map("weekly_reports")
+}
+
+// Avancement d'un objectif au titre d'un rapport. Objectif « chiffré » = lié à
+// un Objective ; objectif « libre » = simple intitulé (objectiveId null + label).
+model WeeklyReportObjective {
+  id          String       @id @default(uuid())
+  reportId    String       @map("report_id")
+  report      WeeklyReport @relation(fields: [reportId], references: [id])
+  objectiveId String?      @map("objective_id")
+  objective   Objective?   @relation(fields: [objectiveId], references: [id])
+  label       String?
+  progressPct Int          @default(0) @map("progress_pct")
+  comment     String?
+
+  @@map("weekly_report_objectives")
 }

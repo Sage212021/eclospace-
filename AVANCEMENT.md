@@ -561,6 +561,17 @@ Sur retour opérateur, tous les documents officiels (facture, devis, relevé de 
 - **Papier à en-tête officiel corrigé** enregistré (`frontend/public/eclosion-papier-entete.png`, A4 1054×1492). Bandeaux mesurés ~56 mm (haut) et ~56 mm (bas) → hauteurs réservées : mode « en-tête intégré » padding 58/58 mm ; mode « papier vierge » espaces 40/40 mm en plus de la marge @page de 18 mm.
 - **Petit écart restant à trancher** : le papier corrigé liste **3 téléphones** (dont `654 366 663`), le numérique n'en a que 2 — à aligner si l'opérateur le souhaite. *(Fait : 3e numéro ajouté au numérique.)*
 
+### 11/07/2026 (suite) — Rapports hebdomadaires par agent (Demande 3, backend)
+
+Nouveau module : chaque agent rédige un compte-rendu périodique relié à ses **objectifs** (chiffrés et/ou libres) et à sa **recherche/veille** ; la hiérarchie suit et valide.
+
+- **Objectifs** (`objectives`) : intitulé + cible chiffrée facultative (valeur + unité) + période + poids ; fixés par un **chef de département** (son pôle) ou la **DG**.
+- **Rapport** (`weekly_reports`) : sections *réalisations, recherche, difficultés, plan suivant* + lignes d'**avancement d'objectifs** (`weekly_report_objectives`, % + commentaire ; objectif lié = chiffré, ou libellé libre). Cycle **brouillon → soumis → validé / retourné**. Un rapport par agent et par période.
+- **Paramétrable** (table `settings`) : `weekly_report_validation_mode` (**dg** par défaut, ou **chef**) et `weekly_report_periodicity` (**weekly**, biweekly, monthly).
+- **Confidentialité** (modèle « présence/names ») : agent = ses rapports ; chef = son pôle ; DG (`direction:consultation`) + super-admin = tout. Refus tracés (`access_denied`).
+- **API** : objectifs (create/list), rapports (create période courante, list, get, patch, submit, validate/return). Migration **additive**. **181 tests** (+4 : cycle, confidentialité, habilitation validation, objectifs réservés).
+- **Reste** : les écrans (agent : rédiger/soumettre ; chef/DG : suivre/valider) — prochain incrément.
+
 ### 11/07/2026 (suite) — Devis/facture Impression et Communication (Demande 2, choix C)
 
 Le circuit devis → signature → facture est **généralisé aux trois métiers** de la maison : **Éditoriale** (facturée à l'auteur), **Impression** et **Communication** (facturées à un client). Décision opérateur : **choix C** — un devis peut viser un **auteur (Partenaire) OU un client (Customer)**, au choix.

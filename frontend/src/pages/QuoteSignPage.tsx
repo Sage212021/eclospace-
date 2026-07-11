@@ -54,8 +54,22 @@ export function QuoteSignPage({ token }: { token: string }) {
     <div style={page}>
       <div style={card}>
         <div style={header}>
-          <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700 }}>Éclosion Édition</div>
-          <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#C89A1B" }}>L'avenir du livre</div>
+          <img
+            src="/eclosion-logo.png"
+            alt="Éclosion Édition — L'avenir du livre"
+            style={{ height: 56, width: "auto", display: "block" }}
+            // Repli discret si le logo ne se charge pas : on affiche le nom.
+            onError={(e) => {
+              const img = e.currentTarget;
+              img.style.display = "none";
+              const fb = img.nextElementSibling as HTMLElement | null;
+              if (fb) fb.style.display = "block";
+            }}
+          />
+          <div style={{ display: "none" }}>
+            <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700 }}>Éclosion Édition</div>
+            <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#C89A1B" }}>L'avenir du livre</div>
+          </div>
         </div>
 
         <div style={{ padding: "24px 26px" }}>

@@ -12,6 +12,7 @@ import {
 import { printEditorialQuote, printInvoice } from "../lib/print";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
+import { DocPrintMenu } from "./DocPrintMenu";
 
 const STATUS_LABELS: Record<EditorialQuoteStatus, string> = {
   draft: "Brouillon",
@@ -127,16 +128,7 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
             <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 999, padding: "2px 10px", fontSize: 11 }}>
               {STATUS_LABELS[q.status]}
             </span>
-            <button onClick={() => getEditorialQuote(q.id).then((quote) => printEditorialQuote(quote)).catch((e) => setError(e.message))} style={secondaryButtonStyle}>
-              Imprimer / PDF
-            </button>
-            <button
-              onClick={() => getEditorialQuote(q.id).then((quote) => printEditorialQuote(quote, { letterhead: true })).catch((e) => setError(e.message))}
-              style={secondaryButtonStyle}
-              title="Version neutre (sans logo ni mentions) à imprimer sur le papier à en-tête physique de la maison"
-            >
-              Sur papier à en-tête
-            </button>
+            <DocPrintMenu onPrint={(o) => getEditorialQuote(q.id).then((quote) => printEditorialQuote(quote, o)).catch((e) => setError(e.message))} />
             {canCreate && (q.status === "draft" || q.status === "sent") && (
               <button onClick={() => handleSend(q)} style={secondaryButtonStyle}>
                 {q.status === "sent" ? "Renvoyer le lien" : "✉️ Envoyer pour signature"}

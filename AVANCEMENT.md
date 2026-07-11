@@ -546,3 +546,15 @@ Partie visible construite et **vérifiée au navigateur** :
 - **Décision consignée** au registre : **D-006** (extension « compte d'auteur »).
 
 Typecheck + build front OK ; suite backend inchangée (175 tests). Reste éventuel : ajuster les formulations de la page de signature selon retours.
+
+### 11/07/2026 (suite) — Trois présentations d'impression + papier à en-tête officiel
+
+Sur retour opérateur, tous les documents officiels (facture, devis, relevé de droits, bon de commande, contrat) offrent désormais **trois présentations à l'impression**, via un menu « Imprimer / PDF ▾ » commun (`DocPrintMenu`) :
+1. **Numérique** (par défaut) : logo + mentions légales complètes — pour l'écran/e-mail ou le papier ordinaire ;
+2. **Avec papier à en-tête intégré** : l'image A4 officielle de la maison est reproduite en fond (en-tête + filigrane + pied) — à imprimer sur **papier ordinaire** ;
+3. **Sur papier à en-tête vierge** : version **neutre** (sans logo ni mentions), zones haut/bas réservées — à imprimer sur le **papier physique** pré-imprimé.
+
+- **Papier à en-tête officiel enregistré** : extrait du fichier fourni (`NOUVEAU_PAPIER_ENTETE_ECLOSION1.docx`) et sauvegardé (`frontend/public/eclosion-papier-entete.png`, A4 1385×1959).
+- Impression des fonds forcée (`print-color-adjust: exact`). Vérifié au navigateur (devis en-tête intégré : contenu bien centré dans la zone libre).
+- Hauteurs réservées (mode vierge / intégré) ajustables si le bandeau du papier diffère.
+- **À confirmer avec l'opérateur** : le nouveau papier à en-tête porte des coordonnées **différentes** de celles des documents numériques actuels (téléphones, e-mail `editioneclosion@gmail.com`, site `eclosionedition.cm`, N° contribuable `MÀ2019127511744Y`). À harmoniser une fois la source officielle tranchée.

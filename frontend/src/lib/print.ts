@@ -25,20 +25,32 @@ const HOUSE = {
   cnps: "C-YAO-2019-0144",
 };
 
-// En-tête et pied communs à tous les documents officiels (papier à en-tête
-// Éclosion Édition). Styles inlinés : la fenêtre d'impression est isolée de
-// l'application.
-// `letterhead` = impression sur PAPIER À EN-TÊTE physique : on retire le logo et
-// toutes les mentions (adresse, RCCM, NIU, CNPS…) — le papier les porte déjà —
-// et on réserve un espace en haut/bas pour l'en-tête et le pied pré-imprimés. La
-// version numérique complète (avec logo et mentions) reste l'option par défaut.
-function documentShell(title: string, body: string, opts?: { letterhead?: boolean }): string {
+// Options d'impression, partagées par tous les documents (facture, devis,
+// relevé, bon de commande, contrat). Trois présentations :
+//   • défaut (numérique) : logo + mentions légales complètes, pour envoi/écran ;
+//   • letterhead : version NEUTRE (sans logo ni mentions) pour imprimer sur le
+//     papier à en-tête PHYSIQUE — espaces réservés en haut/bas ;
+//   • embed : papier à en-tête NUMÉRIQUE intégré (image de fond A4 officielle) —
+//     à imprimer sur papier ordinaire, l'en-tête est reproduit à l'impression.
+export interface PrintOpts {
+  letterhead?: boolean;
+  embed?: boolean;
+}
+
+// En-tête et pied communs à tous les documents officiels. Styles inlinés : la
+// fenêtre d'impression est isolée de l'application.
+function documentShell(title: string, body: string, opts?: PrintOpts): string {
   const now = new Date().toLocaleString("fr-FR");
+  const embed = opts?.embed ?? false;
   const letterhead = opts?.letterhead ?? false;
 
-  const head = letterhead
-    ? `<div class="lh-space" aria-hidden="true"></div>`
-    : `<div class="lh">
+  // En mode « en-tête intégré », l'image A4 officielle fournit en-tête et pied :
+  // aucun logo/mention ajouté, le contenu se place dans la zone centrale libre.
+  const head = embed
+    ? ""
+    : letterhead
+      ? `<div class="lh-space" aria-hidden="true"></div>`
+      : `<div class="lh">
         <img class="lh__logo" src="${window.location.origin}/eclosion-logo.png" alt="${HOUSE.brand} ${HOUSE.brandSuffix} — ${HOUSE.tagline}">
         <div class="lh__contact">
           ${escapeHtml(HOUSE.address)}<br>
@@ -48,22 +60,34 @@ function documentShell(title: string, body: string, opts?: { letterhead?: boolea
       </div>
       <div class="lh__rule"></div>`;
 
-  const foot = letterhead
-    ? `<div class="lh-foot-space" aria-hidden="true"></div>`
-    : `<div class="foot">
+  const foot = embed
+    ? ""
+    : letterhead
+      ? `<div class="lh-foot-space" aria-hidden="true"></div>`
+      : `<div class="foot">
         <div class="foot__legal">${escapeHtml(HOUSE.legalName)} · RCCM : ${escapeHtml(HOUSE.rccm)} · NIU : ${escapeHtml(HOUSE.niu)} · N° Affil. CNPS : ${escapeHtml(HOUSE.cnps)}</div>
         <div>Document généré par Éclospace le ${escapeHtml(now)}.</div>
       </div>`;
 
+  const pageMargin = embed ? "0" : "18mm 16mm";
+  // Fond « papier à en-tête » A4 officiel (forcé à l'impression). La zone centrale
+  // libre est réservée par le padding du bloc document.
+  const embedStyle = embed
+    ? `body { background: url("${window.location.origin}/eclosion-papier-entete.png") top center / 210mm 297mm no-repeat; }
+       .doc { max-width: none; padding: 42mm 20mm 52mm; }
+       body, .doc { -webkit-print-color-adjust: exact; print-color-adjust: exact; }`
+    : "";
+
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
   <style>
-    @page { size: A4; margin: 18mm 16mm; }
+    @page { size: A4; margin: ${pageMargin}; }
     * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #16233d; margin: 0; font-size: 12.5px; line-height: 1.5; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #16233d; margin: 0; font-size: 12.5px; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .doc { max-width: 720px; margin: 0 auto; padding: 8px; }
     /* Espace réservé à l'en-tête / au pied pré-imprimés du papier à en-tête. */
     .lh-space { height: 26mm; }
     .lh-foot-space { height: 20mm; }
+    ${embedStyle}
     .lh { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
     .lh__logo { height: 62px; width: auto; }
     .lh__contact { text-align: right; font-size: 10.5px; color: #4b5563; line-height: 1.7; max-width: 340px; }
@@ -90,7 +114,7 @@ function documentShell(title: string, body: string, opts?: { letterhead?: boolea
     .foot__legal { color: #16233d; font-weight: 600; }
     .actions { text-align: center; margin: 18px 0 4px; }
     .actions button { font: inherit; background: #16233d; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; cursor: pointer; }
-    @media print { .actions { display: none; } .doc { padding: 0; } }
+    @media print { .actions { display: none; } ${embed ? "" : ".doc { padding: 0; }"} }
   </style></head>
   <body>
     <div class="doc">
@@ -103,7 +127,7 @@ function documentShell(title: string, body: string, opts?: { letterhead?: boolea
   </body></html>`;
 }
 
-function openPrintWindow(title: string, body: string, opts?: { letterhead?: boolean }): void {
+function openPrintWindow(title: string, body: string, opts?: PrintOpts): void {
   const w = window.open("", "_blank", "width=860,height=1000");
   if (!w) {
     // Bloqueur de pop-up : on informe plutôt que d'échouer en silence.
@@ -131,7 +155,7 @@ function escapeHtml(s: string): string {
 
 // Facture / avoir prêt à imprimer (Ch. 18). Reprend les lignes, totaux HT / TVA
 // / TTC et la devise tels qu'enregistrés — aucun recalcul côté impression.
-export function printInvoice(invoice: InvoiceDetail): void {
+export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
   const isCredit = invoice.type === "credit_note";
   const cur = invoice.currency || "XAF";
   const created = invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString("fr-FR") : "—";
@@ -171,7 +195,7 @@ export function printInvoice(invoice: InvoiceDetail): void {
       <div class="ttc"><span>Total TTC</span><span class="num">${money(invoice.totalTtc, cur)}</span></div>
     </div>`;
 
-  openPrintWindow(`${isCredit ? "Avoir" : "Facture"} ${invoice.invoiceNumber}`, body);
+  openPrintWindow(`${isCredit ? "Avoir" : "Facture"} ${invoice.invoiceNumber}`, body, opts);
 }
 
 function statusLabel(status: string): string {
@@ -197,7 +221,7 @@ const QUOTE_METHOD_LABELS: Record<string, string> = {
 // Devis de prestation éditoriale prêt à imprimer / PDF (compte d'auteur). Reprend
 // le papier à en-tête. Mentionne l'exclusion (impression/communication) et, si le
 // devis est signé, l'acceptation de l'auteur (nom, date, mode).
-export function printEditorialQuote(quote: EditorialQuote, opts?: { letterhead?: boolean }): void {
+export function printEditorialQuote(quote: EditorialQuote, opts?: PrintOpts): void {
   const cur = quote.currency || "XAF";
   const validUntil = quote.validUntil ? new Date(quote.validUntil).toLocaleDateString("fr-FR") : null;
   const author = `${quote.partner.firstName} ${quote.partner.lastName}`;
@@ -263,7 +287,7 @@ const ROYALTY_SOURCE_LABELS: Record<string, string> = {
 // Relevé de droits d'auteur prêt à imprimer (Ch. 9 §9.5, Ch. 18 §18.7). Détaille
 // les lignes (base, quantité, taux appliqué, montant) puis récapitule droits
 // acquis, à-valoir amorti et solde dû. Montants tels qu'enregistrés.
-export function printRoyaltyStatement(st: RoyaltyStatementDetail): void {
+export function printRoyaltyStatement(st: RoyaltyStatementDetail, opts?: PrintOpts): void {
   const cur = "XAF";
   const start = new Date(st.periodStart).toLocaleDateString("fr-FR");
   const end = new Date(st.periodEnd).toLocaleDateString("fr-FR");
@@ -304,7 +328,7 @@ export function printRoyaltyStatement(st: RoyaltyStatementDetail): void {
       <div class="ttc"><span>Restant à payer</span><span class="num">${money(remaining, cur)}</span></div>
     </div>`;
 
-  openPrintWindow(`Relevé de droits ${st.contract.contractNumber}`, body);
+  openPrintWindow(`Relevé de droits ${st.contract.contractNumber}`, body, opts);
 }
 
 const PO_STATUS_LABELS: Record<string, string> = {
@@ -319,7 +343,7 @@ const PO_STATUS_LABELS: Record<string, string> = {
 
 // Bon de commande imprimeur prêt à imprimer (Ch. 15 §15.4). Récapitule le
 // fournisseur, l'ouvrage, la quantité, le montant et les conditions de livraison.
-export function printPurchaseOrder(po: PurchaseOrder): void {
+export function printPurchaseOrder(po: PurchaseOrder, opts?: PrintOpts): void {
   const cur = po.currency || "XAF";
   const printer = po.printer ? `${po.printer.partner.firstName} ${po.printer.partner.lastName}` : "—";
   const book = po.quote?.manuscript;
@@ -356,7 +380,7 @@ export function printPurchaseOrder(po: PurchaseOrder): void {
       <div class="ttc"><span>Total commande</span><span class="num">${money(po.amount, cur)}</span></div>
     </div>`;
 
-  openPrintWindow(`Bon de commande ${po.poNumber}`, body);
+  openPrintWindow(`Bon de commande ${po.poNumber}`, body, opts);
 }
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -389,7 +413,7 @@ const PERIODICITY_LABELS: Record<string, string> = {
 // Fiche contractuelle prête à imprimer (Ch. 9). Récapitule les parties, l'ouvrage,
 // la portée (territoires, langues, formats) et les clauses de droits d'auteur
 // (base, paliers, à-valoir, retenue, périodicité). Résumé structuré du contrat.
-export function printContract(c: ContractDetail): void {
+export function printContract(c: ContractDetail, opts?: PrintOpts): void {
   const cur = "XAF";
   const partner = `${c.partner.firstName} ${c.partner.lastName}`;
   const signed = c.signedAt ? new Date(c.signedAt).toLocaleDateString("fr-FR") : "—";
@@ -446,5 +470,5 @@ export function printContract(c: ContractDetail): void {
       <div style="flex:1; min-width:200px"><div class="party__label">Le cocontractant</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature</div></div>
     </div>`;
 
-  openPrintWindow(`Contrat ${c.contractNumber}`, body);
+  openPrintWindow(`Contrat ${c.contractNumber}`, body, opts);
 }

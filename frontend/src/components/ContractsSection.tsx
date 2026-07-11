@@ -17,6 +17,7 @@ import {
 import { printContract } from "../lib/print";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
+import { DocPrintMenu } from "./DocPrintMenu";
 
 const SIGNATURE_PARTY_LABELS: Record<SignatureParty, string> = {
   author: "Partie contractante (auteur / prestataire)",
@@ -118,9 +119,7 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
             <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 999, padding: "2px 10px", fontSize: 11 }}>
               {STATUS_LABELS[contract.status]}
             </span>
-            <button onClick={() => getContract(contract.id).then(printContract).catch((e) => setError(e.message))} style={secondaryButtonStyle}>
-              Imprimer / PDF
-            </button>
+            <DocPrintMenu onPrint={(o) => getContract(contract.id).then((c) => printContract(c, o)).catch((e) => setError(e.message))} />
             {canValidate && contract.status === "awaiting_signature" && (
               <button onClick={() => setSigning(contract)} style={{ ...secondaryButtonStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)", fontWeight: 600 }}>
                 ✍️ Signer

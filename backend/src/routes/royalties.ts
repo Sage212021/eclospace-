@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { PaymentMethod } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -20,7 +19,7 @@ const statementSchema = z.object({
 });
 
 const paymentSchema = z.object({
-  method: z.nativeEnum(PaymentMethod),
+  method: z.string().min(1),
   bank_account_id: z.string().uuid().optional(),
   tax_withheld: z.number().nonnegative().optional(), // absolute montant ; défaut = tax_withholding_pct du contrat
   amount: z.number().positive().optional(), // paiement partiel (brut) ; défaut = solde restant

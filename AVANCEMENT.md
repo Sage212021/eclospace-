@@ -561,6 +561,21 @@ Sur retour opérateur, tous les documents officiels (facture, devis, relevé de 
 - **Papier à en-tête officiel corrigé** enregistré (`frontend/public/eclosion-papier-entete.png`, A4 1054×1492). Bandeaux mesurés ~56 mm (haut) et ~56 mm (bas) → hauteurs réservées : mode « en-tête intégré » padding 58/58 mm ; mode « papier vierge » espaces 40/40 mm en plus de la marge @page de 18 mm.
 - **Petit écart restant à trancher** : le papier corrigé liste **3 téléphones** (dont `654 366 663`), le numérique n'en a que 2 — à aligner si l'opérateur le souhaite. *(Fait : 3e numéro ajouté au numérique.)*
 
+### 11/07/2026 (suite) — Module Paiements enrichi (socle backend)
+
+Sur analyse de la proposition « modes de paiement + comptes financiers » : **l'essentiel existait déjà** (comptes bancaires/caisses/mobile money, virements, trésorerie, encaissements liés à un compte, rapprochement, relances). Socle d'enrichissement livré (décisions opérateur du 11/07/2026 — tout confirmé) :
+
+- **Modes de paiement 100 % configurables** : l'enum figé devient une **table `payment_methods`** (code, libellé, nature, actif, compte par défaut). L'administrateur ajoute/modifie librement (PayPal, Wave…). Les 5 modes historiques conservés (codes stables). Endpoints : `GET/POST /payment-methods`, `PATCH /payment-methods/:id` (admin).
+- **Référence de transaction** sur chaque paiement (ID Mobile Money, n° chèque, réf. virement).
+- **Association automatique** au **compte financier par défaut** du mode si non précisé.
+- **Devise XAF** (F CFA Cameroun) par défaut partout + reprise des lignes en XOF.
+- Migration **en place** (aucune donnée perdue : conversion du mode enum→code, colonnes ajoutées). **184 tests** (+3 : liste/ajout/unicité, mode inconnu refusé, compte par défaut + référence).
+- **Incrément 2 (fait)** : écran **Finance → « Modes de paiement »** (admin : activer/désactiver, compte par défaut, ajouter un mode personnalisé) ; **encaissement enrichi** (choix du **mode** + **compte** + **référence**, et **paiement mixte** = plusieurs modes sur une même facture). Vérifié au navigateur.
+- **Incrément 3 (fait — dimension point de vente)** : modèle **`points_of_sale`** (librairie, salon, boutique en ligne…), champ `point_of_sale_id` sur les ventes au comptoir, endpoints CRUD (`/points-of-sale`, commercial:administration). Migration additive.
+- **Incrément 5 (fait — rapports)** : endpoint `GET /finance/payment-report?from&to` — agrégats **par mode de paiement**, **par compte financier**, **ventes par point de vente** ; **carte « Rapport d'encaissements »** sur l'écran Finance (filtre période + 3 tableaux). Vérifié au navigateur. **+3 tests** (`finance-reports.test.ts`).
+- **Incrément 4 (fait — échéancier de crédit)** : table `installments` (échéances d'une facture), endpoints `POST/GET /invoices/:id/schedule` (plan limité au total TTC), statut par échéance (réglée / partielle / à venir / **en retard**) calculé sur le montant réglé cumulé. **Écran** : bouton « Échéancier » sur chaque facture → fenêtre de définition + statuts. **188 tests** (+2). Migration additive.
+- **Module Paiements — 5 incréments livrés.** Reste optionnel : câblage UI du sélecteur point de vente sur la saisie de vente au comptoir (l'API est prête).
+
 ### 11/07/2026 (suite) — Rapports hebdomadaires par agent (Demande 3, backend)
 
 Nouveau module : chaque agent rédige un compte-rendu périodique relié à ses **objectifs** (chiffrés et/ou libres) et à sa **recherche/veille** ; la hiérarchie suit et valide.

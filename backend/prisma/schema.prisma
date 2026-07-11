@@ -1553,7 +1553,7 @@ model PurchaseOrder {
   poNumber             String              @unique @map("po_number")
   orderedQuantity      Int                 @map("ordered_quantity")
   amount               Decimal             @db.Decimal(12, 2)
-  currency             String              @default("XOF")
+  currency             String              @default("XAF")
   deliveryDue          DateTime?           @map("delivery_due")
   deliveryLocationId   String?             @map("delivery_location_id")
   deliveryLocation     StockLocation?      @relation(fields: [deliveryLocationId], references: [id])
@@ -2092,10 +2092,35 @@ model PosSale {
   unitPrice     Decimal          @map("unit_price") @db.Decimal(10, 2)
   paymentMethod PosPaymentMethod @map("payment_method")
   eventLabel    String?          @map("event_label")
+  // Point de vente (dimension structurée, pour les rapports par point de vente).
+  pointOfSaleId String?          @map("point_of_sale_id")
+  pointOfSale   PointOfSale?     @relation(fields: [pointOfSaleId], references: [id])
   soldBy        String?          @map("sold_by")
   soldAt        DateTime         @default(now()) @map("sold_at")
 
   @@map("pos_sales")
+}
+
+// Point de vente (décision opérateur du 11/07/2026) : librairie, salon du livre,
+// boutique en ligne… Liste configurable, sert de dimension aux rapports.
+enum PointOfSaleType {
+  librairie
+  salon
+  en_ligne
+  autre
+}
+
+model PointOfSale {
+  id       String          @id @default(uuid())
+  name     String
+  type     PointOfSaleType @default(librairie)
+  active   Boolean         @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  posSales PosSale[]
+
+  @@map("points_of_sale")
 }
 
 enum ReturnLineVerdict {
@@ -2236,7 +2261,7 @@ model Invoice {
   totalHt         Decimal       @map("total_ht") @db.Decimal(12, 2)
   totalTax        Decimal       @map("total_tax") @db.Decimal(12, 2)
   totalTtc        Decimal       @map("total_ttc") @db.Decimal(12, 2)
-  currency        String        @default("XOF")
+  currency        String        @default("XAF")
   dueDate         DateTime?     @map("due_date")
   status          InvoiceStatus @default(issued)
 
@@ -2246,8 +2271,27 @@ model Invoice {
   lines              InvoiceLine[]
   paymentAllocations PaymentAllocation[]
   editorialQuote     EditorialQuote?
+  installments       Installment[]
 
   @@map("invoices")
+}
+
+// Échéancier de crédit (décision opérateur du 11/07/2026) : une facture réglée à
+// crédit peut être découpée en échéances planifiées (paiement en 2-3 fois). Plan
+// indicatif : le rapprochement avec les encaissements se fait par les montants
+// réglés cumulés (allocations), pas par un lettrage échéance par échéance.
+model Installment {
+  id        String   @id @default(uuid())
+  invoiceId String   @map("invoice_id")
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  dueDate   DateTime @map("due_date")
+  amount    Decimal  @db.Decimal(12, 2)
+  note      String?
+  sortOrder Int      @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("installments")
 }
 
 // --- Compte d'auteur : devis puis facture de prestation éditoriale ----------
@@ -2361,20 +2405,47 @@ enum PaymentDirection {
   out
 }
 
-// "card" ajouté par rapport à la liste du Ch. 18 §18.3 (virement/chèque/
-// espèces/mobile money) pour couvrir la vente directe par carte (Ch. 17 §17.7).
-enum PaymentMethod {
-  transfer
+// Nature d'un mode de paiement — sert au regroupement dans les rapports et à
+// l'association automatique à un compte financier (décision opérateur du
+// 11/07/2026 : modes 100 % configurables par l'administrateur).
+enum PaymentMethodKind {
+  especes
+  virement
   cheque
-  cash
-  card
+  carte
   mobile_money
+  autre
+}
+
+// Liste PARAMÉTRABLE des modes de paiement (l'administrateur ajoute/modifie :
+// PayPal, Wave, un nouveau Mobile Money…). Les 5 modes historiques sont créés
+// par la migration/seed avec des codes stables (cash, transfer, cheque, card,
+// mobile_money). `Payment.method` référence le `code` (référence souple validée
+// applicativement — pas de contrainte FK, pour rester additif).
+model PaymentMethodDef {
+  id               String            @id @default(uuid())
+  code             String            @unique
+  label            String
+  kind             PaymentMethodKind @default(autre)
+  active           Boolean           @default(true)
+  sortOrder        Int               @default(0) @map("sort_order")
+  // Compte financier associé par défaut (ex. « espèces » → Caisse principale).
+  defaultAccountId String?           @map("default_account_id")
+  defaultAccount   BankAccount?      @relation("MethodDefaultAccount", fields: [defaultAccountId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("payment_methods")
 }
 
 model Payment {
   id            String           @id @default(uuid())
   direction     PaymentDirection
-  method        PaymentMethod
+  // Code du mode de paiement (référence payment_methods.code, configurable).
+  method        String
+  // Référence de la transaction : ID Mobile Money, n° de chèque, réf. de virement…
+  reference     String?
   amount        Decimal          @db.Decimal(12, 2)
   receivedAt    DateTime         @default(now()) @map("received_at")
   bankAccountId String?          @map("bank_account_id")
@@ -2521,14 +2592,15 @@ model BankAccount {
   id       String          @id @default(uuid())
   label    String
   type     BankAccountType @default(banque)
-  currency String          @default("XOF")
+  currency String          @default("XAF")
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  payments        Payment[]
-  statements      BankStatement[]
-  transfersOut    AccountTransfer[] @relation("TransferFrom")
-  transfersIn     AccountTransfer[] @relation("TransferTo")
+  payments           Payment[]
+  statements         BankStatement[]
+  transfersOut       AccountTransfer[]  @relation("TransferFrom")
+  transfersIn        AccountTransfer[]  @relation("TransferTo")
+  defaultForMethods  PaymentMethodDef[] @relation("MethodDefaultAccount")
 
   @@map("bank_accounts")
 }

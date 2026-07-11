@@ -8,9 +8,13 @@ import {
   listIsbnRefs,
   listSalesOrders,
   listStockLocations,
+  listPointsOfSale,
+  createPointOfSale,
   type Customer,
   type CustomerCategory,
   type IsbnRef,
+  type PointOfSale,
+  type PointOfSaleType,
   type SalesOrder,
   type StockLocation,
 } from "../api/client";
@@ -272,16 +276,40 @@ function PosSaleForm({
   const [quantity, setQuantity] = useState(1);
   const [unitPrice, setUnitPrice] = useState(10000);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "mobile_money">("cash");
+  const [points, setPoints] = useState<PointOfSale[]>([]);
+  const [pointId, setPointId] = useState("");
+  // Ajout rapide d'un point de vente (nom + type).
+  const [addingPoint, setAddingPoint] = useState(false);
+  const [newPointName, setNewPointName] = useState("");
+  const [newPointType, setNewPointType] = useState<PointOfSaleType>("librairie");
 
   useEffect(() => {
     if (!isbnId && isbns[0]) setIsbnId(isbns[0].id);
     if (!locationId && locations[0]) setLocationId(locations[0].id);
   }, [isbns, locations]);
 
+  useEffect(() => {
+    listPointsOfSale().then(setPoints).catch(() => setPoints([]));
+  }, []);
+
+  async function handleAddPoint() {
+    if (!newPointName.trim()) return;
+    try {
+      const p = await createPointOfSale({ name: newPointName.trim(), type: newPointType });
+      const list = await listPointsOfSale();
+      setPoints(list);
+      setPointId(p.id);
+      setNewPointName("");
+      setAddingPoint(false);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Impossible d'ajouter le point de vente.");
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     try {
-      await createPosSale({ isbn_id: isbnId, location_id: locationId, quantity, unit_price: unitPrice, payment_method: paymentMethod });
+      await createPosSale({ isbn_id: isbnId, location_id: locationId, quantity, unit_price: unitPrice, payment_method: paymentMethod, point_of_sale_id: pointId || undefined });
       onCreated();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Échec de la vente au comptoir.");
@@ -315,7 +343,34 @@ function PosSaleForm({
               <option value="mobile_money">Mobile money</option>
             </select>
           </Field>
+          <Field label="Point de vente">
+            <select value={pointId} onChange={(e) => setPointId(e.target.value)}>
+              <option value="">— Aucun —</option>
+              {points.filter((p) => p.active).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </Field>
         </div>
+        {addingPoint ? (
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8, marginTop: 12 }}>
+            <Field label="Nom du point de vente">
+              <input value={newPointName} onChange={(e) => setNewPointName(e.target.value)} placeholder="Ex : Librairie du Centre" />
+            </Field>
+            <Field label="Type">
+              <select value={newPointType} onChange={(e) => setNewPointType(e.target.value as PointOfSaleType)}>
+                <option value="librairie">Librairie</option>
+                <option value="salon">Salon / foire</option>
+                <option value="en_ligne">En ligne</option>
+                <option value="autre">Autre</option>
+              </select>
+            </Field>
+            <Button variant="add" size="sm" type="button" onClick={handleAddPoint}>Enregistrer</Button>
+            <Button variant="subtle" size="sm" type="button" onClick={() => { setAddingPoint(false); setNewPointName(""); }}>Annuler</Button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setAddingPoint(true)} style={{ marginTop: 10, background: "none", border: "none", color: "var(--gold)", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+            + nouveau point de vente
+          </button>
+        )}
         <div style={{ marginTop: 14 }}>
           <Button variant="add" size="md" type="submit">Encaisser</Button>
         </div>

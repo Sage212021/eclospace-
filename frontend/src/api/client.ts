@@ -1181,8 +1181,56 @@ export function createPosSale(input: {
   unit_price: number;
   payment_method: "cash" | "card" | "mobile_money";
   event_label?: string;
+  point_of_sale_id?: string;
 }) {
   return request(`/api/v1/pos-sales`, { method: "POST", body: JSON.stringify(input) });
+}
+
+// Points de vente (librairie, salon, boutique en ligne…) — dimension des rapports.
+export type PointOfSaleType = "librairie" | "salon" | "en_ligne" | "autre";
+export interface PointOfSale {
+  id: string;
+  name: string;
+  type: PointOfSaleType;
+  active: boolean;
+}
+export function listPointsOfSale() {
+  return request<PointOfSale[]>(`/api/v1/points-of-sale`);
+}
+export function createPointOfSale(input: { name: string; type: PointOfSaleType }) {
+  return request<PointOfSale>(`/api/v1/points-of-sale`, { method: "POST", body: JSON.stringify(input) });
+}
+export function updatePointOfSale(id: string, input: { name?: string; type?: PointOfSaleType; active?: boolean }) {
+  return request<PointOfSale>(`/api/v1/points-of-sale/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+// Rapport d'encaissements (par mode, compte, point de vente), filtrable période.
+export interface PaymentReport {
+  from: string | null;
+  to: string | null;
+  total_in: number;
+  by_method: { method: string; label: string; total: number; count: number }[];
+  by_account: { account_id: string | null; label: string; total: number; count: number }[];
+  by_point_of_sale: { point_of_sale_id: string | null; name: string; total: number; count: number }[];
+}
+export function getPaymentReport(params?: { from?: string; to?: string }) {
+  const qs = new URLSearchParams(params as Record<string, string>).toString();
+  return request<PaymentReport>(`/api/v1/finance/payment-report${qs ? `?${qs}` : ""}`);
+}
+
+// Échéancier de crédit d'une facture.
+export interface InvoiceSchedule {
+  invoice_id: string;
+  total_ttc: number;
+  settled: number;
+  planned: number;
+  installments: { id: string; due_date: string; amount: number; note: string | null; status: "paid" | "partial" | "pending" | "overdue" }[];
+}
+export function getInvoiceSchedule(id: string) {
+  return request<InvoiceSchedule>(`/api/v1/invoices/${id}/schedule`);
+}
+export function setInvoiceSchedule(id: string, installments: { due_date: string; amount: number; note?: string }[]) {
+  return request<InvoiceSchedule>(`/api/v1/invoices/${id}/schedule`, { method: "POST", body: JSON.stringify({ installments }) });
 }
 
 // Ch. 18 : Finance et comptabilité (Lot 5).
@@ -1271,11 +1319,41 @@ export function getCustomerAging(customerId: string) {
 }
 
 export function createPayment(input: {
-  method: "transfer" | "cheque" | "cash" | "card" | "mobile_money";
+  method: string;
+  reference?: string;
+  bank_account_id?: string;
   amount: number;
   allocations: { invoice_id: string; amount: number }[];
 }) {
   return request(`/api/v1/payments`, { method: "POST", body: JSON.stringify(input) });
+}
+
+// Modes de paiement configurables (paramétrables par l'administrateur).
+export type PaymentMethodKind = "especes" | "virement" | "cheque" | "carte" | "mobile_money" | "autre";
+
+export interface PaymentMethodDef {
+  id: string;
+  code: string;
+  label: string;
+  kind: PaymentMethodKind;
+  active: boolean;
+  sortOrder: number;
+  defaultAccountId: string | null;
+}
+
+export function listPaymentMethods() {
+  return request<PaymentMethodDef[]>(`/api/v1/payment-methods`);
+}
+
+export function createPaymentMethod(input: { code: string; label: string; kind: PaymentMethodKind; default_account_id?: string | null; sort_order?: number }) {
+  return request<PaymentMethodDef>(`/api/v1/payment-methods`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updatePaymentMethod(
+  id: string,
+  input: { label?: string; kind?: PaymentMethodKind; active?: boolean; default_account_id?: string | null; sort_order?: number },
+) {
+  return request<PaymentMethodDef>(`/api/v1/payment-methods/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
 export interface Dunning {

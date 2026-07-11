@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { Prisma, PaymentMethod, ExpenseCategory, CostType, BankAccountType, ShippingZone } from "@prisma/client";
+import { Prisma, PaymentMethodKind, ExpenseCategory, CostType, BankAccountType, ShippingZone } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -18,10 +18,34 @@ const invoiceEmailSchema = z.object({
 });
 
 const paymentSchema = z.object({
-  method: z.nativeEnum(PaymentMethod),
+  // Code d'un mode de paiement configurable (validé contre payment_methods).
+  method: z.string().min(1),
+  reference: z.string().max(120).optional(),
   amount: z.number().positive(),
   bank_account_id: z.string().uuid().optional(),
   allocations: z.array(z.object({ invoice_id: z.string().uuid(), amount: z.number().positive() })).min(1),
+});
+
+const paymentMethodSchema = z.object({
+  code: z.string().trim().min(2).max(40).regex(/^[a-z0-9_]+$/, "Code en minuscules, chiffres et _ uniquement."),
+  label: z.string().trim().min(1).max(80),
+  kind: z.nativeEnum(PaymentMethodKind).default("autre"),
+  default_account_id: z.string().uuid().nullable().optional(),
+  sort_order: z.number().int().optional(),
+});
+
+const scheduleSchema = z.object({
+  installments: z
+    .array(z.object({ due_date: z.coerce.date(), amount: z.number().positive(), note: z.string().max(200).optional() }))
+    .min(1, "Au moins une échéance."),
+});
+
+const paymentMethodPatchSchema = z.object({
+  label: z.string().trim().min(1).max(80).optional(),
+  kind: z.nativeEnum(PaymentMethodKind).optional(),
+  active: z.boolean().optional(),
+  default_account_id: z.string().uuid().nullable().optional(),
+  sort_order: z.number().int().optional(),
 });
 
 const expenseSchema = z.object({
@@ -42,7 +66,7 @@ const budgetSchema = z.object({
 const bankAccountSchema = z.object({
   label: z.string().min(1),
   type: z.nativeEnum(BankAccountType).default("banque"),
-  currency: z.string().default("XOF"),
+  currency: z.string().default("XAF"),
 });
 
 const taxRateSchema = z.object({
@@ -153,6 +177,14 @@ export default async function financeRoutes(fastify: FastifyInstance) {
       });
     }
 
+    // Mode de paiement : doit exister et être actif (liste configurable).
+    const methodDef = await prisma.paymentMethodDef.findUnique({ where: { code: body.method } });
+    if (!methodDef || !methodDef.active) {
+      return reply.code(400).send({ code: "invalid_payment_method", message: "Mode de paiement inconnu ou désactivé." });
+    }
+    // Association automatique au compte financier par défaut du mode, à défaut de choix explicite.
+    const bankAccountId = body.bank_account_id ?? methodDef.defaultAccountId ?? null;
+
     try {
       const payment = await prisma.$transaction(async (tx) => {
         await assertPeriodOpen(tx);
@@ -160,8 +192,9 @@ export default async function financeRoutes(fastify: FastifyInstance) {
           data: {
             direction: "in",
             method: body.method,
+            reference: body.reference,
             amount: body.amount,
-            bankAccountId: body.bank_account_id,
+            bankAccountId,
             createdBy: request.user!.id,
           },
         });
@@ -194,6 +227,126 @@ export default async function financeRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/payments", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
     const payments = await prisma.payment.findMany({ include: { allocations: true }, orderBy: { receivedAt: "desc" } });
     return reply.send(payments);
+  });
+
+  // --- Modes de paiement (paramétrables par l'administrateur) ---------------
+  fastify.get("/api/v1/payment-methods", { preHandler: requirePermission("finance", "consultation") }, async (_request, reply) => {
+    const methods = await prisma.paymentMethodDef.findMany({ orderBy: [{ sortOrder: "asc" }, { label: "asc" }] });
+    return reply.send(methods);
+  });
+
+  fastify.post("/api/v1/payment-methods", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+    const parsed = paymentMethodSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const b = parsed.data;
+    const existing = await prisma.paymentMethodDef.findUnique({ where: { code: b.code } });
+    if (existing) {
+      return reply.code(409).send({ code: "duplicate_code", message: `Le code « ${b.code} » existe déjà.` });
+    }
+    const method = await prisma.paymentMethodDef.create({
+      data: { code: b.code, label: b.label, kind: b.kind, defaultAccountId: b.default_account_id ?? null, sortOrder: b.sort_order ?? 0 },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "payment_method", entityId: method.id, newValues: { code: b.code, label: b.label }, ipAddress: request.ip });
+    return reply.code(201).send(method);
+  });
+
+  fastify.patch("/api/v1/payment-methods/:id", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = paymentMethodPatchSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const b = parsed.data;
+    const method = await prisma.paymentMethodDef.findUnique({ where: { id } });
+    if (!method) return reply.code(404).send({ code: "not_found", message: "Mode de paiement introuvable." });
+    const updated = await prisma.paymentMethodDef.update({
+      where: { id },
+      data: {
+        ...(b.label !== undefined ? { label: b.label } : {}),
+        ...(b.kind !== undefined ? { kind: b.kind } : {}),
+        ...(b.active !== undefined ? { active: b.active } : {}),
+        ...(b.default_account_id !== undefined ? { defaultAccountId: b.default_account_id } : {}),
+        ...(b.sort_order !== undefined ? { sortOrder: b.sort_order } : {}),
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payment_method", entityId: id, newValues: b as Prisma.InputJsonValue, ipAddress: request.ip });
+    return reply.send(updated);
+  });
+
+  // --- Échéancier de crédit d'une facture -----------------------------------
+  // Définit (remplace) le plan d'échéances d'une facture. Somme des échéances
+  // limitée au total TTC (paiement en plusieurs fois).
+  fastify.post("/api/v1/invoices/:id/schedule", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = scheduleSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    const sum = parsed.data.installments.reduce((s, i) => s + i.amount, 0);
+    if (sum - Number(invoice.totalTtc) > 0.01) {
+      return reply.code(400).send({ code: "schedule_exceeds_total", message: `Le total des échéances (${sum}) dépasse le montant de la facture (${invoice.totalTtc}).` });
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.installment.deleteMany({ where: { invoiceId: id } });
+      let order = 0;
+      for (const i of parsed.data.installments.sort((a, b) => a.due_date.getTime() - b.due_date.getTime())) {
+        await tx.installment.create({ data: { invoiceId: id, dueDate: i.due_date, amount: i.amount, note: i.note, sortOrder: order++ } });
+      }
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "invoice_schedule", entityId: id, newValues: { count: parsed.data.installments.length, total: sum }, ipAddress: request.ip });
+    return reply.send(await buildSchedule(id));
+  });
+
+  fastify.get("/api/v1/invoices/:id/schedule", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    return reply.send(await buildSchedule(id));
+  });
+
+  // Rapport d'encaissements : agrégats par mode de paiement, par compte
+  // financier (caisse/banque/mobile money) et ventes au comptoir par point de
+  // vente — filtrables par période (from/to). Base des rapports demandés.
+  fastify.get("/api/v1/finance/payment-report", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const q = request.query as { from?: string; to?: string };
+    const range: Prisma.DateTimeFilter = {};
+    if (q.from) range.gte = new Date(q.from);
+    if (q.to) range.lte = new Date(q.to);
+    const hasRange = Boolean(q.from || q.to);
+    const paymentWhere = { direction: "in" as const, ...(hasRange ? { receivedAt: range } : {}) };
+
+    const [byMethodRaw, byAccountRaw, methods, accounts, posSales, points] = await Promise.all([
+      prisma.payment.groupBy({ by: ["method"], where: paymentWhere, _sum: { amount: true }, _count: true }),
+      prisma.payment.groupBy({ by: ["bankAccountId"], where: paymentWhere, _sum: { amount: true }, _count: true }),
+      prisma.paymentMethodDef.findMany(),
+      prisma.bankAccount.findMany(),
+      prisma.posSale.findMany({ where: hasRange ? { soldAt: range } : {}, select: { pointOfSaleId: true, quantity: true, unitPrice: true } }),
+      prisma.pointOfSale.findMany(),
+    ]);
+
+    const methodLabel = new Map(methods.map((m) => [m.code, m.label]));
+    const accountLabel = new Map(accounts.map((a) => [a.id, a.label]));
+    const pointLabel = new Map(points.map((p) => [p.id, p.name]));
+
+    const byMethod = byMethodRaw.map((r) => ({ method: r.method, label: methodLabel.get(r.method) ?? r.method, total: Number(r._sum.amount ?? 0), count: r._count }));
+    const byAccount = byAccountRaw.map((r) => ({ account_id: r.bankAccountId, label: r.bankAccountId ? accountLabel.get(r.bankAccountId) ?? "Compte" : "(non affecté)", total: Number(r._sum.amount ?? 0), count: r._count }));
+
+    const posMap = new Map<string, { total: number; count: number }>();
+    for (const s of posSales) {
+      const key = s.pointOfSaleId ?? "__none__";
+      const cur = posMap.get(key) ?? { total: 0, count: 0 };
+      cur.total += Number(s.unitPrice) * s.quantity;
+      cur.count += 1;
+      posMap.set(key, cur);
+    }
+    const byPointOfSale = [...posMap.entries()].map(([key, v]) => ({ point_of_sale_id: key === "__none__" ? null : key, name: key === "__none__" ? "(non précisé)" : pointLabel.get(key) ?? "Point de vente", total: v.total, count: v.count }));
+
+    const totalIn = byMethod.reduce((s, m) => s + m.total, 0);
+    return reply.send({ from: q.from ?? null, to: q.to ?? null, total_in: totalIn, by_method: byMethod, by_account: byAccount, by_point_of_sale: byPointOfSale });
   });
 
   // Ch. 18 §18.3 : créances par ancienneté (non échu / 30 / 60 / 90+ jours).
@@ -983,4 +1136,28 @@ async function validateExpenseAndPostCostEntry(id: string, approvedBy: string) {
 
 function createHashOf(content: string): string {
   return createHash("sha256").update(content).digest("hex");
+}
+
+// Échéancier enrichi : chaque échéance reçoit un statut à partir du cumul
+// planifié et du montant déjà réglé (allocations), avec repérage des retards.
+async function buildSchedule(invoiceId: string) {
+  const [invoice, installments, alloc] = await Promise.all([
+    prisma.invoice.findUnique({ where: { id: invoiceId } }),
+    prisma.installment.findMany({ where: { invoiceId }, orderBy: [{ sortOrder: "asc" }, { dueDate: "asc" }] }),
+    prisma.paymentAllocation.aggregate({ where: { invoiceId }, _sum: { amount: true } }),
+  ]);
+  const settled = Number(alloc._sum.amount ?? 0);
+  const now = new Date();
+  let cumulative = 0;
+  const rows = installments.map((i) => {
+    const start = cumulative;
+    cumulative += Number(i.amount);
+    let status: "paid" | "partial" | "pending" | "overdue";
+    if (settled >= cumulative - 0.01) status = "paid";
+    else if (settled > start + 0.01) status = "partial";
+    else status = "pending";
+    if (status !== "paid" && i.dueDate < now) status = "overdue";
+    return { id: i.id, due_date: i.dueDate, amount: Number(i.amount), note: i.note, status };
+  });
+  return { invoice_id: invoiceId, total_ttc: Number(invoice?.totalTtc ?? 0), settled, planned: cumulative, installments: rows };
 }

@@ -15,6 +15,7 @@ import { FinancePage } from "./pages/FinancePage";
 import { HrPage } from "./pages/HrPage";
 import { DirectionPage } from "./pages/DirectionPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { WeeklyReportsPage } from "./pages/WeeklyReportsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { UsersRolesPage } from "./pages/UsersRolesPage";
@@ -28,6 +29,7 @@ import { usePresence } from "./hooks/usePresence";
 // manuscrits filtrée sur une étape du workflow (option « liste filtrée »).
 type PageId =
   | "dashboard"
+  | "weekly-reports"
   | "manuscripts"
   | "my-readings"
   | "catalogue-ref"
@@ -51,7 +53,7 @@ type LeafView = { page: PageId } | { stage: string; heading: string };
 // Les sous-modules « par étape » ouvrent la liste des manuscrits filtrée sur
 // le statut de workflow correspondant, d'où la permission manuscripts:consultation.
 const NAV_POLES: NavPole[] = [
-  { label: null, items: [{ key: "dashboard", label: "Tableau de bord" }] },
+  { label: null, items: [{ key: "dashboard", label: "Tableau de bord" }, { key: "mes-rapports", label: "Mes rapports hebdo" }] },
   {
     label: "Éditorial",
     items: [
@@ -110,6 +112,7 @@ const NAV_POLES: NavPole[] = [
 
 const LEAF_VIEWS: Record<string, LeafView> = {
   dashboard: { page: "dashboard" },
+  "mes-rapports": { page: "weekly-reports" },
   "ed-manuscrits": { page: "manuscripts" },
   "ed-comite": { stage: "COMITE_LECTURE", heading: "Comité de lecture" },
   "ed-mes-lectures": { page: "my-readings" },
@@ -378,6 +381,7 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "reports" && (
           <ReportsPage canCreateAnalysis={permissions.has("rapports:saisie")} canPromoteAnalysis={permissions.has("rapports:administration")} />
         )}
+        {leaf && "page" in leaf && leaf.page === "weekly-reports" && <WeeklyReportsPage user={user} />}
         {leaf && "page" in leaf && leaf.page === "audit" && <AuditLogPage />}
         {leaf && "page" in leaf && leaf.page === "settings" && (
           <SettingsPage canAdminister={permissions.has("settings:administration")} user={user} />

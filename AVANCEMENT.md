@@ -570,7 +570,8 @@ Nouveau module : chaque agent rédige un compte-rendu périodique relié à ses 
 - **Paramétrable** (table `settings`) : `weekly_report_validation_mode` (**dg** par défaut, ou **chef**) et `weekly_report_periodicity` (**weekly**, biweekly, monthly).
 - **Confidentialité** (modèle « présence/names ») : agent = ses rapports ; chef = son pôle ; DG (`direction:consultation`) + super-admin = tout. Refus tracés (`access_denied`).
 - **API** : objectifs (create/list), rapports (create période courante, list, get, patch, submit, validate/return). Migration **additive**. **181 tests** (+4 : cycle, confidentialité, habilitation validation, objectifs réservés).
-- **Reste** : les écrans (agent : rédiger/soumettre ; chef/DG : suivre/valider) — prochain incrément.
+- **Écrans (fait)** : page **« Mes rapports hebdo »** (menu, accessible à tous) — *Mon rapport de la période* (objectifs + avancement, réalisations, recherche/veille, difficultés, plan ; Enregistrer/Soumettre), *Mes objectifs*, et *Suivi des rapports* (chef/DG : consulter, valider/retourner). Vérifié au navigateur.
+- Les deux réglages (mode de validation, périodicité) sont modifiables depuis l'écran **Paramètres** (clé/valeur, `settings:administration`).
 
 ### 11/07/2026 (suite) — Devis/facture Impression et Communication (Demande 2, choix C)
 

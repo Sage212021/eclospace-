@@ -518,3 +518,45 @@ Décision opérateur : **signature simple/interne** (sans coût, sans prestatair
 - **Tests** : `tests/contract-signature.test.ts` (activation, empreinte, trace, refus hors état, consentement, unicité par partie). **170 tests passent** (backend), build front OK.
 
 **Phase B, point 2 (SMS)** : reporté à la décision budgétaire/fournisseur de l'opérateur.
+
+### 11/07/2026 — Compte d'auteur : devis → signature → facture de prestation (backend)
+
+Nouvelle extension décidée avec l'opérateur : facturer à l'**auteur** le **travail éditorial** (relecture, correction, proposition de couverture, maquette… jusqu'au livre fini), **hors impression et communication**. Modèle « compte d'auteur », en complément du « compte d'éditeur » du cahier des charges. Parcours : **devis → l'auteur le valide/signe → facture générée depuis le devis**.
+
+**Fait (fondations backend, testées)** :
+- **Devis de prestation** (`editorial_quotes` + lignes) : création, totaux HT/TVA/TTC, mention d'exclusion (impression/communication) par défaut, numérotation sécurisée `DE-AAAA-NNNN`.
+- **Trois modes de signature** (au choix selon le contexte / l'accessibilité de l'auteur) :
+  - **③ en ligne** (principal) : envoi d'un **lien unique** (jeton aléatoire, à usage unique, expirant 30 j) ; page publique sans compte ; l'auteur consulte et **signe en ligne**.
+  - **① interne** : un agent enregistre l'accord de l'auteur.
+  - **② papier** : devis imprimé, signé, scanné, renvoyé (accord enregistré, scan rattaché).
+  - Dans tous les cas : **empreinte des montants signés** + **trace au journal**.
+- **Facture de prestation** générée depuis le devis **accepté** : reprend les lignes, **aucun droit d'auteur généré**, facturée à un **client-auteur** miroir (lié au Partenaire, dédoublonné), immuable, même série `FA-…`.
+- **Garde-fous** : facture impossible avant acceptation ; consentement explicite obligatoire ; lien à usage unique.
+- Migrations **additives** (aucune donnée touchée). **175 tests** (dont 5 nouveaux sur ce parcours).
+
+**Reste à faire (prochain incrément)** : écran de gestion des devis (fiche manuscrit), **page publique de signature**, **impression PDF** du devis et de la facture de prestation, **envoi par e-mail** du lien de signature ; puis consigner la décision au registre.
+
+### 11/07/2026 (suite) — Compte d'auteur : écrans, signature en ligne, PDF, e-mail (terminé)
+
+Partie visible construite et **vérifiée au navigateur** :
+- **Écran de gestion des devis** sur la fiche du manuscrit (section « Prestation éditoriale (compte d'auteur) ») : création (catalogue de prestations + lignes libres, total en direct), **envoi pour signature**, **signature interne/papier**, **génération de la facture**, **impression/PDF** du devis.
+- **Page publique de signature** (`/signer-devis/:jeton`) : accessible **sans compte**, aux couleurs de la maison ; l'auteur voit son devis (lignes, total, mention d'exclusion) et **signe en un clic** → écran de confirmation « Devis signé — merci ». *(Vérifié de bout en bout : consultation via le lien, signature, confirmation.)*
+- **Envoi automatique par e-mail** du lien de signature à l'auteur quand « Envoyer pour signature » est cliqué (réutilise le SMTP configuré ; au meilleur effort).
+- **Impression PDF** du devis (papier à en-tête, mention d'exclusion, bloc d'acceptation si signé) et de la facture de prestation (via l'impression facture existante).
+- **Décision consignée** au registre : **D-006** (extension « compte d'auteur »).
+
+Typecheck + build front OK ; suite backend inchangée (175 tests). Reste éventuel : ajuster les formulations de la page de signature selon retours.
+
+### 11/07/2026 (suite) — Trois présentations d'impression + papier à en-tête officiel
+
+Sur retour opérateur, tous les documents officiels (facture, devis, relevé de droits, bon de commande, contrat) offrent désormais **trois présentations à l'impression**, via un menu « Imprimer / PDF ▾ » commun (`DocPrintMenu`) :
+1. **Numérique** (par défaut) : logo + mentions légales complètes — pour l'écran/e-mail ou le papier ordinaire ;
+2. **Avec papier à en-tête intégré** : l'image A4 officielle de la maison est reproduite en fond (en-tête + filigrane + pied) — à imprimer sur **papier ordinaire** ;
+3. **Sur papier à en-tête vierge** : version **neutre** (sans logo ni mentions), zones haut/bas réservées — à imprimer sur le **papier physique** pré-imprimé.
+
+- **Papier à en-tête officiel enregistré** : extrait du fichier fourni (`NOUVEAU_PAPIER_ENTETE_ECLOSION1.docx`) et sauvegardé (`frontend/public/eclosion-papier-entete.png`, A4 1385×1959).
+- Impression des fonds forcée (`print-color-adjust: exact`). Vérifié au navigateur (devis en-tête intégré : contenu bien centré dans la zone libre).
+- Hauteurs réservées (mode vierge / intégré) ajustables si le bandeau du papier diffère.
+- **Données de référence = celles des documents numériques** (décision opérateur du 11/07/2026) : téléphones `(+237) 698 03 15 02 / 678 70 40 86`, e-mail `eclosionedition@gmail.com`, site `eclosioneditions.cm`, N° de contribuable `M021912751174Y`, RC `RC/YAO/2019/B/144`. C'est le **papier à en-tête** qui a été corrigé pour s'y conformer (nouvelle image fournie), pas l'inverse. Source unique du numérique dans trois fichiers (`frontend/src/lib/print.ts`, `backend/src/lib/documentEmail.ts`, `frontend/src/pages/QuoteSignPage.tsx`).
+- **Papier à en-tête officiel corrigé** enregistré (`frontend/public/eclosion-papier-entete.png`, A4 1054×1492). Bandeaux mesurés ~56 mm (haut) et ~56 mm (bas) → hauteurs réservées : mode « en-tête intégré » padding 58/58 mm ; mode « papier vierge » espaces 40/40 mm en plus de la marge @page de 18 mm.
+- **Petit écart restant à trancher** : le papier corrigé liste **3 téléphones** (dont `654 366 663`), le numérique n'en a que 2 — à aligner si l'opérateur le souhaite.

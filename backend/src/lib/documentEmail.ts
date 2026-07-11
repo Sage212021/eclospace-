@@ -11,7 +11,7 @@ const HOUSE = {
   tagline: "L'avenir du livre",
   address: "Carrefour INSTIC – Nouvelle route Kondengui, Yaoundé, Cameroun",
   poBox: "B.P. 33071 Yaoundé",
-  phone: "(+237) 698 03 15 02 / 678 70 40 86",
+  phone: "(+237) 654 366 663 / 698 03 15 02 / 678 70 40 86",
   email: "eclosionedition@gmail.com",
   website: "https://eclosioneditions.cm",
   rccm: "RC/YAO/2019/B/144",
@@ -87,6 +87,32 @@ export function buildNotificationEmail(opts: { title: string; body: string; prio
   const subject = `${prefix}${opts.title} — ${HOUSE.brand}`;
   const text = `${p.label} : ${opts.title}\n\n${opts.body}\n\nAlerte émise par Eclospace.\n${HOUSE.legalName} · ${HOUSE.website}`;
   return { subject, html: emailShell({ title: subject, message: "", body }), text };
+}
+
+// E-mail d'invitation à signer un devis de prestation en ligne (③). Corps
+// sobre : rappel du montant, bouton vers le lien de signature unique.
+export function buildQuoteSignEmail(opts: {
+  authorName: string;
+  quoteNumber: string;
+  totalTtc: string;
+  currency: string;
+  signUrl: string;
+  message?: string;
+}): DocumentEmail {
+  const total = money(opts.totalTtc, opts.currency);
+  const body = `
+    <div style="font-family:Georgia,serif;font-size:20px;margin:0 0 6px">Votre devis de prestation éditoriale</div>
+    <div style="font-size:13px;color:#4b5563;margin-bottom:16px">Devis ${esc(opts.quoteNumber)} · Montant total : <b>${esc(total)}</b></div>
+    <p style="font-size:14px;line-height:1.6;margin:0 0 20px">Bonjour ${esc(opts.authorName)},<br>
+    votre devis pour le travail éditorial de votre ouvrage est prêt. Vous pouvez le consulter et le
+    <b>signer en ligne</b> en un clic, en toute sécurité, via le bouton ci-dessous.</p>
+    <p style="margin:0 0 22px">
+      <a href="${esc(opts.signUrl)}" style="display:inline-block;background:#16233d;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:8px">Consulter et signer mon devis</a>
+    </p>
+    <p style="font-size:12px;color:#6b7280;margin:0">Ou copiez ce lien dans votre navigateur :<br>${esc(opts.signUrl)}</p>`;
+  const subject = `Votre devis ${opts.quoteNumber} à signer — ${HOUSE.brand}`;
+  const text = `Bonjour ${opts.authorName},\n\nVotre devis de prestation éditoriale ${opts.quoteNumber} (total ${total}) est prêt à être signé en ligne :\n${opts.signUrl}\n\n${HOUSE.legalName} · ${HOUSE.website}`;
+  return { subject, html: emailShell({ title: subject, message: opts.message ?? "", body }), text };
 }
 
 const INVOICE_STATUS: Record<string, string> = { issued: "Émise", paid: "Réglée", cancelled: "Annulée", credit_note: "Avoir" };

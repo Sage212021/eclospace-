@@ -45,7 +45,8 @@ import { Modal, Field } from "../components/Modal";
 import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
 import { IconFinance } from "../components/icons";
-import { printInvoice, printRoyaltyStatement } from "../lib/print";
+import { printInvoice, printRoyaltyStatement, type PrintOpts } from "../lib/print";
+import { DocPrintMenu } from "../components/DocPrintMenu";
 
 const ZONE_LABELS: Record<ShippingZone, string> = {
   yaounde: "Yaoundé",
@@ -145,18 +146,18 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
   // Impression / export PDF d'une facture : on récupère son détail (lignes,
   // totaux) puis on ouvre la fenêtre d'impression du navigateur.
-  async function handlePrintInvoice(invoiceId: string) {
+  async function handlePrintInvoice(invoiceId: string, opts?: PrintOpts) {
     try {
-      printInvoice(await getInvoice(invoiceId));
+      printInvoice(await getInvoice(invoiceId), opts);
     } catch (err) {
       fail(err, "Échec de l'ouverture de la facture.");
     }
   }
 
   // Impression / export PDF d'un relevé de droits d'auteur.
-  async function handlePrintStatement(statementId: string) {
+  async function handlePrintStatement(statementId: string, opts?: PrintOpts) {
     try {
-      printRoyaltyStatement(await getRoyaltyStatement(statementId));
+      printRoyaltyStatement(await getRoyaltyStatement(statementId), opts);
     } catch (err) {
       fail(err, "Échec de l'ouverture du relevé.");
     }
@@ -302,7 +303,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
                   <StatusChip label={STATUS_LABELS[invoice.status] ?? invoice.status} />
                 </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
-                  <Button variant="view" size="sm" onClick={() => handlePrintInvoice(invoice.id)}>Imprimer / PDF</Button>
+                  <DocPrintMenu onPrint={(o) => handlePrintInvoice(invoice.id, o)} />
                   <Button variant="view" size="sm" onClick={() => setEmailInvoice(invoice)}>Envoyer par e-mail</Button>
                   {canManage && invoice.type === "invoice" && invoice.status === "issued" && (
                     <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, amount: String(invoice.totalTtc) })}>
@@ -399,7 +400,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
                   <StatusChip label={STATUS_LABELS[statement.status] ?? statement.status} />
                 </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
-                  <Button variant="view" size="sm" onClick={() => handlePrintStatement(statement.id)}>Imprimer / PDF</Button>
+                  <DocPrintMenu onPrint={(o) => handlePrintStatement(statement.id, o)} />
                   <Button variant="view" size="sm" onClick={() => setEmailStatement(statement)}>Envoyer par e-mail</Button>
                   {canAdminister && statement.status !== "paid" && Number(statement.remaining_balance ?? statement.balanceDue) > 0 && (
                     <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-statement", statement, amount: "" })}>Payer</Button>

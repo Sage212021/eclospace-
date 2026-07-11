@@ -201,6 +201,67 @@ async function ensureWalkInCustomer(tx: Tx) {
   return tx.customer.create({ data: { category: "particulier", name: "Vente directe (comptoir / salon)" } });
 }
 
+// Compte d'auteur : le module Finance facture toujours un « client ». Pour
+// facturer une prestation à un auteur (Partenaire), on maintient un unique
+// « client-auteur » miroir, lié au Partenaire (partnerId) et créé à la volée la
+// première fois — l'auteur garde une seule identité de référence (le
+// Partenaire), le client n'en est que le reflet comptable, dédoublonné.
+export async function ensureAuthorCustomer(tx: Tx, partnerId: string) {
+  const linked = await tx.customer.findFirst({ where: { partnerId, deletedAt: null } });
+  if (linked) return linked;
+  const partner = await tx.partner.findUniqueOrThrow({ where: { id: partnerId } });
+  return tx.customer.create({
+    data: {
+      category: "auteur",
+      name: `${partner.firstName} ${partner.lastName}`.trim(),
+      contactName: partner.penName ?? null,
+      email: partner.email ?? null,
+      phone: partner.phone ?? null,
+      address: partner.address ?? null,
+      partnerId: partner.id,
+    },
+  });
+}
+
+// Compte d'auteur (décision opérateur du 10/07/2026) : génère la FACTURE de
+// prestation éditoriale à partir d'un DEVIS accepté/signé. Reprend les lignes du
+// devis (donc les mêmes montants que ce que l'auteur a validé). Aucune ligne ne
+// porte de manuscrit/format → aucun droit d'auteur généré (c'est un service
+// vendu, pas une vente de livre). Idempotent : refuse si le devis a déjà sa
+// facture.
+export async function createInvoiceFromEditorialQuote(tx: Tx, quoteId: string) {
+  const quote = await tx.editorialQuote.findUniqueOrThrow({ where: { id: quoteId }, include: { lines: true } });
+  if (quote.status !== "accepted") {
+    throw new Error("quote_not_accepted");
+  }
+  if (quote.invoiceId) {
+    throw new Error("quote_already_invoiced");
+  }
+
+  const customer = await ensureAuthorCustomer(tx, quote.partnerId);
+  const invoice = await createInvoiceRecord(tx, {
+    customerId: customer.id,
+    sourceType: "editorial_quote",
+    sourceId: quote.id,
+    lines: quote.lines.map((l) => ({
+      isbnId: null,
+      manuscriptId: null, // pas de droits d'auteur sur une prestation
+      format: null,
+      description: l.description,
+      quantity: l.quantity,
+      unitPrice: Number(l.unitPrice),
+      taxRate: Number(l.taxRate),
+    })),
+  });
+
+  await tx.editorialQuote.update({
+    where: { id: quote.id },
+    data: { status: "invoiced", invoiceId: invoice.id },
+  });
+
+  return invoice;
+}
+
 // Ch. 18 §18.2, Ch. 17 §17.9 : avoir rattaché à la facture d'origine ; les
 // prix/taux reprennent ceux de la facture d'origine si elle existe, sinon le
 // tarif courant. Recalcul des droits d'auteur pour tous les verdicts (les

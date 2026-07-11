@@ -13,6 +13,7 @@ import {
 } from "../api/client";
 import { Spine } from "../components/Spine";
 import { ContractsSection } from "../components/ContractsSection";
+import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
 import { TasksSection } from "../components/TasksSection";
 import { CorrectionSection } from "../components/CorrectionSection";
 import { ProductionSection } from "../components/ProductionSection";
@@ -168,6 +169,15 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           defaultPartnerId={manuscript.workContributors[0]?.partner.id ?? ""}
           canCreate={permissions.has("contracts:saisie")}
           canValidate={permissions.has("contracts:validation")}
+        />
+      )}
+
+      {permissions.has("finance:consultation") && (
+        <EditorialQuotesSection
+          manuscriptId={manuscript.id}
+          defaultPartnerId={manuscript.workContributors[0]?.partner.id ?? ""}
+          canCreate={permissions.has("finance:saisie")}
+          canValidate={permissions.has("finance:validation")}
         />
       )}
 

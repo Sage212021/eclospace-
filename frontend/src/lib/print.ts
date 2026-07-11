@@ -10,6 +10,7 @@ import type { ContractDetail, EditorialQuote, InvoiceDetail, PurchaseOrder, Roya
 // Coordonnées officielles de la maison — source unique pour tous les documents
 // imprimés (facture, avoir, et à venir : relevés, bons de commande, contrats).
 // Modifier ici met à jour l'en-tête et le pied de TOUS les documents.
+// Coordonnées alignées sur le papier à en-tête officiel (fourni le 11/07/2026).
 const HOUSE = {
   legalName: "ECLOSION EDITION SARL",
   brand: "Éclosion",
@@ -17,11 +18,11 @@ const HOUSE = {
   tagline: "L'avenir du livre",
   address: "Carrefour INSTIC – Nouvelle route Kondengui, Yaoundé, Cameroun",
   poBox: "B.P. 33071 Yaoundé",
-  phone: "(+237) 698 03 15 02 / 678 70 40 86",
-  email: "eclosionedition@gmail.com",
-  website: "https://eclosioneditions.cm",
+  phone: "(+237) 677 157 326 / 678 704 086 / 698 031 502",
+  email: "editioneclosion@gmail.com",
+  website: "https://eclosionedition.cm",
   rccm: "RC/YAO/2019/B/144",
-  niu: "M021912751174Y",
+  niu: "MÀ2019127511744Y",
   cnps: "C-YAO-2019-0144",
 };
 
@@ -74,7 +75,7 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
   // libre est réservée par le padding du bloc document.
   const embedStyle = embed
     ? `body { background: url("${window.location.origin}/eclosion-papier-entete.png") top center / 210mm 297mm no-repeat; }
-       .doc { max-width: none; padding: 42mm 20mm 52mm; }
+       .doc { max-width: none; padding: 44mm 20mm 46mm; }
        body, .doc { -webkit-print-color-adjust: exact; print-color-adjust: exact; }`
     : "";
 
@@ -84,9 +85,10 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     * { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #16233d; margin: 0; font-size: 12.5px; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .doc { max-width: 720px; margin: 0 auto; padding: 8px; }
-    /* Espace réservé à l'en-tête / au pied pré-imprimés du papier à en-tête. */
-    .lh-space { height: 26mm; }
-    .lh-foot-space { height: 20mm; }
+    /* Espace réservé à l'en-tête / au pied pré-imprimés (bandeaux ~40 mm ;
+       la marge @page de 18 mm compte déjà, on complète ici). */
+    .lh-space { height: 24mm; }
+    .lh-foot-space { height: 26mm; }
     ${embedStyle}
     .lh { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
     .lh__logo { height: 62px; width: auto; }

@@ -157,4 +157,49 @@ describe("devis de prestation éditoriale (compte d'auteur)", () => {
     expect(accept.statusCode).toBe(400);
     expect(accept.json().code).toBe("consent_required");
   });
+
+  it("devis IMPRESSION facturé à un client commercial (choix C)", async () => {
+    const client = await prisma.customer.create({
+      data: { category: "institution", name: `Imprimerie Cliente ${Math.random().toString(36).slice(2, 6)}`, email: "client@example.com" },
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/editorial-quotes",
+      headers: { cookie },
+      payload: {
+        service_type: "impression",
+        customer_id: client.id,
+        lines: [{ description: "Tirage numérique 500 ex.", quantity: 500, unit_price: 1500, tax_rate: 0 }],
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const quote = res.json();
+    expect(quote.serviceType).toBe("impression");
+    expect(quote.customer.id).toBe(client.id);
+    expect(quote.partner).toBeNull();
+
+    // Acceptation interne puis facturation → facturée au client (pas un client-auteur).
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/editorial-quotes/${quote.id}/accept`,
+      headers: { cookie },
+      payload: { method: "internal", signer_name: "Client Imprimerie", consent: true },
+    });
+    const inv = await app.inject({ method: "POST", url: `/api/v1/editorial-quotes/${quote.id}/invoice`, headers: { cookie } });
+    expect(inv.statusCode).toBe(201);
+    const invoice = inv.json();
+    expect(invoice.customerId).toBe(client.id);
+    // Aucun droit d'auteur généré, source « impression_quote ».
+    expect(await prisma.royaltyEntry.count({ where: { sourceType: "impression_quote" } })).toBe(0);
+  });
+
+  it("refuse un devis sans destinataire (400)", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/editorial-quotes",
+      headers: { cookie },
+      payload: { service_type: "communication", lines: [{ description: "Logo", quantity: 1, unit_price: 100000 }] },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });

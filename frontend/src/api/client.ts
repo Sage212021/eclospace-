@@ -452,9 +452,10 @@ export function updateContractStatus(id: string, status: ContractStatus) {
   return request<Contract>(`/api/v1/contracts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
 }
 
-// --- Compte d'auteur : devis de prestation éditoriale ---------------------
+// --- Devis de prestation (éditoriale / impression / communication) --------
 export type EditorialQuoteStatus = "draft" | "sent" | "accepted" | "refused" | "expired" | "invoiced";
 export type QuoteAcceptanceMethod = "online_link" | "internal" | "paper";
+export type ServiceType = "editorial" | "impression" | "communication";
 
 export interface EditorialQuoteLine {
   id: string;
@@ -468,6 +469,7 @@ export interface EditorialQuoteLine {
 export interface EditorialQuote {
   id: string;
   quoteNumber: string;
+  serviceType: ServiceType;
   status: EditorialQuoteStatus;
   currency: string;
   totalHt: string;
@@ -480,7 +482,8 @@ export interface EditorialQuote {
   acceptanceMethod: QuoteAcceptanceMethod | null;
   signerName: string | null;
   invoiceId: string | null;
-  partner: { id: string; firstName: string; lastName: string; email: string | null };
+  partner: { id: string; firstName: string; lastName: string; email: string | null } | null;
+  customer: { id: string; name: string; email: string | null } | null;
   manuscript: { id: string; manuscriptNumber: string; title: string } | null;
   lines: EditorialQuoteLine[];
 }
@@ -495,7 +498,9 @@ export function getEditorialQuote(id: string) {
 }
 
 export function createEditorialQuote(input: {
-  partner_id: string;
+  service_type?: ServiceType;
+  partner_id?: string;
+  customer_id?: string;
   manuscript_id?: string;
   currency?: string;
   valid_until?: string;
@@ -1021,7 +1026,7 @@ export function createStockMovement(input: {
   return request(`/api/v1/stock-movements`, { method: "POST", body: JSON.stringify(input) });
 }
 
-export type CustomerCategory = "librairie" | "distributeur" | "institution" | "particulier" | "plateforme";
+export type CustomerCategory = "librairie" | "distributeur" | "institution" | "particulier" | "plateforme" | "auteur";
 
 export interface Customer {
   id: string;

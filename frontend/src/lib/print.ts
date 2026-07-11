@@ -236,7 +236,13 @@ const QUOTE_METHOD_LABELS: Record<string, string> = {
 export function printEditorialQuote(quote: EditorialQuote, opts?: PrintOpts): void {
   const cur = quote.currency || "XAF";
   const validUntil = quote.validUntil ? new Date(quote.validUntil).toLocaleDateString("fr-FR") : null;
-  const author = `${quote.partner.firstName} ${quote.partner.lastName}`;
+  const author = quote.partner ? `${quote.partner.firstName} ${quote.partner.lastName}` : quote.customer?.name ?? "";
+  const QUOTE_TITLES: Record<string, string> = {
+    editorial: "Devis de prestation éditoriale",
+    impression: "Devis d'impression",
+    communication: "Devis de communication",
+  };
+  const quoteTitle = QUOTE_TITLES[quote.serviceType] ?? "Devis de prestation";
 
   const rows = quote.lines
     .map(
@@ -262,7 +268,7 @@ export function printEditorialQuote(quote: EditorialQuote, opts?: PrintOpts): vo
       : "";
 
   const body = `
-    <div class="doc__title">Devis de prestation éditoriale</div>
+    <div class="doc__title">${escapeHtml(quoteTitle)}</div>
     <div class="meta">
       <span>N° <b class="num">${escapeHtml(quote.quoteNumber)}</b></span>
       ${validUntil ? `<span>Valable jusqu'au <b class="num">${escapeHtml(validUntil)}</b></span>` : ""}

@@ -1895,6 +1895,7 @@ model Customer {
   stockLocations  StockLocation[]
   invoices        Invoice[]
   dunnings        Dunning[]
+  serviceQuotes   EditorialQuote[]   @relation("QuoteCustomer")
 
   @@map("customers")
 }
@@ -2269,11 +2270,25 @@ enum QuoteAcceptanceMethod {
   paper       // ② devis imprimé, signé à la main, scanné et renvoyé
 }
 
+// Métier facturé (décision opérateur du 11/07/2026) : les trois lignes d'activité
+// de la maison. Le circuit devis → signature → facture est commun aux trois.
+enum ServiceType {
+  editorial     // travail éditorial facturé à l'auteur (compte d'auteur)
+  impression    // travaux d'imprimerie (offset / numérique)
+  communication // conception/réalisation de supports de communication
+}
+
 model EditorialQuote {
   id           String               @id @default(uuid())
   quoteNumber  String               @unique @map("quote_number")
-  partnerId    String               @map("partner_id")
-  partner      Partner              @relation(fields: [partnerId], references: [id])
+  serviceType  ServiceType          @default(editorial) @map("service_type")
+  // Destinataire du devis (choix C) : un auteur (Partenaire) OU un client
+  // commercial (Customer) — au moins l'un des deux. L'éditorial vise l'auteur ;
+  // impression/communication visent le plus souvent un client.
+  partnerId    String?              @map("partner_id")
+  partner      Partner?             @relation(fields: [partnerId], references: [id])
+  customerId   String?              @map("customer_id")
+  customer     Customer?            @relation("QuoteCustomer", fields: [customerId], references: [id])
   manuscriptId String?              @map("manuscript_id")
   manuscript   Manuscript?          @relation(fields: [manuscriptId], references: [id])
   status       EditorialQuoteStatus @default(draft)

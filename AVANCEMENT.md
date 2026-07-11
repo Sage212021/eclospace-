@@ -561,6 +561,15 @@ Sur retour opérateur, tous les documents officiels (facture, devis, relevé de 
 - **Papier à en-tête officiel corrigé** enregistré (`frontend/public/eclosion-papier-entete.png`, A4 1054×1492). Bandeaux mesurés ~56 mm (haut) et ~56 mm (bas) → hauteurs réservées : mode « en-tête intégré » padding 58/58 mm ; mode « papier vierge » espaces 40/40 mm en plus de la marge @page de 18 mm.
 - **Petit écart restant à trancher** : le papier corrigé liste **3 téléphones** (dont `654 366 663`), le numérique n'en a que 2 — à aligner si l'opérateur le souhaite. *(Fait : 3e numéro ajouté au numérique.)*
 
+### 11/07/2026 (suite) — Devis/facture Impression et Communication (Demande 2, choix C)
+
+Le circuit devis → signature → facture est **généralisé aux trois métiers** de la maison : **Éditoriale** (facturée à l'auteur), **Impression** et **Communication** (facturées à un client). Décision opérateur : **choix C** — un devis peut viser un **auteur (Partenaire) OU un client (Customer)**, au choix.
+
+- **Backend** : `EditorialQuote` gagne `serviceType` (enum `ServiceType`) et un destinataire au choix (`partnerId` **ou** `customerId`, au moins l'un des deux ; `partner_id` devient nullable). La facture est adressée au **client** si fixé, sinon au **client-auteur** miroir. Source de facture `${serviceType}_quote`. Migration **additive**.
+- **Frontend** : le formulaire de devis (fiche manuscrit) propose le **type de prestation** (catalogue de lignes adapté à chaque métier) et le **destinataire** (auteur du manuscrit ou client). Titre du devis imprimé adapté (« Devis d'impression », « Devis de communication »…).
+- **Tests** : +2 (`editorial-quotes.test.ts` : devis impression facturé à un client, refus sans destinataire). **177 tests passent.**
+- **Reste** : Demande 3 (rapports hebdomadaires) — prochain incrément.
+
 ### 11/07/2026 (suite) — Filigrane d'authenticité sur les documents numériques
 
 Retour opérateur : conserver la présentation numérique **élégante** d'origine (logo + coordonnées + pied légal), et y ajouter **uniquement l'ampoule** du papier à en-tête, en filigrane au centre, comme **signature d'authenticité**. Le relook « design en-tête par défaut » est annulé. Les **3 présentations** d'impression sont conservées (Numérique / En-tête intégré / Papier vierge). Filigrane extrait du papier à en-tête (`frontend/public/eclosion-filigrane.png`, blanc rendu transparent), affiché en très léger sur la seule version numérique. Vérifié au navigateur.

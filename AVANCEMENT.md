@@ -732,3 +732,9 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 - **Tests** : +16 (`payroll-engine.test.ts`) dont un **cas de référence vérifié au centime** contre un calcul à la main (brut 500 000, 1 part → PVID 16 800, IRPP+CAC 48 125, **net 426 075**, **coût employeur 567 300**), + variantes (ancienneté, retenue d'absence, parts fiscales) et l'intégration de l'endpoint. **276 tests passent, zéro régression.**
 
 **Prochaine étape (alternance) :** i18n incrément 3 (écrans RH/Finance), puis Paie incrément 4 (bulletin PDF à l'en-tête + envoi e-mail) et incrément 5 (livre de paie + clôture/gel + déclarations CNPS/fiscales).
+
+### 12/07/2026 (suite) — i18n FR/EN : incrément 3 (en-têtes des écrans principaux)
+
+**Fait :** passe de traduction des **titres et sous-titres** des pages principales (RH, Finance, Stock, Commercial, Rapports, Utilisateurs & rôles, Direction générale, Mes lectures) via la couche i18n. Le français reste le défaut ; l'anglais s'affiche pour un utilisateur en EN (vérifié au navigateur : en-tête « Finance & accounting / Invoices, payments… »). Frontend uniquement, build OK, aucune régression backend (276 tests inchangés).
+
+**Prochaine étape (alternance) :** Paie incrément 4 (bulletin PDF à l'en-tête maison + envoi e-mail via le mailer de l'ERP), puis i18n incrément 4 (contenu détaillé des écrans).

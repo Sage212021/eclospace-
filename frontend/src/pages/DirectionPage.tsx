@@ -30,7 +30,10 @@ interface DirectionPageProps {
 
 // Ch. 5 : tableau de bord Direction générale consolidé, recherche globale,
 // alertes automatiques et centre de pilotage intelligent (Ch. 5 §5.9).
+import { useI18n } from "../i18n";
+
 export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
+  const { t } = useI18n();
   const [dashboard, setDashboard] = useState<DirectionDashboard | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
@@ -91,8 +94,8 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
 
   return (
     <div className="ecl-page">
-      <h1 className="ecl-page__title">Direction générale</h1>
-      <p className="ecl-page__lead">Vue consolidée, recherche globale, alertes et recommandations de pilotage.</p>
+      <h1 className="ecl-page__title">{t("page.direction.title", "Direction générale")}</h1>
+      <p className="ecl-page__lead">{t("page.direction.lead", "Vue consolidée, recherche globale, alertes et recommandations de pilotage.")}</p>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

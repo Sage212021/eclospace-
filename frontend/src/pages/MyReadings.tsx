@@ -17,7 +17,10 @@ const STATUS_LABELS: Record<string, string> = {
 
 // Vue lecteur du comité de lecture (Ch. 7 §7.3) : missions attribuées et
 // formulaire de notation pondérée (Ch. 7 §7.4-7.5).
+import { useI18n } from "../i18n";
+
 export function MyReadings() {
+  const { t } = useI18n();
   const [assignments, setAssignments] = useState<ReadingAssignment[]>([]);
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -30,8 +33,8 @@ export function MyReadings() {
 
   return (
     <div className="ecl-page" style={{ maxWidth: 680 }}>
-      <h1 className="ecl-page__title">Mes lectures</h1>
-      <p className="ecl-page__lead">Vos missions de lecture et la remise de vos évaluations.</p>
+      <h1 className="ecl-page__title">{t("page.myreadings.title", "Mes lectures")}</h1>
+      <p className="ecl-page__lead">{t("page.myreadings.lead", "Vos missions de lecture et la remise de vos évaluations.")}</p>
 
       {message && (
         <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 12 }}>

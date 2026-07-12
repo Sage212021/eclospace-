@@ -31,6 +31,7 @@ import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconAdmin } from "../components/icons";
 import { WorkScheduleSection } from "../components/WorkScheduleSection";
+import { PresenceSummaryCard } from "../components/PresenceSummaryCard";
 
 const STATUS_LABELS: Record<EmployeeStatus, string> = {
   salarie: "Salarié",
@@ -227,6 +228,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* Évolution — Présences & Temps de travail : paramétrage des horaires (§9) */}
       <WorkScheduleSection canAdminister={canAdministerPresence} />
+
+      {/* Évolution — Calcul de présence : synthèse du mois de l'utilisateur (§12-17) */}
+      <PresenceSummaryCard />
 
       {/* Ch. 19 §19.2 — Dossiers collaborateurs */}
       <Card

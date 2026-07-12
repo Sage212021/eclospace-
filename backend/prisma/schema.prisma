@@ -586,6 +586,8 @@ model User {
   mfaEnabled   Boolean    @default(false) @map("mfa_enabled")
   mfaSecret    String?    @map("mfa_secret")
   status       UserStatus @default(active)
+  // Langue d'interface choisie (i18n) : "fr" (défaut) ou "en".
+  language     String     @default("fr")
   lastLoginAt  DateTime?  @map("last_login_at")
   // Compte « passe-partout » (super-administrateur) : ne peut être ni suspendu,
   // ni supprimé, ni privé de son rôle ; seul compte éligible au mot de passe

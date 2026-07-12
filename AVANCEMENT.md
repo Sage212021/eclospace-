@@ -692,3 +692,16 @@ Décision **D-007** actée (registre) : dérogation à D-003, **internalisation 
 - **Tests** : +5 (`payroll.test.ts`) : refus profil non habilité (403), interrupteur par défaut désactivé + bascule, barème 2019 exposé, versionnage, validation des bornes. **252 tests passent, zéro régression.**
 
 **Prochaine étape (en parallèle) :** i18n FR/EN — incrément 1 (infrastructure : couche de traduction, langue au profil, sélecteur FR/EN, première surface traduite) ; puis Paie incrément 2 (fiche paie employé) et incrément 3 (moteur de calcul brut→net).
+
+### 12/07/2026 (suite) — i18n FR/EN : incrément 1 (infrastructure + shell traduit)
+
+En parallèle du module Paie (D-007), chantier d'internationalisation.
+
+**Fait :**
+- **Backend** : colonne `users.language` (migration additive `20260712060000_user_language`, défaut "fr") ; `/api/v1/me` renvoie la langue ; `PATCH /api/v1/me/language` (fr|en) la mémorise sur le profil.
+- **Frontend** : couche i18n légère et sans dépendance (`i18n.tsx`) — le **français reste le texte par défaut** fourni à `t(key, fr)`, seul l'**anglais** vit dans le dictionnaire ; une clé non traduite retombe proprement sur le français (traduction possible écran par écran, sans rien casser). Langue lue sur le profil à la connexion, changement mémorisé (localStorage + profil).
+- **Sélecteur FR/EN** (`LanguageSwitch`) sur l'écran de connexion et dans le menu profil.
+- **Surfaces traduites** (incrément 1) : page de **connexion** (identifiant, mot de passe, 2FA…), **barre latérale** (grands pôles + toutes les entrées de menu), **barre supérieure** (recherche, « en ligne », paramètres, déconnexion). Le contenu détaillé des pages reste en français (traduit dans les incréments suivants).
+- **Tests** : +3 (`language.test.ts`) : /me renvoie la langue, changement fr→en persisté, refus d'une langue non supportée. **255 tests passent, zéro régression.** Vérifié au navigateur (bascule EN + persistance après rechargement).
+
+**Prochaine étape (alternance) :** Paie incrément 2 (fiche paie employé), puis i18n incrément 2 (traduction du tableau de bord et des premiers écrans métier).

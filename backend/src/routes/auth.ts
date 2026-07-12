@@ -167,16 +167,28 @@ export default async function authRoutes(fastify: FastifyInstance) {
     if (request.impersonatorId) {
       impersonator = await prisma.user.findUnique({ where: { id: request.impersonatorId }, select: { id: true, username: true } });
     }
+    const profile = await prisma.user.findUnique({ where: { id: user.id }, select: { language: true } });
     return reply.send({
       id: user.id,
       username: user.username,
       email: user.email,
       mfa_enabled: user.mfaEnabled,
+      language: profile?.language ?? "fr",
       roles: user.roles,
       permissions: [...user.permissions],
       impersonating: Boolean(impersonator),
       impersonator,
     });
+  });
+
+  // Choix de langue d'interface (i18n) : "fr" ou "en", mémorisé sur le profil.
+  fastify.patch("/api/v1/me/language", { preHandler: requireAuth }, async (request, reply) => {
+    const parsed = z.object({ language: z.enum(["fr", "en"]) }).safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Langue invalide (fr|en)." });
+    }
+    await prisma.user.update({ where: { id: request.user!.id }, data: { language: parsed.data.language } });
+    return reply.send({ language: parsed.data.language });
   });
 
   // Fin de l'usurpation d'identité : on rebascule sur le compte administrateur

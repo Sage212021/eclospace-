@@ -7,3 +7,4 @@ build/
 backend/uploads/
 backend/public/
 uploads/
+*.tsbuildinfo

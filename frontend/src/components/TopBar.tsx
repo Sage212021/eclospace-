@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getPresenceNames, listUnreadNotifications, quickSearch, type QuickSearchResult } from "../api/client";
+import { useI18n } from "../i18n";
+import { LanguageSwitch } from "./LanguageSwitch";
 
 interface TopBarProps {
   // Nombre de personnes connectées (présence temps réel, sans identités).
@@ -27,6 +29,7 @@ function initials(username: string): string {
 // Barre supérieure (guide §6) : recherche globale + présence + notifications +
 // menu de profil (avatar) à droite, façon Microsoft 365 / Notion.
 export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, user, onLogout, onOpenSettings, onOpenManuscript }: TopBarProps) {
+  const { t } = useI18n();
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hallOpen, setHallOpen] = useState(false);
@@ -133,8 +136,8 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
             setSearchOpen(true);
           }}
           onFocus={() => setSearchOpen(true)}
-          placeholder="Rechercher un ouvrage, un auteur, un ISBN…"
-          aria-label="Recherche rapide"
+          placeholder={t("topbar.search", "Rechercher un ouvrage, un auteur, un ISBN…")}
+          aria-label={t("topbar.search", "Rechercher un ouvrage, un auteur, un ISBN…")}
           style={{
             width: "100%",
             padding: "8px 12px",
@@ -221,7 +224,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
           }}
         >
           <span style={{ width: 9, height: 9, borderRadius: 999, background: "var(--eclosion)", display: "inline-block" }} />
-          <span style={{ fontFamily: "var(--font-mono)" }}>{connectedTotal}</span> en ligne
+          <span style={{ fontFamily: "var(--font-mono)" }}>{connectedTotal}</span> {t("topbar.online", "en ligne")}
         </button>
 
         {hallOpen && (
@@ -231,7 +234,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
               <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>Hall — présence</span>
                 <span style={{ fontSize: 12, color: "var(--muted)" }}>
-                  <span style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{connectedTotal}</span> en ligne
+                  <span style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{connectedTotal}</span> {t("topbar.online", "en ligne")}
                 </span>
               </div>
               <div style={{ maxHeight: 320, overflowY: "auto" }}>
@@ -370,9 +373,12 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
                     onOpenSettings();
                   }}
                 >
-                  Paramètres du compte
+                  {t("topbar.account_settings", "Paramètres du compte")}
                 </MenuItem>
               )}
+              <div style={{ padding: "8px 14px", borderTop: "1px solid var(--line)" }}>
+                <LanguageSwitch />
+              </div>
               <MenuItem
                 danger
                 onClick={() => {
@@ -380,7 +386,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
                   onLogout();
                 }}
               >
-                Se déconnecter
+                {t("topbar.logout", "Se déconnecter")}
               </MenuItem>
             </div>
           </>

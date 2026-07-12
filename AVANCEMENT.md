@@ -705,3 +705,13 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 - **Tests** : +3 (`language.test.ts`) : /me renvoie la langue, changement fr→en persisté, refus d'une langue non supportée. **255 tests passent, zéro régression.** Vérifié au navigateur (bascule EN + persistance après rechargement).
 
 **Prochaine étape (alternance) :** Paie incrément 2 (fiche paie employé), puis i18n incrément 2 (traduction du tableau de bord et des premiers écrans métier).
+
+### 12/07/2026 (suite) — Module Paie : incrément 2 (fiche paie employé)
+
+**Fait :**
+- **Schéma** (migration additive `20260712070000_payroll_employee_profiles`) : `payroll_employee_profiles` (1-1 employé) — matricule, N° CNPS, NIU, catégorie/échelon, mode de paiement/compte, **brut contractuel**, **% salaire de base** (base et compléments dérivés), assiette fiscale, **parts fiscales** (+ appliquer O/N), **ancienneté** (années, taux individuel, seuil, appliquer O/N).
+- **Endpoints** : `GET /api/v1/payroll/employees/:id/profile` (donnée sensible → accès journalisé) et `PUT` (upsert, `paie:saisie`, journalisé).
+- **Frontend** : carte « Fiches paie (par employé) » dans RH — sélecteur d'employé, formulaire complet, **calcul en direct** du salaire de base et des compléments. Vérifié au navigateur.
+- **Tests** : +5 (`payroll-profile.test.ts`) : refus profil non habilité (403), fiche vide (null), enregistrement + calcul base/compléments (500 000 × 0,6 = 300 000), refus % hors bornes (400), 404 employé inexistant. **260 tests passent, zéro régression.**
+
+**Prochaine étape (alternance) :** i18n incrément 2 (traduction du tableau de bord et premiers écrans), puis Paie incrément 3 (moteur de calcul brut→net : cotisations CNPS, IRPP+CAC, CFC/FNE/TC/RAV, net à payer, coût employeur).

@@ -37,6 +37,7 @@ import { AnomaliesSection } from "../components/AnomaliesSection";
 import { AttendanceReportSection } from "../components/AttendanceReportSection";
 import { PayrollConsolidationSection } from "../components/PayrollConsolidationSection";
 import { PayrollSettingsSection } from "../components/PayrollSettingsSection";
+import { PayrollProfilesSection } from "../components/PayrollProfilesSection";
 
 const STATUS_LABELS: Record<EmployeeStatus, string> = {
   salarie: "Salarié",
@@ -74,6 +75,8 @@ interface HrPageProps {
   // Module « Paie » (D-007) : consultation / administration des paramètres.
   canViewPayroll: boolean;
   canManagePayroll: boolean;
+  // Saisie des fiches paie (paie:saisie).
+  canEditPayroll: boolean;
 }
 
 type HrModal =
@@ -88,7 +91,7 @@ type HrModal =
 
 // Ch. 19 : Ressources humaines — dossier collaborateur, cycle de vie du
 // compte, absences, revue des accès (couche transverse du Lot 6).
-export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence, canOverseePresence, canViewPayroll, canManagePayroll }: HrPageProps) {
+export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence, canOverseePresence, canViewPayroll, canManagePayroll, canEditPayroll }: HrPageProps) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [anomalies, setAnomalies] = useState<AccessAnomaly[]>([]);
@@ -258,6 +261,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* Module Paie natif (D-007) — paramètres du barème légal */}
       {canViewPayroll && <PayrollSettingsSection canManage={canManagePayroll} />}
+
+      {/* Module Paie natif (D-007) — fiche paie par employé */}
+      {canViewPayroll && <PayrollProfilesSection employees={employees} canManage={canEditPayroll} />}
 
       {/* Ch. 19 §19.2 — Dossiers collaborateurs */}
       <Card

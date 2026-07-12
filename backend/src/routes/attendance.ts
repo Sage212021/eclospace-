@@ -758,10 +758,238 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // ----- Consolidation vers la paie (§28-31) ---------------------------------
+
+  // Rubriques prises en compte (§29) — activables Oui/Non.
+  fastify.get(
+    "/api/v1/attendance/payroll/rubrics",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (request, reply) => {
+      if (!canSeeOthers(request.user!)) return reply.code(403).send({ code: "forbidden", message: "Réservé aux responsables." });
+      const rows = await prisma.attendancePayrollRubric.findMany({ orderBy: { sortOrder: "asc" } });
+      return reply.send(rows.map((r) => ({ code: r.code, label: r.label, enabled: r.enabled })));
+    },
+  );
+
+  fastify.patch(
+    "/api/v1/attendance/payroll/rubrics/:code",
+    { preHandler: requirePermission("presences", "administration") },
+    async (request, reply) => {
+      const { code } = request.params as { code: string };
+      const parsed = z.object({ enabled: z.boolean() }).safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides." });
+      const existing = await prisma.attendancePayrollRubric.findUnique({ where: { code } });
+      if (!existing) return reply.code(404).send({ code: "not_found", message: "Rubrique inconnue." });
+      const updated = await prisma.attendancePayrollRubric.update({ where: { code }, data: { enabled: parsed.data.enabled, updatedBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "attendance_payroll_rubric", entityId: code, oldValues: { enabled: existing.enabled }, newValues: { enabled: updated.enabled }, ipAddress: request.ip });
+      return reply.send({ code: updated.code, label: updated.label, enabled: updated.enabled });
+    },
+  );
+
+  // Mode d'intégration à la paie (§28) : auto | manuel.
+  fastify.get(
+    "/api/v1/attendance/payroll/mode",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (request, reply) => {
+      if (!canSeeOthers(request.user!)) return reply.code(403).send({ code: "forbidden", message: "Réservé aux responsables." });
+      const s = await prisma.setting.findUnique({ where: { key: "attendance_payroll_mode" } });
+      return reply.send({ mode: (s?.value as string) ?? "manuel" });
+    },
+  );
+
+  fastify.put(
+    "/api/v1/attendance/payroll/mode",
+    { preHandler: requirePermission("presences", "administration") },
+    async (request, reply) => {
+      const parsed = z.object({ mode: z.enum(["auto", "manuel"]) }).safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Mode invalide (auto|manuel)." });
+      await prisma.setting.upsert({ where: { key: "attendance_payroll_mode" }, update: { value: parsed.data.mode }, create: { key: "attendance_payroll_mode", value: parsed.data.mode } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "attendance_payroll_mode", entityId: "attendance_payroll_mode", newValues: { mode: parsed.data.mode }, ipAddress: request.ip });
+      return reply.send({ mode: parsed.data.mode });
+    },
+  );
+
+  // Préparation d'une consolidation pour une période « AAAA-MM » : calcule et
+  // fige un instantané par employé. Refusé si la période est déjà gelée.
+  fastify.post(
+    "/api/v1/attendance/payroll/:periodKey/prepare",
+    { preHandler: requirePermission("presences", "validation") },
+    async (request, reply) => {
+      const { periodKey } = request.params as { periodKey: string };
+      if (!/^\d{4}-\d{2}$/.test(periodKey)) return reply.code(400).send({ code: "validation_error", message: "Période attendue au format AAAA-MM." });
+      const existing = await prisma.attendancePayrollPeriod.findUnique({ where: { periodKey } });
+      if (existing && (existing.status === "gele" || existing.status === "transmis")) {
+        return reply.code(409).send({ code: "period_frozen", message: "Cette période est figée : elle ne peut plus être recalculée." });
+      }
+      const { from, to } = periodRange(periodKey);
+      const report = await computeBatchReport(from, to, null);
+      const modeSetting = await prisma.setting.findUnique({ where: { key: "attendance_payroll_mode" } });
+      const mode = (modeSetting?.value as string) ?? "manuel";
+
+      const period = await prisma.$transaction(async (tx) => {
+        const p = await tx.attendancePayrollPeriod.upsert({
+          where: { periodKey },
+          update: { status: "brouillon", mode, preparedBy: request.user!.id, fromDate: new Date(`${from}T00:00:00.000Z`), toDate: new Date(`${to}T00:00:00.000Z`) },
+          create: { periodKey, fromDate: new Date(`${from}T00:00:00.000Z`), toDate: new Date(`${to}T00:00:00.000Z`), status: "brouillon", mode, preparedBy: request.user!.id },
+        });
+        await tx.attendancePayrollLine.deleteMany({ where: { periodId: p.id } });
+        for (const r of report.rows) {
+          await tx.attendancePayrollLine.create({
+            data: {
+              periodId: p.id,
+              employeeId: r.employee_id,
+              workedMinutes: r.worked_minutes,
+              lateMinutes: r.late_minutes,
+              earlyLeaveMinutes: r.early_leave_minutes,
+              overtimeMinutes: r.overtime_minutes,
+              daysWorked: r.days_worked,
+              daysAbsentUnjustified: r.days_absent_unjustified,
+              daysAbsentJustified: r.days_absent_justified,
+              deductionProposed: r.deduction_proposed,
+            },
+          });
+        }
+        return p;
+      }, { timeout: 120000, maxWait: 15000 });
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "attendance_payroll_period", entityId: periodKey, newValues: { from, to, lines: report.rows.length, mode }, ipAddress: request.ip });
+      return reply.send({ period_key: periodKey, status: period.status, mode, lines: report.rows.length });
+    },
+  );
+
+  // Récapitulatif d'une consolidation (§30) : lignes figées + totaux + rubriques.
+  fastify.get(
+    "/api/v1/attendance/payroll/:periodKey",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (request, reply) => {
+      if (!canSeeOthers(request.user!)) return reply.code(403).send({ code: "forbidden", message: "Réservé aux responsables." });
+      const { periodKey } = request.params as { periodKey: string };
+      const period = await prisma.attendancePayrollPeriod.findUnique({
+        where: { periodKey },
+        include: { lines: { include: { employee: { select: { firstName: true, lastName: true } } }, orderBy: { employee: { lastName: "asc" } } } },
+      });
+      if (!period) return reply.code(404).send({ code: "not_found", message: "Aucune consolidation pour cette période." });
+      const rubrics = await prisma.attendancePayrollRubric.findMany({ orderBy: { sortOrder: "asc" } });
+      const totals = period.lines.reduce(
+        (acc, l) => {
+          acc.worked_minutes += l.workedMinutes;
+          acc.overtime_minutes += l.overtimeMinutes;
+          acc.days_absent_unjustified += l.daysAbsentUnjustified;
+          acc.deduction_total += Number(l.deductionProposed);
+          return acc;
+        },
+        { worked_minutes: 0, overtime_minutes: 0, days_absent_unjustified: 0, deduction_total: 0 },
+      );
+      return reply.send({
+        period_key: period.periodKey,
+        from: period.fromDate.toISOString().slice(0, 10),
+        to: period.toDate.toISOString().slice(0, 10),
+        status: period.status,
+        mode: period.mode,
+        validated_at: period.validatedAt,
+        frozen_at: period.frozenAt,
+        transmitted_at: period.transmittedAt,
+        rubrics: rubrics.map((r) => ({ code: r.code, label: r.label, enabled: r.enabled })),
+        totals,
+        lines: period.lines.map((l) => ({
+          employee_id: l.employeeId,
+          employee_name: `${l.employee.firstName} ${l.employee.lastName}`,
+          worked_minutes: l.workedMinutes,
+          late_minutes: l.lateMinutes,
+          early_leave_minutes: l.earlyLeaveMinutes,
+          overtime_minutes: l.overtimeMinutes,
+          days_worked: l.daysWorked,
+          days_absent_unjustified: l.daysAbsentUnjustified,
+          deduction_proposed: Number(l.deductionProposed),
+        })),
+      });
+    },
+  );
+
+  // Validation (contrôle du gestionnaire) puis gel (§30). Transitions strictes.
+  fastify.post(
+    "/api/v1/attendance/payroll/:periodKey/validate",
+    { preHandler: requirePermission("presences", "validation") },
+    async (request, reply) => {
+      const { periodKey } = request.params as { periodKey: string };
+      const period = await prisma.attendancePayrollPeriod.findUnique({ where: { periodKey } });
+      if (!period) return reply.code(404).send({ code: "not_found", message: "Période introuvable." });
+      if (period.status !== "brouillon") return reply.code(409).send({ code: "invalid_transition", message: `Validation impossible depuis « ${period.status} ».` });
+      const updated = await prisma.attendancePayrollPeriod.update({ where: { periodKey }, data: { status: "valide", validatedBy: request.user!.id, validatedAt: new Date() } });
+      await writeAuditLog({ userId: request.user!.id, action: "validate", entityType: "attendance_payroll_period", entityId: periodKey, newValues: { status: "valide" }, ipAddress: request.ip });
+      return reply.send({ period_key: periodKey, status: updated.status });
+    },
+  );
+
+  fastify.post(
+    "/api/v1/attendance/payroll/:periodKey/freeze",
+    { preHandler: requirePermission("presences", "validation") },
+    async (request, reply) => {
+      const { periodKey } = request.params as { periodKey: string };
+      const period = await prisma.attendancePayrollPeriod.findUnique({ where: { periodKey } });
+      if (!period) return reply.code(404).send({ code: "not_found", message: "Période introuvable." });
+      if (period.status !== "valide") return reply.code(409).send({ code: "invalid_transition", message: "La période doit être validée avant d'être gelée." });
+      const updated = await prisma.attendancePayrollPeriod.update({ where: { periodKey }, data: { status: "gele", frozenAt: new Date() } });
+      await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "attendance_payroll_period", entityId: periodKey, newValues: { status: "gele" }, ipAddress: request.ip });
+      return reply.send({ period_key: periodKey, status: updated.status });
+    },
+  );
+
+  // Transmission à la paie (§28) : alimente les VARIABLES DE PAIE existantes
+  // pour les seules rubriques activées. Ne modifie jamais un bulletin.
+  fastify.post(
+    "/api/v1/attendance/payroll/:periodKey/transmit",
+    { preHandler: requirePermission("presences", "administration") },
+    async (request, reply) => {
+      const { periodKey } = request.params as { periodKey: string };
+      const period = await prisma.attendancePayrollPeriod.findUnique({ where: { periodKey }, include: { lines: true } });
+      if (!period) return reply.code(404).send({ code: "not_found", message: "Période introuvable." });
+      if (period.status !== "gele") return reply.code(409).send({ code: "not_frozen", message: "La période doit être gelée avant transmission à la paie." });
+      const rubrics = await prisma.attendancePayrollRubric.findMany();
+      const on = (code: string) => rubrics.find((r) => r.code === code)?.enabled ?? false;
+
+      await prisma.$transaction(async (tx) => {
+        for (const l of period.lines) {
+          await tx.payrollVariable.upsert({
+            where: { employeeId_periodKey: { employeeId: l.employeeId, periodKey } },
+            update: {
+              // Une rubrique désactivée efface la variable (null), pour refléter
+              // exactement la configuration courante — pas « laisser inchangé ».
+              presenceDays: on("heures_travaillees") ? l.daysWorked : null,
+              absenceDays: on("absences") ? l.daysAbsentUnjustified : null,
+              deductionAmount: on("retenues") ? l.deductionProposed : null,
+              overtimeMinutes: on("heures_supplementaires") ? l.overtimeMinutes : null,
+              exportedAt: new Date(),
+            },
+            create: {
+              employeeId: l.employeeId,
+              periodKey,
+              presenceDays: on("heures_travaillees") ? l.daysWorked : null,
+              absenceDays: on("absences") ? l.daysAbsentUnjustified : null,
+              deductionAmount: on("retenues") ? l.deductionProposed : null,
+              overtimeMinutes: on("heures_supplementaires") ? l.overtimeMinutes : null,
+              exportedAt: new Date(),
+              createdBy: request.user!.id,
+            },
+          });
+        }
+        await tx.attendancePayrollPeriod.update({ where: { periodKey }, data: { status: "transmis", transmittedAt: new Date() } });
+      }, { timeout: 120000, maxWait: 15000 });
+      await writeAuditLog({ userId: request.user!.id, action: "export", entityType: "attendance_payroll_period", entityId: periodKey, newValues: { transmitted: period.lines.length }, ipAddress: request.ip });
+      return reply.send({ period_key: periodKey, status: "transmis", transmitted: period.lines.length });
+    },
+  );
+
   // Petit point d'entrée de santé du module (utile aux futurs tableaux de bord).
   fastify.get("/api/v1/attendance/ping", { preHandler: requireAuth }, async (_request, reply) => {
     return reply.send({ module: "presences", ok: true });
   });
+}
+
+function periodRange(periodKey: string): { from: string; to: string } {
+  const [y, m] = periodKey.split("-").map(Number);
+  const from = `${periodKey}-01`;
+  const to = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  return { from, to };
 }
 
 // ----- Rapport par lot (performant : lectures groupées, calcul en mémoire) --

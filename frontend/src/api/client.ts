@@ -2303,3 +2303,58 @@ export function getMonthlyReport(params?: { from?: string; to?: string; departme
   const qs = new URLSearchParams(params as Record<string, string>).toString();
   return request<MonthlyReport>(`/api/v1/attendance/report/monthly${qs ? `?${qs}` : ""}`);
 }
+
+// Consolidation vers la paie (incrément 6).
+export interface PayrollRubric { code: string; label: string; enabled: boolean }
+export interface PayrollLine {
+  employee_id: string;
+  employee_name: string;
+  worked_minutes: number;
+  late_minutes: number;
+  early_leave_minutes: number;
+  overtime_minutes: number;
+  days_worked: number;
+  days_absent_unjustified: number;
+  deduction_proposed: number;
+}
+export interface PayrollPeriod {
+  period_key: string;
+  from: string;
+  to: string;
+  status: "brouillon" | "valide" | "gele" | "transmis";
+  mode: string;
+  validated_at: string | null;
+  frozen_at: string | null;
+  transmitted_at: string | null;
+  rubrics: PayrollRubric[];
+  totals: { worked_minutes: number; overtime_minutes: number; days_absent_unjustified: number; deduction_total: number };
+  lines: PayrollLine[];
+}
+
+export function getPayrollRubrics() {
+  return request<PayrollRubric[]>(`/api/v1/attendance/payroll/rubrics`);
+}
+export function setPayrollRubric(code: string, enabled: boolean) {
+  return request<PayrollRubric>(`/api/v1/attendance/payroll/rubrics/${code}`, { method: "PATCH", body: JSON.stringify({ enabled }) });
+}
+export function getPayrollMode() {
+  return request<{ mode: string }>(`/api/v1/attendance/payroll/mode`);
+}
+export function setPayrollMode(mode: "auto" | "manuel") {
+  return request<{ mode: string }>(`/api/v1/attendance/payroll/mode`, { method: "PUT", body: JSON.stringify({ mode }) });
+}
+export function preparePayroll(periodKey: string) {
+  return request<{ period_key: string; status: string; lines: number }>(`/api/v1/attendance/payroll/${periodKey}/prepare`, { method: "POST" });
+}
+export function getPayrollPeriod(periodKey: string) {
+  return request<PayrollPeriod>(`/api/v1/attendance/payroll/${periodKey}`);
+}
+export function validatePayroll(periodKey: string) {
+  return request<{ status: string }>(`/api/v1/attendance/payroll/${periodKey}/validate`, { method: "POST" });
+}
+export function freezePayroll(periodKey: string) {
+  return request<{ status: string }>(`/api/v1/attendance/payroll/${periodKey}/freeze`, { method: "POST" });
+}
+export function transmitPayroll(periodKey: string) {
+  return request<{ status: string; transmitted: number }>(`/api/v1/attendance/payroll/${periodKey}/transmit`, { method: "POST" });
+}

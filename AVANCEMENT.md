@@ -662,3 +662,18 @@ Nouveau module d'évolution (validé par l'opérateur : ① socle logiciel d'abo
 - **Tests** : +4 (`attendance-report.test.ts`) : refus de l'agrégat à un employé simple (403), rapport listant les cumuls et la retenue proposée, indicateurs du tableau de bord, refus du tableau de bord à un employé. **241 tests passent, zéro régression.**
 
 **Prochaine étape :** incrément 6 — consolidation vers la paie (rapport RH mensuel validé, mode auto/manuel, rubriques Oui/Non, gel de période) alimentant les variables de paie existantes (export externe, D-003).
+
+### 12/07/2026 (suite) — Présences : incrément 6 (consolidation paie) — MODULE COMPLET
+
+**Fait :**
+- **Schéma** (migration additive réversible `20260712040000_attendance_payroll`) : deux colonnes **nullable** sur `payroll_variables` (`deduction_amount`, `overtime_minutes` — aucune donnée existante impactée) ; `attendance_payroll_rubrics` (12 rubriques activables Oui/Non, §29), `attendance_payroll_periods` (statuts brouillon→valide→gele→transmis, mode auto/manuel) et `attendance_payroll_lines` (instantané figé par employé).
+- **Endpoints** : rubriques (GET/PATCH), mode auto/manuel (GET/PUT), `prepare` (calcule et fige un instantané par employé, refusé si déjà gelé), récapitulatif (§30), `validate`, `freeze` (gel = données figées), `transmit` (alimente les **variables de paie** existantes pour les seules rubriques activées, D-003). Transactions élargies pour tenir plusieurs centaines d'employés. Tout journalisé.
+- **Le module ne modifie jamais un bulletin** (§28) : il fournit des données ; la paie reste externe.
+- **Seed** : 12 rubriques (les 4 calculées actives par défaut), mode « manuel ». Idempotent.
+- **Frontend** : carte « Consolidation vers la paie » — mode, rubriques Oui/Non, workflow préparer→valider→geler→transmettre, récapitulatif par employé. Vérifié au navigateur.
+- **Tests** : +6 (`attendance-payroll.test.ts`) : rubriques et mode, préparation + instantané, refus de gel avant validation (409), gel puis refus de re-préparation (409), transmission vers les variables de paie, exclusion d'une rubrique désactivée. **247 tests passent, zéro régression.**
+- **Correctif** : à la transmission, une rubrique désactivée **remet la variable à null** (reflète exactement la configuration, au lieu de « laisser inchangé »).
+
+**Module « Présences & Temps de travail » : les 6 incréments sont livrés** (horaires + pointage, calculs, retenues, anomalies + workflow, tableau de bord + rapports, consolidation paie). Développement 100 % additif, aucune donnée existante touchée, module désactivable.
+
+**Prochaine étape (hors module) :** SMS des alertes (Phase B point 2) reste en attente d'une décision fournisseur/budget ; pointage physique (badge/QR/biométrie) branchable sur `attendance_events.source` sans refonte des calculs.

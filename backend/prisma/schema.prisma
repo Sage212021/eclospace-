@@ -84,6 +84,7 @@ model Employee {
   workSchedules    WorkSchedule[]
   attendanceEvents AttendanceEvent[]
   attendanceAnomalies AttendanceAnomaly[]
+  attendancePayrollLines AttendancePayrollLine[]
 
   @@map("employees")
 }
@@ -198,6 +199,11 @@ model PayrollVariable {
   absenceDays    Decimal?  @map("absence_days") @db.Decimal(5, 1)
   bonusAmount    Decimal?  @map("bonus_amount") @db.Decimal(12, 2)
   missionsAmount Decimal?  @map("missions_amount") @db.Decimal(12, 2)
+  // Colonnes additives (module Présences, incrément 6) : alimentées à la
+  // transmission d'une consolidation de présence. Nullable → aucune donnée
+  // existante impactée.
+  deductionAmount  Decimal? @map("deduction_amount") @db.Decimal(12, 2)
+  overtimeMinutes  Int?     @map("overtime_minutes")
   exportedAt     DateTime? @map("exported_at")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -396,6 +402,74 @@ model AttendanceValidationLevel {
   updatedBy String?  @map("updated_by")
 
   @@map("attendance_validation_levels")
+}
+
+// Rubrique de paie prise en compte (§29) — activable Oui/Non par le gestionnaire.
+model AttendancePayrollRubric {
+  id       String  @id @default(uuid())
+  code     String  @unique
+  label    String
+  enabled  Boolean @default(true)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("attendance_payroll_rubrics")
+}
+
+// Statut d'une consolidation de présence vers la paie (§30).
+enum AttendancePayrollStatus {
+  brouillon // préparé, modifiable
+  valide    // contrôlé par le gestionnaire
+  gele      // figé : les données ne changent plus pour la période
+  transmis  // écrit dans les variables de paie (export externe)
+}
+
+// Consolidation de présence d'une période de paie (§28, §30). Une fois gelée,
+// les lignes sont figées pour garantir la cohérence des bulletins.
+model AttendancePayrollPeriod {
+  id            String                  @id @default(uuid())
+  periodKey     String                  @unique @map("period_key")
+  fromDate      DateTime                @map("from_date") @db.Date
+  toDate        DateTime                @map("to_date") @db.Date
+  status        AttendancePayrollStatus @default(brouillon)
+  mode          String                  @default("manuel") // "auto" | "manuel"
+  preparedBy    String?                 @map("prepared_by")
+  validatedBy   String?                 @map("validated_by")
+  validatedAt   DateTime?               @map("validated_at")
+  frozenAt      DateTime?               @map("frozen_at")
+  transmittedAt DateTime?               @map("transmitted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lines AttendancePayrollLine[]
+
+  @@map("attendance_payroll_periods")
+}
+
+// Ligne consolidée par employé (instantané figé au gel).
+model AttendancePayrollLine {
+  id                    String                  @id @default(uuid())
+  periodId              String                  @map("period_id")
+  period                AttendancePayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  employeeId            String                  @map("employee_id")
+  employee              Employee                @relation(fields: [employeeId], references: [id])
+  workedMinutes         Int                     @map("worked_minutes")
+  lateMinutes           Int                     @map("late_minutes")
+  earlyLeaveMinutes     Int                     @map("early_leave_minutes")
+  overtimeMinutes       Int                     @map("overtime_minutes")
+  daysWorked            Int                     @map("days_worked")
+  daysAbsentUnjustified Int                     @map("days_absent_unjustified")
+  daysAbsentJustified   Int                     @map("days_absent_justified")
+  deductionProposed     Decimal                 @default(0) @map("deduction_proposed") @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([periodId, employeeId])
+  @@index([employeeId])
+  @@map("attendance_payroll_lines")
 }
 
 enum AccessReviewStatus {

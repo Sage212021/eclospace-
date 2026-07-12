@@ -404,6 +404,32 @@ async function main() {
   await prisma.setting.upsert({ where: { key: "presence_anomaly_late_minutes" }, update: {}, create: { key: "presence_anomaly_late_minutes", value: 15 } });
   await prisma.setting.upsert({ where: { key: "presence_anomaly_early_minutes" }, update: {}, create: { key: "presence_anomaly_early_minutes", value: 15 } });
 
+  // Rubriques de paie prises en compte (§29), activables Oui/Non. Par défaut,
+  // seules celles que le module calcule sont actives (heures travaillées,
+  // absences, retenues, heures sup) ; les autres sont des repères que le
+  // gestionnaire de paie active s'il les alimente lui-même.
+  const payrollRubrics = [
+    { code: "heures_travaillees", label: "Heures travaillées", enabled: true, sortOrder: 10 },
+    { code: "retards", label: "Retards", enabled: true, sortOrder: 20 },
+    { code: "departs_anticipes", label: "Départs anticipés", enabled: true, sortOrder: 30 },
+    { code: "absences", label: "Absences", enabled: true, sortOrder: 40 },
+    { code: "retenues", label: "Retenues", enabled: true, sortOrder: 50 },
+    { code: "heures_supplementaires", label: "Heures supplémentaires", enabled: true, sortOrder: 60 },
+    { code: "primes", label: "Primes", enabled: false, sortOrder: 70 },
+    { code: "conges", label: "Congés", enabled: false, sortOrder: 80 },
+    { code: "permissions", label: "Permissions", enabled: false, sortOrder: 90 },
+    { code: "missions", label: "Missions", enabled: false, sortOrder: 100 },
+    { code: "recuperations", label: "Récupérations", enabled: false, sortOrder: 110 },
+    { code: "ajustements_manuels", label: "Ajustements manuels", enabled: false, sortOrder: 120 },
+  ];
+  for (const r of payrollRubrics) {
+    await prisma.attendancePayrollRubric.upsert({ where: { code: r.code }, update: {}, create: r });
+  }
+
+  // Mode d'intégration à la paie (§28) : « manuel » par défaut (le gestionnaire
+  // sélectionne les rubriques avant calcul), commutable en « auto ».
+  await prisma.setting.upsert({ where: { key: "attendance_payroll_mode" }, update: {}, create: { key: "attendance_payroll_mode", value: "manuel" } });
+
   // Règles par défaut du centre de pilotage intelligent (Ch. 5 §5.9, Ch. 20
   // §20.6) — seuils repris des exemples du cahier des charges, à ajuster par
   // la Direction générale (§5.9 : "définies par l'administrateur avec la direction").

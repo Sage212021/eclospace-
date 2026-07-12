@@ -715,3 +715,9 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 - **Tests** : +5 (`payroll-profile.test.ts`) : refus profil non habilité (403), fiche vide (null), enregistrement + calcul base/compléments (500 000 × 0,6 = 300 000), refus % hors bornes (400), 404 employé inexistant. **260 tests passent, zéro régression.**
 
 **Prochaine étape (alternance) :** i18n incrément 2 (traduction du tableau de bord et premiers écrans), puis Paie incrément 3 (moteur de calcul brut→net : cotisations CNPS, IRPP+CAC, CFC/FNE/TC/RAV, net à payer, coût employeur).
+
+### 12/07/2026 (suite) — i18n FR/EN : incrément 2 (tableau de bord)
+
+**Fait :** traduction complète du **tableau de bord** (accueil) via la couche i18n : titre de bienvenue, sous-titre, libellés des indicateurs (Ouvrages/Utilisateurs/Ventes/Stock), bloc « Ma session » (identifiant, rôle, statut) et **libellés de rôles** (Administrateur général…). Le français reste le défaut ; l'anglais s'affiche pour un utilisateur ayant choisi EN. Vérifié au navigateur (tableau de bord + menu profil entièrement en anglais). Frontend uniquement, aucune régression (260 tests backend inchangés).
+
+**Prochaine étape (alternance) :** Paie incrément 3 (moteur de calcul brut→net), puis i18n incrément 3 (écrans RH / Finance).

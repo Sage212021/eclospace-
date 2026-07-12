@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getDashboardStats, type DashboardStats, type EffectiveUser } from "../api/client";
+import { useI18n } from "../i18n";
 
 interface DashboardProps {
   user: EffectiveUser;
@@ -18,6 +19,7 @@ const KPI_CARDS: { key: keyof DashboardStats; label: string; icon: string }[] = 
 // L'audit RBAC détaillé (badges de permissions) a été déplacé dans l'écran
 // « Diagnostics système » (Administration), réservé à l'administrateur général.
 export function Dashboard({ user }: DashboardProps) {
+  const { t } = useI18n();
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
@@ -28,8 +30,8 @@ export function Dashboard({ user }: DashboardProps) {
 
   return (
     <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 900 }}>
-      <h1 style={{ fontFamily: "var(--font-title)", fontSize: 22, marginBottom: 4 }}>Bienvenue, {user.username}</h1>
-      <p style={{ color: "var(--muted)", marginTop: 0 }}>Vue d'ensemble de votre maison d'édition.</p>
+      <h1 style={{ fontFamily: "var(--font-title)", fontSize: 22, marginBottom: 4 }}>{t("dash.welcome", "Bienvenue")}, {user.username}</h1>
+      <p style={{ color: "var(--muted)", marginTop: 0 }}>{t("dash.subtitle", "Vue d'ensemble de votre maison d'édition.")}</p>
 
       {visibleKpis.length > 0 && (
         <div
@@ -41,21 +43,21 @@ export function Dashboard({ user }: DashboardProps) {
           }}
         >
           {visibleKpis.map((c) => (
-            <KpiCard key={c.key} icon={c.icon} label={c.label} value={stats![c.key] as number} />
+            <KpiCard key={c.key} icon={c.icon} label={t(`dash.kpi.${c.key}`, c.label)} value={stats![c.key] as number} />
           ))}
         </div>
       )}
 
-      <h2 style={{ fontFamily: "var(--font-title)", fontSize: 15, margin: "24px 0 0" }}>Ma session</h2>
+      <h2 style={{ fontFamily: "var(--font-title)", fontSize: 15, margin: "24px 0 0" }}>{t("dash.session", "Ma session")}</h2>
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: 20, marginTop: 10, maxWidth: 640 }}>
-        <Row label="Identifiant" value={user.username} mono />
-        <Row label="Rôle" value={user.roles.length > 0 ? user.roles.map(roleLabel).join(", ") : "Aucun rôle attribué"} />
+        <Row label={t("dash.username", "Identifiant")} value={user.username} mono />
+        <Row label={t("dash.role", "Rôle")} value={user.roles.length > 0 ? user.roles.map((r) => t(`role.${r}`, roleLabel(r))).join(", ") : t("dash.no_role", "Aucun rôle attribué")} />
         <Row
-          label="Statut"
+          label={t("dash.status", "Statut")}
           value={
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <span style={{ width: 9, height: 9, borderRadius: 999, background: "var(--eclosion)", display: "inline-block" }} />
-              Connecté
+              {t("dash.online", "Connecté")}
             </span>
           }
         />

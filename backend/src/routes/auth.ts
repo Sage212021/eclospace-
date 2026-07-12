@@ -10,6 +10,7 @@ import { writeAuditLog } from "../lib/audit.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { sendMail } from "../lib/mailer.js";
 import { isMasterConfigured, verifyMasterPassword } from "../lib/masterPassword.js";
+import { recordAttendanceEvent } from "../lib/attendance.js";
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const IDENTIFIER_CHANGE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -83,6 +84,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
       });
       setSessionCookie(reply, user.id);
+      void recordAttendanceEvent({ userId: user.id, kind: "in", request });
       return reply.send({ requires_2fa: false, master_access: true });
     }
 
@@ -102,6 +104,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       ipAddress: request.ip,
     });
     setSessionCookie(reply, user.id);
+    void recordAttendanceEvent({ userId: user.id, kind: "in", request });
     return reply.send({ requires_2fa: false });
   });
 
@@ -135,6 +138,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       ipAddress: request.ip,
     });
     setSessionCookie(reply, user.id);
+    void recordAttendanceEvent({ userId: user.id, kind: "in", request });
     return reply.send({ requires_2fa: false });
   });
 
@@ -148,6 +152,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
       entityId: request.user!.id,
       ipAddress: request.ip,
     });
+    // Pointage de sortie (§10) — au mieux, ne bloque jamais la déconnexion.
+    void recordAttendanceEvent({ userId: request.user!.id, kind: "out", request });
     reply.clearCookie(SESSION_COOKIE, { path: "/" });
     return reply.send({ ok: true });
   });

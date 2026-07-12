@@ -31,6 +31,7 @@ model Department {
   employees        Employee[]
   workflowStatuses WorkflowStatus[]
   budgets          Budget[]
+  workSchedules    WorkSchedule[]
 
   @@map("departments")
 }
@@ -80,6 +81,8 @@ model Employee {
   payrollVariables PayrollVariable[]
   accessReviewSubjectItems  AccessReviewItem[] @relation("AccessReviewSubject")
   accessReviewReviewerItems AccessReviewItem[] @relation("AccessReviewReviewer")
+  workSchedules    WorkSchedule[]
+  attendanceEvents AttendanceEvent[]
 
   @@map("employees")
 }
@@ -203,6 +206,94 @@ model PayrollVariable {
   @@map("payroll_variables")
 }
 
+// ===================================================================
+// Module « Présences & Temps de travail » (évolution) — incrément 1.
+// Conçu en additif : aucune table existante modifiée. Le module peut être
+// désactivé sans impacter le reste (le pointage est enregistré au mieux, sans
+// jamais bloquer la connexion). Extensible au pointage physique sans refonte
+// des calculs (voir AttendanceEvent.source).
+// ===================================================================
+
+// Portée d'un horaire officiel : maison entière, département, ou employé.
+enum WorkScheduleScope {
+  company
+  department
+  employee
+}
+
+// Horaires officiels PARAMÉTRABLES (RH → Paramètres → Horaires de travail,
+// §9). Heures stockées en minutes depuis minuit (08:30 = 510) pour des calculs
+// exacts. Versionné par effectiveFrom : toute modification crée une nouvelle
+// version et conserve les anciennes (historique des politiques, §9). La pause
+// déjeuner (lunchStartMin→lunchEndMin) est exclue de tous les calculs.
+model WorkSchedule {
+  id            String            @id @default(uuid())
+  scope         WorkScheduleScope @default(company)
+  departmentId  String?           @map("department_id")
+  department    Department?       @relation(fields: [departmentId], references: [id])
+  employeeId    String?           @map("employee_id")
+  employee      Employee?         @relation(fields: [employeeId], references: [id])
+  dayStartMin   Int               @map("day_start_min")
+  lunchStartMin Int               @map("lunch_start_min")
+  lunchEndMin   Int               @map("lunch_end_min")
+  dayEndMin     Int               @map("day_end_min")
+  // Jours ouvrables : jours ISO travaillés séparés par des virgules
+  // (1 = lundi … 7 = dimanche). Défaut : lundi→vendredi.
+  workingDays   String            @default("1,2,3,4,5") @map("working_days")
+  effectiveFrom DateTime          @default(now()) @map("effective_from")
+  active        Boolean           @default(true)
+  label         String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  @@index([scope, departmentId, employeeId])
+  @@map("work_schedules")
+}
+
+// Jours fériés/chômés (§9) — exclus des jours ouvrables dans les calculs.
+model PublicHoliday {
+  id        String   @id @default(uuid())
+  day       DateTime @unique @db.Date
+  label     String
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@map("public_holidays")
+}
+
+// Événement de pointage brut (§10). Aujourd'hui alimenté par la connexion /
+// déconnexion à l'ERP (source = "erp_session") ; conçu pour accueillir demain
+// QR Code, badge RFID, biométrie, NFC, mobile (§11) via le champ `source`, SANS
+// modifier les règles de calcul. Chaque coupure/reconnexion est un événement
+// distinct afin de reconstituer fidèlement la journée (§10).
+model AttendanceEvent {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id])
+  employeeId String?   @map("employee_id")
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+  // "in" (arrivée/connexion) ou "out" (départ/déconnexion).
+  kind       String
+  // "erp_session" aujourd'hui ; "qr" | "rfid" | "biometric" | "nfc" | "mobile" demain.
+  source     String    @default("erp_session")
+  occurredAt DateTime  @default(now()) @map("occurred_at")
+  ipAddress  String?   @map("ip_address")
+  userAgent  String?   @map("user_agent")
+  device     String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, occurredAt])
+  @@index([employeeId, occurredAt])
+  @@map("attendance_events")
+}
+
 enum AccessReviewStatus {
   en_cours
   terminee
@@ -289,6 +380,7 @@ model User {
   objectives         Objective[]         @relation("UserObjectives")
   weeklyReports      WeeklyReport[]       @relation("UserWeeklyReports")
   validatedReports   WeeklyReport[]       @relation("WeeklyReportValidator")
+  attendanceEvents   AttendanceEvent[]
 
   @@map("users")
 }

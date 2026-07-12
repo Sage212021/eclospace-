@@ -2036,3 +2036,88 @@ export function updateSetting(key: string, value: unknown) {
     body: JSON.stringify({ value }),
   });
 }
+
+// --- Module « Présences & Temps de travail » (évolution, incrément 1) --------
+export type WorkScheduleScope = "company" | "department" | "employee";
+
+export interface WorkSchedule {
+  id: string;
+  scope: WorkScheduleScope;
+  department_id: string | null;
+  employee_id: string | null;
+  day_start: string;
+  lunch_start: string;
+  lunch_end: string;
+  day_end: string;
+  working_days: string;
+  effective_from: string;
+  active: boolean;
+  label: string | null;
+}
+
+export interface ResolvedSchedule {
+  day_start: string;
+  lunch_start: string;
+  lunch_end: string;
+  day_end: string;
+  working_days: string;
+  source: "employee" | "department" | "company" | "default";
+}
+
+export interface PublicHoliday {
+  id: string;
+  day: string;
+  label: string;
+}
+
+export interface AttendanceEvent {
+  id: string;
+  kind: "in" | "out";
+  source: string;
+  occurred_at: string;
+  ip_address: string | null;
+  device: string | null;
+}
+
+export function getResolvedSchedule(employeeId?: string) {
+  const qs = employeeId ? `?employee_id=${employeeId}` : "";
+  return request<ResolvedSchedule>(`/api/v1/attendance/work-schedule${qs}`);
+}
+
+export function listWorkSchedules() {
+  return request<WorkSchedule[]>(`/api/v1/attendance/work-schedules`);
+}
+
+export function createWorkSchedule(input: {
+  scope: WorkScheduleScope;
+  department_id?: string;
+  employee_id?: string;
+  day_start: string;
+  lunch_start: string;
+  lunch_end: string;
+  day_end: string;
+  working_days: string;
+  label?: string;
+}) {
+  return request<WorkSchedule>(`/api/v1/attendance/work-schedules`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateWorkSchedule(
+  id: string,
+  input: Partial<{ day_start: string; lunch_start: string; lunch_end: string; day_end: string; working_days: string; active: boolean; label: string }>,
+) {
+  return request<WorkSchedule>(`/api/v1/attendance/work-schedules/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function listHolidays() {
+  return request<PublicHoliday[]>(`/api/v1/attendance/holidays`);
+}
+
+export function createHoliday(input: { day: string; label: string }) {
+  return request<PublicHoliday>(`/api/v1/attendance/holidays`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function listAttendanceEvents(params?: { employee_id?: string; from?: string; to?: string }) {
+  const qs = new URLSearchParams(params as Record<string, string>).toString();
+  return request<AttendanceEvent[]>(`/api/v1/attendance/events${qs ? `?${qs}` : ""}`);
+}

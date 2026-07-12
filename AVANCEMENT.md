@@ -600,3 +600,19 @@ Le circuit devis → signature → facture est **généralisé aux trois métier
 ### 11/07/2026 (suite) — Filigrane d'authenticité sur les documents numériques
 
 Retour opérateur : conserver la présentation numérique **élégante** d'origine (logo + coordonnées + pied légal), et y ajouter **uniquement l'ampoule** du papier à en-tête, en filigrane au centre, comme **signature d'authenticité**. Le relook « design en-tête par défaut » est annulé. Les **3 présentations** d'impression sont conservées (Numérique / En-tête intégré / Papier vierge). Filigrane extrait du papier à en-tête (`frontend/public/eclosion-filigrane.png`, blanc rendu transparent), affiché en très léger sur la seule version numérique. Vérifié au navigateur.
+
+### 12/07/2026 — Module « Présences & Temps de travail » : incrément 1 (horaires + pointage)
+
+Nouveau module d'évolution (validé par l'opérateur : ① socle logiciel d'abord, conçu extensible au pointage physique ; workflow de validation paramétrable avec par défaut le chef de grand pôle). Développé en **additif** : aucune table existante modifiée, aucune donnée touchée ; le module est indépendant et désactivable (le pointage est enregistré « au mieux » et ne bloque jamais l'authentification).
+
+**Fait (incrément 1) :**
+- **Schéma** (migration additive réversible `20260712010000_attendance_foundation`) : `work_schedules` (horaires paramétrables, portée maison/département/employé, heures en minutes, versionné par `effective_from`), `public_holidays` (jours fériés), `attendance_events` (pointage brut, champ `source` extensible à QR/RFID/biométrie/NFC/mobile — §11 — sans refonte des calculs).
+- **Pointage** : la connexion et la déconnexion à l'ERP créent un `attendance_event` (`in`/`out`, `source = erp_session`), branché sur les 3 chemins de login + le logout, tolérant aux pannes.
+- **Backend** (`presences` : nouveau module de permissions à 4 actions ; routes `/api/v1/attendance/...`) : horaire officiel résolu (employé > département > maison > défaut), CRUD horaires (administration), jours fériés, consultation du pointage **bornée à soi** sauf profil habilité (RH/DG/chef de département). Traçabilité au journal d'audit (ancienne → nouvelle valeur).
+- **Seed** : horaire par défaut de la maison (08:30-18:00, pause 12h-13h exclue, Lun-Ven) ; `presences:consultation` pour chaque employé (vue de soi), administration/validation pour RH, DG, chefs de département. Idempotent.
+- **Frontend** : carte « Horaires de travail » dans RH → affiche l'horaire appliqué, permet à l'administrateur RH de le modifier et d'ajouter des jours fériés (police à chasse fixe, palette conforme). Vérifié au navigateur (capture).
+- **Tests** : +11 (`attendance.test.ts` : pointage entrée/sortie, résolution d'horaire maison/surcharge employé, refus d'horaire incohérent, jour férié + doublon 409, périmètre self du pointage, utilitaires HH:MM). **199 tests passent, zéro régression.**
+
+**Limite assumée :** le pointage repose sur la connexion/déconnexion à l'ERP (§10) — indicatif, à valider par la hiérarchie avant la paie ; conçu pour brancher un pointage physique plus tard sans changer les calculs (§18).
+
+**Prochaine étape :** incrément 2 — calculs de présence (temps travaillé pause exclue, retards, départs anticipés, absences, heures supplémentaires).

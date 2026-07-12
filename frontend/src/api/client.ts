@@ -2394,3 +2394,32 @@ export function createPayrollRateSet(body: PayrollRateSetInput) {
 export function setMyLanguage(language: "fr" | "en") {
   return request<{ language: string }>(`/api/v1/me/language`, { method: "PATCH", body: JSON.stringify({ language }) });
 }
+
+// Fiche paie de l'employé (D-007, incrément 2).
+export interface PayrollProfile {
+  matricule: string | null;
+  cnps_number: string | null;
+  niu: string | null;
+  category: string | null;
+  payment_mode: string | null;
+  account_number: string | null;
+  gross_contractual: number;
+  base_pct: number;
+  base_salary: number;
+  complements: number;
+  fiscal_base: number | null;
+  fiscal_parts: number;
+  apply_fiscal_parts: boolean;
+  seniority_years: number;
+  seniority_rate: number | null;
+  seniority_threshold: number | null;
+  apply_seniority: boolean;
+}
+export type PayrollProfileInput = Omit<PayrollProfile, "base_salary" | "complements">;
+
+export function getPayrollProfile(employeeId: string) {
+  return request<{ employee: { id: string; name: string }; profile: PayrollProfile | null }>(`/api/v1/payroll/employees/${employeeId}/profile`);
+}
+export function savePayrollProfile(employeeId: string, input: PayrollProfileInput) {
+  return request<PayrollProfile>(`/api/v1/payroll/employees/${employeeId}/profile`, { method: "PUT", body: JSON.stringify(input) });
+}

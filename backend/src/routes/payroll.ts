@@ -107,4 +107,118 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       return reply.code(201).send(rateSetView(created));
     },
   );
+
+  // ----- Fiche paie de l'employé (incrément 2) -------------------------------
+
+  // Consultation d'une fiche paie (donnée sensible → accès journalisé).
+  fastify.get(
+    "/api/v1/payroll/employees/:employeeId/profile",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const { employeeId } = request.params as { employeeId: string };
+      const employee = await prisma.employee.findFirst({ where: { id: employeeId, deletedAt: null }, select: { id: true, firstName: true, lastName: true } });
+      if (!employee) return reply.code(404).send({ code: "not_found", message: "Employé introuvable." });
+      const profile = await prisma.payrollEmployeeProfile.findUnique({ where: { employeeId } });
+      await writeAuditLog({ userId: request.user!.id, action: "view_sensitive", entityType: "payroll_employee_profile", entityId: employeeId, ipAddress: request.ip });
+      return reply.send({ employee: { id: employee.id, name: `${employee.firstName} ${employee.lastName}` }, profile: profile ? profileView(profile) : null });
+    },
+  );
+
+  // Création / mise à jour de la fiche paie — journalisée.
+  fastify.put(
+    "/api/v1/payroll/employees/:employeeId/profile",
+    { preHandler: requirePermission("paie", "saisie") },
+    async (request, reply) => {
+      const { employeeId } = request.params as { employeeId: string };
+      const parsed = profileSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      const employee = await prisma.employee.findFirst({ where: { id: employeeId, deletedAt: null } });
+      if (!employee) return reply.code(404).send({ code: "not_found", message: "Employé introuvable." });
+      const b = parsed.data;
+      const data = {
+        matricule: b.matricule ?? null,
+        cnpsNumber: b.cnps_number ?? null,
+        niu: b.niu ?? null,
+        category: b.category ?? null,
+        paymentMode: b.payment_mode ?? null,
+        accountNumber: b.account_number ?? null,
+        grossContractual: b.gross_contractual,
+        basePct: b.base_pct,
+        fiscalBase: b.fiscal_base ?? null,
+        fiscalParts: b.fiscal_parts,
+        applyFiscalParts: b.apply_fiscal_parts,
+        seniorityYears: b.seniority_years,
+        seniorityRate: b.seniority_rate ?? null,
+        seniorityThreshold: b.seniority_threshold ?? null,
+        applySeniority: b.apply_seniority,
+      };
+      const saved = await prisma.payrollEmployeeProfile.upsert({
+        where: { employeeId },
+        update: { ...data, updatedBy: request.user!.id },
+        create: { employeeId, ...data, createdBy: request.user!.id },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payroll_employee_profile", entityId: employeeId, newValues: { gross_contractual: b.gross_contractual, base_pct: b.base_pct }, ipAddress: request.ip });
+      return reply.send(profileView(saved));
+    },
+  );
+}
+
+const profileSchema = z.object({
+  matricule: z.string().max(40).optional(),
+  cnps_number: z.string().max(40).optional(),
+  niu: z.string().max(40).optional(),
+  category: z.string().max(60).optional(),
+  payment_mode: z.string().max(60).optional(),
+  account_number: z.string().max(60).optional(),
+  gross_contractual: z.number().min(0),
+  base_pct: z.number().min(0).max(1),
+  fiscal_base: z.number().min(0).optional(),
+  fiscal_parts: z.number().min(0.5).max(20),
+  apply_fiscal_parts: z.boolean(),
+  seniority_years: z.number().int().min(0),
+  seniority_rate: z.number().min(0).max(1).optional(),
+  seniority_threshold: z.number().int().min(0).optional(),
+  apply_seniority: z.boolean(),
+});
+
+function profileView(p: {
+  matricule: string | null;
+  cnpsNumber: string | null;
+  niu: string | null;
+  category: string | null;
+  paymentMode: string | null;
+  accountNumber: string | null;
+  grossContractual: unknown;
+  basePct: unknown;
+  fiscalBase: unknown;
+  fiscalParts: unknown;
+  applyFiscalParts: boolean;
+  seniorityYears: number;
+  seniorityRate: unknown;
+  seniorityThreshold: number | null;
+  applySeniority: boolean;
+}) {
+  const gross = num(p.grossContractual);
+  const basePct = num(p.basePct);
+  const base = Math.round(gross * basePct);
+  return {
+    matricule: p.matricule,
+    cnps_number: p.cnpsNumber,
+    niu: p.niu,
+    category: p.category,
+    payment_mode: p.paymentMode,
+    account_number: p.accountNumber,
+    gross_contractual: gross,
+    base_pct: basePct,
+    // Dérivés (indicatifs) : salaire de base et compléments.
+    base_salary: base,
+    complements: Math.round(gross - base),
+    fiscal_base: p.fiscalBase != null ? num(p.fiscalBase) : null,
+    fiscal_parts: num(p.fiscalParts),
+    apply_fiscal_parts: p.applyFiscalParts,
+    seniority_years: p.seniorityYears,
+    seniority_rate: p.seniorityRate != null ? num(p.seniorityRate) : null,
+    seniority_threshold: p.seniorityThreshold,
+    apply_seniority: p.applySeniority,
+  };
 }

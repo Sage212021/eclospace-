@@ -85,6 +85,7 @@ model Employee {
   attendanceEvents AttendanceEvent[]
   attendanceAnomalies AttendanceAnomaly[]
   attendancePayrollLines AttendancePayrollLine[]
+  payrollProfile   PayrollEmployeeProfile?
 
   @@map("employees")
 }
@@ -529,6 +530,43 @@ model PayrollRateSet {
 
   @@index([active, effectiveFrom])
   @@map("payroll_rate_sets")
+}
+
+// Fiche paie d'un employé (D-007, incrément 2) — données propres au calcul du
+// bulletin (feuille « Employés » du classeur). 1-1 avec l'employé, additif,
+// accès restreint au module `paie`. Le salaire de base et les compléments se
+// déduisent du brut contractuel et du pourcentage de base.
+model PayrollEmployeeProfile {
+  id         String   @id @default(uuid())
+  employeeId String   @unique @map("employee_id")
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  matricule       String? // matricule paie (peut différer de l'id technique)
+  cnpsNumber      String?  @map("cnps_number")
+  niu             String? // N° contribuable (identifiant fiscal)
+  category        String? // catégorie / échelon
+  paymentMode     String?  @map("payment_mode") // banque / mode de paiement
+  accountNumber   String?  @map("account_number")
+
+  // Rémunération.
+  grossContractual Decimal @default(0) @map("gross_contractual") @db.Decimal(12, 2)
+  basePct          Decimal @default(1) @map("base_pct") @db.Decimal(6, 4) // part du brut constituant le salaire de base
+  fiscalBase       Decimal? @map("fiscal_base") @db.Decimal(12, 2) // assiette fiscale si différente
+
+  // Parts fiscales & ancienneté.
+  fiscalParts      Decimal @default(1) @map("fiscal_parts") @db.Decimal(4, 1)
+  applyFiscalParts Boolean @default(true) @map("apply_fiscal_parts")
+  seniorityYears   Int     @default(0) @map("seniority_years")
+  seniorityRate    Decimal? @map("seniority_rate") @db.Decimal(6, 4) // taux individuel (sinon défaut du barème)
+  seniorityThreshold Int?  @map("seniority_threshold") // seuil d'années avant prime
+  applySeniority   Boolean @default(false) @map("apply_seniority")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("payroll_employee_profiles")
 }
 
 enum AccessReviewStatus {

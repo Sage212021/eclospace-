@@ -9,6 +9,7 @@ import {
   minutesToHhmm,
   resolveSchedule,
 } from "../lib/attendance.js";
+import { computeDay, summarize, type DayEvent, type DayResult } from "../lib/attendanceCompute.js";
 
 // Module « Présences & Temps de travail » — incrément 1 : paramétrage des
 // horaires officiels, jours fériés, et consultation du pointage brut.
@@ -317,8 +318,201 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Calcul de la journée d'un employé (présence, retard, départ anticipé,
+  // heures sup) — §12-17. Périmètre self par défaut.
+  fastify.get(
+    "/api/v1/attendance/daily",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (request, reply) => {
+      const query = request.query as { employee_id?: string; date?: string };
+      const date = query.date && /^\d{4}-\d{2}-\d{2}$/.test(query.date) ? query.date : todayKey();
+      const target = await resolveTargetEmployee(request, query.employee_id);
+      if ("forbidden" in target) return reply.code(403).send(target.forbidden);
+      // Sans fiche employé rattachée, aucun calcul de présence n'a de sens.
+      if (!target.employeeId) return reply.send(null);
+      const summary = await computeRange(target.employeeId, target.departmentId, date, date);
+      return reply.send(summary.days[0] ?? null);
+    },
+  );
+
+  // Synthèse sur une période (jour/semaine/mois…) — §20, base du rapport RH.
+  fastify.get(
+    "/api/v1/attendance/summary",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (request, reply) => {
+      const query = request.query as { employee_id?: string; from?: string; to?: string };
+      const { from, to } = monthDefault(query.from, query.to);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+        return reply.code(400).send({ code: "validation_error", message: "Période invalide (from/to au format AAAA-MM-JJ, from ≤ to)." });
+      }
+      const target = await resolveTargetEmployee(request, query.employee_id);
+      if ("forbidden" in target) return reply.code(403).send(target.forbidden);
+      // Sans fiche employé rattachée (ex. super-administrateur), on n'invente
+      // pas d'absences : synthèse neutre avec le drapeau no_employee.
+      if (!target.employeeId) {
+        return reply.send({
+          from,
+          to,
+          days: [],
+          no_employee: true,
+          totals: {
+            worked_minutes: 0,
+            expected_minutes: 0,
+            late_minutes: 0,
+            early_leave_minutes: 0,
+            overtime_minutes: 0,
+            interruption_minutes: 0,
+            days_worked: 0,
+            days_absent_unjustified: 0,
+            days_absent_justified: 0,
+          },
+        });
+      }
+      const summary = await computeRange(target.employeeId, target.departmentId, from, to);
+      return reply.send(summary);
+    },
+  );
+
   // Petit point d'entrée de santé du module (utile aux futurs tableaux de bord).
   fastify.get("/api/v1/attendance/ping", { preHandler: requireAuth }, async (_request, reply) => {
     return reply.send({ module: "presences", ok: true });
   });
+}
+
+// ----- Helpers de calcul (incrément 2) --------------------------------------
+
+function todayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Par défaut : le mois calendaire courant.
+function monthDefault(from?: string, to?: string): { from: string; to: string } {
+  if (from && to) return { from, to };
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const first = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+  const last = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+  return { from: from ?? first, to: to ?? last };
+}
+
+// Décalage horaire métier (Cameroun = UTC+1, WAT, sans heure d'été).
+// Paramétrable via le réglage presence_timezone_offset_minutes.
+async function businessOffsetMinutes(): Promise<number> {
+  const s = await prisma.setting.findUnique({ where: { key: "presence_timezone_offset_minutes" } });
+  const raw = s?.value;
+  const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+  return Number.isFinite(n) ? n : 60;
+}
+
+function toLocal(d: Date, offsetMin: number): { dayKey: string; minutes: number } {
+  const shifted = new Date(d.getTime() + offsetMin * 60000);
+  return { dayKey: shifted.toISOString().slice(0, 10), minutes: shifted.getUTCHours() * 60 + shifted.getUTCMinutes() };
+}
+
+function isoWeekday(dayKey: string): number {
+  const day = new Date(`${dayKey}T00:00:00.000Z`).getUTCDay(); // 0=dim … 6=sam
+  return ((day + 6) % 7) + 1; // 1=lun … 7=dim
+}
+
+function eachDay(from: string, to: string): string[] {
+  const out: string[] = [];
+  const cur = new Date(`${from}T00:00:00.000Z`);
+  const end = new Date(`${to}T00:00:00.000Z`);
+  while (cur <= end) {
+    out.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return out;
+}
+
+// Résout l'employé cible et vérifie le périmètre (self sauf profil habilité).
+async function resolveTargetEmployee(
+  request: FastifyRequest,
+  requestedId?: string,
+): Promise<{ employeeId: string | null; departmentId: string | null } | { forbidden: { code: string; message: string } }> {
+  const own = await prisma.user.findUnique({ where: { id: request.user!.id }, select: { employeeId: true } });
+  const ownEmp = own?.employeeId ?? null;
+  if (requestedId && requestedId !== ownEmp && !canSeeOthers(request.user!)) {
+    return { forbidden: { code: "forbidden", message: "Consultation limitée à vos propres présences." } };
+  }
+  const employeeId = requestedId ?? ownEmp;
+  let departmentId: string | null = null;
+  if (employeeId) {
+    const emp = await prisma.employee.findUnique({ where: { id: employeeId }, select: { departmentId: true } });
+    departmentId = emp?.departmentId ?? null;
+  }
+  return { employeeId, departmentId };
+}
+
+async function computeRange(employeeId: string | null, departmentId: string | null, from: string, to: string) {
+  const offset = await businessOffsetMinutes();
+  const schedule = await resolveSchedule({ employeeId, departmentId, onDate: new Date(`${to}T00:00:00.000Z`) });
+
+  // Fenêtre UTC élargie d'un jour de chaque côté pour capter les événements
+  // dont le jour local déborde la frontière UTC.
+  const fromUtc = new Date(`${from}T00:00:00.000Z`);
+  fromUtc.setUTCDate(fromUtc.getUTCDate() - 1);
+  const toUtc = new Date(`${to}T00:00:00.000Z`);
+  toUtc.setUTCDate(toUtc.getUTCDate() + 2);
+
+  const [events, holidays] = await Promise.all([
+    employeeId
+      ? prisma.attendanceEvent.findMany({
+          where: { employeeId, occurredAt: { gte: fromUtc, lte: toUtc } },
+          select: { kind: true, occurredAt: true },
+        })
+      : Promise.resolve([]),
+    prisma.publicHoliday.findMany({
+      where: { day: { gte: new Date(`${from}T00:00:00.000Z`), lte: new Date(`${to}T00:00:00.000Z`) } },
+      select: { day: true },
+    }),
+  ]);
+
+  // Absences validées couvrant la période (nature de justification par jour).
+  const absences = employeeId
+    ? await prisma.absence.findMany({
+        where: {
+          employeeId,
+          status: "validee",
+          fromDate: { lte: new Date(`${to}T23:59:59.000Z`) },
+          toDate: { gte: new Date(`${from}T00:00:00.000Z`) },
+        },
+        select: { type: true, fromDate: true, toDate: true },
+      })
+    : [];
+
+  const holidaySet = new Set(holidays.map((h) => h.day.toISOString().slice(0, 10)));
+  const eventsByDay = new Map<string, DayEvent[]>();
+  for (const e of events) {
+    const { dayKey, minutes } = toLocal(e.occurredAt, offset);
+    if (!eventsByDay.has(dayKey)) eventsByDay.set(dayKey, []);
+    eventsByDay.get(dayKey)!.push({ kind: e.kind, localMinutes: minutes });
+  }
+
+  function coveringFor(dayKey: string): { type: string } | null {
+    const dayStart = new Date(`${dayKey}T00:00:00.000Z`);
+    const dayEnd = new Date(`${dayKey}T23:59:59.000Z`);
+    const a = absences.find((x) => x.fromDate <= dayEnd && x.toDate >= dayStart);
+    return a ? { type: a.type } : null;
+  }
+
+  const days: DayResult[] = eachDay(from, to).map((dayKey) =>
+    computeDay({
+      date: dayKey,
+      isoWeekday: isoWeekday(dayKey),
+      events: eventsByDay.get(dayKey) ?? [],
+      schedule: {
+        dayStartMin: schedule.dayStartMin,
+        lunchStartMin: schedule.lunchStartMin,
+        lunchEndMin: schedule.lunchEndMin,
+        dayEndMin: schedule.dayEndMin,
+        workingDays: schedule.workingDays,
+      },
+      isHoliday: holidaySet.has(dayKey),
+      covering: coveringFor(dayKey),
+    }),
+  );
+
+  return summarize(from, to, days);
 }

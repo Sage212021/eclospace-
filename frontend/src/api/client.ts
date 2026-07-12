@@ -2121,3 +2121,52 @@ export function listAttendanceEvents(params?: { employee_id?: string; from?: str
   const qs = new URLSearchParams(params as Record<string, string>).toString();
   return request<AttendanceEvent[]>(`/api/v1/attendance/events${qs ? `?${qs}` : ""}`);
 }
+
+// Calculs de présence (incrément 2) — journée et synthèse de période.
+export interface DayResult {
+  date: string;
+  is_working_day: boolean;
+  is_holiday: boolean;
+  has_data: boolean;
+  first_in_min: number | null;
+  last_out_min: number | null;
+  presence_minutes: number;
+  worked_minutes: number;
+  expected_minutes: number;
+  late_minutes: number;
+  early_leave_minutes: number;
+  overtime_minutes: number;
+  interruption_minutes: number;
+  absent_full_day: boolean;
+  justified: boolean;
+  nature: string | null;
+}
+
+export interface AttendanceSummary {
+  from: string;
+  to: string;
+  days: DayResult[];
+  // Vrai si le compte connecté n'est rattaché à aucune fiche employé.
+  no_employee?: boolean;
+  totals: {
+    worked_minutes: number;
+    expected_minutes: number;
+    late_minutes: number;
+    early_leave_minutes: number;
+    overtime_minutes: number;
+    interruption_minutes: number;
+    days_worked: number;
+    days_absent_unjustified: number;
+    days_absent_justified: number;
+  };
+}
+
+export function getAttendanceDaily(params?: { employee_id?: string; date?: string }) {
+  const qs = new URLSearchParams(params as Record<string, string>).toString();
+  return request<DayResult | null>(`/api/v1/attendance/daily${qs ? `?${qs}` : ""}`);
+}
+
+export function getAttendanceSummary(params?: { employee_id?: string; from?: string; to?: string }) {
+  const qs = new URLSearchParams(params as Record<string, string>).toString();
+  return request<AttendanceSummary>(`/api/v1/attendance/summary${qs ? `?${qs}` : ""}`);
+}

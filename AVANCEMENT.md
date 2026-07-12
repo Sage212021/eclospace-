@@ -616,3 +616,13 @@ Nouveau module d'évolution (validé par l'opérateur : ① socle logiciel d'abo
 **Limite assumée :** le pointage repose sur la connexion/déconnexion à l'ERP (§10) — indicatif, à valider par la hiérarchie avant la paie ; conçu pour brancher un pointage physique plus tard sans changer les calculs (§18).
 
 **Prochaine étape :** incrément 2 — calculs de présence (temps travaillé pause exclue, retards, départs anticipés, absences, heures supplémentaires).
+
+### 12/07/2026 (suite) — Présences : incrément 2 (moteur de calculs)
+
+**Fait :**
+- **Moteur de calcul pur** (`backend/src/lib/attendanceCompute.ts`, sans accès base, testable) : reconstitue la journée à partir des pointages bruts et calcule temps de présence, **temps travaillé (pause déjeuner exclue, §16)**, retard (§13), départ anticipé (§14), heures supplémentaires (§17), interruptions de milieu de journée, absence pleine journée. Justification portée en métadonnée (congé/mission validé couvrant le jour) sans fausser les chiffres bruts.
+- **Endpoints** : `GET /api/v1/attendance/daily` (journée d'un employé) et `GET /api/v1/attendance/summary` (synthèse d'une période, mois courant par défaut) — périmètre self sauf profil habilité, décalage horaire métier paramétrable (`presence_timezone_offset_minutes`, défaut UTC+1). Comptes sans fiche employé : synthèse neutre (`no_employee`), pas de fausses absences.
+- **Frontend** : carte « Mon temps de travail (ce mois) » dans RH (temps travaillé, jours travaillés, retards, départs anticipés, heures sup, absences injustifiées ; couleurs retard/or). Vérifié au navigateur.
+- **Tests** : +14 (`attendance-compute.test.ts`), dont l'exemple exact du §16 (sortie 11:45 / retour 13:15 = 30 min, pause non comptée), retard/départ/heures sup, jour férié, week-end, absence justifiée, reconstitution d'intervalles tolérante (oubli de déconnexion, out orphelin). **213 tests passent, zéro régression.**
+
+**Prochaine étape :** incrément 3 — règles de retenues paramétrables (montants, méthodes d'arrondi, plafonds, date d'effet).

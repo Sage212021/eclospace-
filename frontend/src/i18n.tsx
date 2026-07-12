@@ -1,0 +1,104 @@
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { setMyLanguage } from "./api/client";
+
+// Internationalisation FR/EN — approche légère (pas de dépendance) et
+// incrémentale : le français reste le texte par défaut fourni à `t(key, fr)` ;
+// seul l'anglais vit dans le dictionnaire ci-dessous. Une clé sans traduction
+// anglaise retombe proprement sur le français — on peut donc traduire écran par
+// écran sans rien casser.
+
+export type Lang = "fr" | "en";
+
+const EN: Record<string, string> = {
+  // Connexion
+  "login.username": "Username",
+  "login.password": "Password",
+  "login.submit": "Sign in",
+  "login.2fa_hint": "Enter the 6-digit code from your authenticator app.",
+  "login.code": "Verification code",
+  "login.validate": "Verify code",
+  // Barre latérale
+  "sidebar.connected": "Signed in",
+  // Barre supérieure
+  "topbar.search": "Search a book, an author, an ISBN…",
+  "topbar.online": "online",
+  "topbar.account_settings": "Account settings",
+  "topbar.logout": "Sign out",
+  // Poles (grands menus)
+  "pole.Éditorial": "Editorial",
+  "pole.Production": "Production",
+  "pole.Commercial": "Sales",
+  "pole.Juridique & Finance": "Legal & Finance",
+  "pole.Administration": "Administration",
+  "pole.Pilotage": "Management",
+  // Entrées de menu
+  "nav.dashboard": "Dashboard",
+  "nav.mes-rapports": "My weekly reports",
+  "nav.ed-manuscrits": "Manuscripts",
+  "nav.ed-comite": "Reading committee",
+  "nav.ed-mes-lectures": "My reviews",
+  "nav.ed-direction": "Editorial direction",
+  "nav.ed-correction": "Editorial correction",
+  "nav.ed-catalogue-ref": "Domains & collections",
+  "nav.ed-archives": "Archives",
+  "nav.pr-maquette": "Layout",
+  "nav.pr-infographie": "Graphics & covers",
+  "nav.pr-isbn": "ISBN & legal deposit",
+  "nav.pr-bat": "Proof & quality control",
+  "nav.pr-impression": "Printing",
+  "nav.co-stock": "Stock & warehouse",
+  "nav.co-ventes": "Sales & orders",
+  "nav.jf-contrats": "Contracts & royalties",
+  "nav.jf-finance": "Finance & accounting",
+  "nav.ad-rh": "Human resources",
+  "nav.ad-users": "Users & roles",
+  "nav.ad-rights": "Rights & poles",
+  "nav.ad-parametres": "Settings",
+  "nav.ad-diagnostics": "System diagnostics",
+  "nav.pi-direction": "General management",
+  "nav.pi-rapports": "Reports & statistics",
+  "nav.pi-journal": "Activity log",
+};
+
+interface I18nCtx {
+  lang: Lang;
+  /** Changement par l'utilisateur : mémorisé localement ET sur le profil. */
+  setLang: (l: Lang) => void;
+  /** Application depuis le serveur (à la connexion) : sans réécriture serveur. */
+  applyLang: (l: Lang) => void;
+  /** Traduit une clé ; `fr` est le texte français par défaut (fallback). */
+  t: (key: string, fr: string) => string;
+}
+
+const Ctx = createContext<I18nCtx>({ lang: "fr", setLang: () => {}, applyLang: () => {}, t: (_k, fr) => fr });
+
+function readInitial(): Lang {
+  const v = typeof localStorage !== "undefined" ? localStorage.getItem("ecl_lang") : null;
+  return v === "en" ? "en" : "fr";
+}
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [lang, setLangState] = useState<Lang>(readInitial);
+
+  useEffect(() => {
+    if (typeof document !== "undefined") document.documentElement.lang = lang;
+  }, [lang]);
+
+  function applyLang(l: Lang) {
+    setLangState(l);
+    if (typeof localStorage !== "undefined") localStorage.setItem("ecl_lang", l);
+  }
+
+  function setLang(l: Lang) {
+    applyLang(l);
+    void setMyLanguage(l).catch(() => {}); // au mieux : ne bloque jamais l'UI
+  }
+
+  const t = (key: string, fr: string) => (lang === "fr" ? fr : EN[key] ?? fr);
+
+  return <Ctx.Provider value={{ lang, setLang, applyLang, t }}>{children}</Ctx.Provider>;
+}
+
+export function useI18n(): I18nCtx {
+  return useContext(Ctx);
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { confirmIdentifierChange, fetchMe, logout, stopImpersonation, type EffectiveUser } from "./api/client";
+import { useI18n } from "./i18n";
 import { Login } from "./pages/Login";
 import { QuoteSignPage } from "./pages/QuoteSignPage";
 import { Dashboard } from "./pages/Dashboard";
@@ -162,8 +163,16 @@ export function App() {
   const [navOpen, setNavOpen] = useState(false);
 
   const { presence, join, disconnect } = usePresence(Boolean(user));
+  const { applyLang } = useI18n();
 
-  const refreshUser = () => fetchMe().then(setUser).catch(() => setUser(null));
+  const refreshUser = () =>
+    fetchMe()
+      .then((u) => {
+        setUser(u);
+        // Applique la langue enregistrée sur le profil (sans réécriture serveur).
+        if (u.language === "fr" || u.language === "en") applyLang(u.language);
+      })
+      .catch(() => setUser(null));
 
   // Déconnexion robuste (Paramètres/en-tête) : on ferme d'abord la socket de
   // présence, on demande au serveur de clore la session (best effort), puis on

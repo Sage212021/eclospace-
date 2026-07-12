@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { login, verifyTwoFactor } from "../api/client";
 import { PasswordInput } from "../components/PasswordInput";
+import { useI18n } from "../i18n";
+import { LanguageSwitch } from "../components/LanguageSwitch";
 
 interface LoginProps {
   onAuthenticated: () => void;
@@ -9,6 +11,7 @@ interface LoginProps {
 type Step = { kind: "credentials" } | { kind: "twoFactor"; challengeId: string };
 
 export function Login({ onAuthenticated }: LoginProps) {
+  const { t } = useI18n();
   const [step, setStep] = useState<Step>({ kind: "credentials" });
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -70,11 +73,14 @@ export function Login({ onAuthenticated }: LoginProps) {
           boxShadow: "0 24px 70px rgba(9, 16, 33, 0.45)",
         }}
       >
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <LanguageSwitch />
+        </div>
         <img src="/eclospace-logo.jpg" alt="Eclospace" style={{ width: "88%", display: "block", margin: "0 auto 28px" }} />
 
         {step.kind === "credentials" ? (
           <form onSubmit={handleCredentialsSubmit}>
-            <Field label="Identifiant">
+            <Field label={t("login.username", "Identifiant")}>
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -83,7 +89,7 @@ export function Login({ onAuthenticated }: LoginProps) {
                 name="username"
               />
             </Field>
-            <Field label="Mot de passe">
+            <Field label={t("login.password", "Mot de passe")}>
               <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -92,14 +98,14 @@ export function Login({ onAuthenticated }: LoginProps) {
               />
             </Field>
             {error && <ErrorBanner message={error} />}
-            <PrimaryButton disabled={submitting}>Se connecter</PrimaryButton>
+            <PrimaryButton disabled={submitting}>{t("login.submit", "Se connecter")}</PrimaryButton>
           </form>
         ) : (
           <form onSubmit={handleTwoFactorSubmit}>
             <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 0 }}>
-              Saisissez le code à 6 chiffres de votre application d'authentification.
+              {t("login.2fa_hint", "Saisissez le code à 6 chiffres de votre application d'authentification.")}
             </p>
-            <Field label="Code de vérification">
+            <Field label={t("login.code", "Code de vérification")}>
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
@@ -112,7 +118,7 @@ export function Login({ onAuthenticated }: LoginProps) {
               />
             </Field>
             {error && <ErrorBanner message={error} />}
-            <PrimaryButton disabled={submitting}>Valider le code</PrimaryButton>
+            <PrimaryButton disabled={submitting}>{t("login.validate", "Valider le code")}</PrimaryButton>
           </form>
         )}
       </div>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useI18n } from "../i18n";
 import {
   IconAdmin,
   IconBook,
@@ -76,6 +77,7 @@ export function Sidebar({
   presenceByPole,
   presenceByModule,
 }: SidebarProps) {
+  const { t } = useI18n();
   const visiblePoles = poles
     .map((pole) => ({
       ...pole,
@@ -147,7 +149,7 @@ export function Sidebar({
                 <span style={{ color: accent ? "var(--eclosion-light)" : "#8891a8", display: "inline-flex" }}>
                   {poleIcon(pole.label)}
                 </span>
-                {pole.label}
+                {t(`pole.${pole.label}`, pole.label)}
                 <PresenceDot count={presenceByPole[pole.label] ?? 0} />
               </span>
               <span
@@ -187,7 +189,7 @@ export function Sidebar({
       })}
 
       <div style={{ position: "absolute", bottom: 20, padding: "0 20px", fontSize: 11, color: "#a9b0c2" }}>
-        Connecté : {username}
+        {t("sidebar.connected", "Connecté")} : {username}
       </div>
     </nav>
   );
@@ -206,6 +208,7 @@ function LeafButton({
   indented?: boolean;
   presentCount: number;
 }) {
+  const { t } = useI18n();
   const icon = leafIcon(item.key);
   return (
     <li>
@@ -236,7 +239,7 @@ function LeafButton({
           {icon && (
             <span style={{ color: active ? "var(--eclosion-light)" : "#8891a8", display: "inline-flex" }}>{icon}</span>
           )}
-          {item.label}
+          {t(`nav.${item.key}`, item.label)}
         </span>
         <PresenceDot count={presentCount} />
       </button>

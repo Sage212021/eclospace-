@@ -13,6 +13,7 @@ export interface EffectiveUser {
   username: string;
   email: string;
   mfa_enabled: boolean;
+  language?: "fr" | "en";
   roles: string[];
   permissions: string[];
   impersonating?: boolean;
@@ -2387,4 +2388,9 @@ export function getPayrollRateSet(date?: string) {
 }
 export function createPayrollRateSet(body: PayrollRateSetInput) {
   return request<PayrollRateSet>(`/api/v1/payroll/rate-sets`, { method: "POST", body: JSON.stringify(body) });
+}
+
+// i18n : langue d'interface mémorisée sur le profil (fr|en).
+export function setMyLanguage(language: "fr" | "en") {
+  return request<{ language: string }>(`/api/v1/me/language`, { method: "PATCH", body: JSON.stringify({ language }) });
 }

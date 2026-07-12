@@ -2170,3 +2170,36 @@ export function getAttendanceSummary(params?: { employee_id?: string; from?: str
   const qs = new URLSearchParams(params as Record<string, string>).toString();
   return request<AttendanceSummary>(`/api/v1/attendance/summary${qs ? `?${qs}` : ""}`);
 }
+
+// Règles de retenues (incrément 3) — paramétrables et versionnées.
+export type DeductionMethod = "prorata" | "round_half_hour" | "round_hour" | "custom";
+export interface DeductionRule {
+  id: string;
+  per_minute: number | null;
+  per_half_hour: number;
+  per_hour: number;
+  daily_cap: number | null;
+  monthly_cap: number | null;
+  method: DeductionMethod;
+  effective_from: string;
+  active: boolean;
+  label: string | null;
+}
+
+export function listDeductionRules() {
+  return request<DeductionRule[]>(`/api/v1/attendance/deduction-rules`);
+}
+export function createDeductionRule(input: {
+  per_minute?: number;
+  per_half_hour: number;
+  per_hour: number;
+  daily_cap?: number;
+  monthly_cap?: number;
+  method: DeductionMethod;
+  label?: string;
+}) {
+  return request<DeductionRule>(`/api/v1/attendance/deduction-rules`, { method: "POST", body: JSON.stringify(input) });
+}
+export function updateDeductionRule(id: string, input: { active?: boolean; label?: string }) {
+  return request<DeductionRule>(`/api/v1/attendance/deduction-rules/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}

@@ -378,6 +378,16 @@ async function main() {
     });
   }
 
+  // Règle de retenue par défaut (§21 : 500 FCFA / demi-heure, 1000 FCFA / heure ;
+  // méthode « prorata exact » par défaut, la plus transparente — modifiable).
+  // Idempotent : créée seulement si aucune règle n'existe.
+  const existingDeductionRule = await prisma.deductionRule.findFirst();
+  if (!existingDeductionRule) {
+    await prisma.deductionRule.create({
+      data: { perHalfHour: 500, perHour: 1000, method: "prorata", label: "Règle par défaut" },
+    });
+  }
+
   // Règles par défaut du centre de pilotage intelligent (Ch. 5 §5.9, Ch. 20
   // §20.6) — seuils repris des exemples du cahier des charges, à ajuster par
   // la Direction générale (§5.9 : "définies par l'administrateur avec la direction").

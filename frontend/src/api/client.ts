@@ -1371,7 +1371,7 @@ export function listCustomerDunnings(customerId: string) {
   return request<Dunning[]>(`/api/v1/customers/${customerId}/dunning`);
 }
 
-export type ExpenseCategory = "loyer" | "salaire" | "prestation" | "transport" | "communication" | "autre";
+export type ExpenseCategory = "loyer" | "salaire" | "prestation" | "transport" | "communication" | "abonnement" | "autre";
 
 export interface Expense {
   id: string;

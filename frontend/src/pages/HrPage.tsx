@@ -30,6 +30,7 @@ import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconAdmin } from "../components/icons";
+import { WorkScheduleSection } from "../components/WorkScheduleSection";
 
 const STATUS_LABELS: Record<EmployeeStatus, string> = {
   salarie: "Salarié",
@@ -58,6 +59,8 @@ interface HrPageProps {
   canManageUsers: boolean;
   canReadConfidential: boolean;
   canWriteConfidential: boolean;
+  // Module « Présences » : administration des horaires/jours fériés (presences:administration).
+  canAdministerPresence: boolean;
 }
 
 type HrModal =
@@ -72,7 +75,7 @@ type HrModal =
 
 // Ch. 19 : Ressources humaines — dossier collaborateur, cycle de vie du
 // compte, absences, revue des accès (couche transverse du Lot 6).
-export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential }: HrPageProps) {
+export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence }: HrPageProps) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [anomalies, setAnomalies] = useState<AccessAnomaly[]>([]);
@@ -221,6 +224,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
+
+      {/* Évolution — Présences & Temps de travail : paramétrage des horaires (§9) */}
+      <WorkScheduleSection canAdminister={canAdministerPresence} />
 
       {/* Ch. 19 §19.2 — Dossiers collaborateurs */}
       <Card

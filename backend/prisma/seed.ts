@@ -61,7 +61,9 @@ const lot3Modules = ["production", "isbn", "bat", "printing"];
 const lot4Modules = ["stock", "commercial"];
 const lot5Modules = ["finance", "royalties"];
 const lot6Modules = ["rh", "rh_confidentiel", "direction", "pilotage", "rapports"];
-const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules, ...lot5Modules, ...lot6Modules];
+// Évolution : module « Présences & Temps de travail » (indépendant, désactivable).
+const evolutionModules = ["presences"];
+const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules, ...lot5Modules, ...lot6Modules, ...evolutionModules];
 const actions = Object.values(PermissionAction);
 
 // Référentiel des ~20 étapes du workflow (Ch. 4 §4.3). Toutes sont créées dès
@@ -345,6 +347,36 @@ async function main() {
   }
   await grant("DIR_GENERAL", ["rapports:saisie", "rapports:administration"]);
   await grant("RESP_RH", ["rapports:saisie"]);
+
+  // Module « Présences & Temps de travail » (évolution). Chaque employé consulte
+  // SES propres présences (consultation, périmètre borné à soi côté serveur) ;
+  // le Responsable RH administre et valide ; la Direction générale supervise ;
+  // les chefs de département valident les anomalies de leur pôle (incrément 4).
+  for (const [roleCode] of roleByCode) {
+    if (roleCode === "ADMIN_GENERAL") continue;
+    await grant(roleCode, ["presences:consultation"]);
+  }
+  await grant("RESP_RH", ["presences:saisie", "presences:validation", "presences:administration"]);
+  await grant("DIR_GENERAL", ["presences:validation", "presences:administration"]);
+  await grant("CHEF_DEPARTEMENT", ["presences:validation"]);
+
+  // Horaire officiel par défaut de la maison (§9 : 08:30-18:00, pause 12h-13h,
+  // lundi→vendredi). Idempotent : créé seulement s'il n'existe aucun horaire
+  // maison. Modifiable ensuite depuis RH → Paramètres → Horaires de travail.
+  const existingCompanySchedule = await prisma.workSchedule.findFirst({ where: { scope: "company", deletedAt: null } });
+  if (!existingCompanySchedule) {
+    await prisma.workSchedule.create({
+      data: {
+        scope: "company",
+        dayStartMin: 8 * 60 + 30,
+        lunchStartMin: 12 * 60,
+        lunchEndMin: 13 * 60,
+        dayEndMin: 18 * 60,
+        workingDays: "1,2,3,4,5",
+        label: "Horaire officiel (défaut maison)",
+      },
+    });
+  }
 
   // Règles par défaut du centre de pilotage intelligent (Ch. 5 §5.9, Ch. 20
   // §20.6) — seuils repris des exemples du cahier des charges, à ajuster par

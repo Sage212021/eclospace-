@@ -3,7 +3,9 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
-import { computePayslip, type PayrollRates } from "../lib/payrollEngine.js";
+import { computePayslip, type Payslip, type PayrollRates } from "../lib/payrollEngine.js";
+import { buildPayslipEmail } from "../lib/documentEmail.js";
+import { sendMail, senderIdentity } from "../lib/mailer.js";
 
 // Module « Paie » natif (D-007) — incrément 1 : barème légal camerounais
 // PARAMÉTRABLE et VERSIONNÉ, et interrupteur d'internalisation (oui/non).
@@ -138,6 +140,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const b = parsed.data;
       const data = {
         matricule: b.matricule ?? null,
+        email: b.email ? b.email : null,
         cnpsNumber: b.cnps_number ?? null,
         niu: b.niu ?? null,
         category: b.category ?? null,
@@ -169,55 +172,124 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     { preHandler: requirePermission("paie", "consultation") },
     async (request, reply) => {
       const { employeeId } = request.params as { employeeId: string };
-      const query = request.query as { period?: string };
-      const period = query.period && /^\d{4}-\d{2}$/.test(query.period) ? query.period : new Date().toISOString().slice(0, 7);
-      const [y, m] = period.split("-").map(Number);
-      const toDate = new Date(Date.UTC(y, m, 0)); // dernier jour du mois
-
-      const employee = await prisma.employee.findFirst({ where: { id: employeeId, deletedAt: null }, select: { id: true, firstName: true, lastName: true } });
-      if (!employee) return reply.code(404).send({ code: "not_found", message: "Employé introuvable." });
-      const profile = await prisma.payrollEmployeeProfile.findUnique({ where: { employeeId } });
-      if (!profile) return reply.code(409).send({ code: "no_profile", message: "Aucune fiche paie pour cet employé : renseignez-la d'abord." });
-      const rateSet = await prisma.payrollRateSet.findFirst({ where: { active: true, effectiveFrom: { lte: toDate } }, orderBy: { effectiveFrom: "desc" } });
-      if (!rateSet) return reply.code(409).send({ code: "no_rate_set", message: "Aucun barème de paie en vigueur pour la période." });
-
-      // Retenue d'absence issue du module Présences (consolidation de la période).
-      let retenueAbsence = 0;
-      const consolidation = await prisma.attendancePayrollPeriod.findUnique({ where: { periodKey: period }, select: { id: true } });
-      if (consolidation) {
-        const line = await prisma.attendancePayrollLine.findUnique({ where: { periodId_employeeId: { periodId: consolidation.id, employeeId } }, select: { deductionProposed: true } });
-        if (line) retenueAbsence = num(line.deductionProposed);
-      }
-
-      const gross = num(profile.grossContractual);
-      const base = Math.round(gross * num(profile.basePct));
-      const complements = Math.round(gross - base);
-      const payslip = computePayslip(
-        {
-          base,
-          complements,
-          fiscalBase: profile.fiscalBase != null ? num(profile.fiscalBase) : gross,
-          fiscalParts: num(profile.fiscalParts),
-          applyFiscalParts: profile.applyFiscalParts,
-          seniorityYears: profile.seniorityYears,
-          seniorityRate: profile.seniorityRate != null ? num(profile.seniorityRate) : null,
-          seniorityThreshold: profile.seniorityThreshold ?? 0,
-          applySeniority: profile.applySeniority,
-          retenueAbsence,
-          internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
-        },
-        ratesFrom(rateSet),
-      );
-
+      const period = normalizePeriod((request.query as { period?: string }).period);
+      const resolved = await resolvePayslip(employeeId, period);
+      if ("error" in resolved) return reply.code(resolved.status).send(resolved.error);
       await writeAuditLog({ userId: request.user!.id, action: "view_sensitive", entityType: "payslip", entityId: `${employeeId}:${period}`, ipAddress: request.ip });
       return reply.send({
-        employee: { id: employee.id, name: `${employee.firstName} ${employee.lastName}` },
+        employee: { id: resolved.employee.id, name: resolved.employeeName },
         period,
-        rate_set_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10),
-        payslip,
+        rate_set_effective_from: resolved.rateEffectiveFrom,
+        payslip: resolved.payslip,
       });
     },
   );
+
+  // ----- Envoi du bulletin par e-mail (incrément 4) --------------------------
+  fastify.post(
+    "/api/v1/payroll/employees/:employeeId/payslip/email",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const { employeeId } = request.params as { employeeId: string };
+      const parsed = z.object({ period: z.string().optional(), message: z.string().max(2000).optional(), to: z.string().email().optional(), preview: z.boolean().optional() }).safeParse(request.body ?? {});
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      const period = normalizePeriod(parsed.data.period);
+      const resolved = await resolvePayslip(employeeId, period);
+      if ("error" in resolved) return reply.code(resolved.status).send(resolved.error);
+
+      const built = buildPayslipEmail(
+        {
+          employeeName: resolved.employeeName,
+          period,
+          matricule: resolved.profile.matricule,
+          netAPayer: resolved.payslip.net_a_payer,
+          salaireBrut: resolved.payslip.salaire_brut,
+          totalRetenuesSalariales: resolved.payslip.total_retenues_salariales,
+          coutEmployeur: resolved.payslip.cout_employeur,
+        },
+        parsed.data.message ?? "",
+      );
+
+      // Destinataire par défaut : e-mail de la fiche paie, sinon compte lié.
+      const linked = await prisma.user.findFirst({ where: { employeeId, deletedAt: null }, select: { email: true } });
+      const defaultTo = resolved.profile.email ?? linked?.email ?? null;
+
+      if (parsed.data.preview) {
+        return reply.send({ subject: built.subject, html: built.html, default_to: defaultTo });
+      }
+      const to = (parsed.data.to ?? defaultTo)?.trim();
+      if (!to) return reply.code(400).send({ code: "missing_recipient", message: "Renseignez l'adresse e-mail du salarié (fiche paie ou champ destinataire)." });
+
+      let sent: boolean;
+      try {
+        const sender = senderIdentity(request.user!);
+        sent = await sendMail({ to, subject: built.subject, text: built.text, html: built.html, ...sender });
+      } catch (err) {
+        if (err instanceof Error && err.message === "mail_not_configured") {
+          return reply.code(503).send({ code: "mail_not_configured", message: "L'envoi d'e-mails n'est pas encore configuré (paramètres SMTP à renseigner sur l'hébergement)." });
+        }
+        throw err;
+      }
+      await writeAuditLog({ userId: request.user!.id, action: "export", entityType: "payslip_email", entityId: `${employeeId}:${period}`, newValues: { to, sent }, ipAddress: request.ip });
+      return reply.send({ sent, to });
+    },
+  );
+}
+
+function normalizePeriod(p?: string): string {
+  return p && /^\d{4}-\d{2}$/.test(p) ? p : new Date().toISOString().slice(0, 7);
+}
+
+// Calcul du bulletin réutilisable (consultation + e-mail). Renvoie une erreur
+// structurée (status + payload) plutôt qu'une exception.
+async function resolvePayslip(
+  employeeId: string,
+  period: string,
+): Promise<
+  | { employee: { id: string }; employeeName: string; profile: { matricule: string | null; email: string | null }; rateEffectiveFrom: string; payslip: Payslip }
+  | { error: { code: string; message: string }; status: number }
+> {
+  const [y, m] = period.split("-").map(Number);
+  const toDate = new Date(Date.UTC(y, m, 0));
+  const employee = await prisma.employee.findFirst({ where: { id: employeeId, deletedAt: null }, select: { id: true, firstName: true, lastName: true } });
+  if (!employee) return { error: { code: "not_found", message: "Employé introuvable." }, status: 404 };
+  const profile = await prisma.payrollEmployeeProfile.findUnique({ where: { employeeId } });
+  if (!profile) return { error: { code: "no_profile", message: "Aucune fiche paie pour cet employé : renseignez-la d'abord." }, status: 409 };
+  const rateSet = await prisma.payrollRateSet.findFirst({ where: { active: true, effectiveFrom: { lte: toDate } }, orderBy: { effectiveFrom: "desc" } });
+  if (!rateSet) return { error: { code: "no_rate_set", message: "Aucun barème de paie en vigueur pour la période." }, status: 409 };
+
+  let retenueAbsence = 0;
+  const consolidation = await prisma.attendancePayrollPeriod.findUnique({ where: { periodKey: period }, select: { id: true } });
+  if (consolidation) {
+    const line = await prisma.attendancePayrollLine.findUnique({ where: { periodId_employeeId: { periodId: consolidation.id, employeeId } }, select: { deductionProposed: true } });
+    if (line) retenueAbsence = num(line.deductionProposed);
+  }
+
+  const gross = num(profile.grossContractual);
+  const base = Math.round(gross * num(profile.basePct));
+  const payslip = computePayslip(
+    {
+      base,
+      complements: Math.round(gross - base),
+      fiscalBase: profile.fiscalBase != null ? num(profile.fiscalBase) : gross,
+      fiscalParts: num(profile.fiscalParts),
+      applyFiscalParts: profile.applyFiscalParts,
+      seniorityYears: profile.seniorityYears,
+      seniorityRate: profile.seniorityRate != null ? num(profile.seniorityRate) : null,
+      seniorityThreshold: profile.seniorityThreshold ?? 0,
+      applySeniority: profile.applySeniority,
+      retenueAbsence,
+      internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
+    },
+    ratesFrom(rateSet),
+  );
+  return {
+    employee: { id: employee.id },
+    employeeName: `${employee.firstName} ${employee.lastName}`,
+    profile: { matricule: profile.matricule, email: profile.email },
+    rateEffectiveFrom: rateSet.effectiveFrom.toISOString().slice(0, 10),
+    payslip,
+  };
 }
 
 // Barème Prisma → taux du moteur de calcul.
@@ -233,6 +305,7 @@ function ratesFrom(r: Record<string, unknown>): PayrollRates {
 
 const profileSchema = z.object({
   matricule: z.string().max(40).optional(),
+  email: z.string().email().nullable().optional().or(z.literal("")),
   cnps_number: z.string().max(40).optional(),
   niu: z.string().max(40).optional(),
   category: z.string().max(60).optional(),
@@ -251,6 +324,7 @@ const profileSchema = z.object({
 
 function profileView(p: {
   matricule: string | null;
+  email: string | null;
   cnpsNumber: string | null;
   niu: string | null;
   category: string | null;
@@ -271,6 +345,7 @@ function profileView(p: {
   const base = Math.round(gross * basePct);
   return {
     matricule: p.matricule,
+    email: p.email,
     cnps_number: p.cnpsNumber,
     niu: p.niu,
     category: p.category,

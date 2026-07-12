@@ -239,3 +239,42 @@ export function buildRoyaltyStatementEmail(st: StatementForEmail, message: strin
   const text = `${message ? message.trim() + "\n\n" : ""}Relevé de droits d'auteur ${st.contract.contractNumber}\nBénéficiaire : ${author}\nRestant à payer : ${money(remaining, cur)}\n\n${HOUSE.legalName} · ${HOUSE.website}`;
   return { subject, html: emailShell({ title: subject, message, body }), text };
 }
+
+// E-mail du bulletin de paie (D-007, incrément 4) : le net à payer et la
+// ventilation dans le corps du message, à l'en-tête maison. Aucun PDF (choix
+// économe) — le bulletin imprimable reste disponible depuis l'ERP.
+export interface PayslipForEmail {
+  employeeName: string;
+  period: string;
+  matricule?: string | null;
+  netAPayer: number;
+  salaireBrut: number;
+  totalRetenuesSalariales: number;
+  coutEmployeur: number;
+}
+
+export function buildPayslipEmail(p: PayslipForEmail, message: string): DocumentEmail {
+  const cur = "XAF";
+  const row = (label: string, value: number, strong = false) =>
+    `<tr><td style="padding:6px 10px;border-bottom:1px solid #e6e9ef${strong ? ";font-weight:bold" : ""}">${esc(label)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e6e9ef;text-align:right${strong ? ";font-weight:bold" : ""}">${money(value, cur)}</td></tr>`;
+
+  const body = `
+    <div style="font-family:Georgia,serif;font-size:20px;margin:0 0 4px">Bulletin de paie</div>
+    <div style="font-size:13px;color:#4b5563;margin-bottom:14px">Période ${esc(p.period)}${p.matricule ? " · Matricule " + esc(p.matricule) : ""}</div>
+    <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Salarié</div>
+    <div style="font-size:15px;font-weight:bold;margin-bottom:14px">${esc(p.employeeName)}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <tbody>
+        ${row("Salaire brut du mois", p.salaireBrut)}
+        ${row("Total retenues salariales", p.totalRetenuesSalariales)}
+        ${row("NET À PAYER", p.netAPayer, true)}
+        ${row("Coût total employeur", p.coutEmployeur)}
+      </tbody>
+    </table>
+    <div style="margin-top:14px;font-size:11px;color:#6b7280">Document à conserver sans limitation de durée (art. 68 du Code du travail camerounais).</div>`;
+
+  const subject = `Bulletin de paie ${p.period} — ${HOUSE.brand}`;
+  const text = `${message ? message.trim() + "\n\n" : ""}Bulletin de paie — période ${p.period}\nSalarié : ${p.employeeName}\nNet à payer : ${money(p.netAPayer, cur)}\n\n${HOUSE.legalName} · ${HOUSE.website}`;
+  return { subject, html: emailShell({ title: subject, message, body }), text };
+}

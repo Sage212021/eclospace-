@@ -490,3 +490,91 @@ export function printContract(c: ContractDetail, opts?: PrintOpts): void {
 
   openPrintWindow(`Contrat ${c.contractNumber}`, body, opts);
 }
+
+// Bulletin de paie prêt à imprimer / PDF (D-007, incrément 4). En-tête maison
+// commun (documentShell) ; ventilation reprise du moteur de calcul, sans
+// recalcul côté impression. Mentions légales du Code du travail camerounais.
+export interface PayslipPrintData {
+  employee_name: string;
+  period: string; // AAAA-MM
+  matricule?: string | null;
+  cnps_number?: string | null;
+  niu?: string | null;
+  fiscal_parts?: number | null;
+  payslip: {
+    base: number; complements: number; prime_anciennete: number; retenue_absence: number;
+    salaire_brut: number; assiette_cnps: number;
+    pvid_salarie: number; pvid_patronal: number; prestations_familiales: number; accidents_travail: number;
+    cfc_salarie: number; cfc_patronal: number; fne: number; taxe_communale: number; rav: number;
+    irpp_cac: number; total_retenues_internes: number; total_retenues_salariales: number;
+    total_charges_patronales: number; net_a_payer: number; cout_employeur: number;
+  };
+}
+
+export function printPayslip(d: PayslipPrintData, opts?: PrintOpts): void {
+  const p = d.payslip;
+  const m = (n: number) => money(n, "XAF");
+  const line = (label: string, value: number, neg = false) =>
+    `<tr><td>${escapeHtml(label)}</td><td class="r num">${neg ? "− " : ""}${m(value)}</td></tr>`;
+
+  const remuneration = `
+    <table class="lines"><thead><tr><th>Éléments de rémunération</th><th class="r">Montant</th></tr></thead><tbody>
+      ${line("Salaire de base", p.base)}
+      ${line("Compléments de salaire", p.complements)}
+      ${p.prime_anciennete > 0 ? line("Prime d'ancienneté", p.prime_anciennete) : ""}
+      ${p.retenue_absence > 0 ? line("Retenue absence injustifiée", p.retenue_absence, true) : ""}
+      <tr><td><b>SALAIRE BRUT DU MOIS</b></td><td class="r num"><b>${m(p.salaire_brut)}</b></td></tr>
+    </tbody></table>`;
+
+  const cotisations = `
+    <table class="lines" style="margin-top:14px"><thead><tr><th>Cotisations sociales &amp; fiscales — législation camerounaise</th><th class="r">Salarié</th></tr></thead><tbody>
+      ${line("CNPS – PVID (vieillesse/invalidité/décès)", p.pvid_salarie)}
+      ${line("CFC – Crédit Foncier du Cameroun", p.cfc_salarie)}
+      ${line("Taxe communale", p.taxe_communale)}
+      ${line("Redevance audiovisuelle (RAV)", p.rav)}
+      ${line("IRPP + CAC (barème progressif)", p.irpp_cac)}
+      <tr><td><b>TOTAL RETENUES SALARIALES</b></td><td class="r num"><b>${m(p.total_retenues_salariales)}</b></td></tr>
+    </tbody></table>`;
+
+  const internes = p.total_retenues_internes > 0
+    ? `<table class="lines" style="margin-top:14px"><thead><tr><th>Retenues internes</th><th class="r">Montant</th></tr></thead><tbody>
+        <tr><td>Total retenues internes</td><td class="r num">${m(p.total_retenues_internes)}</td></tr></tbody></table>`
+    : "";
+
+  const totals = `
+    <div class="totals">
+      <div><span>Total charges patronales</span><span class="num">${m(p.total_charges_patronales)}</span></div>
+      <div><span>Coût total employeur</span><span class="num">${m(p.cout_employeur)}</span></div>
+      <div class="ttc"><span>NET À PAYER</span><span class="num">${m(p.net_a_payer)}</span></div>
+    </div>`;
+
+  const mentions = `
+    <div style="margin-top:26px;font-size:10px;color:#6b7280;line-height:1.6">
+      Congés payés : acquisition 1,5 jour ouvrable par mois de service effectif (art. 89 du Code du travail camerounais).<br>
+      Document à conserver sans limitation de durée (art. 68 du Code du travail camerounais). Moteur de paie Éclospace.
+    </div>`;
+
+  const body = `
+    <div class="doc__title">Bulletin de paie</div>
+    <div class="meta">
+      <span>Matricule : <b class="num">${escapeHtml(d.matricule ?? "—")}</b></span>
+      <span>Période : <b class="num">${escapeHtml(d.period)}</b></span>
+      <span>Édité le <b class="num">${new Date().toLocaleDateString("fr-FR")}</b></span>
+    </div>
+    <div class="party">
+      <div class="party__label">Salarié</div>
+      <div class="party__name">${escapeHtml(d.employee_name)}</div>
+      <div style="font-size:11px;color:#4b5563;margin-top:2px">
+        N° CNPS : <span class="num">${escapeHtml(d.cnps_number ?? "—")}</span> ·
+        NIU : <span class="num">${escapeHtml(d.niu ?? "—")}</span> ·
+        Parts fiscales : <span class="num">${d.fiscal_parts ?? "—"}</span>
+      </div>
+    </div>
+    ${remuneration}
+    ${cotisations}
+    ${internes}
+    ${totals}
+    ${mentions}`;
+
+  openPrintWindow(`Bulletin de paie — ${d.employee_name} — ${d.period}`, body, opts);
+}

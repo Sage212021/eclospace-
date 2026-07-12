@@ -2398,6 +2398,7 @@ export function setMyLanguage(language: "fr" | "en") {
 // Fiche paie de l'employé (D-007, incrément 2).
 export interface PayrollProfile {
   matricule: string | null;
+  email: string | null;
   cnps_number: string | null;
   niu: string | null;
   category: string | null;
@@ -2442,4 +2443,10 @@ export interface PayslipResult {
 }
 export function getPayslip(employeeId: string, period: string) {
   return request<PayslipResult>(`/api/v1/payroll/employees/${employeeId}/payslip?period=${period}`);
+}
+export function previewPayslipEmail(employeeId: string, period: string, message: string) {
+  return request<{ subject: string; html: string; default_to: string | null }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, preview: true }) });
+}
+export function sendPayslipEmail(employeeId: string, period: string, message: string, to: string) {
+  return request<{ sent: boolean; to: string }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, to }) });
 }

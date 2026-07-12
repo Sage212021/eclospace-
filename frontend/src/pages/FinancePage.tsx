@@ -105,7 +105,10 @@ type FinanceModal =
 // 04/07/2026) : gestion financière opérationnelle, exports vers un cabinet
 // externe. Écran transverse regroupant factures, encaissements, dépenses et
 // droits d'auteur.
+import { useI18n } from "../i18n";
+
 export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
+  const { t } = useI18n();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -312,8 +315,8 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
   return (
     <div className="ecl-page">
-      <h1 className="ecl-page__title">Finance et comptabilité</h1>
-      <p className="ecl-page__lead">Factures, encaissements, dépenses, droits d'auteur et trésorerie.</p>
+      <h1 className="ecl-page__title">{t("page.finance.title", "Finance et comptabilité")}</h1>
+      <p className="ecl-page__lead">{t("page.finance.lead", "Factures, encaissements, dépenses, droits d'auteur et trésorerie.")}</p>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

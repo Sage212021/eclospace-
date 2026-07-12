@@ -31,7 +31,10 @@ type UModal =
 // Gestion des comptes et de leurs habilitations (spéc. fonctionnelle §2, Ch. 2
 // §2.4) : création, suspension/réactivation, suppression, réinitialisation du
 // mot de passe, attribution/retrait de rôle (justifiés et tracés à l'audit).
+import { useI18n } from "../i18n";
+
 export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
+  const { t } = useI18n();
   const [users, setUsers] = useState<UserWithRoles[]>([]);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -119,14 +122,14 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
   return (
     <div className="ecl-page">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <h1 className="ecl-page__title" style={{ margin: 0 }}>Utilisateurs & rôles</h1>
+        <h1 className="ecl-page__title" style={{ margin: 0 }}>{t("page.users.title", "Utilisateurs & rôles")}</h1>
         {canAdminister && (
           <Button variant={showCreate ? "view" : "add"} onClick={() => setShowCreate((v) => !v)}>
             {showCreate ? "Annuler" : "+ Nouveau compte"}
           </Button>
         )}
       </div>
-      <p className="ecl-page__lead">Comptes et habilitations. Chaque changement est justifié et journalisé.</p>
+      <p className="ecl-page__lead">{t("page.users.lead", "Comptes et habilitations. Chaque changement est justifié et journalisé.")}</p>
 
       {showCreate && canAdminister && (
         <CreateAccountForm

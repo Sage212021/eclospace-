@@ -44,7 +44,10 @@ interface StockPageProps {
 
 // Stock et magasin (Ch. 16) : lieux, mouvements typés, alertes. Écran
 // transverse (un article de stock ne se rattache pas à un seul manuscrit).
+import { useI18n } from "../i18n";
+
 export function StockPage({ canManage, canAdminister }: StockPageProps) {
+  const { t } = useI18n();
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [items, setItems] = useState<StockItem[]>([]);
   const [alerts, setAlerts] = useState<(StockItem & { severity: string })[]>([]);
@@ -83,8 +86,8 @@ export function StockPage({ canManage, canAdminister }: StockPageProps) {
 
   return (
     <div className="ecl-page" style={{ maxWidth: 960 }}>
-      <h1 className="ecl-page__title">Stock et magasin</h1>
-      <p className="ecl-page__lead">Lieux de stockage, mouvements et alertes de réapprovisionnement.</p>
+      <h1 className="ecl-page__title">{t("page.stock.title", "Stock et magasin")}</h1>
+      <p className="ecl-page__lead">{t("page.stock.lead", "Lieux de stockage, mouvements et alertes de réapprovisionnement.")}</p>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

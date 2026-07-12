@@ -39,7 +39,10 @@ interface SimulationResult {
 
 // Ch. 20 : rapports standards, dictionnaire d'indicateurs, explorateur
 // d'analyses personnelles, simulation de tirage.
+import { useI18n } from "../i18n";
+
 export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPageProps) {
+  const { t } = useI18n();
   const [kpis, setKpis] = useState<KpiDefinition[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [analyses, setAnalyses] = useState<SavedAnalysis[]>([]);
@@ -124,8 +127,8 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
 
   return (
     <div className="ecl-page">
-      <h1 className="ecl-page__title">Rapports et indicateurs</h1>
-      <p className="ecl-page__lead">Rapports standards, indicateurs de pilotage, analyses personnelles et simulations.</p>
+      <h1 className="ecl-page__title">{t("page.reports.title", "Rapports et indicateurs")}</h1>
+      <p className="ecl-page__lead">{t("page.reports.lead", "Rapports standards, indicateurs de pilotage, analyses personnelles et simulations.")}</p>
 
       {error && (
         <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>

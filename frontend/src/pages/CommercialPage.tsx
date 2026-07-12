@@ -47,7 +47,10 @@ interface CommercialPageProps {
 
 // Commercial, distribution et ventes (Ch. 17) : clients, commandes, vente
 // directe. Écran transverse, non rattaché à un seul manuscrit.
+import { useI18n } from "../i18n";
+
 export function CommercialPage({ canManage, canValidate }: CommercialPageProps) {
+  const { t } = useI18n();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [isbns, setIsbns] = useState<IsbnRef[]>([]);
@@ -96,8 +99,8 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
 
   return (
     <div className="ecl-page" style={{ maxWidth: 960 }}>
-      <h1 className="ecl-page__title">Commercial, distribution et ventes</h1>
-      <p className="ecl-page__lead">Clients, commandes et ventes directes.</p>
+      <h1 className="ecl-page__title">{t("page.commercial.title", "Commercial, distribution et ventes")}</h1>
+      <p className="ecl-page__lead">{t("page.commercial.lead", "Clients, commandes et ventes directes.")}</p>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

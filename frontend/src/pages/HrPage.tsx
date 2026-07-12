@@ -35,6 +35,7 @@ import { PresenceSummaryCard } from "../components/PresenceSummaryCard";
 import { DeductionRulesSection } from "../components/DeductionRulesSection";
 import { AnomaliesSection } from "../components/AnomaliesSection";
 import { AttendanceReportSection } from "../components/AttendanceReportSection";
+import { useI18n } from "../i18n";
 import { PayrollConsolidationSection } from "../components/PayrollConsolidationSection";
 import { PayrollSettingsSection } from "../components/PayrollSettingsSection";
 import { PayrollProfilesSection } from "../components/PayrollProfilesSection";
@@ -92,6 +93,7 @@ type HrModal =
 // Ch. 19 : Ressources humaines — dossier collaborateur, cycle de vie du
 // compte, absences, revue des accès (couche transverse du Lot 6).
 export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence, canOverseePresence, canViewPayroll, canManagePayroll, canEditPayroll }: HrPageProps) {
+  const { t } = useI18n();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [anomalies, setAnomalies] = useState<AccessAnomaly[]>([]);
@@ -235,8 +237,8 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
   return (
     <div className="ecl-page">
-      <h1 className="ecl-page__title">Ressources humaines</h1>
-      <p className="ecl-page__lead">Dossiers collaborateurs, absences et revue des habilitations.</p>
+      <h1 className="ecl-page__title">{t("page.hr.title", "Ressources humaines")}</h1>
+      <p className="ecl-page__lead">{t("page.hr.lead", "Dossiers collaborateurs, absences et revue des habilitations.")}</p>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

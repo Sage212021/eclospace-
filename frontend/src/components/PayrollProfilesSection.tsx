@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import {
   getPayrollProfile,
+  getPayslip,
   savePayrollProfile,
   type Employee,
   type PayrollProfileInput,
+  type PayslipResult,
 } from "../api/client";
 import { Card } from "./Card";
 import { Field } from "./Modal";
@@ -35,13 +37,25 @@ function fcfa(n: number): string {
   return `${Math.round(n).toLocaleString("fr-FR")} FCFA`;
 }
 
+function SlipRow({ label, value, strong, tone }: { label: string; value: number; strong?: boolean; tone?: "gold" }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "4px 8px", background: "var(--paper)", borderRadius: 6 }}>
+      <span style={{ color: "var(--muted)" }}>{label}</span>
+      <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: strong ? 700 : 400, color: tone === "gold" ? "var(--eclosion, #C89A1B)" : "var(--ink)" }}>{fcfa(value)}</span>
+    </div>
+  );
+}
+
 export function PayrollProfilesSection({ employees, canManage }: { employees: Employee[]; canManage: boolean }) {
   const [employeeId, setEmployeeId] = useState("");
   const [form, setForm] = useState<PayrollProfileInput>(EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [slip, setSlip] = useState<PayslipResult | null>(null);
 
   useEffect(() => {
+    setSlip(null);
     if (!employeeId) return;
     getPayrollProfile(employeeId)
       .then((r) => {
@@ -73,6 +87,17 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Enregistrement impossible.");
+    }
+  }
+
+  async function computeSlip() {
+    if (!employeeId) return;
+    try {
+      setSlip(await getPayslip(employeeId, period));
+      setError(null);
+    } catch (err) {
+      setSlip(null);
+      setError(err instanceof Error ? err.message : "Calcul impossible.");
     }
   }
 
@@ -132,6 +157,31 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
               <Button variant="add" size="sm" type="button" onClick={save}>Enregistrer la fiche paie</Button>
             </div>
           )}
+
+          {/* Aperçu du bulletin calculé (moteur brut → net) */}
+          <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
+              <Field label="Période (AAAA-MM)"><input value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
+              <Button variant="edit" size="sm" type="button" onClick={computeSlip}>Calculer le bulletin</Button>
+            </div>
+            {slip && (
+              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8, fontSize: 13 }}>
+                <SlipRow label="Salaire brut" value={slip.payslip.salaire_brut} strong />
+                <SlipRow label="Assiette CNPS" value={slip.payslip.assiette_cnps} />
+                <SlipRow label="PVID salarié" value={slip.payslip.pvid_salarie} />
+                <SlipRow label="CFC salarié" value={slip.payslip.cfc_salarie} />
+                <SlipRow label="Taxe communale" value={slip.payslip.taxe_communale} />
+                <SlipRow label="RAV" value={slip.payslip.rav} />
+                <SlipRow label="IRPP + CAC" value={slip.payslip.irpp_cac} />
+                <SlipRow label="Retenue absence (Présences)" value={slip.payslip.retenue_absence} />
+                <SlipRow label="Total retenues salariales" value={slip.payslip.total_retenues_salariales} />
+                <SlipRow label="NET À PAYER" value={slip.payslip.net_a_payer} strong tone="gold" />
+                <SlipRow label="Total charges patronales" value={slip.payslip.total_charges_patronales} />
+                <SlipRow label="Coût employeur" value={slip.payslip.cout_employeur} strong />
+              </div>
+            )}
+            {slip && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>Barème en vigueur depuis le {slip.rate_set_effective_from}. Bulletin PDF & envoi : incrément suivant.</p>}
+          </div>
         </>
       )}
 

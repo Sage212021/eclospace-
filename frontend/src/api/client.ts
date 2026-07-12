@@ -2423,3 +2423,23 @@ export function getPayrollProfile(employeeId: string) {
 export function savePayrollProfile(employeeId: string, input: PayrollProfileInput) {
   return request<PayrollProfile>(`/api/v1/payroll/employees/${employeeId}/profile`, { method: "PUT", body: JSON.stringify(input) });
 }
+
+// Calcul du bulletin (D-007, incrément 3).
+export interface Payslip {
+  base: number; complements: number; prime_anciennete: number; retenue_absence: number;
+  salaire_brut: number; assiette_fiscale: number; assiette_cnps: number;
+  pvid_salarie: number; pvid_patronal: number; prestations_familiales: number; accidents_travail: number;
+  cfc_salarie: number; cfc_patronal: number; fne: number; taxe_communale: number; rav: number;
+  base_irpp_annuelle: number; irpp_cac: number;
+  total_retenues_internes: number; total_retenues_salariales: number; total_charges_patronales: number;
+  net_a_payer: number; cout_employeur: number;
+}
+export interface PayslipResult {
+  employee: { id: string; name: string };
+  period: string;
+  rate_set_effective_from: string;
+  payslip: Payslip;
+}
+export function getPayslip(employeeId: string, period: string) {
+  return request<PayslipResult>(`/api/v1/payroll/employees/${employeeId}/payslip?period=${period}`);
+}

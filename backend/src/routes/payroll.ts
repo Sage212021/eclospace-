@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { computePayslip, type PayrollRates } from "../lib/payrollEngine.js";
 
 // Module « Paie » natif (D-007) — incrément 1 : barème légal camerounais
 // PARAMÉTRABLE et VERSIONNÉ, et interrupteur d'internalisation (oui/non).
@@ -161,6 +162,73 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       return reply.send(profileView(saved));
     },
   );
+
+  // ----- Calcul du bulletin (incrément 3) : brut → net -----------------------
+  fastify.get(
+    "/api/v1/payroll/employees/:employeeId/payslip",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const { employeeId } = request.params as { employeeId: string };
+      const query = request.query as { period?: string };
+      const period = query.period && /^\d{4}-\d{2}$/.test(query.period) ? query.period : new Date().toISOString().slice(0, 7);
+      const [y, m] = period.split("-").map(Number);
+      const toDate = new Date(Date.UTC(y, m, 0)); // dernier jour du mois
+
+      const employee = await prisma.employee.findFirst({ where: { id: employeeId, deletedAt: null }, select: { id: true, firstName: true, lastName: true } });
+      if (!employee) return reply.code(404).send({ code: "not_found", message: "Employé introuvable." });
+      const profile = await prisma.payrollEmployeeProfile.findUnique({ where: { employeeId } });
+      if (!profile) return reply.code(409).send({ code: "no_profile", message: "Aucune fiche paie pour cet employé : renseignez-la d'abord." });
+      const rateSet = await prisma.payrollRateSet.findFirst({ where: { active: true, effectiveFrom: { lte: toDate } }, orderBy: { effectiveFrom: "desc" } });
+      if (!rateSet) return reply.code(409).send({ code: "no_rate_set", message: "Aucun barème de paie en vigueur pour la période." });
+
+      // Retenue d'absence issue du module Présences (consolidation de la période).
+      let retenueAbsence = 0;
+      const consolidation = await prisma.attendancePayrollPeriod.findUnique({ where: { periodKey: period }, select: { id: true } });
+      if (consolidation) {
+        const line = await prisma.attendancePayrollLine.findUnique({ where: { periodId_employeeId: { periodId: consolidation.id, employeeId } }, select: { deductionProposed: true } });
+        if (line) retenueAbsence = num(line.deductionProposed);
+      }
+
+      const gross = num(profile.grossContractual);
+      const base = Math.round(gross * num(profile.basePct));
+      const complements = Math.round(gross - base);
+      const payslip = computePayslip(
+        {
+          base,
+          complements,
+          fiscalBase: profile.fiscalBase != null ? num(profile.fiscalBase) : gross,
+          fiscalParts: num(profile.fiscalParts),
+          applyFiscalParts: profile.applyFiscalParts,
+          seniorityYears: profile.seniorityYears,
+          seniorityRate: profile.seniorityRate != null ? num(profile.seniorityRate) : null,
+          seniorityThreshold: profile.seniorityThreshold ?? 0,
+          applySeniority: profile.applySeniority,
+          retenueAbsence,
+          internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
+        },
+        ratesFrom(rateSet),
+      );
+
+      await writeAuditLog({ userId: request.user!.id, action: "view_sensitive", entityType: "payslip", entityId: `${employeeId}:${period}`, ipAddress: request.ip });
+      return reply.send({
+        employee: { id: employee.id, name: `${employee.firstName} ${employee.lastName}` },
+        period,
+        rate_set_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10),
+        payslip,
+      });
+    },
+  );
+}
+
+// Barème Prisma → taux du moteur de calcul.
+function ratesFrom(r: Record<string, unknown>): PayrollRates {
+  return {
+    vidSal: num(r.vidSalPct), vidPat: num(r.vidPatPct), pf: num(r.pfPct), at: num(r.atPct), cnpsCeiling: num(r.cnpsCeiling),
+    coefAssiette: num(r.coefAssiette), abatPct: num(r.abatPct), abatFixe: num(r.abatFixe), cacPct: num(r.cacPct),
+    cfcSal: num(r.cfcSalPct), cfcPat: num(r.cfcPatPct), fne: num(r.fnePct), ancDefPct: num(r.ancDefPct),
+    irpp: { p1: num(r.irppT1Ceiling), t1: num(r.irppT1Pct), p2: num(r.irppT2Ceiling), t2: num(r.irppT2Pct), p3: num(r.irppT3Ceiling), t3: num(r.irppT3Pct), t4: num(r.irppT4Pct) },
+    tcRav: { seuil1: num(r.tcRavSeuil1), tc1: num(r.tc1), rav1: num(r.rav1), seuil2: num(r.tcRavSeuil2), tc2: num(r.tc2), rav2: num(r.rav2), tc3: num(r.tc3), rav3: num(r.rav3) },
+  };
 }
 
 const profileSchema = z.object({
@@ -172,12 +240,12 @@ const profileSchema = z.object({
   account_number: z.string().max(60).optional(),
   gross_contractual: z.number().min(0),
   base_pct: z.number().min(0).max(1),
-  fiscal_base: z.number().min(0).optional(),
+  fiscal_base: z.number().min(0).nullable().optional(),
   fiscal_parts: z.number().min(0.5).max(20),
   apply_fiscal_parts: z.boolean(),
   seniority_years: z.number().int().min(0),
-  seniority_rate: z.number().min(0).max(1).optional(),
-  seniority_threshold: z.number().int().min(0).optional(),
+  seniority_rate: z.number().min(0).max(1).nullable().optional(),
+  seniority_threshold: z.number().int().min(0).nullable().optional(),
   apply_seniority: z.boolean(),
 });
 

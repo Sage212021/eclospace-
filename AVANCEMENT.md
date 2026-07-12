@@ -721,3 +721,14 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Fait :** traduction complète du **tableau de bord** (accueil) via la couche i18n : titre de bienvenue, sous-titre, libellés des indicateurs (Ouvrages/Utilisateurs/Ventes/Stock), bloc « Ma session » (identifiant, rôle, statut) et **libellés de rôles** (Administrateur général…). Le français reste le défaut ; l'anglais s'affiche pour un utilisateur ayant choisi EN. Vérifié au navigateur (tableau de bord + menu profil entièrement en anglais). Frontend uniquement, aucune régression (260 tests backend inchangés).
 
 **Prochaine étape (alternance) :** Paie incrément 3 (moteur de calcul brut→net), puis i18n incrément 3 (écrans RH / Finance).
+
+### 12/07/2026 (suite) — Module Paie : incrément 3 (moteur de calcul brut→net)
+
+**Fait :**
+- **Moteur pur** (`payrollEngine.ts`) : réimplémentation **fidèle** des formules du « Livre de paie » du classeur (formules extraites du fichier source) — salaire brut, assiette fiscale, assiette CNPS plafonnée, PVID sal/pat, PF, AT, CFC sal/pat, FNE, taxe communale, RAV, base IRPP annuelle par part (abattements + parts fiscales), **IRPP + CAC** (barème progressif mensualisé), total retenues salariales, total charges patronales, **NET À PAYER**, **coût employeur**.
+- **Endpoint** : `GET /api/v1/payroll/employees/:id/payslip?period=AAAA-MM` — résout la fiche paie + le barème en vigueur + la **retenue d'absence issue du module Présences** (consolidation de la période), calcule le bulletin (accès journalisé).
+- **Frontend** : dans la carte « Fiches paie », **aperçu du bulletin calculé** (période + « Calculer le bulletin ») avec la ventilation complète. Vérifié au navigateur (intégration Présences→Paie : retenue de 115 000 déduite du brut).
+- **Correctif** : le schéma de la fiche paie accepte désormais `null` pour les champs optionnels (fiscal_base, seniority_rate, seniority_threshold) envoyés par le formulaire.
+- **Tests** : +16 (`payroll-engine.test.ts`) dont un **cas de référence vérifié au centime** contre un calcul à la main (brut 500 000, 1 part → PVID 16 800, IRPP+CAC 48 125, **net 426 075**, **coût employeur 567 300**), + variantes (ancienneté, retenue d'absence, parts fiscales) et l'intégration de l'endpoint. **276 tests passent, zéro régression.**
+
+**Prochaine étape (alternance) :** i18n incrément 3 (écrans RH/Finance), puis Paie incrément 4 (bulletin PDF à l'en-tête + envoi e-mail) et incrément 5 (livre de paie + clôture/gel + déclarations CNPS/fiscales).

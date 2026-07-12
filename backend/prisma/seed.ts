@@ -526,6 +526,29 @@ async function main() {
     await prisma.paymentMethodDef.upsert({ where: { code: m.code }, update: {}, create: m });
   }
 
+  // Portefeuilles Mobile Money du Cameroun : Orange Money et MTN Mobile Money.
+  // On les distingue du « Mobile Money » générique pour un rapprochement de
+  // trésorerie propre (un opérateur = un compte, un relevé). Chaque mode est
+  // rattaché à son compte financier par défaut. Idempotent : le compte est
+  // retrouvé par son libellé avant toute création.
+  const mobileWallets = [
+    { code: "orange_money", label: "Orange Money", sortOrder: 51 },
+    { code: "mtn_momo", label: "MTN Mobile Money", sortOrder: 52 },
+  ];
+  for (const wallet of mobileWallets) {
+    let account = await prisma.bankAccount.findFirst({ where: { label: wallet.label } });
+    if (!account) {
+      account = await prisma.bankAccount.create({
+        data: { label: wallet.label, type: "mobile_money", currency: "XAF" },
+      });
+    }
+    await prisma.paymentMethodDef.upsert({
+      where: { code: wallet.code },
+      update: { label: wallet.label, kind: "mobile_money", sortOrder: wallet.sortOrder, defaultAccountId: account.id },
+      create: { code: wallet.code, label: wallet.label, kind: "mobile_money", sortOrder: wallet.sortOrder, defaultAccountId: account.id },
+    });
+  }
+
   // Grille de remise par défaut par catégorie de client (Ch. 17 §17.4).
   const discountGrids: { category: CustomerCategory; discountPct: number }[] = [
     { category: "librairie", discountPct: 35 },

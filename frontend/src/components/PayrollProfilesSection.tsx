@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import {
   getPayrollProfile,
   getPayslip,
+  previewPayslipEmail,
   savePayrollProfile,
+  sendPayslipEmail,
   type Employee,
   type PayrollProfileInput,
   type PayslipResult,
@@ -10,6 +12,8 @@ import {
 import { Card } from "./Card";
 import { Field } from "./Modal";
 import { Button } from "./Button";
+import { EmailModal } from "./EmailModal";
+import { printPayslip } from "../lib/print";
 import { IconAdmin } from "./icons";
 
 // Fiche paie par employé (D-007, incrément 2) : données propres au bulletin
@@ -17,6 +21,7 @@ import { IconAdmin } from "./icons";
 
 const EMPTY: PayrollProfileInput = {
   matricule: "",
+  email: "",
   cnps_number: "",
   niu: "",
   category: "",
@@ -53,6 +58,7 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
   const [message, setMessage] = useState<string | null>(null);
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [slip, setSlip] = useState<PayslipResult | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   useEffect(() => {
     setSlip(null);
@@ -131,6 +137,7 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginTop: 10 }}>
             {txt("Matricule", "matricule")}
+            {txt("E-mail du salarié (bulletin)", "email")}
             {txt("N° CNPS", "cnps_number")}
             {txt("NIU (contribuable)", "niu")}
             {txt("Catégorie / échelon", "category")}
@@ -180,8 +187,41 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
                 <SlipRow label="Coût employeur" value={slip.payslip.cout_employeur} strong />
               </div>
             )}
-            {slip && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>Barème en vigueur depuis le {slip.rate_set_effective_from}. Bulletin PDF & envoi : incrément suivant.</p>}
+            {slip && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                <Button
+                  variant="view"
+                  size="sm"
+                  type="button"
+                  onClick={() =>
+                    printPayslip({
+                      employee_name: slip.employee.name,
+                      period: slip.period,
+                      matricule: form.matricule || null,
+                      cnps_number: form.cnps_number || null,
+                      niu: form.niu || null,
+                      fiscal_parts: form.fiscal_parts,
+                      payslip: slip.payslip,
+                    })
+                  }
+                >
+                  Imprimer le bulletin / PDF
+                </Button>
+                <Button variant="export" size="sm" type="button" onClick={() => setEmailOpen(true)}>Envoyer par e-mail</Button>
+              </div>
+            )}
+            {slip && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>Barème en vigueur depuis le {slip.rate_set_effective_from}.</p>}
           </div>
+
+          {emailOpen && slip && (
+            <EmailModal
+              title={`Envoyer le bulletin — ${slip.employee.name} (${slip.period})`}
+              initialMessage={`Bonjour ${slip.employee.name},\n\nVeuillez trouver votre bulletin de paie pour la période ${slip.period}.\n\nCordialement,\nÉditions Éclosion`}
+              loadPreview={(message) => previewPayslipEmail(employeeId, slip.period, message)}
+              onSend={(to, message) => sendPayslipEmail(employeeId, slip.period, message, to)}
+              onClose={() => setEmailOpen(false)}
+            />
+          )}
         </>
       )}
 

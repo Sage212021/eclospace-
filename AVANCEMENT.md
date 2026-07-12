@@ -738,3 +738,13 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Fait :** passe de traduction des **titres et sous-titres** des pages principales (RH, Finance, Stock, Commercial, Rapports, Utilisateurs & rôles, Direction générale, Mes lectures) via la couche i18n. Le français reste le défaut ; l'anglais s'affiche pour un utilisateur en EN (vérifié au navigateur : en-tête « Finance & accounting / Invoices, payments… »). Frontend uniquement, build OK, aucune régression backend (276 tests inchangés).
 
 **Prochaine étape (alternance) :** Paie incrément 4 (bulletin PDF à l'en-tête maison + envoi e-mail via le mailer de l'ERP), puis i18n incrément 4 (contenu détaillé des écrans).
+
+### 12/07/2026 (suite) — Module Paie : incrément 4 (bulletin PDF + envoi e-mail)
+
+**Fait :**
+- **Bulletin de paie imprimable** (`printPayslip` dans `print.ts`) à l'**en-tête maison** commun (logo, coordonnées, RCCM/NIU/N° affiliation CNPS, filigrane d'authenticité) : éléments de rémunération, cotisations sociales/fiscales, retenue d'absence (du module Présences), NET À PAYER, coût employeur, mentions légales (art. 68 & 89 du Code du travail camerounais). Impression → PDF via le navigateur (choix économe, aucune dépendance PDF).
+- **Envoi par e-mail** : `buildPayslipEmail` (corps à l'en-tête maison) + endpoint `POST /api/v1/payroll/employees/:id/payslip/email` (aperçu + envoi via le mailer de l'ERP, Reply-To de l'expéditeur). Destinataire par défaut : e-mail de la fiche paie, sinon compte lié. Champ **e-mail** ajouté à la fiche paie (migration additive). Calcul du bulletin factorisé (`resolvePayslip`).
+- **Frontend** : boutons « Imprimer le bulletin / PDF » et « Envoyer par e-mail » (fenêtre d'aperçu + envoi réutilisant `EmailModal`) dans l'aperçu du bulletin. Vérifié au navigateur (bulletin imprimé conforme, fenêtre d'envoi opérationnelle).
+- **Tests** : +4 (`payroll-payslip-email.test.ts`) : aperçu sans fiche → 409, aperçu avec destinataire par défaut (e-mail de la fiche), envoi → 503 si SMTP non configuré (le flux atteint bien l'expédition), refus sans destinataire → 400. **280 tests passent, zéro régression.**
+
+**Prochaine étape (alternance) :** i18n incrément 4 (contenu détaillé d'un écran métier), puis Paie incrément 5 (livre de paie + clôture/gel + déclarations CNPS/fiscales).

@@ -35,6 +35,7 @@ import { PresenceSummaryCard } from "../components/PresenceSummaryCard";
 import { DeductionRulesSection } from "../components/DeductionRulesSection";
 import { AnomaliesSection } from "../components/AnomaliesSection";
 import { AttendanceReportSection } from "../components/AttendanceReportSection";
+import { PayrollConsolidationSection } from "../components/PayrollConsolidationSection";
 
 const STATUS_LABELS: Record<EmployeeStatus, string> = {
   salarie: "Salarié",
@@ -247,6 +248,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* Évolution — Tableau de bord & rapports RH + exports (§32-33) */}
       {canOverseePresence && <AttendanceReportSection />}
+
+      {/* Évolution — Consolidation vers la paie (§28-31) */}
+      {canOverseePresence && <PayrollConsolidationSection canAdminister={canAdministerPresence} />}
 
       {/* Ch. 19 §19.2 — Dossiers collaborateurs */}
       <Card

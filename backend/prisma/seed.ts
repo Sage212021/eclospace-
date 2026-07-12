@@ -388,6 +388,22 @@ async function main() {
     });
   }
 
+  // Niveaux du circuit de validation des présences (§25-26). Défaut : chef de
+  // service (grand pôle) et RH obligatoires, RAF facultatif, DG obligatoire.
+  const validationLevels = [
+    { code: "chef", label: "Chef de service", position: 1, mode: "obligatoire" as const },
+    { code: "rh", label: "Responsable RH", position: 2, mode: "obligatoire" as const },
+    { code: "raf", label: "Responsable administratif et financier", position: 3, mode: "facultatif" as const },
+    { code: "dg", label: "Directeur général", position: 4, mode: "obligatoire" as const },
+  ];
+  for (const lvl of validationLevels) {
+    await prisma.attendanceValidationLevel.upsert({ where: { code: lvl.code }, update: {}, create: lvl });
+  }
+
+  // Seuils de détection d'anomalies (§19), paramétrables.
+  await prisma.setting.upsert({ where: { key: "presence_anomaly_late_minutes" }, update: {}, create: { key: "presence_anomaly_late_minutes", value: 15 } });
+  await prisma.setting.upsert({ where: { key: "presence_anomaly_early_minutes" }, update: {}, create: { key: "presence_anomaly_early_minutes", value: 15 } });
+
   // Règles par défaut du centre de pilotage intelligent (Ch. 5 §5.9, Ch. 20
   // §20.6) — seuils repris des exemples du cahier des charges, à ajuster par
   // la Direction générale (§5.9 : "définies par l'administrateur avec la direction").

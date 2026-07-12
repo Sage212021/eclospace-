@@ -640,3 +640,15 @@ Nouveau module d'évolution (validé par l'opérateur : ① socle logiciel d'abo
 **Rappel de cohérence :** le module **propose** la retenue ; le prélèvement réel reste effectué par la paie externe (D-003) après validation hiérarchique (workflow — incrément 4).
 
 **Prochaine étape :** incrément 4 — file d'anomalies + justificatifs + workflow de validation paramétrable (chef → RH → RAF → DG).
+
+### 12/07/2026 (suite) — Présences : incrément 4 (anomalies + workflow de validation)
+
+**Fait :**
+- **Schéma** (migration additive réversible `20260712030000_attendance_anomalies_workflow`) : `attendance_anomalies` (unique par employé/jour/nature, statuts §23, justification motif+commentaire+pièce jointe optionnelle) et `attendance_validation_levels` (niveaux paramétrables chef/RH/RAF/DG, ordre et caractère obligatoire/facultatif/désactivé).
+- **Moteur pur** (`attendanceAnomaly.ts`) : détection (§19 : retard important, départ anticipé, absence — seuils paramétrables, jours justifiés exclus) et machine à états (transitions autorisées, statuts terminaux).
+- **Endpoints** : scan idempotent d'un employé (validation), file d'anomalies avec **confidentialité** (employé = les siennes, chef = son pôle, RH/DG = toutes), justification (employé concerné/chef/RH), décision (valider/rejeter/corriger/annuler/analyser/demander correction, jurisdiction par pôle), niveaux de validation (GET + PUT paramétrable). Tout journalisé.
+- **Seed** : 4 niveaux de validation (chef & RH & DG obligatoires, RAF facultatif) ; seuils d'anomalie (retard/départ ≥ 15 min). Idempotent.
+- **Frontend** : carte « Anomalies de présence » dans RH — scan d'un employé, liste avec statuts colorés, justification (motifs §24), validation/rejet par les habilités. Vérifié au navigateur.
+- **Tests** : +10 (`attendance-anomaly.test.ts`) : détection et seuils, machine à états, scan idempotent, confidentialité (employé/chef/RH), justification, refus de décision par l'employé, blocage des statuts terminaux, niveaux paramétrables. **237 tests passent, zéro régression.**
+
+**Prochaine étape :** incrément 5 — tableau de bord RH + rapports (journalier, mensuel, DG) + exports.

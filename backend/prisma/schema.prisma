@@ -83,6 +83,7 @@ model Employee {
   accessReviewReviewerItems AccessReviewItem[] @relation("AccessReviewReviewer")
   workSchedules    WorkSchedule[]
   attendanceEvents AttendanceEvent[]
+  attendanceAnomalies AttendanceAnomaly[]
 
   @@map("employees")
 }
@@ -325,6 +326,76 @@ model DeductionRule {
 
   @@index([active, effectiveFrom])
   @@map("deduction_rules")
+}
+
+// Nature d'une anomalie de présence (§19).
+enum AttendanceAnomalyType {
+  retard
+  depart_anticipe
+  absence
+  incoherence
+  absence_connexion
+  absence_deconnexion
+  duree_anormale
+}
+
+// Cycle de vie d'une anomalie (§23).
+enum AttendanceAnomalyStatus {
+  en_attente
+  en_analyse
+  validee
+  rejetee
+  corrigee
+  annulee
+}
+
+// File de traitement des anomalies de présence (§19, §23-24). Une anomalie est
+// unique par (employé, jour, nature) : le scan est idempotent. La justification
+// (motif + commentaire + pièce jointe optionnelle) précède la décision.
+model AttendanceAnomaly {
+  id         String                 @id @default(uuid())
+  employeeId String                 @map("employee_id")
+  employee   Employee               @relation(fields: [employeeId], references: [id])
+  day        DateTime               @db.Date
+  type       AttendanceAnomalyType
+  minutes    Int?
+  detail     String?
+  status     AttendanceAnomalyStatus @default(en_attente)
+  justificationMotif    String? @map("justification_motif")
+  justificationComment  String? @map("justification_comment")
+  justificationDocumentId String? @map("justification_document_id")
+  resolvedBy String?   @map("resolved_by")
+  resolvedAt DateTime? @map("resolved_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@unique([employeeId, day, type])
+  @@index([status])
+  @@map("attendance_anomalies")
+}
+
+// Caractère d'un niveau de validation (§26).
+enum ValidationLevelMode {
+  obligatoire // bloque la paie tant que non validé
+  facultatif // possible mais ne bloque pas
+  desactive // niveau ignoré
+}
+
+// Niveaux du circuit de validation PARAMÉTRABLES (§25-26) : chef de service →
+// RH → RAF → DG. Ordre et caractère modifiables sans développeur.
+model AttendanceValidationLevel {
+  id       String              @id @default(uuid())
+  code     String              @unique // "chef" | "rh" | "raf" | "dg"
+  label    String
+  position Int
+  mode     ValidationLevelMode @default(obligatoire)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("attendance_validation_levels")
 }
 
 enum AccessReviewStatus {

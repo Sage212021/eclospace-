@@ -11,6 +11,8 @@ import {
 } from "../lib/attendance.js";
 import { computeDay, summarize, type DayEvent, type DayResult } from "../lib/attendanceCompute.js";
 import { computeDeduction, type DeductionRuleView } from "../lib/attendanceDeduction.js";
+import { canTransition, detectAnomalies, nextStatus, DEFAULT_THRESHOLDS, type AnomalyAction } from "../lib/attendanceAnomaly.js";
+import { poleForPresence } from "../lib/presence.js";
 
 // Module « Présences & Temps de travail » — incrément 1 : paramétrage des
 // horaires officiels, jours fériés, et consultation du pointage brut.
@@ -474,10 +476,306 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // ----- Anomalies & workflow de validation (§19, §23-26) --------------------
+
+  // Scan d'une période : crée les anomalies manquantes (idempotent). Réservé aux
+  // profils habilités (validation) et borné à leur périmètre.
+  fastify.post(
+    "/api/v1/attendance/anomalies/scan",
+    { preHandler: requirePermission("presences", "validation") },
+    async (request, reply) => {
+      const query = request.query as { employee_id?: string; from?: string; to?: string };
+      if (!query.employee_id) {
+        return reply.code(400).send({ code: "validation_error", message: "employee_id requis pour le scan." });
+      }
+      if (!(await canActOnEmployee(request.user!, query.employee_id))) {
+        return reply.code(403).send({ code: "forbidden", message: "Hors de votre périmètre de validation." });
+      }
+      const { from, to } = monthDefault(query.from, query.to);
+      const emp = await prisma.employee.findUnique({ where: { id: query.employee_id }, select: { departmentId: true } });
+      const summary = await computeRange(query.employee_id, emp?.departmentId ?? null, from, to);
+      const thresholds = await anomalyThresholds();
+      const detected = detectAnomalies(summary.days, thresholds);
+      let created = 0;
+      for (const a of detected) {
+        const day = new Date(`${a.day}T00:00:00.000Z`);
+        const exists = await prisma.attendanceAnomaly.findUnique({
+          where: { employeeId_day_type: { employeeId: query.employee_id, day, type: a.type } },
+        });
+        if (!exists) {
+          await prisma.attendanceAnomaly.create({
+            data: { employeeId: query.employee_id, day, type: a.type, minutes: a.minutes, detail: a.detail, createdBy: request.user!.id },
+          });
+          created += 1;
+        }
+      }
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "attendance_anomaly_scan",
+        entityId: query.employee_id,
+        newValues: { from, to, detected: detected.length, created },
+        ipAddress: request.ip,
+      });
+      return reply.send({ from, to, detected: detected.length, created });
+    },
+  );
+
+  // File des anomalies — confidentialité : employé (les siennes), chef (son
+  // pôle), RH/DG (toutes).
+  fastify.get(
+    "/api/v1/attendance/anomalies",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (request, reply) => {
+      const query = request.query as { status?: string; employee_id?: string; from?: string; to?: string };
+      const where: Record<string, unknown> = {};
+      if (query.status) where.status = query.status;
+      if (query.from || query.to) {
+        const day: Record<string, Date> = {};
+        if (query.from) day.gte = new Date(`${query.from}T00:00:00.000Z`);
+        if (query.to) day.lte = new Date(`${query.to}T00:00:00.000Z`);
+        where.day = day;
+      }
+
+      const scope = await anomalyScope(request.user!);
+      if (scope.kind === "self") {
+        if (!scope.employeeId) return reply.send([]);
+        where.employeeId = scope.employeeId;
+      } else if (scope.kind === "pole") {
+        where.employeeId = { in: scope.employeeIds };
+      } // kind === "all" : aucun filtre d'employé.
+      if (query.employee_id) {
+        // Un filtre explicite doit rester dans le périmètre autorisé.
+        if (scope.kind === "self" && query.employee_id !== scope.employeeId) return reply.code(403).send({ code: "forbidden", message: "Hors périmètre." });
+        if (scope.kind === "pole" && !scope.employeeIds.includes(query.employee_id)) return reply.code(403).send({ code: "forbidden", message: "Hors périmètre." });
+        where.employeeId = query.employee_id;
+      }
+
+      const rows = await prisma.attendanceAnomaly.findMany({
+        where,
+        orderBy: [{ day: "desc" }, { createdAt: "desc" }],
+        take: 500,
+        include: { employee: { select: { firstName: true, lastName: true } } },
+      });
+      return reply.send(rows.map(anomalyView));
+    },
+  );
+
+  // Justification d'une anomalie (§24) — motif + commentaire (+ pièce jointe).
+  // Autorisé : l'employé concerné, son chef de pôle, RH/DG.
+  fastify.post(
+    "/api/v1/attendance/anomalies/:id/justify",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z
+        .object({ motif: z.string().min(1).max(120), comment: z.string().max(2000).optional(), document_id: z.string().uuid().optional() })
+        .safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const anomaly = await prisma.attendanceAnomaly.findUnique({ where: { id } });
+      if (!anomaly) return reply.code(404).send({ code: "not_found", message: "Anomalie introuvable." });
+      const ownEmp = await ownEmployeeId(request.user!.id);
+      const isOwner = ownEmp && anomaly.employeeId === ownEmp;
+      if (!isOwner && !(await canActOnEmployee(request.user!, anomaly.employeeId))) {
+        return reply.code(403).send({ code: "forbidden", message: "Vous ne pouvez pas justifier cette anomalie." });
+      }
+      if (anomaly.status === "validee" || anomaly.status === "annulee") {
+        return reply.code(409).send({ code: "anomaly_closed", message: "Cette anomalie est clôturée." });
+      }
+      const updated = await prisma.attendanceAnomaly.update({
+        where: { id },
+        data: {
+          justificationMotif: parsed.data.motif,
+          justificationComment: parsed.data.comment ?? null,
+          justificationDocumentId: parsed.data.document_id ?? null,
+          status: "en_analyse",
+        },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "attendance_anomaly",
+        entityId: id,
+        oldValues: { status: anomaly.status },
+        newValues: { status: "en_analyse", motif: parsed.data.motif },
+        ipAddress: request.ip,
+      });
+      return reply.send(anomalyView(updated));
+    },
+  );
+
+  // Décision sur une anomalie (§25) — valider/rejeter/corriger/annuler/analyser/
+  // demander une correction. Réservé aux validateurs, dans leur périmètre.
+  fastify.post(
+    "/api/v1/attendance/anomalies/:id/decision",
+    { preHandler: requirePermission("presences", "validation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z
+        .object({
+          action: z.enum(["analyser", "valider", "rejeter", "corriger", "annuler", "demander_correction"]),
+          comment: z.string().max(2000).optional(),
+        })
+        .safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Action invalide.", details: parsed.error.issues });
+      }
+      const anomaly = await prisma.attendanceAnomaly.findUnique({ where: { id } });
+      if (!anomaly) return reply.code(404).send({ code: "not_found", message: "Anomalie introuvable." });
+      if (!(await canActOnEmployee(request.user!, anomaly.employeeId))) {
+        return reply.code(403).send({ code: "forbidden", message: "Hors de votre périmètre de validation." });
+      }
+      const action = parsed.data.action as AnomalyAction;
+      if (!canTransition(anomaly.status, action)) {
+        return reply.code(409).send({ code: "invalid_transition", message: `Décision « ${action} » impossible depuis le statut « ${anomaly.status} ».` });
+      }
+      const status = nextStatus(action);
+      const resolved = ["valider", "rejeter", "annuler"].includes(action);
+      const updated = await prisma.attendanceAnomaly.update({
+        where: { id },
+        data: {
+          status,
+          justificationComment: parsed.data.comment ?? anomaly.justificationComment,
+          resolvedBy: resolved ? request.user!.id : anomaly.resolvedBy,
+          resolvedAt: resolved ? new Date() : anomaly.resolvedAt,
+        },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: action === "valider" ? "validate" : "status_change",
+        entityType: "attendance_anomaly",
+        entityId: id,
+        oldValues: { status: anomaly.status },
+        newValues: { status, action },
+        ipAddress: request.ip,
+      });
+      return reply.send(anomalyView(updated));
+    },
+  );
+
+  // Niveaux du circuit de validation (§25-26) — paramétrables.
+  fastify.get(
+    "/api/v1/attendance/validation-levels",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (_request, reply) => {
+      const rows = await prisma.attendanceValidationLevel.findMany({ orderBy: { position: "asc" } });
+      return reply.send(rows.map((l) => ({ code: l.code, label: l.label, position: l.position, mode: l.mode })));
+    },
+  );
+
+  fastify.put(
+    "/api/v1/attendance/validation-levels/:code",
+    { preHandler: requirePermission("presences", "administration") },
+    async (request, reply) => {
+      const { code } = request.params as { code: string };
+      const parsed = z
+        .object({ mode: z.enum(["obligatoire", "facultatif", "desactive"]).optional(), position: z.number().int().min(1).optional(), label: z.string().max(60).optional() })
+        .safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const existing = await prisma.attendanceValidationLevel.findUnique({ where: { code } });
+      if (!existing) return reply.code(404).send({ code: "not_found", message: "Niveau inconnu." });
+      const updated = await prisma.attendanceValidationLevel.update({
+        where: { code },
+        data: { mode: parsed.data.mode ?? existing.mode, position: parsed.data.position ?? existing.position, label: parsed.data.label ?? existing.label, updatedBy: request.user!.id },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "attendance_validation_level",
+        entityId: code,
+        oldValues: { mode: existing.mode, position: existing.position },
+        newValues: { mode: updated.mode, position: updated.position },
+        ipAddress: request.ip,
+      });
+      return reply.send({ code: updated.code, label: updated.label, position: updated.position, mode: updated.mode });
+    },
+  );
+
   // Petit point d'entrée de santé du module (utile aux futurs tableaux de bord).
   fastify.get("/api/v1/attendance/ping", { preHandler: requireAuth }, async (_request, reply) => {
     return reply.send({ module: "presences", ok: true });
   });
+}
+
+// ----- Anomalies : vue, seuils, périmètre ----------------------------------
+
+function anomalyView(a: {
+  id: string;
+  employeeId: string;
+  day: Date;
+  type: string;
+  minutes: number | null;
+  detail: string | null;
+  status: string;
+  justificationMotif: string | null;
+  justificationComment: string | null;
+  resolvedAt: Date | null;
+  employee?: { firstName: string; lastName: string };
+}) {
+  return {
+    id: a.id,
+    employee_id: a.employeeId,
+    employee_name: a.employee ? `${a.employee.firstName} ${a.employee.lastName}` : undefined,
+    day: a.day.toISOString().slice(0, 10),
+    type: a.type,
+    minutes: a.minutes,
+    detail: a.detail,
+    status: a.status,
+    justification_motif: a.justificationMotif,
+    justification_comment: a.justificationComment,
+    resolved_at: a.resolvedAt,
+  };
+}
+
+async function anomalyThresholds() {
+  const late = await prisma.setting.findUnique({ where: { key: "presence_anomaly_late_minutes" } });
+  const early = await prisma.setting.findUnique({ where: { key: "presence_anomaly_early_minutes" } });
+  const num = (v: unknown, d: number) => (typeof v === "number" ? v : typeof v === "string" ? Number(v) || d : d);
+  return { lateMin: num(late?.value, DEFAULT_THRESHOLDS.lateMin), earlyMin: num(early?.value, DEFAULT_THRESHOLDS.earlyMin) };
+}
+
+// Grand pôle de l'utilisateur connecté (via le département de sa fiche).
+async function userPole(userId: string): Promise<string | null> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, include: { employee: { include: { department: true } } } });
+  const code = u?.employee?.department?.code ?? null;
+  return code ? poleForPresence(code) : null;
+}
+
+async function employeePole(employeeId: string): Promise<string | null> {
+  const e = await prisma.employee.findUnique({ where: { id: employeeId }, include: { department: true } });
+  return e?.department?.code ? poleForPresence(e.department.code) : null;
+}
+
+// Qui peut agir (justifier au nom de / décider) sur les anomalies d'un employé.
+async function canActOnEmployee(user: { id: string; permissions: Set<string>; roles: string[] }, employeeId: string): Promise<boolean> {
+  if (user.permissions.has("presences:validation") || user.permissions.has("presences:administration") || user.permissions.has("direction:consultation")) {
+    return true;
+  }
+  if (user.roles.includes("CHEF_DEPARTEMENT")) {
+    const [up, ep] = await Promise.all([userPole(user.id), employeePole(employeeId)]);
+    return up !== null && up === ep;
+  }
+  return false;
+}
+
+// Périmètre de lecture de la file d'anomalies.
+async function anomalyScope(
+  user: { id: string; permissions: Set<string>; roles: string[] },
+): Promise<{ kind: "all" } | { kind: "pole"; employeeIds: string[] } | { kind: "self"; employeeId: string | null }> {
+  if (user.permissions.has("presences:validation") || user.permissions.has("presences:administration") || user.permissions.has("direction:consultation")) {
+    return { kind: "all" };
+  }
+  if (user.roles.includes("CHEF_DEPARTEMENT")) {
+    const pole = await userPole(user.id);
+    const employees = await prisma.employee.findMany({ where: { deletedAt: null }, include: { department: true } });
+    const ids = employees.filter((e) => e.department?.code && poleForPresence(e.department.code) === pole).map((e) => e.id);
+    return { kind: "pole", employeeIds: ids };
+  }
+  return { kind: "self", employeeId: await ownEmployeeId(user.id) };
 }
 
 // ----- Règles de retenues : schéma, vue, résolution ------------------------

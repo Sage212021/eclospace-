@@ -2203,3 +2203,50 @@ export function createDeductionRule(input: {
 export function updateDeductionRule(id: string, input: { active?: boolean; label?: string }) {
   return request<DeductionRule>(`/api/v1/attendance/deduction-rules/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
+
+// Anomalies & workflow de validation (incrément 4).
+export type AnomalyStatus = "en_attente" | "en_analyse" | "validee" | "rejetee" | "corrigee" | "annulee";
+export type AnomalyType = "retard" | "depart_anticipe" | "absence" | "incoherence" | "absence_connexion" | "absence_deconnexion" | "duree_anormale";
+export type AnomalyAction = "analyser" | "valider" | "rejeter" | "corriger" | "annuler" | "demander_correction";
+
+export interface AttendanceAnomaly {
+  id: string;
+  employee_id: string;
+  employee_name?: string;
+  day: string;
+  type: AnomalyType;
+  minutes: number | null;
+  detail: string | null;
+  status: AnomalyStatus;
+  justification_motif: string | null;
+  justification_comment: string | null;
+  resolved_at: string | null;
+}
+
+export interface ValidationLevel {
+  code: string;
+  label: string;
+  position: number;
+  mode: "obligatoire" | "facultatif" | "desactive";
+}
+
+export function listAnomalies(params?: { status?: string; employee_id?: string; from?: string; to?: string }) {
+  const qs = new URLSearchParams(params as Record<string, string>).toString();
+  return request<AttendanceAnomaly[]>(`/api/v1/attendance/anomalies${qs ? `?${qs}` : ""}`);
+}
+export function scanAnomalies(params: { employee_id: string; from?: string; to?: string }) {
+  const qs = new URLSearchParams(params as Record<string, string>).toString();
+  return request<{ from: string; to: string; detected: number; created: number }>(`/api/v1/attendance/anomalies/scan?${qs}`, { method: "POST" });
+}
+export function justifyAnomaly(id: string, input: { motif: string; comment?: string; document_id?: string }) {
+  return request<AttendanceAnomaly>(`/api/v1/attendance/anomalies/${id}/justify`, { method: "POST", body: JSON.stringify(input) });
+}
+export function decideAnomaly(id: string, input: { action: AnomalyAction; comment?: string }) {
+  return request<AttendanceAnomaly>(`/api/v1/attendance/anomalies/${id}/decision`, { method: "POST", body: JSON.stringify(input) });
+}
+export function listValidationLevels() {
+  return request<ValidationLevel[]>(`/api/v1/attendance/validation-levels`);
+}
+export function updateValidationLevel(code: string, input: { mode?: string; position?: number; label?: string }) {
+  return request<ValidationLevel>(`/api/v1/attendance/validation-levels/${code}`, { method: "PUT", body: JSON.stringify(input) });
+}

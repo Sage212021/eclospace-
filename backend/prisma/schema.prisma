@@ -2480,6 +2480,7 @@ enum ExpenseCategory {
   prestation
   transport
   communication
+  abonnement
   autre
 }
 

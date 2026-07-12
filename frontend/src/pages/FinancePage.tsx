@@ -71,6 +71,7 @@ const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   prestation: "Prestation",
   transport: "Transport",
   communication: "Communication",
+  abonnement: "Abonnements / Services en ligne",
   autre: "Autre",
 };
 

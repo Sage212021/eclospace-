@@ -61,8 +61,9 @@ const lot3Modules = ["production", "isbn", "bat", "printing"];
 const lot4Modules = ["stock", "commercial"];
 const lot5Modules = ["finance", "royalties"];
 const lot6Modules = ["rh", "rh_confidentiel", "direction", "pilotage", "rapports"];
-// Évolution : module « Présences & Temps de travail » (indépendant, désactivable).
-const evolutionModules = ["presences"];
+// Évolution : modules « Présences & Temps de travail » et « Paie » (D-007),
+// indépendants et désactivables.
+const evolutionModules = ["presences", "paie"];
 const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules, ...lot5Modules, ...lot6Modules, ...evolutionModules];
 const actions = Object.values(PermissionAction);
 
@@ -429,6 +430,33 @@ async function main() {
   // Mode d'intégration à la paie (§28) : « manuel » par défaut (le gestionnaire
   // sélectionne les rubriques avant calcul), commutable en « auto ».
   await prisma.setting.upsert({ where: { key: "attendance_payroll_mode" }, update: {}, create: { key: "attendance_payroll_mode", value: "manuel" } });
+
+  // Module Paie natif (D-007) : permissions par rôle + interrupteur oui/non.
+  await grant("RESP_FINANCE", ["paie:consultation", "paie:saisie", "paie:validation", "paie:administration"]);
+  await grant("RESP_RH", ["paie:consultation", "paie:saisie"]);
+  await grant("DIR_GENERAL", ["paie:consultation", "paie:validation", "paie:administration"]);
+
+  // Internalisation de la paie DÉSACTIVÉE par défaut (D-007) : tant qu'elle est
+  // « non », l'export externe (D-003) reste le mode par défaut.
+  await prisma.setting.upsert({ where: { key: "payroll_internal_enabled" }, update: {}, create: { key: "payroll_internal_enabled", value: "false" } });
+
+  // Barème légal camerounais initial, repris du classeur (docs/paie/), version
+  // 2019-01-01. Idempotent : créé seulement si aucun barème n'existe.
+  const existingRateSet = await prisma.payrollRateSet.findFirst();
+  if (!existingRateSet) {
+    await prisma.payrollRateSet.create({
+      data: {
+        effectiveFrom: new Date("2019-01-01T00:00:00.000Z"),
+        label: "Barème 2019 (repris du moteur Excel)",
+        vidSalPct: 0.042, vidPatPct: 0.042, pfPct: 0.07, atPct: 0.025, cnpsCeiling: 750000,
+        abatPct: 0.3, abatFixe: 500000, cacPct: 0.1, cfcSalPct: 0.01, cfcPatPct: 0.015, fnePct: 0.01,
+        coefAssiette: 0.8, heuresMois: 173.33, ancDefPct: 0.05,
+        irppT1Ceiling: 2000000, irppT1Pct: 0.1, irppT2Ceiling: 3000000, irppT2Pct: 0.15,
+        irppT3Ceiling: 5000000, irppT3Pct: 0.25, irppT4Pct: 0.35,
+        tcRavSeuil1: 110000, tc1: 0, rav1: 1950, tcRavSeuil2: 200000, tc2: 500, rav2: 1950, tc3: 750, rav3: 3250,
+      },
+    });
+  }
 
   // Règles par défaut du centre de pilotage intelligent (Ch. 5 §5.9, Ch. 20
   // §20.6) — seuils repris des exemples du cahier des charges, à ajuster par

@@ -677,3 +677,18 @@ Nouveau module d'évolution (validé par l'opérateur : ① socle logiciel d'abo
 **Module « Présences & Temps de travail » : les 6 incréments sont livrés** (horaires + pointage, calculs, retenues, anomalies + workflow, tableau de bord + rapports, consolidation paie). Développement 100 % additif, aucune donnée existante touchée, module désactivable.
 
 **Prochaine étape (hors module) :** SMS des alertes (Phase B point 2) reste en attente d'une décision fournisseur/budget ; pointage physique (badge/QR/biométrie) branchable sur `attendance_events.source` sans refonte des calculs.
+
+### 12/07/2026 (suite) — Module Paie natif : incrément 1 (paramètres versionnés + interrupteur) + i18n à suivre
+
+Décision **D-007** actée (registre) : dérogation à D-003, **internalisation de la paie activable/désactivable**, en réimplémentant nativement le moteur Excel fourni (archivé dans `docs/paie/` avec sa spec `SPEC_MOTEUR_PAIE.md`).
+
+**Fait (Paie incrément 1) :**
+- **Schéma** (migration additive réversible `20260712050000_payroll_rate_sets`) : `payroll_rate_sets` — barème légal camerounais complet (CNPS PVID/PF/AT + plafond, IRPP progressif 4 tranches, CAC, CFC sal/pat, FNE, abattements, coefficient, heures, ancienneté, TC/RAV), **paramétrable et versionné par date d'effet**.
+- **Interrupteur** `payroll_internal_enabled` (setting) : **désactivé par défaut** (export externe D-003) ; activable pour que l'ERP calcule les bulletins.
+- **Module de permissions `paie`** (4 actions), accordé RESP_FINANCE (complet), DIR_GENERAL (validation/admin), RESP_RH (consultation/saisie).
+- **Endpoints** : `GET/PUT /payroll/config` (interrupteur), `GET /payroll/rate-sets` (liste), `GET /payroll/rate-set?date=` (barème résolu), `POST /payroll/rate-sets` (nouvelle version). Tout journalisé.
+- **Seed** : barème 2019 repris à l'identique du classeur (PVID 4,2 %, PF 7 %, AT 2,5 %, plafond 750 000, IRPP 10/15/25/35 %, CAC 10 %, CFC 1 %/1,5 %, FNE 1 %, abattement 30 %+500 000, TC/RAV). Idempotent.
+- **Frontend** : carte « Paramètres de paie (barème légal) » dans RH — interrupteur oui/non, barème en vigueur, création d'une nouvelle version, historique. Vérifié au navigateur.
+- **Tests** : +5 (`payroll.test.ts`) : refus profil non habilité (403), interrupteur par défaut désactivé + bascule, barème 2019 exposé, versionnage, validation des bornes. **252 tests passent, zéro régression.**
+
+**Prochaine étape (en parallèle) :** i18n FR/EN — incrément 1 (infrastructure : couche de traduction, langue au profil, sélecteur FR/EN, première surface traduite) ; puis Paie incrément 2 (fiche paie employé) et incrément 3 (moteur de calcul brut→net).

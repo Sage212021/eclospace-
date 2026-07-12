@@ -652,3 +652,13 @@ Nouveau module d'évolution (validé par l'opérateur : ① socle logiciel d'abo
 - **Tests** : +10 (`attendance-anomaly.test.ts`) : détection et seuils, machine à états, scan idempotent, confidentialité (employé/chef/RH), justification, refus de décision par l'employé, blocage des statuts terminaux, niveaux paramétrables. **237 tests passent, zéro régression.**
 
 **Prochaine étape :** incrément 5 — tableau de bord RH + rapports (journalier, mensuel, DG) + exports.
+
+### 12/07/2026 (suite) — Présences : incrément 5 (tableau de bord + rapports + exports)
+
+**Fait :**
+- **Moteur de rapport par lot** (dans `routes/attendance.ts`, `computeBatchReport`) : agrégation par employé sur une période, **lectures groupées + calcul en mémoire** (résolution d'horaire employé > département > maison > défaut sans requête par employé) pour tenir la charge (plusieurs centaines d'employés, §7). Réutilise le moteur de calcul (incrément 2) et le barème de retenue (incrément 3).
+- **Endpoints** : `GET /report/monthly` (une ligne par employé : temps travaillé, retards, départs anticipés, heures sup, absences, retenue proposée + totaux) et `GET /dashboard` (indicateurs du jour : présents/absents/retards/départs, taux de présence et d'absentéisme, heures sup et retenues du mois). Réservés aux profils de supervision (RH/DG/chef).
+- **Frontend** : carte « Tableau de bord & rapports RH » — bandeau d'indicateurs, sélecteur de période, tableau par employé, **Export Excel (CSV)** et **Imprimer / PDF** (navigateur). Vérifié au navigateur.
+- **Tests** : +4 (`attendance-report.test.ts`) : refus de l'agrégat à un employé simple (403), rapport listant les cumuls et la retenue proposée, indicateurs du tableau de bord, refus du tableau de bord à un employé. **241 tests passent, zéro régression.**
+
+**Prochaine étape :** incrément 6 — consolidation vers la paie (rapport RH mensuel validé, mode auto/manuel, rubriques Oui/Non, gel de période) alimentant les variables de paie existantes (export externe, D-003).

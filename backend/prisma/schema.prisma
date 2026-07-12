@@ -472,6 +472,65 @@ model AttendancePayrollLine {
   @@map("attendance_payroll_lines")
 }
 
+// ===================================================================
+// Module « Paie » natif (D-007) — réimplémentation du moteur Excel
+// (docs/paie/). Barème légal camerounais PARAMÉTRABLE et VERSIONNÉ par date
+// d'effet : toute évolution crée une nouvelle version, les anciennes sont
+// conservées. Additif ; l'internalisation est activable/désactivable via le
+// réglage payroll_internal_enabled (sinon export externe, D-003).
+// ===================================================================
+model PayrollRateSet {
+  id            String   @id @default(uuid())
+  effectiveFrom DateTime @map("effective_from") @db.Date
+  label         String?
+  active        Boolean  @default(true)
+
+  // CNPS (fractions : 0.042 = 4,2 %).
+  vidSalPct   Decimal @map("vid_sal_pct") @db.Decimal(6, 4)
+  vidPatPct   Decimal @map("vid_pat_pct") @db.Decimal(6, 4)
+  pfPct       Decimal @map("pf_pct") @db.Decimal(6, 4)
+  atPct       Decimal @map("at_pct") @db.Decimal(6, 4)
+  cnpsCeiling Decimal @map("cnps_ceiling") @db.Decimal(12, 2)
+
+  // Fiscal.
+  abatPct   Decimal @map("abat_pct") @db.Decimal(6, 4)
+  abatFixe  Decimal @map("abat_fixe") @db.Decimal(12, 2)
+  cacPct    Decimal @map("cac_pct") @db.Decimal(6, 4)
+  cfcSalPct Decimal @map("cfc_sal_pct") @db.Decimal(6, 4)
+  cfcPatPct Decimal @map("cfc_pat_pct") @db.Decimal(6, 4)
+  fnePct    Decimal @map("fne_pct") @db.Decimal(6, 4)
+
+  // Divers.
+  coefAssiette Decimal @map("coef_assiette") @db.Decimal(6, 4)
+  heuresMois   Decimal @map("heures_mois") @db.Decimal(7, 2)
+  ancDefPct    Decimal @map("anc_def_pct") @db.Decimal(6, 4)
+
+  // Barème IRPP progressif (plafonds annuels par part, taux en fraction).
+  irppT1Ceiling Decimal @map("irpp_t1_ceiling") @db.Decimal(12, 2)
+  irppT1Pct     Decimal @map("irpp_t1_pct") @db.Decimal(6, 4)
+  irppT2Ceiling Decimal @map("irpp_t2_ceiling") @db.Decimal(12, 2)
+  irppT2Pct     Decimal @map("irpp_t2_pct") @db.Decimal(6, 4)
+  irppT3Ceiling Decimal @map("irpp_t3_ceiling") @db.Decimal(12, 2)
+  irppT3Pct     Decimal @map("irpp_t3_pct") @db.Decimal(6, 4)
+  irppT4Pct     Decimal @map("irpp_t4_pct") @db.Decimal(6, 4)
+
+  // Barème TC (taxe communale) / RAV (redevance audiovisuelle) par tranches de brut.
+  tcRavSeuil1 Decimal @map("tc_rav_seuil1") @db.Decimal(12, 2)
+  tc1         Decimal @map("tc1") @db.Decimal(12, 2)
+  rav1        Decimal @map("rav1") @db.Decimal(12, 2)
+  tcRavSeuil2 Decimal @map("tc_rav_seuil2") @db.Decimal(12, 2)
+  tc2         Decimal @map("tc2") @db.Decimal(12, 2)
+  rav2        Decimal @map("rav2") @db.Decimal(12, 2)
+  tc3         Decimal @map("tc3") @db.Decimal(12, 2)
+  rav3        Decimal @map("rav3") @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@index([active, effectiveFrom])
+  @@map("payroll_rate_sets")
+}
+
 enum AccessReviewStatus {
   en_cours
   terminee

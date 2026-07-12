@@ -10,6 +10,7 @@ import {
   resolveSchedule,
 } from "../lib/attendance.js";
 import { computeDay, summarize, type DayEvent, type DayResult } from "../lib/attendanceCompute.js";
+import { computeDeduction, type DeductionRuleView } from "../lib/attendanceDeduction.js";
 
 // Module « Présences & Temps de travail » — incrément 1 : paramétrage des
 // horaires officiels, jours fériés, et consultation du pointage brut.
@@ -373,10 +374,159 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // ----- Règles de retenues (§21-22) -----------------------------------------
+
+  fastify.get(
+    "/api/v1/attendance/deduction-rules",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (_request, reply) => {
+      const rows = await prisma.deductionRule.findMany({ orderBy: { effectiveFrom: "desc" } });
+      return reply.send(rows.map(deductionRuleView));
+    },
+  );
+
+  // Nouvelle version de la règle (les anciennes sont conservées, §21).
+  fastify.post(
+    "/api/v1/attendance/deduction-rules",
+    { preHandler: requirePermission("presences", "administration") },
+    async (request, reply) => {
+      const parsed = deductionRuleSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const b = parsed.data;
+      const created = await prisma.deductionRule.create({
+        data: {
+          perMinute: b.per_minute ?? null,
+          perHalfHour: b.per_half_hour,
+          perHour: b.per_hour,
+          dailyCap: b.daily_cap ?? null,
+          monthlyCap: b.monthly_cap ?? null,
+          method: b.method,
+          effectiveFrom: b.effective_from ? new Date(b.effective_from) : new Date(),
+          label: b.label,
+          createdBy: request.user!.id,
+        },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "deduction_rule",
+        entityId: created.id,
+        newValues: deductionRuleView(created),
+        ipAddress: request.ip,
+      });
+      return reply.code(201).send(deductionRuleView(created));
+    },
+  );
+
+  fastify.patch(
+    "/api/v1/attendance/deduction-rules/:id",
+    { preHandler: requirePermission("presences", "administration") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z.object({ active: z.boolean().optional(), label: z.string().max(120).optional() }).safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const existing = await prisma.deductionRule.findUnique({ where: { id } });
+      if (!existing) return reply.code(404).send({ code: "not_found", message: "Règle introuvable." });
+      const updated = await prisma.deductionRule.update({
+        where: { id },
+        data: { active: parsed.data.active ?? existing.active, label: parsed.data.label ?? existing.label, updatedBy: request.user!.id },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "deduction_rule",
+        entityId: id,
+        oldValues: deductionRuleView(existing),
+        newValues: deductionRuleView(updated),
+        ipAddress: request.ip,
+      });
+      return reply.send(deductionRuleView(updated));
+    },
+  );
+
+  // Aperçu de la retenue proposée pour un employé sur une période, selon la
+  // règle en vigueur — respecte les justifications et les plafonds.
+  fastify.get(
+    "/api/v1/attendance/deduction-preview",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (request, reply) => {
+      const query = request.query as { employee_id?: string; from?: string; to?: string };
+      const { from, to } = monthDefault(query.from, query.to);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+        return reply.code(400).send({ code: "validation_error", message: "Période invalide." });
+      }
+      const target = await resolveTargetEmployee(request, query.employee_id);
+      if ("forbidden" in target) return reply.code(403).send(target.forbidden);
+      const rule = await resolveDeductionRule(new Date(`${to}T00:00:00.000Z`));
+      if (!rule) {
+        return reply.send({ from, to, rule: null, message: "Aucune règle de retenue en vigueur.", by_day: [], total_deduction: 0, total_retainable_minutes: 0 });
+      }
+      if (!target.employeeId) {
+        return reply.send({ from, to, rule, no_employee: true, by_day: [], total_deduction: 0, total_retainable_minutes: 0, total_before_monthly_cap: 0 });
+      }
+      const summary = await computeRange(target.employeeId, target.departmentId, from, to);
+      const result = computeDeduction(summary.days, rule);
+      return reply.send({ from, to, rule, ...result });
+    },
+  );
+
   // Petit point d'entrée de santé du module (utile aux futurs tableaux de bord).
   fastify.get("/api/v1/attendance/ping", { preHandler: requireAuth }, async (_request, reply) => {
     return reply.send({ module: "presences", ok: true });
   });
+}
+
+// ----- Règles de retenues : schéma, vue, résolution ------------------------
+
+const deductionRuleSchema = z.object({
+  per_minute: z.number().nonnegative().optional(),
+  per_half_hour: z.number().nonnegative().default(500),
+  per_hour: z.number().nonnegative().default(1000),
+  daily_cap: z.number().nonnegative().optional(),
+  monthly_cap: z.number().nonnegative().optional(),
+  method: z.enum(["prorata", "round_half_hour", "round_hour", "custom"]).default("prorata"),
+  effective_from: z.string().datetime().optional(),
+  label: z.string().max(120).optional(),
+});
+
+function deductionRuleView(r: {
+  id: string;
+  perMinute: unknown;
+  perHalfHour: unknown;
+  perHour: unknown;
+  dailyCap: unknown;
+  monthlyCap: unknown;
+  method: string;
+  effectiveFrom: Date;
+  active: boolean;
+  label: string | null;
+}) {
+  return {
+    id: r.id,
+    per_minute: r.perMinute != null ? Number(r.perMinute) : null,
+    per_half_hour: Number(r.perHalfHour),
+    per_hour: Number(r.perHour),
+    daily_cap: r.dailyCap != null ? Number(r.dailyCap) : null,
+    monthly_cap: r.monthlyCap != null ? Number(r.monthlyCap) : null,
+    method: r.method as DeductionRuleView["method"],
+    effective_from: r.effectiveFrom,
+    active: r.active,
+    label: r.label,
+  };
+}
+
+// Règle applicable à une date : la plus récente, active, dont la date d'effet
+// précède la date visée (versionnage §21).
+async function resolveDeductionRule(onDate: Date): Promise<DeductionRuleView | null> {
+  const rule = await prisma.deductionRule.findFirst({
+    where: { active: true, effectiveFrom: { lte: onDate } },
+    orderBy: { effectiveFrom: "desc" },
+  });
+  return rule ? deductionRuleView(rule) : null;
 }
 
 // ----- Helpers de calcul (incrément 2) --------------------------------------

@@ -626,3 +626,17 @@ Nouveau module d'évolution (validé par l'opérateur : ① socle logiciel d'abo
 - **Tests** : +14 (`attendance-compute.test.ts`), dont l'exemple exact du §16 (sortie 11:45 / retour 13:15 = 30 min, pause non comptée), retard/départ/heures sup, jour férié, week-end, absence justifiée, reconstitution d'intervalles tolérante (oubli de déconnexion, out orphelin). **213 tests passent, zéro régression.**
 
 **Prochaine étape :** incrément 3 — règles de retenues paramétrables (montants, méthodes d'arrondi, plafonds, date d'effet).
+
+### 12/07/2026 (suite) — Présences : incrément 3 (retenues paramétrables)
+
+**Fait :**
+- **Schéma** (migration additive réversible `20260712020000_deduction_rules`) : `deduction_rules` — barème **paramétrable et versionné** (montant par minute/demi-heure/heure, plafonds jour/mois, méthode, date d'effet). Anciennes versions conservées (§21).
+- **Moteur pur** (`attendanceDeduction.ts`) : assiette « retenable » d'une journée (retard + départ anticipé + interruptions, ou temps attendu si absence pleine journée injustifiée ; **0 si justifié**), 4 méthodes de calcul (§22 : prorata exact, arrondi demi-heure sup., arrondi heure sup., personnalisée), application des plafonds jour puis mois.
+- **Endpoints** : CRUD `/api/v1/attendance/deduction-rules` (POST = nouvelle version, PATCH = activer/désactiver, journalisés), et **aperçu** `/deduction-preview` (retenue proposée d'un employé sur une période selon la règle en vigueur, justifications et plafonds respectés).
+- **Seed** : règle par défaut (500 FCFA/demi-heure, 1000 FCFA/heure, méthode prorata). Idempotent.
+- **Frontend** : carte « Règles de retenues » dans RH (barème en vigueur + méthode + plafonds ; création d'une nouvelle version ; historique des versions). Vérifié au navigateur.
+- **Tests** : +14 (`attendance-deduction.test.ts`) : méthodes de calcul (prorata/arrondis), assiette et exonération des jours justifiés, plafonds jour/mois, versionnage. **227 tests passent, zéro régression.**
+
+**Rappel de cohérence :** le module **propose** la retenue ; le prélèvement réel reste effectué par la paie externe (D-003) après validation hiérarchique (workflow — incrément 4).
+
+**Prochaine étape :** incrément 4 — file d'anomalies + justificatifs + workflow de validation paramétrable (chef → RH → RAF → DG).

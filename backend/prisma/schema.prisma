@@ -294,6 +294,39 @@ model AttendanceEvent {
   @@map("attendance_events")
 }
 
+// Méthode de calcul d'une retenue (§22).
+enum DeductionMethod {
+  prorata // au prorata exact (tarif à la minute)
+  round_half_hour // arrondi à la demi-heure supérieure
+  round_hour // arrondi à l'heure supérieure
+  custom // personnalisée (tarif à la minute défini par l'entreprise)
+}
+
+// Règle de retenue PARAMÉTRABLE et VERSIONNÉE (§21) — RH → Paramètres → Règles
+// de retenues. Toute évolution crée une nouvelle version (date d'effet) et
+// conserve les anciennes, afin de préserver l'historique des calculs. Montants
+// en XOF/XAF (FCFA), sans décimale usuelle mais stockés en Decimal par sûreté.
+model DeductionRule {
+  id           String          @id @default(uuid())
+  perMinute    Decimal?        @map("per_minute") @db.Decimal(12, 2)
+  perHalfHour  Decimal         @default(500) @map("per_half_hour") @db.Decimal(12, 2)
+  perHour      Decimal         @default(1000) @map("per_hour") @db.Decimal(12, 2)
+  dailyCap     Decimal?        @map("daily_cap") @db.Decimal(12, 2)
+  monthlyCap   Decimal?        @map("monthly_cap") @db.Decimal(12, 2)
+  method       DeductionMethod @default(prorata)
+  effectiveFrom DateTime       @default(now()) @map("effective_from")
+  active       Boolean         @default(true)
+  label        String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+
+  @@index([active, effectiveFrom])
+  @@map("deduction_rules")
+}
+
 enum AccessReviewStatus {
   en_cours
   terminee

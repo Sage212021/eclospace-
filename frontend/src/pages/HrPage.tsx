@@ -32,6 +32,7 @@ import { Button } from "../components/Button";
 import { IconAdmin } from "../components/icons";
 import { WorkScheduleSection } from "../components/WorkScheduleSection";
 import { PresenceSummaryCard } from "../components/PresenceSummaryCard";
+import { DeductionRulesSection } from "../components/DeductionRulesSection";
 
 const STATUS_LABELS: Record<EmployeeStatus, string> = {
   salarie: "Salarié",
@@ -231,6 +232,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* Évolution — Calcul de présence : synthèse du mois de l'utilisateur (§12-17) */}
       <PresenceSummaryCard />
+
+      {/* Évolution — Règles de retenues paramétrables et versionnées (§21-22) */}
+      <DeductionRulesSection canAdminister={canAdministerPresence} />
 
       {/* Ch. 19 §19.2 — Dossiers collaborateurs */}
       <Card

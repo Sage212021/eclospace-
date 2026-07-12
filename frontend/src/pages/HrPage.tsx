@@ -34,6 +34,7 @@ import { WorkScheduleSection } from "../components/WorkScheduleSection";
 import { PresenceSummaryCard } from "../components/PresenceSummaryCard";
 import { DeductionRulesSection } from "../components/DeductionRulesSection";
 import { AnomaliesSection } from "../components/AnomaliesSection";
+import { AttendanceReportSection } from "../components/AttendanceReportSection";
 
 const STATUS_LABELS: Record<EmployeeStatus, string> = {
   salarie: "Salarié",
@@ -66,6 +67,8 @@ interface HrPageProps {
   canAdministerPresence: boolean;
   // Module « Présences » : validation des anomalies (presences:validation).
   canValidatePresence: boolean;
+  // Module « Présences » : accès au tableau de bord et rapports agrégés.
+  canOverseePresence: boolean;
 }
 
 type HrModal =
@@ -80,7 +83,7 @@ type HrModal =
 
 // Ch. 19 : Ressources humaines — dossier collaborateur, cycle de vie du
 // compte, absences, revue des accès (couche transverse du Lot 6).
-export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence }: HrPageProps) {
+export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence, canOverseePresence }: HrPageProps) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [anomalies, setAnomalies] = useState<AccessAnomaly[]>([]);
@@ -241,6 +244,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* Évolution — File d'anomalies + justificatifs + validation (§19, §23-25) */}
       <AnomaliesSection canValidate={canValidatePresence} employees={employees} />
+
+      {/* Évolution — Tableau de bord & rapports RH + exports (§32-33) */}
+      {canOverseePresence && <AttendanceReportSection />}
 
       {/* Ch. 19 §19.2 — Dossiers collaborateurs */}
       <Card

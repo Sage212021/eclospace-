@@ -374,6 +374,7 @@ export function App() {
             canWriteConfidential={permissions.has("rh_confidentiel:saisie")}
             canAdministerPresence={permissions.has("presences:administration")}
             canValidatePresence={permissions.has("presences:validation")}
+            canOverseePresence={permissions.has("presences:validation") || permissions.has("direction:consultation") || roles.has("CHEF_DEPARTEMENT")}
           />
         )}
         {leaf && "page" in leaf && leaf.page === "users-roles" && (

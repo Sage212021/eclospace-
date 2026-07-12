@@ -8,6 +8,7 @@ import {
   hhmmToMinutes,
   minutesToHhmm,
   resolveSchedule,
+  DEFAULT_SCHEDULE,
 } from "../lib/attendance.js";
 import { computeDay, summarize, type DayEvent, type DayResult } from "../lib/attendanceCompute.js";
 import { computeDeduction, type DeductionRuleView } from "../lib/attendanceDeduction.js";
@@ -695,10 +696,220 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // ----- Rapports & tableau de bord (§20, §32-33) ----------------------------
+
+  // Rapport mensuel RH : une ligne par employé (temps travaillé, retards,
+  // absences, heures sup, retenue proposée). Réservé aux profils de supervision.
+  fastify.get(
+    "/api/v1/attendance/report/monthly",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (request, reply) => {
+      if (!canSeeOthers(request.user!)) {
+        return reply.code(403).send({ code: "forbidden", message: "Rapport réservé aux responsables (RH, chef, direction)." });
+      }
+      const query = request.query as { from?: string; to?: string; department_id?: string };
+      const { from, to } = monthDefault(query.from, query.to);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+        return reply.code(400).send({ code: "validation_error", message: "Période invalide." });
+      }
+      const report = await computeBatchReport(from, to, query.department_id ?? null);
+      return reply.send(report);
+    },
+  );
+
+  // Tableau de bord RH : indicateurs du jour + retenues du mois en cours.
+  fastify.get(
+    "/api/v1/attendance/dashboard",
+    { preHandler: requirePermission("presences", "consultation") },
+    async (request, reply) => {
+      if (!canSeeOthers(request.user!)) {
+        return reply.code(403).send({ code: "forbidden", message: "Tableau de bord réservé aux responsables." });
+      }
+      const query = request.query as { date?: string };
+      const date = query.date && /^\d{4}-\d{2}-\d{2}$/.test(query.date) ? query.date : todayKey();
+      const monthStart = `${date.slice(0, 7)}-01`;
+      const [dayReport, monthReport] = await Promise.all([
+        computeBatchReport(date, date, null),
+        computeBatchReport(monthStart, date, null),
+      ]);
+      const headcount = dayReport.rows.length;
+      const present = dayReport.rows.filter((r) => r.worked_minutes > 0).length;
+      const absent = dayReport.rows.filter((r) => r.days_absent_unjustified > 0).length;
+      const late = dayReport.rows.filter((r) => r.late_minutes > 0).length;
+      const early = dayReport.rows.filter((r) => r.early_leave_minutes > 0).length;
+      const overtime = dayReport.rows.reduce((s, r) => s + r.overtime_minutes, 0);
+      // Base « attendue » du jour : employés dont c'est un jour ouvrable.
+      const expectedToday = dayReport.rows.filter((r) => r.expected_minutes > 0).length;
+      const presenceRate = expectedToday > 0 ? Math.round((present / expectedToday) * 1000) / 10 : null;
+      const absenteeismRate = expectedToday > 0 ? Math.round((absent / expectedToday) * 1000) / 10 : null;
+      return reply.send({
+        date,
+        headcount,
+        present_today: present,
+        absent_today: absent,
+        late_today: late,
+        early_leave_today: early,
+        overtime_minutes_today: overtime,
+        presence_rate_pct: presenceRate,
+        absenteeism_rate_pct: absenteeismRate,
+        deduction_month_total: monthReport.totals.deduction_total,
+        overtime_minutes_month: monthReport.totals.overtime_minutes,
+      });
+    },
+  );
+
   // Petit point d'entrée de santé du module (utile aux futurs tableaux de bord).
   fastify.get("/api/v1/attendance/ping", { preHandler: requireAuth }, async (_request, reply) => {
     return reply.send({ module: "presences", ok: true });
   });
+}
+
+// ----- Rapport par lot (performant : lectures groupées, calcul en mémoire) --
+
+function parseDays(csv: string): number[] {
+  return csv.split(",").map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n >= 1 && n <= 7);
+}
+
+interface BatchScheduleRow {
+  scope: string;
+  departmentId: string | null;
+  employeeId: string | null;
+  dayStartMin: number;
+  lunchStartMin: number;
+  lunchEndMin: number;
+  dayEndMin: number;
+  workingDays: string;
+  effectiveFrom: Date;
+}
+
+// Horaire applicable à un employé, résolu EN MÉMOIRE (employé > département >
+// maison > défaut) à partir de la liste chargée une seule fois.
+function pickSchedule(schedules: BatchScheduleRow[], employeeId: string, departmentId: string | null, onDate: Date) {
+  const applicable = schedules.filter((s) => s.effectiveFrom <= onDate);
+  const best = (scope: string, matchId: string | null) =>
+    applicable
+      .filter((s) => s.scope === scope && (scope === "company" || (scope === "department" ? s.departmentId === matchId : s.employeeId === matchId)))
+      .sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime())[0];
+  const chosen = best("employee", employeeId) ?? (departmentId ? best("department", departmentId) : undefined) ?? best("company", null);
+  if (!chosen) {
+    return {
+      dayStartMin: DEFAULT_SCHEDULE.dayStartMin,
+      lunchStartMin: DEFAULT_SCHEDULE.lunchStartMin,
+      lunchEndMin: DEFAULT_SCHEDULE.lunchEndMin,
+      dayEndMin: DEFAULT_SCHEDULE.dayEndMin,
+      workingDays: parseDays(DEFAULT_SCHEDULE.workingDays),
+    };
+  }
+  return {
+    dayStartMin: chosen.dayStartMin,
+    lunchStartMin: chosen.lunchStartMin,
+    lunchEndMin: chosen.lunchEndMin,
+    dayEndMin: chosen.dayEndMin,
+    workingDays: parseDays(chosen.workingDays),
+  };
+}
+
+export interface ReportRow {
+  employee_id: string;
+  employee_name: string;
+  department: string | null;
+  worked_minutes: number;
+  expected_minutes: number;
+  late_minutes: number;
+  early_leave_minutes: number;
+  overtime_minutes: number;
+  days_worked: number;
+  days_absent_unjustified: number;
+  days_absent_justified: number;
+  deduction_proposed: number;
+}
+
+async function computeBatchReport(from: string, to: string, departmentId: string | null) {
+  const offset = await businessOffsetMinutes();
+  const toDate = new Date(`${to}T00:00:00.000Z`);
+  const fromDate = new Date(`${from}T00:00:00.000Z`);
+  const fromUtc = new Date(fromDate);
+  fromUtc.setUTCDate(fromUtc.getUTCDate() - 1);
+  const toUtc = new Date(toDate);
+  toUtc.setUTCDate(toUtc.getUTCDate() + 2);
+
+  const [employees, schedules, holidays, rule, events, absences] = await Promise.all([
+    prisma.employee.findMany({ where: { deletedAt: null, ...(departmentId ? { departmentId } : {}) }, include: { department: true } }),
+    prisma.workSchedule.findMany({ where: { deletedAt: null, active: true, effectiveFrom: { lte: toDate } } }),
+    prisma.publicHoliday.findMany({ where: { day: { gte: fromDate, lte: toDate } }, select: { day: true } }),
+    resolveDeductionRule(toDate),
+    prisma.attendanceEvent.findMany({ where: { occurredAt: { gte: fromUtc, lte: toUtc }, employeeId: { not: null } }, select: { employeeId: true, kind: true, occurredAt: true } }),
+    prisma.absence.findMany({ where: { status: "validee", fromDate: { lte: new Date(`${to}T23:59:59.000Z`) }, toDate: { gte: fromDate } }, select: { employeeId: true, type: true, fromDate: true, toDate: true } }),
+  ]);
+
+  const holidaySet = new Set(holidays.map((h) => h.day.toISOString().slice(0, 10)));
+  const eventsByEmp = new Map<string, Map<string, DayEvent[]>>();
+  for (const e of events) {
+    if (!e.employeeId) continue;
+    const { dayKey, minutes } = toLocal(e.occurredAt, offset);
+    if (!eventsByEmp.has(e.employeeId)) eventsByEmp.set(e.employeeId, new Map());
+    const m = eventsByEmp.get(e.employeeId)!;
+    if (!m.has(dayKey)) m.set(dayKey, []);
+    m.get(dayKey)!.push({ kind: e.kind, localMinutes: minutes });
+  }
+  const absencesByEmp = new Map<string, { type: string; fromDate: Date; toDate: Date }[]>();
+  for (const a of absences) {
+    if (!absencesByEmp.has(a.employeeId)) absencesByEmp.set(a.employeeId, []);
+    absencesByEmp.get(a.employeeId)!.push(a);
+  }
+
+  const dayKeys = eachDay(from, to);
+  const rows: ReportRow[] = [];
+  for (const emp of employees) {
+    const sched = pickSchedule(schedules as BatchScheduleRow[], emp.id, emp.departmentId, toDate);
+    const empEvents = eventsByEmp.get(emp.id) ?? new Map<string, DayEvent[]>();
+    const empAbs = absencesByEmp.get(emp.id) ?? [];
+    const days = dayKeys.map((dayKey) => {
+      const ds = new Date(`${dayKey}T00:00:00.000Z`);
+      const de = new Date(`${dayKey}T23:59:59.000Z`);
+      const cov = empAbs.find((x) => x.fromDate <= de && x.toDate >= ds);
+      return computeDay({
+        date: dayKey,
+        isoWeekday: isoWeekday(dayKey),
+        events: empEvents.get(dayKey) ?? [],
+        schedule: sched,
+        isHoliday: holidaySet.has(dayKey),
+        covering: cov ? { type: cov.type } : null,
+      });
+    });
+    const summary = summarize(from, to, days);
+    const ded = rule ? computeDeduction(days, rule).total_deduction : 0;
+    rows.push({
+      employee_id: emp.id,
+      employee_name: `${emp.firstName} ${emp.lastName}`,
+      department: emp.department?.name ?? null,
+      worked_minutes: summary.totals.worked_minutes,
+      expected_minutes: summary.totals.expected_minutes,
+      late_minutes: summary.totals.late_minutes,
+      early_leave_minutes: summary.totals.early_leave_minutes,
+      overtime_minutes: summary.totals.overtime_minutes,
+      days_worked: summary.totals.days_worked,
+      days_absent_unjustified: summary.totals.days_absent_unjustified,
+      days_absent_justified: summary.totals.days_absent_justified,
+      deduction_proposed: ded,
+    });
+  }
+  rows.sort((a, b) => a.employee_name.localeCompare(b.employee_name, "fr"));
+
+  const totals = rows.reduce(
+    (acc, r) => {
+      acc.worked_minutes += r.worked_minutes;
+      acc.late_minutes += r.late_minutes;
+      acc.early_leave_minutes += r.early_leave_minutes;
+      acc.overtime_minutes += r.overtime_minutes;
+      acc.days_absent_unjustified += r.days_absent_unjustified;
+      acc.deduction_total += r.deduction_proposed;
+      return acc;
+    },
+    { worked_minutes: 0, late_minutes: 0, early_leave_minutes: 0, overtime_minutes: 0, days_absent_unjustified: 0, deduction_total: 0 },
+  );
+
+  return { from, to, headcount: rows.length, rows, totals };
 }
 
 // ----- Anomalies : vue, seuils, périmètre ----------------------------------

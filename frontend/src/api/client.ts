@@ -2250,3 +2250,56 @@ export function listValidationLevels() {
 export function updateValidationLevel(code: string, input: { mode?: string; position?: number; label?: string }) {
   return request<ValidationLevel>(`/api/v1/attendance/validation-levels/${code}`, { method: "PUT", body: JSON.stringify(input) });
 }
+
+// Rapports & tableau de bord de présence (incrément 5).
+export interface AttendanceDashboard {
+  date: string;
+  headcount: number;
+  present_today: number;
+  absent_today: number;
+  late_today: number;
+  early_leave_today: number;
+  overtime_minutes_today: number;
+  presence_rate_pct: number | null;
+  absenteeism_rate_pct: number | null;
+  deduction_month_total: number;
+  overtime_minutes_month: number;
+}
+
+export interface ReportRow {
+  employee_id: string;
+  employee_name: string;
+  department: string | null;
+  worked_minutes: number;
+  expected_minutes: number;
+  late_minutes: number;
+  early_leave_minutes: number;
+  overtime_minutes: number;
+  days_worked: number;
+  days_absent_unjustified: number;
+  days_absent_justified: number;
+  deduction_proposed: number;
+}
+
+export interface MonthlyReport {
+  from: string;
+  to: string;
+  headcount: number;
+  rows: ReportRow[];
+  totals: {
+    worked_minutes: number;
+    late_minutes: number;
+    early_leave_minutes: number;
+    overtime_minutes: number;
+    days_absent_unjustified: number;
+    deduction_total: number;
+  };
+}
+
+export function getAttendanceDashboard(date?: string) {
+  return request<AttendanceDashboard>(`/api/v1/attendance/dashboard${date ? `?date=${date}` : ""}`);
+}
+export function getMonthlyReport(params?: { from?: string; to?: string; department_id?: string }) {
+  const qs = new URLSearchParams(params as Record<string, string>).toString();
+  return request<MonthlyReport>(`/api/v1/attendance/report/monthly${qs ? `?${qs}` : ""}`);
+}

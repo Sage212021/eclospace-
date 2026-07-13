@@ -108,7 +108,10 @@ type FinanceModal =
 import { useI18n } from "../i18n";
 
 export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  // Alias de `t` pour les endroits où la variable de boucle s'appelle aussi `t`
+  // (ex. la liste des « tenders » du paiement mixte), afin d'éviter le masquage.
+  const tr = t;
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -201,7 +204,11 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
         });
         total += amount;
       }
-      setMessage(`Encaissement de ${total} enregistré pour ${modal.invoice.invoiceNumber}${tenders.length > 1 ? ` (${tenders.length} modes)` : ""}.`);
+      setMessage(
+        lang === "en"
+          ? `Payment of ${total} recorded for ${modal.invoice.invoiceNumber}${tenders.length > 1 ? ` (${tenders.length} methods)` : ""}.`
+          : `Encaissement de ${total} enregistré pour ${modal.invoice.invoiceNumber}${tenders.length > 1 ? ` (${tenders.length} modes)` : ""}.`,
+      );
       setModal(null);
       await refresh();
     } catch (err) {
@@ -212,7 +219,11 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
   async function handleDunning(customerId: string) {
     try {
       const dunning = await nextDunning(customerId);
-      setMessage(`Relance envoyée : ${dunning.level === "rappel" ? "rappel courtois" : "mise en demeure"}.`);
+      setMessage(
+        lang === "en"
+          ? `Reminder sent: ${dunning.level === "rappel" ? "courtesy reminder" : "formal notice"}.`
+          : `Relance envoyée : ${dunning.level === "rappel" ? "rappel courtois" : "mise en demeure"}.`,
+      );
     } catch (err) {
       fail(err, "Échec de la relance.");
     }
@@ -221,7 +232,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
   async function handleValidateExpense(expense: Expense) {
     try {
       await validateExpense(expense.id);
-      setMessage("Dépense validée.");
+      setMessage(t("fin.msg.expense_validated", "Dépense validée."));
       await refresh();
     } catch (err) {
       fail(err, "Échec de la validation.");
@@ -235,7 +246,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
         period_start: new Date(modal.start).toISOString(),
         period_end: new Date(modal.end).toISOString(),
       });
-      setMessage("Relevé de droits d'auteur généré.");
+      setMessage(t("fin.msg.statement_generated", "Relevé de droits d'auteur généré."));
       setModal(null);
       await refresh();
     } catch (err) {
@@ -247,7 +258,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
     if (modal?.kind !== "pay-statement") return;
     try {
       await payRoyaltyStatement(modal.statement.id, { method: "transfer", amount: modal.amount ? Number(modal.amount) : undefined });
-      setMessage("Ordre de paiement des droits d'auteur exécuté.");
+      setMessage(t("fin.msg.royalty_paid", "Ordre de paiement des droits d'auteur exécuté."));
       setModal(null);
       await refresh();
     } catch (err) {
@@ -263,7 +274,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
     if (beneficiaries.length === 0) return;
     try {
       await setContractBeneficiaries(modal.contractId.trim(), beneficiaries);
-      setMessage("Répartition des droits enregistrée.");
+      setMessage(t("fin.msg.split_saved", "Répartition des droits enregistrée."));
       setModal(null);
     } catch (err) {
       fail(err, "Échec de l'enregistrement de la répartition.");
@@ -279,7 +290,11 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
         per_kg_amount: modal.perKg ? Number(modal.perKg) : undefined,
         free_above_amount: modal.freeAbove ? Number(modal.freeAbove) : undefined,
       });
-      setMessage(`Tarif de livraison ${ZONE_LABELS[modal.zone]} mis à jour.`);
+      setMessage(
+        lang === "en"
+          ? `${t("com.zone." + modal.zone, ZONE_LABELS[modal.zone])} delivery rate updated.`
+          : `Tarif de livraison ${ZONE_LABELS[modal.zone]} mis à jour.`,
+      );
       setModal(null);
       await refresh();
     } catch (err) {
@@ -291,7 +306,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
     if (modal?.kind !== "bank-account" || !modal.label.trim()) return;
     try {
       await createBankAccount({ label: modal.label.trim(), type: modal.type });
-      setMessage("Compte créé.");
+      setMessage(t("fin.msg.account_created", "Compte créé."));
       setModal(null);
       await refresh();
     } catch (err) {
@@ -305,7 +320,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
     if (!Number.isFinite(amount) || amount <= 0) return;
     try {
       await createAccountTransfer({ from_account_id: modal.fromId, to_account_id: modal.toId, amount });
-      setMessage("Virement interne enregistré.");
+      setMessage(t("fin.msg.transfer_saved", "Virement interne enregistré."));
       setModal(null);
       await refresh();
     } catch (err) {
@@ -321,9 +336,9 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
-      <Card title="Factures" icon={<IconFinance />} subtitle="Suivi des factures et encaissements.">
+      <Card title={t("fin.invoices", "Factures")} icon={<IconFinance />} subtitle={t("fin.invoices_sub", "Suivi des factures et encaissements.")}>
         {invoices.length === 0 ? (
-          <Empty>Aucune facture.</Empty>
+          <Empty>{t("fin.no_invoice", "Aucune facture.")}</Empty>
         ) : (
           <div className="ecl-list">
             {invoices.map((invoice) => (
@@ -332,16 +347,16 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
                   <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{invoice.invoiceNumber}</span>
                   <span className="ecl-row__desc" style={{ margin: 0 }}>{invoice.customer.name}</span>
                   <Amount value={invoice.totalTtc} />
-                  <StatusChip label={STATUS_LABELS[invoice.status] ?? invoice.status} />
+                  <StatusChip label={t("fin.st." + invoice.status, STATUS_LABELS[invoice.status] ?? invoice.status)} />
                 </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
                   <DocPrintMenu onPrint={(o) => handlePrintInvoice(invoice.id, o)} />
-                  <Button variant="view" size="sm" onClick={() => setEmailInvoice(invoice)}>Envoyer par e-mail</Button>
+                  <Button variant="view" size="sm" onClick={() => setEmailInvoice(invoice)}>{t("fin.send_email", "Envoyer par e-mail")}</Button>
                   {canManage && invoice.type === "invoice" && invoice.status === "issued" && (
                     <>
-                      <Button variant="view" size="sm" onClick={() => setScheduleInvoice(invoice)}>Échéancier</Button>
+                      <Button variant="view" size="sm" onClick={() => setScheduleInvoice(invoice)}>{t("fin.schedule_btn", "Échéancier")}</Button>
                       <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, tenders: [{ method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: String(invoice.totalTtc) }] })}>
-                        Encaisser
+                        {t("fin.collect", "Encaisser")}
                       </Button>
                     </>
                   )}
@@ -353,11 +368,11 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       </Card>
 
       {/* Ch. 18 §18.3 — Encours et relance client */}
-      <Card title="Encours et relance client" icon={<IconFinance />} subtitle="Balance âgée d'un client et relances.">
+      <Card title={t("fin.outstanding", "Encours et relance client")} icon={<IconFinance />} subtitle={t("fin.outstanding_sub", "Balance âgée d'un client et relances.")}>
         <div className="ecl-field" style={{ maxWidth: 360 }}>
-          <label>Client</label>
+          <label>{t("fin.customer", "Client")}</label>
           <select value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)}>
-            <option value="">— sélectionner —</option>
+            <option value="">{t("fin.select", "— sélectionner —")}</option>
             {customers.map((customer) => (
               <option key={customer.id} value={customer.id}>{customer.name}</option>
             ))}
@@ -365,33 +380,33 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
         </div>
         {aging && (
           <div style={{ display: "flex", gap: 16, marginTop: 14, fontSize: 13, flexWrap: "wrap", alignItems: "center" }}>
-            <span>Non échu : <strong style={{ fontFamily: "var(--font-mono)" }}>{aging.not_due}</strong></span>
-            <span style={{ color: "var(--amber)" }}>30 j : <strong style={{ fontFamily: "var(--font-mono)" }}>{aging.d30}</strong></span>
-            <span style={{ color: "var(--amber)" }}>60 j : <strong style={{ fontFamily: "var(--font-mono)" }}>{aging.d60}</strong></span>
-            <span style={{ color: "var(--alert)" }}>90 j+ : <strong style={{ fontFamily: "var(--font-mono)" }}>{aging.d90_plus}</strong></span>
+            <span>{t("fin.not_due", "Non échu")} : <strong style={{ fontFamily: "var(--font-mono)" }}>{aging.not_due}</strong></span>
+            <span style={{ color: "var(--amber)" }}>{t("fin.aging30", "30 j")} : <strong style={{ fontFamily: "var(--font-mono)" }}>{aging.d30}</strong></span>
+            <span style={{ color: "var(--amber)" }}>{t("fin.aging60", "60 j")} : <strong style={{ fontFamily: "var(--font-mono)" }}>{aging.d60}</strong></span>
+            <span style={{ color: "var(--alert)" }}>{t("fin.aging90", "90 j+")} : <strong style={{ fontFamily: "var(--font-mono)" }}>{aging.d90_plus}</strong></span>
             {canManage && aging.d30 + aging.d60 + aging.d90_plus > 0 && (
-              <Button variant="edit" size="sm" onClick={() => handleDunning(selectedCustomerId)}>Relancer</Button>
+              <Button variant="edit" size="sm" onClick={() => handleDunning(selectedCustomerId)}>{t("fin.dun", "Relancer")}</Button>
             )}
           </div>
         )}
       </Card>
 
       {/* Ch. 18 §18.4 — Dépenses */}
-      <Card title="Dépenses" icon={<IconFinance />} subtitle="Engagements de dépenses et validations.">
+      <Card title={t("fin.expenses", "Dépenses")} icon={<IconFinance />} subtitle={t("fin.expenses_sub", "Engagements de dépenses et validations.")}>
         {expenses.length === 0 ? (
-          <Empty>Aucune dépense.</Empty>
+          <Empty>{t("fin.no_expense", "Aucune dépense.")}</Empty>
         ) : (
           <div className="ecl-list">
             {expenses.map((expense) => (
               <div key={expense.id} className="ecl-row">
                 <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span className="ecl-row__title">{CATEGORY_LABELS[expense.category]}</span>
+                  <span className="ecl-row__title">{t("fin.cat." + expense.category, CATEGORY_LABELS[expense.category])}</span>
                   <Amount value={expense.amount} />
-                  <StatusChip label={STATUS_LABELS[expense.status] ?? expense.status} />
+                  <StatusChip label={t("fin.st." + expense.status, STATUS_LABELS[expense.status] ?? expense.status)} />
                   {expense.description && <span className="ecl-row__desc" style={{ margin: 0 }}>{expense.description}</span>}
                 </div>
                 {canAdminister && expense.status === "a_valider" && (
-                  <Button variant="add" size="sm" onClick={() => handleValidateExpense(expense)}>Valider</Button>
+                  <Button variant="add" size="sm" onClick={() => handleValidateExpense(expense)}>{t("fin.validate", "Valider")}</Button>
                 )}
               </div>
             ))}
@@ -399,31 +414,31 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
         )}
         {canManage && (
           <div style={{ marginTop: 14 }}>
-            <NewExpenseForm onCreated={() => { setMessage("Dépense enregistrée."); refresh(); }} onError={setError} />
+            <NewExpenseForm onCreated={() => { setMessage(t("fin.msg.expense_recorded", "Dépense enregistrée.")); refresh(); }} onError={setError} />
           </div>
         )}
       </Card>
 
       {/* Ch. 9 §9.5, Ch. 18 §18.7 — Relevés de droits d'auteur */}
       <Card
-        title="Relevés de droits d'auteur"
+        title={t("fin.royalties", "Relevés de droits d'auteur")}
         icon={<IconFinance />}
-        subtitle="Génération et paiement des relevés."
+        subtitle={t("fin.royalties_sub", "Génération et paiement des relevés.")}
         action={
           canAdminister ? (
             <div style={{ display: "flex", gap: 8 }}>
               <Button variant="add" size="sm" onClick={() => setModal({ kind: "generate-statement", contractId: "", start: "2026-01-01", end: "2026-12-31" })}>
-                + Relevé
+                {t("fin.new_statement", "+ Relevé")}
               </Button>
               <Button variant="view" size="sm" onClick={() => setModal({ kind: "beneficiaries", contractId: "", rows: [{ partnerId: "", sharePct: "100" }] })}>
-                Répartir
+                {t("fin.distribute", "Répartir")}
               </Button>
             </div>
           ) : undefined
         }
       >
         {royaltyStatements.length === 0 ? (
-          <Empty>Aucun relevé.</Empty>
+          <Empty>{t("fin.no_statement", "Aucun relevé.")}</Empty>
         ) : (
           <div className="ecl-list">
             {royaltyStatements.map((statement) => (
@@ -431,14 +446,14 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
                 <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{statement.contract.contractNumber}</span>
                   <span className="ecl-row__desc" style={{ margin: 0 }}>{statement.contract.partner.firstName} {statement.contract.partner.lastName}</span>
-                  <span className="ecl-row__desc" style={{ margin: 0 }}>dû : <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{statement.balanceDue}</strong></span>
-                  <StatusChip label={STATUS_LABELS[statement.status] ?? statement.status} />
+                  <span className="ecl-row__desc" style={{ margin: 0 }}>{t("fin.due_short", "dû :")} <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{statement.balanceDue}</strong></span>
+                  <StatusChip label={t("fin.st." + statement.status, STATUS_LABELS[statement.status] ?? statement.status)} />
                 </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
                   <DocPrintMenu onPrint={(o) => handlePrintStatement(statement.id, o)} />
-                  <Button variant="view" size="sm" onClick={() => setEmailStatement(statement)}>Envoyer par e-mail</Button>
+                  <Button variant="view" size="sm" onClick={() => setEmailStatement(statement)}>{t("fin.send_email", "Envoyer par e-mail")}</Button>
                   {canAdminister && statement.status !== "paid" && Number(statement.remaining_balance ?? statement.balanceDue) > 0 && (
-                    <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-statement", statement, amount: "" })}>Payer</Button>
+                    <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-statement", statement, amount: "" })}>{t("fin.pay", "Payer")}</Button>
                   )}
                 </div>
               </div>
@@ -448,23 +463,23 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       </Card>
 
       {/* Ch. 17 §17.5 — Frais de port par zone */}
-      <Card title="Frais de port par zone" icon={<IconFinance />} subtitle="Barème de livraison par zone géographique.">
+      <Card title={t("fin.shipping", "Frais de port par zone")} icon={<IconFinance />} subtitle={t("fin.shipping_sub", "Barème de livraison par zone géographique.")}>
         <div className="ecl-list">
           {(Object.keys(ZONE_LABELS) as ShippingZone[]).map((zone) => {
             const rate = shippingRates.find((r) => r.zone === zone);
             return (
               <div key={zone} className="ecl-row">
                 <div className="ecl-row__main">
-                  <div className="ecl-row__title">{ZONE_LABELS[zone]}</div>
+                  <div className="ecl-row__title">{t("com.zone." + zone, ZONE_LABELS[zone])}</div>
                   <div className="ecl-row__desc">
                     {rate
-                      ? `Forfait : ${rate.flatAmount ?? "—"} · au kg : ${rate.perKgAmount ?? "—"} · gratuit au-delà de : ${rate.freeAboveAmount ?? "—"}`
-                      : "Non paramétré (frais nuls)"}
+                      ? `${t("fin.flat", "Forfait")} : ${rate.flatAmount ?? "—"} · ${t("fin.per_kg", "au kg")} : ${rate.perKgAmount ?? "—"} · ${t("fin.free_above", "gratuit au-delà de")} : ${rate.freeAboveAmount ?? "—"}`
+                      : t("fin.not_configured", "Non paramétré (frais nuls)")}
                   </div>
                 </div>
                 {canAdminister && (
                   <Button variant="view" size="sm" onClick={() => setModal({ kind: "shipping", zone, flat: String(rate?.flatAmount ?? ""), perKg: String(rate?.perKgAmount ?? ""), freeAbove: String(rate?.freeAboveAmount ?? "") })}>
-                    Paramétrer
+                    {t("fin.configure", "Paramétrer")}
                   </Button>
                 )}
               </div>
@@ -478,10 +493,10 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
       {/* Modes de paiement configurables */}
       <Card
-        title="Modes de paiement"
+        title={t("fin.payment_methods", "Modes de paiement")}
         icon={<IconFinance />}
-        subtitle="Espèces, virement, chèque, Mobile Money… paramétrables."
-        action={canAdminister ? <Button variant="view" size="sm" onClick={() => setModal({ kind: "payment-methods" })}>Gérer</Button> : undefined}
+        subtitle={t("fin.payment_methods_sub", "Espèces, virement, chèque, Mobile Money… paramétrables.")}
+        action={canAdminister ? <Button variant="view" size="sm" onClick={() => setModal({ kind: "payment-methods" })}>{t("fin.manage", "Gérer")}</Button> : undefined}
       >
         <div className="ecl-list">
           {paymentMethods.filter((m) => m.active).map((m) => (
@@ -501,27 +516,27 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
       {/* Ch. 18 §18.8 — Trésorerie */}
       <Card
-        title="Trésorerie : comptes, caisses et virements"
+        title={t("fin.treasury", "Trésorerie : comptes, caisses et virements")}
         icon={<IconFinance />}
-        subtitle="Soldes des comptes et virements internes."
+        subtitle={t("fin.treasury_sub", "Soldes des comptes et virements internes.")}
         action={
           canAdminister ? (
             <div style={{ display: "flex", gap: 8 }}>
-              <Button variant="add" size="sm" onClick={() => setModal({ kind: "bank-account", label: "", type: "banque" })}>+ Compte</Button>
-              <Button variant="view" size="sm" onClick={() => setModal({ kind: "transfer", fromId: "", toId: "", amount: "" })}>Virement</Button>
+              <Button variant="add" size="sm" onClick={() => setModal({ kind: "bank-account", label: "", type: "banque" })}>{t("fin.add_account", "+ Compte")}</Button>
+              <Button variant="view" size="sm" onClick={() => setModal({ kind: "transfer", fromId: "", toId: "", amount: "" })}>{t("fin.transfer_btn", "Virement")}</Button>
             </div>
           ) : undefined
         }
       >
         {bankAccounts.length === 0 ? (
-          <Empty>Aucun compte.</Empty>
+          <Empty>{t("fin.no_account", "Aucun compte.")}</Empty>
         ) : (
           <div className="ecl-list">
             {bankAccounts.map((account) => (
               <div key={account.id} className="ecl-row">
                 <div className="ecl-row__main">
                   <div className="ecl-row__title">{account.label}</div>
-                  <div className="ecl-row__desc">{account.type}</div>
+                  <div className="ecl-row__desc">{t("fin.acct." + account.type, account.type)}</div>
                 </div>
                 <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--ink)" }}>{balances[account.id] ?? "…"}</span>
               </div>
@@ -532,8 +547,10 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
       {emailInvoice && (
         <EmailModal
-          title={`Envoyer la facture ${emailInvoice.invoiceNumber}`}
-          initialMessage={`Madame, Monsieur,\n\nVeuillez trouver ci-dessous votre facture ${emailInvoice.invoiceNumber}. Nous vous en souhaitons bonne réception.\n\nCordialement,\nÉclosion Édition`}
+          title={`${t("fin.email.invoice_title", "Envoyer la facture")} ${emailInvoice.invoiceNumber}`}
+          initialMessage={lang === "en"
+            ? `Dear Sir or Madam,\n\nPlease find below your invoice ${emailInvoice.invoiceNumber}. We hope you receive it well.\n\nKind regards,\nÉclosion Édition`
+            : `Madame, Monsieur,\n\nVeuillez trouver ci-dessous votre facture ${emailInvoice.invoiceNumber}. Nous vous en souhaitons bonne réception.\n\nCordialement,\nÉclosion Édition`}
           loadPreview={(msg) => previewInvoiceEmail(emailInvoice.id, msg)}
           onSend={(to, msg) => sendInvoiceEmail(emailInvoice.id, to, msg)}
           onClose={() => setEmailInvoice(null)}
@@ -542,8 +559,10 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
       {emailStatement && (
         <EmailModal
-          title={`Envoyer le relevé ${emailStatement.contract.contractNumber}`}
-          initialMessage={`Cher auteur, chère auteure,\n\nVeuillez trouver ci-dessous votre relevé de droits d'auteur pour le contrat ${emailStatement.contract.contractNumber}.\n\nBien cordialement,\nÉclosion Édition`}
+          title={`${t("fin.email.statement_title", "Envoyer le relevé")} ${emailStatement.contract.contractNumber}`}
+          initialMessage={lang === "en"
+            ? `Dear author,\n\nPlease find below your royalty statement for contract ${emailStatement.contract.contractNumber}.\n\nKind regards,\nÉclosion Édition`
+            : `Cher auteur, chère auteure,\n\nVeuillez trouver ci-dessous votre relevé de droits d'auteur pour le contrat ${emailStatement.contract.contractNumber}.\n\nBien cordialement,\nÉclosion Édition`}
           loadPreview={(msg) => previewRoyaltyStatementEmail(emailStatement.id, msg)}
           onSend={(to, msg) => sendRoyaltyStatementEmail(emailStatement.id, to, msg)}
           onClose={() => setEmailStatement(null)}
@@ -553,16 +572,16 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       {/* ── Fenêtres intégrées ─────────────────────────────────────────────── */}
       {modal?.kind === "pay-invoice" && (
         <Modal
-          title={`Encaisser ${modal.invoice.invoiceNumber}`}
+          title={`${t("fin.collect", "Encaisser")} ${modal.invoice.invoiceNumber}`}
           wide
           onClose={() => setModal(null)}
-          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitPayInvoice} confirmLabel="Encaisser" confirmVariant="add" />}
+          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitPayInvoice} confirmLabel={t("fin.collect", "Encaisser")} confirmVariant="add" />}
         >
           <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
-            Client : <strong style={{ color: "var(--ink)" }}>{modal.invoice.customer.name}</strong> · solde {modal.invoice.totalTtc}
+            {t("fin.customer", "Client")} : <strong style={{ color: "var(--ink)" }}>{modal.invoice.customer.name}</strong> · {t("fin.balance", "solde")} {modal.invoice.totalTtc}
           </p>
           <div style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 8px" }}>
-            Un ou plusieurs modes (paiement mixte). Compte laissé sur « Auto » = compte par défaut du mode.
+            {t("fin.mixed_hint", "Un ou plusieurs modes (paiement mixte). Compte laissé sur « Auto » = compte par défaut du mode.")}
           </div>
           {modal.tenders.map((t, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1.1fr 1.1fr 1fr 0.9fr 28px", gap: 8, alignItems: "center", marginBottom: 8 }}>
@@ -572,14 +591,14 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
                 ))}
               </select>
               <select value={t.bankAccountId} onChange={(e) => setModal({ ...modal, tenders: modal.tenders.map((x, idx) => (idx === i ? { ...x, bankAccountId: e.target.value } : x)) })}>
-                <option value="">Auto (compte par défaut)</option>
+                <option value="">{tr("fin.auto_account", "Auto (compte par défaut)")}</option>
                 {bankAccounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.label}</option>
                 ))}
               </select>
-              <input placeholder="Référence (n° chèque, ID MoMo…)" value={t.reference} onChange={(e) => setModal({ ...modal, tenders: modal.tenders.map((x, idx) => (idx === i ? { ...x, reference: e.target.value } : x)) })} />
-              <input type="number" min={0} placeholder="Montant" value={t.amount} onChange={(e) => setModal({ ...modal, tenders: modal.tenders.map((x, idx) => (idx === i ? { ...x, amount: e.target.value } : x)) })} />
-              <button type="button" title="Retirer" disabled={modal.tenders.length === 1} onClick={() => setModal({ ...modal, tenders: modal.tenders.filter((_, idx) => idx !== i) })} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, cursor: "pointer", padding: "6px 6px" }}>✕</button>
+              <input placeholder={tr("fin.reference_ph", "Référence (n° chèque, ID MoMo…)")} value={t.reference} onChange={(e) => setModal({ ...modal, tenders: modal.tenders.map((x, idx) => (idx === i ? { ...x, reference: e.target.value } : x)) })} />
+              <input type="number" min={0} placeholder={tr("fin.amount_ph", "Montant")} value={t.amount} onChange={(e) => setModal({ ...modal, tenders: modal.tenders.map((x, idx) => (idx === i ? { ...x, amount: e.target.value } : x)) })} />
+              <button type="button" title={tr("fin.remove", "Retirer")} disabled={modal.tenders.length === 1} onClick={() => setModal({ ...modal, tenders: modal.tenders.filter((_, idx) => idx !== i) })} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, cursor: "pointer", padding: "6px 6px" }}>✕</button>
             </div>
           ))}
           <button
@@ -587,16 +606,16 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
             onClick={() => setModal({ ...modal, tenders: [...modal.tenders, { method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: "" }] })}
             style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}
           >
-            + Ajouter un mode (paiement mixte)
+            {t("fin.add_method", "+ Ajouter un mode (paiement mixte)")}
           </button>
           <div style={{ textAlign: "right", marginTop: 8, fontFamily: "var(--font-mono)", fontWeight: 600 }}>
-            Total saisi : {modal.tenders.reduce((s, t) => s + (Number(t.amount) || 0), 0)}
+            {t("fin.total_entered", "Total saisi :")} {modal.tenders.reduce((s, t) => s + (Number(t.amount) || 0), 0)}
           </div>
         </Modal>
       )}
 
       {scheduleInvoice && (
-        <ScheduleModal invoice={scheduleInvoice} onClose={() => setScheduleInvoice(null)} onError={(m) => setError(m)} onSaved={() => setMessage("Échéancier enregistré.")} />
+        <ScheduleModal invoice={scheduleInvoice} onClose={() => setScheduleInvoice(null)} onError={(m) => setError(m)} onSaved={() => setMessage(t("fin.msg.schedule_saved", "Échéancier enregistré."))} />
       )}
 
       {modal?.kind === "payment-methods" && (
@@ -611,24 +630,24 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
       {modal?.kind === "generate-statement" && (
         <Modal
-          title="Générer un relevé de droits"
+          title={t("fin.gen_statement_title", "Générer un relevé de droits")}
           onClose={() => setModal(null)}
-          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitGenerateStatement} confirmLabel="Générer" confirmVariant="add" />}
+          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitGenerateStatement} confirmLabel={t("fin.generate", "Générer")} confirmVariant="add" />}
         >
-          <Field label="Identifiant du contrat"><input value={modal.contractId} onChange={(e) => setModal({ ...modal, contractId: e.target.value })} autoFocus /></Field>
-          <Field label="Début de période"><input type="date" value={modal.start} onChange={(e) => setModal({ ...modal, start: e.target.value })} /></Field>
-          <Field label="Fin de période"><input type="date" value={modal.end} onChange={(e) => setModal({ ...modal, end: e.target.value })} /></Field>
+          <Field label={t("fin.contract_id", "Identifiant du contrat")}><input value={modal.contractId} onChange={(e) => setModal({ ...modal, contractId: e.target.value })} autoFocus /></Field>
+          <Field label={t("fin.period_start", "Début de période")}><input type="date" value={modal.start} onChange={(e) => setModal({ ...modal, start: e.target.value })} /></Field>
+          <Field label={t("fin.period_end", "Fin de période")}><input type="date" value={modal.end} onChange={(e) => setModal({ ...modal, end: e.target.value })} /></Field>
         </Modal>
       )}
 
       {modal?.kind === "pay-statement" && (
         <Modal
-          title="Payer les droits d'auteur"
+          title={t("fin.pay_royalty_title", "Payer les droits d'auteur")}
           onClose={() => setModal(null)}
-          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitPayStatement} confirmLabel="Payer" confirmVariant="add" />}
+          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitPayStatement} confirmLabel={t("fin.pay", "Payer")} confirmVariant="add" />}
         >
-          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>Restant dû : <strong style={{ color: "var(--ink)", fontFamily: "var(--font-mono)" }}>{modal.statement.remaining_balance ?? modal.statement.balanceDue}</strong></p>
-          <Field label="Montant (laisser vide pour solder le restant)">
+          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{t("fin.remaining_due", "Restant dû :")} <strong style={{ color: "var(--ink)", fontFamily: "var(--font-mono)" }}>{modal.statement.remaining_balance ?? modal.statement.balanceDue}</strong></p>
+          <Field label={t("fin.amount_or_empty", "Montant (laisser vide pour solder le restant)")}>
             <input type="number" min={0} value={modal.amount} onChange={(e) => setModal({ ...modal, amount: e.target.value })} autoFocus />
           </Field>
         </Modal>
@@ -636,53 +655,53 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
       {modal?.kind === "beneficiaries" && (
         <Modal
-          title="Répartir les droits entre bénéficiaires"
+          title={t("fin.distribute_title", "Répartir les droits entre bénéficiaires")}
           onClose={() => setModal(null)}
-          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitBeneficiaries} confirmLabel="Enregistrer" confirmVariant="add" />}
+          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitBeneficiaries} confirmLabel={t("fin.save", "Enregistrer")} confirmVariant="add" />}
         >
-          <Field label="Identifiant du contrat"><input value={modal.contractId} onChange={(e) => setModal({ ...modal, contractId: e.target.value })} autoFocus /></Field>
+          <Field label={t("fin.contract_id", "Identifiant du contrat")}><input value={modal.contractId} onChange={(e) => setModal({ ...modal, contractId: e.target.value })} autoFocus /></Field>
           {modal.rows.map((row, i) => (
             <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
               <div className="ecl-field" style={{ flex: 2 }}>
-                <label>Partenaire (identifiant)</label>
+                <label>{t("fin.partner_id", "Partenaire (identifiant)")}</label>
                 <input value={row.partnerId} onChange={(e) => { const rows = [...modal.rows]; rows[i] = { ...row, partnerId: e.target.value }; setModal({ ...modal, rows }); }} />
               </div>
               <div className="ecl-field" style={{ flex: 1 }}>
-                <label>Part (%)</label>
+                <label>{t("fin.share_pct", "Part (%)")}</label>
                 <input type="number" min={0} max={100} value={row.sharePct} onChange={(e) => { const rows = [...modal.rows]; rows[i] = { ...row, sharePct: e.target.value }; setModal({ ...modal, rows }); }} />
               </div>
             </div>
           ))}
           <Button variant="subtle" size="sm" onClick={() => setModal({ ...modal, rows: [...modal.rows, { partnerId: "", sharePct: "0" }] })}>
-            + Ajouter un bénéficiaire
+            {t("fin.add_beneficiary", "+ Ajouter un bénéficiaire")}
           </Button>
         </Modal>
       )}
 
       {modal?.kind === "shipping" && (
         <Modal
-          title={`Frais de port — ${ZONE_LABELS[modal.zone]}`}
+          title={`${t("fin.shipping_title", "Frais de port —")} ${t("com.zone." + modal.zone, ZONE_LABELS[modal.zone])}`}
           onClose={() => setModal(null)}
-          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitShipping} confirmLabel="Enregistrer" confirmVariant="add" />}
+          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitShipping} confirmLabel={t("fin.save", "Enregistrer")} confirmVariant="add" />}
         >
-          <Field label="Forfait (laisser vide si non applicable)"><input type="number" min={0} value={modal.flat} onChange={(e) => setModal({ ...modal, flat: e.target.value })} /></Field>
-          <Field label="Tarif au kilogramme"><input type="number" min={0} value={modal.perKg} onChange={(e) => setModal({ ...modal, perKg: e.target.value })} /></Field>
-          <Field label="Gratuité au-delà de (montant de commande)"><input type="number" min={0} value={modal.freeAbove} onChange={(e) => setModal({ ...modal, freeAbove: e.target.value })} /></Field>
+          <Field label={t("fin.flat_or_empty", "Forfait (laisser vide si non applicable)")}><input type="number" min={0} value={modal.flat} onChange={(e) => setModal({ ...modal, flat: e.target.value })} /></Field>
+          <Field label={t("fin.per_kg_rate", "Tarif au kilogramme")}><input type="number" min={0} value={modal.perKg} onChange={(e) => setModal({ ...modal, perKg: e.target.value })} /></Field>
+          <Field label={t("fin.free_above_label", "Gratuité au-delà de (montant de commande)")}><input type="number" min={0} value={modal.freeAbove} onChange={(e) => setModal({ ...modal, freeAbove: e.target.value })} /></Field>
         </Modal>
       )}
 
       {modal?.kind === "bank-account" && (
         <Modal
-          title="Nouveau compte / caisse"
+          title={t("fin.new_account_title", "Nouveau compte / caisse")}
           onClose={() => setModal(null)}
-          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitBankAccount} confirmLabel="Créer" confirmVariant="add" />}
+          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitBankAccount} confirmLabel={t("common.create", "Créer")} confirmVariant="add" />}
         >
-          <Field label="Libellé"><input value={modal.label} onChange={(e) => setModal({ ...modal, label: e.target.value })} autoFocus /></Field>
-          <Field label="Type">
+          <Field label={t("fin.label", "Libellé")}><input value={modal.label} onChange={(e) => setModal({ ...modal, label: e.target.value })} autoFocus /></Field>
+          <Field label={t("fin.type", "Type")}>
             <select value={modal.type} onChange={(e) => setModal({ ...modal, type: e.target.value as BankAccountType })}>
-              <option value="banque">Banque</option>
-              <option value="caisse">Caisse</option>
-              <option value="mobile_money">Mobile money</option>
+              <option value="banque">{t("fin.bank", "Banque")}</option>
+              <option value="caisse">{t("fin.cash_box", "Caisse")}</option>
+              <option value="mobile_money">{t("fin.mobile_money", "Mobile money")}</option>
             </select>
           </Field>
         </Modal>
@@ -690,24 +709,24 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
       {modal?.kind === "transfer" && (
         <Modal
-          title="Virement interne"
+          title={t("fin.transfer_title", "Virement interne")}
           onClose={() => setModal(null)}
-          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitTransfer} confirmLabel="Virer" confirmVariant="add" />}
+          footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitTransfer} confirmLabel={t("fin.transfer_btn", "Virer")} confirmVariant="add" />}
         >
-          {bankAccounts.length < 2 && <p style={{ margin: 0, fontSize: 13, color: "var(--alert)" }}>Il faut au moins deux comptes/caisses.</p>}
-          <Field label="Compte source">
+          {bankAccounts.length < 2 && <p style={{ margin: 0, fontSize: 13, color: "var(--alert)" }}>{t("fin.need_two_accounts", "Il faut au moins deux comptes/caisses.")}</p>}
+          <Field label={t("fin.from_account", "Compte source")}>
             <select value={modal.fromId} onChange={(e) => setModal({ ...modal, fromId: e.target.value })}>
-              <option value="">— sélectionner —</option>
+              <option value="">{t("fin.select", "— sélectionner —")}</option>
               {bankAccounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
             </select>
           </Field>
-          <Field label="Compte destination">
+          <Field label={t("fin.to_account", "Compte destination")}>
             <select value={modal.toId} onChange={(e) => setModal({ ...modal, toId: e.target.value })}>
-              <option value="">— sélectionner —</option>
+              <option value="">{t("fin.select", "— sélectionner —")}</option>
               {bankAccounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
             </select>
           </Field>
-          <Field label="Montant"><input type="number" min={0} value={modal.amount} onChange={(e) => setModal({ ...modal, amount: e.target.value })} /></Field>
+          <Field label={t("fin.amount", "Montant")}><input type="number" min={0} value={modal.amount} onChange={(e) => setModal({ ...modal, amount: e.target.value })} /></Field>
         </Modal>
       )}
     </div>
@@ -732,6 +751,8 @@ function TaxRatesCard({
   onError: (m: string | null) => void;
   onMessage: (m: string | null) => void;
 }) {
+  const { t } = useI18n();
+  const plabel = (pt: string) => t("fin.prod." + pt, productLabel(pt));
   const [rates, setRates] = useState<TaxRate[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState<{ productType: string; rate: string } | null>(null);
@@ -756,7 +777,7 @@ function TaxRatesCard({
     onError(null);
     try {
       await setTaxRate({ country, product_type: productType, rate });
-      onMessage(`Taux de TVA « ${productLabel(productType)} » enregistré à ${rate} %. Il s'applique aux nouvelles factures.`);
+      onMessage(`${t("fin.tax", "Taux de TVA")} « ${plabel(productType)} » = ${rate} %. ${t("fin.tax_applies", "S'applique aux nouvelles factures.")}`);
       setAdding(null);
       await refresh();
     } catch (err) {
@@ -766,23 +787,23 @@ function TaxRatesCard({
 
   return (
     <Card
-      title="Taux de TVA"
+      title={t("fin.tax", "Taux de TVA")}
       icon={<IconFinance />}
-      subtitle="Appliqué aux nouvelles factures. Les factures déjà émises ne changent pas."
+      subtitle={t("fin.tax_sub", "Appliqué aux nouvelles factures. Les factures déjà émises ne changent pas.")}
       action={
         canAdminister && !adding ? (
-          <Button variant="view" size="sm" onClick={() => setAdding({ productType: "", rate: "" })}>+ Type de produit</Button>
+          <Button variant="view" size="sm" onClick={() => setAdding({ productType: "", rate: "" })}>{t("fin.tax_add_product", "+ Type de produit")}</Button>
         ) : undefined
       }
     >
       {rates.length === 0 && !adding ? (
-        <Empty>Aucun taux défini — la TVA vaut 0 % tant qu'aucun taux n'est enregistré.</Empty>
+        <Empty>{t("fin.tax_empty", "Aucun taux défini — la TVA vaut 0 % tant qu'aucun taux n'est enregistré.")}</Empty>
       ) : (
         <div className="ecl-list">
           {rates.map((r) => (
             <div key={r.id} className="ecl-row">
               <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span className="ecl-row__title">{productLabel(r.productType)}</span>
+                <span className="ecl-row__title">{plabel(r.productType)}</span>
                 {r.country !== "default" && <StatusChip label={r.country} />}
               </div>
               {canAdminister ? (
@@ -800,7 +821,7 @@ function TaxRatesCard({
                     <span style={{ color: "var(--muted)", fontSize: 13 }}>%</span>
                   </div>
                   <Button variant="add" size="sm" onClick={() => save(r.country, r.productType, drafts[r.id] ?? "")} disabled={drafts[r.id] === String(r.rate)}>
-                    Enregistrer
+                    {t("fin.save", "Enregistrer")}
                   </Button>
                 </div>
               ) : (
@@ -814,28 +835,29 @@ function TaxRatesCard({
       {adding && (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginTop: 12, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
           <div className="ecl-field" style={{ flex: "1 1 200px" }}>
-            <label>Type de produit</label>
-            <input value={adding.productType} onChange={(e) => setAdding({ ...adding, productType: e.target.value })} placeholder="Ex. livre, papeterie…" autoFocus />
+            <label>{t("fin.product_type", "Type de produit")}</label>
+            <input value={adding.productType} onChange={(e) => setAdding({ ...adding, productType: e.target.value })} placeholder={t("fin.product_type_ph", "Ex. livre, papeterie…")} autoFocus />
           </div>
           <div className="ecl-field" style={{ flex: "0 0 120px" }}>
-            <label>Taux (%)</label>
+            <label>{t("fin.rate_pct", "Taux (%)")}</label>
             <input type="number" min={0} max={100} step="0.01" value={adding.rate} onChange={(e) => setAdding({ ...adding, rate: e.target.value })} />
           </div>
           <Button variant="add" size="sm" onClick={() => save("default", adding.productType.trim() || "livre", adding.rate)} disabled={!adding.productType.trim() || adding.rate === ""}>
-            Enregistrer
+            {t("fin.save", "Enregistrer")}
           </Button>
-          <Button variant="view" size="sm" onClick={() => setAdding(null)}>Annuler</Button>
+          <Button variant="view" size="sm" onClick={() => setAdding(null)}>{t("common.cancel", "Annuler")}</Button>
         </div>
       )}
 
       <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "12px 0 0" }}>
-        Au Cameroun, les livres peuvent être exonérés de TVA (0 %). Renseignez le taux légal qui vous concerne.
+        {t("fin.tax_note", "Au Cameroun, les livres peuvent être exonérés de TVA (0 %). Renseignez le taux légal qui vous concerne.")}
       </p>
     </Card>
   );
 }
 
 function NewExpenseForm({ onCreated, onError }: { onCreated: () => void; onError: (m: string) => void }) {
+  const { t } = useI18n();
   const [category, setCategory] = useState<ExpenseCategory>("autre");
   const [amount, setAmount] = useState(0);
   const [description, setDescription] = useState("");
@@ -855,28 +877,29 @@ function NewExpenseForm({ onCreated, onError }: { onCreated: () => void; onError
   return (
     <form onSubmit={handleSubmit} style={{ borderTop: "1px solid var(--line)", paddingTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
       <div className="ecl-field" style={{ flex: "1 1 140px" }}>
-        <label>Catégorie</label>
+        <label>{t("fin.category", "Catégorie")}</label>
         <select value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)}>
-          {Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{t("fin.cat." + value, label)}</option>)}
         </select>
       </div>
       <div className="ecl-field" style={{ flex: "1 1 120px" }}>
-        <label>Montant</label>
+        <label>{t("fin.amount", "Montant")}</label>
         <input type="number" min={0} value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
       </div>
       <div className="ecl-field" style={{ flex: "2 1 200px" }}>
-        <label>Description</label>
+        <label>{t("fin.description", "Description")}</label>
         <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
-      <Button variant="add" size="sm" type="submit">Enregistrer</Button>
+      <Button variant="add" size="sm" type="submit">{t("fin.save", "Enregistrer")}</Button>
     </form>
   );
 }
 
 function ModalActions({ onCancel, onConfirm, confirmLabel, confirmVariant }: { onCancel: () => void; onConfirm: () => void; confirmLabel: string; confirmVariant: "add" | "edit" }) {
+  const { t } = useI18n();
   return (
     <>
-      <Button variant="view" size="sm" onClick={onCancel}>Annuler</Button>
+      <Button variant="view" size="sm" onClick={onCancel}>{t("common.cancel", "Annuler")}</Button>
       <Button variant={confirmVariant} size="sm" onClick={onConfirm}>{confirmLabel}</Button>
     </>
   );
@@ -891,6 +914,7 @@ const SCHEDULE_STATUS: Record<string, { label: string; color: string }> = {
 
 // Échéancier de crédit : plan de paiement en plusieurs fois d'une facture.
 function ScheduleModal({ invoice, onClose, onError, onSaved }: { invoice: Invoice; onClose: () => void; onError: (m: string) => void; onSaved: () => void }) {
+  const { t } = useI18n();
   const [schedule, setSchedule] = useState<InvoiceSchedule | null>(null);
   const [rows, setRows] = useState<{ due_date: string; amount: string; note: string }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -929,14 +953,14 @@ function ScheduleModal({ invoice, onClose, onError, onSaved }: { invoice: Invoic
 
   return (
     <Modal
-      title={`Échéancier — ${invoice.invoiceNumber}`}
+      title={`${t("fin.schedule_btn", "Échéancier")} — ${invoice.invoiceNumber}`}
       wide
       onClose={onClose}
-      footer={<ModalActions onCancel={onClose} onConfirm={save} confirmLabel={busy ? "…" : "Enregistrer"} confirmVariant="add" />}
+      footer={<ModalActions onCancel={onClose} onConfirm={save} confirmLabel={busy ? t("fin.saving", "…") : t("fin.save", "Enregistrer")} confirmVariant="add" />}
     >
       <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
-        Total facture : {money(Number(invoice.totalTtc))}
-        {schedule ? ` · déjà réglé : ${money(schedule.settled)}` : ""}
+        {t("fin.invoice_total", "Total facture :")} {money(Number(invoice.totalTtc))}
+        {schedule ? ` · ${t("fin.already_paid", "déjà réglé :")} ${money(schedule.settled)}` : ""}
       </p>
       <div style={{ margin: "10px 0" }}>
         {rows.map((r, i) => {
@@ -944,19 +968,19 @@ function ScheduleModal({ invoice, onClose, onError, onSaved }: { invoice: Invoic
           return (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "140px 120px 1fr 90px 28px", gap: 8, alignItems: "center", marginBottom: 6 }}>
               <input type="date" value={r.due_date} onChange={(e) => setRows((c) => c.map((x, idx) => (idx === i ? { ...x, due_date: e.target.value } : x)))} />
-              <input type="number" min={0} placeholder="Montant" value={r.amount} onChange={(e) => setRows((c) => c.map((x, idx) => (idx === i ? { ...x, amount: e.target.value } : x)))} />
-              <input placeholder="Note (facultatif)" value={r.note} onChange={(e) => setRows((c) => c.map((x, idx) => (idx === i ? { ...x, note: e.target.value } : x)))} />
-              <span style={{ fontSize: 11, color: st ? SCHEDULE_STATUS[st].color : "var(--muted)" }}>{st ? SCHEDULE_STATUS[st].label : "—"}</span>
+              <input type="number" min={0} placeholder={t("fin.amount_ph", "Montant")} value={r.amount} onChange={(e) => setRows((c) => c.map((x, idx) => (idx === i ? { ...x, amount: e.target.value } : x)))} />
+              <input placeholder={t("fin.note_optional", "Note (facultatif)")} value={r.note} onChange={(e) => setRows((c) => c.map((x, idx) => (idx === i ? { ...x, note: e.target.value } : x)))} />
+              <span style={{ fontSize: 11, color: st ? SCHEDULE_STATUS[st].color : "var(--muted)" }}>{st ? t("fin.sch." + st, SCHEDULE_STATUS[st].label) : "—"}</span>
               <button type="button" onClick={() => setRows((c) => c.filter((_, idx) => idx !== i))} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, cursor: "pointer" }}>✕</button>
             </div>
           );
         })}
         <button type="button" onClick={() => setRows((c) => [...c, { due_date: "", amount: "", note: "" }])} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>
-          + Échéance
+          {t("fin.add_installment", "+ Échéance")}
         </button>
       </div>
       <div style={{ textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 600, color: planned - Number(invoice.totalTtc) > 0.01 ? "var(--alert)" : "var(--ink)" }}>
-        Total planifié : {money(planned)} / {money(Number(invoice.totalTtc))}
+        {t("fin.total_planned", "Total planifié :")} {money(planned)} / {money(Number(invoice.totalTtc))}
       </div>
     </Modal>
   );
@@ -965,6 +989,7 @@ function ScheduleModal({ invoice, onClose, onError, onSaved }: { invoice: Invoic
 // Rapport d'encaissements : totaux par mode de paiement, par compte financier
 // et ventes au comptoir par point de vente — filtrable par période.
 function PaymentReportCard() {
+  const { t } = useI18n();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [report, setReport] = useState<PaymentReport | null>(null);
@@ -984,27 +1009,27 @@ function PaymentReportCard() {
 
   return (
     <Card
-      title="Rapport d'encaissements"
+      title={t("fin.report", "Rapport d'encaissements")}
       icon={<IconFinance />}
-      subtitle="Par mode de paiement, par compte et par point de vente."
+      subtitle={t("fin.report_sub", "Par mode de paiement, par compte et par point de vente.")}
       action={
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} title="Depuis" style={{ fontSize: 12 }} />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} title="Jusqu'à" style={{ fontSize: 12 }} />
-          <Button variant="view" size="sm" onClick={load}>Actualiser</Button>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} title={t("fin.since", "Depuis")} style={{ fontSize: 12 }} />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} title={t("fin.until", "Jusqu'à")} style={{ fontSize: 12 }} />
+          <Button variant="view" size="sm" onClick={load}>{t("fin.refresh", "Actualiser")}</Button>
         </div>
       }
     >
       {error && <p style={{ color: "var(--alert)", fontSize: 13 }}>{error}</p>}
       {!report ? (
-        <Empty>Chargement…</Empty>
+        <Empty>{t("fin.loading", "Chargement…")}</Empty>
       ) : (
         <>
-          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, marginBottom: 10 }}>Total encaissé : {money(report.total_in)}</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, marginBottom: 10 }}>{t("fin.total_collected", "Total encaissé :")} {money(report.total_in)}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 16 }}>
-            <ReportTable title="Par mode de paiement" rows={report.by_method.map((r) => ({ label: r.label, total: r.total, count: r.count }))} money={money} />
-            <ReportTable title="Par compte financier" rows={report.by_account.map((r) => ({ label: r.label, total: r.total, count: r.count }))} money={money} />
-            <ReportTable title="Ventes par point de vente" rows={report.by_point_of_sale.map((r) => ({ label: r.name, total: r.total, count: r.count }))} money={money} />
+            <ReportTable title={t("fin.by_method", "Par mode de paiement")} rows={report.by_method.map((r) => ({ label: r.label, total: r.total, count: r.count }))} money={money} />
+            <ReportTable title={t("fin.by_account", "Par compte financier")} rows={report.by_account.map((r) => ({ label: r.label, total: r.total, count: r.count }))} money={money} />
+            <ReportTable title={t("fin.by_pos", "Ventes par point de vente")} rows={report.by_point_of_sale.map((r) => ({ label: r.name, total: r.total, count: r.count }))} money={money} />
           </div>
         </>
       )}
@@ -1056,6 +1081,7 @@ function PaymentMethodsModal({
   onChanged: () => Promise<void>;
   onError: (m: string) => void;
 }) {
+  const { t } = useI18n();
   const [code, setCode] = useState("");
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<PaymentMethodKind>("autre");
@@ -1087,35 +1113,35 @@ function PaymentMethodsModal({
   }
 
   return (
-    <Modal title="Modes de paiement" wide onClose={onClose} footer={<Button variant="view" size="sm" onClick={onClose}>Fermer</Button>}>
+    <Modal title={t("fin.payment_methods", "Modes de paiement")} wide onClose={onClose} footer={<Button variant="view" size="sm" onClick={onClose}>{t("fin.close", "Fermer")}</Button>}>
       <div className="ecl-list" style={{ marginBottom: 12 }}>
         {methods.map((m) => (
           <div key={m.id} className="ecl-row" style={{ display: "grid", gridTemplateColumns: "1.2fr 0.9fr 1.3fr 0.8fr", gap: 8, alignItems: "center" }}>
             <span><strong>{m.label}</strong> <span style={{ fontSize: 11, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{m.code}</span></span>
-            <span style={{ fontSize: 12, color: "var(--muted)" }}>{KIND_LABELS[m.kind]}</span>
-            <select value={m.defaultAccountId ?? ""} onChange={(e) => patch(m.id, { default_account_id: e.target.value || null })} title="Compte financier par défaut">
-              <option value="">Aucun compte par défaut</option>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>{t("fin.kind." + m.kind, KIND_LABELS[m.kind])}</span>
+            <select value={m.defaultAccountId ?? ""} onChange={(e) => patch(m.id, { default_account_id: e.target.value || null })} title={t("fin.pm_default_account", "Compte financier par défaut")}>
+              <option value="">{t("fin.pm_no_default", "Aucun compte par défaut")}</option>
               {bankAccounts.map((a) => (
                 <option key={a.id} value={a.id}>{a.label}</option>
               ))}
             </select>
             <label style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}>
-              <input type="checkbox" checked={m.active} onChange={(e) => patch(m.id, { active: e.target.checked })} /> Actif
+              <input type="checkbox" checked={m.active} onChange={(e) => patch(m.id, { active: e.target.checked })} /> {t("fin.pm_active", "Actif")}
             </label>
           </div>
         ))}
       </div>
       <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Ajouter un mode</div>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{t("fin.pm_add", "Ajouter un mode")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8 }}>
-          <input placeholder="Code (ex. paypal)" value={code} onChange={(e) => setCode(e.target.value)} />
-          <input placeholder="Libellé (ex. PayPal)" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <input placeholder={t("fin.pm_code_ph", "Code (ex. paypal)")} value={code} onChange={(e) => setCode(e.target.value)} />
+          <input placeholder={t("fin.pm_label_ph", "Libellé (ex. PayPal)")} value={label} onChange={(e) => setLabel(e.target.value)} />
           <select value={kind} onChange={(e) => setKind(e.target.value as PaymentMethodKind)}>
             {(Object.keys(KIND_LABELS) as PaymentMethodKind[]).map((k) => (
-              <option key={k} value={k}>{KIND_LABELS[k]}</option>
+              <option key={k} value={k}>{t("fin.kind." + k, KIND_LABELS[k])}</option>
             ))}
           </select>
-          <Button variant="add" size="sm" onClick={add} disabled={busy || !code.trim() || !label.trim()}>Ajouter</Button>
+          <Button variant="add" size="sm" onClick={add} disabled={busy || !code.trim() || !label.trim()}>{t("fin.pm_add_btn", "Ajouter")}</Button>
         </div>
       </div>
     </Modal>

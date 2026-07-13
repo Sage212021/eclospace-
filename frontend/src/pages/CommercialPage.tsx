@@ -83,7 +83,7 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
       setNewCustomer(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la création du client.");
+      setError(err instanceof Error ? err.message : t("com.err_customer", "Échec de la création du client."));
     }
   }
 
@@ -93,7 +93,7 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
       setMessage(`Commande ${order.orderNumber} débloquée.`);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'approbation.");
+      setError(err instanceof Error ? err.message : t("com.err_approve", "Échec de l'approbation."));
     }
   }
 
@@ -106,31 +106,31 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
       <Card
-        title="Clients"
+        title={t("com.customers", "Clients")}
         icon={<IconCommercial />}
-        subtitle="Librairies, distributeurs, institutions…"
+        subtitle={t("com.customers_sub", "Librairies, distributeurs, institutions…")}
         action={canManage ? <Button variant="add" size="sm" onClick={() => setNewCustomer({ name: "", category: "librairie", zone: "" })}>+ Client</Button> : undefined}
       >
         {customers.length === 0 ? (
-          <Empty>Aucun client.</Empty>
+          <Empty>{t("com.no_customer", "Aucun client.")}</Empty>
         ) : (
           <div className="ecl-list">
             {customers.map((customer) => (
               <div key={customer.id} className="ecl-row">
                 <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span className="ecl-row__title">{customer.name}</span>
-                  <StatusChip label={CATEGORY_LABELS[customer.category]} />
+                  <StatusChip label={t(`com.cat.${customer.category}`, CATEGORY_LABELS[customer.category])} />
                 </div>
-                {customer.creditLimit && <span className="ecl-row__desc" style={{ margin: 0 }}>plafond <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{customer.creditLimit}</strong></span>}
+                {customer.creditLimit && <span className="ecl-row__desc" style={{ margin: 0 }}>{t("com.limit", "plafond")} <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{customer.creditLimit}</strong></span>}
               </div>
             ))}
           </div>
         )}
       </Card>
 
-      <Card title="Commandes" icon={<IconCommercial />} subtitle="Suivi et déblocage des commandes.">
+      <Card title={t("com.orders", "Commandes")} icon={<IconCommercial />} subtitle={t("com.orders_sub", "Suivi et déblocage des commandes.")}>
         {orders.length === 0 ? (
-          <Empty>Aucune commande.</Empty>
+          <Empty>{t("com.no_order", "Aucune commande.")}</Empty>
         ) : (
           <div className="ecl-list">
             {orders.map((order) => (
@@ -142,7 +142,7 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
                   {order.blockReason && <span style={{ color: "var(--alert)", fontSize: 12 }}>{order.blockReason}</span>}
                 </div>
                 {canValidate && order.status === "blocked_credit" && (
-                  <Button variant="add" size="sm" onClick={() => handleApprove(order)}>Débloquer</Button>
+                  <Button variant="add" size="sm" onClick={() => handleApprove(order)}>{t("com.unblock", "Débloquer")}</Button>
                 )}
               </div>
             ))}
@@ -153,30 +153,30 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
       {canManage && (
         <>
           <NewOrderForm customers={customers} isbns={isbns} locations={locations} onCreated={(msg) => { setMessage(msg); refresh(); }} onError={setError} />
-          <PosSaleForm isbns={isbns} locations={locations} onCreated={() => { setMessage("Vente au comptoir enregistrée."); refresh(); }} onError={setError} />
+          <PosSaleForm isbns={isbns} locations={locations} onCreated={() => { setMessage(t("com.pos_recorded", "Vente au comptoir enregistrée.")); refresh(); }} onError={setError} />
         </>
       )}
 
       {newCustomer && (
         <Modal
-          title="Nouveau client"
+          title={t("com.new_customer", "Nouveau client")}
           onClose={() => setNewCustomer(null)}
           footer={
             <>
-              <Button variant="view" size="sm" onClick={() => setNewCustomer(null)}>Annuler</Button>
-              <Button variant="add" size="sm" onClick={submitCustomer}>Créer</Button>
+              <Button variant="view" size="sm" onClick={() => setNewCustomer(null)}>{t("common.cancel", "Annuler")}</Button>
+              <Button variant="add" size="sm" onClick={submitCustomer}>{t("common.create", "Créer")}</Button>
             </>
           }
         >
-          <Field label="Nom du client"><input value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} autoFocus /></Field>
-          <Field label="Catégorie">
+          <Field label={t("com.customer_name", "Nom du client")}><input value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} autoFocus /></Field>
+          <Field label={t("com.category", "Catégorie")}>
             <select value={newCustomer.category} onChange={(e) => setNewCustomer({ ...newCustomer, category: e.target.value as CustomerCategory })}>
-              {Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{t(`com.cat.${value}`, label)}</option>)}
             </select>
           </Field>
-          <Field label="Zone de livraison">
+          <Field label={t("com.delivery_zone", "Zone de livraison")}>
             <select value={newCustomer.zone} onChange={(e) => setNewCustomer({ ...newCustomer, zone: e.target.value })}>
-              {ZONE_OPTIONS.map((z) => <option key={z.value} value={z.value}>{z.label}</option>)}
+              {ZONE_OPTIONS.map((z) => <option key={z.value} value={z.value}>{t(`com.zone.${z.value}`, z.label)}</option>)}
             </select>
           </Field>
         </Modal>
@@ -198,6 +198,7 @@ function NewOrderForm({
   onCreated: (message: string) => void;
   onError: (m: string) => void;
 }) {
+  const { t } = useI18n();
   const [customerId, setCustomerId] = useState("");
   const [isbnId, setIsbnId] = useState("");
   const [locationId, setLocationId] = useState("");
@@ -225,38 +226,38 @@ function NewOrderForm({
           : `Commande ${order.orderNumber} confirmée.`,
       );
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Échec de la création de la commande.");
+      onError(err instanceof Error ? err.message : t("com.err_order", "Échec de la création de la commande."));
     }
   }
 
   return (
-    <Card title="Nouvelle commande" icon={<IconCommercial />} subtitle="Créer une commande client.">
+    <Card title={t("com.new_order", "Nouvelle commande")} icon={<IconCommercial />} subtitle={t("com.new_order_sub", "Créer une commande client.")}>
       <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-          <Field label="Client">
+          <Field label={t("com.customer", "Client")}>
             <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
               {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
             </select>
           </Field>
-          <Field label="Référence (ISBN)">
+          <Field label={t("com.ref_isbn", "Référence (ISBN)")}>
             <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)}>
               {isbns.map((isbn) => <option key={isbn.id} value={isbn.id}>{isbn.isbn13} — {isbn.manuscript?.title}</option>)}
             </select>
           </Field>
-          <Field label="Lieu d'expédition">
+          <Field label={t("com.ship_location", "Lieu d'expédition")}>
             <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
               {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
             </select>
           </Field>
-          <Field label="Quantité">
+          <Field label={t("com.quantity", "Quantité")}>
             <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} />
           </Field>
-          <Field label="Prix unitaire">
+          <Field label={t("com.unit_price", "Prix unitaire")}>
             <input type="number" min={0} value={unitPrice} onChange={(e) => setUnitPrice(Number(e.target.value))} />
           </Field>
         </div>
         <div style={{ marginTop: 14 }}>
-          <Button variant="add" size="md" type="submit">Créer la commande</Button>
+          <Button variant="add" size="md" type="submit">{t("com.create_order", "Créer la commande")}</Button>
         </div>
       </form>
     </Card>
@@ -274,6 +275,7 @@ function PosSaleForm({
   onCreated: () => void;
   onError: (m: string) => void;
 }) {
+  const { t } = useI18n();
   const [isbnId, setIsbnId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -305,7 +307,7 @@ function PosSaleForm({
       setNewPointName("");
       setAddingPoint(false);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Impossible d'ajouter le point de vente.");
+      onError(err instanceof Error ? err.message : t("com.err_point", "Impossible d'ajouter le point de vente."));
     }
   }
 
@@ -315,67 +317,67 @@ function PosSaleForm({
       await createPosSale({ isbn_id: isbnId, location_id: locationId, quantity, unit_price: unitPrice, payment_method: paymentMethod, point_of_sale_id: pointId || undefined });
       onCreated();
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Échec de la vente au comptoir.");
+      onError(err instanceof Error ? err.message : t("com.err_pos", "Échec de la vente au comptoir."));
     }
   }
 
   return (
-    <Card title="Vente au comptoir / salon" icon={<IconCommercial />} subtitle="Encaisser une vente directe.">
+    <Card title={t("com.pos_title", "Vente au comptoir / salon")} icon={<IconCommercial />} subtitle={t("com.pos_sub", "Encaisser une vente directe.")}>
       <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-          <Field label="Référence (ISBN)">
+          <Field label={t("com.ref_isbn", "Référence (ISBN)")}>
             <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)}>
               {isbns.map((isbn) => <option key={isbn.id} value={isbn.id}>{isbn.isbn13} — {isbn.manuscript?.title}</option>)}
             </select>
           </Field>
-          <Field label="Lieu">
+          <Field label={t("com.location", "Lieu")}>
             <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
               {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
             </select>
           </Field>
-          <Field label="Quantité">
+          <Field label={t("com.quantity", "Quantité")}>
             <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} />
           </Field>
-          <Field label="Prix unitaire">
+          <Field label={t("com.unit_price", "Prix unitaire")}>
             <input type="number" min={0} value={unitPrice} onChange={(e) => setUnitPrice(Number(e.target.value))} />
           </Field>
-          <Field label="Encaissement">
+          <Field label={t("com.payment", "Encaissement")}>
             <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as typeof paymentMethod)}>
-              <option value="cash">Espèces</option>
-              <option value="card">Carte</option>
-              <option value="mobile_money">Mobile money</option>
+              <option value="cash">{t("com.cash", "Espèces")}</option>
+              <option value="card">{t("com.card", "Carte")}</option>
+              <option value="mobile_money">{t("com.mobile", "Mobile money")}</option>
             </select>
           </Field>
-          <Field label="Point de vente">
+          <Field label={t("com.pos_point", "Point de vente")}>
             <select value={pointId} onChange={(e) => setPointId(e.target.value)}>
-              <option value="">— Aucun —</option>
+              <option value="">{t("com.pos_none", "— Aucun —")}</option>
               {points.filter((p) => p.active).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
         </div>
         {addingPoint ? (
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8, marginTop: 12 }}>
-            <Field label="Nom du point de vente">
-              <input value={newPointName} onChange={(e) => setNewPointName(e.target.value)} placeholder="Ex : Librairie du Centre" />
+            <Field label={t("com.point_name", "Nom du point de vente")}>
+              <input value={newPointName} onChange={(e) => setNewPointName(e.target.value)} placeholder={t("com.point_placeholder", "Ex : Librairie du Centre")} />
             </Field>
-            <Field label="Type">
+            <Field label={t("common.type", "Type")}>
               <select value={newPointType} onChange={(e) => setNewPointType(e.target.value as PointOfSaleType)}>
-                <option value="librairie">Librairie</option>
-                <option value="salon">Salon / foire</option>
-                <option value="en_ligne">En ligne</option>
-                <option value="autre">Autre</option>
+                <option value="librairie">{t("com.pt.librairie", "Librairie")}</option>
+                <option value="salon">{t("com.pt.salon", "Salon / foire")}</option>
+                <option value="en_ligne">{t("com.pt.en_ligne", "En ligne")}</option>
+                <option value="autre">{t("com.pt.autre", "Autre")}</option>
               </select>
             </Field>
-            <Button variant="add" size="sm" type="button" onClick={handleAddPoint}>Enregistrer</Button>
-            <Button variant="subtle" size="sm" type="button" onClick={() => { setAddingPoint(false); setNewPointName(""); }}>Annuler</Button>
+            <Button variant="add" size="sm" type="button" onClick={handleAddPoint}>{t("com.save", "Enregistrer")}</Button>
+            <Button variant="subtle" size="sm" type="button" onClick={() => { setAddingPoint(false); setNewPointName(""); }}>{t("common.cancel", "Annuler")}</Button>
           </div>
         ) : (
           <button type="button" onClick={() => setAddingPoint(true)} style={{ marginTop: 10, background: "none", border: "none", color: "var(--gold)", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}>
-            + nouveau point de vente
+            {t("com.new_point", "+ nouveau point de vente")}
           </button>
         )}
         <div style={{ marginTop: 14 }}>
-          <Button variant="add" size="md" type="submit">Encaisser</Button>
+          <Button variant="add" size="md" type="submit">{t("com.checkout", "Encaisser")}</Button>
         </div>
       </form>
     </Card>

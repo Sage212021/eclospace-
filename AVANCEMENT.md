@@ -768,3 +768,9 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Module « Paie » natif (D-007) : les 5 incréments sont livrés** — barème versionné + interrupteur, fiche paie employé, moteur de calcul brut→net, bulletin PDF + e-mail, livre de paie + clôture + déclarations. 100 % additif, activable/désactivable, aligné sur le classeur Excel source (`docs/paie/`).
 
 **Reste (chantier i18n) :** traduction progressive des écrans métier restants (incréments i18n 5+).
+
+### 13/07/2026 (suite) — i18n FR/EN : incrément 5 (écran « Stock » complet)
+
+**Fait :** traduction **intégrale** de l'écran Stock & magasin : cartes (alertes, lieux, stock par référence, nouveau mouvement), messages vides, puces (rupture/alerte, déclassé), libellés de champs, boutons, et **les deux menus déroulants d'énumérations** (10 types de mouvement, 4 types de lieu). Vérifié au navigateur (contenu + options en anglais). Frontend uniquement, build OK, aucune régression backend (285 tests inchangés).
+
+**Reste :** traduction des écrans Finance, Commercial, RH (dont les cartes des modules Présences/Paie), Rapports, Utilisateurs, Direction — au fil des incréments i18n suivants.

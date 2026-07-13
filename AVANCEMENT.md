@@ -804,3 +804,9 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Fait :** traduction **intégrale** de l'écran Utilisateurs & rôles : bouton de création, formulaire de nouveau compte (identifiant, e-mail, mot de passe, rôle initial), actions par compte (réinitialiser le mot de passe, suspendre/réactiver, se connecter en tant que, supprimer), attribution/retrait de rôle, puce de statut (Actif/Suspendu), et les **6 fenêtres de confirmation** (suspension, imitation, suppression, réinitialisation, attribution, retrait) avec leurs corps de texte et messages. Français conservé par défaut. Typecheck + build OK, aucune régression backend (285 tests inchangés).
 
 **Reste :** écran RH (cartes Présences/Paie) — dernier écran, réparti sur de nombreux sous-composants.
+
+### 13/07/2026 (suite) — i18n FR/EN : incrément 11 (écran « RH » — partie Présences)
+
+**Fait :** traduction **intégrale** de la page RH (dossiers collaborateurs, absences, anomalies d'accès, revue des habilitations, avec leurs 8 fenêtres et énumérations de statuts/types) **et** des 5 cartes du module Présences : horaires de travail (jours abrégés + source de l'horaire), synthèse « mon temps de travail », règles de retenues (barème versionné), file d'anomalies de présence (types + statuts + justification), tableau de bord & rapports RH (indicateurs, tableau, en-têtes CSV/PDF bilingues). Français conservé par défaut. Typecheck + build OK, aucune régression backend (285 tests inchangés).
+
+**Reste :** partie **Paie** de l'écran RH (4 sous-composants : paramètres du barème, fiches paie, livre de paie/clôture, consolidation).

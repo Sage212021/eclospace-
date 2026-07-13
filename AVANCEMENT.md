@@ -774,3 +774,9 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Fait :** traduction **intégrale** de l'écran Stock & magasin : cartes (alertes, lieux, stock par référence, nouveau mouvement), messages vides, puces (rupture/alerte, déclassé), libellés de champs, boutons, et **les deux menus déroulants d'énumérations** (10 types de mouvement, 4 types de lieu). Vérifié au navigateur (contenu + options en anglais). Frontend uniquement, build OK, aucune régression backend (285 tests inchangés).
 
 **Reste :** traduction des écrans Finance, Commercial, RH (dont les cartes des modules Présences/Paie), Rapports, Utilisateurs, Direction — au fil des incréments i18n suivants.
+
+### 13/07/2026 (suite) — i18n FR/EN : incrément 6 (écran « Commercial » complet)
+
+**Fait :** traduction **intégrale** de l'écran Commercial / ventes : cartes (Clients, Commandes, Nouvelle commande, Vente au comptoir), boutons, messages vides, libellés de champs, et **toutes les énumérations** (6 catégories de client, 4 zones de livraison, 3 modes d'encaissement, 4 types de point de vente). 44 appels `t()` ajoutés, français par défaut conservé. Build OK, aucune régression backend (285 tests inchangés).
+
+**Reste :** écrans Finance, RH (cartes Présences/Paie), Rapports, Utilisateurs, Direction.

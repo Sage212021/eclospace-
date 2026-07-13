@@ -810,3 +810,9 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Fait :** traduction **intégrale** de la page RH (dossiers collaborateurs, absences, anomalies d'accès, revue des habilitations, avec leurs 8 fenêtres et énumérations de statuts/types) **et** des 5 cartes du module Présences : horaires de travail (jours abrégés + source de l'horaire), synthèse « mon temps de travail », règles de retenues (barème versionné), file d'anomalies de présence (types + statuts + justification), tableau de bord & rapports RH (indicateurs, tableau, en-têtes CSV/PDF bilingues). Français conservé par défaut. Typecheck + build OK, aucune régression backend (285 tests inchangés).
 
 **Reste :** partie **Paie** de l'écran RH (4 sous-composants : paramètres du barème, fiches paie, livre de paie/clôture, consolidation).
+
+### 13/07/2026 (suite) — i18n FR/EN : incrément 12 (écran RH — partie Paie) — **chantier i18n terminé**
+
+**Fait :** traduction **intégrale** des 4 sous-composants du module Paie (D-007) : paramètres du barème légal (interrupteur d'internalisation, barème CNPS/IRPP/CFC/FNE/CAC versionné, ~20 champs), fiches paie par employé (données du bulletin, aperçu brut→net des 12 lignes du bulletin, impression, e-mail bilingue), livre de paie & clôture (tableau, exports CNPS/fiscal CSV bilingues, clôture), consolidation vers la paie (mode, rubriques, workflow préparer→valider→geler→transmettre, statuts). Français conservé par défaut. Typecheck + build OK, aucune régression backend (285 tests inchangés).
+
+**➡️ Le chantier i18n FR/EN est terminé : l'intégralité de l'ERP est désormais bilingue.** 12 incréments : connexion, tableau de bord, navigation/en-têtes, mes lectures, stock, commercial, finance, direction, rapports, utilisateurs, RH (présences + paie). Le français reste toujours le défaut ; l'anglais s'active par l'utilisateur (profil + sélecteur de langue). Aucune modification backend, tous les tests inchangés.

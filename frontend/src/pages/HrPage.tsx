@@ -39,6 +39,7 @@ import { useI18n } from "../i18n";
 import { PayrollConsolidationSection } from "../components/PayrollConsolidationSection";
 import { PayrollSettingsSection } from "../components/PayrollSettingsSection";
 import { PayrollProfilesSection } from "../components/PayrollProfilesSection";
+import { PayrollRegisterSection } from "../components/PayrollRegisterSection";
 
 const STATUS_LABELS: Record<EmployeeStatus, string> = {
   salarie: "Salarié",
@@ -78,6 +79,8 @@ interface HrPageProps {
   canManagePayroll: boolean;
   // Saisie des fiches paie (paie:saisie).
   canEditPayroll: boolean;
+  // Clôture d'une période de paie (paie:validation).
+  canClosePayroll: boolean;
 }
 
 type HrModal =
@@ -92,7 +95,7 @@ type HrModal =
 
 // Ch. 19 : Ressources humaines — dossier collaborateur, cycle de vie du
 // compte, absences, revue des accès (couche transverse du Lot 6).
-export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence, canOverseePresence, canViewPayroll, canManagePayroll, canEditPayroll }: HrPageProps) {
+export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence, canOverseePresence, canViewPayroll, canManagePayroll, canEditPayroll, canClosePayroll }: HrPageProps) {
   const { t } = useI18n();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [absences, setAbsences] = useState<Absence[]>([]);
@@ -266,6 +269,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* Module Paie natif (D-007) — fiche paie par employé */}
       {canViewPayroll && <PayrollProfilesSection employees={employees} canManage={canEditPayroll} />}
+
+      {/* Module Paie natif (D-007) — livre de paie, clôture, déclarations */}
+      {canViewPayroll && <PayrollRegisterSection canClose={canClosePayroll} />}
 
       {/* Ch. 19 §19.2 — Dossiers collaborateurs */}
       <Card

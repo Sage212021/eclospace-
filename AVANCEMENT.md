@@ -754,3 +754,17 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Fait :** traduction **intégrale** de l'écran « Mes lectures » (comité de lecture) : en-tête, message vide, échéance, boutons (Fermer/Évaluer, Remettre mon rapport), statuts des missions, et **tout le formulaire de notation** (recommandations, appréciation, score global). Premier écran métier entièrement bilingue (au-delà des seuls en-têtes). Format de date localisé (fr-FR / en-GB). Vérifié au navigateur (titre + contenu en anglais). Frontend uniquement, build OK, aucune régression backend (280 tests inchangés).
 
 **Prochaine étape (alternance) :** Paie incrément 5 (livre de paie mensuel + clôture/gel + déclarations CNPS/fiscales — dernier incrément Paie), puis i18n incrément 5 (autres écrans métier).
+
+### 13/07/2026 (suite) — Module Paie : incrément 5 (livre de paie + clôture + déclarations) — MODULE COMPLET
+
+**Fait :**
+- **Schéma** (migration additive `20260713000000_payroll_closure`) : `payroll_closures` (clôture par période, unique) et `payroll_journal_lines` (instantané figé par salarié, détail des cotisations pour les déclarations). Le journal est **immuable**, re-clôture refusée (anti-doublon).
+- **Livre de paie** : `GET /api/v1/payroll/register?period=` — calcul **par lot** (barème + retenues Présences chargés une seule fois) de tous les salariés dotés d'une fiche paie ; totaux (brut, net, charges patronales) + indicateur « clôturé ».
+- **Clôture / gel** : `POST /register/:period/close` — archive le livre dans le journal (transaction), équivalent du « CloturerMois » du classeur ; `GET /journal/:period` restitue le journal figé. Tout journalisé.
+- **Déclarations** : la ligne conserve le détail (assiette CNPS, PVID sal/pat, PF, AT / IRPP+CAC, CFC sal/pat, FNE, TC, RAV) ; exports **CNPS** et **fiscal** en CSV côté frontend.
+- **Frontend** : carte « Livre de paie & clôture » — période, génération du livre (tableau tous salariés + totaux), **Clôturer la période** (droit `paie:validation`), **Export CNPS (CSV)** et **Export fiscal (CSV)**. Vérifié au navigateur (14 salariés, net total et coût employeur agrégés).
+- **Tests** : +5 (`payroll-closure.test.ts`) : livre listant les salariés + totaux, clôture + journal immuable archivé, indicateur clôturé, refus de seconde clôture (409), journal d'une période non clôturée → 404. **285 tests passent, zéro régression.**
+
+**Module « Paie » natif (D-007) : les 5 incréments sont livrés** — barème versionné + interrupteur, fiche paie employé, moteur de calcul brut→net, bulletin PDF + e-mail, livre de paie + clôture + déclarations. 100 % additif, activable/désactivable, aligné sur le classeur Excel source (`docs/paie/`).
+
+**Reste (chantier i18n) :** traduction progressive des écrans métier restants (incréments i18n 5+).

@@ -234,6 +234,104 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       return reply.send({ sent, to });
     },
   );
+
+  // ----- Livre de paie & clôture (incrément 5) -------------------------------
+
+  // Livre de paie d'une période : une ligne par salarié doté d'une fiche paie.
+  fastify.get(
+    "/api/v1/payroll/register",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.query as { period?: string }).period);
+      const reg = await computeRegister(period);
+      if ("error" in reg) return reply.code(reg.status).send(reg.error);
+      const closure = await prisma.payrollClosure.findUnique({ where: { periodKey: period }, select: { closedAt: true, closedBy: true } });
+      return reply.send({ ...reg, closed: Boolean(closure), closed_at: closure?.closedAt ?? null });
+    },
+  );
+
+  // Clôture / gel d'une période : archive le livre dans le journal immuable.
+  // Refusée si la période est déjà clôturée (anti-doublon).
+  fastify.post(
+    "/api/v1/payroll/register/:period/close",
+    { preHandler: requirePermission("paie", "validation") },
+    async (request, reply) => {
+      const { period } = request.params as { period: string };
+      if (!/^\d{4}-\d{2}$/.test(period)) return reply.code(400).send({ code: "validation_error", message: "Période attendue au format AAAA-MM." });
+      const existing = await prisma.payrollClosure.findUnique({ where: { periodKey: period } });
+      if (existing) return reply.code(409).send({ code: "already_closed", message: "Cette période est déjà clôturée : le journal de paie est figé." });
+      const reg = await computeRegister(period);
+      if ("error" in reg) return reply.code(reg.status).send(reg.error);
+      if (reg.lines.length === 0) return reply.code(409).send({ code: "empty_register", message: "Aucun salarié avec fiche paie : rien à clôturer." });
+
+      const closure = await prisma.$transaction(async (tx) => {
+        const c = await tx.payrollClosure.create({
+          data: {
+            periodKey: period,
+            employees: reg.lines.length,
+            totalBrut: reg.totals.brut,
+            totalNet: reg.totals.net,
+            totalChargesPat: reg.totals.charges_pat,
+            rateEffectiveFrom: new Date(`${reg.rate_effective_from}T00:00:00.000Z`),
+            closedBy: request.user!.id,
+          },
+        });
+        for (const l of reg.lines) {
+          await tx.payrollJournalLine.create({
+            data: {
+              closureId: c.id,
+              employeeId: l.employee_id,
+              employeeName: l.employee_name,
+              matricule: l.matricule,
+              cnpsNumber: l.cnps_number,
+              niu: l.niu,
+              salaireBrut: l.salaire_brut,
+              assietteCnps: l.assiette_cnps,
+              pvidSalarie: l.pvid_salarie,
+              pvidPatronal: l.pvid_patronal,
+              prestationsFamiliales: l.prestations_familiales,
+              accidentsTravail: l.accidents_travail,
+              cfcSalarie: l.cfc_salarie,
+              cfcPatronal: l.cfc_patronal,
+              fne: l.fne,
+              taxeCommunale: l.taxe_communale,
+              rav: l.rav,
+              irppCac: l.irpp_cac,
+              totalRetenuesSalariales: l.total_retenues_salariales,
+              totalChargesPatronales: l.total_charges_patronales,
+              netAPayer: l.net_a_payer,
+              coutEmployeur: l.cout_employeur,
+            },
+          });
+        }
+        return c;
+      }, { timeout: 120000, maxWait: 15000 });
+
+      await writeAuditLog({ userId: request.user!.id, action: "validate", entityType: "payroll_closure", entityId: period, newValues: { employees: reg.lines.length, total_net: reg.totals.net }, ipAddress: request.ip });
+      return reply.send({ period, employees: closure.employees, total_net: Number(closure.totalNet), closed_at: closure.closedAt });
+    },
+  );
+
+  // Journal de paie archivé d'une période clôturée.
+  fastify.get(
+    "/api/v1/payroll/journal/:period",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const { period } = request.params as { period: string };
+      const closure = await prisma.payrollClosure.findUnique({
+        where: { periodKey: period },
+        include: { lines: { orderBy: { employeeName: "asc" } } },
+      });
+      if (!closure) return reply.code(404).send({ code: "not_found", message: "Période non clôturée." });
+      return reply.send({
+        period,
+        closed_at: closure.closedAt,
+        employees: closure.employees,
+        totals: { brut: Number(closure.totalBrut), net: Number(closure.totalNet), charges_pat: Number(closure.totalChargesPat) },
+        lines: closure.lines.map(journalLineView),
+      });
+    },
+  );
 }
 
 function normalizePeriod(p?: string): string {
@@ -363,5 +461,132 @@ function profileView(p: {
     seniority_rate: p.seniorityRate != null ? num(p.seniorityRate) : null,
     seniority_threshold: p.seniorityThreshold,
     apply_seniority: p.applySeniority,
+  };
+}
+
+// Livre de paie d'une période : calcul par lot (barème + consolidation Présences
+// chargés une seule fois) de tous les salariés dotés d'une fiche paie.
+async function computeRegister(period: string): Promise<
+  | { period: string; rate_effective_from: string; lines: RegisterLine[]; totals: { brut: number; net: number; charges_pat: number } }
+  | { error: { code: string; message: string }; status: number }
+> {
+  const [y, m] = period.split("-").map(Number);
+  const toDate = new Date(Date.UTC(y, m, 0));
+  const rateSet = await prisma.payrollRateSet.findFirst({ where: { active: true, effectiveFrom: { lte: toDate } }, orderBy: { effectiveFrom: "desc" } });
+  if (!rateSet) return { error: { code: "no_rate_set", message: "Aucun barème de paie en vigueur pour la période." }, status: 409 };
+  const rates = ratesFrom(rateSet as unknown as Record<string, unknown>);
+
+  const profiles = await prisma.payrollEmployeeProfile.findMany({
+    where: { employee: { deletedAt: null } },
+    include: { employee: { select: { id: true, firstName: true, lastName: true } } },
+  });
+
+  // Retenues d'absence (module Présences) de la période, chargées en une fois.
+  const consolidation = await prisma.attendancePayrollPeriod.findUnique({ where: { periodKey: period }, select: { id: true } });
+  const retenueByEmp = new Map<string, number>();
+  if (consolidation) {
+    const lines = await prisma.attendancePayrollLine.findMany({ where: { periodId: consolidation.id }, select: { employeeId: true, deductionProposed: true } });
+    for (const l of lines) retenueByEmp.set(l.employeeId, num(l.deductionProposed));
+  }
+
+  const lines: RegisterLine[] = [];
+  const totals = { brut: 0, net: 0, charges_pat: 0 };
+  for (const p of profiles) {
+    const gross = num(p.grossContractual);
+    const base = Math.round(gross * num(p.basePct));
+    const ps = computePayslip(
+      {
+        base,
+        complements: Math.round(gross - base),
+        fiscalBase: p.fiscalBase != null ? num(p.fiscalBase) : gross,
+        fiscalParts: num(p.fiscalParts),
+        applyFiscalParts: p.applyFiscalParts,
+        seniorityYears: p.seniorityYears,
+        seniorityRate: p.seniorityRate != null ? num(p.seniorityRate) : null,
+        seniorityThreshold: p.seniorityThreshold ?? 0,
+        applySeniority: p.applySeniority,
+        retenueAbsence: retenueByEmp.get(p.employeeId) ?? 0,
+        internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
+      },
+      rates,
+    );
+    lines.push({
+      employee_id: p.employeeId,
+      employee_name: `${p.employee.firstName} ${p.employee.lastName}`,
+      matricule: p.matricule,
+      cnps_number: p.cnpsNumber,
+      niu: p.niu,
+      salaire_brut: ps.salaire_brut,
+      assiette_cnps: ps.assiette_cnps,
+      pvid_salarie: ps.pvid_salarie,
+      pvid_patronal: ps.pvid_patronal,
+      prestations_familiales: ps.prestations_familiales,
+      accidents_travail: ps.accidents_travail,
+      cfc_salarie: ps.cfc_salarie,
+      cfc_patronal: ps.cfc_patronal,
+      fne: ps.fne,
+      taxe_communale: ps.taxe_communale,
+      rav: ps.rav,
+      irpp_cac: ps.irpp_cac,
+      total_retenues_salariales: ps.total_retenues_salariales,
+      total_charges_patronales: ps.total_charges_patronales,
+      net_a_payer: ps.net_a_payer,
+      cout_employeur: ps.cout_employeur,
+    });
+    totals.brut += ps.salaire_brut;
+    totals.net += ps.net_a_payer;
+    totals.charges_pat += ps.total_charges_patronales;
+  }
+  lines.sort((a, b) => a.employee_name.localeCompare(b.employee_name, "fr"));
+  return { period, rate_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10), lines, totals };
+}
+
+interface RegisterLine {
+  employee_id: string;
+  employee_name: string;
+  matricule: string | null;
+  cnps_number: string | null;
+  niu: string | null;
+  salaire_brut: number;
+  assiette_cnps: number;
+  pvid_salarie: number;
+  pvid_patronal: number;
+  prestations_familiales: number;
+  accidents_travail: number;
+  cfc_salarie: number;
+  cfc_patronal: number;
+  fne: number;
+  taxe_communale: number;
+  rav: number;
+  irpp_cac: number;
+  total_retenues_salariales: number;
+  total_charges_patronales: number;
+  net_a_payer: number;
+  cout_employeur: number;
+}
+
+function journalLineView(l: Record<string, unknown> & { employeeId: string; employeeName: string; matricule: string | null; cnpsNumber: string | null; niu: string | null }) {
+  return {
+    employee_id: l.employeeId,
+    employee_name: l.employeeName,
+    matricule: l.matricule,
+    cnps_number: l.cnpsNumber,
+    niu: l.niu,
+    salaire_brut: num(l.salaireBrut),
+    assiette_cnps: num(l.assietteCnps),
+    pvid_salarie: num(l.pvidSalarie),
+    pvid_patronal: num(l.pvidPatronal),
+    prestations_familiales: num(l.prestationsFamiliales),
+    accidents_travail: num(l.accidentsTravail),
+    cfc_salarie: num(l.cfcSalarie),
+    cfc_patronal: num(l.cfcPatronal),
+    fne: num(l.fne),
+    taxe_communale: num(l.taxeCommunale),
+    rav: num(l.rav),
+    irpp_cac: num(l.irppCac),
+    total_retenues_salariales: num(l.totalRetenuesSalariales),
+    total_charges_patronales: num(l.totalChargesPatronales),
+    net_a_payer: num(l.netAPayer),
+    cout_employeur: num(l.coutEmployeur),
   };
 }

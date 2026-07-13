@@ -570,6 +570,63 @@ model PayrollEmployeeProfile {
   @@map("payroll_employee_profiles")
 }
 
+// Clôture mensuelle de la paie (D-007, incrément 5) — équivalent de la
+// « clôture du mois » du classeur (Livre de paie → Journal de paie). Une fois
+// clôturée, la période est FIGÉE : les lignes archivées sont immuables et la
+// re-clôture est refusée (anti-doublon).
+model PayrollClosure {
+  id              String   @id @default(uuid())
+  periodKey       String   @unique @map("period_key")
+  employees       Int
+  totalBrut       Decimal  @default(0) @map("total_brut") @db.Decimal(14, 2)
+  totalNet        Decimal  @default(0) @map("total_net") @db.Decimal(14, 2)
+  totalChargesPat Decimal  @default(0) @map("total_charges_pat") @db.Decimal(14, 2)
+  rateEffectiveFrom DateTime @map("rate_effective_from") @db.Date
+
+  closedAt DateTime @default(now()) @map("closed_at")
+  closedBy String?  @map("closed_by")
+
+  lines PayrollJournalLine[]
+
+  @@map("payroll_closures")
+}
+
+// Ligne archivée du Journal de paie (instantané figé par salarié). Détail des
+// cotisations conservé pour produire les déclarations CNPS et fiscales.
+model PayrollJournalLine {
+  id           String         @id @default(uuid())
+  closureId    String         @map("closure_id")
+  closure      PayrollClosure @relation(fields: [closureId], references: [id], onDelete: Cascade)
+  employeeId   String         @map("employee_id")
+  employeeName String         @map("employee_name")
+  matricule    String?
+  cnpsNumber   String?        @map("cnps_number")
+  niu          String?
+
+  salaireBrut            Decimal @map("salaire_brut") @db.Decimal(12, 2)
+  assietteCnps           Decimal @map("assiette_cnps") @db.Decimal(12, 2)
+  pvidSalarie            Decimal @map("pvid_salarie") @db.Decimal(12, 2)
+  pvidPatronal           Decimal @map("pvid_patronal") @db.Decimal(12, 2)
+  prestationsFamiliales  Decimal @map("prestations_familiales") @db.Decimal(12, 2)
+  accidentsTravail       Decimal @map("accidents_travail") @db.Decimal(12, 2)
+  cfcSalarie             Decimal @map("cfc_salarie") @db.Decimal(12, 2)
+  cfcPatronal            Decimal @map("cfc_patronal") @db.Decimal(12, 2)
+  fne                    Decimal @db.Decimal(12, 2)
+  taxeCommunale          Decimal @map("taxe_communale") @db.Decimal(12, 2)
+  rav                    Decimal @db.Decimal(12, 2)
+  irppCac                Decimal @map("irpp_cac") @db.Decimal(12, 2)
+  totalRetenuesSalariales Decimal @map("total_retenues_salariales") @db.Decimal(12, 2)
+  totalChargesPatronales  Decimal @map("total_charges_patronales") @db.Decimal(12, 2)
+  netAPayer              Decimal @map("net_a_payer") @db.Decimal(12, 2)
+  coutEmployeur          Decimal @map("cout_employeur") @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([closureId])
+  @@index([employeeId])
+  @@map("payroll_journal_lines")
+}
+
 enum AccessReviewStatus {
   en_cours
   terminee

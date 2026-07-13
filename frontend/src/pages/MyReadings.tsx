@@ -20,7 +20,7 @@ const STATUS_LABELS: Record<string, string> = {
 import { useI18n } from "../i18n";
 
 export function MyReadings() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [assignments, setAssignments] = useState<ReadingAssignment[]>([]);
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export function MyReadings() {
         </div>
       )}
       {assignments.length === 0 && (
-        <p style={{ color: "var(--muted)", marginTop: 16 }}>Aucune mission en cours — les nouvelles affectations apparaîtront ici.</p>
+        <p style={{ color: "var(--muted)", marginTop: 16 }}>{t("myr.empty", "Aucune mission en cours — les nouvelles affectations apparaîtront ici.")}</p>
       )}
       {assignments.map((assignment) => (
         <section key={assignment.id} className="ecl-card">
@@ -50,8 +50,8 @@ export function MyReadings() {
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: 14.5, color: "var(--ink)" }}>{assignment.manuscript?.title}</div>
               <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <span>Échéance : {new Date(assignment.dueAt).toLocaleDateString("fr-FR")}</span>
-                <StatusChip label={STATUS_LABELS[assignment.status] ?? assignment.status} />
+                <span>{t("myr.deadline", "Échéance")} : {new Date(assignment.dueAt).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR")}</span>
+                <StatusChip label={t(`myr.status.${assignment.status}`, STATUS_LABELS[assignment.status] ?? assignment.status)} />
               </div>
             </div>
             {assignment.status === "pending" && (
@@ -60,7 +60,7 @@ export function MyReadings() {
                 size="sm"
                 onClick={() => setOpenAssignmentId(openAssignmentId === assignment.id ? null : assignment.id)}
               >
-                {openAssignmentId === assignment.id ? "Fermer" : "Évaluer"}
+                {openAssignmentId === assignment.id ? t("myr.close", "Fermer") : t("myr.evaluate", "Évaluer")}
               </Button>
             )}
           </div>
@@ -69,7 +69,7 @@ export function MyReadings() {
               assignmentId={assignment.id}
               onSubmitted={() => {
                 setOpenAssignmentId(null);
-                setMessage("Évaluation remise avec succès.");
+                setMessage(t("myr.submitted_ok", "Évaluation remise avec succès."));
                 refresh();
               }}
             />
@@ -81,6 +81,7 @@ export function MyReadings() {
 }
 
 function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; onSubmitted: () => void }) {
+  const { t } = useI18n();
   const [criteria, setCriteria] = useState<EvaluationCriterion[]>([]);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [comment, setComment] = useState("");
@@ -121,7 +122,7 @@ function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; o
         <div key={criterion.id} style={{ marginBottom: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
             <span>
-              {criterion.label} <span style={{ color: "var(--muted)" }}>(coef. {criterion.coefficient})</span>
+              {criterion.label} <span style={{ color: "var(--muted)" }}>({t("myr.coef", "coef.")} {criterion.coefficient})</span>
             </span>
             <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{scores[criterion.id] ?? 0}/10</span>
           </div>
@@ -138,23 +139,23 @@ function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; o
       ))}
 
       <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 14px", padding: "8px 12px", background: "var(--paper)", borderRadius: 8 }}>
-        Score global indicatif (recalculé et validé par le serveur à la remise) :{" "}
+        {t("myr.global_score", "Score global indicatif (recalculé et validé par le serveur à la remise) :")}{" "}
         <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{livePreview.toFixed(2)}</strong>
       </div>
 
-      <Field label="Recommandation">
+      <Field label={t("myr.recommendation", "Recommandation")}>
         <select value={recommendation} onChange={(e) => setRecommendation(e.target.value as typeof recommendation)}>
-          <option value="accept">Acceptation sans modification</option>
-          <option value="accept_minor">Acceptation sous réserve de corrections mineures</option>
-          <option value="accept_major">Acceptation sous réserve de corrections majeures</option>
-          <option value="rewrite">Demande de réécriture</option>
-          <option value="new_expertise">Nouvelle expertise</option>
-          <option value="reject">Refus motivé</option>
+          <option value="accept">{t("myr.reco.accept", "Acceptation sans modification")}</option>
+          <option value="accept_minor">{t("myr.reco.accept_minor", "Acceptation sous réserve de corrections mineures")}</option>
+          <option value="accept_major">{t("myr.reco.accept_major", "Acceptation sous réserve de corrections majeures")}</option>
+          <option value="rewrite">{t("myr.reco.rewrite", "Demande de réécriture")}</option>
+          <option value="new_expertise">{t("myr.reco.new_expertise", "Nouvelle expertise")}</option>
+          <option value="reject">{t("myr.reco.reject", "Refus motivé")}</option>
         </select>
       </Field>
 
       <div style={{ marginTop: 12 }}>
-        <Field label="Appréciation générale">
+        <Field label={t("myr.general_comment", "Appréciation générale")}>
           <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} />
         </Field>
       </div>
@@ -162,7 +163,7 @@ function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; o
       {error && <p style={{ color: "var(--alert)", fontSize: 12.5, marginTop: 10 }}>{error}</p>}
 
       <div style={{ marginTop: 14 }}>
-        <Button variant="add" size="md" type="submit">Remettre mon rapport</Button>
+        <Button variant="add" size="md" type="submit">{t("myr.submit_report", "Remettre mon rapport")}</Button>
       </div>
     </form>
   );

@@ -748,3 +748,9 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 - **Tests** : +4 (`payroll-payslip-email.test.ts`) : aperçu sans fiche → 409, aperçu avec destinataire par défaut (e-mail de la fiche), envoi → 503 si SMTP non configuré (le flux atteint bien l'expédition), refus sans destinataire → 400. **280 tests passent, zéro régression.**
 
 **Prochaine étape (alternance) :** i18n incrément 4 (contenu détaillé d'un écran métier), puis Paie incrément 5 (livre de paie + clôture/gel + déclarations CNPS/fiscales).
+
+### 13/07/2026 — i18n FR/EN : incrément 4 (écran « Mes lectures » complet)
+
+**Fait :** traduction **intégrale** de l'écran « Mes lectures » (comité de lecture) : en-tête, message vide, échéance, boutons (Fermer/Évaluer, Remettre mon rapport), statuts des missions, et **tout le formulaire de notation** (recommandations, appréciation, score global). Premier écran métier entièrement bilingue (au-delà des seuls en-têtes). Format de date localisé (fr-FR / en-GB). Vérifié au navigateur (titre + contenu en anglais). Frontend uniquement, build OK, aucune régression backend (280 tests inchangés).
+
+**Prochaine étape (alternance) :** Paie incrément 5 (livre de paie mensuel + clôture/gel + déclarations CNPS/fiscales — dernier incrément Paie), puis i18n incrément 5 (autres écrans métier).

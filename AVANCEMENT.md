@@ -786,3 +786,9 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Fait :** traduction **intégrale** de l'écran Finance & comptabilité — le plus riche de l'ERP (1143 lignes, ~9 cartes, 8 fenêtres intégrées, 6 sous-composants). Sont désormais bilingues : les cartes (Factures, Encours & relance client, Dépenses, Relevés de droits d'auteur, Frais de port par zone, Taux de TVA, Modes de paiement, Rapport d'encaissements, Trésorerie), toutes les fenêtres (encaissement mixte, échéancier de crédit, génération/paiement de relevé, répartition des bénéficiaires, frais de port, compte/caisse, virement interne, gestion des modes de paiement), et **toutes les énumérations** (statuts de factures/dépenses/relevés, catégories de dépense dont « Abonnements / Services en ligne », zones de livraison réutilisant `com.zone.*`, types de produit TVA, genres de mode de paiement, statuts d'échéancier, types de compte). Les messages de confirmation et les corps d'e-mail (facture, relevé) basculent aussi selon la langue. ~150 appels `t()`, français conservé par défaut. Typecheck + build OK, aucune régression backend (285 tests inchangés).
 
 **Reste :** écrans RH (cartes Présences/Paie), Rapports, Utilisateurs, Direction.
+
+### 13/07/2026 (suite) — i18n FR/EN : incrément 8 (écran « Direction générale » complet)
+
+**Fait :** traduction **intégrale** de l'écran Direction générale (pilotage) : les 4 cartes (tableau de bord consolidé, recherche globale, alertes automatiques, centre de pilotage intelligent), les **4 blocs de domaine** (Éditorial, Production, Commercial, Financier) avec leurs **14 tuiles d'indicateurs**, la fenêtre de décision d'une recommandation (traiter/reporter/ignorer), les messages, et les **libellés de priorité** (faible/moyenne/élevée/critique). Français conservé par défaut. Typecheck + build OK, aucune régression backend (285 tests inchangés).
+
+**Reste :** écrans RH (cartes Présences/Paie), Rapports, Utilisateurs.

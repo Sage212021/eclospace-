@@ -33,7 +33,7 @@ interface DirectionPageProps {
 import { useI18n } from "../i18n";
 
 export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [dashboard, setDashboard] = useState<DirectionDashboard | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
@@ -71,7 +71,11 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
   async function handleGenerate() {
     try {
       const result = await generateRecommendations();
-      setMessage(`${result.created} nouvelle(s) recommandation(s) générée(s).`);
+      setMessage(
+        lang === "en"
+          ? `${result.created} new recommendation(s) generated.`
+          : `${result.created} nouvelle(s) recommandation(s) générée(s).`,
+      );
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de la génération.");
@@ -82,7 +86,7 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
     if (!decideFor) return;
     try {
       await decideRecommendation(decideFor.recommendation.id, decideFor.status, decideFor.comment || undefined);
-      setMessage("Recommandation traitée.");
+      setMessage(t("dir.msg.reco_treated", "Recommandation traitée."));
       setDecideFor(null);
       await refresh();
     } catch (err) {
@@ -90,7 +94,7 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
     }
   }
 
-  const DECISION_LABELS = { treated: "Traiter", postponed: "Reporter", ignored: "Ignorer" } as const;
+  const DECISION_LABELS = { treated: t("dir.treat", "Traiter"), postponed: t("dir.postpone", "Reporter"), ignored: t("dir.ignore", "Ignorer") } as const;
 
   return (
     <div className="ecl-page">
@@ -101,62 +105,62 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
       {/* Ch. 5 §5.1 — Tableau de bord consolidé */}
-      <Card title="Tableau de bord consolidé" icon={<IconPilotage />} subtitle="Indicateurs clés par domaine.">
+      <Card title={t("dir.dashboard", "Tableau de bord consolidé")} icon={<IconPilotage />} subtitle={t("dir.dashboard_sub", "Indicateurs clés par domaine.")}>
         {dashboard ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            <DomainBlock title="Éditorial">
+            <DomainBlock title={t("dir.dom.editorial", "Éditorial")}>
               <TileRow>
-                <StatTile label="Manuscrits" value={dashboard.editorial.total} />
-                <StatTile label="Statuts actifs" value={dashboard.editorial.by_status.length} />
+                <StatTile label={t("dir.tile.manuscripts", "Manuscrits")} value={dashboard.editorial.total} />
+                <StatTile label={t("dir.tile.active_statuses", "Statuts actifs")} value={dashboard.editorial.by_status.length} />
               </TileRow>
-              <DataTable rows={dashboard.editorial.by_status.map(({ code: _code, ...rest }) => rest)} emptyLabel="Aucun manuscrit." />
+              <DataTable rows={dashboard.editorial.by_status.map(({ code: _code, ...rest }) => rest)} emptyLabel={t("dir.no_manuscript", "Aucun manuscrit.")} />
             </DomainBlock>
 
-            <DomainBlock title="Production">
+            <DomainBlock title={t("dir.dom.production", "Production")}>
               <TileRow>
-                <StatTile label="Projets en cours" value={dashboard.production.projects_in_progress} />
-                <StatTile label="Tâches terminées" value={dashboard.production.tasks_done} />
-                <StatTile label="Tâches en retard" value={dashboard.production.tasks_late} tone={dashboard.production.tasks_late > 0 ? "late" : undefined} />
-                <StatTile label="Respect des délais" value={dashboard.production.on_time_rate_pct === null ? "—" : `${dashboard.production.on_time_rate_pct} %`} />
+                <StatTile label={t("dir.tile.projects_in_progress", "Projets en cours")} value={dashboard.production.projects_in_progress} />
+                <StatTile label={t("dir.tile.tasks_done", "Tâches terminées")} value={dashboard.production.tasks_done} />
+                <StatTile label={t("dir.tile.tasks_late", "Tâches en retard")} value={dashboard.production.tasks_late} tone={dashboard.production.tasks_late > 0 ? "late" : undefined} />
+                <StatTile label={t("dir.tile.on_time_rate", "Respect des délais")} value={dashboard.production.on_time_rate_pct === null ? "—" : `${dashboard.production.on_time_rate_pct} %`} />
               </TileRow>
             </DomainBlock>
 
-            <DomainBlock title="Commercial">
+            <DomainBlock title={t("dir.dom.commercial", "Commercial")}>
               <TileRow>
-                <StatTile label="Exemplaires vendus" value={dashboard.commercial.units_sold} />
-                <StatTile label="Chiffre d'affaires" value={dashboard.commercial.revenue_total} />
-                <StatTile label="Ruptures de stock" value={dashboard.commercial.stock_outs} tone={dashboard.commercial.stock_outs > 0 ? "alert" : undefined} />
+                <StatTile label={t("dir.tile.units_sold", "Exemplaires vendus")} value={dashboard.commercial.units_sold} />
+                <StatTile label={t("dir.tile.revenue", "Chiffre d'affaires")} value={dashboard.commercial.revenue_total} />
+                <StatTile label={t("dir.tile.stock_outs", "Ruptures de stock")} value={dashboard.commercial.stock_outs} tone={dashboard.commercial.stock_outs > 0 ? "alert" : undefined} />
               </TileRow>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Meilleures ventes</div>
-              <DataTable rows={dashboard.commercial.best_sellers} emptyLabel="Aucune vente enregistrée." />
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{t("dir.best_sellers", "Meilleures ventes")}</div>
+              <DataTable rows={dashboard.commercial.best_sellers} emptyLabel={t("dir.no_sale", "Aucune vente enregistrée.")} />
             </DomainBlock>
 
-            <DomainBlock title="Financier">
+            <DomainBlock title={t("dir.dom.financial", "Financier")}>
               {dashboard.financial ? (
                 <TileRow>
-                  <StatTile label="Coût de production" value={dashboard.financial.production_cost_total} />
-                  <StatTile label="Dépenses engagées" value={dashboard.financial.expenses_engaged} />
-                  <StatTile label="Droits d'auteur dus" value={dashboard.financial.royalties_due} />
-                  <StatTile label="Factures en attente" value={dashboard.financial.invoices_pending} />
-                  <StatTile label="Position de trésorerie" value={dashboard.financial.treasury_position} tone={dashboard.financial.treasury_position < 0 ? "alert" : undefined} />
+                  <StatTile label={t("dir.tile.production_cost", "Coût de production")} value={dashboard.financial.production_cost_total} />
+                  <StatTile label={t("dir.tile.expenses_engaged", "Dépenses engagées")} value={dashboard.financial.expenses_engaged} />
+                  <StatTile label={t("dir.tile.royalties_due", "Droits d'auteur dus")} value={dashboard.financial.royalties_due} />
+                  <StatTile label={t("dir.tile.invoices_pending", "Factures en attente")} value={dashboard.financial.invoices_pending} />
+                  <StatTile label={t("dir.tile.treasury", "Position de trésorerie")} value={dashboard.financial.treasury_position} tone={dashboard.financial.treasury_position < 0 ? "alert" : undefined} />
                 </TileRow>
               ) : (
-                <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Réservé aux profils habilités (consultation financière).</p>
+                <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>{t("dir.financial_restricted", "Réservé aux profils habilités (consultation financière).")}</p>
               )}
             </DomainBlock>
           </div>
         ) : (
-          <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
+          <p style={{ color: "var(--muted)", fontSize: 13 }}>{t("dir.loading", "Chargement…")}</p>
         )}
       </Card>
 
       {/* Ch. 5 §5.4 — Recherche globale */}
-      <Card title="Recherche globale" icon={<IconPilotage />} subtitle="Numéro, titre, contributeur, collection, ISBN.">
+      <Card title={t("dir.search", "Recherche globale")} icon={<IconPilotage />} subtitle={t("dir.search_sub", "Numéro, titre, contributeur, collection, ISBN.")}>
         <form onSubmit={handleSearch} style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
           <div className="ecl-field" style={{ flex: 1 }}>
-            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher…" />
+            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("dir.search_ph", "Rechercher…")} />
           </div>
-          <Button variant="view" size="sm" type="submit">Rechercher</Button>
+          <Button variant="view" size="sm" type="submit">{t("dir.search_btn", "Rechercher")}</Button>
         </form>
         {results.length > 0 && (
           <div className="ecl-list" style={{ marginTop: 12 }}>
@@ -174,9 +178,9 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
       </Card>
 
       {/* Ch. 5 §5.6 — Alertes automatiques */}
-      <Card title="Alertes automatiques" icon={<IconPilotage />} subtitle="Signaux nécessitant une attention.">
+      <Card title={t("dir.alerts", "Alertes automatiques")} icon={<IconPilotage />} subtitle={t("dir.alerts_sub", "Signaux nécessitant une attention.")}>
         {alerts.length === 0 ? (
-          <Empty>Aucune alerte.</Empty>
+          <Empty>{t("dir.no_alert", "Aucune alerte.")}</Empty>
         ) : (
           <div className="ecl-list">
             {alerts.map((alert, i) => (
@@ -191,13 +195,13 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
 
       {/* Ch. 5 §5.9 — Centre de pilotage intelligent */}
       <Card
-        title="Centre de pilotage intelligent"
+        title={t("dir.pilot", "Centre de pilotage intelligent")}
         icon={<IconPilotage />}
-        subtitle="Recommandations générées à partir des indicateurs."
-        action={<Button variant="add" size="sm" onClick={handleGenerate}>Générer</Button>}
+        subtitle={t("dir.pilot_sub", "Recommandations générées à partir des indicateurs.")}
+        action={<Button variant="add" size="sm" onClick={handleGenerate}>{t("dir.generate", "Générer")}</Button>}
       >
         {recommendations.length === 0 ? (
-          <Empty>Aucune recommandation ouverte.</Empty>
+          <Empty>{t("dir.no_reco", "Aucune recommandation ouverte.")}</Empty>
         ) : (
           <div className="ecl-list">
             {recommendations.map((recommendation) => (
@@ -208,9 +212,9 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
                 </div>
                 {canTreatRecommendations && (
                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    <Button variant="add" size="sm" onClick={() => setDecideFor({ recommendation, status: "treated", comment: "" })}>Traiter</Button>
-                    <Button variant="view" size="sm" onClick={() => setDecideFor({ recommendation, status: "postponed", comment: "" })}>Reporter</Button>
-                    <Button variant="danger" size="sm" onClick={() => setDecideFor({ recommendation, status: "ignored", comment: "" })}>Ignorer</Button>
+                    <Button variant="add" size="sm" onClick={() => setDecideFor({ recommendation, status: "treated", comment: "" })}>{t("dir.treat", "Traiter")}</Button>
+                    <Button variant="view" size="sm" onClick={() => setDecideFor({ recommendation, status: "postponed", comment: "" })}>{t("dir.postpone", "Reporter")}</Button>
+                    <Button variant="danger" size="sm" onClick={() => setDecideFor({ recommendation, status: "ignored", comment: "" })}>{t("dir.ignore", "Ignorer")}</Button>
                   </div>
                 )}
               </div>
@@ -221,17 +225,17 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
 
       {decideFor && (
         <Modal
-          title={`${DECISION_LABELS[decideFor.status]} la recommandation`}
+          title={`${DECISION_LABELS[decideFor.status]} ${t("dir.decide_title", "la recommandation")}`}
           onClose={() => setDecideFor(null)}
           footer={
             <>
-              <Button variant="view" size="sm" onClick={() => setDecideFor(null)}>Annuler</Button>
-              <Button variant="add" size="sm" onClick={submitDecision}>Confirmer</Button>
+              <Button variant="view" size="sm" onClick={() => setDecideFor(null)}>{t("common.cancel", "Annuler")}</Button>
+              <Button variant="add" size="sm" onClick={submitDecision}>{t("dir.confirm", "Confirmer")}</Button>
             </>
           }
         >
           <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{decideFor.recommendation.message}</p>
-          <Field label="Commentaire (optionnel)">
+          <Field label={t("dir.comment_optional", "Commentaire (optionnel)")}>
             <textarea rows={3} value={decideFor.comment} onChange={(e) => setDecideFor({ ...decideFor, comment: e.target.value })} autoFocus />
           </Field>
         </Modal>
@@ -265,10 +269,11 @@ function StatTile({ label, value, tone }: { label: string; value: number | strin
 }
 
 function PriorityChip({ priority }: { priority: string }) {
+  const { t } = useI18n();
   const color = PRIORITY_COLORS[priority] ?? "var(--muted)";
   return (
     <span style={{ fontSize: 11, fontWeight: 700, color, border: `1px solid ${color}`, borderRadius: 999, padding: "1px 9px", whiteSpace: "nowrap", textTransform: "capitalize" }}>
-      {priority}
+      {t("prio." + priority, priority)}
     </span>
   );
 }

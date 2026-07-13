@@ -798,3 +798,9 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Fait :** traduction **intégrale** de l'écran Rapports & indicateurs : les 4 cartes (dictionnaire d'indicateurs, bibliothèque de rapports standards, explorateur d'analyses personnelles, simulation de tirage), les 3 fenêtres intégrées (nouvelle analyse, promotion en rapport standard, simulation de tirage avec son tableau de résultats — en-têtes de colonnes traduites), les libellés de domaine (Éditorial/Production/Commercial/Financier/RH) et les messages. Français conservé par défaut. Typecheck + build OK, aucune régression backend (285 tests inchangés).
 
 **Reste :** écrans RH (cartes Présences/Paie), Utilisateurs.
+
+### 13/07/2026 (suite) — i18n FR/EN : incrément 10 (écran « Utilisateurs & rôles » complet)
+
+**Fait :** traduction **intégrale** de l'écran Utilisateurs & rôles : bouton de création, formulaire de nouveau compte (identifiant, e-mail, mot de passe, rôle initial), actions par compte (réinitialiser le mot de passe, suspendre/réactiver, se connecter en tant que, supprimer), attribution/retrait de rôle, puce de statut (Actif/Suspendu), et les **6 fenêtres de confirmation** (suspension, imitation, suppression, réinitialisation, attribution, retrait) avec leurs corps de texte et messages. Français conservé par défaut. Typecheck + build OK, aucune régression backend (285 tests inchangés).
+
+**Reste :** écran RH (cartes Présences/Paie) — dernier écran, réparti sur de nombreux sous-composants.

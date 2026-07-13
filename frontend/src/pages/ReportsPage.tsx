@@ -42,7 +42,7 @@ interface SimulationResult {
 import { useI18n } from "../i18n";
 
 export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPageProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [kpis, setKpis] = useState<KpiDefinition[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [analyses, setAnalyses] = useState<SavedAnalysis[]>([]);
@@ -73,7 +73,7 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
     try {
       const result = await runReport(report.id);
       setReportRows({ reportId: report.id, rows: result.rows });
-      setMessage(`${result.rows.length} ligne(s) générée(s).`);
+      setMessage(lang === "en" ? `${result.rows.length} row(s) generated.` : `${result.rows.length} ligne(s) générée(s).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de la génération du rapport.");
     }
@@ -83,7 +83,7 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
     if (!createForm || !createForm.label.trim() || !createForm.metric) return;
     try {
       await createAnalysis({ label: createForm.label.trim(), definition: { metric: createForm.metric } });
-      setMessage("Analyse enregistrée.");
+      setMessage(t("rep.msg.analysis_saved", "Analyse enregistrée."));
       setCreateForm(null);
       await refresh();
     } catch (err) {
@@ -104,7 +104,7 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
     if (!promoteFor || !promoteForm.key.trim()) return;
     try {
       await promoteAnalysis(promoteFor.id, promoteForm.key.trim(), promoteForm.domain);
-      setMessage("Analyse promue en rapport standard.");
+      setMessage(t("rep.msg.analysis_promoted", "Analyse promue en rapport standard."));
       setPromoteFor(null);
       setPromoteForm({ key: "", domain: "editorial" });
       await refresh();
@@ -139,12 +139,12 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
 
       {/* Ch. 20 §20.2 — Dictionnaire d'indicateurs */}
       <Card
-        title="Dictionnaire d'indicateurs"
+        title={t("rep.kpi_dict", "Dictionnaire d'indicateurs")}
         icon={<IconPilotage />}
-        subtitle="Ce que mesure chaque indicateur de pilotage."
+        subtitle={t("rep.kpi_dict_sub", "Ce que mesure chaque indicateur de pilotage.")}
       >
         {kpis.length === 0 ? (
-          <Empty>Aucun indicateur.</Empty>
+          <Empty>{t("rep.no_kpi", "Aucun indicateur.")}</Empty>
         ) : (
           <div className="ecl-list">
             {kpis.map((kpi) => (
@@ -154,7 +154,7 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
                   {/* Le jargon (code technique + formule) est replié : l'écran
                       métier reste lisible, le détail reste accessible d'un clic. */}
                   <details className="ecl-tech">
-                    <summary>Détail technique</summary>
+                    <summary>{t("rep.tech_detail", "Détail technique")}</summary>
                     <div className="ecl-tech__body">
                       {kpi.code}
                       {"\n"}
@@ -169,9 +169,9 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
       </Card>
 
       {/* Ch. 20 §20.3 — Bibliothèque de rapports standards */}
-      <Card title="Bibliothèque de rapports standards" icon={<IconPilotage />} subtitle="Rapports prêts à générer, par domaine.">
+      <Card title={t("rep.library", "Bibliothèque de rapports standards")} icon={<IconPilotage />} subtitle={t("rep.library_sub", "Rapports prêts à générer, par domaine.")}>
         {reports.length === 0 ? (
-          <Empty>Aucun rapport catalogué.</Empty>
+          <Empty>{t("rep.no_report", "Aucun rapport catalogué.")}</Empty>
         ) : (
           <div className="ecl-list">
             {reports.map((report) => (
@@ -182,12 +182,12 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
                     <DomainChip domain={report.domain} />
                   </div>
                   <Button variant="view" size="sm" onClick={() => handleRunReport(report)}>
-                    Générer
+                    {t("rep.generate", "Générer")}
                   </Button>
                 </div>
                 {reportRows?.reportId === report.id && (
                   <div style={{ marginTop: 8 }}>
-                    <DataTable rows={reportRows.rows as Record<string, unknown>[]} emptyLabel="Aucune donnée pour ce rapport." />
+                    <DataTable rows={reportRows.rows as Record<string, unknown>[]} emptyLabel={t("rep.no_report_data", "Aucune donnée pour ce rapport.")} />
                   </div>
                 )}
               </div>
@@ -198,19 +198,19 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
 
       {/* Ch. 20 §20.4 — Explorateur d'analyses personnelles */}
       <Card
-        title="Explorateur d'analyses personnelles"
+        title={t("rep.explorer", "Explorateur d'analyses personnelles")}
         icon={<IconPilotage />}
-        subtitle="Vos analyses sur mesure à partir des indicateurs."
+        subtitle={t("rep.explorer_sub", "Vos analyses sur mesure à partir des indicateurs.")}
         action={
           canCreateAnalysis ? (
             <Button variant="add" size="sm" onClick={() => setCreateForm({ label: "", metric: kpis[0]?.code ?? "" })}>
-              + Analyse
+              {t("rep.new_analysis", "+ Analyse")}
             </Button>
           ) : undefined
         }
       >
         {analyses.length === 0 ? (
-          <Empty>Aucune analyse enregistrée.</Empty>
+          <Empty>{t("rep.no_analysis", "Aucune analyse enregistrée.")}</Empty>
         ) : (
           <div className="ecl-list">
             {analyses.map((analysis) => (
@@ -222,11 +222,11 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
                   </div>
                   <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                     <Button variant="view" size="sm" onClick={() => handleRunAnalysis(analysis)}>
-                      Calculer
+                      {t("rep.compute", "Calculer")}
                     </Button>
                     {canPromoteAnalysis && (
                       <Button variant="edit" size="sm" onClick={() => setPromoteFor(analysis)}>
-                        Promouvoir
+                        {t("rep.promote", "Promouvoir")}
                       </Button>
                     )}
                   </div>
@@ -240,43 +240,43 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
 
       {/* Ch. 20 §20.6 — Simulation de tirage */}
       <Card
-        title="Simulation de tirage"
+        title={t("rep.simulation", "Simulation de tirage")}
         icon={<IconPilotage />}
-        subtitle="Estimez le coût unitaire et l'écoulement selon la quantité imprimée."
+        subtitle={t("rep.simulation_sub", "Estimez le coût unitaire et l'écoulement selon la quantité imprimée.")}
         action={
           <Button variant="add" size="sm" onClick={() => { setSimForm({ manuscriptId: "", quantities: "1000,2000,3000" }); setSimResult(null); }}>
-            Simuler
+            {t("rep.simulate", "Simuler")}
           </Button>
         }
       >
         <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>
-          Lancez une simulation pour comparer plusieurs quantités de tirage d'un ouvrage.
+          {t("rep.simulation_hint", "Lancez une simulation pour comparer plusieurs quantités de tirage d'un ouvrage.")}
         </p>
       </Card>
 
       {/* ── Fenêtres intégrées ─────────────────────────────────────────────── */}
       {createForm && (
         <Modal
-          title="Nouvelle analyse"
+          title={t("rep.new_analysis_title", "Nouvelle analyse")}
           onClose={() => setCreateForm(null)}
           footer={
             <>
-              <Button variant="view" size="sm" onClick={() => setCreateForm(null)}>Annuler</Button>
+              <Button variant="view" size="sm" onClick={() => setCreateForm(null)}>{t("common.cancel", "Annuler")}</Button>
               <Button variant="add" size="sm" onClick={submitCreateAnalysis} disabled={!createForm.label.trim() || !createForm.metric}>
-                Enregistrer
+                {t("rep.save", "Enregistrer")}
               </Button>
             </>
           }
         >
-          <Field label="Libellé de l'analyse">
+          <Field label={t("rep.analysis_label", "Libellé de l'analyse")}>
             <input
               value={createForm.label}
               onChange={(e) => setCreateForm({ ...createForm, label: e.target.value })}
-              placeholder="Ex. Chiffre d'affaires du trimestre"
+              placeholder={t("rep.analysis_label_ph", "Ex. Chiffre d'affaires du trimestre")}
               autoFocus
             />
           </Field>
-          <Field label="Indicateur mesuré">
+          <Field label={t("rep.measured_indicator", "Indicateur mesuré")}>
             <select value={createForm.metric} onChange={(e) => setCreateForm({ ...createForm, metric: e.target.value })}>
               {kpis.map((k) => (
                 <option key={k.code} value={k.code}>{k.label}</option>
@@ -288,32 +288,32 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
 
       {promoteFor && (
         <Modal
-          title="Promouvoir en rapport standard"
+          title={t("rep.promote_title", "Promouvoir en rapport standard")}
           onClose={() => setPromoteFor(null)}
           footer={
             <>
-              <Button variant="view" size="sm" onClick={() => setPromoteFor(null)}>Annuler</Button>
+              <Button variant="view" size="sm" onClick={() => setPromoteFor(null)}>{t("common.cancel", "Annuler")}</Button>
               <Button variant="edit" size="sm" onClick={submitPromote} disabled={!promoteForm.key.trim()}>
-                Promouvoir
+                {t("rep.promote", "Promouvoir")}
               </Button>
             </>
           }
         >
           <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
-            Analyse : <strong style={{ color: "var(--ink)" }}>{promoteFor.label}</strong>
+            {t("rep.analysis", "Analyse :")} <strong style={{ color: "var(--ink)" }}>{promoteFor.label}</strong>
           </p>
-          <Field label="Clé du rapport">
+          <Field label={t("rep.report_key", "Clé du rapport")}>
             <input
               value={promoteForm.key}
               onChange={(e) => setPromoteForm({ ...promoteForm, key: e.target.value })}
-              placeholder="Ex. ca_trimestriel"
+              placeholder={t("rep.report_key_ph", "Ex. ca_trimestriel")}
               autoFocus
             />
           </Field>
-          <Field label="Domaine">
+          <Field label={t("rep.domain", "Domaine")}>
             <select value={promoteForm.domain} onChange={(e) => setPromoteForm({ ...promoteForm, domain: e.target.value as ReportDomain })}>
               {Object.entries(DOMAIN_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
+                <option key={value} value={value}>{t("rep.dom." + value, label)}</option>
               ))}
             </select>
           </Field>
@@ -322,44 +322,44 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
 
       {simForm && (
         <Modal
-          title="Simulation de tirage"
+          title={t("rep.simulation", "Simulation de tirage")}
           onClose={() => { setSimForm(null); setSimResult(null); }}
           footer={
             <>
-              <Button variant="view" size="sm" onClick={() => { setSimForm(null); setSimResult(null); }}>Fermer</Button>
+              <Button variant="view" size="sm" onClick={() => { setSimForm(null); setSimResult(null); }}>{t("rep.close", "Fermer")}</Button>
               <Button variant="add" size="sm" onClick={submitSimulation} disabled={!simForm.manuscriptId.trim()}>
-                Lancer la simulation
+                {t("rep.run_simulation", "Lancer la simulation")}
               </Button>
             </>
           }
         >
-          <Field label="Identifiant du manuscrit">
+          <Field label={t("rep.manuscript_id", "Identifiant du manuscrit")}>
             <input
               value={simForm.manuscriptId}
               onChange={(e) => setSimForm({ ...simForm, manuscriptId: e.target.value })}
-              placeholder="Coller l'identifiant de l'ouvrage"
+              placeholder={t("rep.manuscript_id_ph", "Coller l'identifiant de l'ouvrage")}
               autoFocus
             />
           </Field>
-          <Field label="Quantités à comparer (séparées par des virgules)">
+          <Field label={t("rep.quantities", "Quantités à comparer (séparées par des virgules)")}>
             <input
               value={simForm.quantities}
               onChange={(e) => setSimForm({ ...simForm, quantities: e.target.value })}
-              placeholder="1000, 2000, 3000"
+              placeholder={t("rep.quantities_ph", "1000, 2000, 3000")}
             />
           </Field>
           {simResult && (
             <div style={{ marginTop: 4 }}>
               <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>
-                Rythme de vente quotidien estimé : <strong style={{ color: "var(--ink)", fontFamily: "var(--font-mono)" }}>{simResult.daily_sale_rate}</strong>
+                {t("rep.daily_rate", "Rythme de vente quotidien estimé :")} <strong style={{ color: "var(--ink)", fontFamily: "var(--font-mono)" }}>{simResult.daily_sale_rate}</strong>
               </div>
               <DataTable
                 rows={simResult.simulations.map((s) => ({
-                  Quantité: s.quantity,
-                  "Coût unitaire": s.unit_cost ?? "—",
-                  "Écoulement (jours)": s.estimated_days_to_sell_out ?? "—",
+                  [t("rep.col.quantity", "Quantité")]: s.quantity,
+                  [t("rep.col.unit_cost", "Coût unitaire")]: s.unit_cost ?? "—",
+                  [t("rep.col.sellout_days", "Écoulement (jours)")]: s.estimated_days_to_sell_out ?? "—",
                 }))}
-                emptyLabel="Aucune simulation."
+                emptyLabel={t("rep.no_simulation", "Aucune simulation.")}
               />
             </div>
           )}
@@ -372,8 +372,9 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
 // Résultat d'un indicateur calculé : soit un nombre unique (en chasse fixe),
 // soit une répartition (tableau).
 function AnalysisResult({ value }: { value: unknown }) {
+  const { t } = useI18n();
   if (Array.isArray(value)) {
-    return <DataTable rows={value as Record<string, unknown>[]} emptyLabel="Aucune donnée." />;
+    return <DataTable rows={value as Record<string, unknown>[]} emptyLabel={t("rep.no_data", "Aucune donnée.")} />;
   }
   const display =
     typeof value === "number"
@@ -387,6 +388,7 @@ function AnalysisResult({ value }: { value: unknown }) {
 }
 
 function DomainChip({ domain }: { domain: ReportDomain }) {
+  const { t } = useI18n();
   return (
     <span
       style={{
@@ -399,7 +401,7 @@ function DomainChip({ domain }: { domain: ReportDomain }) {
         whiteSpace: "nowrap",
       }}
     >
-      {DOMAIN_LABELS[domain]}
+      {t("rep.dom." + domain, DOMAIN_LABELS[domain])}
     </span>
   );
 }

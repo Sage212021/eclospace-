@@ -138,7 +138,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
     if (modal?.kind !== "employee" || !modal.firstName.trim() || !modal.lastName.trim()) return;
     try {
       await createEmployee({ first_name: modal.firstName.trim(), last_name: modal.lastName.trim(), position: modal.position || undefined, department_id: modal.departmentId || undefined });
-      setMessage("Dossier collaborateur créé.");
+      setMessage(t("hr.msg.file_created", "Dossier collaborateur créé."));
       setModal(null);
       await refresh();
     } catch (err) {
@@ -150,7 +150,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
     if (modal?.kind !== "mobility") return;
     try {
       await updateEmployee(modal.employee.id, { position: modal.position });
-      setMessage("Mobilité enregistrée.");
+      setMessage(t("hr.msg.mobility_saved", "Mobilité enregistrée."));
       setModal(null);
       await refresh();
     } catch (err) {
@@ -162,7 +162,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
     if (modal?.kind !== "departure" || !modal.date) return;
     try {
       await setEmployeeDeparture(modal.employee.id, new Date(modal.date).toISOString());
-      setMessage("Date de départ enregistrée.");
+      setMessage(t("hr.msg.departure_saved", "Date de départ enregistrée."));
       setModal(null);
       await refresh();
     } catch (err) {
@@ -173,7 +173,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   async function openConfidential(employee: Employee) {
     try {
       const c = await getEmployeeConfidential(employee.id);
-      setModal({ kind: "view-confidential", employee, baseSalary: c.baseSalary != null ? String(c.baseSalary) : "Non renseigné", notes: c.notes ?? "—" });
+      setModal({ kind: "view-confidential", employee, baseSalary: c.baseSalary != null ? String(c.baseSalary) : t("hr.not_provided", "Non renseigné"), notes: c.notes ?? "—" });
     } catch (err) {
       fail(err, "Échec de la consultation.");
     }
@@ -183,7 +183,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
     if (modal?.kind !== "edit-confidential") return;
     try {
       await updateEmployeeConfidential(modal.employee.id, { base_salary: modal.baseSalary ? Number(modal.baseSalary) : undefined });
-      setMessage("Données confidentielles mises à jour.");
+      setMessage(t("hr.msg.conf_updated", "Données confidentielles mises à jour."));
       setModal(null);
     } catch (err) {
       fail(err, "Échec de la mise à jour.");
@@ -194,7 +194,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
     if (modal?.kind !== "grant-role" || !modal.employee.user || !modal.roleCode.trim() || !modal.justification.trim()) return;
     try {
       await grantRole(modal.employee.user.id, modal.roleCode.trim(), modal.justification.trim());
-      setMessage("Rôle attribué.");
+      setMessage(t("hr.msg.role_granted", "Rôle attribué."));
       setModal(null);
     } catch (err) {
       fail(err, "Échec de l'attribution du rôle.");
@@ -205,7 +205,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
     if (modal?.kind !== "absence" || !modal.employeeId || !modal.from || !modal.to) return;
     try {
       await createAbsence({ employee_id: modal.employeeId, type: modal.type, from_date: new Date(modal.from).toISOString(), to_date: new Date(modal.to).toISOString() });
-      setMessage("Demande d'absence enregistrée.");
+      setMessage(t("hr.msg.absence_saved", "Demande d'absence enregistrée."));
       setModal(null);
       await refresh();
     } catch (err) {
@@ -217,7 +217,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
     if (modal?.kind !== "review" || !modal.label.trim()) return;
     try {
       await createAccessReview(modal.label.trim());
-      setMessage("Campagne de revue lancée.");
+      setMessage(t("hr.msg.campaign_launched", "Campagne de revue lancée."));
       setModal(null);
       await refresh();
     } catch (err) {
@@ -226,16 +226,16 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   }
 
   async function handleSuspend(employee: Employee) {
-    try { await suspendEmployee(employee.id); setMessage("Compte suspendu."); await refresh(); } catch (err) { fail(err, "Échec de la suspension."); }
+    try { await suspendEmployee(employee.id); setMessage(t("hr.msg.account_suspended", "Compte suspendu.")); await refresh(); } catch (err) { fail(err, "Échec de la suspension."); }
   }
   async function handleReinstate(employee: Employee) {
-    try { await reinstateEmployee(employee.id); setMessage("Compte réactivé."); await refresh(); } catch (err) { fail(err, "Échec de la réactivation."); }
+    try { await reinstateEmployee(employee.id); setMessage(t("hr.msg.account_reinstated", "Compte réactivé.")); await refresh(); } catch (err) { fail(err, "Échec de la réactivation."); }
   }
   async function handleDecideAbsence(absence: Absence, decision: "validee" | "refusee") {
-    try { await decideAbsence(absence.id, decision); setMessage(decision === "validee" ? "Absence validée." : "Absence refusée."); await refresh(); } catch (err) { fail(err, "Échec de la décision."); }
+    try { await decideAbsence(absence.id, decision); setMessage(decision === "validee" ? t("hr.msg.absence_approved", "Absence validée.") : t("hr.msg.absence_rejected", "Absence refusée.")); await refresh(); } catch (err) { fail(err, "Échec de la décision."); }
   }
   async function handleDecideReviewItem(item: AccessReviewItem, decision: "confirme" | "anomalie_signalee") {
-    try { await decideAccessReviewItem(item.id, decision); setMessage("Décision enregistrée."); setReviewItems(await listAccessReviewItems(selectedReviewId)); } catch (err) { fail(err, "Échec de l'enregistrement."); }
+    try { await decideAccessReviewItem(item.id, decision); setMessage(t("hr.msg.decision_saved", "Décision enregistrée.")); setReviewItems(await listAccessReviewItems(selectedReviewId)); } catch (err) { fail(err, "Échec de l'enregistrement."); }
   }
 
   return (
@@ -275,13 +275,13 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* Ch. 19 §19.2 — Dossiers collaborateurs */}
       <Card
-        title="Dossiers collaborateurs"
+        title={t("hr.files", "Dossiers collaborateurs")}
         icon={<IconAdmin />}
-        subtitle="Statut, poste, congés et cycle de vie du compte."
-        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "employee", firstName: "", lastName: "", position: "", departmentId: "" })}>+ Collaborateur</Button> : undefined}
+        subtitle={t("hr.files_sub", "Statut, poste, congés et cycle de vie du compte.")}
+        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "employee", firstName: "", lastName: "", position: "", departmentId: "" })}>{t("hr.add_employee", "+ Collaborateur")}</Button> : undefined}
       >
         {employees.length === 0 ? (
-          <Empty>Aucun collaborateur.</Empty>
+          <Empty>{t("hr.no_employee", "Aucun collaborateur.")}</Empty>
         ) : (
           <div className="ecl-list">
             {employees.map((employee) => (
@@ -289,23 +289,23 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                 <div className="ecl-row__main">
                   <div className="ecl-row__title" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     {employee.firstName} {employee.lastName}
-                    <StatusChip label={STATUS_LABELS[employee.status]} />
+                    <StatusChip label={t("hr.st." + employee.status, STATUS_LABELS[employee.status])} />
                   </div>
                   <div className="ecl-row__desc">
                     {[employee.position, employee.department?.name].filter(Boolean).join(" · ")}
                     {employee.department || employee.position ? " · " : ""}
-                    solde congés : <span style={{ fontFamily: "var(--font-mono)" }}>{employee.leaveBalanceDays}</span>
-                    {employee.departureDate && <span style={{ color: "var(--amber)" }}> · départ : {employee.departureDate.slice(0, 10)}</span>}
+                    {t("hr.leave_balance", "solde congés :")} <span style={{ fontFamily: "var(--font-mono)" }}>{employee.leaveBalanceDays}</span>
+                    {employee.departureDate && <span style={{ color: "var(--amber)" }}> · {t("hr.departure", "départ :")} {employee.departureDate.slice(0, 10)}</span>}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, position: employee.position ?? "" })}>Mobilité</Button>}
-                  {canAdminister && !employee.departureDate && <Button variant="view" size="sm" onClick={() => setModal({ kind: "departure", employee, date: new Date().toISOString().slice(0, 10) })}>Départ</Button>}
-                  {canAdminister && employee.user?.status === "active" && <Button variant="danger" size="sm" onClick={() => handleSuspend(employee)}>Suspendre</Button>}
-                  {canAdminister && employee.user?.status === "suspended" && <Button variant="add" size="sm" onClick={() => handleReinstate(employee)}>Réactiver</Button>}
-                  {canReadConfidential && <Button variant="view" size="sm" onClick={() => openConfidential(employee)}>Confidentiel</Button>}
-                  {canWriteConfidential && <Button variant="edit" size="sm" onClick={() => setModal({ kind: "edit-confidential", employee, baseSalary: "" })}>Modifier conf.</Button>}
-                  {canManageUsers && <Button variant="edit" size="sm" onClick={() => setModal({ kind: "grant-role", employee, roleCode: "", justification: "" })}>Attribuer un rôle</Button>}
+                  {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, position: employee.position ?? "" })}>{t("hr.mobility", "Mobilité")}</Button>}
+                  {canAdminister && !employee.departureDate && <Button variant="view" size="sm" onClick={() => setModal({ kind: "departure", employee, date: new Date().toISOString().slice(0, 10) })}>{t("hr.departure_btn", "Départ")}</Button>}
+                  {canAdminister && employee.user?.status === "active" && <Button variant="danger" size="sm" onClick={() => handleSuspend(employee)}>{t("hr.suspend", "Suspendre")}</Button>}
+                  {canAdminister && employee.user?.status === "suspended" && <Button variant="add" size="sm" onClick={() => handleReinstate(employee)}>{t("hr.reinstate", "Réactiver")}</Button>}
+                  {canReadConfidential && <Button variant="view" size="sm" onClick={() => openConfidential(employee)}>{t("hr.confidential", "Confidentiel")}</Button>}
+                  {canWriteConfidential && <Button variant="edit" size="sm" onClick={() => setModal({ kind: "edit-confidential", employee, baseSalary: "" })}>{t("hr.edit_conf", "Modifier conf.")}</Button>}
+                  {canManageUsers && <Button variant="edit" size="sm" onClick={() => setModal({ kind: "grant-role", employee, roleCode: "", justification: "" })}>{t("hr.grant_role", "Attribuer un rôle")}</Button>}
                 </div>
               </div>
             ))}
@@ -315,26 +315,26 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* Ch. 19 §19.5 — Absences */}
       <Card
-        title="Absences"
+        title={t("hr.absences", "Absences")}
         icon={<IconAdmin />}
-        subtitle="Congés, maladies, missions et télétravail."
-        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "absence", employeeId: employees[0]?.id ?? "", type: "conge", from: "", to: "" })}>+ Demande</Button> : undefined}
+        subtitle={t("hr.absences_sub", "Congés, maladies, missions et télétravail.")}
+        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "absence", employeeId: employees[0]?.id ?? "", type: "conge", from: "", to: "" })}>{t("hr.add_absence", "+ Demande")}</Button> : undefined}
       >
         {absences.length === 0 ? (
-          <Empty>Aucune demande.</Empty>
+          <Empty>{t("hr.no_absence", "Aucune demande.")}</Empty>
         ) : (
           <div className="ecl-list">
             {absences.map((absence) => (
               <div key={absence.id} className="ecl-row">
                 <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span className="ecl-row__title">{ABSENCE_TYPE_LABELS[absence.type]}</span>
+                  <span className="ecl-row__title">{t("hr.abs." + absence.type, ABSENCE_TYPE_LABELS[absence.type])}</span>
                   <span className="ecl-row__desc" style={{ margin: 0 }}>{absence.fromDate.slice(0, 10)} → {absence.toDate.slice(0, 10)}</span>
-                  <StatusChip label={ABSENCE_STATUS_LABELS[absence.status]} />
+                  <StatusChip label={t("hr.absst." + absence.status, ABSENCE_STATUS_LABELS[absence.status])} />
                 </div>
                 {canValidateAbsence && absence.status === "en_attente" && (
                   <div style={{ display: "flex", gap: 6 }}>
-                    <Button variant="add" size="sm" onClick={() => handleDecideAbsence(absence, "validee")}>Valider</Button>
-                    <Button variant="danger" size="sm" onClick={() => handleDecideAbsence(absence, "refusee")}>Refuser</Button>
+                    <Button variant="add" size="sm" onClick={() => handleDecideAbsence(absence, "validee")}>{t("hr.validate", "Valider")}</Button>
+                    <Button variant="danger" size="sm" onClick={() => handleDecideAbsence(absence, "refusee")}>{t("hr.refuse", "Refuser")}</Button>
                   </div>
                 )}
               </div>
@@ -345,9 +345,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* Ch. 19 §19.4 — Anomalies d'accès */}
       {canManage && (
-        <Card title="Anomalies d'accès" icon={<IconAdmin />} subtitle="Écarts détectés entre comptes et habilitations.">
+        <Card title={t("hr.access_anomalies", "Anomalies d'accès")} icon={<IconAdmin />} subtitle={t("hr.access_anomalies_sub", "Écarts détectés entre comptes et habilitations.")}>
           {anomalies.length === 0 ? (
-            <Empty>Aucune anomalie détectée.</Empty>
+            <Empty>{t("hr.no_anomaly", "Aucune anomalie détectée.")}</Empty>
           ) : (
             <div className="ecl-list">
               {anomalies.map((anomaly, i) => (
@@ -364,15 +364,15 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       {/* Ch. 19 §19.4 — Revue périodique des habilitations */}
       {canManage && (
         <Card
-          title="Revue périodique des habilitations"
+          title={t("hr.access_review", "Revue périodique des habilitations")}
           icon={<IconAdmin />}
-          subtitle="Campagnes de vérification des accès."
-          action={canAdminister ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "review", label: "" })}>+ Campagne</Button> : undefined}
+          subtitle={t("hr.access_review_sub", "Campagnes de vérification des accès.")}
+          action={canAdminister ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "review", label: "" })}>{t("hr.add_campaign", "+ Campagne")}</Button> : undefined}
         >
           <div className="ecl-field" style={{ maxWidth: 360 }}>
-            <label>Campagne</label>
+            <label>{t("hr.campaign", "Campagne")}</label>
             <select value={selectedReviewId} onChange={(e) => setSelectedReviewId(e.target.value)}>
-              <option value="">— sélectionner —</option>
+              <option value="">{t("hr.select", "— sélectionner —")}</option>
               {reviews.map((review) => <option key={review.id} value={review.id}>{review.label}</option>)}
             </select>
           </div>
@@ -383,14 +383,14 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                   <div className="ecl-row__main">
                     <div className="ecl-row__title">{item.employee.firstName} {item.employee.lastName}</div>
                     <div className="ecl-row__desc">
-                      Réviseur : {item.reviewer.firstName} {item.reviewer.lastName}
-                      {item.decision && ` · ${item.decision === "confirme" ? "Confirmé" : "Anomalie signalée"}`}
+                      {t("hr.reviewer", "Réviseur :")} {item.reviewer.firstName} {item.reviewer.lastName}
+                      {item.decision && ` · ${item.decision === "confirme" ? t("hr.confirmed", "Confirmé") : t("hr.anomaly_flagged", "Anomalie signalée")}`}
                     </div>
                   </div>
                   {!item.decision && (
                     <div style={{ display: "flex", gap: 6 }}>
-                      <Button variant="add" size="sm" onClick={() => handleDecideReviewItem(item, "confirme")}>Confirmer</Button>
-                      <Button variant="danger" size="sm" onClick={() => handleDecideReviewItem(item, "anomalie_signalee")}>Signaler</Button>
+                      <Button variant="add" size="sm" onClick={() => handleDecideReviewItem(item, "confirme")}>{t("hr.confirm", "Confirmer")}</Button>
+                      <Button variant="danger" size="sm" onClick={() => handleDecideReviewItem(item, "anomalie_signalee")}>{t("hr.flag", "Signaler")}</Button>
                     </div>
                   )}
                 </div>
@@ -402,71 +402,71 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* ── Fenêtres intégrées ─────────────────────────────────────────────── */}
       {modal?.kind === "employee" && (
-        <Modal title="Nouveau dossier collaborateur" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitEmployee} confirmLabel="Créer" />}>
-          <Field label="Prénom"><input value={modal.firstName} onChange={(e) => setModal({ ...modal, firstName: e.target.value })} autoFocus /></Field>
-          <Field label="Nom"><input value={modal.lastName} onChange={(e) => setModal({ ...modal, lastName: e.target.value })} /></Field>
-          <Field label="Poste (optionnel)"><input value={modal.position} onChange={(e) => setModal({ ...modal, position: e.target.value })} /></Field>
-          <Field label="Identifiant du département (optionnel)"><input value={modal.departmentId} onChange={(e) => setModal({ ...modal, departmentId: e.target.value })} /></Field>
+        <Modal title={t("hr.new_file_title", "Nouveau dossier collaborateur")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitEmployee} confirmLabel={t("hr.create", "Créer")} />}>
+          <Field label={t("hr.first_name", "Prénom")}><input value={modal.firstName} onChange={(e) => setModal({ ...modal, firstName: e.target.value })} autoFocus /></Field>
+          <Field label={t("hr.last_name", "Nom")}><input value={modal.lastName} onChange={(e) => setModal({ ...modal, lastName: e.target.value })} /></Field>
+          <Field label={t("hr.position_opt", "Poste (optionnel)")}><input value={modal.position} onChange={(e) => setModal({ ...modal, position: e.target.value })} /></Field>
+          <Field label={t("hr.department_id_opt", "Identifiant du département (optionnel)")}><input value={modal.departmentId} onChange={(e) => setModal({ ...modal, departmentId: e.target.value })} /></Field>
         </Modal>
       )}
 
       {modal?.kind === "mobility" && (
-        <Modal title="Mobilité interne" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitMobility} confirmLabel="Enregistrer" />}>
+        <Modal title={t("hr.mobility_title", "Mobilité interne")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitMobility} confirmLabel={t("hr.save", "Enregistrer")} />}>
           <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
-          <Field label="Nouveau poste"><input value={modal.position} onChange={(e) => setModal({ ...modal, position: e.target.value })} autoFocus /></Field>
+          <Field label={t("hr.new_position", "Nouveau poste")}><input value={modal.position} onChange={(e) => setModal({ ...modal, position: e.target.value })} autoFocus /></Field>
         </Modal>
       )}
 
       {modal?.kind === "departure" && (
-        <Modal title="Enregistrer un départ" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitDeparture} confirmLabel="Enregistrer" />}>
+        <Modal title={t("hr.departure_title", "Enregistrer un départ")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitDeparture} confirmLabel={t("hr.save", "Enregistrer")} />}>
           <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
-          <Field label="Date de départ"><input type="date" value={modal.date} onChange={(e) => setModal({ ...modal, date: e.target.value })} /></Field>
+          <Field label={t("hr.departure_date", "Date de départ")}><input type="date" value={modal.date} onChange={(e) => setModal({ ...modal, date: e.target.value })} /></Field>
         </Modal>
       )}
 
       {modal?.kind === "view-confidential" && (
-        <Modal title="Données confidentielles" onClose={() => setModal(null)} footer={<Button variant="view" size="sm" onClick={() => setModal(null)}>Fermer</Button>}>
+        <Modal title={t("hr.confidential_title", "Données confidentielles")} onClose={() => setModal(null)} footer={<Button variant="view" size="sm" onClick={() => setModal(null)}>{t("hr.close", "Fermer")}</Button>}>
           <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
-          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>Salaire de base</div><div style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "var(--ink)" }}>{modal.baseSalary}</div></div>
-          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>Notes</div><div style={{ fontSize: 13 }}>{modal.notes}</div></div>
+          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>{t("hr.base_salary", "Salaire de base")}</div><div style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "var(--ink)" }}>{modal.baseSalary}</div></div>
+          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>{t("hr.notes", "Notes")}</div><div style={{ fontSize: 13 }}>{modal.notes}</div></div>
         </Modal>
       )}
 
       {modal?.kind === "edit-confidential" && (
-        <Modal title="Modifier les données confidentielles" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitEditConfidential} confirmLabel="Enregistrer" />}>
+        <Modal title={t("hr.edit_conf_title", "Modifier les données confidentielles")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitEditConfidential} confirmLabel={t("hr.save", "Enregistrer")} />}>
           <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
-          <Field label="Salaire de base"><input type="number" min={0} value={modal.baseSalary} onChange={(e) => setModal({ ...modal, baseSalary: e.target.value })} autoFocus /></Field>
+          <Field label={t("hr.base_salary", "Salaire de base")}><input type="number" min={0} value={modal.baseSalary} onChange={(e) => setModal({ ...modal, baseSalary: e.target.value })} autoFocus /></Field>
         </Modal>
       )}
 
       {modal?.kind === "grant-role" && (
-        <Modal title="Attribuer un rôle" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitGrantRole} confirmLabel="Attribuer" />}>
+        <Modal title={t("hr.grant_role_title", "Attribuer un rôle")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitGrantRole} confirmLabel={t("hr.grant", "Attribuer")} />}>
           <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
-          <Field label="Code du rôle"><input value={modal.roleCode} onChange={(e) => setModal({ ...modal, roleCode: e.target.value })} autoFocus /></Field>
-          <Field label="Justification"><input value={modal.justification} onChange={(e) => setModal({ ...modal, justification: e.target.value })} /></Field>
+          <Field label={t("hr.role_code", "Code du rôle")}><input value={modal.roleCode} onChange={(e) => setModal({ ...modal, roleCode: e.target.value })} autoFocus /></Field>
+          <Field label={t("hr.justification", "Justification")}><input value={modal.justification} onChange={(e) => setModal({ ...modal, justification: e.target.value })} /></Field>
         </Modal>
       )}
 
       {modal?.kind === "absence" && (
-        <Modal title="Nouvelle demande d'absence" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitAbsence} confirmLabel="Enregistrer" />}>
-          <Field label="Collaborateur">
+        <Modal title={t("hr.new_absence_title", "Nouvelle demande d'absence")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitAbsence} confirmLabel={t("hr.save", "Enregistrer")} />}>
+          <Field label={t("hr.employee", "Collaborateur")}>
             <select value={modal.employeeId} onChange={(e) => setModal({ ...modal, employeeId: e.target.value })}>
               {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>)}
             </select>
           </Field>
-          <Field label="Type">
+          <Field label={t("hr.type", "Type")}>
             <select value={modal.type} onChange={(e) => setModal({ ...modal, type: e.target.value as AbsenceType })}>
-              {Object.entries(ABSENCE_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {Object.entries(ABSENCE_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{t("hr.abs." + value, label)}</option>)}
             </select>
           </Field>
-          <Field label="Du"><input type="date" value={modal.from} onChange={(e) => setModal({ ...modal, from: e.target.value })} /></Field>
-          <Field label="Au"><input type="date" value={modal.to} onChange={(e) => setModal({ ...modal, to: e.target.value })} /></Field>
+          <Field label={t("hr.from", "Du")}><input type="date" value={modal.from} onChange={(e) => setModal({ ...modal, from: e.target.value })} /></Field>
+          <Field label={t("hr.to", "Au")}><input type="date" value={modal.to} onChange={(e) => setModal({ ...modal, to: e.target.value })} /></Field>
         </Modal>
       )}
 
       {modal?.kind === "review" && (
-        <Modal title="Lancer une campagne de revue" onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitReview} confirmLabel="Lancer" />}>
-          <Field label="Libellé de la campagne"><input value={modal.label} onChange={(e) => setModal({ ...modal, label: e.target.value })} autoFocus /></Field>
+        <Modal title={t("hr.review_title", "Lancer une campagne de revue")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitReview} confirmLabel={t("hr.launch", "Lancer")} />}>
+          <Field label={t("hr.campaign_label", "Libellé de la campagne")}><input value={modal.label} onChange={(e) => setModal({ ...modal, label: e.target.value })} autoFocus /></Field>
         </Modal>
       )}
     </div>
@@ -474,9 +474,10 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 }
 
 function ModalActions({ onCancel, onConfirm, confirmLabel }: { onCancel: () => void; onConfirm: () => void; confirmLabel: string }) {
+  const { t } = useI18n();
   return (
     <>
-      <Button variant="view" size="sm" onClick={onCancel}>Annuler</Button>
+      <Button variant="view" size="sm" onClick={onCancel}>{t("hr.cancel", "Annuler")}</Button>
       <Button variant="add" size="sm" onClick={onConfirm}>{confirmLabel}</Button>
     </>
   );

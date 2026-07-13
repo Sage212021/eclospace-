@@ -9,6 +9,7 @@ import { Card } from "./Card";
 import { Field } from "./Modal";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
+import { useI18n } from "../i18n";
 
 // Tableau de bord RH + rapport mensuel (§32-33) avec exports Excel (CSV) et
 // impression (PDF via le navigateur). Réservé aux profils de supervision.
@@ -39,6 +40,7 @@ function Indicator({ label, value, tone }: { label: string; value: string; tone?
 }
 
 export function AttendanceReportSection() {
+  const { t, lang } = useI18n();
   const [dash, setDash] = useState<AttendanceDashboard | null>(null);
   const [report, setReport] = useState<MonthlyReport | null>(null);
   const [from, setFrom] = useState(firstOfMonth());
@@ -66,14 +68,16 @@ export function AttendanceReportSection() {
 
   function exportCsv() {
     if (!report) return;
-    const header = ["Employé", "Département", "Temps travaillé (min)", "Retards (min)", "Départs anticipés (min)", "Heures sup (min)", "Jours travaillés", "Absences injustifiées", "Retenue proposée (FCFA)"];
+    const header = lang === "en"
+      ? ["Employee", "Department", "Time worked (min)", "Lateness (min)", "Early departures (min)", "Overtime (min)", "Days worked", "Unjustified absences", "Proposed deduction (FCFA)"]
+      : ["Employé", "Département", "Temps travaillé (min)", "Retards (min)", "Départs anticipés (min)", "Heures sup (min)", "Jours travaillés", "Absences injustifiées", "Retenue proposée (FCFA)"];
     const lines = report.rows.map((r) => [r.employee_name, r.department ?? "", r.worked_minutes, r.late_minutes, r.early_leave_minutes, r.overtime_minutes, r.days_worked, r.days_absent_unjustified, r.deduction_proposed]);
     const csv = [header, ...lines].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\r\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `rapport-presence_${report.from}_${report.to}.csv`;
+    a.download = `${lang === "en" ? "attendance-report" : "rapport-presence"}_${report.from}_${report.to}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -83,10 +87,14 @@ export function AttendanceReportSection() {
     const rowsHtml = report.rows
       .map((r) => `<tr><td>${r.employee_name}</td><td>${r.department ?? ""}</td><td style="text-align:right">${fmt(r.worked_minutes)}</td><td style="text-align:right">${fmt(r.late_minutes)}</td><td style="text-align:right">${fmt(r.early_leave_minutes)}</td><td style="text-align:right">${fmt(r.overtime_minutes)}</td><td style="text-align:right">${r.days_absent_unjustified}</td><td style="text-align:right">${fcfa(r.deduction_proposed)}</td></tr>`)
       .join("");
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Rapport de présence ${report.from} → ${report.to}</title>
+    const title = lang === "en" ? "Attendance report" : "Rapport de présence";
+    const th = lang === "en"
+      ? ["Employee", "Department", "Worked", "Lateness", "Early dep.", "Overtime", "Unjust. abs.", "Deduction"]
+      : ["Employé", "Département", "Travaillé", "Retards", "Départs ant.", "Heures sup", "Abs. injust.", "Retenue"];
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title} ${report.from} → ${report.to}</title>
       <style>body{font-family:Georgia,serif;color:#16233D;padding:24px}h1{font-size:18px}table{width:100%;border-collapse:collapse;font-size:12px;font-family:monospace}th,td{border:1px solid #ccc;padding:4px 6px}th{background:#16233D;color:#fff;text-align:left}</style>
-      </head><body><h1>Rapport de présence — ${report.from} au ${report.to}</h1>
-      <table><thead><tr><th>Employé</th><th>Département</th><th>Travaillé</th><th>Retards</th><th>Départs ant.</th><th>Heures sup</th><th>Abs. injust.</th><th>Retenue</th></tr></thead>
+      </head><body><h1>${title} — ${report.from} ${lang === "en" ? "to" : "au"} ${report.to}</h1>
+      <table><thead><tr>${th.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
       <tbody>${rowsHtml}</tbody></table></body></html>`;
     const w = window.open("", "_blank");
     if (w) {
@@ -99,28 +107,28 @@ export function AttendanceReportSection() {
 
   return (
     <Card
-      title="Tableau de bord & rapports RH"
+      title={t("att.dashboard", "Tableau de bord & rapports RH")}
       icon={<IconAdmin />}
-      subtitle="Indicateurs de présence et rapport exportable (Excel / impression)."
+      subtitle={t("att.dashboard_sub", "Indicateurs de présence et rapport exportable (Excel / impression).")}
     >
       {dash && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid var(--line)" }}>
-          <Indicator label="Présents (jour)" value={String(dash.present_today)} tone="ok" />
-          <Indicator label="Absents (jour)" value={String(dash.absent_today)} tone={dash.absent_today > 0 ? "warn" : undefined} />
-          <Indicator label="En retard (jour)" value={String(dash.late_today)} tone={dash.late_today > 0 ? "warn" : undefined} />
-          <Indicator label="Départs anticipés" value={String(dash.early_leave_today)} tone={dash.early_leave_today > 0 ? "warn" : undefined} />
-          <Indicator label="Taux de présence" value={dash.presence_rate_pct != null ? `${dash.presence_rate_pct}%` : "—"} />
-          <Indicator label="Heures sup (mois)" value={fmt(dash.overtime_minutes_month)} tone="over" />
-          <Indicator label="Retenues (mois)" value={fcfa(dash.deduction_month_total)} tone={dash.deduction_month_total > 0 ? "warn" : undefined} />
+          <Indicator label={t("att.present_today", "Présents (jour)")} value={String(dash.present_today)} tone="ok" />
+          <Indicator label={t("att.absent_today", "Absents (jour)")} value={String(dash.absent_today)} tone={dash.absent_today > 0 ? "warn" : undefined} />
+          <Indicator label={t("att.late_today", "En retard (jour)")} value={String(dash.late_today)} tone={dash.late_today > 0 ? "warn" : undefined} />
+          <Indicator label={t("att.early_leave_today", "Départs anticipés")} value={String(dash.early_leave_today)} tone={dash.early_leave_today > 0 ? "warn" : undefined} />
+          <Indicator label={t("att.presence_rate", "Taux de présence")} value={dash.presence_rate_pct != null ? `${dash.presence_rate_pct}%` : "—"} />
+          <Indicator label={t("att.overtime_month", "Heures sup (mois)")} value={fmt(dash.overtime_minutes_month)} tone="over" />
+          <Indicator label={t("att.deduction_month", "Retenues (mois)")} value={fcfa(dash.deduction_month_total)} tone={dash.deduction_month_total > 0 ? "warn" : undefined} />
         </div>
       )}
 
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
-        <Field label="Du"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
-        <Field label="Au"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
-        <Button variant="edit" size="sm" type="button" onClick={generate}>{loading ? "…" : "Générer"}</Button>
-        {report && report.rows.length > 0 && <Button variant="export" size="sm" type="button" onClick={exportCsv}>Export Excel</Button>}
-        {report && report.rows.length > 0 && <Button variant="view" size="sm" type="button" onClick={print}>Imprimer / PDF</Button>}
+        <Field label={t("att.from", "Du")}><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+        <Field label={t("att.to", "Au")}><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+        <Button variant="edit" size="sm" type="button" onClick={generate}>{loading ? "…" : t("att.generate", "Générer")}</Button>
+        {report && report.rows.length > 0 && <Button variant="export" size="sm" type="button" onClick={exportCsv}>{t("att.export_excel", "Export Excel")}</Button>}
+        {report && report.rows.length > 0 && <Button variant="view" size="sm" type="button" onClick={print}>{t("att.print_pdf", "Imprimer / PDF")}</Button>}
       </div>
 
       {report && (
@@ -128,14 +136,14 @@ export function AttendanceReportSection() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
-                <th style={{ padding: "6px 8px" }}>Employé</th>
-                <th style={{ padding: "6px 8px" }}>Département</th>
-                <th style={{ padding: "6px 8px", textAlign: "right" }}>Travaillé</th>
-                <th style={{ padding: "6px 8px", textAlign: "right" }}>Retards</th>
-                <th style={{ padding: "6px 8px", textAlign: "right" }}>Départs ant.</th>
-                <th style={{ padding: "6px 8px", textAlign: "right" }}>H. sup</th>
-                <th style={{ padding: "6px 8px", textAlign: "right" }}>Abs. injust.</th>
-                <th style={{ padding: "6px 8px", textAlign: "right" }}>Retenue</th>
+                <th style={{ padding: "6px 8px" }}>{t("att.col.employee", "Employé")}</th>
+                <th style={{ padding: "6px 8px" }}>{t("att.col.department", "Département")}</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>{t("att.col.worked", "Travaillé")}</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>{t("att.col.late", "Retards")}</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>{t("att.col.early", "Départs ant.")}</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>{t("att.col.overtime", "H. sup")}</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>{t("att.col.absent", "Abs. injust.")}</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>{t("att.col.deduction", "Retenue")}</th>
               </tr>
             </thead>
             <tbody style={{ fontFamily: "var(--font-mono, monospace)" }}>
@@ -155,7 +163,7 @@ export function AttendanceReportSection() {
             {report.rows.length > 0 && (
               <tfoot>
                 <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700, fontFamily: "var(--font-mono, monospace)" }}>
-                  <td style={{ padding: "6px 8px" }} colSpan={2}>Total ({report.headcount} employés)</td>
+                  <td style={{ padding: "6px 8px" }} colSpan={2}>{lang === "en" ? `Total (${report.headcount} employees)` : `Total (${report.headcount} employés)`}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>{fmt(report.totals.worked_minutes)}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>{fmt(report.totals.late_minutes)}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>{fmt(report.totals.early_leave_minutes)}</td>
@@ -166,7 +174,7 @@ export function AttendanceReportSection() {
               </tfoot>
             )}
           </table>
-          {report.rows.length > 200 && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>Affichage limité à 200 lignes ; l'export Excel contient tout.</p>}
+          {report.rows.length > 200 && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>{t("att.rows_limited", "Affichage limité à 200 lignes ; l'export Excel contient tout.")}</p>}
         </div>
       )}
 

@@ -80,7 +80,7 @@ export function StockPage({ canManage, canAdminister }: StockPageProps) {
       setNewLocation(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la création du lieu.");
+      setError(err instanceof Error ? err.message : t("stock.err_location", "Échec de la création du lieu."));
     }
   }
 
@@ -93,7 +93,7 @@ export function StockPage({ canManage, canAdminister }: StockPageProps) {
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
       {alerts.length > 0 && (
-        <Card title="Alertes de stock" icon={<IconCommercial />} subtitle="Ruptures et seuils d'alerte atteints.">
+        <Card title={t("stock.alerts_title", "Alertes de stock")} icon={<IconCommercial />} subtitle={t("stock.alerts_sub", "Ruptures et seuils d'alerte atteints.")}>
           <div className="ecl-list">
             {alerts.map((alert) => (
               <div key={alert.id} className="ecl-row">
@@ -112,7 +112,7 @@ export function StockPage({ canManage, canAdminister }: StockPageProps) {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {alert.severity === "rupture" ? "Rupture" : "Alerte"} · {alert.quantityAvailable} dispo.
+                  {alert.severity === "rupture" ? t("stock.rupture", "Rupture") : t("stock.alert", "Alerte")} · {alert.quantityAvailable} {t("stock.available_short", "dispo.")}
                 </span>
               </div>
             ))}
@@ -121,37 +121,37 @@ export function StockPage({ canManage, canAdminister }: StockPageProps) {
       )}
 
       <Card
-        title="Lieux de stockage"
+        title={t("stock.locations_title", "Lieux de stockage")}
         icon={<IconCommercial />}
-        subtitle="Entrepôts, dépôts et emplacements."
-        action={canAdminister ? <Button variant="add" size="sm" onClick={() => setNewLocation({ label: "", type: "entrepot" })}>+ Lieu</Button> : undefined}
+        subtitle={t("stock.locations_sub", "Entrepôts, dépôts et emplacements.")}
+        action={canAdminister ? <Button variant="add" size="sm" onClick={() => setNewLocation({ label: "", type: "entrepot" })}>{t("stock.add_location", "+ Lieu")}</Button> : undefined}
       >
         {locations.length === 0 ? (
-          <Empty>Aucun lieu.</Empty>
+          <Empty>{t("stock.no_location", "Aucun lieu.")}</Empty>
         ) : (
           <div className="ecl-list">
             {locations.map((location) => (
               <div key={location.id} className="ecl-row">
                 <span className="ecl-row__title">{location.label}</span>
-                <StatusChip label={LOCATION_TYPE_LABELS[location.type] ?? location.type} />
+                <StatusChip label={t(`stock.loc.${location.type}`, LOCATION_TYPE_LABELS[location.type] ?? location.type)} />
               </div>
             ))}
           </div>
         )}
       </Card>
 
-      <Card title="Stock par référence et lieu" icon={<IconCommercial />} subtitle="Quantités physiques, réservées et disponibles.">
+      <Card title={t("stock.items_title", "Stock par référence et lieu")} icon={<IconCommercial />} subtitle={t("stock.items_sub", "Quantités physiques, réservées et disponibles.")}>
         {items.length === 0 ? (
-          <Empty>Aucun article en stock.</Empty>
+          <Empty>{t("stock.no_item", "Aucun article en stock.")}</Empty>
         ) : (
           <div className="ecl-list">
             {items.map((item) => (
               <div key={item.id} className="ecl-row">
                 <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{item.isbn.isbn13}</span>
-                  <span className="ecl-row__desc" style={{ margin: 0 }}>{item.location.label} · tirage {item.printRun}</span>
+                  <span className="ecl-row__desc" style={{ margin: 0 }}>{item.location.label} · {t("stock.print_run", "tirage")} {item.printRun}</span>
                   {item.condition === "declasse" && (
-                    <span style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 999, padding: "2px 8px", fontSize: 11 }}>Déclassé</span>
+                    <span style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 999, padding: "2px 8px", fontSize: 11 }}>{t("stock.declasse", "Déclassé")}</span>
                   )}
                 </div>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 12.5, color: "var(--ink)", whiteSpace: "nowrap" }}>
@@ -161,33 +161,33 @@ export function StockPage({ canManage, canAdminister }: StockPageProps) {
             ))}
           </div>
         )}
-        <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>Physique / réservé / disponible.</p>
+        <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>{t("stock.pra_note", "Physique / réservé / disponible.")}</p>
       </Card>
 
       {canManage && (
         <MovementForm
           isbns={isbns}
           locations={locations}
-          onRecorded={() => { setMessage("Mouvement enregistré."); refresh(); }}
+          onRecorded={() => { setMessage(t("stock.movement_recorded", "Mouvement enregistré.")); refresh(); }}
           onError={setError}
         />
       )}
 
       {newLocation && (
         <Modal
-          title="Nouveau lieu de stockage"
+          title={t("stock.new_location_title", "Nouveau lieu de stockage")}
           onClose={() => setNewLocation(null)}
           footer={
             <>
-              <Button variant="view" size="sm" onClick={() => setNewLocation(null)}>Annuler</Button>
-              <Button variant="add" size="sm" onClick={submitLocation}>Créer</Button>
+              <Button variant="view" size="sm" onClick={() => setNewLocation(null)}>{t("common.cancel", "Annuler")}</Button>
+              <Button variant="add" size="sm" onClick={submitLocation}>{t("common.create", "Créer")}</Button>
             </>
           }
         >
-          <Field label="Nom du lieu"><input value={newLocation.label} onChange={(e) => setNewLocation({ ...newLocation, label: e.target.value })} placeholder="Ex. Entrepôt principal" autoFocus /></Field>
-          <Field label="Type">
+          <Field label={t("stock.location_name", "Nom du lieu")}><input value={newLocation.label} onChange={(e) => setNewLocation({ ...newLocation, label: e.target.value })} placeholder={t("stock.location_placeholder", "Ex. Entrepôt principal")} autoFocus /></Field>
+          <Field label={t("common.type", "Type")}>
             <select value={newLocation.type} onChange={(e) => setNewLocation({ ...newLocation, type: e.target.value as StockLocationType })}>
-              {Object.entries(LOCATION_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {Object.entries(LOCATION_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{t(`stock.loc.${value}`, label)}</option>)}
             </select>
           </Field>
         </Modal>
@@ -207,6 +207,7 @@ function MovementForm({
   onRecorded: () => void;
   onError: (m: string) => void;
 }) {
+  const { t } = useI18n();
   const [type, setType] = useState<StockMovementType>("production_in");
   const [isbnId, setIsbnId] = useState("");
   const [fromLocationId, setFromLocationId] = useState("");
@@ -233,45 +234,45 @@ function MovementForm({
       setReason("");
       onRecorded();
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Échec de l'enregistrement du mouvement.");
+      onError(err instanceof Error ? err.message : t("stock.err_movement", "Échec de l'enregistrement du mouvement."));
     }
   }
 
   return (
-    <Card title="Nouveau mouvement de stock" icon={<IconCommercial />} subtitle="Enregistrer une entrée, une sortie ou un transfert.">
+    <Card title={t("stock.movement_title", "Nouveau mouvement de stock")} icon={<IconCommercial />} subtitle={t("stock.movement_sub", "Enregistrer une entrée, une sortie ou un transfert.")}>
       <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-          <Field label="Type">
+          <Field label={t("common.type", "Type")}>
             <select value={type} onChange={(e) => setType(e.target.value as StockMovementType)}>
-              {Object.entries(MOVEMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {Object.entries(MOVEMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{t(`stock.mv.${value}`, label)}</option>)}
             </select>
           </Field>
-          <Field label="Référence (ISBN)">
+          <Field label={t("stock.ref_isbn", "Référence (ISBN)")}>
             <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)}>
               {isbns.map((isbn) => <option key={isbn.id} value={isbn.id}>{isbn.isbn13} — {isbn.manuscript?.title}</option>)}
             </select>
           </Field>
-          <Field label="Quantité">
+          <Field label={t("stock.quantity", "Quantité")}>
             <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} />
           </Field>
-          <Field label="Lieu d'origine">
+          <Field label={t("stock.from", "Lieu d'origine")}>
             <select value={fromLocationId} onChange={(e) => setFromLocationId(e.target.value)}>
               <option value="">—</option>
               {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
             </select>
           </Field>
-          <Field label="Lieu de destination">
+          <Field label={t("stock.to", "Lieu de destination")}>
             <select value={toLocationId} onChange={(e) => setToLocationId(e.target.value)}>
               <option value="">—</option>
               {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
             </select>
           </Field>
-          <Field label="Motif">
+          <Field label={t("stock.reason", "Motif")}>
             <input value={reason} onChange={(e) => setReason(e.target.value)} required />
           </Field>
         </div>
         <div style={{ marginTop: 14 }}>
-          <Button variant="add" size="md" type="submit">Enregistrer le mouvement</Button>
+          <Button variant="add" size="md" type="submit">{t("stock.record_movement", "Enregistrer le mouvement")}</Button>
         </div>
       </form>
     </Card>

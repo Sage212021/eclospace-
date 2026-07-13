@@ -2450,3 +2450,22 @@ export function previewPayslipEmail(employeeId: string, period: string, message:
 export function sendPayslipEmail(employeeId: string, period: string, message: string, to: string) {
   return request<{ sent: boolean; to: string }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, to }) });
 }
+
+// Livre de paie & clôture (D-007, incrément 5).
+export interface RegisterLine {
+  employee_id: string; employee_name: string; matricule: string | null; cnps_number: string | null; niu: string | null;
+  salaire_brut: number; assiette_cnps: number; pvid_salarie: number; pvid_patronal: number;
+  prestations_familiales: number; accidents_travail: number; cfc_salarie: number; cfc_patronal: number;
+  fne: number; taxe_communale: number; rav: number; irpp_cac: number;
+  total_retenues_salariales: number; total_charges_patronales: number; net_a_payer: number; cout_employeur: number;
+}
+export interface PayrollRegister {
+  period: string; rate_effective_from: string; closed: boolean; closed_at: string | null;
+  lines: RegisterLine[]; totals: { brut: number; net: number; charges_pat: number };
+}
+export function getPayrollRegister(period: string) {
+  return request<PayrollRegister>(`/api/v1/payroll/register?period=${period}`);
+}
+export function closePayrollPeriod(period: string) {
+  return request<{ period: string; employees: number; total_net: number; closed_at: string }>(`/api/v1/payroll/register/${period}/close`, { method: "POST" });
+}

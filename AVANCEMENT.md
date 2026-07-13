@@ -792,3 +792,9 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Fait :** traduction **intégrale** de l'écran Direction générale (pilotage) : les 4 cartes (tableau de bord consolidé, recherche globale, alertes automatiques, centre de pilotage intelligent), les **4 blocs de domaine** (Éditorial, Production, Commercial, Financier) avec leurs **14 tuiles d'indicateurs**, la fenêtre de décision d'une recommandation (traiter/reporter/ignorer), les messages, et les **libellés de priorité** (faible/moyenne/élevée/critique). Français conservé par défaut. Typecheck + build OK, aucune régression backend (285 tests inchangés).
 
 **Reste :** écrans RH (cartes Présences/Paie), Rapports, Utilisateurs.
+
+### 13/07/2026 (suite) — i18n FR/EN : incrément 9 (écran « Rapports & indicateurs » complet)
+
+**Fait :** traduction **intégrale** de l'écran Rapports & indicateurs : les 4 cartes (dictionnaire d'indicateurs, bibliothèque de rapports standards, explorateur d'analyses personnelles, simulation de tirage), les 3 fenêtres intégrées (nouvelle analyse, promotion en rapport standard, simulation de tirage avec son tableau de résultats — en-têtes de colonnes traduites), les libellés de domaine (Éditorial/Production/Commercial/Financier/RH) et les messages. Français conservé par défaut. Typecheck + build OK, aucune régression backend (285 tests inchangés).
+
+**Reste :** écrans RH (cartes Présences/Paie), Utilisateurs.

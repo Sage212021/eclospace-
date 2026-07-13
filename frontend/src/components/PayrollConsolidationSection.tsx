@@ -16,6 +16,7 @@ import { Card } from "./Card";
 import { Field } from "./Modal";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
+import { useI18n } from "../i18n";
 
 // Consolidation vers la paie (§28-31). Le module fournit les données ; la paie
 // reste externe (D-003). Workflow : préparer → valider → geler → transmettre.
@@ -39,6 +40,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export function PayrollConsolidationSection({ canAdminister }: { canAdminister: boolean }) {
+  const { t } = useI18n();
   const [rubrics, setRubrics] = useState<PayrollRubric[]>([]);
   const [mode, setMode] = useState("manuel");
   const [periodKey, setPeriodKey] = useState(currentPeriod());
@@ -103,15 +105,15 @@ export function PayrollConsolidationSection({ canAdminister }: { canAdminister: 
 
   return (
     <Card
-      title="Consolidation vers la paie"
+      title={t("pay.consolidation", "Consolidation vers la paie")}
       icon={<IconAdmin />}
-      subtitle="Le module fournit les données ; il ne modifie jamais un bulletin. La paie reste externe."
+      subtitle={t("pay.consolidation_sub", "Le module fournit les données ; il ne modifie jamais un bulletin. La paie reste externe.")}
     >
       {/* Mode + rubriques */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", marginBottom: 12 }}>
         <div style={{ fontSize: 13 }}>
-          Mode d'intégration : <strong>{mode === "auto" ? "Automatique" : "Manuel"}</strong>
-          {canAdminister && <Button variant="view" size="sm" type="button" onClick={toggleMode} style={{ marginLeft: 8 }}>Basculer</Button>}
+          {t("pay.integration_mode", "Mode d'intégration :")} <strong>{mode === "auto" ? t("pay.auto", "Automatique") : t("pay.manual", "Manuel")}</strong>
+          {canAdminister && <Button variant="view" size="sm" type="button" onClick={toggleMode} style={{ marginLeft: 8 }}>{t("pay.toggle", "Basculer")}</Button>}
         </div>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
@@ -125,30 +127,30 @@ export function PayrollConsolidationSection({ canAdminister }: { canAdminister: 
 
       {/* Période + actions du workflow */}
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-        <Field label="Période (AAAA-MM)"><input value={periodKey} onChange={(e) => setPeriodKey(e.target.value)} placeholder="2026-07" style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
-        <Button variant="edit" size="sm" type="button" disabled={busy} onClick={() => act(() => preparePayroll(periodKey), "Consolidation préparée.")}>Préparer</Button>
-        {status === "brouillon" && <Button variant="add" size="sm" type="button" disabled={busy} onClick={() => act(() => validatePayroll(periodKey), "Consolidation validée.")}>Valider</Button>}
-        {status === "valide" && <Button variant="add" size="sm" type="button" disabled={busy} onClick={() => act(() => freezePayroll(periodKey), "Consolidation gelée.")}>Geler</Button>}
-        {status === "gele" && canAdminister && <Button variant="export" size="sm" type="button" disabled={busy} onClick={() => act(() => transmitPayroll(periodKey), "Transmise aux variables de paie.")}>Transmettre à la paie</Button>}
+        <Field label={t("pay.period_field", "Période (AAAA-MM)")}><input value={periodKey} onChange={(e) => setPeriodKey(e.target.value)} placeholder="2026-07" style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
+        <Button variant="edit" size="sm" type="button" disabled={busy} onClick={() => act(() => preparePayroll(periodKey), t("pay.msg.prepared", "Consolidation préparée."))}>{t("pay.prepare", "Préparer")}</Button>
+        {status === "brouillon" && <Button variant="add" size="sm" type="button" disabled={busy} onClick={() => act(() => validatePayroll(periodKey), t("pay.msg.validated", "Consolidation validée."))}>{t("pay.validate", "Valider")}</Button>}
+        {status === "valide" && <Button variant="add" size="sm" type="button" disabled={busy} onClick={() => act(() => freezePayroll(periodKey), t("pay.msg.frozen", "Consolidation gelée."))}>{t("pay.freeze", "Geler")}</Button>}
+        {status === "gele" && canAdminister && <Button variant="export" size="sm" type="button" disabled={busy} onClick={() => act(() => transmitPayroll(periodKey), t("pay.msg.transmitted", "Transmise aux variables de paie."))}>{t("pay.transmit", "Transmettre à la paie")}</Button>}
       </div>
 
       {period && (
         <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 13, marginBottom: 8 }}>
-            Statut : <strong>{STATUS_LABELS[period.status] ?? period.status}</strong> · {period.lines.length} employés ·
-            {" "}Retenues proposées : <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 700 }}>{fcfa(period.totals.deduction_total)}</span>
-            {period.transmitted_at && <span style={{ color: "var(--eclosion, #C89A1B)" }}> · transmise le {period.transmitted_at.slice(0, 10)}</span>}
+            {t("pay.status", "Statut :")} <strong>{t("pay.pst." + period.status, STATUS_LABELS[period.status] ?? period.status)}</strong> · {period.lines.length} {t("pay.employees_count", "employés")} ·
+            {" "}{t("pay.proposed_deductions", "Retenues proposées :")} <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 700 }}>{fcfa(period.totals.deduction_total)}</span>
+            {period.transmitted_at && <span style={{ color: "var(--eclosion, #C89A1B)" }}> · {t("pay.transmitted_on", "transmise le")} {period.transmitted_at.slice(0, 10)}</span>}
           </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
-                  <th style={{ padding: "5px 8px" }}>Employé</th>
-                  <th style={{ padding: "5px 8px", textAlign: "right" }}>Travaillé</th>
-                  <th style={{ padding: "5px 8px", textAlign: "right" }}>Retards</th>
-                  <th style={{ padding: "5px 8px", textAlign: "right" }}>H. sup</th>
-                  <th style={{ padding: "5px 8px", textAlign: "right" }}>Abs. injust.</th>
-                  <th style={{ padding: "5px 8px", textAlign: "right" }}>Retenue</th>
+                  <th style={{ padding: "5px 8px" }}>{t("att.col.employee", "Employé")}</th>
+                  <th style={{ padding: "5px 8px", textAlign: "right" }}>{t("att.col.worked", "Travaillé")}</th>
+                  <th style={{ padding: "5px 8px", textAlign: "right" }}>{t("att.col.late", "Retards")}</th>
+                  <th style={{ padding: "5px 8px", textAlign: "right" }}>{t("att.col.overtime", "H. sup")}</th>
+                  <th style={{ padding: "5px 8px", textAlign: "right" }}>{t("att.col.absent", "Abs. injust.")}</th>
+                  <th style={{ padding: "5px 8px", textAlign: "right" }}>{t("att.col.deduction", "Retenue")}</th>
                 </tr>
               </thead>
               <tbody style={{ fontFamily: "var(--font-mono, monospace)" }}>
@@ -164,7 +166,7 @@ export function PayrollConsolidationSection({ canAdminister }: { canAdminister: 
                 ))}
               </tbody>
             </table>
-            {period.lines.length > 100 && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>Affichage limité à 100 lignes.</p>}
+            {period.lines.length > 100 && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>{t("pay.rows_limited_100", "Affichage limité à 100 lignes.")}</p>}
           </div>
         </div>
       )}

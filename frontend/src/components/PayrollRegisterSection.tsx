@@ -4,6 +4,7 @@ import { Card } from "./Card";
 import { Field } from "./Modal";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
+import { useI18n } from "../i18n";
 
 // Livre de paie mensuel + clôture/gel + exports déclarations CNPS/fiscales
 // (D-007, incrément 5). La clôture fige la période (journal immuable).
@@ -28,6 +29,7 @@ function downloadCsv(name: string, header: string[], rows: (string | number)[][]
 }
 
 export function PayrollRegisterSection({ canClose }: { canClose: boolean }) {
+  const { t, lang } = useI18n();
   const [period, setPeriod] = useState(currentPeriod());
   const [reg, setReg] = useState<PayrollRegister | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,7 +53,11 @@ export function PayrollRegisterSection({ canClose }: { canClose: boolean }) {
     setBusy(true);
     try {
       const r = await closePayrollPeriod(period);
-      setMessage(`Période ${period} clôturée : ${r.employees} salarié(s), net total ${fcfa(r.total_net)}. Le journal est figé.`);
+      setMessage(
+        lang === "en"
+          ? `Period ${period} closed: ${r.employees} employee(s), total net ${fcfa(r.total_net)}. The journal is frozen.`
+          : `Période ${period} clôturée : ${r.employees} salarié(s), net total ${fcfa(r.total_net)}. Le journal est figé.`,
+      );
       setError(null);
       await load();
     } catch (err) {
@@ -65,7 +71,9 @@ export function PayrollRegisterSection({ canClose }: { canClose: boolean }) {
     if (!reg) return;
     downloadCsv(
       `declaration-cnps_${reg.period}.csv`,
-      ["Salarié", "Matricule", "N° CNPS", "Assiette CNPS", "PVID salarié", "PVID patronal", "Prest. familiales", "Accidents travail"],
+      lang === "en"
+        ? ["Employee", "Staff no.", "CNPS no.", "CNPS base", "Employee PVID", "Employer PVID", "Family benefits", "Work accidents"]
+        : ["Salarié", "Matricule", "N° CNPS", "Assiette CNPS", "PVID salarié", "PVID patronal", "Prest. familiales", "Accidents travail"],
       reg.lines.map((l: RegisterLine) => [l.employee_name, l.matricule ?? "", l.cnps_number ?? "", l.assiette_cnps, l.pvid_salarie, l.pvid_patronal, l.prestations_familiales, l.accidents_travail]),
     );
   }
@@ -73,49 +81,51 @@ export function PayrollRegisterSection({ canClose }: { canClose: boolean }) {
     if (!reg) return;
     downloadCsv(
       `declaration-fiscale_${reg.period}.csv`,
-      ["Salarié", "NIU", "IRPP + CAC", "CFC salarié", "CFC patronal", "FNE", "Taxe communale", "RAV"],
+      lang === "en"
+        ? ["Employee", "NIU", "IRPP + CAC", "Employee CFC", "Employer CFC", "FNE", "Communal tax", "RAV"]
+        : ["Salarié", "NIU", "IRPP + CAC", "CFC salarié", "CFC patronal", "FNE", "Taxe communale", "RAV"],
       reg.lines.map((l: RegisterLine) => [l.employee_name, l.niu ?? "", l.irpp_cac, l.cfc_salarie, l.cfc_patronal, l.fne, l.taxe_communale, l.rav]),
     );
   }
 
   return (
     <Card
-      title="Livre de paie & clôture"
+      title={t("pay.register", "Livre de paie & clôture")}
       icon={<IconAdmin />}
-      subtitle="Livre mensuel de tous les salariés, clôture (journal figé) et déclarations CNPS / fiscales."
+      subtitle={t("pay.register_sub", "Livre mensuel de tous les salariés, clôture (journal figé) et déclarations CNPS / fiscales.")}
     >
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
-        <Field label="Période (AAAA-MM)"><input value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
-        <Button variant="edit" size="sm" type="button" disabled={busy} onClick={load}>{busy ? "…" : "Générer le livre de paie"}</Button>
-        {reg && reg.lines.length > 0 && <Button variant="export" size="sm" type="button" onClick={exportCnps}>Export CNPS (CSV)</Button>}
-        {reg && reg.lines.length > 0 && <Button variant="export" size="sm" type="button" onClick={exportFiscal}>Export fiscal (CSV)</Button>}
-        {reg && !reg.closed && reg.lines.length > 0 && canClose && <Button variant="add" size="sm" type="button" disabled={busy} onClick={close}>Clôturer la période</Button>}
+        <Field label={t("pay.period_field", "Période (AAAA-MM)")}><input value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
+        <Button variant="edit" size="sm" type="button" disabled={busy} onClick={load}>{busy ? "…" : t("pay.gen_register", "Générer le livre de paie")}</Button>
+        {reg && reg.lines.length > 0 && <Button variant="export" size="sm" type="button" onClick={exportCnps}>{t("pay.export_cnps", "Export CNPS (CSV)")}</Button>}
+        {reg && reg.lines.length > 0 && <Button variant="export" size="sm" type="button" onClick={exportFiscal}>{t("pay.export_fiscal", "Export fiscal (CSV)")}</Button>}
+        {reg && !reg.closed && reg.lines.length > 0 && canClose && <Button variant="add" size="sm" type="button" disabled={busy} onClick={close}>{t("pay.close_period", "Clôturer la période")}</Button>}
       </div>
 
       {reg && (
         <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 13, marginBottom: 8 }}>
             {reg.closed ? (
-              <span style={{ color: "var(--eclosion, #C89A1B)", fontWeight: 700 }}>Période clôturée (journal figé){reg.closed_at ? ` le ${reg.closed_at.slice(0, 10)}` : ""}</span>
+              <span style={{ color: "var(--eclosion, #C89A1B)", fontWeight: 700 }}>{t("pay.period_closed", "Période clôturée (journal figé)")}{reg.closed_at ? `${t("pay.on", " le ")}${reg.closed_at.slice(0, 10)}` : ""}</span>
             ) : (
-              <span>{reg.lines.length} salarié(s) · barème depuis le {reg.rate_effective_from}</span>
+              <span>{reg.lines.length} {t("pay.employees_count", "salarié(s)")} · {t("pay.scale_since", "barème depuis le")} {reg.rate_effective_from}</span>
             )}
-            {" · "}Net total : <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 700 }}>{fcfa(reg.totals.net)}</span> ·
-            {" "}Coût employeur : <span style={{ fontFamily: "var(--font-mono, monospace)" }}>{fcfa(reg.totals.brut + reg.totals.charges_pat)}</span>
+            {" · "}{t("pay.net_total", "Net total :")} <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 700 }}>{fcfa(reg.totals.net)}</span> ·
+            {" "}{t("pay.employer_cost", "Coût employeur :")} <span style={{ fontFamily: "var(--font-mono, monospace)" }}>{fcfa(reg.totals.brut + reg.totals.charges_pat)}</span>
           </div>
           {reg.lines.length === 0 ? (
-            <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucun salarié avec fiche paie sur cette période.</p>
+            <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>{t("pay.no_employee_period", "Aucun salarié avec fiche paie sur cette période.")}</p>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
-                    <th style={{ padding: "5px 8px" }}>Salarié</th>
-                    <th style={{ padding: "5px 8px", textAlign: "right" }}>Brut</th>
-                    <th style={{ padding: "5px 8px", textAlign: "right" }}>Retenues sal.</th>
-                    <th style={{ padding: "5px 8px", textAlign: "right" }}>Charges pat.</th>
-                    <th style={{ padding: "5px 8px", textAlign: "right" }}>Net à payer</th>
-                    <th style={{ padding: "5px 8px", textAlign: "right" }}>Coût employeur</th>
+                    <th style={{ padding: "5px 8px" }}>{t("att.col.employee", "Salarié")}</th>
+                    <th style={{ padding: "5px 8px", textAlign: "right" }}>{t("pay.col.gross", "Brut")}</th>
+                    <th style={{ padding: "5px 8px", textAlign: "right" }}>{t("pay.col.emp_deductions", "Retenues sal.")}</th>
+                    <th style={{ padding: "5px 8px", textAlign: "right" }}>{t("pay.col.emp_charges", "Charges pat.")}</th>
+                    <th style={{ padding: "5px 8px", textAlign: "right" }}>{t("pay.col.net", "Net à payer")}</th>
+                    <th style={{ padding: "5px 8px", textAlign: "right" }}>{t("pay.col.employer_cost", "Coût employeur")}</th>
                   </tr>
                 </thead>
                 <tbody style={{ fontFamily: "var(--font-mono, monospace)" }}>
@@ -131,7 +141,7 @@ export function PayrollRegisterSection({ canClose }: { canClose: boolean }) {
                   ))}
                 </tbody>
               </table>
-              {reg.lines.length > 150 && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>Affichage limité à 150 lignes ; les exports CSV contiennent tout.</p>}
+              {reg.lines.length > 150 && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>{t("pay.rows_limited_150", "Affichage limité à 150 lignes ; les exports CSV contiennent tout.")}</p>}
             </div>
           )}
         </div>

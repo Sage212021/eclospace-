@@ -38,6 +38,9 @@ const PRIORITY_COLORS: Record<AnnouncementPriority, string> = {
 interface AnnouncementsPageProps {
   canPublish: boolean;
   canAdminister: boolean;
+  // Ouverture directe d'une annonce (depuis la cloche de notifications).
+  openAnnouncementId?: string | null;
+  onOpened?: () => void;
 }
 
 interface TargetRow {
@@ -69,7 +72,7 @@ const EMPTY_FORM: FormState = {
 };
 
 // Centre de Communication Interne — Babillard d'annonces (module « communication »).
-export function AnnouncementsPage({ canPublish, canAdminister }: AnnouncementsPageProps) {
+export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementId, onOpened }: AnnouncementsPageProps) {
   const { t, lang } = useI18n();
   const [categories, setCategories] = useState<AnnouncementCategory[]>([]);
   const [feed, setFeed] = useState<AnnouncementFeedItem[]>([]);
@@ -110,6 +113,13 @@ export function AnnouncementsPage({ canPublish, canAdminister }: AnnouncementsPa
     refreshFeed().catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
+
+  // Ouverture demandée depuis la cloche : affiche le détail puis acquitte.
+  useEffect(() => {
+    if (!openAnnouncementId) return;
+    openDetail(openAnnouncementId).finally(() => onOpened?.());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openAnnouncementId]);
 
   function fail(err: unknown, fallback: string) {
     setError(err instanceof Error ? err.message : fallback);

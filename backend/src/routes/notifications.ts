@@ -34,6 +34,16 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     return reply.send(notifications);
   });
 
+  // Marque toutes MES notifications comme lues (bouton « Tout marquer comme lu »
+  // de la cloche). Un utilisateur n'agit que sur ses propres notifications.
+  fastify.post("/api/v1/notifications/read-all", { preHandler: requireAuth }, async (request, reply) => {
+    const result = await prisma.notification.updateMany({
+      where: { userId: request.user!.id, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return reply.send({ ok: true, updated: result.count });
+  });
+
   fastify.patch("/api/v1/notifications/:id", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const parsed = patchSchema.safeParse(request.body);

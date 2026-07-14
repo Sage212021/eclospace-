@@ -844,3 +844,15 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Vérifications :** typecheck + build frontend OK ; round-trip complet vérifié via le **serveur HTTP réel** (login → création avec `<script>` → publication 592 destinataires → fil → détail : script retiré, `<b>` conservé → suivi de lecture) ; **293 tests backend** (+1 : gating des options de ciblage). Aucune donnée existante modifiée.
 
 **Reste (module Communication) :** inc 3 (cloche cliquable : menu déroulant + ouverture d'annonce) → inc 4 (temps réel + sonnerie + pop-up + écran préférences) → inc 5 (relances de lecture) → inc 6 (bannière Urgent/Critique + archivage auto).
+
+### 14/07/2026 (suite) — Babillard d'annonces : incrément 3 (cloche cliquable)
+
+**Fait :** la cloche 🔔 de la barre supérieure devient **interactive**.
+- Clic sur la cloche → **menu déroulant** listant les 30 dernières notifications : puce de couleur selon la priorité, titre, aperçu (2 lignes), date/heure ; les non-lues sont surlignées.
+- **Clic sur une notification** → marquée lue (badge décrémenté) ; si elle pointe vers une annonce (`entityType = announcement`), bascule automatiquement sur le **Babillard** et **ouvre l'annonce** directement (fenêtre de détail).
+- **« Tout marquer comme lu »** → nouvel endpoint additif `POST /notifications/read-all` (bornée à ses propres notifications).
+- Le badge de non-lus fonctionnait déjà et **inclut les annonces** (chaque publication crée une notification par destinataire — cf. inc 1).
+
+**Vérifications :** typecheck front + back OK ; build OK ; round-trip vérifié sur le **serveur HTTP réel** (publication d'une annonce → la notification `annonce` porte `entityType/entityId` → « tout marquer comme lu » : 2211 → 0 non-lues). Aucune régression backend.
+
+**Reste (module Communication) :** inc 4 (temps réel Socket.IO + sonnerie + pop-up + écran de préférences de notification) → inc 5 (relances de lecture) → inc 6 (bannière Urgent/Critique + archivage auto).

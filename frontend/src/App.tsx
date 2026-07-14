@@ -164,6 +164,7 @@ export function App() {
   const [user, setUser] = useState<EffectiveUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>({ kind: "leaf", key: "dashboard" });
+  const [announcementToOpen, setAnnouncementToOpen] = useState<string | null>(null);
   const [confirmBanner, setConfirmBanner] = useState<{ tone: "ok" | "alert"; text: string } | null>(null);
   // Barre latérale : en tiroir escamotable sur mobile (piloté par CSS ; l'état
   // ne sert qu'à ouvrir/fermer le tiroir, fermé par défaut).
@@ -266,6 +267,13 @@ export function App() {
   const activeKey = view.kind === "manuscript-detail" ? view.originKey : view.key;
   const leaf = view.kind === "leaf" ? LEAF_VIEWS[view.key] : undefined;
   const openManuscript = (id: string) => setView({ kind: "manuscript-detail", id, originKey: activeKey });
+  // Ouverture d'une annonce depuis la cloche : bascule sur le Babillard et
+  // transmet l'identifiant à ouvrir (si l'utilisateur y a accès).
+  const openAnnouncement = (id: string) => {
+    if (!permissions.has("communication:consultation")) return;
+    setAnnouncementToOpen(id);
+    setView({ kind: "leaf", key: "cm-babillard" });
+  };
 
   const selectLeaf = (key: string) => {
     setView({ kind: "leaf", key });
@@ -308,6 +316,7 @@ export function App() {
           onLogout={handleLogout}
           onOpenSettings={() => selectLeaf("ad-parametres")}
           onOpenManuscript={openManuscript}
+          onOpenAnnouncement={openAnnouncement}
         />
 
         {user.impersonating && (
@@ -410,7 +419,12 @@ export function App() {
           <SettingsPage canAdminister={permissions.has("settings:administration")} user={user} />
         )}
         {leaf && "page" in leaf && leaf.page === "communication" && (
-          <AnnouncementsPage canPublish={permissions.has("communication:saisie")} canAdminister={permissions.has("communication:administration")} />
+          <AnnouncementsPage
+            canPublish={permissions.has("communication:saisie")}
+            canAdminister={permissions.has("communication:administration")}
+            openAnnouncementId={announcementToOpen}
+            onOpened={() => setAnnouncementToOpen(null)}
+          />
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
       </div>

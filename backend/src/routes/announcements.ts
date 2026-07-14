@@ -101,6 +101,34 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
     return reply.send(categories);
   });
 
+  // ── Options de ciblage (départements, rôles, utilisateurs) ─────────────────
+  // Fourni par le module lui-même et réservé aux publieurs (communication:saisie),
+  // pour ne pas exiger la permission users:consultation.
+  fastify.get(
+    "/api/v1/announcement-targets/options",
+    { preHandler: requirePermission("communication", "saisie") },
+    async (_request, reply) => {
+      const [departments, roles, users] = await Promise.all([
+        prisma.department.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+        prisma.role.findMany({ orderBy: { label: "asc" }, select: { id: true, label: true } }),
+        prisma.user.findMany({
+          where: { status: "active", deletedAt: null },
+          orderBy: { username: "asc" },
+          select: { id: true, username: true, employee: { select: { firstName: true, lastName: true } } },
+        }),
+      ]);
+      return reply.send({
+        departments,
+        roles,
+        users: users.map((u) => ({
+          id: u.id,
+          username: u.username,
+          name: u.employee ? `${u.employee.firstName} ${u.employee.lastName}` : u.username,
+        })),
+      });
+    },
+  );
+
   // ── Fil personnel : les annonces publiées qui me ciblent ───────────────────
   const feedQuery = z.object({
     unread: z.enum(["true", "false"]).optional(),

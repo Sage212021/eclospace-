@@ -49,22 +49,22 @@ enum EmployeeStatus {
 }
 
 model Employee {
-  id           String      @id @default(uuid())
-  firstName    String      @map("first_name")
-  lastName     String      @map("last_name")
-  departmentId String?     @map("department_id")
-  department   Department? @relation(fields: [departmentId], references: [id])
-  status       EmployeeStatus @default(salarie)
-  position     String?
-  managerId    String?     @map("manager_id")
-  manager      Employee?   @relation("EmployeeManager", fields: [managerId], references: [id])
-  reports      Employee[]  @relation("EmployeeManager")
-  hireDate     DateTime?   @map("hire_date")
+  id               String         @id @default(uuid())
+  firstName        String         @map("first_name")
+  lastName         String         @map("last_name")
+  departmentId     String?        @map("department_id")
+  department       Department?    @relation(fields: [departmentId], references: [id])
+  status           EmployeeStatus @default(salarie)
+  position         String?
+  managerId        String?        @map("manager_id")
+  manager          Employee?      @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports          Employee[]     @relation("EmployeeManager")
+  hireDate         DateTime?      @map("hire_date")
   // Ch. 19 §19.3 : date programmée de désactivation du compte ; vérifiée de
   // façon paresseuse à chaque connexion (pas de tâche planifiée dans le
   // projet — cf. docs/JOURNAL_TECHNIQUE.md).
-  departureDate    DateTime? @map("departure_date")
-  leaveBalanceDays Decimal   @default(0) @map("leave_balance_days") @db.Decimal(5, 1)
+  departureDate    DateTime?      @map("departure_date")
+  leaveBalanceDays Decimal        @default(0) @map("leave_balance_days") @db.Decimal(5, 1)
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -73,19 +73,19 @@ model Employee {
   deletedAt DateTime? @map("deleted_at")
   deletedBy String?   @map("deleted_by")
 
-  user User?
-  hrContracts      HrContract[]
-  confidential     EmployeeConfidential?
-  absences         Absence[]
-  employeeSkills   EmployeeSkill[]
-  payrollVariables PayrollVariable[]
-  accessReviewSubjectItems  AccessReviewItem[] @relation("AccessReviewSubject")
-  accessReviewReviewerItems AccessReviewItem[] @relation("AccessReviewReviewer")
-  workSchedules    WorkSchedule[]
-  attendanceEvents AttendanceEvent[]
-  attendanceAnomalies AttendanceAnomaly[]
-  attendancePayrollLines AttendancePayrollLine[]
-  payrollProfile   PayrollEmployeeProfile?
+  user                      User?
+  hrContracts               HrContract[]
+  confidential              EmployeeConfidential?
+  absences                  Absence[]
+  employeeSkills            EmployeeSkill[]
+  payrollVariables          PayrollVariable[]
+  accessReviewSubjectItems  AccessReviewItem[]      @relation("AccessReviewSubject")
+  accessReviewReviewerItems AccessReviewItem[]      @relation("AccessReviewReviewer")
+  workSchedules             WorkSchedule[]
+  attendanceEvents          AttendanceEvent[]
+  attendanceAnomalies       AttendanceAnomaly[]
+  attendancePayrollLines    AttendancePayrollLine[]
+  payrollProfile            PayrollEmployeeProfile?
 
   @@map("employees")
 }
@@ -192,20 +192,20 @@ model EmployeeSkill {
 // Variables de paie par période (Ch. 19 §19.7) — export vers un logiciel de
 // paie externe ou saisie du net à payer pour exécution par le module Finance.
 model PayrollVariable {
-  id             String    @id @default(uuid())
-  employeeId     String    @map("employee_id")
-  employee       Employee  @relation(fields: [employeeId], references: [id])
-  periodKey      String    @map("period_key")
-  presenceDays   Decimal?  @map("presence_days") @db.Decimal(5, 1)
-  absenceDays    Decimal?  @map("absence_days") @db.Decimal(5, 1)
-  bonusAmount    Decimal?  @map("bonus_amount") @db.Decimal(12, 2)
-  missionsAmount Decimal?  @map("missions_amount") @db.Decimal(12, 2)
+  id              String    @id @default(uuid())
+  employeeId      String    @map("employee_id")
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+  periodKey       String    @map("period_key")
+  presenceDays    Decimal?  @map("presence_days") @db.Decimal(5, 1)
+  absenceDays     Decimal?  @map("absence_days") @db.Decimal(5, 1)
+  bonusAmount     Decimal?  @map("bonus_amount") @db.Decimal(12, 2)
+  missionsAmount  Decimal?  @map("missions_amount") @db.Decimal(12, 2)
   // Colonnes additives (module Présences, incrément 6) : alimentées à la
   // transmission d'une consolidation de présence. Nullable → aucune donnée
   // existante impactée.
-  deductionAmount  Decimal? @map("deduction_amount") @db.Decimal(12, 2)
-  overtimeMinutes  Int?     @map("overtime_minutes")
-  exportedAt     DateTime? @map("exported_at")
+  deductionAmount Decimal?  @map("deduction_amount") @db.Decimal(12, 2)
+  overtimeMinutes Int?      @map("overtime_minutes")
+  exportedAt      DateTime? @map("exported_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
@@ -265,9 +265,9 @@ model WorkSchedule {
 
 // Jours fériés/chômés (§9) — exclus des jours ouvrables dans les calculs.
 model PublicHoliday {
-  id        String   @id @default(uuid())
-  day       DateTime @unique @db.Date
-  label     String
+  id    String   @id @default(uuid())
+  day   DateTime @unique @db.Date
+  label String
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
@@ -315,21 +315,21 @@ enum DeductionMethod {
 // conserve les anciennes, afin de préserver l'historique des calculs. Montants
 // en XOF/XAF (FCFA), sans décimale usuelle mais stockés en Decimal par sûreté.
 model DeductionRule {
-  id           String          @id @default(uuid())
-  perMinute    Decimal?        @map("per_minute") @db.Decimal(12, 2)
-  perHalfHour  Decimal         @default(500) @map("per_half_hour") @db.Decimal(12, 2)
-  perHour      Decimal         @default(1000) @map("per_hour") @db.Decimal(12, 2)
-  dailyCap     Decimal?        @map("daily_cap") @db.Decimal(12, 2)
-  monthlyCap   Decimal?        @map("monthly_cap") @db.Decimal(12, 2)
-  method       DeductionMethod @default(prorata)
-  effectiveFrom DateTime       @default(now()) @map("effective_from")
-  active       Boolean         @default(true)
-  label        String?
+  id            String          @id @default(uuid())
+  perMinute     Decimal?        @map("per_minute") @db.Decimal(12, 2)
+  perHalfHour   Decimal         @default(500) @map("per_half_hour") @db.Decimal(12, 2)
+  perHour       Decimal         @default(1000) @map("per_hour") @db.Decimal(12, 2)
+  dailyCap      Decimal?        @map("daily_cap") @db.Decimal(12, 2)
+  monthlyCap    Decimal?        @map("monthly_cap") @db.Decimal(12, 2)
+  method        DeductionMethod @default(prorata)
+  effectiveFrom DateTime        @default(now()) @map("effective_from")
+  active        Boolean         @default(true)
+  label         String?
 
-  createdAt DateTime  @default(now()) @map("created_at")
-  createdBy String?   @map("created_by")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  updatedBy String?   @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
 
   @@index([active, effectiveFrom])
   @@map("deduction_rules")
@@ -360,19 +360,19 @@ enum AttendanceAnomalyStatus {
 // unique par (employé, jour, nature) : le scan est idempotent. La justification
 // (motif + commentaire + pièce jointe optionnelle) précède la décision.
 model AttendanceAnomaly {
-  id         String                 @id @default(uuid())
-  employeeId String                 @map("employee_id")
-  employee   Employee               @relation(fields: [employeeId], references: [id])
-  day        DateTime               @db.Date
-  type       AttendanceAnomalyType
-  minutes    Int?
-  detail     String?
-  status     AttendanceAnomalyStatus @default(en_attente)
-  justificationMotif    String? @map("justification_motif")
-  justificationComment  String? @map("justification_comment")
-  justificationDocumentId String? @map("justification_document_id")
-  resolvedBy String?   @map("resolved_by")
-  resolvedAt DateTime? @map("resolved_at")
+  id                      String                  @id @default(uuid())
+  employeeId              String                  @map("employee_id")
+  employee                Employee                @relation(fields: [employeeId], references: [id])
+  day                     DateTime                @db.Date
+  type                    AttendanceAnomalyType
+  minutes                 Int?
+  detail                  String?
+  status                  AttendanceAnomalyStatus @default(en_attente)
+  justificationMotif      String?                 @map("justification_motif")
+  justificationComment    String?                 @map("justification_comment")
+  justificationDocumentId String?                 @map("justification_document_id")
+  resolvedBy              String?                 @map("resolved_by")
+  resolvedAt              DateTime?               @map("resolved_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
@@ -407,11 +407,11 @@ model AttendanceValidationLevel {
 
 // Rubrique de paie prise en compte (§29) — activable Oui/Non par le gestionnaire.
 model AttendancePayrollRubric {
-  id       String  @id @default(uuid())
-  code     String  @unique
-  label    String
-  enabled  Boolean @default(true)
-  sortOrder Int    @default(0) @map("sort_order")
+  id        String  @id @default(uuid())
+  code      String  @unique
+  label     String
+  enabled   Boolean @default(true)
+  sortOrder Int     @default(0) @map("sort_order")
 
   updatedAt DateTime @updatedAt @map("updated_at")
   updatedBy String?  @map("updated_by")
@@ -422,9 +422,9 @@ model AttendancePayrollRubric {
 // Statut d'une consolidation de présence vers la paie (§30).
 enum AttendancePayrollStatus {
   brouillon // préparé, modifiable
-  valide    // contrôlé par le gestionnaire
-  gele      // figé : les données ne changent plus pour la période
-  transmis  // écrit dans les variables de paie (export externe)
+  valide // contrôlé par le gestionnaire
+  gele // figé : les données ne changent plus pour la période
+  transmis // écrit dans les variables de paie (export externe)
 }
 
 // Consolidation de présence d'une période de paie (§28, §30). Une fois gelée,
@@ -541,26 +541,26 @@ model PayrollEmployeeProfile {
   employeeId String   @unique @map("employee_id")
   employee   Employee @relation(fields: [employeeId], references: [id])
 
-  matricule       String? // matricule paie (peut différer de l'id technique)
-  email           String? // adresse d'envoi du bulletin (sinon compte lié)
-  cnpsNumber      String?  @map("cnps_number")
-  niu             String? // N° contribuable (identifiant fiscal)
-  category        String? // catégorie / échelon
-  paymentMode     String?  @map("payment_mode") // banque / mode de paiement
-  accountNumber   String?  @map("account_number")
+  matricule     String? // matricule paie (peut différer de l'id technique)
+  email         String? // adresse d'envoi du bulletin (sinon compte lié)
+  cnpsNumber    String? @map("cnps_number")
+  niu           String? // N° contribuable (identifiant fiscal)
+  category      String? // catégorie / échelon
+  paymentMode   String? @map("payment_mode") // banque / mode de paiement
+  accountNumber String? @map("account_number")
 
   // Rémunération.
-  grossContractual Decimal @default(0) @map("gross_contractual") @db.Decimal(12, 2)
-  basePct          Decimal @default(1) @map("base_pct") @db.Decimal(6, 4) // part du brut constituant le salaire de base
+  grossContractual Decimal  @default(0) @map("gross_contractual") @db.Decimal(12, 2)
+  basePct          Decimal  @default(1) @map("base_pct") @db.Decimal(6, 4) // part du brut constituant le salaire de base
   fiscalBase       Decimal? @map("fiscal_base") @db.Decimal(12, 2) // assiette fiscale si différente
 
   // Parts fiscales & ancienneté.
-  fiscalParts      Decimal @default(1) @map("fiscal_parts") @db.Decimal(4, 1)
-  applyFiscalParts Boolean @default(true) @map("apply_fiscal_parts")
-  seniorityYears   Int     @default(0) @map("seniority_years")
-  seniorityRate    Decimal? @map("seniority_rate") @db.Decimal(6, 4) // taux individuel (sinon défaut du barème)
-  seniorityThreshold Int?  @map("seniority_threshold") // seuil d'années avant prime
-  applySeniority   Boolean @default(false) @map("apply_seniority")
+  fiscalParts        Decimal  @default(1) @map("fiscal_parts") @db.Decimal(4, 1)
+  applyFiscalParts   Boolean  @default(true) @map("apply_fiscal_parts")
+  seniorityYears     Int      @default(0) @map("seniority_years")
+  seniorityRate      Decimal? @map("seniority_rate") @db.Decimal(6, 4) // taux individuel (sinon défaut du barème)
+  seniorityThreshold Int?     @map("seniority_threshold") // seuil d'années avant prime
+  applySeniority     Boolean  @default(false) @map("apply_seniority")
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
@@ -575,12 +575,12 @@ model PayrollEmployeeProfile {
 // clôturée, la période est FIGÉE : les lignes archivées sont immuables et la
 // re-clôture est refusée (anti-doublon).
 model PayrollClosure {
-  id              String   @id @default(uuid())
-  periodKey       String   @unique @map("period_key")
-  employees       Int
-  totalBrut       Decimal  @default(0) @map("total_brut") @db.Decimal(14, 2)
-  totalNet        Decimal  @default(0) @map("total_net") @db.Decimal(14, 2)
-  totalChargesPat Decimal  @default(0) @map("total_charges_pat") @db.Decimal(14, 2)
+  id                String   @id @default(uuid())
+  periodKey         String   @unique @map("period_key")
+  employees         Int
+  totalBrut         Decimal  @default(0) @map("total_brut") @db.Decimal(14, 2)
+  totalNet          Decimal  @default(0) @map("total_net") @db.Decimal(14, 2)
+  totalChargesPat   Decimal  @default(0) @map("total_charges_pat") @db.Decimal(14, 2)
   rateEffectiveFrom DateTime @map("rate_effective_from") @db.Date
 
   closedAt DateTime @default(now()) @map("closed_at")
@@ -603,22 +603,22 @@ model PayrollJournalLine {
   cnpsNumber   String?        @map("cnps_number")
   niu          String?
 
-  salaireBrut            Decimal @map("salaire_brut") @db.Decimal(12, 2)
-  assietteCnps           Decimal @map("assiette_cnps") @db.Decimal(12, 2)
-  pvidSalarie            Decimal @map("pvid_salarie") @db.Decimal(12, 2)
-  pvidPatronal           Decimal @map("pvid_patronal") @db.Decimal(12, 2)
-  prestationsFamiliales  Decimal @map("prestations_familiales") @db.Decimal(12, 2)
-  accidentsTravail       Decimal @map("accidents_travail") @db.Decimal(12, 2)
-  cfcSalarie             Decimal @map("cfc_salarie") @db.Decimal(12, 2)
-  cfcPatronal            Decimal @map("cfc_patronal") @db.Decimal(12, 2)
-  fne                    Decimal @db.Decimal(12, 2)
-  taxeCommunale          Decimal @map("taxe_communale") @db.Decimal(12, 2)
-  rav                    Decimal @db.Decimal(12, 2)
-  irppCac                Decimal @map("irpp_cac") @db.Decimal(12, 2)
+  salaireBrut             Decimal @map("salaire_brut") @db.Decimal(12, 2)
+  assietteCnps            Decimal @map("assiette_cnps") @db.Decimal(12, 2)
+  pvidSalarie             Decimal @map("pvid_salarie") @db.Decimal(12, 2)
+  pvidPatronal            Decimal @map("pvid_patronal") @db.Decimal(12, 2)
+  prestationsFamiliales   Decimal @map("prestations_familiales") @db.Decimal(12, 2)
+  accidentsTravail        Decimal @map("accidents_travail") @db.Decimal(12, 2)
+  cfcSalarie              Decimal @map("cfc_salarie") @db.Decimal(12, 2)
+  cfcPatronal             Decimal @map("cfc_patronal") @db.Decimal(12, 2)
+  fne                     Decimal @db.Decimal(12, 2)
+  taxeCommunale           Decimal @map("taxe_communale") @db.Decimal(12, 2)
+  rav                     Decimal @db.Decimal(12, 2)
+  irppCac                 Decimal @map("irpp_cac") @db.Decimal(12, 2)
   totalRetenuesSalariales Decimal @map("total_retenues_salariales") @db.Decimal(12, 2)
   totalChargesPatronales  Decimal @map("total_charges_patronales") @db.Decimal(12, 2)
-  netAPayer              Decimal @map("net_a_payer") @db.Decimal(12, 2)
-  coutEmployeur          Decimal @map("cout_employeur") @db.Decimal(12, 2)
+  netAPayer               Decimal @map("net_a_payer") @db.Decimal(12, 2)
+  coutEmployeur           Decimal @map("cout_employeur") @db.Decimal(12, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -713,9 +713,13 @@ model User {
   batSignatures      BatSignature[]
   contractSignatures ContractSignature[]
   objectives         Objective[]         @relation("UserObjectives")
-  weeklyReports      WeeklyReport[]       @relation("UserWeeklyReports")
-  validatedReports   WeeklyReport[]       @relation("WeeklyReportValidator")
+  weeklyReports      WeeklyReport[]      @relation("UserWeeklyReports")
+  validatedReports   WeeklyReport[]      @relation("WeeklyReportValidator")
   attendanceEvents   AttendanceEvent[]
+
+  authoredAnnouncements  Announcement[]          @relation("AnnouncementAuthor")
+  announcementReceipts   AnnouncementReceipt[]   @relation("AnnouncementReceipts")
+  notificationPreference NotificationPreference? @relation("UserNotificationPreference")
 
   @@map("users")
 }
@@ -810,6 +814,7 @@ enum NotificationType {
   echeance
   validation
   alerte_stock
+  annonce
   autre
 }
 
@@ -880,7 +885,8 @@ model Document {
   deletedAt DateTime? @map("deleted_at")
   deletedBy String?   @map("deleted_by")
 
-  versions DocumentVersion[]
+  versions                DocumentVersion[]
+  announcementAttachments AnnouncementAttachment[]
 
   @@map("documents")
 }
@@ -1093,7 +1099,7 @@ model Manuscript {
   projectManagerId String? @map("project_manager_id")
   projectManager   User?   @relation("ManuscriptProjectManager", fields: [projectManagerId], references: [id])
 
-  receivedAt        DateTime @map("received_at")
+  receivedAt        DateTime  @map("received_at")
   // Date de parution réelle de l'ouvrage (spéc. fonctionnelle §5/§8). Nulle
   // tant que le livre n'est pas paru ; renseignée avec sa date historique pour
   // les ouvrages déjà publiés importés dans le catalogue (antidatage tracé).
@@ -1101,12 +1107,12 @@ model Manuscript {
   // Ouvrage déjà paru saisi rétroactivement (hors circuit de production) pour
   // constituer le catalogue existant — se distingue d'un manuscrit entré en
   // production dans l'ERP.
-  isBackCatalogue   Boolean  @default(false) @map("is_back_catalogue")
-  requiresExpertise Boolean  @default(false) @map("requires_expertise")
+  isBackCatalogue   Boolean   @default(false) @map("is_back_catalogue")
+  requiresExpertise Boolean   @default(false) @map("requires_expertise")
   // Décision opérateur (04/07/2026) : étape Réécriture activée mais
   // facultative — déclenchée par la correction ou l'expertise (Ch. 4 §4.3),
   // via le drapeau posé à la validation de ces étapes (voir workflow.ts).
-  requiresRewrite   Boolean  @default(false) @map("requires_rewrite")
+  requiresRewrite   Boolean   @default(false) @map("requires_rewrite")
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -1412,12 +1418,12 @@ model Contract {
   deletedAt DateTime? @map("deleted_at")
   deletedBy String?   @map("deleted_by")
 
-  royaltyTerms        RoyaltyTerms?
-  royaltyEntries      RoyaltyEntry[]
-  royaltyStatements   RoyaltyStatement[]
+  royaltyTerms         RoyaltyTerms?
+  royaltyEntries       RoyaltyEntry[]
+  royaltyStatements    RoyaltyStatement[]
   royaltyBeneficiaries ContractBeneficiary[]
-  hrContracts         HrContract[]
-  signatures          ContractSignature[]
+  hrContracts          HrContract[]
+  signatures           ContractSignature[]
 
   @@map("contracts")
 }
@@ -1469,17 +1475,17 @@ enum StatementPeriodicity {
 // aux ventes (royalty_entries/statements/payments, §9.5) est le Lot 5 : il
 // n'existe pas de vente à relier tant que le Lot 4 n'est pas construit.
 model RoyaltyTerms {
-  id                  String                @id @default(uuid())
-  contractId          String                @unique @map("contract_id")
-  contract            Contract              @relation(fields: [contractId], references: [id])
-  base                RoyaltyBase
-  tiers               Json // paliers : [{ "up_to": 3000, "rate": 0.08 }, { "up_to": null, "rate": 0.10 }]
-  advanceAmount       Decimal?              @map("advance_amount") @db.Decimal(12, 2)
-  paymentSchedule     String?               @map("payment_schedule")
+  id                   String                @id @default(uuid())
+  contractId           String                @unique @map("contract_id")
+  contract             Contract              @relation(fields: [contractId], references: [id])
+  base                 RoyaltyBase
+  tiers                Json // paliers : [{ "up_to": 3000, "rate": 0.08 }, { "up_to": null, "rate": 0.10 }]
+  advanceAmount        Decimal?              @map("advance_amount") @db.Decimal(12, 2)
+  paymentSchedule      String?               @map("payment_schedule")
   // Revue opérateur du 04/07/2026 : retenue fiscale par défaut du contrat
   // (appliquée à l'exécution du paiement si non explicitement surchargée) et
   // périodicité indicative des relevés.
-  taxWithholdingPct   Decimal?              @map("tax_withholding_pct") @db.Decimal(5, 2)
+  taxWithholdingPct    Decimal?              @map("tax_withholding_pct") @db.Decimal(5, 2)
   statementPeriodicity StatementPeriodicity? @map("statement_periodicity")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1495,12 +1501,12 @@ model RoyaltyTerms {
 // l'exécution du paiement. Sans bénéficiaire configuré, 100 % va au
 // partenaire unique du contrat (rétrocompatible).
 model ContractBeneficiary {
-  id         String  @id @default(uuid())
-  contractId String  @map("contract_id")
+  id         String   @id @default(uuid())
+  contractId String   @map("contract_id")
   contract   Contract @relation(fields: [contractId], references: [id])
-  partnerId  String  @map("partner_id")
-  partner    Partner @relation(fields: [partnerId], references: [id])
-  sharePct   Decimal @map("share_pct") @db.Decimal(5, 2)
+  partnerId  String   @map("partner_id")
+  partner    Partner  @relation(fields: [partnerId], references: [id])
+  sharePct   Decimal  @map("share_pct") @db.Decimal(5, 2)
 
   @@unique([contractId, partnerId])
   @@map("contract_beneficiaries")
@@ -2279,11 +2285,11 @@ enum ShippingZone {
 // forfait. Les trois valeurs sont indépendantes et modifiables par le
 // financier via l'écran Finance, sans redéploiement (comme tax_rates).
 model ShippingRate {
-  id               String       @id @default(uuid())
-  zone             ShippingZone @unique
-  flatAmount       Decimal?     @map("flat_amount") @db.Decimal(10, 2)
-  perKgAmount      Decimal?     @map("per_kg_amount") @db.Decimal(10, 2)
-  freeAboveAmount  Decimal?     @map("free_above_amount") @db.Decimal(10, 2)
+  id              String       @id @default(uuid())
+  zone            ShippingZone @unique
+  flatAmount      Decimal?     @map("flat_amount") @db.Decimal(10, 2)
+  perKgAmount     Decimal?     @map("per_kg_amount") @db.Decimal(10, 2)
+  freeAboveAmount Decimal?     @map("free_above_amount") @db.Decimal(10, 2)
 
   updatedAt DateTime @updatedAt @map("updated_at")
   updatedBy String?  @map("updated_by")
@@ -2394,20 +2400,20 @@ enum SalesOrderStatus {
 // Ch. 17 §17.5 : la confirmation crée la réservation de stock ; le contrôle
 // d'encours bloque la commande si le plafond est dépassé ou le client en retard.
 model SalesOrder {
-  id          String           @id @default(uuid())
-  customerId  String           @map("customer_id")
-  customer    Customer         @relation(fields: [customerId], references: [id])
-  orderNumber String           @unique @map("order_number")
-  channel     SalesChannel
-  status      SalesOrderStatus @default(draft)
-  blockReason String?          @map("block_reason")
-  approvedBy  String?          @map("approved_by")
+  id                  String           @id @default(uuid())
+  customerId          String           @map("customer_id")
+  customer            Customer         @relation(fields: [customerId], references: [id])
+  orderNumber         String           @unique @map("order_number")
+  channel             SalesChannel
+  status              SalesOrderStatus @default(draft)
+  blockReason         String?          @map("block_reason")
+  approvedBy          String?          @map("approved_by")
   // Frais de port (calculés à la commande depuis la zone du client et le poids
   // total, cf. lib/shipping.ts) ; facturés une seule fois, sur la première
   // livraison de la commande (shippingFeeInvoiced évite un double comptage
   // en cas de livraisons partielles multiples).
-  shippingFee         Decimal @default(0) @map("shipping_fee") @db.Decimal(10, 2)
-  shippingFeeInvoiced Boolean @default(false) @map("shipping_fee_invoiced")
+  shippingFee         Decimal          @default(0) @map("shipping_fee") @db.Decimal(10, 2)
+  shippingFeeInvoiced Boolean          @default(false) @map("shipping_fee_invoiced")
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
@@ -2538,10 +2544,10 @@ enum PointOfSaleType {
 }
 
 model PointOfSale {
-  id       String          @id @default(uuid())
-  name     String
-  type     PointOfSaleType @default(librairie)
-  active   Boolean         @default(true)
+  id     String          @id @default(uuid())
+  name   String
+  type   PointOfSaleType @default(librairie)
+  active Boolean         @default(true)
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2740,50 +2746,50 @@ enum EditorialQuoteStatus {
 // choisis selon le contexte et l'accessibilité de l'auteur).
 enum QuoteAcceptanceMethod {
   online_link // ③ l'auteur signe en ligne via un lien reçu par e-mail
-  internal    // ① accord enregistré par un agent (en personne / téléphone)
-  paper       // ② devis imprimé, signé à la main, scanné et renvoyé
+  internal // ① accord enregistré par un agent (en personne / téléphone)
+  paper // ② devis imprimé, signé à la main, scanné et renvoyé
 }
 
 // Métier facturé (décision opérateur du 11/07/2026) : les trois lignes d'activité
 // de la maison. Le circuit devis → signature → facture est commun aux trois.
 enum ServiceType {
-  editorial     // travail éditorial facturé à l'auteur (compte d'auteur)
-  impression    // travaux d'imprimerie (offset / numérique)
+  editorial // travail éditorial facturé à l'auteur (compte d'auteur)
+  impression // travaux d'imprimerie (offset / numérique)
   communication // conception/réalisation de supports de communication
 }
 
 model EditorialQuote {
-  id           String               @id @default(uuid())
-  quoteNumber  String               @unique @map("quote_number")
-  serviceType  ServiceType          @default(editorial) @map("service_type")
+  id             String               @id @default(uuid())
+  quoteNumber    String               @unique @map("quote_number")
+  serviceType    ServiceType          @default(editorial) @map("service_type")
   // Destinataire du devis (choix C) : un auteur (Partenaire) OU un client
   // commercial (Customer) — au moins l'un des deux. L'éditorial vise l'auteur ;
   // impression/communication visent le plus souvent un client.
-  partnerId    String?              @map("partner_id")
-  partner      Partner?             @relation(fields: [partnerId], references: [id])
-  customerId   String?              @map("customer_id")
-  customer     Customer?            @relation("QuoteCustomer", fields: [customerId], references: [id])
-  manuscriptId String?              @map("manuscript_id")
-  manuscript   Manuscript?          @relation(fields: [manuscriptId], references: [id])
-  status       EditorialQuoteStatus @default(draft)
-  currency     String               @default("XAF")
-  totalHt      Decimal              @map("total_ht") @db.Decimal(12, 2)
-  totalTax     Decimal              @map("total_tax") @db.Decimal(12, 2)
-  totalTtc     Decimal              @map("total_ttc") @db.Decimal(12, 2)
-  validUntil   DateTime?            @map("valid_until")
-  notes        String?
+  partnerId      String?              @map("partner_id")
+  partner        Partner?             @relation(fields: [partnerId], references: [id])
+  customerId     String?              @map("customer_id")
+  customer       Customer?            @relation("QuoteCustomer", fields: [customerId], references: [id])
+  manuscriptId   String?              @map("manuscript_id")
+  manuscript     Manuscript?          @relation(fields: [manuscriptId], references: [id])
+  status         EditorialQuoteStatus @default(draft)
+  currency       String               @default("XAF")
+  totalHt        Decimal              @map("total_ht") @db.Decimal(12, 2)
+  totalTax       Decimal              @map("total_tax") @db.Decimal(12, 2)
+  totalTtc       Decimal              @map("total_ttc") @db.Decimal(12, 2)
+  validUntil     DateTime?            @map("valid_until")
+  notes          String?
   // Mention explicite d'exclusion (impression, communication) portée au devis.
-  exclusionsNote String?            @map("exclusions_note")
+  exclusionsNote String?              @map("exclusions_note")
 
   // Signature / acceptation (mode ③ par jeton, ou ① / ② enregistrés par un agent)
-  signToken          String?               @unique @map("sign_token")
-  signTokenExpiresAt DateTime?             @map("sign_token_expires_at")
-  acceptedAt         DateTime?             @map("accepted_at")
+  signToken          String?                @unique @map("sign_token")
+  signTokenExpiresAt DateTime?              @map("sign_token_expires_at")
+  acceptedAt         DateTime?              @map("accepted_at")
   acceptanceMethod   QuoteAcceptanceMethod? @map("acceptance_method")
-  signerName         String?               @map("signer_name")
-  termsHash          String?               @map("terms_hash")
-  acceptanceNote     String?               @map("acceptance_note")
-  acceptanceIp       String?               @map("acceptance_ip")
+  signerName         String?                @map("signer_name")
+  termsHash          String?                @map("terms_hash")
+  acceptanceNote     String?                @map("acceptance_note")
+  acceptanceIp       String?                @map("acceptance_ip")
 
   invoiceId String?  @unique @map("invoice_id")
   invoice   Invoice? @relation(fields: [invoiceId], references: [id])
@@ -2929,16 +2935,16 @@ enum ExpenseStatus {
 // Dépenses hors commandes d'impression (celles-ci sont déjà engagées via
 // purchase_orders, Ch. 15 §15.4) — circuit de validation par seuils.
 model Expense {
-  id                String          @id @default(uuid())
-  category          ExpenseCategory
-  amount            Decimal         @db.Decimal(12, 2)
-  status            ExpenseStatus   @default(a_valider)
-  supplier          String?
-  manuscriptId      String?         @map("manuscript_id")
-  manuscript        Manuscript?     @relation(fields: [manuscriptId], references: [id])
-  description       String?
-  approvedBy        String?         @map("approved_by")
-  financeValidatedBy String?        @map("finance_validated_by")
+  id                 String          @id @default(uuid())
+  category           ExpenseCategory
+  amount             Decimal         @db.Decimal(12, 2)
+  status             ExpenseStatus   @default(a_valider)
+  supplier           String?
+  manuscriptId       String?         @map("manuscript_id")
+  manuscript         Manuscript?     @relation(fields: [manuscriptId], references: [id])
+  description        String?
+  approvedBy         String?         @map("approved_by")
+  financeValidatedBy String?         @map("finance_validated_by")
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
@@ -3024,11 +3030,11 @@ model BankAccount {
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  payments           Payment[]
-  statements         BankStatement[]
-  transfersOut       AccountTransfer[]  @relation("TransferFrom")
-  transfersIn        AccountTransfer[]  @relation("TransferTo")
-  defaultForMethods  PaymentMethodDef[] @relation("MethodDefaultAccount")
+  payments          Payment[]
+  statements        BankStatement[]
+  transfersOut      AccountTransfer[]  @relation("TransferFrom")
+  transfersIn       AccountTransfer[]  @relation("TransferTo")
+  defaultForMethods PaymentMethodDef[] @relation("MethodDefaultAccount")
 
   @@map("bank_accounts")
 }
@@ -3037,15 +3043,15 @@ model BankAccount {
 // modifie pas la position de trésorerie globale (Ch. 18 §18.8), seulement la
 // répartition entre comptes.
 model AccountTransfer {
-  id             String      @id @default(uuid())
-  fromAccountId  String      @map("from_account_id")
-  fromAccount    BankAccount @relation("TransferFrom", fields: [fromAccountId], references: [id])
-  toAccountId    String      @map("to_account_id")
-  toAccount      BankAccount @relation("TransferTo", fields: [toAccountId], references: [id])
-  amount         Decimal     @db.Decimal(12, 2)
-  reason         String?
-  transferredAt  DateTime    @default(now()) @map("transferred_at")
-  createdBy      String?     @map("created_by")
+  id            String      @id @default(uuid())
+  fromAccountId String      @map("from_account_id")
+  fromAccount   BankAccount @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccountId   String      @map("to_account_id")
+  toAccount     BankAccount @relation("TransferTo", fields: [toAccountId], references: [id])
+  amount        Decimal     @db.Decimal(12, 2)
+  reason        String?
+  transferredAt DateTime    @default(now()) @map("transferred_at")
+  createdBy     String?     @map("created_by")
 
   @@map("account_transfers")
 }
@@ -3370,4 +3376,145 @@ model WeeklyReportObjective {
   comment     String?
 
   @@map("weekly_report_objectives")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Centre de Communication Interne — Babillard d'annonces (module « communication »)
+// Extension additive : diffusion d'annonces officielles ciblées, suivi de
+// lecture, préférences de notification par utilisateur. Ne modifie aucune
+// table existante. Réutilise le modèle Notification (cloche) et Document
+// (pièces jointes versionnées).
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AnnouncementPriority {
+  normale
+  importante
+  urgente
+  critique
+}
+
+enum AnnouncementStatus {
+  brouillon
+  publiee
+  archivee
+}
+
+// Ciblage polymorphe (comme entity_type/entity_id ailleurs) : « tous » ne porte
+// pas d'identifiant ; les autres pointent vers un département, un rôle ou un
+// utilisateur. Résolu côté serveur au moment de la publication.
+enum AnnouncementTargetType {
+  tous
+  departement
+  role
+  utilisateur
+}
+
+// Catégories en table de référence (et non enum figé) : la Direction peut en
+// ajouter sans migration, et l'utilisateur peut filtrer ses notifications par
+// catégorie.
+model AnnouncementCategory {
+  id        String  @id @default(uuid())
+  code      String  @unique
+  label     String
+  sortOrder Int     @default(0) @map("sort_order")
+  active    Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  announcements Announcement[]
+
+  @@map("announcement_categories")
+}
+
+model Announcement {
+  id          String                @id @default(uuid())
+  title       String
+  // Contenu enrichi : HTML ASSAINI côté serveur (liste blanche) avant stockage.
+  bodyHtml    String                @map("body_html")
+  categoryId  String?               @map("category_id")
+  category    AnnouncementCategory? @relation(fields: [categoryId], references: [id])
+  priority    AnnouncementPriority  @default(normale)
+  status      AnnouncementStatus    @default(brouillon)
+  authorId    String                @map("author_id")
+  author      User                  @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+  // Lecture obligatoire : impose un accusé de réception explicite.
+  requireAck  Boolean               @default(false) @map("require_ack")
+  pinned      Boolean               @default(false)
+  publishedAt DateTime?             @map("published_at")
+  expiresAt   DateTime?             @map("expires_at")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  targets     AnnouncementTarget[]
+  receipts    AnnouncementReceipt[]
+  attachments AnnouncementAttachment[]
+
+  @@index([status, publishedAt])
+  @@map("announcements")
+}
+
+model AnnouncementTarget {
+  id             String                 @id @default(uuid())
+  announcementId String                 @map("announcement_id")
+  announcement   Announcement           @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  targetType     AnnouncementTargetType @map("target_type")
+  // Nul pour « tous » ; identifiant de département, rôle ou utilisateur sinon.
+  targetId       String?                @map("target_id")
+
+  @@index([announcementId])
+  @@map("announcement_targets")
+}
+
+// Suivi de lecture : une ligne par destinataire, créée à la publication. Alimente
+// « qui a lu / pas lu / date » et l'accusé de réception. Réutilisée par la
+// génération des notifications (cloche).
+model AnnouncementReceipt {
+  id             String       @id @default(uuid())
+  announcementId String       @map("announcement_id")
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  userId         String       @map("user_id")
+  user           User         @relation("AnnouncementReceipts", fields: [userId], references: [id])
+  readAt         DateTime?    @map("read_at")
+  acknowledgedAt DateTime?    @map("acknowledged_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+  @@map("announcement_receipts")
+}
+
+// Pièces jointes : réutilise le stockage versionné/immuable des Documents.
+model AnnouncementAttachment {
+  id             String       @id @default(uuid())
+  announcementId String       @map("announcement_id")
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  documentId     String       @map("document_id")
+  document       Document     @relation(fields: [documentId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("announcement_attachments")
+}
+
+// Préférences de notification par utilisateur (nouveau — l'utilisateur n'en
+// avait aucune). Volume 0-100 ; categories = liste opt-in (null = toutes).
+model NotificationPreference {
+  id            String  @id @default(uuid())
+  userId        String  @unique @map("user_id")
+  user          User    @relation("UserNotificationPreference", fields: [userId], references: [id])
+  soundEnabled  Boolean @default(true) @map("sound_enabled")
+  soundVolume   Int     @default(70) @map("sound_volume")
+  visualEnabled Boolean @default(true) @map("visual_enabled")
+  emailEnabled  Boolean @default(true) @map("email_enabled")
+  categories    Json?
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("notification_preferences")
 }

@@ -63,7 +63,7 @@ const lot5Modules = ["finance", "royalties"];
 const lot6Modules = ["rh", "rh_confidentiel", "direction", "pilotage", "rapports"];
 // Évolution : modules « Présences & Temps de travail » et « Paie » (D-007),
 // indépendants et désactivables.
-const evolutionModules = ["presences", "paie"];
+const evolutionModules = ["presences", "paie", "communication"];
 const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules, ...lot5Modules, ...lot6Modules, ...evolutionModules];
 const actions = Object.values(PermissionAction);
 
@@ -723,6 +723,41 @@ async function main() {
     update: {},
     create: { country: "default", productType: "livre", rate: 0 },
   });
+
+  // ── Centre de Communication Interne — Babillard d'annonces (évolution) ──────
+  // Tout le personnel consulte les annonces qui le ciblent (consultation, bornée
+  // à soi côté serveur) ; la publication et l'administration sont réservées aux
+  // profils de direction et transverses (DG, RH, Administration/Finances,
+  // Direction éditoriale). L'administrateur général a déjà tout.
+  for (const [roleCode] of roleByCode) {
+    if (roleCode === "ADMIN_GENERAL") continue;
+    await grant(roleCode, ["communication:consultation"]);
+  }
+  for (const publisher of ["DIR_GENERAL", "RESP_RH", "RESP_FINANCE", "DIR_EDITORIAL"]) {
+    await grant(publisher, ["communication:saisie", "communication:administration"]);
+  }
+
+  // Catégories d'annonces par défaut (référentiel extensible depuis l'écran).
+  // Idempotent (upsert par code) ; la Direction peut en ajouter sans migration.
+  const announcementCategories = [
+    { code: "note_service", label: "Note de service", sortOrder: 10 },
+    { code: "reunion", label: "Réunion", sortOrder: 20 },
+    { code: "projet_editorial", label: "Nouveau projet éditorial", sortOrder: 30 },
+    { code: "calendrier_production", label: "Calendrier de production", sortOrder: 40 },
+    { code: "echeance", label: "Échéance importante", sortOrder: 50 },
+    { code: "rh", label: "Annonce RH", sortOrder: 60 },
+    { code: "felicitation", label: "Félicitations", sortOrder: 70 },
+    { code: "anniversaire", label: "Anniversaire", sortOrder: 80 },
+    { code: "arrivee_depart", label: "Arrivée / Départ", sortOrder: 90 },
+    { code: "info_generale", label: "Information générale", sortOrder: 100 },
+  ];
+  for (const cat of announcementCategories) {
+    await prisma.announcementCategory.upsert({
+      where: { code: cat.code },
+      update: { label: cat.label, sortOrder: cat.sortOrder },
+      create: cat,
+    });
+  }
 
   console.log("Seed Lot 0 terminé.");
   console.log(`Compte administrateur : admin / ${adminPassword} (à changer immédiatement)`);

@@ -1,0 +1,113 @@
+import type { AnnouncementPriority, NotificationPriority } from "@prisma/client";
+import { prisma } from "./prisma.js";
+import { notifyUsers } from "./notify.js";
+import { announcementPreview } from "./announcementHtml.js";
+import { writeAuditLog } from "./audit.js";
+
+// Correspondance priorité d'annonce → priorité de notification (cloche + seuil
+// e-mail). Urgente/Critique franchissent le seuil d'envoi par e-mail.
+export function announcementNotificationPriority(p: AnnouncementPriority): NotificationPriority {
+  switch (p) {
+    case "critique":
+      return "critical";
+    case "urgente":
+      return "high";
+    case "importante":
+      return "medium";
+    default:
+      return "low";
+  }
+}
+
+type TargetRow = { targetType: string; targetId: string | null };
+
+// Résout l'audience d'une annonce (ensemble d'identifiants d'utilisateurs
+// ACTIFS) à partir de ses cibles. « tous » = tout le personnel disposant d'un
+// compte actif. Les cibles multiples s'additionnent (union), sans doublon.
+export async function resolveAudience(targets: TargetRow[]): Promise<Set<string>> {
+  const userIds = new Set<string>();
+
+  if (targets.some((t) => t.targetType === "tous")) {
+    const users = await prisma.user.findMany({ where: { status: "active", deletedAt: null }, select: { id: true } });
+    for (const u of users) userIds.add(u.id);
+    return userIds;
+  }
+
+  const departmentIds = targets.filter((t) => t.targetType === "departement" && t.targetId).map((t) => t.targetId!);
+  const roleIds = targets.filter((t) => t.targetType === "role" && t.targetId).map((t) => t.targetId!);
+  const directUserIds = targets.filter((t) => t.targetType === "utilisateur" && t.targetId).map((t) => t.targetId!);
+
+  if (departmentIds.length > 0) {
+    const users = await prisma.user.findMany({
+      where: { status: "active", deletedAt: null, employee: { departmentId: { in: departmentIds } } },
+      select: { id: true },
+    });
+    for (const u of users) userIds.add(u.id);
+  }
+  if (roleIds.length > 0) {
+    const userRoles = await prisma.userRole.findMany({
+      where: { revokedAt: null, roleId: { in: roleIds }, user: { status: "active", deletedAt: null } },
+      select: { userId: true },
+    });
+    for (const ur of userRoles) userIds.add(ur.userId);
+  }
+  if (directUserIds.length > 0) {
+    const users = await prisma.user.findMany({
+      where: { id: { in: directUserIds }, status: "active", deletedAt: null },
+      select: { id: true },
+    });
+    for (const u of users) userIds.add(u.id);
+  }
+  return userIds;
+}
+
+// Publie une annonce : fige la date de publication, crée un reçu de lecture par
+// destinataire, génère les notifications (cloche + e-mail selon la priorité) et
+// journalise. Idempotent sur les reçus (skipDuplicates) : republier n'écrase
+// aucune lecture déjà enregistrée.
+export async function publishAnnouncement(
+  announcementId: string,
+  actor: { id: string; ip?: string | null },
+): Promise<{ recipients: number }> {
+  const ann = await prisma.announcement.findUnique({ where: { id: announcementId }, include: { targets: true } });
+  if (!ann || ann.deletedAt) throw new Error("Annonce introuvable.");
+
+  const audience = await resolveAudience(ann.targets);
+  const userIds = [...audience];
+  const publishedAt = ann.publishedAt ?? new Date();
+
+  await prisma.announcement.update({
+    where: { id: announcementId },
+    data: { status: "publiee", publishedAt, updatedBy: actor.id },
+  });
+
+  if (userIds.length > 0) {
+    await prisma.announcementReceipt.createMany({
+      data: userIds.map((userId) => ({ announcementId, userId })),
+      skipDuplicates: true,
+    });
+
+    await notifyUsers({
+      userIds,
+      type: "annonce",
+      priority: announcementNotificationPriority(ann.priority),
+      title: ann.title,
+      body: announcementPreview(ann.bodyHtml),
+      entityType: "announcement",
+      entityId: announcementId,
+      // Lecture obligatoire : e-mail même si la priorité est basse.
+      emailOverride: ann.requireAck,
+    });
+  }
+
+  await writeAuditLog({
+    userId: actor.id,
+    action: "status_change",
+    entityType: "announcement",
+    entityId: announcementId,
+    newValues: { status: "publiee", recipients: userIds.length, requireAck: ann.requireAck },
+    ipAddress: actor.ip ?? null,
+  });
+
+  return { recipients: userIds.length };
+}

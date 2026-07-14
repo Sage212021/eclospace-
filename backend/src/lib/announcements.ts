@@ -3,6 +3,7 @@ import { prisma } from "./prisma.js";
 import { notifyUsers } from "./notify.js";
 import { announcementPreview } from "./announcementHtml.js";
 import { writeAuditLog } from "./audit.js";
+import { emitToUsers } from "./realtime.js";
 
 // Correspondance priorité d'annonce → priorité de notification (cloche + seuil
 // e-mail). Urgente/Critique franchissent le seuil d'envoi par e-mail.
@@ -69,7 +70,10 @@ export async function publishAnnouncement(
   announcementId: string,
   actor: { id: string; ip?: string | null },
 ): Promise<{ recipients: number }> {
-  const ann = await prisma.announcement.findUnique({ where: { id: announcementId }, include: { targets: true } });
+  const ann = await prisma.announcement.findUnique({
+    where: { id: announcementId },
+    include: { targets: true, category: { select: { code: true } } },
+  });
   if (!ann || ann.deletedAt) throw new Error("Annonce introuvable.");
 
   const audience = await resolveAudience(ann.targets);
@@ -87,16 +91,29 @@ export async function publishAnnouncement(
       skipDuplicates: true,
     });
 
+    const preview = announcementPreview(ann.bodyHtml);
     await notifyUsers({
       userIds,
       type: "annonce",
       priority: announcementNotificationPriority(ann.priority),
       title: ann.title,
-      body: announcementPreview(ann.bodyHtml),
+      body: preview,
       entityType: "announcement",
       entityId: announcementId,
       // Lecture obligatoire : e-mail même si la priorité est basse.
       emailOverride: ann.requireAck,
+    });
+
+    // Poussée temps réel aux destinataires connectés (cloche + son + pop-up).
+    // Au meilleur effort : les hors-ligne s'appuient sur la notification
+    // persistée déjà créée ci-dessus.
+    emitToUsers(userIds, "announcement:new", {
+      id: announcementId,
+      title: ann.title,
+      preview,
+      priority: ann.priority,
+      category: ann.category?.code ?? null,
+      require_ack: ann.requireAck,
     });
   }
 

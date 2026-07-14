@@ -856,3 +856,16 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Vérifications :** typecheck front + back OK ; build OK ; round-trip vérifié sur le **serveur HTTP réel** (publication d'une annonce → la notification `annonce` porte `entityType/entityId` → « tout marquer comme lu » : 2211 → 0 non-lues). Aucune régression backend.
 
 **Reste (module Communication) :** inc 4 (temps réel Socket.IO + sonnerie + pop-up + écran de préférences de notification) → inc 5 (relances de lecture) → inc 6 (bannière Urgent/Critique + archivage auto).
+
+### 14/07/2026 (suite) — Babillard d'annonces : incrément 4 (temps réel + sonnerie + pop-up + préférences)
+
+**Fait :** la diffusion devient **instantanée et paramétrable**.
+- **Temps réel (Socket.IO)** : à la publication, un événement `announcement:new` est poussé aux destinataires **connectés** via une salle par utilisateur (`user:<id>`). Plomberie : `lib/realtime.ts` (émetteur partagé), `presence.ts` (join de la salle + enregistrement du serveur), `publishAnnouncement()` (émission après création des notifications). Les hors-ligne s'appuient sur la notification persistée (cloche).
+- **Cloche** : le badge se met à jour sans rafraîchir la page (signal `refreshSignal`).
+- **Sonnerie** : `lib/notificationSound.ts` — deux notes brèves générées en Web Audio (aucun fichier binaire), volume réglable ; ne peut retentir qu'après une première interaction (règle navigateur, signalée à l'utilisateur).
+- **Pop-up** : `AnnouncementToasts` — aperçu en bas à droite (titre, extrait, priorité), clic → ouvre l'annonce ; s'efface seul.
+- **Écran de préférences** (carte sur le Babillard) : sonnerie on/off, volume, pop-up visuel on/off, e-mail on/off, et **catégories à notifier** (toutes, ou une sélection fine). Respectées à la fois par le temps réel (front) et par l'e-mail (back, opt-out déjà en place).
+
+**Vérifications :** typecheck front + back OK ; build OK ; **temps réel vérifié de bout en bout** avec un vrai client Socket.IO authentifié (publication → réception de `announcement:new` avec id/priorité/aperçu corrects). Suite backend relancée.
+
+**Reste (module Communication) :** inc 5 (relances de lecture ciblées) → inc 6 (bannière Urgent/Critique sur le tableau de bord + archivage automatique à l'expiration).

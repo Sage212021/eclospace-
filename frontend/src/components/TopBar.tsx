@@ -29,6 +29,9 @@ interface TopBarProps {
   onOpenManuscript?: (id: string) => void;
   // Ouvre une annonce du Babillard depuis une notification de la cloche.
   onOpenAnnouncement?: (id: string) => void;
+  // Signal (compteur) : à chaque changement, la cloche recharge son badge de
+  // non-lus (ex. arrivée d'une annonce en temps réel).
+  refreshSignal?: number;
 }
 
 const NOTIF_COLORS: Record<string, string> = {
@@ -46,7 +49,7 @@ function initials(username: string): string {
 
 // Barre supérieure (guide §6) : recherche globale + présence + notifications +
 // menu de profil (avatar) à droite, façon Microsoft 365 / Notion.
-export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, user, onLogout, onOpenSettings, onOpenManuscript, onOpenAnnouncement }: TopBarProps) {
+export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, user, onLogout, onOpenSettings, onOpenManuscript, onOpenAnnouncement, refreshSignal }: TopBarProps) {
   const { t, lang } = useI18n();
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -84,20 +87,21 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
   const [searching, setSearching] = useState(false);
   const searchBoxRef = useRef<HTMLDivElement>(null);
 
+  // Badge de non-lus : au montage, puis à chaque signal (arrivée temps réel).
   useEffect(() => {
     listUnreadNotifications()
       .then((notifications) => setUnreadCount(notifications.length))
       .catch(() => setUnreadCount(0));
-  }, []);
+  }, [refreshSignal]);
 
-  // Charge la liste complète à l'ouverture du panneau (rechargée à chaque
-  // ouverture pour rester à jour).
+  // Charge la liste complète à l'ouverture du panneau (et sur signal si ouvert),
+  // pour rester à jour.
   useEffect(() => {
     if (!notifOpen) return;
     listNotifications()
       .then((list) => setNotifs(list.slice(0, 30)))
       .catch(() => setNotifs([]));
-  }, [notifOpen]);
+  }, [notifOpen, refreshSignal]);
 
   function notifTime(iso: string): string {
     return new Date(iso).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });

@@ -19,9 +19,23 @@ const EMPTY: PresenceState = { total: 0, byPole: {}, byModule: {} };
 // Présence temps réel via Socket.IO (Ch. 5). Connecte une socket authentifiée
 // par le cookie de session, écoute l'état de présence diffusé, et expose une
 // fonction `join` pour signaler le pôle/module courant.
-export function usePresence(enabled: boolean) {
+// Charge utile d'une nouvelle annonce poussée en temps réel (Babillard).
+export interface AnnouncementPush {
+  id: string;
+  title: string;
+  preview: string;
+  priority: "normale" | "importante" | "urgente" | "critique";
+  category: string | null;
+  require_ack: boolean;
+}
+
+export function usePresence(enabled: boolean, onAnnouncement?: (a: AnnouncementPush) => void) {
   const [presence, setPresence] = useState<PresenceState>(EMPTY);
   const socketRef = useRef<Socket | null>(null);
+  // Le gestionnaire d'annonce est stocké dans une ref pour rester à jour sans
+  // reconnecter la socket à chaque rendu.
+  const annHandler = useRef(onAnnouncement);
+  annHandler.current = onAnnouncement;
 
   useEffect(() => {
     if (!enabled) {
@@ -31,6 +45,7 @@ export function usePresence(enabled: boolean) {
     const socket = io(API_BASE || undefined, { withCredentials: true });
     socketRef.current = socket;
     socket.on("presence:update", (p: PresenceState) => setPresence(p));
+    socket.on("announcement:new", (a: AnnouncementPush) => annHandler.current?.(a));
     return () => {
       socket.disconnect();
       socketRef.current = null;

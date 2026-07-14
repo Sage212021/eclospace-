@@ -11,6 +11,7 @@ import {
   listAnnouncementFeed,
   listAnnouncementsManage,
   publishAnnouncement,
+  setNotificationPreferences,
   updateAnnouncement,
   type AnnouncementCategory,
   type AnnouncementDetail,
@@ -19,6 +20,7 @@ import {
   type AnnouncementPriority,
   type AnnouncementReceiptsReport,
   type AnnouncementTargetType,
+  type NotificationPreferences,
   type TargetOptions,
 } from "../api/client";
 import { Card } from "../components/Card";
@@ -41,6 +43,9 @@ interface AnnouncementsPageProps {
   // Ouverture directe d'une annonce (depuis la cloche de notifications).
   openAnnouncementId?: string | null;
   onOpened?: () => void;
+  // Préférences de notification (partagées avec App pour le temps réel).
+  prefs?: NotificationPreferences | null;
+  onPrefsChange?: (p: NotificationPreferences) => void;
 }
 
 interface TargetRow {
@@ -72,7 +77,7 @@ const EMPTY_FORM: FormState = {
 };
 
 // Centre de Communication Interne — Babillard d'annonces (module « communication »).
-export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementId, onOpened }: AnnouncementsPageProps) {
+export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementId, onOpened, prefs, onPrefsChange }: AnnouncementsPageProps) {
   const { t, lang } = useI18n();
   const [categories, setCategories] = useState<AnnouncementCategory[]>([]);
   const [feed, setFeed] = useState<AnnouncementFeedItem[]>([]);
@@ -306,6 +311,9 @@ export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementI
         )}
       </Card>
 
+      {/* Préférences de notification */}
+      <NotificationPrefsCard categories={categories} prefs={prefs ?? null} onSaved={(p) => { onPrefsChange?.(p); setMessage(t("cm.prefs_saved", "Préférences enregistrées.")); }} onError={setError} />
+
       {/* Gestion des annonces (publieurs) */}
       {canPublish && (
         <Card
@@ -491,6 +499,106 @@ export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementI
         </Modal>
       )}
     </div>
+  );
+}
+
+// Préférences de notification par utilisateur (sonnerie, volume, visuel,
+// e-mail, catégories). Une case « toutes les catégories » (categories = null) ;
+// décochée, l'utilisateur choisit finement celles qui le notifient.
+function NotificationPrefsCard({
+  categories,
+  prefs,
+  onSaved,
+  onError,
+}: {
+  categories: AnnouncementCategory[];
+  prefs: NotificationPreferences | null;
+  onSaved: (p: NotificationPreferences) => void;
+  onError: (m: string) => void;
+}) {
+  const { t } = useI18n();
+  const [draft, setDraft] = useState<NotificationPreferences | null>(prefs);
+  useEffect(() => {
+    setDraft(prefs);
+  }, [prefs]);
+
+  if (!draft) return null;
+
+  const allCats = draft.categories === null;
+  const selected = new Set(draft.categories ?? []);
+
+  async function save(next: NotificationPreferences) {
+    setDraft(next);
+    try {
+      await setNotificationPreferences(next);
+      onSaved(next);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Enregistrement impossible.");
+    }
+  }
+
+  function toggleCat(code: string, on: boolean) {
+    const set = new Set(selected);
+    if (on) set.add(code);
+    else set.delete(code);
+    // Toutes cochées → on repasse à « toutes » (null).
+    const next = set.size === categories.length ? null : [...set];
+    void save({ ...draft!, categories: next });
+  }
+
+  const chk: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13 };
+
+  return (
+    <Card title={t("cm.prefs", "Mes préférences de notification")} icon={<IconPilotage />} subtitle={t("cm.prefs_sub", "Réglez comment vous êtes averti des annonces.")}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center" }}>
+        <label style={chk}>
+          <input type="checkbox" checked={draft.sound_enabled} onChange={(e) => save({ ...draft, sound_enabled: e.target.checked })} />
+          {t("cm.pref_sound", "Sonnerie")}
+        </label>
+        <label style={{ ...chk, opacity: draft.sound_enabled ? 1 : 0.5 }}>
+          {t("cm.pref_volume", "Volume")}
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={draft.sound_volume}
+            disabled={!draft.sound_enabled}
+            onChange={(e) => setDraft({ ...draft, sound_volume: Number(e.target.value) })}
+            onMouseUp={(e) => save({ ...draft, sound_volume: Number((e.target as HTMLInputElement).value) })}
+            onTouchEnd={(e) => save({ ...draft, sound_volume: Number((e.target as HTMLInputElement).value) })}
+          />
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, width: 30 }}>{draft.sound_volume}</span>
+        </label>
+        <label style={chk}>
+          <input type="checkbox" checked={draft.visual_enabled} onChange={(e) => save({ ...draft, visual_enabled: e.target.checked })} />
+          {t("cm.pref_visual", "Pop-up visuel")}
+        </label>
+        <label style={chk}>
+          <input type="checkbox" checked={draft.email_enabled} onChange={(e) => save({ ...draft, email_enabled: e.target.checked })} />
+          {t("cm.pref_email", "E-mail")}
+        </label>
+      </div>
+
+      <div style={{ marginTop: 12, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+        <label style={chk}>
+          <input type="checkbox" checked={allCats} onChange={(e) => save({ ...draft, categories: e.target.checked ? null : [] })} />
+          {t("cm.pref_all_cats", "M'avertir pour toutes les catégories")}
+        </label>
+        {!allCats && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 10 }}>
+            {categories.map((c) => (
+              <label key={c.code} style={{ ...chk, fontSize: 12.5 }}>
+                <input type="checkbox" checked={selected.has(c.code)} onChange={(e) => toggleCat(c.code, e.target.checked)} />
+                {t(`cm.cat.${c.code}`, c.label)}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>
+        {t("cm.pref_sound_note", "La sonnerie ne peut retentir qu'après une première action de votre part sur la page (règle des navigateurs).")}
+      </p>
+    </Card>
   );
 }
 

@@ -2,6 +2,7 @@ import type { Server as HttpServer } from "node:http";
 import { Server as SocketIOServer, type Socket } from "socket.io";
 import { prisma } from "./prisma.js";
 import { SESSION_COOKIE, verifySessionToken } from "./session.js";
+import { setRealtimeServer, userRoom } from "./realtime.js";
 
 // Présence temps réel (Ch. 5, indicateurs de présence) via Socket.IO, attaché
 // au MÊME serveur HTTP que Fastify (un seul $PORT sur Scalingo). État en
@@ -146,6 +147,8 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
   const states = new Map<string, SocketState>();
   // Partage le registre avec getPresenceNamesByPole (révélation habilitée).
   liveStates = states;
+  // Enregistre le serveur pour l'émission temps réel ciblée (lib/realtime.ts).
+  setRealtimeServer(io);
 
   // Authentification de la socket par le cookie de session existant (RBAC
   // inchangé : on réutilise verifySessionToken).
@@ -206,6 +209,9 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
       moduleId: null,
       pole: socket.data.pole ?? null,
     });
+    // Salle par utilisateur : permet de pousser une notification ciblée (ex.
+    // nouvelle annonce du Babillard) au seul destinataire concerné.
+    socket.join(userRoom(socket.data.userId));
     broadcast();
 
     socket.on("presence:join", (payload: JoinPayload) => {

@@ -21,6 +21,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { UsersRolesPage } from "./pages/UsersRolesPage";
 import { DiagnosticsPage } from "./pages/DiagnosticsPage";
+import { AnnouncementsPage } from "./pages/AnnouncementsPage";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { PresenceToasts } from "./components/PresenceToasts";
@@ -45,6 +46,7 @@ type PageId =
   | "audit"
   | "settings"
   | "users-roles"
+  | "communication"
   | "diagnostics";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
@@ -102,6 +104,10 @@ const NAV_POLES: NavPole[] = [
     ],
   },
   {
+    label: "Communication interne",
+    items: [{ key: "cm-babillard", label: "Babillard d'annonces", permission: "communication:consultation" }],
+  },
+  {
     label: "Pilotage",
     items: [
       { key: "pi-direction", label: "Direction générale", permission: "direction:consultation" },
@@ -135,6 +141,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ad-rights": { page: "rights-matrix" },
   "ad-parametres": { page: "settings" },
   "ad-diagnostics": { page: "diagnostics" },
+  "cm-babillard": { page: "communication" },
   "pi-direction": { page: "direction" },
   "pi-rapports": { page: "reports" },
   "pi-journal": { page: "audit" },
@@ -401,6 +408,9 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "audit" && <AuditLogPage />}
         {leaf && "page" in leaf && leaf.page === "settings" && (
           <SettingsPage canAdminister={permissions.has("settings:administration")} user={user} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "communication" && (
+          <AnnouncementsPage canPublish={permissions.has("communication:saisie")} canAdminister={permissions.has("communication:administration")} />
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
       </div>

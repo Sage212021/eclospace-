@@ -216,6 +216,18 @@ describe("communication — babillard d'annonces (incrément 1)", () => {
     expect(actions).toContain("view_sensitive"); // consultation par B
   });
 
+  it("réserve les options de ciblage aux publieurs", async () => {
+    const forbidden = await app.inject({ method: "GET", url: "/api/v1/announcement-targets/options", headers: { cookie: aCookie } });
+    expect(forbidden.statusCode).toBe(403); // simple destinataire (consultation seule)
+
+    const ok = await app.inject({ method: "GET", url: "/api/v1/announcement-targets/options", headers: { cookie: pubCookie } });
+    expect(ok.statusCode).toBe(200);
+    const body = ok.json();
+    expect(Array.isArray(body.departments)).toBe(true);
+    expect(Array.isArray(body.roles)).toBe(true);
+    expect(Array.isArray(body.users)).toBe(true);
+  });
+
   it("expose les préférences de notification (défauts) et les met à jour", async () => {
     const get = await app.inject({ method: "GET", url: "/api/v1/me/notification-preferences", headers: { cookie: aCookie } });
     expect(get.statusCode).toBe(200);

@@ -2469,3 +2469,148 @@ export function getPayrollRegister(period: string) {
 export function closePayrollPeriod(period: string) {
   return request<{ period: string; employees: number; total_net: number; closed_at: string }>(`/api/v1/payroll/register/${period}/close`, { method: "POST" });
 }
+
+// ── Centre de Communication Interne — Babillard d'annonces ────────────────────
+export type AnnouncementPriority = "normale" | "importante" | "urgente" | "critique";
+export type AnnouncementStatus = "brouillon" | "publiee" | "archivee";
+export type AnnouncementTargetType = "tous" | "departement" | "role" | "utilisateur";
+
+export interface AnnouncementCategory {
+  code: string;
+  label: string;
+}
+
+export interface AnnouncementFeedItem {
+  id: string;
+  title: string;
+  body_html: string;
+  preview: string;
+  priority: AnnouncementPriority;
+  status: AnnouncementStatus;
+  require_ack: boolean;
+  pinned: boolean;
+  published_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+  category: AnnouncementCategory | null;
+  author: { id: string; username: string } | null;
+  read_at: string | null;
+  acknowledged_at: string | null;
+}
+
+export interface AnnouncementManageItem extends Omit<AnnouncementFeedItem, "preview" | "read_at" | "acknowledged_at"> {
+  recipients: number;
+  read: number;
+}
+
+export interface AnnouncementTargetRef {
+  type: AnnouncementTargetType;
+  id: string | null;
+}
+
+export interface AnnouncementDetail extends AnnouncementFeedItem {
+  targets?: AnnouncementTargetRef[];
+}
+
+export interface AnnouncementInput {
+  title: string;
+  body_html: string;
+  category_code?: string | null;
+  priority?: AnnouncementPriority;
+  require_ack?: boolean;
+  pinned?: boolean;
+  expires_at?: string | null;
+  targets: { type: AnnouncementTargetType; id?: string }[];
+}
+
+export interface AnnouncementReceiptsReport {
+  total: number;
+  read: number;
+  acknowledged: number;
+  require_ack: boolean;
+  rows: { user_id: string; username: string; name: string; read_at: string | null; acknowledged_at: string | null }[];
+}
+
+export interface TargetOptions {
+  departments: { id: string; name: string }[];
+  roles: { id: string; label: string }[];
+  users: { id: string; username: string; name: string }[];
+}
+
+export interface NotificationPreferences {
+  sound_enabled: boolean;
+  sound_volume: number;
+  visual_enabled: boolean;
+  email_enabled: boolean;
+  categories: string[] | null;
+}
+
+export function listAnnouncementCategories() {
+  return request<AnnouncementCategory[]>("/api/v1/announcement-categories");
+}
+
+export function listAnnouncementFeed(filters?: { unread?: boolean; category?: string; priority?: AnnouncementPriority; status?: "publiee" | "archivee" }) {
+  const p = new URLSearchParams();
+  if (filters?.unread) p.set("unread", "true");
+  if (filters?.category) p.set("category", filters.category);
+  if (filters?.priority) p.set("priority", filters.priority);
+  if (filters?.status) p.set("status", filters.status);
+  const q = p.toString();
+  return request<AnnouncementFeedItem[]>(`/api/v1/announcements${q ? `?${q}` : ""}`);
+}
+
+export function getAnnouncementsUnreadCount() {
+  return request<{ count: number }>("/api/v1/announcements/unread-count");
+}
+
+export function listAnnouncementsManage() {
+  return request<AnnouncementManageItem[]>("/api/v1/announcements/manage");
+}
+
+export function getAnnouncement(id: string) {
+  return request<AnnouncementDetail>(`/api/v1/announcements/${id}`);
+}
+
+export function createAnnouncement(input: AnnouncementInput) {
+  return request<{ id: string }>("/api/v1/announcements", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateAnnouncement(id: string, input: Partial<AnnouncementInput>) {
+  return request<{ ok: true }>(`/api/v1/announcements/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function publishAnnouncement(id: string) {
+  return request<{ ok: true; recipients: number }>(`/api/v1/announcements/${id}/publish`, { method: "POST" });
+}
+
+export function archiveAnnouncement(id: string) {
+  return request<{ ok: true }>(`/api/v1/announcements/${id}/archive`, { method: "POST" });
+}
+
+export function deleteAnnouncement(id: string) {
+  return request<{ ok: true }>(`/api/v1/announcements/${id}`, { method: "DELETE" });
+}
+
+export function markAnnouncementRead(id: string) {
+  return request<{ ok: true }>(`/api/v1/announcements/${id}/read`, { method: "POST" });
+}
+
+export function ackAnnouncement(id: string) {
+  return request<{ ok: true }>(`/api/v1/announcements/${id}/ack`, { method: "POST" });
+}
+
+export function getAnnouncementReceipts(id: string) {
+  return request<AnnouncementReceiptsReport>(`/api/v1/announcements/${id}/receipts`);
+}
+
+export function getAnnouncementTargetOptions() {
+  return request<TargetOptions>("/api/v1/announcement-targets/options");
+}
+
+export function getNotificationPreferences() {
+  return request<NotificationPreferences>("/api/v1/me/notification-preferences");
+}
+
+export function setNotificationPreferences(input: Partial<NotificationPreferences>) {
+  return request<{ ok: true }>("/api/v1/me/notification-preferences", { method: "PUT", body: JSON.stringify(input) });
+}

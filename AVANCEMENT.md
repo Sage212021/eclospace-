@@ -829,3 +829,18 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 - **Tests** : `tests/communication-announcements.test.ts` (ciblage, permissions, suivi de lecture, assainissement XSS, auteur-seul, audit, préférences). **292 tests passent** (+7). Typecheck OK.
 
 **Reste (module Communication) :** inc 2 (écran Babillard : liste, filtres, détail, formulaire + pièces jointes + i18n) → inc 3 (cloche cliquable) → inc 4 (temps réel + sonnerie + pop-up + écran préférences) → inc 5 (suivi de lecture / relances) → inc 6 (bannière Urgent/Critique + archivage auto).
+
+### 14/07/2026 (suite) — Babillard d'annonces : incrément 2 (écran frontend)
+
+**Fait :** l'écran **Communication interne → Babillard d'annonces**, entièrement bilingue FR/EN.
+- **Nouveau pôle de menu** « Communication interne » (icône mégaphone) avec la feuille « Babillard d'annonces », filtrée par la permission `communication:consultation`.
+- **Fil personnel** : liste des annonces me ciblant, avec puce non-lue, épingle, chip de priorité (couleurs charte : normale/importante/urgente `#C4661F`/critique), catégorie, aperçu, date ; filtres non-lues / catégorie / priorité ; clic → **fenêtre de détail** (contenu enrichi rendu, bouton d'accusé de réception si lecture obligatoire).
+- **Gestion** (publieurs) : liste avec statut, compteur lues/destinataires ; actions Voir / Modifier / Publier / Suivi / Archiver / Supprimer.
+- **Formulaire** de création/édition : titre, **éditeur de contenu enrichi léger** (`RichTextEditor` : gras/italique/souligné/listes/lien, sans dépendance lourde ; HTML réassaini côté serveur), catégorie, priorité, date d'expiration, lecture obligatoire, épingle, et **constructeur de ciblage** (tous / département / rôle / employé, options fournies par un endpoint dédié réservé aux publieurs).
+- **Suivi de lecture** : fenêtre listant qui a lu / pas lu (+ accusés), avec compteurs.
+- **Backend** : petit endpoint additif `GET /announcement-targets/options` (réservé `communication:saisie`) pour alimenter le sélecteur de cibles sans exiger `users:consultation`.
+- **CSS** : rendu du contenu enrichi (listes, liens, tableaux, citations) restauré malgré la réinitialisation globale.
+
+**Vérifications :** typecheck + build frontend OK ; round-trip complet vérifié via le **serveur HTTP réel** (login → création avec `<script>` → publication 592 destinataires → fil → détail : script retiré, `<b>` conservé → suivi de lecture) ; **293 tests backend** (+1 : gating des options de ciblage). Aucune donnée existante modifiée.
+
+**Reste (module Communication) :** inc 3 (cloche cliquable : menu déroulant + ouverture d'annonce) → inc 4 (temps réel + sonnerie + pop-up + écran préférences) → inc 5 (relances de lecture) → inc 6 (bannière Urgent/Critique + archivage auto).

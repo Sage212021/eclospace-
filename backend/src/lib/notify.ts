@@ -13,6 +13,19 @@ interface RoleNotificationInput {
   entityId: string;
 }
 
+interface UsersNotificationInput {
+  userIds: string[];
+  type: NotificationType;
+  priority: NotificationPriority;
+  title: string;
+  body: string;
+  entityType: string;
+  entityId: string;
+  // Force l'envoi e-mail hors du seuil « important/critique » (ex. lecture
+  // obligatoire d'une annonce), sous réserve du consentement de l'utilisateur.
+  emailOverride?: boolean;
+}
+
 // Seuil d'envoi par e-mail : seules les alertes « importantes » et « critiques »
 // sont doublées d'un e-mail, pour ne pas noyer les boîtes sous les notifications
 // de routine (affectations, échéances courantes). Les notifications restent
@@ -25,8 +38,9 @@ const EMAIL_PRIORITIES: NotificationPriority[] = ["high", "critical"];
 async function emailNotification(
   recipients: { email: string | null }[],
   input: { title: string; body: string; priority: NotificationPriority },
+  force = false,
 ): Promise<void> {
-  if (!EMAIL_PRIORITIES.includes(input.priority)) return;
+  if (!force && !EMAIL_PRIORITIES.includes(input.priority)) return;
   if (!isMailConfigured()) return; // e-mail non configuré : la cloche in-app suffit.
 
   const addresses = [...new Set(recipients.map((r) => r.email?.trim()).filter((e): e is string => Boolean(e)))];
@@ -75,4 +89,44 @@ export async function notifyRole(input: RoleNotificationInput): Promise<void> {
     .filter((ur) => ur.user?.status === "active" && !ur.user?.deletedAt)
     .map((ur) => ({ email: ur.user?.email ?? null }));
   await emailNotification(recipients, input);
+}
+
+// Diffusion à une liste explicite d'utilisateurs (Babillard d'annonces). Crée
+// une notification in-app par destinataire — ce qui alimente immédiatement le
+// badge de la cloche existante — et double par e-mail selon le seuil de
+// priorité (ou `emailOverride`), au meilleur effort, en respectant la
+// préférence e-mail de chaque destinataire (opt-out possible).
+export async function notifyUsers(input: UsersNotificationInput): Promise<void> {
+  const ids = [...new Set(input.userIds)];
+  if (ids.length === 0) return;
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, email: true, status: true, deletedAt: true, notificationPreference: { select: { emailEnabled: true } } },
+  });
+
+  const wantsEmail = input.emailOverride === true || EMAIL_PRIORITIES.includes(input.priority);
+  const sendByEmail = wantsEmail && isMailConfigured();
+
+  await prisma.notification.createMany({
+    data: ids.map((userId) => ({
+      userId,
+      type: input.type,
+      priority: input.priority,
+      title: input.title,
+      body: input.body,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      ...(sendByEmail ? { channel: "email" as const, sentAt: new Date() } : {}),
+    })),
+  });
+
+  if (!sendByEmail) return;
+
+  // Destinataires actifs, non supprimés, n'ayant pas désactivé l'e-mail (le
+  // défaut est activé lorsqu'aucune préférence n'est enregistrée).
+  const recipients = users
+    .filter((u) => u.status === "active" && !u.deletedAt && u.notificationPreference?.emailEnabled !== false)
+    .map((u) => ({ email: u.email }));
+  await emailNotification(recipients, input, true);
 }

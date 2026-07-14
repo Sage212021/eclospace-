@@ -270,3 +270,34 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
   cloche in-app suffit) : pas de faux marquage `email`.
 - Constructeur d'e-mail : `buildNotificationEmail()` dans `lib/documentEmail.ts`.
   Tests : `tests/notification-email.test.ts`.
+
+## Centre de Communication Interne — Babillard d'annonces (14/07/2026)
+
+### Nouvelle dépendance : `sanitize-html`
+- **Choix** : `sanitize-html` (+ `@types/sanitize-html`) pour assainir le contenu
+  enrichi des annonces (mise en forme, listes, tableaux, liens, images) **avant
+  stockage**. Bibliothèque éprouvée et largement adoptée (pas une dépendance
+  exotique) ; l'alternative — écrire un assainisseur HTML maison — est un
+  anti-patron reconnu (source classique de failles XSS).
+- **Justification** : le contenu est saisi par des profils habilités mais
+  **affiché à tout le personnel**. On ne fait jamais confiance au HTML reçu :
+  liste blanche stricte de balises, schémas limités à http/https(+mailto),
+  `rel="noopener noreferrer nofollow"` forcé, aucun `<script>/<style>/<iframe>`
+  ni gestionnaire d'événement. Wrapper : `lib/announcementHtml.ts`.
+
+### Réutilisation de l'existant (aucune table modifiée)
+- **Cloche** : à la publication, on crée une ligne `Notification` (type `annonce`)
+  par destinataire → le badge existant fonctionne sans réécriture. Helper
+  `notifyUsers()` ajouté à `lib/notify.ts` (miroir de `notifyRole()`), respectant
+  la préférence e-mail par utilisateur (nouvelle table `notification_preference`).
+- **Pièces jointes** : réutilisent le stockage versionné/immuable `Document`.
+- **Ciblage polymorphe** (`target_type` + `target_id`) sur le modèle
+  `entity_type/entity_id` déjà employé (Notification, Document, AuditLog).
+  Résolution de l'audience côté serveur : `lib/announcements.ts` → `resolveAudience()`.
+- **Audit** : mapping sur l'enum existant (publication/archivage → `status_change`,
+  consultation → `view_sensitive`, accusé de réception → `validate`) plutôt que
+  d'ajouter des valeurs — impact minimal, cohérent avec le reste du code.
+
+### Vidéos
+- Gérées **par lien** (http/https) en v1 plutôt qu'hébergées, pour rester
+  compatible avec une connexion modeste (contrainte du projet).

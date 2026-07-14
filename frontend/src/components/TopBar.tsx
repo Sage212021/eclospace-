@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { getPresenceNames, listUnreadNotifications, quickSearch, type QuickSearchResult } from "../api/client";
+import {
+  getPresenceNames,
+  listNotifications,
+  listUnreadNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  quickSearch,
+  type Notification,
+  type QuickSearchResult,
+} from "../api/client";
 import { useI18n } from "../i18n";
 import { LanguageSwitch } from "./LanguageSwitch";
 
@@ -18,7 +27,16 @@ interface TopBarProps {
   onOpenSettings?: () => void;
   // Ouvre la fiche d'un ouvrage depuis un résultat de recherche.
   onOpenManuscript?: (id: string) => void;
+  // Ouvre une annonce du Babillard depuis une notification de la cloche.
+  onOpenAnnouncement?: (id: string) => void;
 }
+
+const NOTIF_COLORS: Record<string, string> = {
+  low: "var(--muted)",
+  medium: "var(--eclosion)",
+  high: "#C4661F",
+  critical: "var(--alert)",
+};
 
 function initials(username: string): string {
   const parts = username.replace(/[_.-]+/g, " ").trim().split(/\s+/);
@@ -28,11 +46,13 @@ function initials(username: string): string {
 
 // Barre supérieure (guide §6) : recherche globale + présence + notifications +
 // menu de profil (avatar) à droite, façon Microsoft 365 / Notion.
-export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, user, onLogout, onOpenSettings, onOpenManuscript }: TopBarProps) {
-  const { t } = useI18n();
+export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, user, onLogout, onOpenSettings, onOpenManuscript, onOpenAnnouncement }: TopBarProps) {
+  const { t, lang } = useI18n();
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hallOpen, setHallOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifs, setNotifs] = useState<Notification[]>([]);
   // Noms par grand pôle, chargés à la demande à l'ouverture du Hall, pour les
   // seuls profils habilités. Rechargés à chaque ouverture pour rester à jour.
   const [namesByPole, setNamesByPole] = useState<Record<string, string[]>>({});
@@ -69,6 +89,37 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
       .then((notifications) => setUnreadCount(notifications.length))
       .catch(() => setUnreadCount(0));
   }, []);
+
+  // Charge la liste complète à l'ouverture du panneau (rechargée à chaque
+  // ouverture pour rester à jour).
+  useEffect(() => {
+    if (!notifOpen) return;
+    listNotifications()
+      .then((list) => setNotifs(list.slice(0, 30)))
+      .catch(() => setNotifs([]));
+  }, [notifOpen]);
+
+  function notifTime(iso: string): string {
+    return new Date(iso).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+
+  async function handleNotifClick(n: Notification) {
+    if (!n.readAt) {
+      setNotifs((list) => list.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)));
+      setUnreadCount((c) => Math.max(0, c - 1));
+      void markNotificationRead(n.id).catch(() => {});
+    }
+    if (n.entityType === "announcement" && n.entityId && onOpenAnnouncement) {
+      setNotifOpen(false);
+      onOpenAnnouncement(n.entityId);
+    }
+  }
+
+  async function handleMarkAll() {
+    setNotifs((list) => list.map((x) => ({ ...x, readAt: x.readAt ?? new Date().toISOString() })));
+    setUnreadCount(0);
+    void markAllNotificationsRead().catch(() => {});
+  }
 
   useEffect(() => {
     const term = query.trim();
@@ -287,24 +338,97 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
           </>
         )}
       </div>
-      <div style={{ position: "relative", fontSize: 18 }} title={`${unreadCount} notification(s) non lue(s)`}>
-        🔔
-        {unreadCount > 0 && (
-          <span
-            style={{
-              position: "absolute",
-              top: -4,
-              right: -8,
-              background: "var(--alert)",
-              color: "#fff",
-              borderRadius: 999,
-              fontSize: 10,
-              padding: "1px 5px",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            {unreadCount}
-          </span>
+      <div style={{ position: "relative" }}>
+        <button
+          onClick={() => setNotifOpen((v) => !v)}
+          aria-label={t("notif.title", "Notifications")}
+          aria-expanded={notifOpen}
+          title={`${unreadCount} ${t("notif.unread_count", "notification(s) non lue(s)")}`}
+          style={{ position: "relative", fontSize: 18, background: "transparent", border: "none", cursor: "pointer", padding: "2px 4px", lineHeight: 1 }}
+        >
+          🔔
+          {unreadCount > 0 && (
+            <span
+              style={{
+                position: "absolute",
+                top: -2,
+                right: -4,
+                background: "var(--alert)",
+                color: "#fff",
+                borderRadius: 999,
+                fontSize: 10,
+                padding: "1px 5px",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              {unreadCount}
+            </span>
+          )}
+        </button>
+
+        {notifOpen && (
+          <>
+            <div onClick={() => setNotifOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60 }} aria-hidden="true" />
+            <div
+              style={{
+                position: "absolute",
+                top: "calc(100% + 8px)",
+                right: 0,
+                zIndex: 61,
+                width: 340,
+                maxWidth: "90vw",
+                background: "var(--card)",
+                border: "1px solid var(--line)",
+                borderRadius: 12,
+                boxShadow: "0 12px 32px rgba(9, 16, 33, 0.18)",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>{t("notif.title", "Notifications")}</span>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={handleMarkAll}
+                    style={{ background: "transparent", border: "none", color: "var(--eclosion-dark)", fontSize: 12, cursor: "pointer", padding: 0 }}
+                  >
+                    {t("notif.mark_all", "Tout marquer comme lu")}
+                  </button>
+                )}
+              </div>
+              <div style={{ maxHeight: 380, overflowY: "auto" }}>
+                {notifs.length === 0 ? (
+                  <div style={{ padding: "16px 14px", fontSize: 13, color: "var(--muted)" }}>{t("notif.empty", "Aucune notification.")}</div>
+                ) : (
+                  notifs.map((n) => {
+                    const clickable = n.entityType === "announcement" && n.entityId && onOpenAnnouncement;
+                    return (
+                      <button
+                        key={n.id}
+                        onClick={() => handleNotifClick(n)}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          textAlign: "left",
+                          background: n.readAt ? "transparent" : "var(--eclosion-soft)",
+                          border: "none",
+                          borderBottom: "1px solid var(--line)",
+                          padding: "10px 14px",
+                          cursor: clickable ? "pointer" : "default",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 999, background: NOTIF_COLORS[n.priority] ?? "var(--muted)", display: "inline-block", flexShrink: 0 }} />
+                          <span style={{ fontSize: 13, fontWeight: n.readAt ? 500 : 700, color: "var(--ink)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title}</span>
+                          <span style={{ fontSize: 10.5, color: "var(--muted)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>{notifTime(n.createdAt)}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, marginLeft: 15, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{n.body}</div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
 

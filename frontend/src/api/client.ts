@@ -121,15 +121,30 @@ export function confirmIdentifierChange(token: string) {
 
 export interface Notification {
   id: string;
+  type: string;
   title: string;
   body: string;
   priority: "low" | "medium" | "high" | "critical";
+  entityType: string | null;
+  entityId: string | null;
   readAt: string | null;
   createdAt: string;
 }
 
 export function listUnreadNotifications() {
   return request<Notification[]>("/api/v1/notifications?unread=true");
+}
+
+export function listNotifications() {
+  return request<Notification[]>("/api/v1/notifications");
+}
+
+export function markNotificationRead(id: string, read = true) {
+  return request<Notification>(`/api/v1/notifications/${id}`, { method: "PATCH", body: JSON.stringify({ read }) });
+}
+
+export function markAllNotificationsRead() {
+  return request<{ ok: true; updated: number }>("/api/v1/notifications/read-all", { method: "POST" });
 }
 
 export function logout() {

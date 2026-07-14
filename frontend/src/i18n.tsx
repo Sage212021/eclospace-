@@ -186,6 +186,11 @@ const EN: Record<string, string> = {
   "topbar.online": "online",
   "topbar.account_settings": "Account settings",
   "topbar.logout": "Sign out",
+  // Cloche de notifications
+  "notif.title": "Notifications",
+  "notif.unread_count": "unread notification(s)",
+  "notif.mark_all": "Mark all as read",
+  "notif.empty": "No notification.",
   // Poles (grands menus)
   "pole.Éditorial": "Editorial",
   "pole.Production": "Production",

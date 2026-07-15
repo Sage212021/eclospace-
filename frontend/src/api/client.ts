@@ -2680,6 +2680,27 @@ export interface CalendarEventInput {
   targets: { type: AnnouncementTargetType; id?: string }[];
 }
 
+// Fil d'actualités : items agrégés (annonces + événements).
+export interface NewsfeedItem {
+  kind: "announcement" | "event";
+  id: string;
+  title: string;
+  date: string | null;
+  preview: string | null;
+  author: string | null;
+  // annonce
+  priority?: AnnouncementPriority;
+  category?: string | null;
+  read?: boolean;
+  // événement
+  event_type?: CalendarEventType;
+  all_day?: boolean;
+}
+
+export function getNewsfeed() {
+  return request<NewsfeedItem[]>("/api/v1/newsfeed");
+}
+
 export function getTodayBirthdays() {
   return request<{ id: string; name: string }[]>("/api/v1/calendar/today-birthdays");
 }

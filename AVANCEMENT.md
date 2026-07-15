@@ -945,3 +945,13 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Vérifications :** typecheck front + back OK ; build OK ; tests du calendrier : **11** (dont notification ciblée à la création, rappel manuel, fenêtre « à venir »). Suite backend relancée.
 
 **➡️ Le calendrier partagé est complet** (4 incréments) : socle backend, écran mensuel, anniversaires automatiques (+ encart « du jour »), rappels/notifications. Le Centre de Communication Interne compte désormais **2 composants** (Babillard + Calendrier). Extensions futures possibles : sondages, newsletter.
+
+### 14/07/2026 (suite) — Centre de Communication : Fil d'actualités (Newsletter inc 1)
+
+**Fait :** 3ᵉ composant du Centre de Communication Interne — le **Fil d'actualités**, vue agrégée en lecture seule.
+- **API** `GET /api/v1/newsfeed` : fusionne, sur une fenêtre de ±45 jours, les **annonces publiées qui me ciblent** (via mes reçus) et les **événements du calendrier qui me concernent** (même visibilité que le calendrier), triés du plus récent au plus ancien. Aucune nouvelle table (réutilise reçus + visibilité événements).
+- **Écran** « Communication interne → Fil d'actualités » : chronologie type timeline, chaque élément (📣 annonce / 📅 événement / ⏰ échéance) montre sa date, son titre, un aperçu ; clic → ouvre l'annonce ou le calendrier. Bilingue FR/EN.
+
+**Vérifications :** typecheck front + back OK ; build OK ; test ajouté (agrégation annonce+événement visible pour le destinataire, invisible pour un tiers). Tests communication-calendar : **12**. Suite backend relancée.
+
+**Reste (Newsletter) :** inc 2 (digest périodique : compiler un bulletin d'actualités sur une période, aperçu, envoi par e-mail à une audience, archive des bulletins).

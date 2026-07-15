@@ -215,6 +215,31 @@ describe("communication — calendrier & événements (incrément 1)", () => {
     expect(ids).not.toContain(farId); // au-delà
   });
 
+  it("agrège annonces et événements dans le fil d'actualités (selon la visibilité)", async () => {
+    // Annonce ciblant userA.
+    const ann = await app.inject({
+      method: "POST",
+      url: "/api/v1/announcements",
+      headers: { cookie: pubCookie },
+      payload: { title: `Fil annonce ${rnd}`, body_html: "<p>news</p>", targets: [{ type: "utilisateur", id: userAId }] },
+    });
+    const annId = ann.json().id as string;
+    await app.inject({ method: "POST", url: `/api/v1/announcements/${annId}/publish`, headers: { cookie: pubCookie } });
+
+    // Événement ciblant userA, proche (dans la fenêtre du fil).
+    const ev = await create(pubCookie, { title: `Fil événement ${rnd}`, starts_at: new Date(Date.now() + 3 * 86_400_000).toISOString(), targets: [{ type: "utilisateur", id: userAId }] });
+    const evId = ev.json().id as string;
+
+    const feedA = (await app.inject({ method: "GET", url: "/api/v1/newsfeed", headers: { cookie: aCookie } })).json() as { kind: string; id: string }[];
+    expect(feedA.some((i) => i.kind === "announcement" && i.id === annId)).toBe(true);
+    expect(feedA.some((i) => i.kind === "event" && i.id === evId)).toBe(true);
+
+    // userB ne cible ni l'un ni l'autre.
+    const feedB = (await app.inject({ method: "GET", url: "/api/v1/newsfeed", headers: { cookie: bCookie } })).json() as { id: string }[];
+    expect(feedB.some((i) => i.id === annId)).toBe(false);
+    expect(feedB.some((i) => i.id === evId)).toBe(false);
+  });
+
   it("journalise création et suppression logique", async () => {
     const res = await create(pubCookie, { title: `Audit cal ${rnd}`, starts_at: "2026-08-25T09:00:00.000Z", targets: [{ type: "tous" }] });
     const id = res.json().id as string;

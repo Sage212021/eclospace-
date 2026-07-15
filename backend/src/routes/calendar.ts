@@ -79,6 +79,61 @@ function eventView(e: {
   };
 }
 
+// Anniversaires des collaborateurs sur une plage : événements virtuels « journée
+// entière ». On ne divulgue jamais l'année de naissance ni l'âge — seulement le
+// jour et le mois. Exclut les dossiers supprimés et les départs déjà effectifs.
+async function buildBirthdayEvents(from: Date, to: Date) {
+  const employees = await prisma.employee.findMany({
+    where: {
+      deletedAt: null,
+      birthDate: { not: null },
+      OR: [{ departureDate: null }, { departureDate: { gt: new Date() } }],
+    },
+    select: { id: true, firstName: true, lastName: true, birthDate: true },
+  });
+  const years = new Set([from.getUTCFullYear(), to.getUTCFullYear()]);
+  const out: {
+    id: string;
+    title: string;
+    description: null;
+    type: string;
+    starts_at: string;
+    ends_at: null;
+    all_day: boolean;
+    location: null;
+    author: null;
+    can_manage: boolean;
+    birthday: boolean;
+    person: string;
+  }[] = [];
+  for (const e of employees) {
+    const bd = e.birthDate!;
+    const m = bd.getUTCMonth();
+    const d = bd.getUTCDate();
+    const name = `${e.firstName} ${e.lastName}`;
+    for (const y of years) {
+      const date = new Date(Date.UTC(y, m, d, 0, 0, 0));
+      if (date >= from && date < to) {
+        out.push({
+          id: `birthday:${e.id}:${y}`,
+          title: `Anniversaire de ${name}`,
+          description: null,
+          type: "ceremonie",
+          starts_at: date.toISOString(),
+          ends_at: null,
+          all_day: true,
+          location: null,
+          author: null,
+          can_manage: false,
+          birthday: true,
+          person: name,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 export default async function calendarRoutes(fastify: FastifyInstance) {
   // ── Liste des événements d'une plage (vue mensuelle) qui me concernent ─────
   fastify.get("/api/v1/calendar/events", { preHandler: requirePermission("communication", "consultation") }, async (request, reply) => {
@@ -111,9 +166,14 @@ export default async function calendarRoutes(fastify: FastifyInstance) {
     });
 
     const managerAll = canManageAll(request);
-    return reply.send(
-      events.map((e) => ({ ...eventView(e), can_manage: managerAll || e.authorId === request.user!.id })),
-    );
+    const stored = events.map((e) => ({ ...eventView(e), can_manage: managerAll || e.authorId === request.user!.id, birthday: false }));
+
+    // Anniversaires automatiques : événements virtuels (non stockés) déduits de
+    // la date de naissance des collaborateurs. Visibles de tous ; on n'affiche
+    // que le jour et le mois (jamais l'année de naissance ni l'âge).
+    const birthdays = await buildBirthdayEvents(from, to);
+
+    return reply.send([...stored, ...birthdays].sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()));
   });
 
   // ── Détail d'un événement ──────────────────────────────────────────────────

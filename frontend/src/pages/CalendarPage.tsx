@@ -294,7 +294,7 @@ export function CalendarPage({ canPublish }: CalendarPageProps) {
                         width: "100%",
                         textAlign: "left",
                         border: "none",
-                        borderLeft: `3px solid ${TYPE_COLORS[e.type]}`,
+                        borderLeft: `3px solid ${e.birthday ? "var(--eclosion)" : TYPE_COLORS[e.type]}`,
                         background: "var(--paper)",
                         borderRadius: 4,
                         padding: "2px 5px",
@@ -306,7 +306,8 @@ export function CalendarPage({ canPublish }: CalendarPageProps) {
                         color: "var(--ink)",
                       }}
                     >
-                      {!e.all_day && <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{fmtTime(e.starts_at)} </span>}
+                      {e.birthday && "🎂 "}
+                      {!e.birthday && !e.all_day && <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{fmtTime(e.starts_at)} </span>}
                       {e.title}
                     </button>
                   ))}
@@ -332,7 +333,11 @@ export function CalendarPage({ canPublish }: CalendarPageProps) {
           }
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: TYPE_COLORS[detail.type], border: `1px solid ${TYPE_COLORS[detail.type]}`, borderRadius: 999, padding: "1px 9px" }}>{typeLabel(detail.type)}</span>
+            {detail.birthday ? (
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--eclosion-dark)", border: "1px solid var(--eclosion)", borderRadius: 999, padding: "1px 9px" }}>🎂 {t("cal.birthday", "Anniversaire")}</span>
+            ) : (
+              <span style={{ fontSize: 11, fontWeight: 700, color: TYPE_COLORS[detail.type], border: `1px solid ${TYPE_COLORS[detail.type]}`, borderRadius: 999, padding: "1px 9px" }}>{typeLabel(detail.type)}</span>
+            )}
             <span style={{ fontSize: 13, color: "var(--muted)" }}>
               {new Date(detail.starts_at).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" })}
               {!detail.all_day && ` · ${fmtTime(detail.starts_at)}${detail.ends_at ? `–${fmtTime(detail.ends_at)}` : ""}`}

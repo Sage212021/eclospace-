@@ -1575,6 +1575,7 @@ export interface Employee {
   status: EmployeeStatus;
   position: string | null;
   hireDate: string | null;
+  birthDate: string | null;
   departureDate: string | null;
   leaveBalanceDays: string;
   department: { id: string; name: string } | null;
@@ -1602,12 +1603,13 @@ export function createEmployee(input: {
   position?: string;
   manager_id?: string;
   hire_date?: string;
+  birth_date?: string;
   account?: { username: string; email: string; password: string; role_code: string };
 }) {
   return request<Employee>("/api/v1/employees", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateEmployee(id: string, input: Partial<{ department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null }>) {
+export function updateEmployee(id: string, input: Partial<{ department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null }>) {
   return request<Employee>(`/api/v1/employees/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
@@ -2660,6 +2662,7 @@ export interface CalendarEvent {
   location: string | null;
   author: { id: string; username: string } | null;
   can_manage: boolean;
+  birthday?: boolean;
 }
 
 export interface CalendarEventDetail extends CalendarEvent {

@@ -913,3 +913,14 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Vérifications :** typecheck front + back OK ; build OK ; round-trip vérifié sur le **serveur HTTP réel** (création d'un événement → présent dans le mois, absent du mois suivant, `can_manage` correct).
 
 **Reste (calendrier) :** inc 3 (anniversaires automatiques : date de naissance sur la fiche employé + génération) → inc 4 (rappels/notifications d'événement).
+
+### 14/07/2026 (suite) — Calendrier partagé : incrément 3 (anniversaires automatiques)
+
+**Fait :**
+- **Fiche employé** : nouveau champ **date de naissance** (facultatif ; migration additive `20260714300000_employee_birth_date`). Saisissable à la création d'un collaborateur et modifiable via la fenêtre « Mobilité » (RH).
+- **Anniversaires automatiques** dans le calendrier : le serveur génère des **événements virtuels « journée entière »** (non stockés) à partir des dates de naissance des collaborateurs actifs. On n'affiche que le **jour et le mois** — jamais l'année de naissance ni l'âge (confidentialité). Rendus avec 🎂 et la couleur or, non modifiables.
+- **API** : `GET /calendar/events` fusionne les événements stockés et les anniversaires de la plage.
+
+**Vérifications :** typecheck front + back OK ; build OK ; tests du calendrier : **7** (dont génération d'anniversaire au bon jour, absent hors plage, non gérable). Suite backend relancée.
+
+**Reste (calendrier) :** inc 4 (rappels / notifications d'événement — cloche + e-mail à l'approche d'un événement).

@@ -60,6 +60,9 @@ model Employee {
   manager          Employee?      @relation("EmployeeManager", fields: [managerId], references: [id])
   reports          Employee[]     @relation("EmployeeManager")
   hireDate         DateTime?      @map("hire_date")
+  // Date de naissance (facultative) : alimente les anniversaires automatiques du
+  // calendrier partagé. On n'en affiche que le jour et le mois (jamais l'âge).
+  birthDate        DateTime?      @map("birth_date")
   // Ch. 19 §19.3 : date programmée de désactivation du compte ; vérifiée de
   // façon paresseuse à chaque connexion (pas de tâche planifiée dans le
   // projet — cf. docs/JOURNAL_TECHNIQUE.md).

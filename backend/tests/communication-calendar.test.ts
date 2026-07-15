@@ -125,6 +125,26 @@ describe("communication — calendrier & événements (incrément 1)", () => {
     expect(forbidden.statusCode).toBe(403);
   });
 
+  it("génère les anniversaires automatiques à partir des dates de naissance", async () => {
+    const emp = await prisma.employee.create({
+      data: { firstName: "Nour", lastName: `Anniv${rnd}`, departmentId: deptX.id, birthDate: new Date(Date.UTC(1990, 7, 15)) }, // 15 août
+    });
+    const list = await listRange(aCookie); // août 2026
+    const rows = list.json() as { id: string; birthday?: boolean; all_day: boolean; starts_at: string; title: string; can_manage: boolean }[];
+    const bday = rows.find((e) => e.id === `birthday:${emp.id}:2026`);
+    expect(bday).toBeTruthy();
+    expect(bday!.birthday).toBe(true);
+    expect(bday!.all_day).toBe(true);
+    expect(bday!.can_manage).toBe(false);
+    expect(new Date(bday!.starts_at).getUTCMonth()).toBe(7);
+    expect(new Date(bday!.starts_at).getUTCDate()).toBe(15);
+    expect(bday!.title).toContain("Anniversaire");
+
+    // Hors du mois : pas d'anniversaire.
+    const sep = await listRange(aCookie, "2026-09-01T00:00:00.000Z", "2026-10-01T00:00:00.000Z");
+    expect((sep.json() as { id: string }[]).some((e) => e.id === `birthday:${emp.id}:2026`)).toBe(false);
+  });
+
   it("journalise création et suppression logique", async () => {
     const res = await create(pubCookie, { title: `Audit cal ${rnd}`, starts_at: "2026-08-25T09:00:00.000Z", targets: [{ type: "tous" }] });
     const id = res.json().id as string;

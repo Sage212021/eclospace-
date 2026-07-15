@@ -23,6 +23,7 @@ import { UsersRolesPage } from "./pages/UsersRolesPage";
 import { DiagnosticsPage } from "./pages/DiagnosticsPage";
 import { AnnouncementsPage } from "./pages/AnnouncementsPage";
 import { CalendarPage } from "./pages/CalendarPage";
+import { NewsFeedPage } from "./pages/NewsFeedPage";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { PresenceToasts } from "./components/PresenceToasts";
@@ -51,6 +52,7 @@ type PageId =
   | "users-roles"
   | "communication"
   | "calendar"
+  | "newsfeed"
   | "diagnostics";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
@@ -110,6 +112,7 @@ const NAV_POLES: NavPole[] = [
   {
     label: "Communication interne",
     items: [
+      { key: "cm-actualites", label: "Fil d'actualités", permission: "communication:consultation" },
       { key: "cm-babillard", label: "Babillard d'annonces", permission: "communication:consultation" },
       { key: "cm-calendrier", label: "Calendrier partagé", permission: "communication:consultation" },
     ],
@@ -148,6 +151,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ad-rights": { page: "rights-matrix" },
   "ad-parametres": { page: "settings" },
   "ad-diagnostics": { page: "diagnostics" },
+  "cm-actualites": { page: "newsfeed" },
   "cm-babillard": { page: "communication" },
   "cm-calendrier": { page: "calendar" },
   "pi-direction": { page: "direction" },
@@ -493,6 +497,12 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "calendar" && (
           <CalendarPage canPublish={permissions.has("communication:saisie")} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "newsfeed" && (
+          <NewsFeedPage
+            onOpenAnnouncement={openAnnouncement}
+            onOpenCalendar={permissions.has("communication:consultation") ? () => setView({ kind: "leaf", key: "cm-calendrier" }) : undefined}
+          />
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
       </div>

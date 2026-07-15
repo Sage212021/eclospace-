@@ -724,6 +724,7 @@ model User {
   announcementReceipts   AnnouncementReceipt[]   @relation("AnnouncementReceipts")
   notificationPreference NotificationPreference? @relation("UserNotificationPreference")
   authoredEvents         CalendarEvent[]         @relation("CalendarEventAuthor")
+  authoredNewsletters    Newsletter[]            @relation("NewsletterAuthor")
 
   @@map("users")
 }
@@ -3579,4 +3580,34 @@ model CalendarEventTarget {
   @@index([eventId])
   @@index([targetType, targetId])
   @@map("calendar_event_targets")
+}
+
+enum NewsletterStatus {
+  brouillon
+  envoyee
+}
+
+model Newsletter {
+  id            String           @id @default(uuid())
+  title         String
+  intro         String?
+  periodStart   DateTime         @map("period_start")
+  periodEnd     DateTime         @map("period_end")
+  status        NewsletterStatus @default(brouillon)
+  authorId      String           @map("author_id")
+  author        User             @relation("NewsletterAuthor", fields: [authorId], references: [id])
+  sentAt        DateTime?        @map("sent_at")
+  recipients    Int?
+  itemsSnapshot Json?            @map("items_snapshot")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  @@index([status])
+  @@index([periodStart])
+  @@map("newsletters")
 }

@@ -4,6 +4,8 @@ import { CalendarEventType, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { resolveAudience } from "../lib/announcements.js";
+import { notifyUsers } from "../lib/notify.js";
 
 // Centre de Communication Interne — Calendrier partagé & événements
 // (module « communication »). Événements de la maison, ciblés comme les
@@ -134,6 +136,41 @@ async function buildBirthdayEvents(from: Date, to: Date) {
   return out;
 }
 
+// Format compact et neutre (indépendant de la langue) pour le corps des
+// notifications d'événement.
+function eventWhen(startsAt: Date, allDay: boolean): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  const day = `${startsAt.getUTCFullYear()}-${p(startsAt.getUTCMonth() + 1)}-${p(startsAt.getUTCDate())}`;
+  return allDay ? day : `${day} ${p(startsAt.getUTCHours())}:${p(startsAt.getUTCMinutes())}`;
+}
+
+// Notifie l'audience d'un événement (cloche + e-mail selon la priorité). Les
+// échéances passent en priorité « haute » (doublées d'un e-mail) ; les autres
+// événements restent en priorité « moyenne » (cloche seule).
+async function notifyEventAudience(
+  event: { id: string; title: string; type: string; startsAt: Date; allDay: boolean; location: string | null },
+  targets: { targetType: string; targetId: string | null }[],
+  opts: { reminder?: boolean } = {},
+): Promise<number> {
+  const audience = await resolveAudience(targets);
+  const userIds = [...audience];
+  if (userIds.length === 0) return 0;
+  const priority = event.type === "echeance" ? ("high" as const) : ("medium" as const);
+  const prefix = opts.reminder ? "Rappel" : "Nouvel événement";
+  const where = eventWhen(event.startsAt, event.allDay);
+  await notifyUsers({
+    userIds,
+    type: "autre",
+    priority,
+    title: `${prefix} : ${event.title}`,
+    body: `${where}${event.location ? ` · ${event.location}` : ""}`,
+    entityType: "calendar_event",
+    entityId: event.id,
+    emailOverride: opts.reminder === true,
+  });
+  return userIds.length;
+}
+
 export default async function calendarRoutes(fastify: FastifyInstance) {
   // ── Liste des événements d'une plage (vue mensuelle) qui me concernent ─────
   fastify.get("/api/v1/calendar/events", { preHandler: requirePermission("communication", "consultation") }, async (request, reply) => {
@@ -187,6 +224,39 @@ export default async function calendarRoutes(fastify: FastifyInstance) {
     end.setUTCDate(start.getUTCDate() + 1);
     const birthdays = await buildBirthdayEvents(start, end);
     return reply.send(birthdays.map((b) => ({ id: b.id, name: b.person })));
+  });
+
+  // ── Événements à venir (encart du tableau de bord) ─────────────────────────
+  // Les prochains événements qui me concernent, dans une fenêtre courte (7 jours
+  // par défaut) : rappel « à venir » sans planificateur, calculé à la demande.
+  fastify.get("/api/v1/calendar/upcoming", { preHandler: requirePermission("communication", "consultation") }, async (request, reply) => {
+    const days = Math.min(31, Math.max(1, Number((request.query as { days?: string }).days) || 7));
+    const now = new Date();
+    const until = new Date(now.getTime() + days * 86_400_000);
+
+    let visibility: Prisma.CalendarEventWhereInput = {};
+    if (!canManageAll(request)) {
+      const scope = await viewerScope(request.user!.id);
+      visibility = {
+        targets: {
+          some: {
+            OR: [
+              { targetType: "tous" },
+              ...(scope.departmentId ? [{ targetType: "departement" as const, targetId: scope.departmentId }] : []),
+              ...(scope.roleIds.length ? [{ targetType: "role" as const, targetId: { in: scope.roleIds } }] : []),
+              { targetType: "utilisateur" as const, targetId: request.user!.id },
+            ],
+          },
+        },
+      };
+    }
+    const events = await prisma.calendarEvent.findMany({
+      where: { deletedAt: null, startsAt: { gte: now, lt: until }, ...visibility },
+      orderBy: { startsAt: "asc" },
+      take: 8,
+      include: { author: { select: { id: true, username: true } } },
+    });
+    return reply.send(events.map((e) => eventView(e)));
   });
 
   // ── Détail d'un événement ──────────────────────────────────────────────────
@@ -251,6 +321,9 @@ export default async function calendarRoutes(fastify: FastifyInstance) {
       newValues: { title: created.title, type: created.type, startsAt: created.startsAt },
       ipAddress: request.ip,
     });
+
+    // Notifie l'audience du nouvel événement (cloche + e-mail si échéance).
+    await notifyEventAudience(created, d.targets.map((t) => ({ targetType: t.type, targetId: t.type === "tous" ? null : t.id! }))).catch(() => {});
 
     return reply.code(201).send({ id: created.id });
   });
@@ -322,5 +395,23 @@ export default async function calendarRoutes(fastify: FastifyInstance) {
       ipAddress: request.ip,
     });
     return reply.send({ ok: true });
+  });
+
+  // ── Rappel manuel aux participants (auteur ou administration) ──────────────
+  fastify.post("/api/v1/calendar/events/:id/remind", { preHandler: requirePermission("communication", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const event = await loadManageable(request, reply, id);
+    if (!event) return;
+    const targets = await prisma.calendarEventTarget.findMany({ where: { eventId: id }, select: { targetType: true, targetId: true } });
+    const reminded = await notifyEventAudience(event, targets, { reminder: true });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "calendar_event",
+      entityId: id,
+      newValues: { reminder: true, reminded },
+      ipAddress: request.ip,
+    });
+    return reply.send({ ok: true, reminded });
   });
 }

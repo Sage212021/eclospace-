@@ -23,6 +23,8 @@ describe("communication — calendrier & événements (incrément 1)", () => {
   let bCookie: string;
   let saisieOnlyCookie: string;
   let deptX: { id: string };
+  let userAId: string;
+  let userBId: string;
 
   beforeAll(async () => {
     app = await buildApp();
@@ -33,6 +35,8 @@ describe("communication — calendrier & événements (incrément 1)", () => {
     await createUserWithRole(`cal_pub_${rnd}`, "RESP_RH", PWD);
     const a = await createUserWithRole(`cal_a_${rnd}`, "CORRECTEUR", PWD);
     const b = await createUserWithRole(`cal_b_${rnd}`, "CORRECTEUR", PWD);
+    userAId = a.id;
+    userBId = b.id;
     const empA = await prisma.employee.create({ data: { firstName: "Cal", lastName: `A${rnd}`, departmentId: deptX.id } });
     const empB = await prisma.employee.create({ data: { firstName: "Cal", lastName: `B${rnd}`, departmentId: deptY.id } });
     await prisma.user.update({ where: { id: a.id }, data: { employeeId: empA.id } });
@@ -165,6 +169,50 @@ describe("communication — calendrier & événements (incrément 1)", () => {
     const raw = res.json() as Record<string, unknown>[];
     expect(raw.every((r) => !("birthDate" in r) && !("birth_date" in r))).toBe(true);
     expect(todayEmp.id).toBeTruthy();
+  });
+
+  it("notifie l'audience à la création d'un événement", async () => {
+    const res = await create(pubCookie, {
+      title: `Notif ${rnd}`,
+      type: "reunion",
+      starts_at: "2026-08-18T09:00:00.000Z",
+      targets: [{ type: "departement", id: deptX.id }],
+    });
+    const id = res.json().id as string;
+    // userA (deptX) reçoit une notification d'événement ; userB (deptY) non.
+    const nA = await prisma.notification.findFirst({ where: { userId: userAId, entityType: "calendar_event", entityId: id } });
+    expect(nA).toBeTruthy();
+    expect(nA!.title).toContain("Nouvel événement");
+    const nB = await prisma.notification.findFirst({ where: { userId: userBId, entityType: "calendar_event", entityId: id } });
+    expect(nB).toBeNull();
+  });
+
+  it("permet un rappel manuel aux participants", async () => {
+    const res = await create(pubCookie, {
+      title: `Rappel ${rnd}`,
+      starts_at: "2026-08-19T09:00:00.000Z",
+      targets: [{ type: "utilisateur", id: userAId }],
+    });
+    const id = res.json().id as string;
+    const before = await prisma.notification.count({ where: { userId: userAId, entityId: id, title: { startsWith: "Rappel :" } } });
+    const remind = await app.inject({ method: "POST", url: `/api/v1/calendar/events/${id}/remind`, headers: { cookie: pubCookie } });
+    expect(remind.statusCode).toBe(200);
+    expect(remind.json().reminded).toBe(1);
+    const after = await prisma.notification.count({ where: { userId: userAId, entityId: id, title: { startsWith: "Rappel :" } } });
+    expect(after).toBe(before + 1);
+  });
+
+  it("liste les événements à venir (fenêtre courte)", async () => {
+    const soonISO = new Date(Date.now() + 2 * 86_400_000).toISOString(); // dans 2 jours
+    const farISO = new Date(Date.now() + 20 * 86_400_000).toISOString(); // dans 20 jours
+    const soon = await create(pubCookie, { title: `Bientôt ${rnd}`, starts_at: soonISO, targets: [{ type: "utilisateur", id: userAId }] });
+    const far = await create(pubCookie, { title: `Loin ${rnd}`, starts_at: farISO, targets: [{ type: "utilisateur", id: userAId }] });
+    const soonId = soon.json().id as string;
+    const farId = far.json().id as string;
+    const up = await app.inject({ method: "GET", url: "/api/v1/calendar/upcoming?days=7", headers: { cookie: aCookie } });
+    const ids = (up.json() as { id: string }[]).map((e) => e.id);
+    expect(ids).toContain(soonId); // dans 7 jours
+    expect(ids).not.toContain(farId); // au-delà
   });
 
   it("journalise création et suppression logique", async () => {

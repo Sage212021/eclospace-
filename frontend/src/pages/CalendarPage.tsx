@@ -5,6 +5,7 @@ import {
   getAnnouncementTargetOptions,
   getCalendarEvent,
   listCalendarEvents,
+  remindCalendarEvent,
   updateCalendarEvent,
   type AnnouncementTargetType,
   type CalendarEvent,
@@ -205,6 +206,15 @@ export function CalendarPage({ canPublish }: CalendarPageProps) {
     }
   }
 
+  async function doRemind(id: string) {
+    try {
+      const r = await remindCalendarEvent(id);
+      setMessage(lang === "en" ? `Reminder sent to ${r.reminded} person(s).` : `Rappel envoyé à ${r.reminded} personne(s).`);
+    } catch (err) {
+      fail(err, "Rappel impossible.");
+    }
+  }
+
   const monthLabel = new Date(cursor.year, cursor.month, 1).toLocaleDateString(locale, { month: "long", year: "numeric" });
   const weekdays = useMemo(() => {
     const ref = startOfGrid(2024, 0); // un lundi
@@ -326,8 +336,9 @@ export function CalendarPage({ canPublish }: CalendarPageProps) {
           onClose={() => setDetail(null)}
           footer={
             <>
-              {detail.can_manage && <Button variant="danger" size="sm" onClick={() => doDelete(detail.id)}>{t("cal.delete", "Supprimer")}</Button>}
-              {detail.can_manage && <Button variant="edit" size="sm" onClick={() => { const d = detail; setDetail(null); openForm(undefined, d); }}>{t("cal.edit", "Modifier")}</Button>}
+              {detail.can_manage && !detail.birthday && <Button variant="danger" size="sm" onClick={() => doDelete(detail.id)}>{t("cal.delete", "Supprimer")}</Button>}
+              {detail.can_manage && !detail.birthday && <Button variant="view" size="sm" onClick={() => doRemind(detail.id)}>{t("cal.remind", "Rappeler")}</Button>}
+              {detail.can_manage && !detail.birthday && <Button variant="edit" size="sm" onClick={() => { const d = detail; setDetail(null); openForm(undefined, d); }}>{t("cal.edit", "Modifier")}</Button>}
               <Button variant="view" size="sm" onClick={() => setDetail(null)}>{t("cal.close", "Fermer")}</Button>
             </>
           }

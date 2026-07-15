@@ -29,6 +29,8 @@ interface TopBarProps {
   onOpenManuscript?: (id: string) => void;
   // Ouvre une annonce du Babillard depuis une notification de la cloche.
   onOpenAnnouncement?: (id: string) => void;
+  // Ouvre le calendrier depuis une notification d'événement.
+  onOpenCalendar?: () => void;
   // Signal (compteur) : à chaque changement, la cloche recharge son badge de
   // non-lus (ex. arrivée d'une annonce en temps réel).
   refreshSignal?: number;
@@ -49,7 +51,7 @@ function initials(username: string): string {
 
 // Barre supérieure (guide §6) : recherche globale + présence + notifications +
 // menu de profil (avatar) à droite, façon Microsoft 365 / Notion.
-export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, user, onLogout, onOpenSettings, onOpenManuscript, onOpenAnnouncement, refreshSignal }: TopBarProps) {
+export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, user, onLogout, onOpenSettings, onOpenManuscript, onOpenAnnouncement, onOpenCalendar, refreshSignal }: TopBarProps) {
   const { t, lang } = useI18n();
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -116,6 +118,9 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
     if (n.entityType === "announcement" && n.entityId && onOpenAnnouncement) {
       setNotifOpen(false);
       onOpenAnnouncement(n.entityId);
+    } else if (n.entityType === "calendar_event" && onOpenCalendar) {
+      setNotifOpen(false);
+      onOpenCalendar();
     }
   }
 
@@ -407,7 +412,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
                   <div style={{ padding: "16px 14px", fontSize: 13, color: "var(--muted)" }}>{t("notif.empty", "Aucune notification.")}</div>
                 ) : (
                   notifs.map((n) => {
-                    const clickable = n.entityType === "announcement" && n.entityId && onOpenAnnouncement;
+                    const clickable = (n.entityType === "announcement" && n.entityId && onOpenAnnouncement) || (n.entityType === "calendar_event" && onOpenCalendar);
                     return (
                       <button
                         key={n.id}

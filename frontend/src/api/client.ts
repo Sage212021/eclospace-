@@ -2618,6 +2618,10 @@ export function getAnnouncementReceipts(id: string) {
   return request<AnnouncementReceiptsReport>(`/api/v1/announcements/${id}/receipts`);
 }
 
+export function remindAnnouncement(id: string) {
+  return request<{ ok: true; reminded: number }>(`/api/v1/announcements/${id}/remind`, { method: "POST" });
+}
+
 export function getAnnouncementTargetOptions() {
   return request<TargetOptions>("/api/v1/announcement-targets/options");
 }

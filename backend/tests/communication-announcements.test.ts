@@ -174,6 +174,54 @@ describe("communication — babillard d'annonces (incrément 1)", () => {
     expect(body.acknowledged).toBe(1);
   });
 
+  it("relance uniquement les destinataires n'ayant pas accusé réception", async () => {
+    const draft = await createDraft(pubCookie, {
+      title: `Relance ${rnd}`,
+      body_html: "<p>Merci de confirmer.</p>",
+      require_ack: true,
+      targets: [
+        { type: "utilisateur", id: userAId },
+        { type: "utilisateur", id: userBId },
+      ],
+    });
+    const id = draft.json().id as string;
+    const pub = await app.inject({ method: "POST", url: `/api/v1/announcements/${id}/publish`, headers: { cookie: pubCookie } });
+    expect(pub.json().recipients).toBe(2);
+
+    // A accuse réception, pas B.
+    await app.inject({ method: "POST", url: `/api/v1/announcements/${id}/ack`, headers: { cookie: aCookie } });
+
+    // Compte des notifications « Rappel » de B AVANT la relance.
+    const before = await prisma.notification.count({
+      where: { userId: userBId, entityId: id, title: { startsWith: "Rappel :" } },
+    });
+
+    const remind = await app.inject({ method: "POST", url: `/api/v1/announcements/${id}/remind`, headers: { cookie: pubCookie } });
+    expect(remind.statusCode).toBe(200);
+    expect(remind.json().reminded).toBe(1); // seul B n'a pas accusé
+
+    // B a bien reçu une nouvelle notification « Rappel », pas A.
+    const afterB = await prisma.notification.count({
+      where: { userId: userBId, entityId: id, title: { startsWith: "Rappel :" } },
+    });
+    expect(afterB).toBe(before + 1);
+    const aRappel = await prisma.notification.count({
+      where: { userId: userAId, entityId: id, title: { startsWith: "Rappel :" } },
+    });
+    expect(aRappel).toBe(0);
+  });
+
+  it("refuse la relance d'une annonce non publiée", async () => {
+    const draft = await createDraft(pubCookie, {
+      title: `Brouillon relance ${rnd}`,
+      body_html: "<p>x</p>",
+      targets: [{ type: "utilisateur", id: userAId }],
+    });
+    const id = draft.json().id as string;
+    const remind = await app.inject({ method: "POST", url: `/api/v1/announcements/${id}/remind`, headers: { cookie: pubCookie } });
+    expect(remind.statusCode).toBe(409);
+  });
+
   it("réserve la gestion à l'auteur (ou à l'administration)", async () => {
     // saisieOnly (sans administration) crée son annonce…
     const mine = await createDraft(saisieOnlyCookie, {

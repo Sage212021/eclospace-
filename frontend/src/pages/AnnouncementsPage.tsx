@@ -11,6 +11,7 @@ import {
   listAnnouncementFeed,
   listAnnouncementsManage,
   publishAnnouncement,
+  remindAnnouncement,
   setNotificationPreferences,
   updateAnnouncement,
   type AnnouncementCategory,
@@ -248,6 +249,19 @@ export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementI
     }
   }
 
+  async function doRemind(id: string) {
+    try {
+      const r = await remindAnnouncement(id);
+      setMessage(
+        lang === "en" ? `Reminder sent to ${r.reminded} person(s).` : `Relance envoyée à ${r.reminded} personne(s).`,
+      );
+      // Rafraîchit le suivi (les compteurs ne changent pas, mais on garde l'état à jour).
+      setReceipts({ id, report: await getAnnouncementReceipts(id) });
+    } catch (err) {
+      fail(err, "Relance impossible.");
+    }
+  }
+
   return (
     <div className="ecl-page">
       <h1 className="ecl-page__title">{t("page.communication.title", "Communication interne")}</h1>
@@ -478,7 +492,21 @@ export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementI
           title={t("cm.tracking_title", "Suivi de lecture")}
           wide
           onClose={() => setReceipts(null)}
-          footer={<Button variant="view" size="sm" onClick={() => setReceipts(null)}>{t("cm.close", "Fermer")}</Button>}
+          footer={
+            <>
+              {(() => {
+                const pending = receipts.report.require_ack
+                  ? receipts.report.total - receipts.report.acknowledged
+                  : receipts.report.total - receipts.report.read;
+                return pending > 0 ? (
+                  <Button variant="edit" size="sm" onClick={() => doRemind(receipts.id)}>
+                    {t("cm.remind", "Relancer les non-lecteurs")} ({pending})
+                  </Button>
+                ) : null;
+              })()}
+              <Button variant="view" size="sm" onClick={() => setReceipts(null)}>{t("cm.close", "Fermer")}</Button>
+            </>
+          }
         >
           <div style={{ display: "flex", gap: 18, fontSize: 13, marginBottom: 10, flexWrap: "wrap" }}>
             <span>{t("cm.recipients", "Destinataires")} : <strong style={{ fontFamily: "var(--font-mono)" }}>{receipts.report.total}</strong></span>

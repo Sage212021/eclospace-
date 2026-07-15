@@ -847,6 +847,10 @@ model Notification {
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  // La cloche interroge « mes notifications (non lues) » à chaque page, et le
+  // Babillard crée une notification par destinataire : cet index maintient ces
+  // lectures rapides à mesure que la table grandit.
+  @@index([userId, readAt])
   @@map("notifications")
 }
 

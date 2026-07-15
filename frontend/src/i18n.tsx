@@ -909,6 +909,8 @@ const EN: Record<string, string> = {
   "cal.birthday": "Birthday",
   "cal.birthday_today": "Birthday today",
   "cal.birthday_wish": "remember to wish them well!",
+  "cal.upcoming": "Upcoming events",
+  "cal.remind": "Remind",
   "page.communication.title": "Internal communication",
   "page.communication.lead": "Announcement board: official information broadcast to staff.",
   "cm.prio.normale": "Normal",

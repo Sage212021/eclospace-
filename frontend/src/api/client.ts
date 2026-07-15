@@ -2703,3 +2703,11 @@ export function updateCalendarEvent(id: string, input: Partial<CalendarEventInpu
 export function deleteCalendarEvent(id: string) {
   return request<{ ok: true }>(`/api/v1/calendar/events/${id}`, { method: "DELETE" });
 }
+
+export function remindCalendarEvent(id: string) {
+  return request<{ ok: true; reminded: number }>(`/api/v1/calendar/events/${id}/remind`, { method: "POST" });
+}
+
+export function getUpcomingEvents(days = 7) {
+  return request<CalendarEvent[]>(`/api/v1/calendar/upcoming?days=${days}`);
+}

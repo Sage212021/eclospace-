@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { getDashboardStats, getTodayBirthdays, type DashboardStats, type EffectiveUser } from "../api/client";
+import { getDashboardStats, getTodayBirthdays, getUpcomingEvents, type CalendarEvent, type DashboardStats, type EffectiveUser } from "../api/client";
 import { useI18n } from "../i18n";
 import { AnnouncementBanner } from "../components/AnnouncementBanner";
 
 interface DashboardProps {
   user: EffectiveUser;
   onOpenAnnouncement?: (id: string) => void;
+  onOpenCalendar?: () => void;
 }
 
 // Grands indicateurs affichés en tête du tableau de bord. Chacun n'apparaît que
@@ -20,15 +21,19 @@ const KPI_CARDS: { key: keyof DashboardStats; label: string; icon: string }[] = 
 // Page d'accueil : grands indicateurs de synthèse + rappel de la session.
 // L'audit RBAC détaillé (badges de permissions) a été déplacé dans l'écran
 // « Diagnostics système » (Administration), réservé à l'administrateur général.
-export function Dashboard({ user, onOpenAnnouncement }: DashboardProps) {
-  const { t } = useI18n();
+export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar }: DashboardProps) {
+  const { t, lang } = useI18n();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [birthdays, setBirthdays] = useState<{ id: string; name: string }[]>([]);
+  const [upcoming, setUpcoming] = useState<CalendarEvent[]>([]);
   const canSeeAnnouncements = user.permissions.includes("communication:consultation");
 
   useEffect(() => {
     getDashboardStats().then(setStats).catch(() => setStats(null));
-    if (canSeeAnnouncements) getTodayBirthdays().then(setBirthdays).catch(() => setBirthdays([]));
+    if (canSeeAnnouncements) {
+      getTodayBirthdays().then(setBirthdays).catch(() => setBirthdays([]));
+      getUpcomingEvents(7).then(setUpcoming).catch(() => setUpcoming([]));
+    }
   }, [canSeeAnnouncements]);
 
   const visibleKpis = stats ? KPI_CARDS.filter((c) => stats[c.key] !== null) : [];
@@ -44,6 +49,29 @@ export function Dashboard({ user, onOpenAnnouncement }: DashboardProps) {
             <strong>{t("cal.birthday_today", "Anniversaire aujourd'hui")} : </strong>
             {birthdays.map((b) => b.name).join(", ")} — {t("cal.birthday_wish", "pensez à leur souhaiter !")}
           </span>
+        </div>
+      )}
+      {/* Événements à venir (7 jours) qui me concernent. */}
+      {upcoming.length > 0 && (
+        <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: "12px 14px", marginBottom: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--eclosion-dark)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
+            {t("cal.upcoming", "Événements à venir")}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {upcoming.map((e) => (
+              <button
+                key={e.id}
+                onClick={() => onOpenCalendar?.()}
+                style={{ display: "flex", alignItems: "baseline", gap: 10, background: "transparent", border: "none", textAlign: "left", cursor: onOpenCalendar ? "pointer" : "default", padding: "2px 0", width: "100%" }}
+              >
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", flexShrink: 0, minWidth: 118 }}>
+                  {new Date(e.starts_at).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR", { weekday: "short", day: "2-digit", month: "short" })}
+                  {!e.all_day && ` · ${new Date(e.starts_at).toLocaleTimeString(lang === "en" ? "en-GB" : "fr-FR", { hour: "2-digit", minute: "2-digit" })}`}
+                </span>
+                <span style={{ fontSize: 13.5, color: "var(--ink)" }}>{e.title}{e.location ? <span style={{ color: "var(--muted)" }}> · {e.location}</span> : null}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <h1 style={{ fontFamily: "var(--font-title)", fontSize: 22, marginBottom: 4 }}>{t("dash.welcome", "Bienvenue")}, {user.username}</h1>

@@ -372,6 +372,7 @@ export function App() {
           onOpenSettings={() => selectLeaf("ad-parametres")}
           onOpenManuscript={openManuscript}
           onOpenAnnouncement={openAnnouncement}
+          onOpenCalendar={() => permissions.has("communication:consultation") && setView({ kind: "leaf", key: "cm-calendrier" })}
           refreshSignal={notifTick}
         />
 
@@ -424,7 +425,13 @@ export function App() {
           />
         )}
 
-        {leaf && "page" in leaf && leaf.page === "dashboard" && <Dashboard user={user} onOpenAnnouncement={openAnnouncement} />}
+        {leaf && "page" in leaf && leaf.page === "dashboard" && (
+          <Dashboard
+            user={user}
+            onOpenAnnouncement={openAnnouncement}
+            onOpenCalendar={permissions.has("communication:consultation") ? () => setView({ kind: "leaf", key: "cm-calendrier" }) : undefined}
+          />
+        )}
         {leaf && "page" in leaf && leaf.page === "manuscripts" && (
           <Manuscripts canCreate={permissions.has("manuscripts:saisie")} onOpenManuscript={openManuscript} />
         )}

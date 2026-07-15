@@ -933,3 +933,15 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 - Rappel : la date de naissance complète reste dans la fiche RH (back-office) ; le calendrier ne marque l'anniversaire que sur sa case du jour ; on n'affiche jamais l'année ni l'âge.
 
 **Vérifications :** typecheck front + back OK ; build OK ; vérifié sur le serveur réel (seul l'employé fêté aujourd'hui ressort, pas celui de demain) ; test ajouté (l'anniversaire du jour sort, pas celui à +2 jours ; aucune date de naissance dans la réponse). Tests calendrier : **8**.
+
+### 14/07/2026 (suite) — Calendrier partagé : incrément 4 (rappels & notifications) — **calendrier terminé**
+
+**Fait :** dernier incrément du calendrier.
+- **Notification à la création** : à l'ajout d'un événement, son audience reçoit une notification dans la cloche (`entityType = calendar_event`) ; les **échéances** passent en priorité haute (doublées d'un e-mail). Clic sur la notification → ouvre le **Calendrier**.
+- **Rappel manuel** : bouton « Rappeler » sur le détail d'un événement (auteur/admin) → re-notifie l'audience (« Rappel : … », + e-mail).
+- **Encart « Événements à venir »** sur le tableau de bord : les prochains événements (7 jours) qui me concernent, calculés à la demande (pas de planificateur), cliquables vers le calendrier.
+- **API** : `GET /calendar/upcoming`, `POST /calendar/events/:id/remind`, notification intégrée à la création.
+
+**Vérifications :** typecheck front + back OK ; build OK ; tests du calendrier : **11** (dont notification ciblée à la création, rappel manuel, fenêtre « à venir »). Suite backend relancée.
+
+**➡️ Le calendrier partagé est complet** (4 incréments) : socle backend, écran mensuel, anniversaires automatiques (+ encart « du jour »), rappels/notifications. Le Centre de Communication Interne compte désormais **2 composants** (Babillard + Calendrier). Extensions futures possibles : sondages, newsletter.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getDashboardStats, type DashboardStats, type EffectiveUser } from "../api/client";
+import { getDashboardStats, getTodayBirthdays, type DashboardStats, type EffectiveUser } from "../api/client";
 import { useI18n } from "../i18n";
 import { AnnouncementBanner } from "../components/AnnouncementBanner";
 
@@ -23,17 +23,29 @@ const KPI_CARDS: { key: keyof DashboardStats; label: string; icon: string }[] = 
 export function Dashboard({ user, onOpenAnnouncement }: DashboardProps) {
   const { t } = useI18n();
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [birthdays, setBirthdays] = useState<{ id: string; name: string }[]>([]);
   const canSeeAnnouncements = user.permissions.includes("communication:consultation");
 
   useEffect(() => {
     getDashboardStats().then(setStats).catch(() => setStats(null));
-  }, []);
+    if (canSeeAnnouncements) getTodayBirthdays().then(setBirthdays).catch(() => setBirthdays([]));
+  }, [canSeeAnnouncements]);
 
   const visibleKpis = stats ? KPI_CARDS.filter((c) => stats[c.key] !== null) : [];
 
   return (
     <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 900 }}>
       {canSeeAnnouncements && onOpenAnnouncement && <AnnouncementBanner onOpen={onOpenAnnouncement} />}
+      {/* Anniversaires du jour : n'apparaît QUE le jour même, jamais à l'avance. */}
+      {birthdays.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 10, padding: "10px 14px", marginBottom: 18, fontSize: 13.5, color: "var(--ink)" }}>
+          <span style={{ fontSize: 20 }}>🎂</span>
+          <span>
+            <strong>{t("cal.birthday_today", "Anniversaire aujourd'hui")} : </strong>
+            {birthdays.map((b) => b.name).join(", ")} — {t("cal.birthday_wish", "pensez à leur souhaiter !")}
+          </span>
+        </div>
+      )}
       <h1 style={{ fontFamily: "var(--font-title)", fontSize: 22, marginBottom: 4 }}>{t("dash.welcome", "Bienvenue")}, {user.username}</h1>
       <p style={{ color: "var(--muted)", marginTop: 0 }}>{t("dash.subtitle", "Vue d'ensemble de votre maison d'édition.")}</p>
 

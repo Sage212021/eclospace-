@@ -924,3 +924,12 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Vérifications :** typecheck front + back OK ; build OK ; tests du calendrier : **7** (dont génération d'anniversaire au bon jour, absent hors plage, non gérable). Suite backend relancée.
 
 **Reste (calendrier) :** inc 4 (rappels / notifications d'événement — cloche + e-mail à l'approche d'un événement).
+
+### 14/07/2026 (suite) — Calendrier : anniversaires « du jour » sur le tableau de bord
+
+**Précision demandée par l'opérateur** : l'anniversaire ne doit « sortir » **que le jour même**, pas rester affiché toute l'année ; et la date de naissance reste en back-office.
+- **Encart « Anniversaire aujourd'hui »** sur le tableau de bord : n'apparaît **que le jour J**, listant uniquement les **noms** des personnes fêtées (« pensez à leur souhaiter ! »). Disparaît le lendemain.
+- **API** : `GET /calendar/today-birthdays` — ne renvoie que les anniversaires du jour, **noms seuls** (aucune date de naissance exposée).
+- Rappel : la date de naissance complète reste dans la fiche RH (back-office) ; le calendrier ne marque l'anniversaire que sur sa case du jour ; on n'affiche jamais l'année ni l'âge.
+
+**Vérifications :** typecheck front + back OK ; build OK ; vérifié sur le serveur réel (seul l'employé fêté aujourd'hui ressort, pas celui de demain) ; test ajouté (l'anniversaire du jour sort, pas celui à +2 jours ; aucune date de naissance dans la réponse). Tests calendrier : **8**.

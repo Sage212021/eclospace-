@@ -2680,6 +2680,10 @@ export interface CalendarEventInput {
   targets: { type: AnnouncementTargetType; id?: string }[];
 }
 
+export function getTodayBirthdays() {
+  return request<{ id: string; name: string }[]>("/api/v1/calendar/today-birthdays");
+}
+
 export function listCalendarEvents(from: string, to: string) {
   return request<CalendarEvent[]>(`/api/v1/calendar/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 }

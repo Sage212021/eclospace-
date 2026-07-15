@@ -145,6 +145,28 @@ describe("communication — calendrier & événements (incrément 1)", () => {
     expect((sep.json() as { id: string }[]).some((e) => e.id === `birthday:${emp.id}:2026`)).toBe(false);
   });
 
+  it("ne fait sortir les anniversaires que le jour même (encart du tableau de bord)", async () => {
+    const now = new Date();
+    const todayEmp = await prisma.employee.create({
+      data: { firstName: "Aujourd", lastName: `Hui${rnd}`, departmentId: deptX.id, birthDate: new Date(Date.UTC(1988, now.getUTCMonth(), now.getUTCDate())) },
+    });
+    // Anniversaire dans 2 jours : ne doit PAS apparaître aujourd'hui.
+    await prisma.employee.create({
+      data: { firstName: "Autre", lastName: `Jour${rnd}`, departmentId: deptX.id, birthDate: new Date(Date.UTC(1988, now.getUTCMonth(), now.getUTCDate() + 2)) },
+    });
+
+    const res = await app.inject({ method: "GET", url: "/api/v1/calendar/today-birthdays", headers: { cookie: aCookie } });
+    expect(res.statusCode).toBe(200);
+    const names = (res.json() as { id: string; name: string }[]).map((x) => x.name);
+    expect(names.some((n) => n.includes(`Hui${rnd}`))).toBe(true); // fêté aujourd'hui
+    expect(names.some((n) => n.includes(`Jour${rnd}`))).toBe(false); // dans 2 jours
+
+    // Aucune date de naissance n'est exposée par cet endpoint (nom seul).
+    const raw = res.json() as Record<string, unknown>[];
+    expect(raw.every((r) => !("birthDate" in r) && !("birth_date" in r))).toBe(true);
+    expect(todayEmp.id).toBeTruthy();
+  });
+
   it("journalise création et suppression logique", async () => {
     const res = await create(pubCookie, { title: `Audit cal ${rnd}`, starts_at: "2026-08-25T09:00:00.000Z", targets: [{ type: "tous" }] });
     const id = res.json().id as string;

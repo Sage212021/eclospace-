@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { getDashboardStats, type DashboardStats, type EffectiveUser } from "../api/client";
 import { useI18n } from "../i18n";
+import { AnnouncementBanner } from "../components/AnnouncementBanner";
 
 interface DashboardProps {
   user: EffectiveUser;
+  onOpenAnnouncement?: (id: string) => void;
 }
 
 // Grands indicateurs affichés en tête du tableau de bord. Chacun n'apparaît que
@@ -18,9 +20,10 @@ const KPI_CARDS: { key: keyof DashboardStats; label: string; icon: string }[] = 
 // Page d'accueil : grands indicateurs de synthèse + rappel de la session.
 // L'audit RBAC détaillé (badges de permissions) a été déplacé dans l'écran
 // « Diagnostics système » (Administration), réservé à l'administrateur général.
-export function Dashboard({ user }: DashboardProps) {
+export function Dashboard({ user, onOpenAnnouncement }: DashboardProps) {
   const { t } = useI18n();
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const canSeeAnnouncements = user.permissions.includes("communication:consultation");
 
   useEffect(() => {
     getDashboardStats().then(setStats).catch(() => setStats(null));
@@ -30,6 +33,7 @@ export function Dashboard({ user }: DashboardProps) {
 
   return (
     <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 900 }}>
+      {canSeeAnnouncements && onOpenAnnouncement && <AnnouncementBanner onOpen={onOpenAnnouncement} />}
       <h1 style={{ fontFamily: "var(--font-title)", fontSize: 22, marginBottom: 4 }}>{t("dash.welcome", "Bienvenue")}, {user.username}</h1>
       <p style={{ color: "var(--muted)", marginTop: 0 }}>{t("dash.subtitle", "Vue d'ensemble de votre maison d'édition.")}</p>
 

@@ -880,3 +880,13 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Vérifications :** typecheck front + back OK ; build OK ; tests du module (10, dont 2 nouveaux : relance ciblée = seuls les non-accusés, refus de relance sur brouillon). Suite backend relancée.
 
 **Reste (module Communication) :** inc 6 (bannière Urgent/Critique sur le tableau de bord + archivage automatique à l'expiration) — dernier incrément.
+
+### 14/07/2026 (suite) — Babillard d'annonces : incrément 6 (bannière + archivage auto) — **module terminé**
+
+**Fait :** dernier incrément du Centre de Communication Interne.
+- **Bannière défilante** en tête du tableau de bord (`AnnouncementBanner`) : les annonces **Urgentes/Critiques** qui ciblent l'utilisateur défilent en continu (CSS, en pause au survol), visibles dès la connexion ; clic → ouvre l'annonce ; le bandeau disparaît s'il n'y a rien d'urgent. Endpoint `GET /announcements/banner` (consultation). Fond bleu marine, étiquette de priorité aux couleurs de la charte, liseré rouge si une annonce critique est active.
+- **Archivage automatique à l'expiration** : `sweepExpiredAnnouncements()` — balayage paresseux (pas de tâche planifiée, cf. JOURNAL_TECHNIQUE) déclenché aux consultations (fil, gestion, bannière) ; les annonces publiées dont la date d'expiration est passée passent en « archivée », journalisées comme action système (userId null).
+
+**Vérifications :** typecheck front + back OK ; build OK ; tests du module : **12** (dont archivage auto d'une annonce expirée + bandeau ne contenant que les urgentes/critiques). Suite backend relancée.
+
+**➡️ Le module Centre de Communication Interne / Babillard d'annonces est complet** (6 incréments) : socle backend, écran, cloche cliquable, temps réel + sonnerie + pop-up + préférences, relances de lecture, bannière + archivage automatique. Extensions futures possibles (calendrier partagé, sondages, anniversaires automatiques, newsletter) sous le même pôle « Communication interne ».

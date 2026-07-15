@@ -522,3 +522,23 @@ textarea:not([disabled]):focus {
 [contenteditable][data-placeholder]:empty::before { content: attr(data-placeholder); color: var(--muted); }
 [contenteditable] ul { list-style: disc; padding-left: 22px; }
 [contenteditable] ol { list-style: decimal; padding-left: 22px; }
+
+/* Bandeau défilant des annonces urgentes/critiques (tableau de bord). */
+@keyframes ecl-banner-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ecl-banner-track {
+  animation: ecl-banner-scroll 30s linear infinite;
+  will-change: transform;
+}
+.ecl-banner-viewport:hover .ecl-banner-track { animation-play-state: paused; }
+@keyframes ecl-banner-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.ecl-banner-pulse { animation: ecl-banner-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ecl-banner-track { animation: none; }
+  .ecl-banner-pulse { animation: none; }
+}

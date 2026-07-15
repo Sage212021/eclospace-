@@ -129,6 +129,36 @@ export async function publishAnnouncement(
   return { recipients: userIds.length };
 }
 
+// Archivage automatique à l'expiration (§ « durée de publication »). Le projet
+// n'a pas de tâche planifiée (cf. JOURNAL_TECHNIQUE) : on balaie paresseusement
+// les annonces publiées dont la date d'expiration est passée, au fil des
+// consultations (fil, gestion, bannière). Journalisé comme action système
+// (userId null). Idempotent et borné (peu d'annonces expirent à la fois).
+export async function sweepExpiredAnnouncements(): Promise<number> {
+  const now = new Date();
+  const expired = await prisma.announcement.findMany({
+    where: { status: "publiee", deletedAt: null, expiresAt: { not: null, lt: now } },
+    select: { id: true },
+    take: 200,
+  });
+  if (expired.length === 0) return 0;
+
+  await prisma.announcement.updateMany({
+    where: { id: { in: expired.map((a) => a.id) } },
+    data: { status: "archivee" },
+  });
+  for (const a of expired) {
+    await writeAuditLog({
+      userId: null,
+      action: "status_change",
+      entityType: "announcement",
+      entityId: a.id,
+      newValues: { status: "archivee", auto: true, reason: "expired" },
+    });
+  }
+  return expired.length;
+}
+
 // Relance de lecture : re-notifie les destinataires « concernés » d'une annonce
 // publiée — ceux qui n'ont pas accusé réception si la lecture est obligatoire,
 // sinon ceux qui n'ont pas encore lu. Réutilise la cloche, le temps réel et

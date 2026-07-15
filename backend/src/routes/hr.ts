@@ -14,6 +14,7 @@ const employeeSchema = z.object({
   position: z.string().optional(),
   manager_id: z.string().uuid().optional(),
   hire_date: z.string().datetime().optional(),
+  birth_date: z.string().datetime().optional(),
   // Arrivée (Ch. 19 §19.3) : création du compte utilisateur avec le rôle du
   // poste, dans le même mouvement que le dossier — champs optionnels, aucun
   // compte n'est créé si absents (bénévoles, dossiers sans accès système).
@@ -32,6 +33,7 @@ const employeeUpdateSchema = z.object({
   status: z.nativeEnum(EmployeeStatus).optional(),
   position: z.string().optional(),
   manager_id: z.string().uuid().nullable().optional(),
+  birth_date: z.string().datetime().nullable().optional(),
 });
 
 const hrContractSchema = z.object({
@@ -111,6 +113,7 @@ export default async function hrRoutes(fastify: FastifyInstance) {
           position: body.position,
           managerId: body.manager_id,
           hireDate: body.hire_date ? new Date(body.hire_date) : undefined,
+          birthDate: body.birth_date ? new Date(body.birth_date) : undefined,
           createdBy: request.user!.id,
         },
       });
@@ -207,6 +210,7 @@ export default async function hrRoutes(fastify: FastifyInstance) {
         status: parsed.data.status,
         position: parsed.data.position,
         managerId: parsed.data.manager_id,
+        ...(parsed.data.birth_date !== undefined ? { birthDate: parsed.data.birth_date ? new Date(parsed.data.birth_date) : null } : {}),
         updatedBy: request.user!.id,
       },
     });

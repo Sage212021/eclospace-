@@ -84,8 +84,8 @@ interface HrPageProps {
 }
 
 type HrModal =
-  | { kind: "employee"; firstName: string; lastName: string; position: string; departmentId: string }
-  | { kind: "mobility"; employee: Employee; position: string }
+  | { kind: "employee"; firstName: string; lastName: string; position: string; departmentId: string; birthDate: string }
+  | { kind: "mobility"; employee: Employee; position: string; birthDate: string }
   | { kind: "departure"; employee: Employee; date: string }
   | { kind: "view-confidential"; employee: Employee; baseSalary: string; notes: string }
   | { kind: "edit-confidential"; employee: Employee; baseSalary: string }
@@ -137,7 +137,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   async function submitEmployee() {
     if (modal?.kind !== "employee" || !modal.firstName.trim() || !modal.lastName.trim()) return;
     try {
-      await createEmployee({ first_name: modal.firstName.trim(), last_name: modal.lastName.trim(), position: modal.position || undefined, department_id: modal.departmentId || undefined });
+      await createEmployee({ first_name: modal.firstName.trim(), last_name: modal.lastName.trim(), position: modal.position || undefined, department_id: modal.departmentId || undefined, birth_date: modal.birthDate ? new Date(modal.birthDate).toISOString() : undefined });
       setMessage(t("hr.msg.file_created", "Dossier collaborateur créé."));
       setModal(null);
       await refresh();
@@ -149,7 +149,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   async function submitMobility() {
     if (modal?.kind !== "mobility") return;
     try {
-      await updateEmployee(modal.employee.id, { position: modal.position });
+      await updateEmployee(modal.employee.id, { position: modal.position, birth_date: modal.birthDate ? new Date(modal.birthDate).toISOString() : null });
       setMessage(t("hr.msg.mobility_saved", "Mobilité enregistrée."));
       setModal(null);
       await refresh();
@@ -278,7 +278,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
         title={t("hr.files", "Dossiers collaborateurs")}
         icon={<IconAdmin />}
         subtitle={t("hr.files_sub", "Statut, poste, congés et cycle de vie du compte.")}
-        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "employee", firstName: "", lastName: "", position: "", departmentId: "" })}>{t("hr.add_employee", "+ Collaborateur")}</Button> : undefined}
+        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "employee", firstName: "", lastName: "", position: "", departmentId: "", birthDate: "" })}>{t("hr.add_employee", "+ Collaborateur")}</Button> : undefined}
       >
         {employees.length === 0 ? (
           <Empty>{t("hr.no_employee", "Aucun collaborateur.")}</Empty>
@@ -299,7 +299,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, position: employee.position ?? "" })}>{t("hr.mobility", "Mobilité")}</Button>}
+                  {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, position: employee.position ?? "", birthDate: employee.birthDate ? employee.birthDate.slice(0, 10) : "" })}>{t("hr.mobility", "Mobilité")}</Button>}
                   {canAdminister && !employee.departureDate && <Button variant="view" size="sm" onClick={() => setModal({ kind: "departure", employee, date: new Date().toISOString().slice(0, 10) })}>{t("hr.departure_btn", "Départ")}</Button>}
                   {canAdminister && employee.user?.status === "active" && <Button variant="danger" size="sm" onClick={() => handleSuspend(employee)}>{t("hr.suspend", "Suspendre")}</Button>}
                   {canAdminister && employee.user?.status === "suspended" && <Button variant="add" size="sm" onClick={() => handleReinstate(employee)}>{t("hr.reinstate", "Réactiver")}</Button>}
@@ -406,6 +406,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
           <Field label={t("hr.first_name", "Prénom")}><input value={modal.firstName} onChange={(e) => setModal({ ...modal, firstName: e.target.value })} autoFocus /></Field>
           <Field label={t("hr.last_name", "Nom")}><input value={modal.lastName} onChange={(e) => setModal({ ...modal, lastName: e.target.value })} /></Field>
           <Field label={t("hr.position_opt", "Poste (optionnel)")}><input value={modal.position} onChange={(e) => setModal({ ...modal, position: e.target.value })} /></Field>
+          <Field label={t("hr.birth_date_opt", "Date de naissance (optionnel)")}><input type="date" value={modal.birthDate} onChange={(e) => setModal({ ...modal, birthDate: e.target.value })} /></Field>
           <Field label={t("hr.department_id_opt", "Identifiant du département (optionnel)")}><input value={modal.departmentId} onChange={(e) => setModal({ ...modal, departmentId: e.target.value })} /></Field>
         </Modal>
       )}
@@ -414,6 +415,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
         <Modal title={t("hr.mobility_title", "Mobilité interne")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitMobility} confirmLabel={t("hr.save", "Enregistrer")} />}>
           <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
           <Field label={t("hr.new_position", "Nouveau poste")}><input value={modal.position} onChange={(e) => setModal({ ...modal, position: e.target.value })} autoFocus /></Field>
+          <Field label={t("hr.birth_date_opt", "Date de naissance (optionnel)")}><input type="date" value={modal.birthDate} onChange={(e) => setModal({ ...modal, birthDate: e.target.value })} /></Field>
         </Modal>
       )}
 

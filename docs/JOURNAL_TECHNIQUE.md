@@ -301,3 +301,30 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 ### Vidéos
 - Gérées **par lien** (http/https) en v1 plutôt qu'hébergées, pour rester
   compatible avec une connexion modeste (contrainte du projet).
+
+## Centre de Communication Interne — Bulletin d'actualités / Newsletter (15/07/2026)
+
+### Périmètre « maison » du digest (confidentialité)
+- Un bulletin est **envoyé à tout le personnel** ; le compilateur
+  (`lib/newsletters.ts` → `compileNewsletter`) n'agrège donc **que** les
+  actualités explicitement destinées à « tous » : annonces publiées ciblées
+  `tous` + événements ciblés `tous`, sur la période. Un contenu ciblé sur un
+  pôle/rôle/personne ne remonte **jamais** dans un bulletin général — cohérent
+  avec la règle « ne pas exposer à un pôle ce qui concerne un autre ».
+
+### Instantané figé à l'envoi (immuabilité de ce qui a été diffusé)
+- À l'envoi, on **fige** la liste compilée dans `items_snapshot` (JSON) et on
+  enregistre `sent_at` + `recipients`. Un bulletin envoyé est **verrouillé** :
+  ni modifiable ni renvoyable (409). La consultation d'un bulletin envoyé montre
+  l'instantané (ce qui a réellement été diffusé), pas une recompilation qui
+  divergerait si une annonce est modifiée/supprimée après coup.
+
+### Réutilisation de l'existant (aucune table modifiée)
+- **E-mail** : `buildNewsletterEmail` (`lib/documentEmail.ts`) reprend le papier
+  à en-tête maison et l'infrastructure `sendMail` ; « Répondre à » = e-mail de
+  l'éditeur qui envoie (`senderIdentity`). Envoi au meilleur effort, sans SMTP
+  (dev/test) l'e-mail est journalisé.
+- **Permissions** : module `communication` réutilisé (consultation pour lire les
+  bulletins envoyés, saisie pour composer/envoyer) — aucune nouvelle permission.
+- **Audit** : `entity_type = "newsletter"`, mapping sur l'enum existant
+  (création → `create`, édition → `update`, envoi/suppression → `status_change`).

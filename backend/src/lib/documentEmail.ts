@@ -89,6 +89,49 @@ export function buildNotificationEmail(opts: { title: string; body: string; prio
   return { subject, html: emailShell({ title: subject, message: "", body }), text };
 }
 
+// --- Newsletter / bulletin d'actualités interne ---------------------------
+// Digest périodique : introduction facultative + liste des actualités de la
+// période (annonces publiées et événements), sur le papier à en-tête maison.
+export interface NewsletterItemForEmail {
+  kind: "announcement" | "event";
+  title: string;
+  date: string | null;
+  preview: string | null;
+}
+
+export function buildNewsletterEmail(opts: {
+  title: string;
+  intro: string | null;
+  periodStart: string;
+  periodEnd: string;
+  items: NewsletterItemForEmail[];
+}): DocumentEmail {
+  const day = (iso: string | null) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
+  const rows = opts.items
+    .map((it) => {
+      const icon = it.kind === "announcement" ? "📣" : "📅";
+      const meta = day(it.date);
+      const preview = it.preview ? `<div style="font-size:13px;color:#6b7280;margin-top:2px">${esc(it.preview)}</div>` : "";
+      return `<div style="padding:10px 0;border-bottom:1px solid #eef1f6">
+        <div style="font-size:12px;color:#a87d14;font-family:monospace">${esc(meta)}</div>
+        <div style="font-size:15px;color:#16233d;font-weight:bold">${icon} ${esc(it.title)}</div>
+        ${preview}
+      </div>`;
+    })
+    .join("");
+  const empty = opts.items.length === 0 ? `<p style="font-size:14px;color:#6b7280">Aucune actualité sur cette période.</p>` : rows;
+  const introHtml = opts.intro?.trim() ? `<p style="font-size:14px;line-height:1.6;margin:0 0 16px;white-space:pre-wrap">${esc(opts.intro.trim())}</p>` : "";
+  const body = `
+    <div style="font-family:Georgia,serif;font-size:20px;margin:0 0 4px;color:#16233d">${esc(opts.title)}</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:16px">${esc(day(opts.periodStart))} — ${esc(day(opts.periodEnd))}</div>
+    ${introHtml}
+    ${empty}
+    <p style="font-size:12px;color:#6b7280;margin-top:18px">Bulletin d'actualités interne d'Éclosion Édition. Connectez-vous à l'ERP pour en savoir plus.</p>`;
+  const subject = `${opts.title} — ${HOUSE.brand}`;
+  const text = `${opts.title}\n${day(opts.periodStart)} — ${day(opts.periodEnd)}\n\n${opts.intro?.trim() ? opts.intro.trim() + "\n\n" : ""}${opts.items.map((it) => `- ${day(it.date)} ${it.title}`).join("\n") || "Aucune actualité."}\n\n${HOUSE.legalName} · ${HOUSE.website}`;
+  return { subject, html: emailShell({ title: subject, message: "", body }), text };
+}
+
 // E-mail d'invitation à signer un devis de prestation en ligne (③). Corps
 // sobre : rappel du montant, bouton vers le lien de signature unique.
 export function buildQuoteSignEmail(opts: {

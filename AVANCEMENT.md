@@ -955,3 +955,15 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Vérifications :** typecheck front + back OK ; build OK ; test ajouté (agrégation annonce+événement visible pour le destinataire, invisible pour un tiers). Tests communication-calendar : **12**. Suite backend relancée.
 
 **Reste (Newsletter) :** inc 2 (digest périodique : compiler un bulletin d'actualités sur une période, aperçu, envoi par e-mail à une audience, archive des bulletins).
+
+### 15/07/2026 — Centre de Communication : Bulletin d'actualités / Newsletter (inc 2, socle backend)
+
+**Fait :** 4ᵉ composant du Centre de Communication Interne — le **Bulletin d'actualités** (« newsletter »), digest périodique composable puis diffusable par e-mail.
+- **Modèle** `Newsletter` (titre, intro facultative, période début/fin, statut *brouillon*/*envoyée*, auteur, date d'envoi, nombre de destinataires, instantané figé des actualités) + enum `NewsletterStatus`. Migration `20260715184014_newsletters`. Aucune table existante modifiée.
+- **Compilateur** (`lib/newsletters.ts`) : rassemble, pour une période, **uniquement les actualités de portée MAISON** — annonces publiées diffusées à « tous » + événements ouverts à « tous ». **Choix de confidentialité** : un bulletin partant à tout le personnel, on n'y agrège jamais un contenu ciblé sur un pôle/rôle/personne.
+- **API** (`routes/newsletters.ts`, module « communication ») : liste (consultants ne voient que les bulletins **envoyés** ; éditeurs voient aussi les brouillons), prévisualisation d'une période, création/édition de brouillon, **envoi** (compile → fige l'instantané → e-mail à tout le personnel actif, sur le papier à en-tête maison, au meilleur effort), suppression logique. Cycle de vie verrouillé : un bulletin envoyé n'est ni modifiable ni renvoyable (409).
+- **E-mail** (`buildNewsletterEmail`) : bulletin mis en page avec l'en-tête Éclosion Édition, liste datée des actualités, « Répondre à » = e-mail de l'éditeur qui envoie.
+
+**Vérifications :** typecheck backend OK ; migration appliquée ; **4 tests** ajoutés (permissions, compilation « maison » qui exclut le ciblé + le hors-période, cycle brouillon→envoyé figé, visibilité consultant). Suite backend : **313 tests** (le seul échec observé en run complet est un *timeout* de charge sur un test RH sans lien — vert en isolation).
+
+**Reste (Newsletter) :** inc 3 — écran « Bulletin d'actualités » (composer/prévisualiser/envoyer, consulter les bulletins envoyés), bilingue FR/EN, entrée de navigation.

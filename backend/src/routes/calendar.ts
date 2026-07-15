@@ -176,6 +176,19 @@ export default async function calendarRoutes(fastify: FastifyInstance) {
     return reply.send([...stored, ...birthdays].sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()));
   });
 
+  // ── Anniversaires du JOUR (pour l'encart du tableau de bord) ───────────────
+  // Ne renvoie que les anniversaires d'aujourd'hui : l'encart ne « sort » donc
+  // que le jour même, jamais à l'avance ni toute l'année. Aucune date de
+  // naissance n'est exposée — seulement le nom des personnes fêtées.
+  fastify.get("/api/v1/calendar/today-birthdays", { preHandler: requirePermission("communication", "consultation") }, async (_request, reply) => {
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 1);
+    const birthdays = await buildBirthdayEvents(start, end);
+    return reply.send(birthdays.map((b) => ({ id: b.id, name: b.person })));
+  });
+
   // ── Détail d'un événement ──────────────────────────────────────────────────
   fastify.get("/api/v1/calendar/events/:id", { preHandler: requirePermission("communication", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };

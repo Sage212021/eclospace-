@@ -276,6 +276,52 @@ describe("communication — babillard d'annonces (incrément 1)", () => {
     expect(Array.isArray(body.users)).toBe(true);
   });
 
+  it("archive automatiquement une annonce expirée (balayage paresseux)", async () => {
+    const draft = await createDraft(pubCookie, {
+      title: `Expirée ${rnd}`,
+      body_html: "<p>déjà expirée</p>",
+      expires_at: new Date(Date.now() - 86_400_000).toISOString(), // hier
+      targets: [{ type: "utilisateur", id: userAId }],
+    });
+    const id = draft.json().id as string;
+    await app.inject({ method: "POST", url: `/api/v1/announcements/${id}/publish`, headers: { cookie: pubCookie } });
+
+    // Une consultation du fil déclenche le balayage d'archivage.
+    await app.inject({ method: "GET", url: "/api/v1/announcements", headers: { cookie: aCookie } });
+
+    const row = await prisma.announcement.findUniqueOrThrow({ where: { id } });
+    expect(row.status).toBe("archivee");
+    // Journalisée comme action système (userId null).
+    const audit = await prisma.auditLog.findFirst({ where: { entityType: "announcement", entityId: id, userId: null } });
+    expect(audit?.action).toBe("status_change");
+  });
+
+  it("alimente le bandeau avec les annonces urgentes/critiques ciblées", async () => {
+    const urgent = await createDraft(pubCookie, {
+      title: `Bandeau urgent ${rnd}`,
+      body_html: "<p>à la une</p>",
+      priority: "critique",
+      targets: [{ type: "utilisateur", id: userAId }],
+    });
+    const urgentId = urgent.json().id as string;
+    await app.inject({ method: "POST", url: `/api/v1/announcements/${urgentId}/publish`, headers: { cookie: pubCookie } });
+
+    const normal = await createDraft(pubCookie, {
+      title: `Bandeau normal ${rnd}`,
+      body_html: "<p>ordinaire</p>",
+      priority: "normale",
+      targets: [{ type: "utilisateur", id: userAId }],
+    });
+    const normalId = normal.json().id as string;
+    await app.inject({ method: "POST", url: `/api/v1/announcements/${normalId}/publish`, headers: { cookie: pubCookie } });
+
+    const banner = await app.inject({ method: "GET", url: "/api/v1/announcements/banner", headers: { cookie: aCookie } });
+    expect(banner.statusCode).toBe(200);
+    const ids = (banner.json() as { id: string }[]).map((x) => x.id);
+    expect(ids).toContain(urgentId); // critique → dans le bandeau
+    expect(ids).not.toContain(normalId); // normale → hors bandeau
+  });
+
   it("expose les préférences de notification (défauts) et les met à jour", async () => {
     const get = await app.inject({ method: "GET", url: "/api/v1/me/notification-preferences", headers: { cookie: aCookie } });
     expect(get.statusCode).toBe(200);

@@ -2578,6 +2578,18 @@ export function getAnnouncementsUnreadCount() {
   return request<{ count: number }>("/api/v1/announcements/unread-count");
 }
 
+export interface AnnouncementBannerItem {
+  id: string;
+  title: string;
+  priority: "urgente" | "critique";
+  preview: string;
+  acknowledged: boolean;
+}
+
+export function getAnnouncementBanner() {
+  return request<AnnouncementBannerItem[]>("/api/v1/announcements/banner");
+}
+
 export function listAnnouncementsManage() {
   return request<AnnouncementManageItem[]>("/api/v1/announcements/manage");
 }

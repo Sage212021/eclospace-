@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { sanitizeAnnouncementHtml, announcementPreview } from "../lib/announcementHtml.js";
-import { publishAnnouncement, remindUnread } from "../lib/announcements.js";
+import { publishAnnouncement, remindUnread, sweepExpiredAnnouncements } from "../lib/announcements.js";
 
 // Centre de Communication Interne — Babillard d'annonces (module « communication »).
 // Diffusion d'annonces officielles ciblées, suivi de lecture, journalisation.
@@ -143,6 +143,7 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
       const parsed = feedQuery.safeParse(request.query);
       if (!parsed.success) return badRequest(reply, parsed.error.issues);
       const { unread, category, priority, status } = parsed.data;
+      await sweepExpiredAnnouncements().catch(() => {});
 
       const receipts = await prisma.announcementReceipt.findMany({
         where: {
@@ -180,6 +181,38 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // ── Bannière : annonces Urgentes/Critiques actives qui me ciblent ──────────
+  // Alimente le bandeau défilant en tête du tableau de bord (visible dès la
+  // connexion). Balaie d'abord les annonces expirées (archivage automatique).
+  fastify.get(
+    "/api/v1/announcements/banner",
+    { preHandler: requirePermission("communication", "consultation") },
+    async (request, reply) => {
+      await sweepExpiredAnnouncements().catch(() => {});
+      const receipts = await prisma.announcementReceipt.findMany({
+        where: {
+          userId: request.user!.id,
+          announcement: {
+            deletedAt: null,
+            status: "publiee",
+            priority: { in: ["urgente", "critique"] },
+          },
+        },
+        include: { announcement: { select: { id: true, title: true, bodyHtml: true, priority: true, pinned: true, publishedAt: true } } },
+      });
+      receipts.sort((a, b) => (b.announcement.publishedAt?.getTime() ?? 0) - (a.announcement.publishedAt?.getTime() ?? 0));
+      return reply.send(
+        receipts.map((r) => ({
+          id: r.announcement.id,
+          title: r.announcement.title,
+          priority: r.announcement.priority,
+          preview: announcementPreview(r.announcement.bodyHtml, 120),
+          acknowledged: Boolean(r.acknowledgedAt),
+        })),
+      );
+    },
+  );
+
   // ── Nombre de non-lues (pour le badge de la cloche, complément à /notifications) ──
   fastify.get(
     "/api/v1/announcements/unread-count",
@@ -197,6 +230,7 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
     "/api/v1/announcements/manage",
     { preHandler: requirePermission("communication", "saisie") },
     async (request, reply) => {
+      await sweepExpiredAnnouncements().catch(() => {});
       const rows = await prisma.announcement.findMany({
         where: {
           deletedAt: null,

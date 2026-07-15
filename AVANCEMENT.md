@@ -890,3 +890,13 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Vérifications :** typecheck front + back OK ; build OK ; tests du module : **12** (dont archivage auto d'une annonce expirée + bandeau ne contenant que les urgentes/critiques). Suite backend relancée.
 
 **➡️ Le module Centre de Communication Interne / Babillard d'annonces est complet** (6 incréments) : socle backend, écran, cloche cliquable, temps réel + sonnerie + pop-up + préférences, relances de lecture, bannière + archivage automatique. Extensions futures possibles (calendrier partagé, sondages, anniversaires automatiques, newsletter) sous le même pôle « Communication interne ».
+
+### 14/07/2026 (suite) — Calendrier partagé & événements : incrément 1 (socle backend)
+
+**Fait :** 2ᵉ composant du Centre de Communication Interne, sous le même pôle et le même module de permissions (`communication`). 100 % additif.
+- **Schéma** (migration `20260714200000_calendar_events`) : `calendar_events` (titre, description, type — réunion/échéance/formation/sortie/cérémonie/autre, début, fin, journée entière, lieu, auteur, suppression logique) et `calendar_event_targets` (ciblage polymorphe, réutilise l'enum `AnnouncementTargetType`).
+- **API** (`routes/calendar.ts`) : liste par plage de dates **filtrée sur la visibilité** (un utilisateur ne voit que les événements qui le ciblent : tous / son département / ses rôles / lui-même ; l'administration voit tout), détail, création/modification/suppression logique (réservées `communication:saisie`, auteur ou admin). Réutilise le sélecteur de cibles et la résolution d'audience des annonces.
+- **Audit** : création, modification, suppression.
+- **Tests** : `tests/communication-calendar.test.ts` (visibilité par département, permissions, filtre de plage, gestion auteur-seul, plage de dates incohérente, audit).
+
+**Reste (calendrier) :** inc 2 (écran calendrier : vue mensuelle + formulaire) → inc 3 (anniversaires automatiques : ajout d'une date de naissance à la fiche employé + génération) → inc 4 (rappels/notifications d'événement).

@@ -22,6 +22,7 @@ import { AuditLogPage } from "./pages/AuditLogPage";
 import { UsersRolesPage } from "./pages/UsersRolesPage";
 import { DiagnosticsPage } from "./pages/DiagnosticsPage";
 import { AnnouncementsPage } from "./pages/AnnouncementsPage";
+import { CalendarPage } from "./pages/CalendarPage";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { PresenceToasts } from "./components/PresenceToasts";
@@ -49,6 +50,7 @@ type PageId =
   | "settings"
   | "users-roles"
   | "communication"
+  | "calendar"
   | "diagnostics";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
@@ -107,7 +109,10 @@ const NAV_POLES: NavPole[] = [
   },
   {
     label: "Communication interne",
-    items: [{ key: "cm-babillard", label: "Babillard d'annonces", permission: "communication:consultation" }],
+    items: [
+      { key: "cm-babillard", label: "Babillard d'annonces", permission: "communication:consultation" },
+      { key: "cm-calendrier", label: "Calendrier partagé", permission: "communication:consultation" },
+    ],
   },
   {
     label: "Pilotage",
@@ -144,6 +149,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ad-parametres": { page: "settings" },
   "ad-diagnostics": { page: "diagnostics" },
   "cm-babillard": { page: "communication" },
+  "cm-calendrier": { page: "calendar" },
   "pi-direction": { page: "direction" },
   "pi-rapports": { page: "reports" },
   "pi-journal": { page: "audit" },
@@ -477,6 +483,9 @@ export function App() {
             prefs={notifPrefs}
             onPrefsChange={setNotifPrefs}
           />
+        )}
+        {leaf && "page" in leaf && leaf.page === "calendar" && (
+          <CalendarPage canPublish={permissions.has("communication:saisie")} />
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
       </div>

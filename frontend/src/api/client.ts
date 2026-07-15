@@ -2645,3 +2645,54 @@ export function getNotificationPreferences() {
 export function setNotificationPreferences(input: Partial<NotificationPreferences>) {
   return request<{ ok: true }>("/api/v1/me/notification-preferences", { method: "PUT", body: JSON.stringify(input) });
 }
+
+// ── Calendrier partagé & événements ──────────────────────────────────────────
+export type CalendarEventType = "reunion" | "echeance" | "formation" | "sortie" | "ceremonie" | "autre";
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  type: CalendarEventType;
+  starts_at: string;
+  ends_at: string | null;
+  all_day: boolean;
+  location: string | null;
+  author: { id: string; username: string } | null;
+  can_manage: boolean;
+}
+
+export interface CalendarEventDetail extends CalendarEvent {
+  targets?: AnnouncementTargetRef[];
+}
+
+export interface CalendarEventInput {
+  title: string;
+  description?: string | null;
+  type: CalendarEventType;
+  starts_at: string;
+  ends_at?: string | null;
+  all_day?: boolean;
+  location?: string | null;
+  targets: { type: AnnouncementTargetType; id?: string }[];
+}
+
+export function listCalendarEvents(from: string, to: string) {
+  return request<CalendarEvent[]>(`/api/v1/calendar/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+}
+
+export function getCalendarEvent(id: string) {
+  return request<CalendarEventDetail>(`/api/v1/calendar/events/${id}`);
+}
+
+export function createCalendarEvent(input: CalendarEventInput) {
+  return request<{ id: string }>("/api/v1/calendar/events", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateCalendarEvent(id: string, input: Partial<CalendarEventInput>) {
+  return request<{ ok: true }>(`/api/v1/calendar/events/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function deleteCalendarEvent(id: string) {
+  return request<{ ok: true }>(`/api/v1/calendar/events/${id}`, { method: "DELETE" });
+}

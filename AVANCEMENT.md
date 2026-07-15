@@ -900,3 +900,16 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 - **Tests** : `tests/communication-calendar.test.ts` (visibilité par département, permissions, filtre de plage, gestion auteur-seul, plage de dates incohérente, audit).
 
 **Reste (calendrier) :** inc 2 (écran calendrier : vue mensuelle + formulaire) → inc 3 (anniversaires automatiques : ajout d'une date de naissance à la fiche employé + génération) → inc 4 (rappels/notifications d'événement).
+
+### 14/07/2026 (suite) — Calendrier partagé : incrément 2 (écran)
+
+**Fait :** l'écran **Communication interne → Calendrier partagé**, bilingue FR/EN.
+- **Nouvelle feuille de menu** « Calendrier partagé » (à côté du Babillard).
+- **Vue mensuelle** : grille lundi→dimanche (6 semaines), jour courant surligné, navigation ‹ / Aujourd'hui / ›. Chaque jour affiche ses événements (liseré coloré par type, heure de début), « +N » au-delà de 3.
+- **Détail** au clic sur un événement : type, date/heure (ou journée entière), lieu, description, auteur ; boutons Modifier/Supprimer si l'utilisateur peut gérer l'événement.
+- **Formulaire** (publieurs) : titre, type (réunion/échéance/formation/sortie/cérémonie/autre), date, début/fin (ou journée entière), lieu, description, et **constructeur de ciblage** (tous/département/rôle/employé) — réutilise le sélecteur de cibles des annonces. Clic sur une case vide → création pré-datée.
+- Chaque utilisateur ne voit que les événements qui le concernent (visibilité serveur, inc 1).
+
+**Vérifications :** typecheck front + back OK ; build OK ; round-trip vérifié sur le **serveur HTTP réel** (création d'un événement → présent dans le mois, absent du mois suivant, `can_manage` correct).
+
+**Reste (calendrier) :** inc 3 (anniversaires automatiques : date de naissance sur la fiche employé + génération) → inc 4 (rappels/notifications d'événement).

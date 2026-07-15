@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { confirmIdentifierChange, fetchMe, logout, stopImpersonation, type EffectiveUser } from "./api/client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { confirmIdentifierChange, fetchMe, getNotificationPreferences, logout, stopImpersonation, type EffectiveUser, type NotificationPreferences } from "./api/client";
 import { useI18n } from "./i18n";
 import { Login } from "./pages/Login";
 import { QuoteSignPage } from "./pages/QuoteSignPage";
@@ -25,7 +25,9 @@ import { AnnouncementsPage } from "./pages/AnnouncementsPage";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { PresenceToasts } from "./components/PresenceToasts";
-import { usePresence } from "./hooks/usePresence";
+import { AnnouncementToasts, type ToastItem } from "./components/AnnouncementToasts";
+import { usePresence, type AnnouncementPush } from "./hooks/usePresence";
+import { playNotificationSound } from "./lib/notificationSound";
 
 // Cible d'un élément de menu : soit une page dédiée, soit une liste de
 // manuscrits filtrée sur une étape du workflow (option « liste filtrée »).
@@ -165,12 +167,40 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>({ kind: "leaf", key: "dashboard" });
   const [announcementToOpen, setAnnouncementToOpen] = useState<string | null>(null);
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  // Compteur incrémenté à chaque nouvelle annonce temps réel : sert de signal
+  // à la cloche (TopBar) pour recharger son badge de non-lus.
+  const [notifTick, setNotifTick] = useState(0);
+  const toastId = useRef(1);
   const [confirmBanner, setConfirmBanner] = useState<{ tone: "ok" | "alert"; text: string } | null>(null);
   // Barre latérale : en tiroir escamotable sur mobile (piloté par CSS ; l'état
   // ne sert qu'à ouvrir/fermer le tiroir, fermé par défaut).
   const [navOpen, setNavOpen] = useState(false);
 
-  const { presence, join, disconnect } = usePresence(Boolean(user));
+  // Préférences de notification (son/visuel/e-mail/catégories) : lues à jour
+  // dans une ref pour le gestionnaire temps réel sans le recréer.
+  const notifPrefsRef = useRef<NotificationPreferences | null>(null);
+  notifPrefsRef.current = notifPrefs;
+
+  // Réception temps réel d'une nouvelle annonce : cloche + sonnerie + pop-up,
+  // selon les préférences de l'utilisateur.
+  const handleAnnouncementPush = useCallback((a: AnnouncementPush) => {
+    const prefs = notifPrefsRef.current;
+    // La notification persistée existe toujours : on rafraîchit la cloche.
+    setNotifTick((n) => n + 1);
+    // Filtrage par catégories choisies (null = toutes).
+    const allowed = !prefs?.categories || (a.category != null && prefs.categories.includes(a.category));
+    if (!allowed) return;
+    if (prefs?.sound_enabled !== false) playNotificationSound(prefs?.sound_volume ?? 70);
+    if (prefs?.visual_enabled !== false) {
+      const id = toastId.current++;
+      setToasts((list) => [...list, { ...a, toastId: id }]);
+      window.setTimeout(() => setToasts((list) => list.filter((x) => x.toastId !== id)), 7000);
+    }
+  }, []);
+
+  const { presence, join, disconnect } = usePresence(Boolean(user), handleAnnouncementPush);
   const { applyLang } = useI18n();
 
   const refreshUser = () =>
@@ -204,6 +234,16 @@ export function App() {
   useEffect(() => {
     refreshUser().finally(() => setLoading(false));
   }, []);
+
+  // Charge les préférences de notification à la connexion (et au changement de
+  // compte, ex. imitation d'utilisateur).
+  useEffect(() => {
+    if (!user) {
+      setNotifPrefs(null);
+      return;
+    }
+    getNotificationPreferences().then(setNotifPrefs).catch(() => {});
+  }, [user?.id]);
 
   // Signale le pôle/module courant à chaque changement de vue (présence).
   useEffect(() => {
@@ -297,6 +337,15 @@ export function App() {
     <div className="app-shell">
       {/* Notifications discrètes de connexion/déconnexion (sans identités). */}
       <PresenceToasts total={presence.total} />
+      {/* Pop-up d'aperçu des nouvelles annonces (temps réel). */}
+      <AnnouncementToasts
+        toasts={toasts}
+        onOpen={(id) => {
+          setToasts([]);
+          openAnnouncement(id);
+        }}
+        onDismiss={(tid) => setToasts((list) => list.filter((x) => x.toastId !== tid))}
+      />
       {/* Layout responsive piloté par CSS (média-requêtes) : fiable sur un vrai
           téléphone, indépendant du JavaScript. La classe --open ne fait glisser
           le tiroir que sous 900px ; au-dessus, la barre reste fixe en flux. */}
@@ -317,6 +366,7 @@ export function App() {
           onOpenSettings={() => selectLeaf("ad-parametres")}
           onOpenManuscript={openManuscript}
           onOpenAnnouncement={openAnnouncement}
+          refreshSignal={notifTick}
         />
 
         {user.impersonating && (
@@ -424,6 +474,8 @@ export function App() {
             canAdminister={permissions.has("communication:administration")}
             openAnnouncementId={announcementToOpen}
             onOpened={() => setAnnouncementToOpen(null)}
+            prefs={notifPrefs}
+            onPrefsChange={setNotifPrefs}
           />
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}

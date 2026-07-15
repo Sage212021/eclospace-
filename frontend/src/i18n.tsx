@@ -948,6 +948,19 @@ const EN: Record<string, string> = {
   "cm.cat.anniversaire": "Birthday",
   "cm.cat.arrivee_depart": "Arrival / Departure",
   "cm.cat.info_generale": "General information",
+  // Temps réel + préférences de notification
+  "cm.new_announcement": "New announcement",
+  "cm.dismiss": "Dismiss",
+  "cm.open": "Open",
+  "cm.prefs": "My notification preferences",
+  "cm.prefs_sub": "Choose how you are notified of announcements.",
+  "cm.prefs_saved": "Preferences saved.",
+  "cm.pref_sound": "Sound",
+  "cm.pref_volume": "Volume",
+  "cm.pref_visual": "Visual pop-up",
+  "cm.pref_email": "E-mail",
+  "cm.pref_all_cats": "Notify me for all categories",
+  "cm.pref_sound_note": "The sound can only play after you first interact with the page (browser rule).",
 };
 
 interface I18nCtx {

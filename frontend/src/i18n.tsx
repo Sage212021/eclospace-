@@ -961,6 +961,7 @@ const EN: Record<string, string> = {
   "cm.pref_email": "E-mail",
   "cm.pref_all_cats": "Notify me for all categories",
   "cm.pref_sound_note": "The sound can only play after you first interact with the page (browser rule).",
+  "cm.remind": "Remind non-readers",
 };
 
 interface I18nCtx {

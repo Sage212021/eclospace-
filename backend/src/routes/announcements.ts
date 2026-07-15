@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { sanitizeAnnouncementHtml, announcementPreview } from "../lib/announcementHtml.js";
-import { publishAnnouncement } from "../lib/announcements.js";
+import { publishAnnouncement, remindUnread } from "../lib/announcements.js";
 
 // Centre de Communication Interne — Babillard d'annonces (module « communication »).
 // Diffusion d'annonces officielles ciblées, suivi de lecture, journalisation.
@@ -454,6 +454,18 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
       require_ack: ann.requireAck,
       rows,
     });
+  });
+
+  // ── Relance de lecture (auteur ou administration) ──────────────────────────
+  fastify.post("/api/v1/announcements/:id/remind", { preHandler: requirePermission("communication", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const ann = await loadManageable(request, reply, id);
+    if (!ann) return;
+    if (ann.status !== "publiee") {
+      return reply.code(409).send({ code: "not_published", message: "Seule une annonce publiée peut faire l'objet d'une relance." });
+    }
+    const result = await remindUnread(id, { id: request.user!.id, ip: request.ip });
+    return reply.send({ ok: true, reminded: result.reminded });
   });
 
   // ── Marquer lu / accuser réception (destinataire) ──────────────────────────

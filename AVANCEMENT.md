@@ -869,3 +869,14 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Vérifications :** typecheck front + back OK ; build OK ; **temps réel vérifié de bout en bout** avec un vrai client Socket.IO authentifié (publication → réception de `announcement:new` avec id/priorité/aperçu corrects). Suite backend relancée.
 
 **Reste (module Communication) :** inc 5 (relances de lecture ciblées) → inc 6 (bannière Urgent/Critique sur le tableau de bord + archivage automatique à l'expiration).
+
+### 14/07/2026 (suite) — Babillard d'annonces : incrément 5 (relances de lecture)
+
+**Fait :** l'auteur (ou l'administration) peut **relancer les personnes concernées** d'une annonce publiée.
+- **Backend** : `remindUnread()` + `POST /announcements/:id/remind` (réservé `communication:saisie`, auteur ou admin, annonce publiée). Cible ceux qui **n'ont pas accusé réception** si la lecture est obligatoire, sinon ceux qui **n'ont pas encore lu**. Réutilise la cloche, le temps réel et l'e-mail (notification « Rappel : … »), journalisé. Ne recrée aucun reçu.
+- **Frontend** : bouton **« Relancer les non-lecteurs (N) »** dans la fenêtre de suivi de lecture, affiché seulement s'il reste des destinataires concernés ; message de confirmation avec le nombre relancé.
+- **Performance** : ajout d'un **index `notifications(user_id, read_at)`** (migration additive) — la cloche interroge « mes notifications / non-lues » à chaque page et le Babillard crée une notification par destinataire ; cet index maintient ces lectures rapides à mesure que la table grandit.
+
+**Vérifications :** typecheck front + back OK ; build OK ; tests du module (10, dont 2 nouveaux : relance ciblée = seuls les non-accusés, refus de relance sur brouillon). Suite backend relancée.
+
+**Reste (module Communication) :** inc 6 (bannière Urgent/Critique sur le tableau de bord + archivage automatique à l'expiration) — dernier incrément.

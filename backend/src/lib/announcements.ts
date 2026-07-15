@@ -128,3 +128,72 @@ export async function publishAnnouncement(
 
   return { recipients: userIds.length };
 }
+
+// Relance de lecture : re-notifie les destinataires « concernés » d'une annonce
+// publiée — ceux qui n'ont pas accusé réception si la lecture est obligatoire,
+// sinon ceux qui n'ont pas encore lu. Réutilise la cloche, le temps réel et
+// l'e-mail (au meilleur effort). Ne recrée aucun reçu (ils existent déjà).
+export async function remindUnread(
+  announcementId: string,
+  actor: { id: string; ip?: string | null },
+): Promise<{ reminded: number }> {
+  const ann = await prisma.announcement.findUnique({
+    where: { id: announcementId },
+    include: { category: { select: { code: true } } },
+  });
+  if (!ann || ann.deletedAt) throw new Error("Annonce introuvable.");
+  if (ann.status !== "publiee") throw new Error("Seule une annonce publiée peut faire l'objet d'une relance.");
+
+  // « Concernés » = pas encore accusé (lecture obligatoire) ou pas encore lu.
+  const pending = await prisma.announcementReceipt.findMany({
+    where: {
+      announcementId,
+      ...(ann.requireAck ? { acknowledgedAt: null } : { readAt: null }),
+    },
+    select: { userId: true },
+  });
+  const userIds = pending.map((r) => r.userId);
+  if (userIds.length === 0) {
+    await writeAuditLog({
+      userId: actor.id,
+      action: "update",
+      entityType: "announcement",
+      entityId: announcementId,
+      newValues: { reminder: true, reminded: 0 },
+      ipAddress: actor.ip ?? null,
+    });
+    return { reminded: 0 };
+  }
+
+  const preview = announcementPreview(ann.bodyHtml);
+  const reminderTitle = `Rappel : ${ann.title}`;
+  await notifyUsers({
+    userIds,
+    type: "annonce",
+    priority: announcementNotificationPriority(ann.priority),
+    title: reminderTitle,
+    body: preview,
+    entityType: "announcement",
+    entityId: announcementId,
+    emailOverride: ann.requireAck,
+  });
+  emitToUsers(userIds, "announcement:new", {
+    id: announcementId,
+    title: reminderTitle,
+    preview,
+    priority: ann.priority,
+    category: ann.category?.code ?? null,
+    require_ack: ann.requireAck,
+  });
+
+  await writeAuditLog({
+    userId: actor.id,
+    action: "update",
+    entityType: "announcement",
+    entityId: announcementId,
+    newValues: { reminder: true, reminded: userIds.length },
+    ipAddress: actor.ip ?? null,
+  });
+
+  return { reminded: userIds.length };
+}

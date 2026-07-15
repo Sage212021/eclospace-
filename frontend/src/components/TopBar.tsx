@@ -373,14 +373,17 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
         {notifOpen && (
           <>
             <div onClick={() => setNotifOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60 }} aria-hidden="true" />
+            {/* Ancré au bord DROIT de la fenêtre (position fixe) plutôt qu'à la
+                cloche : sur mobile étroit, un panneau large accroché à la cloche
+                (qui n'est pas l'élément le plus à droite) débordait hors de
+                l'écran et coupait le texte. La largeur s'adapte à la fenêtre. */}
             <div
               style={{
-                position: "absolute",
-                top: "calc(100% + 8px)",
-                right: 0,
+                position: "fixed",
+                top: 62,
+                right: 8,
                 zIndex: 61,
-                width: 340,
-                maxWidth: "90vw",
+                width: "min(340px, calc(100vw - 16px))",
                 background: "var(--card)",
                 border: "1px solid var(--line)",
                 borderRadius: 12,

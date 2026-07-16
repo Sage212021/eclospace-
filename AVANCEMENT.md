@@ -967,3 +967,16 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Vérifications :** typecheck backend OK ; migration appliquée ; **4 tests** ajoutés (permissions, compilation « maison » qui exclut le ciblé + le hors-période, cycle brouillon→envoyé figé, visibilité consultant). Suite backend : **313 tests** (le seul échec observé en run complet est un *timeout* de charge sur un test RH sans lien — vert en isolation).
 
 **Reste (Newsletter) :** inc 3 — écran « Bulletin d'actualités » (composer/prévisualiser/envoyer, consulter les bulletins envoyés), bilingue FR/EN, entrée de navigation.
+
+### 15/07/2026 (suite) — Centre de Communication : Bulletin d'actualités (inc 3, écran)
+
+**Fait :** l'écran **« Bulletin d'actualités »** (pôle Communication interne → 4ᵉ entrée), qui clôt le module Newsletter.
+- **Liste** : les bulletins envoyés (visibles de tout le personnel) et, pour les éditeurs, aussi les brouillons ; chaque ligne montre le titre, la période, le statut (Brouillon/Envoyé) et le nombre de destinataires.
+- **Composition** (éditeurs, `communication:saisie`) : titre, période (du/au), introduction facultative, avec un **aperçu en direct du sommaire** — la liste des actualités « maison » de la période s'actualise à chaque changement de dates (via `/newsletters/preview`).
+- **Envoi** : bouton « Envoyer » avec **confirmation explicite** (« définitif, envoi par e-mail à tout le personnel, plus modifiable ») ; à l'envoi, message de retour avec le nombre de destinataires et d'actualités.
+- **Consultation** : un bulletin envoyé s'ouvre en lecture seule et montre l'**instantané figé** (exactement ce qui a été diffusé) + date d'envoi et destinataires. Un brouillon montre l'aperçu en direct et propose Modifier / Supprimer / Envoyer.
+- Bilingue FR/EN (clés `nlt.*`, `nav.cm-bulletin`), styles conformes au guide (bandeaux, badges, timeline sobre).
+
+**Vérifications :** typecheck frontend OK ; build Vite OK. Aucune modification backend (le socle inc 2 était déjà fusionné).
+
+**➡️ Le module Newsletter est complet** (3 incréments : fil d'actualités, socle backend, écran). Le Centre de Communication Interne compte désormais **4 composants** (Babillard + Calendrier + Fil d'actualités + Bulletin). Extensions futures possibles sous le même pôle : sondages, planification d'envoi automatique du bulletin.

@@ -24,6 +24,7 @@ import { DiagnosticsPage } from "./pages/DiagnosticsPage";
 import { AnnouncementsPage } from "./pages/AnnouncementsPage";
 import { CalendarPage } from "./pages/CalendarPage";
 import { NewsFeedPage } from "./pages/NewsFeedPage";
+import { NewslettersPage } from "./pages/NewslettersPage";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { PresenceToasts } from "./components/PresenceToasts";
@@ -53,6 +54,7 @@ type PageId =
   | "communication"
   | "calendar"
   | "newsfeed"
+  | "newsletters"
   | "diagnostics";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
@@ -115,6 +117,7 @@ const NAV_POLES: NavPole[] = [
       { key: "cm-actualites", label: "Fil d'actualités", permission: "communication:consultation" },
       { key: "cm-babillard", label: "Babillard d'annonces", permission: "communication:consultation" },
       { key: "cm-calendrier", label: "Calendrier partagé", permission: "communication:consultation" },
+      { key: "cm-bulletin", label: "Bulletin d'actualités", permission: "communication:consultation" },
     ],
   },
   {
@@ -154,6 +157,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "cm-actualites": { page: "newsfeed" },
   "cm-babillard": { page: "communication" },
   "cm-calendrier": { page: "calendar" },
+  "cm-bulletin": { page: "newsletters" },
   "pi-direction": { page: "direction" },
   "pi-rapports": { page: "reports" },
   "pi-journal": { page: "audit" },
@@ -503,6 +507,9 @@ export function App() {
             onOpenAnnouncement={openAnnouncement}
             onOpenCalendar={permissions.has("communication:consultation") ? () => setView({ kind: "leaf", key: "cm-calendrier" }) : undefined}
           />
+        )}
+        {leaf && "page" in leaf && leaf.page === "newsletters" && (
+          <NewslettersPage canManage={permissions.has("communication:saisie")} />
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
       </div>

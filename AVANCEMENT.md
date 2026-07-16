@@ -996,3 +996,20 @@ Chantier de **consolidation** (aucune nouvelle fonctionnalité) : rendre l'ERP d
 **Vérifications :** typecheck backend OK ; test d'architecture 3/3 ; lot3 ISBN/BAT/workflow verts en isolation (le refactor ne change aucun comportement).
 
 **Reste (durcissement) :** inc 2 — guide de démarrage développeur (`docs/`), pour qu'un nouvel arrivant lance et comprenne le projet sans deviner ; inc 3 (optionnel) — quelques tests bout-en-bout navigateur.
+
+### 16/07/2026 (suite) — Durcissement de l'architecture (inc 2) : guide du développeur
+
+Chantier de **consolidation** (documentation, aucun code applicatif touché).
+
+**Fait :** nouveau document **`docs/08_Guide_developpeur.md`** — le guide d'accueil qui manquait pour qu'un développeur (humain ou IA) puisse **lancer, comprendre et faire évoluer** le projet sans deviner. Il complète le `README.md` (démarrage rapide) par :
+- une **carte du code** (à quoi sert chaque dossier, où mettre quoi) ;
+- les **trois couches et leurs frontières**, reliées au test qui les impose (inc 1) ;
+- les **conventions non négociables** (les 7 contraintes d'intégrité et leur mise en œuvre : audit append-only, suppression logique, factures immuables, transactions atomiques, permissions Pôle→Profil→Niveau, erreurs explicites) ;
+- l'**i18n FR/EN**, les **tests** (dont le piège du timeout de charge), le **workflow des migrations Prisma** (voie interactive + voie non interactive) ;
+- une **recette pas à pas « ajouter un module de bout en bout »** qui encode toutes ces conventions en une check-list de 10 points ;
+- les **points de déploiement** Cloud (Scalingo, disque éphémère → S3, SMTP hors dépôt).
+- Lien ajouté depuis le `README.md`.
+
+**Vérifications :** documentation uniquement ; aucune modification de code, de schéma ni de test. Rien à recompiler.
+
+**Reste (durcissement) :** inc 3 (optionnel) — quelques tests bout-en-bout navigateur (Playwright déjà disponible dans l'environnement).

@@ -4,6 +4,7 @@
 
 - 📘 Commencer par : `docs/07_Synthese_executive.md`
 - 📐 Conception complète : dossier `docs/`
+- 🧭 Contribuer au code : `docs/08_Guide_developpeur.md` (carte du code, conventions, recette d'ajout d'un module)
 - 🖥️ Prototype navigable : `prototype/Phase3_Prototype_UI.html` (à ouvrir dans un navigateur)
 - 🤖 Instructions de développement : `CLAUDE.md` (lu automatiquement par Claude Code)
 - 📊 État du projet : `AVANCEMENT.md`

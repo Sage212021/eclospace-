@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { computeEan13CheckDigit, isbn13ToBarcodeSvg } from "../lib/barcode.js";
+import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
 
 // Ch. 13 §13.2 : alerte paramétrable quand le stock d'ISBN disponibles
 // passe sous ce seuil (clé settings, valeur de départ documentée en Lot 3).
@@ -419,18 +420,3 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
 }
 
 // Réutilisé par le module BAT (Ch. 14 §14.2 : contrôle de complétude préalable).
-export async function computeIsbnCompleteness(manuscriptId: string): Promise<{ complete: boolean; missing: string[] }> {
-  const [printIsbn, legalDeposits, metadata] = await Promise.all([
-    prisma.isbn.findFirst({ where: { manuscriptId, format: "print" } }),
-    prisma.legalDeposit.findMany({ where: { manuscriptId } }),
-    prisma.workMetadata.findUnique({ where: { manuscriptId } }),
-  ]);
-
-  const missing: string[] = [];
-  if (!printIsbn) missing.push("isbn_attribue");
-  if (legalDeposits.length === 0) missing.push("depot_legal_prepare");
-  if (!metadata || !metadata.summary || !metadata.weightGrams) missing.push("fiche_metadonnees_complete");
-  if (!metadata || metadata.themaCodes.length === 0) missing.push("classification_affectee");
-
-  return { complete: missing.length === 0, missing };
-}

@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
-import { computeIsbnCompleteness } from "./isbn.js";
+import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
 
 // Ch. 4 §4.3, §4.6 : les étapes 8 (expertise) et 9 (réécriture) ne sont
 // activées que si le projet le requiert ; leur absence n'est pas comptée

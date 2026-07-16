@@ -302,6 +302,38 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 - Gérées **par lien** (http/https) en v1 plutôt qu'hébergées, pour rester
   compatible avec une connexion modeste (contrainte du projet).
 
+## Durcissement de l'architecture — frontières entre couches (16/07/2026)
+
+### Un test plutôt qu'un plugin de lint
+- **Choix** : imposer les frontières entre couches par un **test Vitest**
+  (`tests/architecture.test.ts`) qui parcourt le graphe d'imports, plutôt que
+  d'ajouter ESLint + `eslint-plugin-boundaries` (le projet n'a pas d'ESLint).
+- **Justification** : la règle n°6 du projet interdit les dépendances exotiques
+  et privilégie l'économie. Le test réutilise l'outil déjà en place (Vitest +
+  `node:fs`), n'ajoute **aucune dépendance**, tourne avec la suite (donc en CI),
+  et documente les invariants sous forme exécutable. Il couvre les trois formes
+  d'import (`from`, `import()` dynamique, `import "…"` à effet de bord).
+
+### Invariants imposés (couches, de la plus basse à la plus haute)
+- `lib/` = règles métier et utilitaires partagés — **ne connaît pas** les routes.
+- `routes/` = points d'entrée HTTP — orchestrent, s'appuient sur `lib/`.
+- `app.ts` / `server.ts` = assemblage et démarrage — **personne ne les importe**.
+- Règles : (1) `lib/` ne dépend jamais d'une route ; (2) une route n'importe
+  jamais une autre route (le partagé passe par `lib/`) ; (3) ni `lib/` ni
+  `routes/` n'importent l'assemblage.
+
+### Ce que les cross-imports entre domaines restent autorisés
+- Un `lib/` peut en importer un autre (ex. `commercial` s'appuie sur
+  `lib/finance` pour l'encours — cohérent et documenté). L'invariant ne cloisonne
+  **pas** les domaines entre eux ; il impose le **sens des dépendances** (pas de
+  montée de couche, pas de route→route), ce qui est la vraie cause d'un code qui
+  se dégrade avec le temps.
+
+### Correction associée
+- `computeIsbnCompleteness` (règle de complétude ISBN, Ch. 12) vivait dans
+  `routes/isbn.ts` et était tirée par `routes/workflow.ts` et `routes/bat.ts`
+  (route→route). Déplacée dans `lib/isbnCompleteness.ts` ; comportement inchangé.
+
 ## Centre de Communication Interne — Bulletin d'actualités / Newsletter (15/07/2026)
 
 ### Périmètre « maison » du digest (confidentialité)

@@ -6,7 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
-import { computeIsbnCompleteness } from "./isbn.js";
+import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
 
 // Ch. 14 §14.3 : liste de contrôle paramétrable, valeurs de départ conformes

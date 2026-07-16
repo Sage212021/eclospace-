@@ -302,6 +302,38 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 - Gérées **par lien** (http/https) en v1 plutôt qu'hébergées, pour rester
   compatible avec une connexion modeste (contrainte du projet).
 
+## Application installable — PWA (16/07/2026)
+
+### Pas d'application « à télécharger » sur un store : une PWA
+- **Choix** : rendre le frontend **installable** (Progressive Web App) plutôt que
+  de fabriquer une application native Android/iOS. L'utilisateur ouvre l'URL de
+  l'ERP et « ajoute à l'écran d'accueil » : une icône au logo Eclospace apparaît
+  et l'application se lance en plein écran, comme une app.
+- **Justification** : une app native imposerait un second code (Kotlin/Swift ou
+  un wrapper), des comptes de store, des cycles de revue et des mises à jour
+  séparées — l'opposé de la règle n°6 (simplicité, économie). La PWA réutilise
+  exactement le même code déjà déployé ; « installer » et « mettre à jour » se
+  font tout seuls via le web. Aucune dépendance ajoutée (pas de `vite-plugin-pwa`).
+
+### Composants (tous statiques, servis à la racine)
+- `public/manifest.webmanifest` : nom, `display: standalone`, couleurs de marque
+  (thème marine `#16233D`, fond `#F8F9FB`), icônes.
+- **Icônes** générées **à partir du logo** (`eclospace-logo.jpg`) avec le
+  Chromium déjà présent (Playwright) — aucun outil image installé n'était requis :
+  `icon-192`, `icon-512`, `icon-maskable-512` (marge « safe zone » pour le masque
+  Android), `apple-touch-icon` (180, iOS), et un favicon monogramme doré « E »
+  (net à petite taille). Logo centré sur fond blanc, fidèle à son rendu natif.
+- `public/sw.js` : service worker **minimal**. Navigation en réseau-d'abord avec
+  repli sur la coquille en cache (hors ligne) ; **l'API (`/api/*`) n'est jamais
+  mise en cache** (un ERP montre l'état réel). Enregistré depuis `main.tsx`
+  uniquement en production, au meilleur effort.
+- `index.html` : `theme-color`, `manifest`, `apple-touch-icon`, métadonnées iOS.
+
+### Vérification
+- Build servi en HTTP puis inspecté dans Chromium : manifeste détecté, 3 icônes,
+  `display: standalone`, **service worker actif (« activated »), portée racine** —
+  critères d'installabilité réunis. Aucune erreur console.
+
 ## Durcissement de l'architecture — frontières entre couches (16/07/2026)
 
 ### Un test plutôt qu'un plugin de lint

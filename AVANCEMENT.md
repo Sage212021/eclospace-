@@ -980,3 +980,19 @@ En parallèle du module Paie (D-007), chantier d'internationalisation.
 **Vérifications :** typecheck frontend OK ; build Vite OK. Aucune modification backend (le socle inc 2 était déjà fusionné).
 
 **➡️ Le module Newsletter est complet** (3 incréments : fil d'actualités, socle backend, écran). Le Centre de Communication Interne compte désormais **4 composants** (Babillard + Calendrier + Fil d'actualités + Bulletin). Extensions futures possibles sous le même pôle : sondages, planification d'envoi automatique du bulletin.
+
+### 16/07/2026 — Durcissement de l'architecture (inc 1) : frontières entre couches vérifiées
+
+Chantier de **consolidation** (aucune nouvelle fonctionnalité) : rendre l'ERP durable dans le temps en verrouillant sa structure. Objectif = qu'un ajout dans 3 ou 5 ans ne puisse pas dégrader silencieusement l'organisation du code.
+
+**Fait :**
+- **Test d'architecture** (`backend/tests/architecture.test.ts`, écrit avec l'outil déjà présent — Vitest, **zéro dépendance nouvelle**) qui analyse le graphe d'imports et **fait échouer la CI** si une frontière est franchie. Trois invariants imposés :
+  1. aucun fichier `lib/` ne dépend d'une route (pas de dépendance montante) ;
+  2. aucune route n'importe une autre route (le partagé passe par `lib/`) ;
+  3. personne n'importe l'assemblage (`app.ts` / `server.ts`).
+- **Violation réelle corrigée** : `computeIsbnCompleteness` — une règle métier (complétude ISBN, Ch. 12) — vivait dans `routes/isbn.ts` mais était tirée par `routes/workflow.ts` et `routes/bat.ts`. Déplacée dans sa vraie couche : `lib/isbnCompleteness.ts`. Les trois routes l'importent désormais depuis `lib/`.
+- Détection vérifiée sur les trois formes d'import (`… from`, `import()`, `import "…"` à effet de bord) — test prouvé non « faux-vert » en réintroduisant temporairement une violation.
+
+**Vérifications :** typecheck backend OK ; test d'architecture 3/3 ; lot3 ISBN/BAT/workflow verts en isolation (le refactor ne change aucun comportement).
+
+**Reste (durcissement) :** inc 2 — guide de démarrage développeur (`docs/`), pour qu'un nouvel arrivant lance et comprenne le projet sans deviner ; inc 3 (optionnel) — quelques tests bout-en-bout navigateur.

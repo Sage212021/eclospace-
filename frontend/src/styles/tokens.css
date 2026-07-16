@@ -67,6 +67,18 @@ textarea:not([disabled]):focus {
   box-shadow: 0 0 0 3px rgba(200, 154, 27, 0.18);
 }
 
+/* Garde-fou anti-débordement : aucun champ de formulaire ne dépasse la largeur
+   de son conteneur. Un menu déroulant à libellé long (ex. « Correcteur —
+   Correction éditoriale ») est ainsi borné à l'espace disponible plutôt que de
+   pousser la carte hors de l'écran sur mobile (où .app-main masque le
+   débordement, rendant le contenu coupé inaccessible). box-sizing est déjà
+   global (voir la règle « * »). */
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
 /* Coquille applicative responsive — piloté par MÉDIA-REQUÊTES (et non par du
    JavaScript) : c'est le seul moyen fiable sur un vrai téléphone. Sur grand
    écran, la barre latérale est fixe ; sous 900px, elle devient un tiroir
@@ -323,6 +335,17 @@ textarea:not([disabled]):focus {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+/* Sur écran étroit, l'action (filtres, boutons) passe SOUS le titre au lieu de
+   le chevaucher. Un empilement explicite est nécessaire : avec min-width:0 sur
+   le titre, la seule mise en flex-wrap laisserait plutôt le titre se comprimer
+   que l'action descendre. */
+@media (max-width: 640px) {
+  .ecl-card__head {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 .ecl-card__title-wrap {
   display: flex;

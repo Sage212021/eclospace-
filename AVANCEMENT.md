@@ -1013,3 +1013,15 @@ Chantier de **consolidation** (documentation, aucun code applicatif touché).
 **Vérifications :** documentation uniquement ; aucune modification de code, de schéma ni de test. Rien à recompiler.
 
 **Reste (durcissement) :** inc 3 (optionnel) — quelques tests bout-en-bout navigateur (Playwright déjà disponible dans l'environnement).
+
+### 16/07/2026 (suite) — Correctif responsive : débordements horizontaux sur mobile
+
+Signalé par l'opérateur (captures Scalingo sur téléphone) : certaines fenêtres débordaient à droite, coupant le contenu (menu déroulant des droits tronqué, filtres du Babillard chevauchant le titre). Cause : sur mobile, `.app-main` masque le débordement horizontal (`overflow-x: hidden`), donc tout élément trop large est **coupé et devient inaccessible**.
+
+**Corrigé de façon systémique** (CSS partagé `styles/tokens.css`, s'applique partout d'un coup) :
+- **En-tête de carte** (`.ecl-card__head`) : passait le titre et son action (filtres/boutons) sur une seule ligne non sécable → chevauchement. Ajout de `flex-wrap: wrap` + empilement explicite sous 640px (`flex-direction: column`) pour que l'action descende **sous** le titre. Corrige toutes les cartes à action (Babillard, etc.).
+- **Champs de formulaire** (`input, select, textarea`) : ajout de `max-width: 100%` — un menu déroulant à libellé long (ex. « Correcteur — Correction éditoriale ») est désormais borné à la largeur de sa carte au lieu de pousser la page hors écran. Corrige la matrice des droits et tout menu long ailleurs.
+
+**Audit associé** : vérification que chaque tableau large est bien dans un conteneur `overflow-x: auto` (défilement propre plutôt que coupe) — c'était déjà le cas partout (composant partagé `DataTable`, matrice des droits, journal d'audit, manuscrits, paie, présences). Les modales sont déjà bornées (`max-width: 100%`).
+
+**Vérifications :** typecheck + build frontend OK ; rendu réel des deux écrans incriminés à 360 px (Chromium/Playwright) — **aucun débordement horizontal de page**, filtres empilés sous le titre, menu déroulant contenu dans la carte, tableau défilant dans son cadre. Correctif CSS pur, aucune logique touchée.

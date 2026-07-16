@@ -2732,3 +2732,75 @@ export function remindCalendarEvent(id: string) {
 export function getUpcomingEvents(days = 7) {
   return request<CalendarEvent[]>(`/api/v1/calendar/upcoming?days=${days}`);
 }
+
+// ── Bulletin d'actualités (Newsletter) ───────────────────────────────────────
+export type NewsletterStatus = "brouillon" | "envoyee";
+
+export interface NewsletterSummary {
+  id: string;
+  title: string;
+  status: NewsletterStatus;
+  period_start: string;
+  period_end: string;
+  sent_at: string | null;
+  recipients: number | null;
+  author: string | null;
+  created_at: string;
+}
+
+export interface NewsletterItem {
+  kind: "announcement" | "event";
+  id: string;
+  title: string;
+  date: string | null;
+  preview: string | null;
+}
+
+export interface NewsletterDetail {
+  id: string;
+  title: string;
+  intro: string | null;
+  status: NewsletterStatus;
+  period_start: string;
+  period_end: string;
+  sent_at: string | null;
+  recipients: number | null;
+  author: string | null;
+  items: NewsletterItem[];
+}
+
+export interface NewsletterInput {
+  title: string;
+  intro?: string | null;
+  period_start: string;
+  period_end: string;
+}
+
+export function listNewsletters() {
+  return request<NewsletterSummary[]>("/api/v1/newsletters");
+}
+
+export function previewNewsletter(periodStart: string, periodEnd: string) {
+  const qs = `period_start=${encodeURIComponent(periodStart)}&period_end=${encodeURIComponent(periodEnd)}`;
+  return request<{ items: NewsletterItem[] }>(`/api/v1/newsletters/preview?${qs}`);
+}
+
+export function getNewsletter(id: string) {
+  return request<NewsletterDetail>(`/api/v1/newsletters/${id}`);
+}
+
+export function createNewsletter(input: NewsletterInput) {
+  return request<{ id: string }>("/api/v1/newsletters", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateNewsletter(id: string, input: Partial<NewsletterInput>) {
+  return request<{ ok: true }>(`/api/v1/newsletters/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function sendNewsletter(id: string) {
+  return request<{ ok: true; recipients: number; items: number }>(`/api/v1/newsletters/${id}/send`, { method: "POST" });
+}
+
+export function deleteNewsletter(id: string) {
+  return request<{ ok: true }>(`/api/v1/newsletters/${id}`, { method: "DELETE" });
+}

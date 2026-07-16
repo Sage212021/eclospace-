@@ -1039,3 +1039,7 @@ Demande de l'opérateur : pouvoir « télécharger » l'application, avec le log
 **Vérifications :** typecheck + build OK ; les fichiers PWA sont bien copiés dans `dist` (donc servis à la racine par le backend). Build servi en HTTP et inspecté dans Chromium : manifeste détecté, 3 icônes, `display: standalone`, **service worker actif (« activated »), portée racine** — critères d'installabilité réunis, aucune erreur console. Aucune dépendance ajoutée.
 
 **Pour l'utilisateur :** ouvrir l'URL de l'ERP sur le téléphone → Android/Chrome propose « Installer l'application » (menu ⋮) ; iOS/Safari → Partager → « Sur l'écran d'accueil ». L'icône Eclospace apparaît alors sur l'écran d'accueil.
+
+### 16/07/2026 (suite) — PWA : icônes plus lisibles (logo recadré et agrandi)
+
+Retour de l'opérateur : le logo était trop petit dans l'icône. Le fichier source (`eclospace-logo.jpg`) contenait beaucoup de blanc autour du texte (zone utile détectée : 1004×305 sur 1280×653). Icônes régénérées en **recadrant au plus près** puis en **remplissant l'icône** (92 % de large pour les icônes standard, 72 % pour la version « maskable » afin de rester dans la zone de sécurité du masque Android). Résultat : « Eclospace » nettement lisible jusqu'à la petite taille d'un téléphone. Aperçu validé par l'opérateur avant fusion. Icônes régénérées : `icon-192`, `icon-512`, `icon-maskable-512`, `apple-touch-icon`.

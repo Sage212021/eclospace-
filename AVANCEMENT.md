@@ -1043,3 +1043,7 @@ Demande de l'opérateur : pouvoir « télécharger » l'application, avec le log
 ### 16/07/2026 (suite) — PWA : icônes plus lisibles (logo recadré et agrandi)
 
 Retour de l'opérateur : le logo était trop petit dans l'icône. Le fichier source (`eclospace-logo.jpg`) contenait beaucoup de blanc autour du texte (zone utile détectée : 1004×305 sur 1280×653). Icônes régénérées en **recadrant au plus près** puis en **remplissant l'icône** (92 % de large pour les icônes standard, 72 % pour la version « maskable » afin de rester dans la zone de sécurité du masque Android). Résultat : « Eclospace » nettement lisible jusqu'à la petite taille d'un téléphone. Aperçu validé par l'opérateur avant fusion. Icônes régénérées : `icon-192`, `icon-512`, `icon-maskable-512`, `apple-touch-icon`.
+
+### 16/07/2026 (suite) — PWA : choix final de l'icône = logo « Eclospace » agrandi
+
+Le monogramme « E » (PR #83) a été annulé : l'opérateur a finalement retenu le **logo « Eclospace » complet en bandeau, agrandi**. Icônes régénérées à partir du logo recadré, remplies à **98 %** de la largeur (icônes standard et Apple), maskable inchangée à 72 % (zone de sécurité). PR #83 fermée sans fusion. Aperçu validé.

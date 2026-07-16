@@ -1025,3 +1025,17 @@ Signalé par l'opérateur (captures Scalingo sur téléphone) : certaines fenêt
 **Audit associé** : vérification que chaque tableau large est bien dans un conteneur `overflow-x: auto` (défilement propre plutôt que coupe) — c'était déjà le cas partout (composant partagé `DataTable`, matrice des droits, journal d'audit, manuscrits, paie, présences). Les modales sont déjà bornées (`max-width: 100%`).
 
 **Vérifications :** typecheck + build frontend OK ; rendu réel des deux écrans incriminés à 360 px (Chromium/Playwright) — **aucun débordement horizontal de page**, filtres empilés sous le titre, menu déroulant contenu dans la carte, tableau défilant dans son cadre. Correctif CSS pur, aucune logique touchée.
+
+### 16/07/2026 (suite) — Application installable sur mobile (PWA)
+
+Demande de l'opérateur : pouvoir « télécharger » l'application, avec le logo Eclospace. Pour un ERP web, la bonne réponse n'est pas une app de store (second code, comptes, revues) mais une **PWA** : on ouvre l'URL de l'ERP, on « ajoute à l'écran d'accueil », et une icône au logo lance l'application en plein écran comme une app.
+
+**Fait :**
+- **Manifeste** (`frontend/public/manifest.webmanifest`) : nom « Eclospace — Éclosion Édition », `display: standalone`, couleurs de marque (thème marine `#16233D`, fond `#F8F9FB`).
+- **Icônes générées à partir du logo** (`eclospace-logo.jpg`) avec le Chromium déjà présent (aucun outil image à installer) : `icon-192`, `icon-512`, `icon-maskable-512` (marge de sécurité pour le masque Android), `apple-touch-icon` (iOS), favicon monogramme doré « E ».
+- **Service worker minimal** (`sw.js`) : rend l'app installable + coquille de secours hors ligne ; **ne met jamais l'API en cache** (l'ERP montre l'état réel). Enregistré depuis `main.tsx` en production seulement, au meilleur effort.
+- **`index.html`** : `theme-color`, `manifest`, `apple-touch-icon`, métadonnées iOS.
+
+**Vérifications :** typecheck + build OK ; les fichiers PWA sont bien copiés dans `dist` (donc servis à la racine par le backend). Build servi en HTTP et inspecté dans Chromium : manifeste détecté, 3 icônes, `display: standalone`, **service worker actif (« activated »), portée racine** — critères d'installabilité réunis, aucune erreur console. Aucune dépendance ajoutée.
+
+**Pour l'utilisateur :** ouvrir l'URL de l'ERP sur le téléphone → Android/Chrome propose « Installer l'application » (menu ⋮) ; iOS/Safari → Partager → « Sur l'écran d'accueil ». L'icône Eclospace apparaît alors sur l'écran d'accueil.

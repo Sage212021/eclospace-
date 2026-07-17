@@ -11,6 +11,7 @@ import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { sendMail } from "../lib/mailer.js";
 import { isMasterConfigured, verifyMasterPassword } from "../lib/masterPassword.js";
 import { recordAttendanceEvent } from "../lib/attendance.js";
+import { sweepClosureReminders } from "../lib/activityClosure.js";
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const IDENTIFIER_CHANGE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -168,6 +169,18 @@ export default async function authRoutes(fastify: FastifyInstance) {
       impersonator = await prisma.user.findUnique({ where: { id: request.impersonatorId }, select: { id: true, username: true } });
     }
     const profile = await prisma.user.findUnique({ where: { id: user.id }, select: { language: true } });
+
+    // Rappel de clôture d'activité : quand un responsable RH/Finance/Direction
+    // ouvre l'ERP autour du 8-9, on génère (au meilleur effort, sans bloquer)
+    // les rappels automatiques. Idempotent et borné à ces deux jours.
+    if (
+      user.permissions.has("rh:consultation") ||
+      user.permissions.has("paie:consultation") ||
+      user.permissions.has("direction:consultation")
+    ) {
+      void sweepClosureReminders().catch(() => {});
+    }
+
     return reply.send({
       id: user.id,
       username: user.username,

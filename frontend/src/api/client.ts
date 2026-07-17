@@ -2804,3 +2804,40 @@ export function sendNewsletter(id: string) {
 export function deleteNewsletter(id: string) {
   return request<{ ok: true }>(`/api/v1/newsletters/${id}`, { method: "DELETE" });
 }
+
+// ── Clôture d'activité mensuelle (RH) ────────────────────────────────────────
+export interface ActivityClosureReminderSent {
+  reminder_day: number;
+  manual: boolean;
+  sent_at: string;
+  recipients: number;
+}
+
+export interface ActivityClosureStatus {
+  closure_day: number;
+  reminder_days: number[];
+  period_key: string;
+  period_label: string;
+  closure_date: string;
+  days_until_closure: number;
+  is_closed: boolean;
+  closed_at: string | null;
+  reminders_sent: ActivityClosureReminderSent[];
+}
+
+export function getActivityClosure() {
+  return request<ActivityClosureStatus>("/api/v1/hr/activity-closure");
+}
+
+export function setActivityClosureDay(closureDay: number) {
+  return request<{ ok: true; closure_day: number }>("/api/v1/hr/activity-closure/day", {
+    method: "PUT",
+    body: JSON.stringify({ closure_day: closureDay }),
+  });
+}
+
+export function remindActivityClosure() {
+  return request<{ ok: true; period_label: string; recipients: number }>("/api/v1/hr/activity-closure/remind", {
+    method: "POST",
+  });
+}

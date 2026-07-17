@@ -302,6 +302,35 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 - Gérées **par lien** (http/https) en v1 plutôt qu'hébergées, pour rester
   compatible avec une connexion modeste (contrainte du projet).
 
+## Signalement de clôture d'activité mensuelle — RH (17/07/2026)
+
+### Jour de clôture paramétrable, rappels relatifs
+- L'activité d'un mois civil se clôture le **jour de clôture du mois suivant**,
+  **paramétrable** (défaut 10, bornes 3–28) et stocké dans `settings`
+  (`activity_closure_day`, valeur JSON). Les **jours de rappel se déduisent**
+  toujours du jour de clôture : jour-2 et jour-1 (« 1 à 2 jours avant »).
+  Modifier le jour recalcule donc les rappels automatiquement.
+
+### Génération paresseuse (pas de planificateur)
+- Cohérent avec le reste du projet (cf. balayage des annonces expirées) : aucun
+  cron. Les rappels sont générés au fil des ouvertures de l'ERP par un
+  responsable — hook fire-and-forget sur `/api/v1/me` (pour les titulaires de
+  `rh:/paie:/direction:consultation`) et sur la rubrique RH. L'opérateur a
+  retenu ce mode « sans infrastructure » ; un vrai planificateur Scalingo
+  resterait possible en évolution (envoi garanti sans connexion).
+
+### Idempotence
+- Table `payroll_closure_reminders` avec unicité `(period_key, reminder_day)` :
+  le marqueur est créé **avant** la notification, donc un seul appel notifie même
+  si plusieurs responsables ouvrent l'ERP simultanément. `reminder_day = 0`
+  marque un envoi **manuel**. Aucun rappel si une `PayrollClosure` existe déjà
+  pour la période.
+
+### Réutilisation
+- Notifications via `notifyUsers` (cloche + e-mail, priorité `high`, type
+  `echeance`), destinataires = union des rôles `RESP_RH`, `RESP_FINANCE`,
+  `DIR_GENERAL`. Aucune table existante modifiée.
+
 ## Application installable — PWA (16/07/2026)
 
 ### Pas d'application « à télécharger » sur un store : une PWA

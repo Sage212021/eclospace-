@@ -2841,3 +2841,36 @@ export function remindActivityClosure() {
     method: "POST",
   });
 }
+
+// ── Publication sur le site vitrine (boutique WordPress) ─────────────────────
+export interface SiteProductPreview {
+  name: string;
+  author: string | null;
+  category: string | null;
+  price: number | null;
+  currency: string;
+  description: string | null;
+  sku: string | null;
+  cover: { available: boolean; version_id: string | null };
+}
+
+export interface SitePublicationView {
+  configured: boolean;
+  site_url: string | null;
+  payload: SiteProductPreview;
+  missing: string[];
+  status: "non_publie" | "publie" | "erreur";
+  external_url: string | null;
+  published_at: string | null;
+}
+
+export function getSitePublication(manuscriptId: string) {
+  return request<SitePublicationView>(`/api/v1/manuscripts/${manuscriptId}/site-publication`);
+}
+
+export function publishToSite(manuscriptId: string) {
+  return request<{ ok: boolean; reason?: string; external_url?: string; external_id?: string; payload?: SiteProductPreview }>(
+    `/api/v1/manuscripts/${manuscriptId}/site-publication`,
+    { method: "POST" },
+  );
+}

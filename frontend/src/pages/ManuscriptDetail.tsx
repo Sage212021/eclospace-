@@ -21,6 +21,7 @@ import { IsbnSection } from "../components/IsbnSection";
 import { BatSection } from "../components/BatSection";
 import { PrintingSection } from "../components/PrintingSection";
 import { AttachmentsSection } from "../components/AttachmentsSection";
+import { SitePublicationSection } from "../components/SitePublicationSection";
 
 interface ManuscriptDetailProps {
   manuscriptId: string;
@@ -210,6 +211,12 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           canManage={permissions.has("printing:saisie")}
           canValidate={permissions.has("printing:validation")}
         />
+      )}
+
+      {/* Site vitrine : publication de l'ouvrage sur la boutique WordPress
+          (action du maquettiste), à partir de la mise en page. */}
+      {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("manuscripts:consultation") && (
+        <SitePublicationSection manuscriptId={manuscript.id} canPublish={permissions.has("manuscripts:saisie")} />
       )}
 
       {/* Pièces jointes : disponibles à toutes les étapes, pour tous les pôles

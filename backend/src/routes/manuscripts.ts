@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
+import { previewSitePublication, publishToSite } from "../lib/sitePublisher.js";
 
 const authorSchema = z.union([
   z.object({ author_id: z.string().uuid() }),
@@ -550,6 +551,41 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       });
 
       return reply.send(updated);
+    },
+  );
+
+  // ── Publication sur le site vitrine (boutique WordPress) ────────────────────
+  // Aperçu : ce qui serait envoyé au site pour cet ouvrage (nom, auteur, genre,
+  // prix, résumé, ISBN), + état de publication + champs manquants éventuels.
+  fastify.get(
+    "/api/v1/manuscripts/:id/site-publication",
+    { preHandler: requirePermission("manuscripts", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      try {
+        return reply.send(await previewSitePublication(id));
+      } catch (err) {
+        return reply.code(404).send({ code: "not_found", message: err instanceof Error ? err.message : "Ouvrage introuvable." });
+      }
+    },
+  );
+
+  // Publier / mettre à jour l'ouvrage sur le site (action du maquettiste). Sans
+  // configuration du site, renvoie l'aperçu sans rien publier (non_configuré).
+  fastify.post(
+    "/api/v1/manuscripts/:id/site-publication",
+    { preHandler: requirePermission("manuscripts", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      try {
+        const result = await publishToSite(id, { id: request.user!.id, ip: request.ip });
+        if (!result.published) {
+          return reply.code(200).send({ ok: false, reason: "not_configured", payload: result.payload });
+        }
+        return reply.send({ ok: true, external_url: result.external_url, external_id: result.external_id });
+      } catch (err) {
+        return reply.code(502).send({ code: "publish_failed", message: err instanceof Error ? err.message : "Publication impossible." });
+      }
     },
   );
 }

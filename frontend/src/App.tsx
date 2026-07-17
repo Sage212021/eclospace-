@@ -176,10 +176,31 @@ const POLE_LABELS: string[] = NAV_POLES.filter((p): p is typeof p & { label: str
 
 type View = { kind: "leaf"; key: string } | { kind: "manuscript-detail"; id: string; originKey: string };
 
+// Mémorisation de l'écran courant (localStorage). Sur mobile, minimiser
+// l'application puis y revenir recharge souvent la page (le système récupère
+// la mémoire) : sans cela, on repartirait toujours du tableau de bord. On
+// restitue donc le dernier écran ouvert. Sécurisé : toute valeur invalide ou
+// clé de feuille inconnue retombe sur le tableau de bord.
+const VIEW_STORAGE_KEY = "eclospace.view";
+const DEFAULT_VIEW: View = { kind: "leaf", key: "dashboard" };
+
+function loadStoredView(): View {
+  try {
+    const raw = localStorage.getItem(VIEW_STORAGE_KEY);
+    if (!raw) return DEFAULT_VIEW;
+    const v = JSON.parse(raw) as View;
+    if (v && v.kind === "leaf" && typeof v.key === "string" && v.key in LEAF_VIEWS) return v;
+    if (v && v.kind === "manuscript-detail" && typeof v.id === "string" && typeof v.originKey === "string") return v;
+  } catch {
+    /* stockage indisponible ou valeur corrompue : on ignore */
+  }
+  return DEFAULT_VIEW;
+}
+
 export function App() {
   const [user, setUser] = useState<EffectiveUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<View>({ kind: "leaf", key: "dashboard" });
+  const [view, setView] = useState<View>(loadStoredView);
   const [announcementToOpen, setAnnouncementToOpen] = useState<string | null>(null);
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -240,6 +261,11 @@ export function App() {
         text: "La déconnexion côté serveur n'a pas abouti (session peut-être déjà expirée). Vous avez tout de même été déconnecté de cet appareil.",
       });
     } finally {
+      try {
+        localStorage.removeItem(VIEW_STORAGE_KEY);
+      } catch {
+        /* sans effet */
+      }
       setView({ kind: "leaf", key: "dashboard" });
       setUser(null);
     }
@@ -265,6 +291,18 @@ export function App() {
     const active = view.kind === "manuscript-detail" ? view.originKey : view.key;
     join(LEAF_TO_POLE[active] ?? null, active);
   }, [view, user, join]);
+
+  // Mémorise l'écran courant tant qu'on est connecté, pour y revenir après un
+  // rechargement (ex. retour d'arrière-plan sur mobile). Rien n'est mémorisé
+  // hors session.
+  useEffect(() => {
+    if (!user) return;
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify(view));
+    } catch {
+      /* stockage indisponible : sans effet */
+    }
+  }, [view, user]);
 
   // Confirmation d'un changement d'identifiant/e-mail via le lien reçu par
   // e-mail (?identifier_token=...). Public : le jeton fait foi.

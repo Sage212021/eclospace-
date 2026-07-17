@@ -1047,3 +1047,11 @@ Retour de l'opérateur : le logo était trop petit dans l'icône. Le fichier sou
 ### 16/07/2026 (suite) — PWA : choix final de l'icône = logo « Eclospace » agrandi
 
 Le monogramme « E » (PR #83) a été annulé : l'opérateur a finalement retenu le **logo « Eclospace » complet en bandeau, agrandi**. Icônes régénérées à partir du logo recadré, remplies à **98 %** de la largeur (icônes standard et Apple), maskable inchangée à 72 % (zone de sécurité). PR #83 fermée sans fusion. Aperçu validé.
+
+### 17/07/2026 — Correctif UX : conserver l'écran courant au retour d'arrière-plan (mobile)
+
+Signalé par l'opérateur : sur mobile, minimiser l'application puis y revenir renvoyait au tableau de bord au lieu de rester sur l'écran ouvert. Cause : la navigation (état React `view`) n'existait qu'en mémoire vive ; quand le système recharge la page (récupération de mémoire au retour d'arrière-plan), l'app repartait de sa vue par défaut.
+
+**Corrigé** (`frontend/src/App.tsx`) : l'écran courant est mémorisé dans `localStorage` (`eclospace.view`) tant qu'on est connecté, et **restauré au chargement** — y compris une fiche d'ouvrage ouverte (restaurée par son identifiant). Valeur invalide/clé inconnue → retour au tableau de bord. Effacé à la déconnexion (aucune mémorisation hors session).
+
+**Vérifications :** typecheck + build OK ; test navigateur réel (Playwright) : après rechargement, l'app **reste sur la page Finance** et **restaure une fiche d'ouvrage** ouverte, au lieu de revenir au tableau de bord.

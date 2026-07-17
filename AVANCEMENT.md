@@ -1067,3 +1067,19 @@ Nouveau besoin de l'opérateur : prévenir les responsables à temps pour finali
 - API : `GET /api/v1/hr/activity-closure`, `POST …/remind`, `PUT …/day`. Migration `payroll_closure_reminders`.
 
 **Vérifications :** typecheck back+front ; build OK ; **5 tests** (jour paramétrable + bornes, rappel 1-2 jours avant mais pas le jour même, idempotence, pas de rappel si clôturée, permissions). Auth (6) et RH-pilotage (20) toujours verts. Rubrique vérifiée dans le navigateur réel (« 24 jours restants · prochaine clôture 10 août · période juillet 2026 »). Bilingue FR/EN.
+
+### 17/07/2026 (suite) — Pont ERP → site vitrine (boutique WordPress), incrément 1
+
+Nouveau besoin : permettre au maquettiste de **publier un ouvrage sur le site** (boutique WordPress/WooCommerce d'Éclosion), rangé dans la catégorie de son **genre**. Analyse faite avec l'opérateur ; le site est confirmé comme une **boutique** (panier, prix XAF, catégories = genres, ex. *FAMILLE*, *EDUCATION*).
+
+**Fait (socle ERP, testable sans le site) :**
+- **Modèle** `SitePublication` (état par ouvrage : non_publié/publié/erreur, identifiant + lien du produit distant, dernier aperçu, date/auteur). Migration `site_publications`. Aucune table existante modifiée.
+- **Constructeur du produit** (`lib/sitePublisher.ts`) : à partir de l'ouvrage → nom (titre + sous-titre), auteur, **catégorie = genre**, **prix XAF** (extrait de `priceByCountry`), résumé, **ISBN** (SKU). Adaptateur **WooCommerce** (création/mise à jour de produit, résolution/création de la catégorie par nom) activé par variables d'environnement ; **sans configuration, l'action produit un APERÇU** (mémorisé) sans rien publier.
+- **API** : `GET /manuscripts/:id/site-publication` (aperçu + état + champs manquants), `POST …` (publier — maquettiste, `manuscripts:saisie`).
+- **Écran** : section **« Site vitrine »** sur la fiche d'ouvrage (dès la mise en page) — badge d'état, aperçu du produit, champs à compléter, lien vers la fiche du site, bouton **« Publier sur le site »**. Bilingue FR/EN.
+
+**Vérifications :** typecheck back+front ; build OK ; **4 tests** (construction du produit, aperçu sans configuration, endpoint d'aperçu, permission de publication). Section vérifiée dans le navigateur réel (aperçu correct, « à compléter : prix » signalé).
+
+**Reste (déploiement) :** créer la **clé API WooCommerce** côté site, la renseigner dans la config Scalingo (`SITE_WC_URL/KEY/SECRET`), puis **premier envoi test** en conditions réelles ; transfert de l'**image de couverture** (URL publique / import média) à finaliser au branchement.
+
+**Sécurité :** les accès du site (partagés par l'opérateur) **ne sont pas** dans le dépôt ; ils iront en config d'hébergement. Mot de passe partagé en chat : à changer par prudence.

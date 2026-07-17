@@ -302,6 +302,29 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 - Gérées **par lien** (http/https) en v1 plutôt qu'hébergées, pour rester
   compatible avec une connexion modeste (contrainte du projet).
 
+## Pont ERP → site vitrine — boutique WordPress/WooCommerce (17/07/2026)
+
+### L'ERP reste la source, le site est une vitrine
+- Le maquettiste « publie » un ouvrage : l'ERP envoie un **produit** au site
+  (nom, auteur, genre→catégorie, prix XAF, résumé, ISBN) et garde le lien +
+  l'état (`SitePublication`). Rien n'est piloté depuis le site.
+
+### Activation par configuration, aperçu sinon
+- L'adaptateur WooCommerce (`lib/sitePublisher.ts`) s'active uniquement si
+  `SITE_WC_URL` + `SITE_WC_KEY` + `SITE_WC_SECRET` sont présents (renseignés sur
+  l'hébergement, **jamais dans le dépôt**). **Sans configuration**, l'action
+  enregistre un **aperçu** du produit et ne publie rien — ce qui permet de
+  construire et tester tout le socle sans accès au site (l'environnement de dev
+  ne joint d'ailleurs pas Internet).
+- Auth WooCommerce : Basic (consumer key/secret) sur l'API `wc/v3`. La catégorie
+  (= genre) est résolue par nom (créée si absente).
+
+### À finaliser au branchement (déploiement)
+- Clé API WooCommerce à créer côté site et à mettre en config Scalingo ; premier
+  envoi test réel. **Image de couverture** : WooCommerce attend une URL publique
+  (ou un import média préalable) — le transfert de l'image est réglé au
+  branchement, l'aperçu signale seulement sa disponibilité.
+
 ## Signalement de clôture d'activité mensuelle — RH (17/07/2026)
 
 ### Jour de clôture paramétrable, rappels relatifs

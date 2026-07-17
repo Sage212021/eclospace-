@@ -598,6 +598,34 @@ model PayrollClosure {
 // clôture le 10 du mois suivant : des rappels automatiques (le 8 et le 9)
 // invitent les responsables à finaliser la paie à temps. Ce marqueur garantit
 // qu'un même rappel n'est envoyé qu'une seule fois par période et par jour.
+// Publication d'un ouvrage sur le site vitrine (boutique WordPress/WooCommerce).
+// Trace l'état de la publication et le lien vers le produit distant. L'ERP
+// reste la source : le site n'est qu'une vitrine alimentée par lui.
+enum SitePublicationStatus {
+  non_publie // jamais envoyé
+  publie // produit créé/à jour sur le site
+  erreur // dernière tentative en échec
+}
+
+model SitePublication {
+  id             String                @id @default(uuid())
+  manuscriptId   String                @unique @map("manuscript_id")
+  manuscript     Manuscript            @relation(fields: [manuscriptId], references: [id])
+  status         SitePublicationStatus @default(non_publie)
+  externalId     String?               @map("external_id") // identifiant du produit sur le site
+  externalUrl    String?               @map("external_url") // lien public de la fiche
+  lastPayload    Json?                 @map("last_payload") // dernier contenu envoyé (aperçu)
+  lastError      String?               @map("last_error")
+  publishedAt    DateTime?             @map("published_at")
+  publishedBy    String?               @map("published_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("site_publications")
+}
+
 model PayrollClosureReminder {
   id          String   @id @default(uuid())
   periodKey   String   @map("period_key") // mois clôturé, ex. « 2026-06 »
@@ -1167,6 +1195,7 @@ model Manuscript {
   costEntries        CostEntry[]
   budgets            Budget[]
   editorialQuotes    EditorialQuote[]
+  sitePublication    SitePublication?
 
   @@map("manuscripts")
 }

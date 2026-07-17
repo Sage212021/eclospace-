@@ -5,6 +5,7 @@ import { EmployeeStatus, HrContractType, AbsenceType, AbsenceStatus, AccessRevie
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { activityClosureStatus, sweepClosureReminders, sendClosureReminderNow, setClosureDay } from "../lib/activityClosure.js";
 
 const employeeSchema = z.object({
   first_name: z.string().min(1),
@@ -727,6 +728,51 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       const variable = await prisma.payrollVariable.update({ where: { id }, data: { exportedAt: new Date() } });
       await writeAuditLog({ userId: request.user!.id, action: "export", entityType: "payroll_variable", entityId: id, ipAddress: request.ip });
       return reply.send(variable);
+    },
+  );
+
+  // ── Signalement de clôture d'activité mensuelle (rubrique RH) ───────────────
+  // État de la prochaine clôture (le 10) + rappels émis. Consulter cette
+  // rubrique déclenche aussi, au passage, la génération paresseuse des rappels
+  // automatiques du 8/9 (au meilleur effort).
+  fastify.get(
+    "/api/v1/hr/activity-closure",
+    { preHandler: requirePermission("rh", "consultation") },
+    async (_request, reply) => {
+      void sweepClosureReminders().catch(() => {});
+      return reply.send(await activityClosureStatus());
+    },
+  );
+
+  // Envoi manuel du rappel (responsable habilité), hors fenêtre automatique.
+  fastify.post(
+    "/api/v1/hr/activity-closure/remind",
+    { preHandler: requirePermission("rh", "administration") },
+    async (request, reply) => {
+      try {
+        const result = await sendClosureReminderNow({ id: request.user!.id, ip: request.ip });
+        return reply.send({ ok: true, ...result });
+      } catch (err) {
+        return reply.code(409).send({ code: "reminder_failed", message: err instanceof Error ? err.message : "Envoi impossible." });
+      }
+    },
+  );
+
+  // Paramétrage du jour de clôture (par la hiérarchie) : 10 par défaut, modifiable.
+  fastify.put(
+    "/api/v1/hr/activity-closure/day",
+    { preHandler: requirePermission("rh", "administration") },
+    async (request, reply) => {
+      const parsed = z.object({ closure_day: z.number().int().min(3).max(28) }).safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Le jour de clôture doit être un entier entre 3 et 28." });
+      }
+      try {
+        const closureDay = await setClosureDay(parsed.data.closure_day, { id: request.user!.id, ip: request.ip });
+        return reply.send({ ok: true, closure_day: closureDay });
+      } catch (err) {
+        return reply.code(400).send({ code: "invalid_day", message: err instanceof Error ? err.message : "Valeur invalide." });
+      }
     },
   );
 }

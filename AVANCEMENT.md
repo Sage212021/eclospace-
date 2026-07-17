@@ -1055,3 +1055,15 @@ Signalé par l'opérateur : sur mobile, minimiser l'application puis y revenir r
 **Corrigé** (`frontend/src/App.tsx`) : l'écran courant est mémorisé dans `localStorage` (`eclospace.view`) tant qu'on est connecté, et **restauré au chargement** — y compris une fiche d'ouvrage ouverte (restaurée par son identifiant). Valeur invalide/clé inconnue → retour au tableau de bord. Effacé à la déconnexion (aucune mémorisation hors session).
 
 **Vérifications :** typecheck + build OK ; test navigateur réel (Playwright) : après rechargement, l'app **reste sur la page Finance** et **restaure une fiche d'ouvrage** ouverte, au lieu de revenir au tableau de bord.
+
+### 17/07/2026 (suite) — RH : signalement de clôture d'activité mensuelle
+
+Nouveau besoin de l'opérateur : prévenir les responsables à temps pour finaliser la paie avant la clôture mensuelle. Décisions actées : l'activité d'un **mois civil** se clôture le **jour de clôture du mois suivant** (**10 par défaut, paramétrable** par la hiérarchie — 5, 6…) ; **rappels automatiques** aux **RH + Finance + Direction**, **les deux jours précédant l'échéance** (donc le 8 et le 9 pour une clôture au 10) ; déclenchement **à la connexion** d'un responsable, sans infrastructure de planification.
+
+**Fait :**
+- **Rubrique « Clôture d'activité mensuelle »** en tête de la page RH : échéance (date + jours restants, encart coloré selon l'urgence), période concernée, règle en vigueur, rappels déjà envoyés. Pour la hiérarchie (`rh:administration`) : **modifier le jour de clôture** (3–28) et **envoyer un rappel manuellement**.
+- **Rappels automatiques** (cloche + e-mail, priorité haute) générés **paresseusement** — quand un responsable ouvre l'ERP autour de l'échéance (hook sur `/api/v1/me` pour RH/Finance/Direction, et sur la rubrique). Message explicite (« L'activité de juin sera clôturée le 10/07. Finalisez la paie : présences, absences, variables. »). **Idempotent** : un marqueur (`payroll_closure_reminders`, unique par période+jour) empêche tout double envoi ; **aucun rappel** si la période est déjà clôturée.
+- **Paramétrage** du jour de clôture stocké dans `settings` (`activity_closure_day`) ; les jours de rappel s'en déduisent (jour-2 et jour-1).
+- API : `GET /api/v1/hr/activity-closure`, `POST …/remind`, `PUT …/day`. Migration `payroll_closure_reminders`.
+
+**Vérifications :** typecheck back+front ; build OK ; **5 tests** (jour paramétrable + bornes, rappel 1-2 jours avant mais pas le jour même, idempotence, pas de rappel si clôturée, permissions). Auth (6) et RH-pilotage (20) toujours verts. Rubrique vérifiée dans le navigateur réel (« 24 jours restants · prochaine clôture 10 août · période juillet 2026 »). Bilingue FR/EN.

@@ -35,6 +35,7 @@ import { PresenceSummaryCard } from "../components/PresenceSummaryCard";
 import { DeductionRulesSection } from "../components/DeductionRulesSection";
 import { AnomaliesSection } from "../components/AnomaliesSection";
 import { AttendanceReportSection } from "../components/AttendanceReportSection";
+import { ActivityClosureSection } from "../components/ActivityClosureSection";
 import { useI18n } from "../i18n";
 import { PayrollConsolidationSection } from "../components/PayrollConsolidationSection";
 import { PayrollSettingsSection } from "../components/PayrollSettingsSection";
@@ -245,6 +246,10 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
+
+      {/* Signalement de clôture d'activité mensuelle : échéance du jour de clôture
+          (10 par défaut, paramétrable) et rappels automatiques aux responsables. */}
+      <ActivityClosureSection canAdminister={canAdminister} />
 
       {/* Évolution — Présences & Temps de travail : paramétrage des horaires (§9) */}
       <WorkScheduleSection canAdminister={canAdministerPresence} />

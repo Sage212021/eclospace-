@@ -2857,6 +2857,7 @@ export interface SiteFichePayload {
 export interface SiteFicheView {
   payload: SiteFichePayload;
   fiche: string; // texte prêt à copier
+  cover: { available: boolean; version_id: string | null; mime_type: string | null; is_image: boolean };
   missing: string[];
   status: "non_publie" | "publie" | "erreur";
   external_url: string | null;

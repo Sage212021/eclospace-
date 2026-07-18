@@ -1096,3 +1096,9 @@ Le développeur du site a confirmé que **le site n'est pas WordPress** (sur-mes
 **Vérifications :** typecheck back+front ; build OK ; **4 tests** (construction de la fiche, endpoint d'aperçu, marquage publié + retrait, permission). Section vérifiée dans le navigateur réel.
 
 **Le socle reste prêt** pour une publication automatique ultérieure si le site expose un jour une entrée API (option ②).
+
+### 17/07/2026 (suite) — Fiche pour le site : couverture associée
+
+Remarque de l'opérateur : la couverture devrait accompagner la fiche, pas être seulement rappelée. Ajouté : la section « Fiche pour le site » embarque désormais la **couverture (1re)** de l'ouvrage — **aperçu (vignette) + bouton « Télécharger la couverture »** — pour que le maquettiste ait tout au même endroit (texte + image). Si aucune couverture n'est déposée, un message invite à l'ajouter (Visuels / Pièces jointes).
+
+Réutilise le stockage existant (`ImageAsset` type `couverture_1` → `DocumentVersion`) et la route de téléchargement `document-versions/:id/download`. Typecheck + build OK ; 4 tests verts (structure « couverture » vérifiée). Bilingue FR/EN.

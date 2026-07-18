@@ -92,10 +92,30 @@ export function formatFiche(p: SiteFichePayload): string {
   return lines.join("\n");
 }
 
-// Aperçu : la fiche prête à publier + l'état de publication + champs manquants.
+// Couverture (1re) de l'ouvrage, si elle a été déposée : renvoie la version de
+// document téléchargeable, pour que la fiche « site » embarque aussi l'image.
+async function coverFor(manuscriptId: string) {
+  const asset = await prisma.imageAsset.findFirst({
+    where: { manuscriptId, type: "couverture_1", documentVersionId: { not: null } },
+    orderBy: { createdAt: "desc" },
+    include: { documentVersion: { select: { id: true, mimeType: true } } },
+  });
+  const v = asset?.documentVersion;
+  return {
+    available: Boolean(v),
+    version_id: v?.id ?? null,
+    mime_type: v?.mimeType ?? null,
+    is_image: Boolean(v?.mimeType?.startsWith("image/")),
+  };
+}
+
+// Aperçu : la fiche prête à publier + la couverture + l'état + champs manquants.
 export async function previewSiteFiche(manuscriptId: string) {
   const payload = await buildFichePayload(manuscriptId);
-  const existing = await prisma.sitePublication.findUnique({ where: { manuscriptId } });
+  const [existing, cover] = await Promise.all([
+    prisma.sitePublication.findUnique({ where: { manuscriptId } }),
+    coverFor(manuscriptId),
+  ]);
   const missing: string[] = [];
   if (!payload.author) missing.push("auteur");
   if (!payload.genre) missing.push("genre");
@@ -104,6 +124,7 @@ export async function previewSiteFiche(manuscriptId: string) {
   return {
     payload,
     fiche: formatFiche(payload),
+    cover,
     missing,
     status: existing?.status ?? "non_publie",
     external_url: existing?.externalUrl ?? null,

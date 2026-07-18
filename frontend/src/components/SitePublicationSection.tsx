@@ -1,23 +1,27 @@
 import { useEffect, useState } from "react";
-import { getSitePublication, publishToSite, type SitePublicationView } from "../api/client";
+import { getSitePublication, setSitePublished, type SiteFicheView } from "../api/client";
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { useI18n } from "../i18n";
 
-// Fiche d'ouvrage → « Site vitrine » : publier l'ouvrage sur la boutique
-// WordPress (produit rangé dans la catégorie de son genre). Tant que le site
-// n'est pas branché (config d'hébergement), l'action montre l'APERÇU de ce qui
-// sera envoyé, sans rien publier.
+// Fiche d'ouvrage → « Fiche pour le site » : le site étant sur-mesure (sans API
+// de publication automatique), l'ERP prépare une fiche prête à copier/coller
+// que le maquettiste ajoute au site. L'ERP garde la trace de ce qui est publié.
 export function SitePublicationSection({ manuscriptId, canPublish }: { manuscriptId: string; canPublish: boolean }) {
-  const { t } = useI18n();
-  const [view, setView] = useState<SitePublicationView | null>(null);
+  const { t, lang } = useI18n();
+  const locale = lang === "en" ? "en-GB" : "fr-FR";
+  const [view, setView] = useState<SiteFicheView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
     try {
-      setView(await getSitePublication(manuscriptId));
+      const v = await getSitePublication(manuscriptId);
+      setView(v);
+      setUrl(v.external_url ?? "");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chargement impossible.");
     }
@@ -27,25 +31,27 @@ export function SitePublicationSection({ manuscriptId, canPublish }: { manuscrip
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manuscriptId]);
 
-  async function publish() {
+  async function copyFiche() {
+    if (!view) return;
+    try {
+      await navigator.clipboard.writeText(view.fiche);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setError(t("sitepub.copy_failed", "Copie impossible — sélectionnez le texte et copiez-le manuellement."));
+    }
+  }
+
+  async function mark(published: boolean) {
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const r = await publishToSite(manuscriptId);
-      if (r.ok) {
-        setMessage(t("sitepub.msg_published", "Ouvrage publié sur le site."));
-      } else {
-        setMessage(
-          t(
-            "sitepub.msg_preview",
-            "Site non encore branché : voici l'aperçu de ce qui sera envoyé. La publication réelle se fera une fois les accès configurés.",
-          ),
-        );
-      }
+      await setSitePublished(manuscriptId, published, url.trim() || undefined);
+      setMessage(published ? t("sitepub.msg_marked", "Marqué comme publié sur le site.") : t("sitepub.msg_unmarked", "Retiré des ouvrages publiés."));
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Publication impossible.");
+      setError(e instanceof Error ? e.message : "Enregistrement impossible.");
     } finally {
       setBusy(false);
     }
@@ -53,83 +59,91 @@ export function SitePublicationSection({ manuscriptId, canPublish }: { manuscrip
 
   if (!view) {
     return (
-      <Card title={t("sitepub.title", "Site vitrine")}>
+      <Card title={t("sitepub.title", "Fiche pour le site")}>
         {error ? <div style={banner("var(--alert-soft)", "var(--alert)")}>{error}</div> : <p style={{ color: "var(--muted)", fontSize: 13 }}>{t("sitepub.loading", "Chargement…")}</p>}
       </Card>
     );
   }
 
-  const p = view.payload;
-  const statusChip = () => {
-    const map: Record<string, { label: string; color: string }> = {
-      publie: { label: t("sitepub.st_published", "Publié sur le site"), color: "var(--success)" },
-      erreur: { label: t("sitepub.st_error", "Erreur"), color: "var(--alert)" },
-      non_publie: { label: t("sitepub.st_none", "Non publié"), color: "var(--muted)" },
-    };
-    const s = map[view.status] ?? map.non_publie;
-    return <span style={{ fontSize: 11, fontWeight: 700, color: s.color, border: `1px solid ${s.color}`, borderRadius: 999, padding: "1px 9px" }}>{s.label}</span>;
-  };
+  const published = view.status === "publie";
+  const statusChip = (
+    <span style={{ fontSize: 11, fontWeight: 700, color: published ? "var(--success)" : "var(--muted)", border: `1px solid ${published ? "var(--success)" : "var(--line)"}`, borderRadius: 999, padding: "1px 9px", whiteSpace: "nowrap" }}>
+      {published ? t("sitepub.st_published", "Publié sur le site") : t("sitepub.st_none", "Non publié")}
+    </span>
+  );
 
   return (
     <Card
-      title={t("sitepub.title", "Site vitrine")}
-      subtitle={t("sitepub.subtitle", "Publier cet ouvrage sur la boutique du site, rangé dans la catégorie de son genre.")}
-      action={statusChip()}
+      title={t("sitepub.title", "Fiche pour le site")}
+      subtitle={t("sitepub.subtitle", "Fiche prête à copier pour la page catalogue du site, rangée par genre.")}
+      action={statusChip}
     >
       {error && <div style={banner("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={banner("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
-      {!view.configured && (
-        <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark)", borderRadius: 8, padding: "8px 12px", fontSize: 12.5, marginBottom: 10 }}>
-          {t("sitepub.not_configured", "La connexion au site n'est pas encore activée : l'action affiche l'aperçu du produit. Le branchement réel se fera au déploiement.")}
-        </div>
-      )}
-
-      {/* Aperçu du produit qui sera envoyé */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, fontSize: 13 }}>
-        <Row label={t("sitepub.f_name", "Nom")} value={p.name} />
-        <Row label={t("sitepub.f_author", "Auteur")} value={p.author} />
-        <Row label={t("sitepub.f_category", "Catégorie (genre)")} value={p.category} />
-        <Row label={t("sitepub.f_price", "Prix")} value={p.price != null ? `${p.price.toLocaleString("fr-FR")} ${p.currency}` : null} mono />
-        <Row label={t("sitepub.f_sku", "ISBN")} value={p.sku} mono />
+      <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark)", borderRadius: 8, padding: "8px 12px", fontSize: 12.5, marginBottom: 10 }}>
+        {t("sitepub.howto", "Copiez cette fiche et collez-la sur le site, dans la catégorie du genre. N'oubliez pas d'y joindre la couverture de l'ouvrage.")}
       </div>
-      {p.description && (
-        <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--muted)" }}>
-          <strong>{t("sitepub.f_desc", "Description :")}</strong> {p.description}
-        </div>
-      )}
+
+      {/* Fiche prête à copier */}
+      <pre
+        style={{
+          background: "var(--paper)",
+          border: "1px solid var(--line)",
+          borderRadius: 8,
+          padding: "12px 14px",
+          fontSize: 13,
+          lineHeight: 1.55,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          fontFamily: "inherit",
+          margin: 0,
+          color: "var(--ink)",
+        }}
+      >
+        {view.fiche}
+      </pre>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+        <Button variant="add" size="sm" onClick={copyFiche}>
+          {copied ? t("sitepub.copied", "✓ Copié") : t("sitepub.copy", "Copier la fiche")}
+        </Button>
+      </div>
 
       {view.missing.length > 0 && (
         <div style={{ marginTop: 10, fontSize: 12.5, color: "#C4661F" }}>
-          {t("sitepub.missing", "À compléter avant publication :")} {view.missing.join(", ")}
+          {t("sitepub.missing", "À compléter dans l'ERP avant publication :")} {view.missing.join(", ")}
         </div>
       )}
 
-      {view.external_url && (
-        <div style={{ marginTop: 10, fontSize: 13 }}>
-          <a href={view.external_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--eclosion-dark)" }}>
-            {t("sitepub.view_online", "Voir la fiche sur le site ↗")}
-          </a>
-        </div>
-      )}
-
+      {/* Suivi : marquer publié + lien de la fiche en ligne */}
       {canPublish && (
-        <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-          <Button variant="add" size="sm" onClick={publish} disabled={busy}>
-            {view.status === "publie" ? t("sitepub.update", "Mettre à jour sur le site") : t("sitepub.publish", "Publier sur le site")}
-          </Button>
+        <div style={{ borderTop: "1px solid var(--line)", marginTop: 14, paddingTop: 12 }}>
+          <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 6 }}>
+            {t("sitepub.track", "Une fois la fiche mise sur le site, marquez-la comme publiée (et collez son lien, facultatif) :")}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder={t("sitepub.url_ph", "Lien de la fiche sur le site (facultatif)")}
+              style={{ flex: 1, minWidth: 220, padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 }}
+            />
+            {published ? (
+              <Button variant="view" size="sm" onClick={() => mark(false)} disabled={busy}>{t("sitepub.unmark", "Retirer")}</Button>
+            ) : (
+              <Button variant="add" size="sm" onClick={() => mark(true)} disabled={busy}>{t("sitepub.mark", "Marquer comme publié")}</Button>
+            )}
+          </div>
+          {published && view.external_url && (
+            <div style={{ marginTop: 8, fontSize: 13 }}>
+              <a href={view.external_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--eclosion-dark)" }}>{t("sitepub.view_online", "Voir la fiche sur le site ↗")}</a>
+              {view.published_at && <span style={{ color: "var(--muted)" }}> · {new Date(view.published_at).toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" })}</span>}
+            </div>
+          )}
         </div>
       )}
     </Card>
-  );
-}
-
-function Row({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.3 }}>{label}</div>
-      <div style={{ color: value ? "var(--ink)" : "var(--muted)", fontFamily: mono ? "var(--font-mono)" : undefined, marginTop: 2 }}>{value ?? "—"}</div>
-    </div>
   );
 }
 

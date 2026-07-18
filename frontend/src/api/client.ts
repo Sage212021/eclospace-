@@ -2842,22 +2842,21 @@ export function remindActivityClosure() {
   });
 }
 
-// ── Publication sur le site vitrine (boutique WordPress) ─────────────────────
-export interface SiteProductPreview {
-  name: string;
+// ── Fiche « site vitrine » (prête à publier) ─────────────────────────────────
+export interface SiteFichePayload {
+  title: string;
+  subtitle: string | null;
   author: string | null;
-  category: string | null;
+  genre: string | null;
   price: number | null;
   currency: string;
-  description: string | null;
-  sku: string | null;
-  cover: { available: boolean; version_id: string | null };
+  summary: string | null;
+  isbn: string | null;
 }
 
-export interface SitePublicationView {
-  configured: boolean;
-  site_url: string | null;
-  payload: SiteProductPreview;
+export interface SiteFicheView {
+  payload: SiteFichePayload;
+  fiche: string; // texte prêt à copier
   missing: string[];
   status: "non_publie" | "publie" | "erreur";
   external_url: string | null;
@@ -2865,12 +2864,12 @@ export interface SitePublicationView {
 }
 
 export function getSitePublication(manuscriptId: string) {
-  return request<SitePublicationView>(`/api/v1/manuscripts/${manuscriptId}/site-publication`);
+  return request<SiteFicheView>(`/api/v1/manuscripts/${manuscriptId}/site-publication`);
 }
 
-export function publishToSite(manuscriptId: string) {
-  return request<{ ok: boolean; reason?: string; external_url?: string; external_id?: string; payload?: SiteProductPreview }>(
+export function setSitePublished(manuscriptId: string, published: boolean, url?: string) {
+  return request<{ ok: true; status: string; external_url: string | null; published_at: string | null }>(
     `/api/v1/manuscripts/${manuscriptId}/site-publication`,
-    { method: "POST" },
+    { method: "POST", body: JSON.stringify({ published, url: url ?? "" }) },
   );
 }

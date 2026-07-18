@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
-import { previewSitePublication, publishToSite } from "../lib/sitePublisher.js";
+import { previewSiteFiche, setSitePublished } from "../lib/sitePublisher.js";
 
 const authorSchema = z.union([
   z.object({ author_id: z.string().uuid() }),
@@ -554,37 +554,37 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // ── Publication sur le site vitrine (boutique WordPress) ────────────────────
-  // Aperçu : ce qui serait envoyé au site pour cet ouvrage (nom, auteur, genre,
-  // prix, résumé, ISBN), + état de publication + champs manquants éventuels.
+  // ── Fiche « site vitrine » (prête à publier) ────────────────────────────────
+  // Le site étant sur-mesure (sans API), l'ERP prépare une fiche prête à copier
+  // (titre, auteur, genre, prix, ISBN, résumé) + l'état de publication.
   fastify.get(
     "/api/v1/manuscripts/:id/site-publication",
     { preHandler: requirePermission("manuscripts", "consultation") },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       try {
-        return reply.send(await previewSitePublication(id));
+        return reply.send(await previewSiteFiche(id));
       } catch (err) {
         return reply.code(404).send({ code: "not_found", message: err instanceof Error ? err.message : "Ouvrage introuvable." });
       }
     },
   );
 
-  // Publier / mettre à jour l'ouvrage sur le site (action du maquettiste). Sans
-  // configuration du site, renvoie l'aperçu sans rien publier (non_configuré).
+  // Marque l'ouvrage comme publié (ou non) sur le site, avec le lien éventuel de
+  // la fiche en ligne — pour que l'ERP garde la trace de ce qui est sur le site.
+  const markSchema = z.object({ published: z.boolean(), url: z.string().url().optional().or(z.literal("")) });
   fastify.post(
     "/api/v1/manuscripts/:id/site-publication",
     { preHandler: requirePermission("manuscripts", "saisie") },
     async (request, reply) => {
       const { id } = request.params as { id: string };
+      const parsed = markSchema.safeParse(request.body ?? {});
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
       try {
-        const result = await publishToSite(id, { id: request.user!.id, ip: request.ip });
-        if (!result.published) {
-          return reply.code(200).send({ ok: false, reason: "not_configured", payload: result.payload });
-        }
-        return reply.send({ ok: true, external_url: result.external_url, external_id: result.external_id });
+        const result = await setSitePublished(id, { id: request.user!.id, ip: request.ip }, parsed.data.published, parsed.data.url || null);
+        return reply.send({ ok: true, ...result });
       } catch (err) {
-        return reply.code(502).send({ code: "publish_failed", message: err instanceof Error ? err.message : "Publication impossible." });
+        return reply.code(404).send({ code: "not_found", message: err instanceof Error ? err.message : "Ouvrage introuvable." });
       }
     },
   );

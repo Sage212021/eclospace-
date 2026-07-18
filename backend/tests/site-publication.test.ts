@@ -82,6 +82,9 @@ describe("fiche pour le site vitrine", () => {
     const body = res.json();
     expect(body.fiche).toContain("Princesse SIKA-BEHA");
     expect(body.status).toBe("non_publie");
+    // Couverture associée : structure présente, indisponible ici (aucune déposée).
+    expect(body.cover).toBeDefined();
+    expect(body.cover.available).toBe(false);
   });
 
   it("marquer comme publié : met à jour l'état et le lien", async () => {

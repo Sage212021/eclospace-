@@ -1083,3 +1083,16 @@ Nouveau besoin : permettre au maquettiste de **publier un ouvrage sur le site** 
 **Reste (déploiement) :** créer la **clé API WooCommerce** côté site, la renseigner dans la config Scalingo (`SITE_WC_URL/KEY/SECRET`), puis **premier envoi test** en conditions réelles ; transfert de l'**image de couverture** (URL publique / import média) à finaliser au branchement.
 
 **Sécurité :** les accès du site (partagés par l'opérateur) **ne sont pas** dans le dépôt ; ils iront en config d'hébergement. Mot de passe partagé en chat : à changer par prudence.
+
+### 17/07/2026 (suite) — Site vitrine : pivot vers « fiche prête à publier » (option ①)
+
+Le développeur du site a confirmé que **le site n'est pas WordPress** (sur-mesure PHP + React) et **n'expose pas d'API** de publication (le e-commerce est une option payante non prise, inutile pour la maison). La publication **automatique** demanderait une intervention dans le code du site, que le développeur juge difficile. **Décision opérateur (option ①)** : l'ERP prépare une **fiche prête à copier** que le maquettiste colle sur le site — zéro dépendance au développeur, utilisable tout de suite.
+
+**Adapté :** l'ancienne connexion WooCommerce (incrément 1, #87) est remplacée par la **fiche copiable** :
+- `lib/sitePublisher.ts` : `buildFichePayload` (titre, sous-titre, auteur, genre, prix XAF, ISBN, résumé) + `formatFiche` (texte prêt à coller) ; `setSitePublished` (marquage manuel + lien de la fiche en ligne). Suppression de l'adaptateur WooCommerce (sans objet).
+- Section **« Fiche pour le site »** sur la fiche d'ouvrage : fiche formatée, bouton **« Copier la fiche »**, rappel couverture, champs manquants signalés, et suivi **« Marquer comme publié »** (+ lien facultatif) pour que l'ERP garde la trace de ce qui est en ligne.
+- API : `GET /manuscripts/:id/site-publication` (fiche + état), `POST …` (marquer publié/retiré).
+
+**Vérifications :** typecheck back+front ; build OK ; **4 tests** (construction de la fiche, endpoint d'aperçu, marquage publié + retrait, permission). Section vérifiée dans le navigateur réel.
+
+**Le socle reste prêt** pour une publication automatique ultérieure si le site expose un jour une entrée API (option ②).

@@ -3,11 +3,12 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { createUserWithRole, extractSessionCookie } from "./helpers.js";
-import { buildProductPayload, publishToSite } from "../src/lib/sitePublisher.js";
+import { buildFichePayload, formatFiche } from "../src/lib/sitePublisher.js";
 
-// Publication d'un ouvrage sur le site vitrine. Règles testées : construction
-// du produit à partir de l'ERP (nom, auteur, genre→catégorie, prix XAF, ISBN,
-// résumé), aperçu sans configuration (aucun envoi réel), permissions.
+// Fiche « site vitrine » (prête à publier). Le site étant sur-mesure (sans API),
+// l'ERP prépare une fiche copiable et garde la trace de ce qui est publié.
+// Règles testées : construction de la fiche (titre, auteur, genre, prix XAF,
+// ISBN, résumé), endpoint d'aperçu, marquage « publié », permissions.
 
 const rnd = Math.floor(Math.random() * 1e6);
 const PWD = "SitePub123!";
@@ -17,7 +18,7 @@ async function login(app: FastifyInstance, username: string, password: string) {
   return extractSessionCookie(res.cookies.map((c) => `${c.name}=${c.value}`));
 }
 
-describe("publication sur le site vitrine", () => {
+describe("fiche pour le site vitrine", () => {
   let app: FastifyInstance;
   let manuscriptId: string;
   let editorCookie: string;
@@ -49,7 +50,6 @@ describe("publication sur le site vitrine", () => {
     await prisma.workMetadata.create({ data: { manuscriptId: m.id, priceByCountry: { CM: 3000 } } });
     await prisma.isbn.create({ data: { isbn13: `978${rnd}${Math.floor(Math.random() * 900 + 100)}`.slice(0, 13), format: "print", manuscriptId: m.id } });
 
-    // Maquettiste = utilisateur avec manuscripts:saisie (ici ADMIN_GENERAL, déjà créé).
     await createUserWithRole(`site_reader_${rnd}`, "CORRECTEUR", PWD);
     editorCookie = await login(app, `site_editor_${rnd}`, PWD);
     readerCookie = await login(app, `site_reader_${rnd}`, PWD);
@@ -59,42 +59,53 @@ describe("publication sur le site vitrine", () => {
     await app.close();
   });
 
-  it("construit le produit à partir des données de l'ouvrage", async () => {
-    const payload = await buildProductPayload(manuscriptId);
-    expect(payload.name).toBe(`Palmes d'or ${rnd} — Tome I : Les fables`);
+  it("construit la fiche à partir des données de l'ouvrage", async () => {
+    const payload = await buildFichePayload(manuscriptId);
+    expect(payload.title).toBe(`Palmes d'or ${rnd}`);
+    expect(payload.subtitle).toBe("Tome I : Les fables");
     expect(payload.author).toBe("Princesse SIKA-BEHA");
-    expect(payload.category).toBe(`Famille ${rnd}`); // genre
-    expect(payload.price).toBe(3000); // XAF depuis priceByCountry
+    expect(payload.genre).toBe(`Famille ${rnd}`);
+    expect(payload.price).toBe(3000);
     expect(payload.currency).toBe("XAF");
-    expect(payload.description).toContain("fables");
-    expect(payload.sku).toMatch(/^978/); // ISBN
+    expect(payload.isbn).toMatch(/^978/);
+
+    const fiche = formatFiche(payload);
+    expect(fiche).toContain("Princesse SIKA-BEHA");
+    expect(fiche).toContain(`Famille ${rnd}`);
+    expect(fiche).toMatch(/3\s?000\s?XAF/);
+    expect(fiche).toContain("Résumé :");
   });
 
-  it("sans configuration du site : aperçu enregistré, aucun envoi réel", async () => {
-    const result = await publishToSite(manuscriptId, { id: "test" });
-    expect(result.published).toBe(false);
-    if (!result.published) expect(result.reason).toBe("not_configured");
-    const row = await prisma.sitePublication.findUnique({ where: { manuscriptId } });
-    expect(row).not.toBeNull();
-    expect(row?.status).toBe("non_publie"); // pas « publié » puisque non envoyé
-    expect(row?.lastPayload).not.toBeNull(); // l'aperçu est mémorisé
-  });
-
-  it("endpoint d'aperçu : accessible en consultation, signale l'état non configuré", async () => {
+  it("endpoint d'aperçu : renvoie la fiche prête à copier", async () => {
     const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/site-publication`, headers: { cookie: editorCookie } });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.configured).toBe(false);
-    expect(body.payload.category).toBe(`Famille ${rnd}`);
+    expect(body.fiche).toContain("Princesse SIKA-BEHA");
+    expect(body.status).toBe("non_publie");
   });
 
-  it("publier est réservé à la saisie (consultation refusée)", async () => {
-    const denied = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/site-publication`, headers: { cookie: readerCookie } });
-    expect(denied.statusCode).toBe(403);
+  it("marquer comme publié : met à jour l'état et le lien", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscriptId}/site-publication`,
+      headers: { cookie: editorCookie },
+      payload: { published: true, url: "https://eclosion.cm/livre/palmes-dor" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("publie");
+    expect(res.json().external_url).toBe("https://eclosion.cm/livre/palmes-dor");
 
-    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/site-publication`, headers: { cookie: editorCookie } });
-    expect(ok.statusCode).toBe(200);
-    expect(ok.json().ok).toBe(false); // non configuré : aperçu, pas d'envoi
-    expect(ok.json().reason).toBe("not_configured");
+    const row = await prisma.sitePublication.findUnique({ where: { manuscriptId } });
+    expect(row?.status).toBe("publie");
+    expect(row?.publishedAt).not.toBeNull();
+
+    // Retrait : repasse en non publié.
+    const off = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/site-publication`, headers: { cookie: editorCookie }, payload: { published: false } });
+    expect(off.json().status).toBe("non_publie");
+  });
+
+  it("marquer est réservé à la saisie (consultation refusée)", async () => {
+    const denied = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/site-publication`, headers: { cookie: readerCookie }, payload: { published: true } });
+    expect(denied.statusCode).toBe(403);
   });
 });

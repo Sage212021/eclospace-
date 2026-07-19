@@ -206,6 +206,10 @@ const EN: Record<string, string> = {
   "pole.Pilotage": "Management",
   // Entrées de menu
   "nav.dashboard": "Dashboard",
+  "nav.locked": "Access denied — outside your scope",
+  "unauth.title": "Access denied",
+  "unauth.body": "This module is not part of your scope:",
+  "unauth.hint": "It appears in the menu to show you the company's structure. If you believe you should have access, please contact your administrator.",
   "nav.mes-rapports": "My weekly reports",
   "nav.ed-manuscrits": "Manuscripts",
   "nav.ed-comite": "Reading committee",

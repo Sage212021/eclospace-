@@ -326,6 +326,13 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 - **Backend** : identifiant **rogné** (trim) et **insensible à la casse** à la
   connexion (`mode: "insensitive"`), ainsi qu'au create/patch. Le **mot de
   passe n'est jamais rogné** (un espace peut être voulu).
+- **Réparation des comptes existants** : un espace **déjà enregistré** dans
+  l'identifiant n'est PAS rattrapé par l'insensibilité à la casse (elle ignore la
+  casse, pas les espaces — vérifié en reproduction). Le seed rogne donc les
+  identifiants/e-mails déjà en base (uniquement si la valeur nettoyée reste
+  unique). Le seed étant rejoué au déploiement, un compte « `Noah ` » redevient
+  « `Noah` » et se connecte à nouveau (après une réinitialisation du mot de passe
+  dans le champ désormais non corrigé, si le mot de passe avait aussi été altéré).
 - Tests (`auth.test.ts`) : connexion avec casse différente / espaces autour de
   l'identifiant → OK ; mot de passe avec espace en trop → refusé.
 

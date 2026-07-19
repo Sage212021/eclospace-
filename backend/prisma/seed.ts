@@ -780,6 +780,27 @@ async function main() {
     });
   }
 
+  // Réparation des identifiants/e-mails « pollués » par un espace parasite
+  // (clavier mobile) : un espace de début/fin empêchait la connexion (comparaison
+  // exacte). On rogne les valeurs déjà en base, uniquement si la valeur nettoyée
+  // reste unique (sinon on laisse tel quel pour ne pas heurter la contrainte).
+  const usersToTrim = await prisma.user.findMany({ where: { deletedAt: null }, select: { id: true, username: true, email: true } });
+  for (const u of usersToTrim) {
+    const cleanUsername = u.username.trim();
+    const cleanEmail = u.email.trim();
+    const data: { username?: string; email?: string } = {};
+    if (cleanUsername !== u.username && !(await prisma.user.findFirst({ where: { username: cleanUsername, id: { not: u.id } } }))) {
+      data.username = cleanUsername;
+    }
+    if (cleanEmail !== u.email && !(await prisma.user.findFirst({ where: { email: cleanEmail, id: { not: u.id } } }))) {
+      data.email = cleanEmail;
+    }
+    if (Object.keys(data).length > 0) {
+      await prisma.user.update({ where: { id: u.id }, data });
+      console.log(`Identifiant réparé (espace retiré) : ${u.username.trim()}`);
+    }
+  }
+
   console.log("Seed Lot 0 terminé.");
   console.log(`Compte administrateur : admin / ${adminPassword} (à changer immédiatement)`);
 }

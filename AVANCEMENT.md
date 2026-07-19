@@ -1102,3 +1102,15 @@ Le développeur du site a confirmé que **le site n'est pas WordPress** (sur-mes
 Remarque de l'opérateur : la couverture devrait accompagner la fiche, pas être seulement rappelée. Ajouté : la section « Fiche pour le site » embarque désormais la **couverture (1re)** de l'ouvrage — **aperçu (vignette) + bouton « Télécharger la couverture »** — pour que le maquettiste ait tout au même endroit (texte + image). Si aucune couverture n'est déposée, un message invite à l'ajouter (Visuels / Pièces jointes).
 
 Réutilise le stockage existant (`ImageAsset` type `couverture_1` → `DocumentVersion`) et la route de téléchargement `document-versions/:id/download`. Typecheck + build OK ; 4 tests verts (structure « couverture » vérifiée). Bilingue FR/EN.
+
+### 19/07/2026 — Fiche pour le site : couverture téléchargée = image web légère
+
+Demande de l'opérateur : le fichier à joindre à la fiche **ne doit pas être lourd**, il doit être **déjà en JPG/PNG**, de **très bonne qualité**. La couverture déposée dans l'ERP est en qualité **impression** (souvent plusieurs Mo, 3000+ px) — inadaptée telle quelle au site.
+
+Ajouté : le téléchargement de la couverture depuis la fiche pointe désormais vers une nouvelle route `GET /api/v1/manuscripts/:id/site-cover` qui **transforme la couverture à la volée** en une image **légère** : sortie **JPG de très bonne qualité (q86)**, servie en pièce jointe avec un **nom propre** (`couverture-<titre>.jpg`). La vignette et le lien « Télécharger la couverture » utilisent cette version optimisée ; un libellé précise « image web légère, prête pour le site ».
+
+**Format des vignettes du site pris en compte** (d'après la capture de la page catalogue eclosion.cm envoyée par l'opérateur) : les couvertures s'y affichent en **portrait ≈ 2:3**. La sortie est donc calée dans une boîte **1080 × 1600**, **proportions conservées** et **couverture entière** — on ne coupe jamais (aucun titre ni auteur perdu) et on ne déforme pas ; réduction seule (une couverture déjà petite n'est pas agrandie). Le site continue de recadrer l'affichage lui-même, comme pour les autres ouvrages.
+
+**Choix technique** : bibliothèque **`jimp`** (traitement d'image 100 % JavaScript, sans binaire natif) — s'installe et tourne à l'identique sur le poste et sur le cloud, conforme à la règle « pas de dépendance exotique ». Isolé dans `lib/imageOptimize.ts` (`optimizeImage`, réduction seule) + `optimizedCoverForSite` dans `lib/sitePublisher.ts`. Format source non décodable (ex. PDF) → erreur explicite `422` plutôt qu'un fichier cassé. Détail dans `docs/JOURNAL_TECHNIQUE.md`.
+
+Typecheck + build OK ; **8 tests verts** (réduction produit un JPG plus léger, jamais d'agrandissement, calage dans la boîte portrait 1080×1600 sans couper ni déformer, endpoint renvoie une image JPG légère en pièce jointe). Bilingue FR/EN.

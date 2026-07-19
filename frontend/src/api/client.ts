@@ -752,6 +752,13 @@ export function documentVersionDownloadUrl(versionId: string): string {
   return `${API_BASE}/api/v1/document-versions/${versionId}/download`;
 }
 
+// Couverture « prête pour le web » : version légère (JPG de très bonne qualité)
+// transformée à la volée depuis la couverture d'impression. C'est ce lien que le
+// maquettiste utilise pour joindre l'image à la fiche du site.
+export function siteCoverDownloadUrl(manuscriptId: string): string {
+  return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/site-cover`;
+}
+
 // « Signaler au pôle » : notifier les titulaires d'un rôle qu'une pièce est
 // disponible (la pièce ne bouge pas).
 export function notifyDocument(documentId: string, roleCode: string) {

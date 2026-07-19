@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getSitePublication, setSitePublished, documentVersionDownloadUrl, type SiteFicheView } from "../api/client";
+import { getSitePublication, setSitePublished, siteCoverDownloadUrl, type SiteFicheView } from "../api/client";
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { useI18n } from "../i18n";
@@ -106,28 +106,31 @@ export function SitePublicationSection({ manuscriptId, canPublish }: { manuscrip
 
       {/* Couverture associée */}
       <div style={{ display: "flex", gap: 14, alignItems: "flex-start", marginTop: 12, flexWrap: "wrap" }}>
-        {view.cover.available && view.cover.version_id ? (
+        {view.cover.available && view.cover.is_image ? (
           <>
-            {view.cover.is_image && (
-              <img
-                src={documentVersionDownloadUrl(view.cover.version_id)}
-                alt={t("sitepub.cover", "Couverture")}
-                style={{ width: 84, height: "auto", borderRadius: 6, border: "1px solid var(--line)", boxShadow: "0 1px 4px rgba(16,35,61,.12)" }}
-              />
-            )}
+            <img
+              src={siteCoverDownloadUrl(manuscriptId)}
+              alt={t("sitepub.cover", "Couverture")}
+              style={{ width: 84, height: "auto", borderRadius: 6, border: "1px solid var(--line)", boxShadow: "0 1px 4px rgba(16,35,61,.12)" }}
+            />
             <div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>{t("sitepub.cover", "Couverture")}</div>
               <a
-                href={documentVersionDownloadUrl(view.cover.version_id)}
+                href={siteCoverDownloadUrl(manuscriptId)}
                 download
-                target="_blank"
-                rel="noopener noreferrer"
                 style={{ fontSize: 13, color: "var(--eclosion-dark)", fontWeight: 600 }}
               >
-                {t("sitepub.cover_download", "⬇ Télécharger la couverture")}
+                {t("sitepub.cover_download", "⬇ Télécharger la couverture (image web légère)")}
               </a>
+              <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 3 }}>
+                {t("sitepub.cover_hint", "Fichier léger, JPG de très bonne qualité, au format portrait du site — prêt à publier.")}
+              </div>
             </div>
           </>
+        ) : view.cover.available ? (
+          <div style={{ fontSize: 12.5, color: "#C4661F" }}>
+            {t("sitepub.cover_notimage", "La couverture déposée n'est pas une image (JPG/PNG) — déposez une image pour pouvoir la joindre à la fiche.")}
+          </div>
         ) : (
           <div style={{ fontSize: 12.5, color: "#C4661F" }}>
             {t("sitepub.cover_missing", "Aucune couverture (1re) déposée pour cet ouvrage — déposez-la dans les Visuels / Pièces jointes.")}

@@ -1,5 +1,7 @@
 import { prisma } from "./prisma.js";
 import { writeAuditLog } from "./audit.js";
+import { readStoredFile } from "./storage.js";
+import { optimizeImage, UnsupportedImageError } from "./imageOptimize.js";
 
 // Publication d'un ouvrage sur le site vitrine (site sur-mesure PHP + React,
 // sans API dédiée). Le site ne pouvant pas recevoir automatiquement les fiches,
@@ -108,6 +110,53 @@ async function coverFor(manuscriptId: string) {
     is_image: Boolean(v?.mimeType?.startsWith("image/")),
   };
 }
+
+// Nom de fichier propre (sans accents ni espaces) pour la couverture téléchargée.
+function slugify(input: string): string {
+  return (
+    input
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // enlève les accents
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase()
+      .slice(0, 60) || "couverture"
+  );
+}
+
+// Format d'affichage des couvertures sur le site vitrine (eclosion.cm) :
+// vignettes **portrait** (≈ 2:3). On cale donc la couverture pour qu'elle tienne
+// dans une boîte 1080 × 1600 — proportions conservées, **couverture entière**
+// (aucune coupe : ni titre ni auteur perdus ; le site recadre lui-même si besoin).
+const SITE_COVER_BOX = { maxWidth: 1080, maxHeight: 1600 } as const;
+
+// Couverture « prête pour le web » : lit la couverture déposée (souvent lourde,
+// en qualité impression) et renvoie une image légère, en JPG de très bonne
+// qualité, au format portrait du site, prête à joindre à la fiche. Réduction
+// seule (jamais d'agrandissement), couverture entière (aucune coupe).
+export async function optimizedCoverForSite(manuscriptId: string): Promise<{
+  buffer: Buffer;
+  mime: string;
+  filename: string;
+} | null> {
+  const asset = await prisma.imageAsset.findFirst({
+    where: { manuscriptId, type: "couverture_1", documentVersionId: { not: null } },
+    orderBy: { createdAt: "desc" },
+    include: { documentVersion: { select: { id: true, filePath: true, mimeType: true } } },
+  });
+  const v = asset?.documentVersion;
+  if (!v || !v.mimeType?.startsWith("image/")) return null;
+
+  const original = await readStoredFile(v.filePath);
+  const optimized = await optimizeImage(original, { ...SITE_COVER_BOX, quality: 86, format: "jpeg" });
+
+  const payload = await buildFichePayload(manuscriptId);
+  const base = slugify(payload.title || "couverture");
+  const filename = `couverture-${base}.${optimized.ext}`;
+  return { buffer: optimized.buffer, mime: optimized.mime, filename };
+}
+
+export { UnsupportedImageError };
 
 // Aperçu : la fiche prête à publier + la couverture + l'état + champs manquants.
 export async function previewSiteFiche(manuscriptId: string) {

@@ -15,6 +15,39 @@ const resetPasswordSchema = z.object({ new_password: z.string().min(1) });
 // vidé de ses titulaires.
 const SUPERADMIN_ROLE = "ADMIN_GENERAL";
 
+// Identifiant/e-mail « libérés » d'un compte supprimé : on suffixe la valeur
+// avec l'id du compte (unique) pour lever la contrainte d'unicité tout en
+// gardant la trace de la valeur d'origine. Le compte reste supprimé (logique).
+function freedIdentifier(value: string, id: string): string {
+  return `${value}#supprimé-${id}`;
+}
+
+// Un compte SUPPRIMÉ occupe encore l'identifiant et l'e-mail (contrainte
+// d'unicité en base, indépendante de la suppression logique). Avant de créer un
+// nouveau compte, on libère ces valeurs sur les éventuels comptes supprimés qui
+// les détiennent, pour permettre la réutilisation d'un e-mail/identifiant après
+// suppression. Les comptes supprimés ne servent plus à se connecter.
+async function releaseDeletedIdentifiers(username: string, email: string): Promise<void> {
+  const held = await prisma.user.findMany({
+    where: { deletedAt: { not: null }, OR: [{ username }, { email }] },
+    select: { id: true, username: true, email: true },
+  });
+  for (const u of held) {
+    await prisma.user.update({
+      where: { id: u.id },
+      data: {
+        ...(u.username === username ? { username: freedIdentifier(u.username, u.id) } : {}),
+        ...(u.email === email ? { email: freedIdentifier(u.email, u.id) } : {}),
+      },
+    });
+  }
+}
+
+// Vrai si l'erreur est une violation de contrainte d'unicité Prisma (P2002).
+function isUniqueViolation(err: unknown): boolean {
+  return Boolean(err && typeof err === "object" && (err as { code?: string }).code === "P2002");
+}
+
 const createUserSchema = z.object({
   username: z.string().min(3).max(60),
   email: z.string().email(),
@@ -171,19 +204,32 @@ export default async function userRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ code: "unknown_role", message: "Un des rôles indiqués est inconnu." });
     }
 
+    // Un compte supprimé peut encore détenir cet identifiant/e-mail : on le
+    // libère pour permettre la réutilisation après suppression.
+    await releaseDeletedIdentifiers(username, email);
+
     const passwordHash = await argon2.hash(password);
-    const user = await prisma.user.create({
-      data: {
-        username,
-        email,
-        passwordHash,
-        status: "active",
-        createdBy: request.user!.id,
-        updatedBy: request.user!.id,
-        userRoles: { create: roles.map((r) => ({ roleId: r.id, grantedBy: request.user!.id })) },
-      },
-      select: { id: true, username: true, email: true, status: true },
-    });
+    let user;
+    try {
+      user = await prisma.user.create({
+        data: {
+          username,
+          email,
+          passwordHash,
+          status: "active",
+          createdBy: request.user!.id,
+          updatedBy: request.user!.id,
+          userRoles: { create: roles.map((r) => ({ roleId: r.id, grantedBy: request.user!.id })) },
+        },
+        select: { id: true, username: true, email: true, status: true },
+      });
+    } catch (err) {
+      // Filet de sécurité : jamais d'erreur technique brute à l'écran (règle §5).
+      if (isUniqueViolation(err)) {
+        return reply.code(409).send({ code: "identifiant_taken", message: `L'identifiant « ${username} » ou l'e-mail « ${email} » est déjà utilisé par un autre compte.` });
+      }
+      throw err;
+    }
 
     await writeAuditLog({
       userId: request.user!.id,
@@ -221,8 +267,12 @@ export default async function userRoutes(fastify: FastifyInstance) {
     if (email && email !== target.email && (await prisma.user.findFirst({ where: { email, deletedAt: null, id: { not: id } } }))) {
       return reply.code(409).send({ code: "email_taken", message: `L'e-mail « ${email} » est déjà utilisé.` });
     }
+    // Libère l'identifiant/e-mail retenus par d'éventuels comptes supprimés.
+    if (username || email) await releaseDeletedIdentifiers(username ?? target.username, email ?? target.email);
 
-    const updated = await prisma.user.update({
+    let updated;
+    try {
+      updated = await prisma.user.update({
       where: { id },
       data: {
         ...(username ? { username } : {}),
@@ -231,7 +281,13 @@ export default async function userRoutes(fastify: FastifyInstance) {
         updatedBy: request.user!.id,
       },
       select: { id: true, username: true, email: true, status: true },
-    });
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        return reply.code(409).send({ code: "identifiant_taken", message: `L'identifiant ou l'e-mail indiqué est déjà utilisé par un autre compte.` });
+      }
+      throw err;
+    }
 
     await writeAuditLog({
       userId: request.user!.id,
@@ -272,13 +328,25 @@ export default async function userRoutes(fastify: FastifyInstance) {
       }
     }
 
-    await prisma.user.update({ where: { id }, data: { deletedAt: new Date(), status: "disabled", updatedBy: request.user!.id } });
+    // Suppression logique (le compte reste en base, tracé) MAIS on libère
+    // l'identifiant et l'e-mail (en les suffixant) pour qu'ils puissent être
+    // réutilisés par un nouveau compte — sinon la contrainte d'unicité bloque.
+    await prisma.user.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        status: "disabled",
+        username: freedIdentifier(target.username, id),
+        email: freedIdentifier(target.email, id),
+        updatedBy: request.user!.id,
+      },
+    });
     await writeAuditLog({
       userId: request.user!.id,
       action: "update",
       entityType: "user",
       entityId: id,
-      oldValues: { username: target.username },
+      oldValues: { username: target.username, email: target.email },
       newValues: { removed: true },
       ipAddress: request.ip,
     });

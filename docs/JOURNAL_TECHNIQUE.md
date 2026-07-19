@@ -302,6 +302,36 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 - Gérées **par lien** (http/https) en v1 plutôt qu'hébergées, pour rester
   compatible avec une connexion modeste (contrainte du projet).
 
+## Comptes : réutiliser un e-mail/identifiant après suppression (19/07/2026)
+
+### Constat (blocage opérateur)
+- À la création d'un compte, une **erreur technique brute** s'affichait :
+  « Invalid `prisma.user.create()` … Unique constraint failed on the fields:
+  (`email`) ». Impossible de créer le compte du DG.
+
+### Cause
+- `username` et `email` sont `@unique` **en base** (indépendamment de la
+  suppression logique). Or les pré-contrôles ne regardaient que les comptes
+  **non supprimés** (`deletedAt: null`). Un compte **supprimé** occupait donc
+  encore l'e-mail : le pré-contrôle passait, puis `create()` heurtait la
+  contrainte d'unicité → erreur Prisma **non capturée**, affichée telle quelle
+  (contraire à la règle §5 : erreurs explicites, jamais techniques).
+
+### Correctif
+- **Suppression** (`DELETE /users/:id`) : la suppression reste **logique** (la
+  ligne et l'audit sont conservés) mais l'identifiant et l'e-mail sont
+  **libérés** — suffixés `#supprimé-<id>` — pour être réutilisables. Les valeurs
+  d'origine sont tracées dans l'audit.
+- **Création / modification** : avant d'écrire, `releaseDeletedIdentifiers()`
+  libère l'e-mail/identifiant encore détenus par d'éventuels comptes **supprimés**
+  (corrige aussi les comptes supprimés **avant** ce correctif, comme le compte
+  Noah). Filet de sécurité : toute violation d'unicité résiduelle (`P2002`) est
+  convertie en **message clair en français** (409), jamais d'erreur brute.
+- Un e-mail/identifiant détenu par un compte **actif** reste refusé (409) comme
+  avant — on ne libère que des comptes supprimés.
+- Tests (`users-roles.test.ts`) : réutilisation d'e-mail+identifiant après
+  suppression → 201 ; collision avec un compte actif → 409 sans texte « prisma ».
+
 ## Cloisonnement des pôles — droits RH et Rapports resserrés (19/07/2026)
 
 ### Constat (signalé par l'opérateur)

@@ -206,6 +206,19 @@ async function main() {
     }
   }
 
+  // Retrait explicite d'une permission à un rôle : nécessaire pour corriger, sur
+  // une base existante, un droit accordé par erreur (grant est idempotent mais
+  // ne retire jamais). Rejouer le seed applique donc aussi les retraits décidés.
+  async function revoke(roleCode: string, keys: string[]) {
+    const roleId = roleByCode.get(roleCode);
+    if (!roleId) return;
+    for (const key of keys) {
+      const permissionId = permissionIdByKey.get(key);
+      if (!permissionId) continue;
+      await prisma.rolePermission.deleteMany({ where: { roleId, permissionId } });
+    }
+  }
+
   await grant("ASSISTANT_EDITORIAL", [
     "manuscripts:consultation",
     "manuscripts:saisie",
@@ -308,11 +321,12 @@ async function main() {
     create: { key: "expense_dg_validation_threshold", value: 500_000 },
   });
 
-  // Ressources humaines (Ch. 19) — le dossier RH est réservé au responsable
-  // RH et à la Direction ; consultation élargie aux responsables de service
-  // (revue des accès de leur équipe, §19.4) mais sans les données
-  // confidentielles (rémunération), à accès restreint (§19.2, même exigence
-  // que le juridique).
+  // Ressources humaines (Ch. 19) — le dossier RH est **réservé au responsable
+  // RH et à la Direction générale** (§19.2, même exigence de confidentialité que
+  // le juridique). Décision opérateur (19/07/2026) : on cloisonne — un
+  // responsable de service (commercial, infographie, qualité, impression,
+  // juridique) ne voit PAS le module RH. On revient donc sur l'élargissement
+  // §19.4 précédemment appliqué (dérogation signalée, cf. JOURNAL_TECHNIQUE).
   const managementRoles = [
     "DIR_GENERAL",
     "DIR_EDITORIAL",
@@ -324,8 +338,10 @@ async function main() {
     "RESP_IMPRESSION",
     "RESP_RH",
   ];
+  const hrConsultRoles = ["DIR_GENERAL", "RESP_RH"];
   for (const roleCode of managementRoles) {
-    await grant(roleCode, ["rh:consultation"]);
+    if (hrConsultRoles.includes(roleCode)) await grant(roleCode, ["rh:consultation"]);
+    else await revoke(roleCode, ["rh:consultation"]); // corrige les bases déjà semées
   }
   await grant("RESP_RH", ["rh:saisie", "rh:validation", "rh:administration", "rh_confidentiel:consultation", "rh_confidentiel:saisie"]);
   await grant("DIR_GENERAL", ["rh:saisie", "rh:validation", "rh:administration", "rh_confidentiel:consultation", "rh_confidentiel:saisie"]);
@@ -342,9 +358,14 @@ async function main() {
   await grant("DIR_EDITORIAL", ["direction:consultation", "pilotage:consultation", "pilotage:saisie"]);
   await grant("RESP_FINANCE", ["direction:consultation", "pilotage:consultation", "pilotage:saisie"]);
 
-  // Rapports, dictionnaire d'indicateurs, explorateur (Ch. 20).
+  // Rapports, dictionnaire d'indicateurs, explorateur (Ch. 20) : outil de
+  // pilotage réservé aux profils de direction / supervision. Décision opérateur
+  // (19/07/2026) : les responsables opérationnels (commercial, infographie,
+  // qualité, impression, juridique) n'y ont plus accès (cloisonnement).
+  const reportRoles = ["DIR_GENERAL", "DIR_EDITORIAL", "RESP_FINANCE", "RESP_RH"];
   for (const roleCode of managementRoles) {
-    await grant(roleCode, ["rapports:consultation"]);
+    if (reportRoles.includes(roleCode)) await grant(roleCode, ["rapports:consultation"]);
+    else await revoke(roleCode, ["rapports:consultation"]); // corrige les bases déjà semées
   }
   await grant("DIR_GENERAL", ["rapports:saisie", "rapports:administration"]);
   await grant("RESP_RH", ["rapports:saisie"]);

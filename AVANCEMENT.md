@@ -1124,3 +1124,11 @@ La page d'accueil ne montrait que 4 totaux bruts. Elle devient un vrai **coup d'
 - Grands chiffres en **police à chasse fixe** ; montants en **notation compacte** (« 78,2 M XAF »), lisibles et sans débordement sur mobile (le chiffre exact reste sur la page Direction). Nombres jamais coupés en cours de chiffre.
 
 Confidentialité respectée : indicateurs restreints (CA, ruptures, retards) invisibles pour un profil sans le droit correspondant. Typecheck + build OK ; **tests dashboard enrichis, verts** (cohérence ouvrages en cours = total − archivés ; somme du pipeline = total ; masquage `null` pour profil restreint). Vérifié en navigateur (accueil admin, ordinateur + mobile — captures à l'appui). Bilingue FR/EN.
+
+### 19/07/2026 (suite) — Cloisonnement des pôles : droits RH et Rapports resserrés
+
+Signalement de l'opérateur : un compte **Responsable commercial** avait accès aux modules **Ressources humaines** et **Rapports**. Après reproduction : ce n'était **pas** un bug d'usurpation d'identité (« Se connecter en tant que » abaisse bien les droits) ni d'affichage — le **rôle** portait `rh:consultation` et `rapports:consultation`, car le paramétrage livré les accordait à tous les responsables de service (élargissement §19.4). Les données confidentielles (salaires, chiffres financiers) restaient, elles, protégées.
+
+**Décision opérateur (cloisonnement)** : un responsable opérationnel ne voit **que son pôle**. `rh:consultation` réservé au **Responsable RH** et à la **Direction générale** ; `rapports:consultation` réservé aux profils de pilotage (Direction générale, Direction éditoriale, Responsable finance, Responsable RH). Retiré à commercial, infographie, qualité, impression, juridique. Les présences (chacun voit les siennes) et la communication interne restent ouvertes à tous.
+
+Mise en œuvre : nouveau `revoke()` dans le seed (miroir de `grant`) — le seed étant idempotent (rejoué à chaque test), **le rejouer corrige aussi une base déjà installée** ; correction également possible sans redéploiement via **Administration → « Droits & pôles »**. Tests `users-roles.test.ts` ajoutés (commercial/infographie n'ont ni RH ni Rapports ; RH/Direction les gardent) — 46 tests liés verts. Vérifié en navigateur : le menu d'un Responsable commercial se limite à Commercial + Communication interne (capture à l'appui).

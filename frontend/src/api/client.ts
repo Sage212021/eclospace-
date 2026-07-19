@@ -46,11 +46,23 @@ export function fetchMe(): Promise<EffectiveUser> {
 
 // Grands indicateurs du tableau de bord. Chaque valeur est null si l'utilisateur
 // n'a pas la permission de consultation correspondante (l'indicateur est alors masqué).
+export interface PipelineStage {
+  code: string;
+  label: string;
+  step_order: number;
+  count: number;
+}
+
 export interface DashboardStats {
   ouvrages: number | null;
+  ouvrages_en_cours: number | null;
   utilisateurs: number | null;
   ventes: number | null;
+  chiffre_affaires: number | null;
   stock: number | null;
+  ruptures: number | null;
+  taches_en_retard: number | null;
+  pipeline: PipelineStage[] | null;
 }
 
 export function getDashboardStats() {

@@ -11,11 +11,18 @@ interface DashboardProps {
 
 // Grands indicateurs affichés en tête du tableau de bord. Chacun n'apparaît que
 // si le serveur en renvoie la valeur (permission de consultation accordée).
-const KPI_CARDS: { key: keyof DashboardStats; label: string; icon: string }[] = [
-  { key: "ouvrages", label: "Ouvrages", icon: "📚" },
+// `tone` colore le grand chiffre en cas de signal (retard/rupture) ; `money`
+// formate en francs CFA (XAF).
+type KpiTone = (v: number) => "alert" | "warn" | undefined;
+const KPI_CARDS: { key: keyof DashboardStats; label: string; icon: string; money?: boolean; tone?: KpiTone }[] = [
+  { key: "ouvrages_en_cours", label: "Ouvrages en cours", icon: "📖" },
+  { key: "ouvrages", label: "Ouvrages (total)", icon: "📚" },
+  { key: "taches_en_retard", label: "Tâches en retard", icon: "⏰", tone: (v) => (v > 0 ? "warn" : undefined) },
+  { key: "chiffre_affaires", label: "Chiffre d'affaires", icon: "💰", money: true },
+  { key: "ventes", label: "Commandes", icon: "🧾" },
+  { key: "stock", label: "Stock (exemplaires)", icon: "📦" },
+  { key: "ruptures", label: "Ruptures de stock", icon: "⚠️", tone: (v) => (v > 0 ? "alert" : undefined) },
   { key: "utilisateurs", label: "Utilisateurs", icon: "👥" },
-  { key: "ventes", label: "Ventes", icon: "💰" },
-  { key: "stock", label: "Stock", icon: "📦" },
 ];
 
 // Page d'accueil : grands indicateurs de synthèse + rappel de la session.
@@ -86,10 +93,25 @@ export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar }: Dashboar
             marginTop: 16,
           }}
         >
-          {visibleKpis.map((c) => (
-            <KpiCard key={c.key} icon={c.icon} label={t(`dash.kpi.${c.key}`, c.label)} value={stats![c.key] as number} />
-          ))}
+          {visibleKpis.map((c) => {
+            const value = stats![c.key] as number;
+            return (
+              <KpiCard
+                key={c.key}
+                icon={c.icon}
+                label={t(`dash.kpi.${c.key}`, c.label)}
+                value={value}
+                money={c.money}
+                tone={c.tone?.(value)}
+              />
+            );
+          })}
         </div>
+      )}
+
+      {/* Pipeline éditorial : où en sont les ouvrages (par étape du workflow). */}
+      {stats?.pipeline && stats.pipeline.length > 0 && (
+        <Pipeline stages={stats.pipeline} />
       )}
 
       <h2 style={{ fontFamily: "var(--font-title)", fontSize: 15, margin: "24px 0 0" }}>{t("dash.session", "Ma session")}</h2>
@@ -111,7 +133,16 @@ export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar }: Dashboar
 }
 
 // Carte d'indicateur : icône dorée, grand chiffre (chasse fixe), libellé.
-function KpiCard({ icon, label, value }: { icon: string; label: string; value: number }) {
+// `tone` colore le chiffre (orange = retard, rouge = rupture) ; `money` formate
+// en francs CFA (XAF), sans décimales.
+function KpiCard({ icon, label, value, money, tone }: { icon: string; label: string; value: number; money?: boolean; tone?: "alert" | "warn" }) {
+  const valueColor = tone === "alert" ? "var(--alert)" : tone === "warn" ? "var(--amber)" : "var(--ink)";
+  const iconBg = tone === "alert" ? "var(--alert-soft)" : tone === "warn" ? "var(--amber-soft, #F6E7D2)" : "var(--eclosion-soft)";
+  // Montants : notation compacte (« 78,2 M XAF ») — lisible d'un coup d'œil et
+  // sans débordement sur mobile. Le chiffre exact reste sur la page Direction.
+  const display = money
+    ? `${new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 }).format(value)} XAF`
+    : value.toLocaleString("fr-FR");
   return (
     <div
       style={{
@@ -132,7 +163,7 @@ function KpiCard({ icon, label, value }: { icon: string; label: string; value: n
           width: 46,
           height: 46,
           borderRadius: 12,
-          background: "var(--eclosion-soft)",
+          background: iconBg,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -142,10 +173,43 @@ function KpiCard({ icon, label, value }: { icon: string; label: string; value: n
         {icon}
       </div>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontFamily: "var(--font-mono)", fontSize: 26, fontWeight: 700, color: "var(--ink)", lineHeight: 1.1 }}>
-          {value.toLocaleString("fr-FR")}
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: money ? 24 : 26, fontWeight: 700, color: valueColor, lineHeight: 1.15 }}>
+          {display}
         </div>
         <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+// Frise « pipeline éditorial » : pour chaque étape portant des ouvrages, une
+// barre proportionnelle et le nombre d'ouvrages — coup d'œil sur l'avancement.
+function Pipeline({ stages }: { stages: { code: string; label: string; step_order: number; count: number }[] }) {
+  const { t } = useI18n();
+  const max = Math.max(...stages.map((s) => s.count), 1);
+  const total = stages.reduce((sum, s) => sum + s.count, 0);
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 14, padding: 18, marginTop: 16, maxWidth: 640 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+        <h2 style={{ fontFamily: "var(--font-title)", fontSize: 15, margin: 0 }}>{t("dash.pipeline", "Pipeline éditorial")}</h2>
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+          {t("dash.pipeline_total", "ouvrages au total")} : <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{total}</strong>
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {stages.map((s) => (
+          <div key={s.code} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ flex: "0 0 40%", fontSize: 12.5, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.label}>
+              {s.label}
+            </div>
+            <div style={{ flex: 1, height: 10, background: "var(--eclosion-soft)", borderRadius: 999, overflow: "hidden" }}>
+              <div style={{ width: `${Math.max(6, (s.count / max) * 100)}%`, height: "100%", background: "var(--eclosion)", borderRadius: 999 }} />
+            </div>
+            <div style={{ flex: "0 0 34px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>
+              {s.count}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

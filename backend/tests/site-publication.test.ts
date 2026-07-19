@@ -3,7 +3,10 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { createUserWithRole, extractSessionCookie } from "./helpers.js";
-import { buildFichePayload, formatFiche } from "../src/lib/sitePublisher.js";
+import { buildFichePayload, formatFiche, optimizedCoverForSite } from "../src/lib/sitePublisher.js";
+import { optimizeImage } from "../src/lib/imageOptimize.js";
+import { storeFile } from "../src/lib/storage.js";
+import { Jimp } from "jimp";
 
 // Fiche « site vitrine » (prête à publier). Le site étant sur-mesure (sans API),
 // l'ERP prépare une fiche copiable et garde la trace de ce qui est publié.
@@ -111,4 +114,91 @@ describe("fiche pour le site vitrine", () => {
     const denied = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/site-publication`, headers: { cookie: readerCookie }, payload: { published: true } });
     expect(denied.statusCode).toBe(403);
   });
+});
+
+// Couverture « prête pour le web » : la couverture déposée est en qualité
+// impression (lourde) ; le téléchargement pour le site doit renvoyer une image
+// LÉGÈRE, en JPG de très bonne qualité, réduite (jamais agrandie).
+// Image « photographique » (dégradé) : contrairement à un aplat de couleur,
+// elle a un poids réaliste — le JPG optimisé (réduit) est alors plus léger.
+async function gradientPng(w: number, h: number): Promise<Buffer> {
+  const data = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      data[i] = (x * 255 / w) | 0;
+      data[i + 1] = (y * 255 / h) | 0;
+      data[i + 2] = ((x + y) * 255 / (w + h)) | 0;
+      data[i + 3] = 255;
+    }
+  }
+  return new Jimp({ width: w, height: h, data }).getBuffer("image/png");
+}
+
+describe("couverture optimisée pour le site", () => {
+  it("réduit une grande image et produit un JPG plus léger", async () => {
+    const big = await gradientPng(2400, 3600);
+    const out = await optimizeImage(big, { maxLongSide: 1600, quality: 86, format: "jpeg" });
+    expect(out.mime).toBe("image/jpeg");
+    expect(out.ext).toBe("jpg");
+    expect(out.buffer.length).toBeLessThan(big.length); // plus léger que l'original
+    // Dimensions plafonnées à 1600 px sur le grand côté.
+    const decoded = await Jimp.read(out.buffer);
+    expect(Math.max(decoded.width, decoded.height)).toBeLessThanOrEqual(1600);
+  });
+
+  it("n'agrandit jamais une petite image", async () => {
+    const small = await new Jimp({ width: 400, height: 600, color: 0x2a5d84ff }).getBuffer("image/png");
+    const out = await optimizeImage(small, { maxLongSide: 1600 });
+    const decoded = await Jimp.read(out.buffer);
+    expect(Math.max(decoded.width, decoded.height)).toBe(600);
+  });
+
+  it("endpoint /site-cover : renvoie une image JPG légère en pièce jointe", async () => {
+    const app = await buildApp();
+    try {
+      const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "MISE_EN_PAGE" }, select: { id: true } });
+      const editor = await createUserWithRole(`site_cover_ed_${rnd}`, "ADMIN_GENERAL", PWD);
+      const m = await prisma.manuscript.create({
+        data: {
+          title: "Étés d'África: pluie & soleil",
+          language: "fr",
+          manuscriptNumber: `MS-COVER-${rnd}`,
+          statusId: status.id,
+          ownerId: editor.id,
+          receivedAt: new Date(),
+        },
+      });
+
+      // Couverture lourde en qualité impression (grande image PNG « photo »).
+      const bigCover = await gradientPng(2400, 3600);
+      const stored = await storeFile(bigCover, "couverture-print.png");
+      const doc = await prisma.document.create({
+        data: { entityType: "manuscript", entityId: m.id, category: "visuel", title: "Couverture" },
+      });
+      const version = await prisma.documentVersion.create({
+        data: { documentId: doc.id, versionNumber: 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: "image/png", sha256Hash: stored.sha256Hash },
+      });
+      await prisma.imageAsset.create({
+        data: { manuscriptId: m.id, type: "couverture_1", documentVersionId: version.id },
+      });
+
+      // La fonction renvoie une image plus légère que l'original.
+      const optimized = await optimizedCoverForSite(m.id);
+      expect(optimized).not.toBeNull();
+      expect(optimized!.mime).toBe("image/jpeg");
+      expect(optimized!.buffer.length).toBeLessThan(bigCover.length);
+      expect(optimized!.filename).toMatch(/^couverture-.*\.jpg$/);
+      expect(optimized!.filename).not.toMatch(/[àáâéè:& ]/); // nom propre, sans accents ni espaces
+
+      const cookie = await login(app, `site_cover_ed_${rnd}`, PWD);
+      const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/site-cover`, headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["content-type"]).toContain("image/jpeg");
+      expect(String(res.headers["content-disposition"])).toContain("attachment");
+      expect(res.rawPayload.length).toBeLessThan(bigCover.length);
+    } finally {
+      await app.close();
+    }
+  }, 30000);
 });

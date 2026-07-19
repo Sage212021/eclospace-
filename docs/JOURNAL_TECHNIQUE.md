@@ -327,6 +327,30 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
   on rebranche la publication automatique : le socle (fiche, suivi, classement
   par genre) est déjà prêt, seule la « porte » d'envoi resterait à ajouter.
 
+### Couverture « prête pour le web » — image légère (19/07/2026)
+- Besoin opérateur : le fichier à joindre à la fiche ne doit **pas être lourd** ;
+  il doit être **déjà en JPG/PNG**, de **très bonne qualité**. Or la couverture
+  déposée dans l'ERP est en **qualité impression** (souvent plusieurs Mo,
+  3000+ px), inadaptée au web.
+- Mise en œuvre : `GET /api/v1/manuscripts/:id/site-cover` transforme la
+  couverture (1re) **à la volée** — réduction au plus **1600 px** de grand côté
+  (jamais d'agrandissement) et sortie **JPG qualité 86** (très bonne qualité,
+  fichier léger). Le fichier est servi en **pièce jointe** avec un nom propre
+  (`couverture-<titre-slug>.jpg`). La miniature et le lien « Télécharger la
+  couverture » de la fiche pointent vers cette version optimisée.
+- **Choix de dépendance : `jimp`** (traitement d'image **100 % JavaScript**,
+  aucun binaire natif à compiler). Motif : conforme à la règle « pas de
+  dépendance exotique » et à la sobriété — s'installe et tourne **à l'identique**
+  sur le poste et sur le cloud (pas de `sharp`/libvips à recompiler par
+  plateforme). Le coût CPU de la conversion est ponctuel (au téléchargement) et
+  acceptable pour le volume d'un éditeur.
+- `lib/imageOptimize.ts` isole le traitement (`optimizeImage`, downscale-only) ;
+  `optimizedCoverForSite` (dans `lib/sitePublisher.ts`) lit le fichier stocké
+  (`readStoredFile`, disque en dev / S3 en prod) et applique l'optimisation. Un
+  format source non décodable (ex. PDF) renvoie une erreur explicite `422`
+  (`unsupported_image`) plutôt qu'un fichier cassé ; une couverture non-image
+  affiche un message dans la fiche.
+
 ## Signalement de clôture d'activité mensuelle — RH (17/07/2026)
 
 ### Jour de clôture paramétrable, rappels relatifs

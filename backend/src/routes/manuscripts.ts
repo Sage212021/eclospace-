@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
-import { previewSiteFiche, setSitePublished } from "../lib/sitePublisher.js";
+import { previewSiteFiche, setSitePublished, optimizedCoverForSite, UnsupportedImageError } from "../lib/sitePublisher.js";
 
 const authorSchema = z.union([
   z.object({ author_id: z.string().uuid() }),
@@ -565,6 +565,31 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       try {
         return reply.send(await previewSiteFiche(id));
       } catch (err) {
+        return reply.code(404).send({ code: "not_found", message: err instanceof Error ? err.message : "Ouvrage introuvable." });
+      }
+    },
+  );
+
+  // Couverture « prête pour le web » : image légère (JPG de très bonne qualité,
+  // ≤ 1600 px), transformée à la volée depuis la couverture d'impression déposée.
+  // C'est ce fichier que le maquettiste joint à la fiche sur le site.
+  fastify.get(
+    "/api/v1/manuscripts/:id/site-cover",
+    { preHandler: requirePermission("manuscripts", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      try {
+        const cover = await optimizedCoverForSite(id);
+        if (!cover) {
+          return reply.code(404).send({ code: "no_cover", message: "Aucune couverture (image) déposée pour cet ouvrage." });
+        }
+        reply.header("content-type", cover.mime);
+        reply.header("content-disposition", `attachment; filename="${cover.filename}"`);
+        return reply.send(cover.buffer);
+      } catch (err) {
+        if (err instanceof UnsupportedImageError) {
+          return reply.code(422).send({ code: "unsupported_image", message: err.message });
+        }
         return reply.code(404).send({ code: "not_found", message: err instanceof Error ? err.message : "Ouvrage introuvable." });
       }
     },

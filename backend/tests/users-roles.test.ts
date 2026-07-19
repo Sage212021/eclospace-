@@ -97,4 +97,44 @@ describe("utilisateurs & rôles (écran d'administration)", () => {
     });
     expect(res.statusCode).toBe(403);
   });
+
+  // Cloisonnement des pôles (décision opérateur 19/07/2026) : un responsable
+  // opérationnel ne doit voir NI le module RH NI les Rapports. Ces droits
+  // restent réservés au RH et à la Direction. Le menu de l'interface est piloté
+  // par ces permissions renvoyées par /me.
+  async function meFor(username: string, password: string, roleCode: string): Promise<string[]> {
+    await createUserWithRole(username, roleCode, password);
+    const cookie = await loginCookie(app, username, password);
+    const res = await app.inject({ method: "GET", url: "/api/v1/me", headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    return res.json().permissions as string[];
+  }
+
+  it("un responsable commercial ne voit ni le module RH ni les Rapports", async () => {
+    const s = Math.random().toString(36).slice(2, 7);
+    const perms = await meFor(`comm_cloison_${s}`, "Commercial123!", "RESP_COMMERCIAL");
+    // Son périmètre métier reste intact…
+    expect(perms).toContain("commercial:consultation");
+    expect(perms).toContain("stock:consultation");
+    // …mais il n'a PAS accès au RH ni aux Rapports.
+    expect(perms).not.toContain("rh:consultation");
+    expect(perms).not.toContain("rapports:consultation");
+  });
+
+  it("un responsable infographie non plus (cloisonnement des responsables opérationnels)", async () => {
+    const s = Math.random().toString(36).slice(2, 7);
+    const perms = await meFor(`info_cloison_${s}`, "Infographie123!", "RESP_INFOGRAPHIE");
+    expect(perms).not.toContain("rh:consultation");
+    expect(perms).not.toContain("rapports:consultation");
+  });
+
+  it("le RH et la Direction gardent bien l'accès RH et Rapports", async () => {
+    const s = Math.random().toString(36).slice(2, 7);
+    const rh = await meFor(`rh_ok_${s}`, "RhAcces123!", "RESP_RH");
+    expect(rh).toContain("rh:consultation");
+    expect(rh).toContain("rapports:consultation");
+    const dg = await meFor(`dg_ok_${s}`, "DgAcces123!", "DIR_GENERAL");
+    expect(dg).toContain("rh:consultation");
+    expect(dg).toContain("rapports:consultation");
+  });
 });

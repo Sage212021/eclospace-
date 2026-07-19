@@ -302,6 +302,41 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 - Gérées **par lien** (http/https) en v1 plutôt qu'hébergées, pour rester
   compatible avec une connexion modeste (contrainte du projet).
 
+## Cloisonnement des pôles — droits RH et Rapports resserrés (19/07/2026)
+
+### Constat (signalé par l'opérateur)
+- Un compte **Responsable commercial** voyait le module **Ressources humaines**
+  et **Rapports**. Vérifié en reproduisant : ce n'était **ni** un bug
+  d'usurpation d'identité (« Se connecter en tant que » fonctionne : elle
+  abaisse bien les droits à ceux de la cible), **ni** un défaut d'affichage — le
+  **rôle lui-même** portait `rh:consultation` et `rapports:consultation`.
+- Origine : le seed accordait ces deux droits à **tous les responsables de
+  service** (élargissement §19.4 : « revue des accès de leur équipe »). Les
+  données confidentielles (salaires `rh_confidentiel`, chiffres `finance`)
+  restaient, elles, protégées.
+
+### Décision (opérateur, dérogation assumée à §19.4)
+- On **cloisonne** : un responsable opérationnel ne voit **que son pôle**.
+  - `rh:consultation` → réservé à **RESP_RH** et **DIR_GENERAL** (retour au
+    §19.2 : « réservé au responsable RH et à la Direction »).
+  - `rapports:consultation` → réservé aux profils de **pilotage/supervision**
+    (DIR_GENERAL, DIR_EDITORIAL, RESP_FINANCE, RESP_RH).
+  - Retiré à : RESP_COMMERCIAL, RESP_INFOGRAPHIE, RESP_QUALITE, RESP_IMPRESSION,
+    RESP_JURIDIQUE. `presences:consultation` (chacun voit les siennes) et
+    `communication:consultation` (comms internes) restent ouverts à tous.
+
+### Mise en œuvre — correction aussi des bases déjà semées
+- Nouveau helper `revoke(role, keys)` dans le seed (miroir de `grant`) : `grant`
+  est idempotent mais ne **retire** jamais. Les listes `hrConsultRoles` /
+  `reportRoles` accordent aux rôles retenus et **révoquent** aux autres. Le seed
+  restant idempotent (rejoué à chaque `pretest`), **le rejouer corrige une base
+  existante** — c'est ainsi que la production applique le resserrement.
+- Correctif possible aussi **sans redéploiement** via l'écran **Administration →
+  « Droits & pôles »** (`POST /api/v1/roles/:id/permissions`, `users:administration`).
+- Tests (`users-roles.test.ts`) : un Responsable commercial / infographie n'a
+  **ni** `rh:consultation` **ni** `rapports:consultation` (mais garde son
+  métier) ; RH et Direction les conservent.
+
 ## Tableau de bord d'accueil enrichi — grands indicateurs (19/07/2026)
 
 ### Objectif

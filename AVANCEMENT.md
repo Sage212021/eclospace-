@@ -1114,3 +1114,13 @@ Ajouté : le téléchargement de la couverture depuis la fiche pointe désormais
 **Choix technique** : bibliothèque **`jimp`** (traitement d'image 100 % JavaScript, sans binaire natif) — s'installe et tourne à l'identique sur le poste et sur le cloud, conforme à la règle « pas de dépendance exotique ». Isolé dans `lib/imageOptimize.ts` (`optimizeImage`, réduction seule) + `optimizedCoverForSite` dans `lib/sitePublisher.ts`. Format source non décodable (ex. PDF) → erreur explicite `422` plutôt qu'un fichier cassé. Détail dans `docs/JOURNAL_TECHNIQUE.md`.
 
 Typecheck + build OK ; **8 tests verts** (réduction produit un JPG plus léger, jamais d'agrandissement, calage dans la boîte portrait 1080×1600 sans couper ni déformer, endpoint renvoie une image JPG légère en pièce jointe). Bilingue FR/EN.
+
+### 19/07/2026 (suite) — Tableau de bord d'accueil enrichi (grands indicateurs)
+
+La page d'accueil ne montrait que 4 totaux bruts. Elle devient un vrai **coup d'œil de pilotage**, en réutilisant `lib/kpi.ts` (source unique, mêmes formules que la page Direction) :
+
+- **Nouveaux indicateurs** (chacun masqué si l'utilisateur n'a pas la permission) : **Ouvrages en cours** (hors archivés), **Tâches en retard** (orange si > 0), **Chiffre d'affaires**, **Ruptures de stock** (rouge si > 0) — en plus des ouvrages total, commandes, stock, utilisateurs.
+- **Frise « pipeline éditorial »** : pour chaque étape du workflow portant des ouvrages, une barre proportionnelle (or) et le nombre — on voit d'un coup où en sont les ouvrages.
+- Grands chiffres en **police à chasse fixe** ; montants en **notation compacte** (« 78,2 M XAF »), lisibles et sans débordement sur mobile (le chiffre exact reste sur la page Direction). Nombres jamais coupés en cours de chiffre.
+
+Confidentialité respectée : indicateurs restreints (CA, ruptures, retards) invisibles pour un profil sans le droit correspondant. Typecheck + build OK ; **tests dashboard enrichis, verts** (cohérence ouvrages en cours = total − archivés ; somme du pipeline = total ; masquage `null` pour profil restreint). Vérifié en navigateur (accueil admin, ordinateur + mobile — captures à l'appui). Bilingue FR/EN.

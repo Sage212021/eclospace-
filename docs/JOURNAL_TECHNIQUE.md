@@ -302,6 +302,40 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 - Gérées **par lien** (http/https) en v1 plutôt qu'hébergées, pour rester
   compatible avec une connexion modeste (contrainte du projet).
 
+## Tableau de bord d'accueil enrichi — grands indicateurs (19/07/2026)
+
+### Objectif
+- La page d'accueil ne montrait que 4 totaux bruts (ouvrages, utilisateurs,
+  ventes, stock). On en fait un vrai **coup d'œil de pilotage** : ouvrages en
+  cours, tâches en retard, chiffre d'affaires, ruptures de stock, et une frise
+  visuelle **« pipeline éditorial »** (nombre d'ouvrages par étape du workflow).
+
+### Réutilisation de la source unique (`lib/kpi.ts`)
+- L'endpoint `GET /api/v1/dashboard/stats` s'appuie sur `editorialIndicators()`
+  (total + répartition par étape) et `commercialIndicators()` (chiffre
+  d'affaires + ruptures) — **mêmes formules** que les tableaux de bord Direction
+  et Rapports, pas de recalcul divergent. Les comptages restants (utilisateurs,
+  commandes, stock physique, tâches en retard) sont des requêtes légères, la
+  page d'accueil étant ouverte par tous à chaque connexion.
+- **Ouvrages en cours** = total moins les archivés, **dérivé de la frise** (sans
+  requête supplémentaire). Le **pipeline** ne renvoie que les étapes portant au
+  moins un ouvrage, dans l'ordre du workflow.
+
+### Confidentialité par module (inchangée)
+- Chaque indicateur n'est calculé et renvoyé que si l'utilisateur a la
+  permission de consultation correspondante (`manuscripts`, `users`,
+  `commercial`, `stock`, `direction`) — sinon `null`, et la carte n'apparaît
+  pas. Les indicateurs restreints (CA, ruptures, tâches en retard) restent
+  masqués pour un profil sans le droit correspondant.
+
+### Rendu (guide de style)
+- Grands chiffres en **police à chasse fixe** ; ton **orange** si tâches en
+  retard > 0, **rouge** si ruptures > 0 (code couleur retard/critique du guide).
+  Montants en **notation compacte** (« 78,2 M XAF ») sur les cartes — lisibles
+  d'un coup d'œil et sans débordement sur mobile ; le chiffre exact reste sur la
+  page Direction. Séparateurs de milliers insécables : les nombres ne se coupent
+  jamais en cours de chiffre.
+
 ## ERP → site vitrine : fiche prête à publier (17/07/2026)
 
 ### Contexte : site sur-mesure, sans API

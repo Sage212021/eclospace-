@@ -49,16 +49,18 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 const createUserSchema = z.object({
-  username: z.string().min(3).max(60),
-  email: z.string().email(),
+  // Espaces de début/fin rognés (fréquents au clavier mobile) pour éviter un
+  // identifiant/e-mail « invisible » qui empêcherait ensuite la connexion.
+  username: z.string().trim().min(3).max(60),
+  email: z.string().trim().email(),
   password: z.string().min(1),
   role_codes: z.array(z.string()).default([]),
 });
 
 const patchUserSchema = z
   .object({
-    username: z.string().min(3).max(60).optional(),
-    email: z.string().email().optional(),
+    username: z.string().trim().min(3).max(60).optional(),
+    email: z.string().trim().email().optional(),
     status: z.enum(["active", "suspended"]).optional(),
   })
   .refine((v) => v.username || v.email || v.status, { message: "Aucune modification fournie." });

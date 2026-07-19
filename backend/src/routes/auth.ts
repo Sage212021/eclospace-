@@ -35,7 +35,9 @@ const requestIdentifierChangeSchema = z
 const confirmIdentifierChangeSchema = z.object({ token: z.string().min(1) });
 
 const loginSchema = z.object({
-  username: z.string().min(1),
+  // On tolère les espaces de début/fin sur l'identifiant (fréquents au clavier
+  // mobile). Le mot de passe n'est jamais rogné (un espace peut être voulu).
+  username: z.string().trim().min(1),
   password: z.string().min(1),
 });
 
@@ -60,7 +62,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
     const { username, password } = parsed.data;
 
-    const user = await prisma.user.findFirst({ where: { username, deletedAt: null } });
+    // Identifiant insensible à la casse : le clavier mobile met souvent une
+    // majuscule à la première lettre. « noah », « Noah » ouvrent le même compte.
+    const user = await prisma.user.findFirst({ where: { username: { equals: username, mode: "insensitive" }, deletedAt: null } });
     if (!user || user.status !== "active") {
       return reply.code(401).send(INVALID_CREDENTIALS);
     }

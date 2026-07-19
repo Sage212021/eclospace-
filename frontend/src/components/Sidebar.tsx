@@ -72,8 +72,9 @@ interface SidebarProps {
 // Barre latérale sombre (guide de style §6). Menu en 6 pôles dépliables
 // (accordéon) : au chargement tous les pôles sont fermés ; cliquer un pôle
 // déroule ses sous-modules et referme les autres (un seul ouvert à la fois),
-// avec une transition légère. Ne montre que les modules autorisés (permission
-// et, le cas échéant, rôle) ; un pôle sans sous-module visible est masqué.
+// avec une transition légère. **Tous les pôles de la maison sont affichés**
+// (structure visible par tous) ; les modules hors périmètre portent un cadenas
+// et leur ouverture affiche « Accès non autorisé » (contrôle côté App + serveur).
 export function Sidebar({
   poles,
   permissions,
@@ -85,14 +86,9 @@ export function Sidebar({
   presenceByModule,
 }: SidebarProps) {
   const { t } = useI18n();
-  const visiblePoles = poles
-    .map((pole) => ({
-      ...pole,
-      items: pole.items.filter(
-        (i) => (!i.permission || permissions.has(i.permission)) && (!i.role || roles.has(i.role)),
-      ),
-    }))
-    .filter((pole) => pole.items.length > 0);
+  const visiblePoles = poles;
+  const isLocked = (item: NavLeaf) =>
+    Boolean((item.permission && !permissions.has(item.permission)) || (item.role && !roles.has(item.role)));
 
   // Un seul pôle ouvert à la fois ; null = tous fermés (état par défaut).
   const [openPole, setOpenPole] = useState<string | null>(null);
@@ -120,7 +116,8 @@ export function Sidebar({
                   item={item}
                   active={item.key === activeKey}
                   onSelect={onSelect}
-                  presentCount={presenceByModule[item.key] ?? 0}
+                  locked={isLocked(item)}
+                  presentCount={isLocked(item) ? 0 : presenceByModule[item.key] ?? 0}
                 />
               ))}
             </ul>
@@ -186,7 +183,8 @@ export function Sidebar({
                     active={item.key === activeKey}
                     onSelect={onSelect}
                     indented
-                    presentCount={presenceByModule[item.key] ?? 0}
+                    locked={isLocked(item)}
+                    presentCount={isLocked(item) ? 0 : presenceByModule[item.key] ?? 0}
                   />
                 ))}
               </ul>
@@ -207,12 +205,14 @@ function LeafButton({
   active,
   onSelect,
   indented,
+  locked,
   presentCount,
 }: {
   item: NavLeaf;
   active: boolean;
   onSelect: (key: string) => void;
   indented?: boolean;
+  locked?: boolean;
   presentCount: number;
 }) {
   const { t } = useI18n();
@@ -221,6 +221,7 @@ function LeafButton({
     <li>
       <button
         onClick={() => onSelect(item.key)}
+        title={locked ? t("nav.locked", "Accès non autorisé — hors de votre périmètre") : undefined}
         style={{
           display: "flex",
           alignItems: "center",
@@ -236,7 +237,8 @@ function LeafButton({
           borderTop: "none",
           borderRight: "none",
           borderBottom: "none",
-          color: "#fff",
+          // Module hors périmètre : texte atténué (mais toujours cliquable).
+          color: locked ? "#8891a8" : "#fff",
           fontSize: 13,
           fontWeight: active ? 600 : 400,
           cursor: "pointer",
@@ -248,9 +250,19 @@ function LeafButton({
           )}
           {t(`nav.${item.key}`, item.label)}
         </span>
-        <PresenceDot count={presentCount} />
+        {locked ? <LockIcon /> : <PresenceDot count={presentCount} />}
       </button>
     </li>
+  );
+}
+
+// Cadenas discret : signale un module visible mais hors du périmètre de l'employé.
+function LockIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7186" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
   );
 }
 

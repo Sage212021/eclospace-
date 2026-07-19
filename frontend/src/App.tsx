@@ -174,6 +174,25 @@ for (const pole of NAV_POLES) {
 // « Hall / Présence » (chaque pôle affiché actif/inactif avec son effectif).
 const POLE_LABELS: string[] = NAV_POLES.filter((p): p is typeof p & { label: string } => Boolean(p.label)).map((p) => p.label);
 
+// Règle d'accès (permission et/ou rôle) par sous-module. Tous les pôles sont
+// visibles dans le menu (structure de la maison), mais ouvrir un module hors de
+// son périmètre affiche « Accès non autorisé » — cette table pilote ce contrôle.
+const LEAF_ACCESS: Record<string, { permission?: string; role?: string }> = {};
+const LEAF_LABEL: Record<string, string> = {};
+for (const pole of NAV_POLES) {
+  for (const item of pole.items) {
+    LEAF_ACCESS[item.key] = { permission: item.permission, role: item.role };
+    LEAF_LABEL[item.key] = item.label;
+  }
+}
+function isLeafAuthorized(key: string, permissions: Set<string>, roles: Set<string>): boolean {
+  const rule = LEAF_ACCESS[key];
+  if (!rule) return true;
+  if (rule.permission && !permissions.has(rule.permission)) return false;
+  if (rule.role && !roles.has(rule.role)) return false;
+  return true;
+}
+
 type View = { kind: "leaf"; key: string } | { kind: "manuscript-detail"; id: string; originKey: string };
 
 // Mémorisation de l'écran courant (localStorage). Sur mobile, minimiser
@@ -358,6 +377,9 @@ export function App() {
   const roles = new Set(user.roles);
   const activeKey = view.kind === "manuscript-detail" ? view.originKey : view.key;
   const leaf = view.kind === "leaf" ? LEAF_VIEWS[view.key] : undefined;
+  // Modèle « tout visible, gardé à l'ouverture » : un module hors périmètre
+  // reste dans le menu mais son ouverture affiche « Accès non autorisé ».
+  const leafAuthorized = view.kind !== "leaf" || isLeafAuthorized(activeKey, permissions, roles);
   const openManuscript = (id: string) => setView({ kind: "manuscript-detail", id, originKey: activeKey });
   // Ouverture d'une annonce depuis la cloche : bascule sur le Babillard et
   // transmet l'identifiant à ouvrir (si l'utilisateur y a accès).
@@ -452,6 +474,10 @@ export function App() {
 
         {confirmBannerNode}
 
+        {!leafAuthorized && <UnauthorizedView poleLabel={LEAF_TO_POLE[activeKey]} moduleLabel={LEAF_LABEL[activeKey] ?? activeKey} />}
+
+        {leafAuthorized && (
+        <>
         {view.kind === "manuscript-detail" && (
           <ManuscriptDetail
             manuscriptId={view.id}
@@ -550,6 +576,52 @@ export function App() {
           <NewslettersPage canManage={permissions.has("communication:saisie")} />
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
+        </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Écran « Accès non autorisé » : le module est visible dans le menu (structure
+// de la maison), mais son ouverture est refusée hors du périmètre de l'employé.
+function UnauthorizedView({ poleLabel, moduleLabel }: { poleLabel?: string; moduleLabel: string }) {
+  const { t } = useI18n();
+  const target = poleLabel ? `${t(`pole.${poleLabel}`, poleLabel)} · ${moduleLabel}` : moduleLabel;
+  return (
+    <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 620 }}>
+      <div
+        style={{
+          background: "var(--card)",
+          border: "1px solid var(--line)",
+          borderLeft: "4px solid var(--amber)",
+          borderRadius: 14,
+          padding: "22px 24px",
+          display: "flex",
+          gap: 16,
+          alignItems: "flex-start",
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 12, background: "var(--amber-soft)", color: "var(--amber)", display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="10" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+        </div>
+        <div>
+          <h1 style={{ fontFamily: "var(--font-title)", fontSize: 19, margin: "2px 0 6px" }}>
+            {t("unauth.title", "Accès non autorisé")}
+          </h1>
+          <p style={{ margin: "0 0 6px", fontSize: 14, color: "var(--ink)" }}>
+            {t("unauth.body", "Ce module ne fait pas partie de votre périmètre :")} <strong>{target}</strong>.
+          </p>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+            {t("unauth.hint", "Il apparaît dans le menu pour vous montrer l'organisation de la maison. Si vous pensez qu'il devrait vous être accessible, rapprochez-vous de votre administrateur.")}
+          </p>
+        </div>
       </div>
     </div>
   );

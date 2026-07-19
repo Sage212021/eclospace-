@@ -337,6 +337,24 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
   **ni** `rh:consultation` **ni** `rapports:consultation` (mais garde son
   métier) ; RH et Direction les conservent.
 
+### Navigation « tout visible, gardé à l'ouverture » (choix opérateur)
+- Choix de présentation retenu par l'opérateur : **tous les pôles de la maison
+  s'affichent dans le menu pour tout le monde** (on montre la structure de
+  l'organisation), mais **on n'accède qu'à son pôle**. Ouvrir un module hors
+  périmètre affiche un écran **« Accès non autorisé »** nommant le pôle — au lieu
+  de masquer le module (comportement précédent). C'est un modèle *discoverable
+  but gated*, complémentaire du cloisonnement des droits ci-dessus.
+- Mise en œuvre (frontend) : `Sidebar` n'écarte plus les modules non autorisés —
+  ils restent affichés avec un **cadenas** et un texte atténué (toujours
+  cliquables). `App` calcule `isLeafAuthorized(cle, permissions, roles)` à partir
+  des `permission`/`role` déclarés par chaque entrée de menu ; si l'utilisateur
+  n'y a pas droit, l'ouverture rend `UnauthorizedView` au lieu du contenu.
+- **Défense en profondeur inchangée** : le contrôle serveur (`requirePermission`,
+  403) reste la source de vérité — l'écran « Accès non autorisé » n'est qu'un
+  garde-fou d'interface qui évite d'afficher une page vide/en erreur. Les
+  **données** (indicateurs financiers, dossiers RH…) restent, elles, gardées par
+  permission : la structure est visible, pas les données d'un autre pôle.
+
 ## Tableau de bord d'accueil enrichi — grands indicateurs (19/07/2026)
 
 ### Objectif

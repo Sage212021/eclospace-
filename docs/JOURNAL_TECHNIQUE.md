@@ -302,6 +302,33 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 - Gérées **par lien** (http/https) en v1 plutôt qu'hébergées, pour rester
   compatible avec une connexion modeste (contrainte du projet).
 
+## Connexion : robustesse au clavier mobile (19/07/2026)
+
+### Constat (blocage opérateur)
+- Après avoir réinitialisé le mot de passe d'un compte, la connexion échouait
+  (« Identifiants invalides ») alors que le compte était bien actif.
+
+### Cause probable
+- Deux pièges du **clavier mobile** :
+  1. Les champs mot de passe de l'**administration** (création de compte,
+     réinitialisation) sont en `type="text"` (l'admin doit voir la valeur pour la
+     communiquer). Or un champ texte déclenche la **correction/majuscule
+     automatique** : le mot de passe **enregistré** pouvait différer de celui
+     tapé (espace ajouté, lettre capitalisée…), alors que le champ de connexion
+     (`type="password"`) ne corrige pas → les deux ne correspondaient plus.
+  2. L'identifiant à la connexion était comparé **exactement** (casse + espaces).
+     Un « Noah » saisi « noah » (minuscule auto) ou « Noah  » (espace) échouait.
+
+### Correctif
+- **Frontend** : `autoCapitalize="off" autoCorrect="off" autoComplete="off"
+  spellCheck={false}` sur les champs identifiant + mot de passe (création,
+  réinitialisation, connexion) → le clavier ne modifie plus la saisie.
+- **Backend** : identifiant **rogné** (trim) et **insensible à la casse** à la
+  connexion (`mode: "insensitive"`), ainsi qu'au create/patch. Le **mot de
+  passe n'est jamais rogné** (un espace peut être voulu).
+- Tests (`auth.test.ts`) : connexion avec casse différente / espaces autour de
+  l'identifiant → OK ; mot de passe avec espace en trop → refusé.
+
 ## Comptes : réutiliser un e-mail/identifiant après suppression (19/07/2026)
 
 ### Constat (blocage opérateur)

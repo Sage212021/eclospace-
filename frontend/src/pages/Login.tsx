@@ -87,6 +87,10 @@ export function Login({ onAuthenticated }: LoginProps) {
                 autoFocus
                 required
                 name="username"
+                autoCapitalize="off"
+                autoCorrect="off"
+                autoComplete="username"
+                spellCheck={false}
               />
             </Field>
             <Field label={t("login.password", "Mot de passe")}>

@@ -51,6 +51,20 @@ describe("authentification et permissions (Lot 0)", () => {
     expect(response.statusCode).toBe(401);
   });
 
+  // Robustesse clavier mobile : l'identifiant est insensible à la casse et aux
+  // espaces de début/fin (le mot de passe, lui, reste exact). Évite les
+  // « Identifiants invalides » dus à une majuscule ou un espace ajoutés.
+  it("connecte avec un identifiant de casse différente et entouré d'espaces", async () => {
+    await createUserWithRole("NoahDG_case", "DIR_GENERAL", "Direction2026");
+    for (const attempt of ["noahdg_case", "  NoahDG_case  ", "NOAHDG_CASE"]) {
+      const res = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: attempt, password: "Direction2026" } });
+      expect(res.statusCode, `login « ${attempt} »`).toBe(200);
+    }
+    // Le mot de passe, lui, n'est pas rogné : un espace en trop échoue.
+    const wrong = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: "NoahDG_case", password: "Direction2026 " } });
+    expect(wrong.statusCode).toBe(401);
+  });
+
   it("applique la matrice des rôles côté serveur : un correcteur ne peut pas créer de document", async () => {
     await createUserWithRole("correcteur_auth_test", "CORRECTEUR", "Correcteur123!");
 

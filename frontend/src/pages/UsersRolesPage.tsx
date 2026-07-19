@@ -242,7 +242,7 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
         >
           <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{t("usr.account", "Compte :")} <strong style={{ color: "var(--ink)" }}>{modal.user.username}</strong></p>
           <Field label={t("usr.new_password", "Nouveau mot de passe (min. 8 car., une majuscule, un chiffre)")}>
-            <input type="text" value={modal.password} onChange={(e) => setModal({ ...modal, password: e.target.value })} autoFocus />
+            <input type="text" value={modal.password} onChange={(e) => setModal({ ...modal, password: e.target.value })} autoFocus autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
           </Field>
           <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{t("usr.reset_note", "Communiquez-le à l'utilisateur, qui pourra le changer ensuite.")}</p>
         </Modal>
@@ -331,9 +331,9 @@ function CreateAccountForm({
       <div className="ecl-card__title" style={{ marginBottom: 14 }}>{t("usr.new_account", "Nouveau compte")}</div>
       <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-          <Field label={t("usr.username", "Identifiant")}><input value={username} onChange={(e) => setUsername(e.target.value)} required minLength={3} /></Field>
-          <Field label={t("usr.email", "E-mail")}><EmailInput value={email} onChange={(e) => setEmail(e.target.value)} required /></Field>
-          <Field label={t("usr.password", "Mot de passe (min. 8 car., une majuscule, un chiffre)")}><input type="text" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>
+          <Field label={t("usr.username", "Identifiant")}><input value={username} onChange={(e) => setUsername(e.target.value)} required minLength={3} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} /></Field>
+          <Field label={t("usr.email", "E-mail")}><EmailInput value={email} onChange={(e) => setEmail(e.target.value)} required autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} /></Field>
+          <Field label={t("usr.password", "Mot de passe (min. 8 car., une majuscule, un chiffre)")}><input type="text" value={password} onChange={(e) => setPassword(e.target.value)} required autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} /></Field>
           <Field label={t("usr.initial_role", "Rôle initial (facultatif)")}>
             <select value={roleCode} onChange={(e) => setRoleCode(e.target.value)}>
               <option value="">{t("usr.no_role_opt", "Aucun rôle")}</option>

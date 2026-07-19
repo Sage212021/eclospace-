@@ -137,4 +137,40 @@ describe("utilisateurs & rôles (écran d'administration)", () => {
     expect(dg).toContain("rh:consultation");
     expect(dg).toContain("rapports:consultation");
   });
+
+  // Réutilisation d'un e-mail/identifiant après suppression (bug signalé) : un
+  // compte supprimé occupait encore l'e-mail et bloquait la création d'un
+  // nouveau compte avec une erreur technique brute. On vérifie que la
+  // suppression libère les identifiants et qu'un message clair remplace l'erreur.
+  it("permet de réutiliser l'e-mail et l'identifiant d'un compte supprimé", async () => {
+    const cookie = await loginCookie(app, "admin", ADMIN_PASSWORD);
+    const s = Math.random().toString(36).slice(2, 7);
+    const email = `reuse_${s}@eclosion.cm`;
+    const username = `reuse_${s}`;
+
+    const first = await app.inject({ method: "POST", url: "/api/v1/users", headers: { cookie }, payload: { username, email, password: "Eclosion2026", role_codes: [] } });
+    expect(first.statusCode).toBe(201);
+    const firstId = first.json().id;
+
+    const del = await app.inject({ method: "DELETE", url: `/api/v1/users/${firstId}`, headers: { cookie } });
+    expect(del.statusCode).toBe(200);
+
+    // Même e-mail + même identifiant : doit maintenant réussir (identifiants libérés).
+    const second = await app.inject({ method: "POST", url: "/api/v1/users", headers: { cookie }, payload: { username, email, password: "Eclosion2026", role_codes: ["DIR_GENERAL"] } });
+    expect(second.statusCode).toBe(201);
+    expect(second.json().email).toBe(email);
+    expect(second.json().id).not.toBe(firstId);
+  });
+
+  it("refuse un e-mail déjà utilisé par un compte actif avec un message clair (pas d'erreur brute)", async () => {
+    const cookie = await loginCookie(app, "admin", ADMIN_PASSWORD);
+    const s = Math.random().toString(36).slice(2, 7);
+    const email = `dup_${s}@eclosion.cm`;
+    const a = await app.inject({ method: "POST", url: "/api/v1/users", headers: { cookie }, payload: { username: `dupA_${s}`, email, password: "Eclosion2026", role_codes: [] } });
+    expect(a.statusCode).toBe(201);
+    const b = await app.inject({ method: "POST", url: "/api/v1/users", headers: { cookie }, payload: { username: `dupB_${s}`, email, password: "Eclosion2026", role_codes: [] } });
+    expect(b.statusCode).toBe(409);
+    expect(b.json().message).toContain("déjà utilisé");
+    expect(JSON.stringify(b.json())).not.toContain("prisma"); // jamais d'erreur technique brute
+  });
 });

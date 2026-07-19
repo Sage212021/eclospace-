@@ -123,7 +123,7 @@ export function SitePublicationSection({ manuscriptId, canPublish }: { manuscrip
                 {t("sitepub.cover_download", "⬇ Télécharger la couverture (image web légère)")}
               </a>
               <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 3 }}>
-                {t("sitepub.cover_hint", "Fichier léger, JPG de très bonne qualité — prêt pour le site.")}
+                {t("sitepub.cover_hint", "Fichier léger, JPG de très bonne qualité, au format portrait du site — prêt à publier.")}
               </div>
             </div>
           </>

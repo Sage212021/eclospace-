@@ -24,6 +24,12 @@ export interface OptimizeOptions {
   // Plus grand côté (px) autorisé en sortie. On réduit seulement (jamais
   // d'agrandissement) : une image déjà plus petite garde ses dimensions.
   maxLongSide?: number;
+  // Boîte cible (largeur × hauteur, px) : l'image est réduite pour TENIR dans
+  // cette boîte, proportions conservées (aucune coupe, aucune déformation).
+  // Utile pour caler une couverture sur le format portrait du site (≈ 2:3).
+  // Prioritaire sur maxLongSide si les deux sont fournis.
+  maxWidth?: number;
+  maxHeight?: number;
   // Qualité JPEG (1–100). 86 = très bonne qualité, fichier léger.
   quality?: number;
   // Format de sortie. « jpeg » par défaut (le plus léger pour une couverture
@@ -39,7 +45,6 @@ export interface OptimizedImage {
 
 // Réduit et convertit une image en un fichier léger de très bonne qualité.
 export async function optimizeImage(input: Buffer, opts: OptimizeOptions = {}): Promise<OptimizedImage> {
-  const maxLongSide = opts.maxLongSide ?? 1600;
   const quality = opts.quality ?? 86;
   const format = opts.format ?? "jpeg";
 
@@ -50,10 +55,14 @@ export async function optimizeImage(input: Buffer, opts: OptimizeOptions = {}): 
     throw new UnsupportedImageError();
   }
 
-  const longSide = Math.max(image.width, image.height);
-  if (longSide > maxLongSide) {
-    // scaleToFit conserve les proportions et tient dans la boîte maxLongSide².
-    image.scaleToFit({ w: maxLongSide, h: maxLongSide });
+  // Boîte cible : soit (largeur × hauteur) explicite, soit un carré maxLongSide.
+  const maxW = opts.maxWidth ?? opts.maxLongSide ?? 1600;
+  const maxH = opts.maxHeight ?? opts.maxLongSide ?? 1600;
+
+  // Réduction SEULE (jamais d'agrandissement) : facteur ≤ 1, proportions gardées.
+  const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+  if (scale < 1) {
+    image.resize({ w: Math.max(1, Math.round(image.width * scale)), h: Math.max(1, Math.round(image.height * scale)) });
   }
 
   if (format === "png") {

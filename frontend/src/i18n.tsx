@@ -877,7 +877,7 @@ const EN: Record<string, string> = {
   "sitepub.copied": "✓ Copied",
   "sitepub.cover": "Cover",
   "sitepub.cover_download": "⬇ Download the cover (lightweight web image)",
-  "sitepub.cover_hint": "Lightweight file, very good quality JPG — ready for the website.",
+  "sitepub.cover_hint": "Lightweight file, very good quality JPG, in the site's portrait format — ready to publish.",
   "sitepub.cover_notimage": "The uploaded cover is not an image (JPG/PNG) — upload an image so it can be attached to the listing.",
   "sitepub.cover_missing": "No front cover uploaded for this book — add it in Visuals / Attachments.",
   "sitepub.copy_failed": "Copy failed — select the text and copy it manually.",

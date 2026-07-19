@@ -124,10 +124,16 @@ function slugify(input: string): string {
   );
 }
 
+// Format d'affichage des couvertures sur le site vitrine (eclosion.cm) :
+// vignettes **portrait** (≈ 2:3). On cale donc la couverture pour qu'elle tienne
+// dans une boîte 1080 × 1600 — proportions conservées, **couverture entière**
+// (aucune coupe : ni titre ni auteur perdus ; le site recadre lui-même si besoin).
+const SITE_COVER_BOX = { maxWidth: 1080, maxHeight: 1600 } as const;
+
 // Couverture « prête pour le web » : lit la couverture déposée (souvent lourde,
 // en qualité impression) et renvoie une image légère, en JPG de très bonne
-// qualité, prête à joindre à la fiche sur le site. Réduction seule (jamais
-// d'agrandissement), au plus 1600 px de côté.
+// qualité, au format portrait du site, prête à joindre à la fiche. Réduction
+// seule (jamais d'agrandissement), couverture entière (aucune coupe).
 export async function optimizedCoverForSite(manuscriptId: string): Promise<{
   buffer: Buffer;
   mime: string;
@@ -142,7 +148,7 @@ export async function optimizedCoverForSite(manuscriptId: string): Promise<{
   if (!v || !v.mimeType?.startsWith("image/")) return null;
 
   const original = await readStoredFile(v.filePath);
-  const optimized = await optimizeImage(original, { maxLongSide: 1600, quality: 86, format: "jpeg" });
+  const optimized = await optimizeImage(original, { ...SITE_COVER_BOX, quality: 86, format: "jpeg" });
 
   const payload = await buildFichePayload(manuscriptId);
   const base = slugify(payload.title || "couverture");

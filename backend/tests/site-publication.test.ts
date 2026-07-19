@@ -154,6 +154,17 @@ describe("couverture optimisée pour le site", () => {
     expect(Math.max(decoded.width, decoded.height)).toBe(600);
   });
 
+  it("cale dans la boîte portrait du site sans couper ni déformer", async () => {
+    // Couverture 2:3 déjà proche du format du site → doit tenir dans 1080×1600
+    // en gardant exactement ses proportions (aucune coupe, aucune déformation).
+    const cover = await gradientPng(2000, 3000);
+    const out = await optimizeImage(cover, { maxWidth: 1080, maxHeight: 1600 });
+    const d = await Jimp.read(out.buffer);
+    expect(d.width).toBeLessThanOrEqual(1080);
+    expect(d.height).toBeLessThanOrEqual(1600);
+    expect(d.width / d.height).toBeCloseTo(2000 / 3000, 2); // proportions conservées
+  });
+
   it("endpoint /site-cover : renvoie une image JPG légère en pièce jointe", async () => {
     const app = await buildApp();
     try {
@@ -190,6 +201,14 @@ describe("couverture optimisée pour le site", () => {
       expect(optimized!.buffer.length).toBeLessThan(bigCover.length);
       expect(optimized!.filename).toMatch(/^couverture-.*\.jpg$/);
       expect(optimized!.filename).not.toMatch(/[àáâéè:& ]/); // nom propre, sans accents ni espaces
+
+      // Format portrait du site : tient dans 1080×1600, proportions gardées
+      // (couverture entière — la source 2400×3600 = 2:3 reste 2:3, non déformée).
+      const decodedCover = await Jimp.read(optimized!.buffer);
+      expect(decodedCover.width).toBeLessThanOrEqual(1080);
+      expect(decodedCover.height).toBeLessThanOrEqual(1600);
+      const srcRatio = 2400 / 3600;
+      expect(decodedCover.width / decodedCover.height).toBeCloseTo(srcRatio, 2);
 
       const cookie = await login(app, `site_cover_ed_${rnd}`, PWD);
       const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/site-cover`, headers: { cookie } });

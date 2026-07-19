@@ -333,11 +333,18 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
   déposée dans l'ERP est en **qualité impression** (souvent plusieurs Mo,
   3000+ px), inadaptée au web.
 - Mise en œuvre : `GET /api/v1/manuscripts/:id/site-cover` transforme la
-  couverture (1re) **à la volée** — réduction au plus **1600 px** de grand côté
-  (jamais d'agrandissement) et sortie **JPG qualité 86** (très bonne qualité,
-  fichier léger). Le fichier est servi en **pièce jointe** avec un nom propre
+  couverture (1re) **à la volée** — sortie **JPG qualité 86** (très bonne
+  qualité, fichier léger), servie en **pièce jointe** avec un nom propre
   (`couverture-<titre-slug>.jpg`). La miniature et le lien « Télécharger la
   couverture » de la fiche pointent vers cette version optimisée.
+- **Format des vignettes du site (eclosion.cm)** : les couvertures y sont
+  affichées en **portrait ≈ 2:3**. On cale donc la sortie dans une boîte
+  **1080 × 1600** — proportions **conservées**, **couverture entière** : on ne
+  coupe jamais (ni titre ni auteur perdus) et on ne déforme pas. Réduction
+  **seule** (jamais d'agrandissement : une couverture déjà petite garde ses
+  dimensions). Le site recadre lui-même l'affichage si besoin, comme pour les
+  autres ouvrages. `optimizeImage` accepte une boîte `maxWidth × maxHeight`
+  (facteur ≤ 1, `min(maxW/w, maxH/h, 1)`), en plus du `maxLongSide` générique.
 - **Choix de dépendance : `jimp`** (traitement d'image **100 % JavaScript**,
   aucun binaire natif à compiler). Motif : conforme à la règle « pas de
   dépendance exotique » et à la sobriété — s'installe et tourne **à l'identique**

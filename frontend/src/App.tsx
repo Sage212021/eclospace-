@@ -78,13 +78,18 @@ const NAV_POLES: NavPole[] = [
     ],
   },
   {
+    // Chaque module Production dépend du droit du MÉTIER correspondant (et non
+    // du droit « manuscrits » générique) : ainsi un rôle qui a besoin de voir les
+    // manuscrits pour une autre raison (ex. le juridique, pour les contrats)
+    // n'accède pas à la Production. La Direction (générale/éditoriale) reçoit ces
+    // droits de supervision dans le seed pour garder la vue complète.
     label: "Production",
     items: [
-      { key: "pr-maquette", label: "Maquette", permission: "manuscripts:consultation" },
-      { key: "pr-infographie", label: "Infographie & couvertures", permission: "manuscripts:consultation" },
-      { key: "pr-isbn", label: "ISBN & dépôt légal", permission: "manuscripts:consultation" },
-      { key: "pr-bat", label: "BAT & contrôle qualité", permission: "manuscripts:consultation" },
-      { key: "pr-impression", label: "Impression", permission: "manuscripts:consultation" },
+      { key: "pr-maquette", label: "Maquette", permission: "production:consultation" },
+      { key: "pr-infographie", label: "Infographie & couvertures", permission: "production:consultation" },
+      { key: "pr-isbn", label: "ISBN & dépôt légal", permission: "isbn:consultation" },
+      { key: "pr-bat", label: "BAT & contrôle qualité", permission: "bat:consultation" },
+      { key: "pr-impression", label: "Impression", permission: "printing:consultation" },
     ],
   },
   {

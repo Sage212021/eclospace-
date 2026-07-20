@@ -302,6 +302,41 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 - Gérées **par lien** (http/https) en v1 plutôt qu'hébergées, pour rester
   compatible avec une connexion modeste (contrainte du projet).
 
+## Cloisonnement de la Production — droits par métier (20/07/2026)
+
+### Constat (signalé par l'opérateur)
+- Un compte cumulant plusieurs rôles (RH + Communication + **Juridique**)
+  pouvait **ouvrir les modules Production** (Maquette, Infographie, ISBN, BAT,
+  Impression), alors qu'aucun rôle « Production » ne lui était attribué.
+
+### Cause
+- Les entrées de menu Production étaient gardées par le droit **générique**
+  `manuscripts:consultation`. Or le **Responsable juridique** a ce droit pour une
+  raison légitime (consulter les manuscrits liés aux **contrats**) — il ouvrait
+  donc aussi la Production par effet de bord. Le cumul de postes (effectif
+  réduit) rendait le problème visible.
+
+### Correctif
+- Chaque module Production dépend désormais du droit **métier** correspondant,
+  et non plus de `manuscripts:consultation` :
+  Maquette / Infographie → `production:consultation` ; ISBN → `isbn:consultation`
+  ; BAT → `bat:consultation` ; Impression → `printing:consultation`.
+- Ainsi le **juridique garde ses Contrats** (via `manuscripts:consultation`) mais
+  **n'accède plus à la Production**. Vérifié : RESP_JURIDIQUE ne voit aucun module
+  Production ; chaque métier ne voit que le sien.
+- **Supervision préservée** : la Direction générale et éditoriale reçoivent dans
+  le seed les droits de vue Production qui leur manquaient
+  (`production/isbn/bat/printing:consultation`) — elles gardent la vue complète.
+- Défense en profondeur inchangée (le garde `isbn:consultation` etc. s'applique
+  aussi à l'ouverture, pas seulement au menu).
+- Tests (`users-roles.test.ts`) : juridique garde `manuscripts:consultation`
+  mais aucun droit de vue Production ; la direction éditoriale les a tous.
+
+### Rappel (cause récurrente)
+- Plusieurs comptes cumulent 2–3 rôles. **Chaque rôle ajoute ses accès.** Ce
+  correctif traite le cas juridique↔production ; le principe reste « un rôle par
+  métier », sauf cumul réellement voulu.
+
 ## Connexion : robustesse au clavier mobile (19/07/2026)
 
 ### Constat (blocage opérateur)

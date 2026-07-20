@@ -281,6 +281,14 @@ async function main() {
   await grant("DIR_GENERAL", ["printing:consultation", "printing:validation", "printing:administration"]);
   await grant("RESP_FINANCE", ["printing:consultation"]);
 
+  // Supervision de toute la chaîne de production par la Direction : les modules
+  // Production dépendent désormais des droits métier (production/isbn/bat/
+  // printing) — et non plus du droit « manuscrits » générique, pour cloisonner
+  // les rôles transverses (juridique, RH…). On garantit donc à la Direction
+  // générale et éditoriale la visibilité complète de la Production.
+  await grant("DIR_GENERAL", ["production:consultation", "isbn:consultation", "bat:consultation"]);
+  await grant("DIR_EDITORIAL", ["production:consultation", "isbn:consultation", "bat:consultation", "printing:consultation"]);
+
   // Stock et magasin (Ch. 16).
   await grant("MAGASINIER", [
     "stock:consultation",

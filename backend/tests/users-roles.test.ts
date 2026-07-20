@@ -128,6 +128,26 @@ describe("utilisateurs & rôles (écran d'administration)", () => {
     expect(perms).not.toContain("rapports:consultation");
   });
 
+  // Le juridique a besoin de consulter les manuscrits (pour les contrats), mais
+  // NE doit PAS accéder à la Production. Les modules Production dépendent des
+  // droits métier (production/isbn/bat/printing), pas du droit « manuscrits ».
+  it("le juridique garde les manuscrits (contrats) mais n'accède pas à la Production", async () => {
+    const s = Math.random().toString(36).slice(2, 7);
+    const perms = await meFor(`jur_${s}`, "Juridique123!", "RESP_JURIDIQUE");
+    expect(perms).toContain("manuscripts:consultation"); // pour ses contrats
+    for (const p of ["production:consultation", "isbn:consultation", "bat:consultation", "printing:consultation"]) {
+      expect(perms, `juridique ne doit pas avoir ${p}`).not.toContain(p);
+    }
+  });
+
+  it("la Direction éditoriale garde la vue complète de la Production", async () => {
+    const s = Math.random().toString(36).slice(2, 7);
+    const perms = await meFor(`dired_${s}`, "DirEd123!", "DIR_EDITORIAL");
+    for (const p of ["production:consultation", "isbn:consultation", "bat:consultation", "printing:consultation"]) {
+      expect(perms, `la direction éditoriale doit voir ${p}`).toContain(p);
+    }
+  });
+
   it("le RH et la Direction gardent bien l'accès RH et Rapports", async () => {
     const s = Math.random().toString(36).slice(2, 7);
     const rh = await meFor(`rh_ok_${s}`, "RhAcces123!", "RESP_RH");

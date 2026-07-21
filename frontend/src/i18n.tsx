@@ -903,6 +903,7 @@ const EN: Record<string, string> = {
   // Communication interne — Babillard d'annonces
   "pole.Communication interne": "Internal communication",
   "nav.cm-babillard": "Announcement board",
+  "nav.cm-evenements": "Events planning",
   "nav.cm-calendrier": "Shared calendar",
   "nav.cm-actualites": "News feed",
   "sitepub.title": "Website listing",

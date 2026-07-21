@@ -28,7 +28,6 @@ import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { RichTextEditor } from "../components/RichTextEditor";
-import { AnnualEventsPlanning } from "../components/AnnualEventsPlanning";
 import { IconPilotage } from "../components/icons";
 import { useI18n } from "../i18n";
 
@@ -42,7 +41,6 @@ const PRIORITY_COLORS: Record<AnnouncementPriority, string> = {
 interface AnnouncementsPageProps {
   canPublish: boolean;
   canAdminister: boolean;
-  canManageEvents: boolean;
   // Ouverture directe d'une annonce (depuis la cloche de notifications).
   openAnnouncementId?: string | null;
   onOpened?: () => void;
@@ -80,7 +78,7 @@ const EMPTY_FORM: FormState = {
 };
 
 // Centre de Communication Interne — Babillard d'annonces (module « communication »).
-export function AnnouncementsPage({ canPublish, canAdminister, canManageEvents, openAnnouncementId, onOpened, prefs, onPrefsChange }: AnnouncementsPageProps) {
+export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementId, onOpened, prefs, onPrefsChange }: AnnouncementsPageProps) {
   const { t, lang } = useI18n();
   const [categories, setCategories] = useState<AnnouncementCategory[]>([]);
   const [feed, setFeed] = useState<AnnouncementFeedItem[]>([]);
@@ -271,9 +269,6 @@ export function AnnouncementsPage({ canPublish, canAdminister, canManageEvents, 
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
-
-      {/* Planning annuel des événements — visible par tous, géré par RH/Direction */}
-      <AnnualEventsPlanning canManage={canManageEvents} />
 
       {/* Fil personnel des annonces */}
       <Card

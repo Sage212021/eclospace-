@@ -22,6 +22,7 @@ import { AuditLogPage } from "./pages/AuditLogPage";
 import { UsersRolesPage } from "./pages/UsersRolesPage";
 import { DiagnosticsPage } from "./pages/DiagnosticsPage";
 import { AnnouncementsPage } from "./pages/AnnouncementsPage";
+import { AnnualEventsPlanning } from "./components/AnnualEventsPlanning";
 import { CalendarPage } from "./pages/CalendarPage";
 import { NewsFeedPage } from "./pages/NewsFeedPage";
 import { NewslettersPage } from "./pages/NewslettersPage";
@@ -36,6 +37,7 @@ import { playNotificationSound } from "./lib/notificationSound";
 // manuscrits filtrée sur une étape du workflow (option « liste filtrée »).
 type PageId =
   | "dashboard"
+  | "annual-events"
   | "weekly-reports"
   | "manuscripts"
   | "my-readings"
@@ -121,6 +123,7 @@ const NAV_POLES: NavPole[] = [
     items: [
       { key: "cm-actualites", label: "Fil d'actualités", permission: "communication:consultation" },
       { key: "cm-babillard", label: "Babillard d'annonces", permission: "communication:consultation" },
+      { key: "cm-evenements", label: "Planning des événements", permission: "communication:consultation" },
       { key: "cm-calendrier", label: "Calendrier partagé", permission: "communication:consultation" },
       { key: "cm-bulletin", label: "Bulletin d'actualités", permission: "communication:consultation" },
     ],
@@ -161,6 +164,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ad-diagnostics": { page: "diagnostics" },
   "cm-actualites": { page: "newsfeed" },
   "cm-babillard": { page: "communication" },
+  "cm-evenements": { page: "annual-events" },
   "cm-calendrier": { page: "calendar" },
   "cm-bulletin": { page: "newsletters" },
   "pi-direction": { page: "direction" },
@@ -562,12 +566,16 @@ export function App() {
           <AnnouncementsPage
             canPublish={permissions.has("communication:saisie")}
             canAdminister={permissions.has("communication:administration")}
-            canManageEvents={permissions.has("rh:administration")}
             openAnnouncementId={announcementToOpen}
             onOpened={() => setAnnouncementToOpen(null)}
             prefs={notifPrefs}
             onPrefsChange={setNotifPrefs}
           />
+        )}
+        {leaf && "page" in leaf && leaf.page === "annual-events" && (
+          <div className="ecl-page">
+            <AnnualEventsPlanning canManage={permissions.has("rh:administration")} />
+          </div>
         )}
         {leaf && "page" in leaf && leaf.page === "calendar" && (
           <CalendarPage canPublish={permissions.has("communication:saisie")} />

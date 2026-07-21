@@ -20,11 +20,14 @@ import { useI18n } from "../i18n";
 //  - Calendrier (aperçu de toute l'année d'un coup d'œil).
 // Lecture par tout le personnel (temps quasi réel) ; gestion par RH + Direction.
 
-const STATUS: Record<AnnualEventStatus, { label: string; color: string; bg: string }> = {
-  a_venir: { label: "À venir", color: "var(--muted)", bg: "var(--paper)" },
-  a_confirmer: { label: "À confirmer", color: "#C4661F", bg: "var(--amber-soft, #f9e9db)" },
-  tenu: { label: "Tenu", color: "var(--eclosion-dark)", bg: "var(--eclosion-soft)" },
-  non_tenu: { label: "Non tenu", color: "var(--alert)", bg: "var(--alert-soft, #f9e9e6)" },
+// Chaque statut porte deux jeux de couleurs :
+//  - color/bg : pour les puces et les boutons (fond clair, texte teinté) ;
+//  - fill/on  : pour les cases pleines du calendrier (fond franc, texte contrasté).
+const STATUS: Record<AnnualEventStatus, { label: string; color: string; bg: string; fill: string; on: string }> = {
+  a_venir: { label: "À venir", color: "var(--eclosion-dark)", bg: "var(--eclosion-soft)", fill: "var(--eclosion)", on: "#16233D" },
+  a_confirmer: { label: "À confirmer", color: "var(--amber)", bg: "var(--amber-soft, #f9e9db)", fill: "var(--amber)", on: "#FFFFFF" },
+  tenu: { label: "Tenu", color: "var(--ink)", bg: "#e7ecf5", fill: "var(--ink)", on: "#FFFFFF" },
+  non_tenu: { label: "Non tenu", color: "var(--alert)", bg: "var(--alert-soft, #f9e9e6)", fill: "var(--alert)", on: "#FFFFFF" },
 };
 const STATUS_ORDER: AnnualEventStatus[] = ["a_venir", "a_confirmer", "tenu", "non_tenu"];
 
@@ -195,8 +198,8 @@ function YearCalendar({ events, year, onYear, locale, lang, onDay, t }: {
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {STATUS_ORDER.map((s) => (
-            <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--muted)" }}>
-              <span style={{ width: 11, height: 11, borderRadius: 3, background: STATUS[s].bg, border: `1px solid ${STATUS[s].color}` }} />
+            <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "var(--ink)", fontWeight: 600 }}>
+              <span style={{ width: 13, height: 13, borderRadius: 4, background: STATUS[s].fill }} />
               {STATUS[s].label}
             </span>
           ))}
@@ -222,17 +225,26 @@ function MiniMonth({ year, month, dayMap, weekdays, locale, onDay }: {
   for (let i = 0; i < firstWeekday; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
+  const now = new Date();
+  const hasAny = Object.keys(dayMap).some((k) => k.startsWith(`${month}-`));
+
   return (
-    <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 8, background: "var(--card)" }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--eclosion-dark)", textTransform: "capitalize", marginBottom: 6, textAlign: "center" }}>{monthName}</div>
+    <div style={{ border: "1px solid var(--line)", borderRadius: 12, padding: "10px 9px", background: "var(--card)", boxShadow: hasAny ? "0 1px 3px rgba(22,35,61,0.06)" : "none" }}>
+      <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--ink)", textTransform: "capitalize", marginBottom: 8, textAlign: "center", letterSpacing: 0.2 }}>{monthName}</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
         {weekdays.map((w, i) => (
-          <div key={i} style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", fontWeight: 600 }}>{w}</div>
+          <div key={i} style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", fontWeight: 700, paddingBottom: 2 }}>{w}</div>
         ))}
         {cells.map((d, i) => {
           if (d === null) return <div key={i} />;
           const evs = dayMap[`${month}-${d}`];
           const st = evs ? STATUS[evs[0].status] : null;
+          const isToday = d === now.getDate() && month === now.getMonth() && year === now.getFullYear();
+          // Bande continue : arrondir seulement les extrémités d'une série du même événement.
+          const sameL = evs && dayMap[`${month}-${d - 1}`]?.[0]?.id === evs[0].id;
+          const sameR = evs && dayMap[`${month}-${d + 1}`]?.[0]?.id === evs[0].id;
+          const radius = evs ? `${sameL ? 2 : 7}px ${sameR ? 2 : 7}px ${sameR ? 2 : 7}px ${sameL ? 2 : 7}px` : "6px";
+          const multi = evs && evs.length > 1;
           return (
             <button
               key={i}
@@ -240,19 +252,23 @@ function MiniMonth({ year, month, dayMap, weekdays, locale, onDay }: {
               disabled={!evs}
               title={evs ? evs.map((e) => e.title).join(", ") : undefined}
               style={{
+                position: "relative",
                 aspectRatio: "1 / 1",
-                fontSize: 10.5,
-                border: st ? `1px solid ${st.color}` : "1px solid transparent",
-                background: st ? st.bg : "transparent",
-                color: st ? st.color : "var(--ink)",
-                fontWeight: st ? 700 : 400,
-                borderRadius: 5,
+                fontSize: 11,
+                border: isToday ? "2px solid var(--ink)" : "1px solid transparent",
+                background: st ? st.fill : "transparent",
+                color: st ? st.on : "var(--muted)",
+                fontWeight: st ? 800 : isToday ? 800 : 400,
+                borderRadius: radius,
                 cursor: evs ? "pointer" : "default",
                 padding: 0,
                 display: "flex", alignItems: "center", justifyContent: "center",
               }}
             >
               {d}
+              {multi && (
+                <span style={{ position: "absolute", top: 1, right: 3, fontSize: 8, fontWeight: 900, lineHeight: 1 }}>•</span>
+              )}
             </button>
           );
         })}

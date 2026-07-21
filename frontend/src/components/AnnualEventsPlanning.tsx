@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   listAnnualEvents,
   createAnnualEvent,
@@ -15,9 +15,10 @@ import { Button } from "./Button";
 import { Modal, Field } from "./Modal";
 import { useI18n } from "../i18n";
 
-// Planning annuel des événements. Vu par tout le personnel (lecture seule, en
-// temps quasi réel) ; géré par le RH et la Direction (canManage) : statut,
-// dates, lieu, affiche — tout est modifiable depuis l'ERP.
+// Planning annuel des événements. Deux vues :
+//  - Liste (détaillée, avec gestion RH/Direction).
+//  - Calendrier (aperçu de toute l'année d'un coup d'œil).
+// Lecture par tout le personnel (temps quasi réel) ; gestion par RH + Direction.
 
 const STATUS: Record<AnnualEventStatus, { label: string; color: string; bg: string }> = {
   a_venir: { label: "À venir", color: "var(--muted)", bg: "var(--paper)" },
@@ -32,9 +33,13 @@ export function AnnualEventsPlanning({ canManage }: { canManage: boolean }) {
   const locale = lang === "en" ? "en-GB" : "fr-FR";
   const [events, setEvents] = useState<AnnualEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "calendar">("list");
+  const [year, setYear] = useState<number>(new Date().getFullYear());
   const [editing, setEditing] = useState<AnnualEvent | "new" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AnnualEvent | null>(null);
+  const [dayDetail, setDayDetail] = useState<{ label: string; events: AnnualEvent[] } | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const yearInit = useRef(false);
 
   async function refresh() {
     try {
@@ -45,43 +50,61 @@ export function AnnualEventsPlanning({ canManage }: { canManage: boolean }) {
   }
   useEffect(() => {
     refresh();
-    // Temps quasi réel : rafraîchit régulièrement pour que les employés voient
-    // vite les changements de statut faits par le RH.
     const timer = window.setInterval(refresh, 45000);
     return () => window.clearInterval(timer);
   }, []);
 
-  async function setStatus(ev: AnnualEvent, status: AnnualEventStatus) {
-    try {
-      await updateAnnualEvent(ev.id, { status });
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Modification impossible.");
-    }
-  }
+  // Au premier chargement, si l'année en cours n'a aucun événement, on se place
+  // sur l'année du premier événement (ex. 2026) pour montrer un calendrier utile.
+  useEffect(() => {
+    if (!events || yearInit.current || events.length === 0) return;
+    const y = new Date().getFullYear();
+    const hasThisYear = events.some((e) => new Date(e.start_date).getUTCFullYear() === y);
+    if (!hasThisYear) setYear(new Date(events[0].start_date).getUTCFullYear());
+    yearInit.current = true;
+  }, [events]);
 
+  async function setStatus(ev: AnnualEvent, status: AnnualEventStatus) {
+    try { await updateAnnualEvent(ev.id, { status }); await refresh(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Modification impossible."); }
+  }
   async function onAffiche(ev: AnnualEvent, file: File) {
-    try {
-      await uploadAnnualEventAffiche(ev.id, file);
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Dépôt de l'affiche impossible.");
-    }
+    try { await uploadAnnualEventAffiche(ev.id, file); await refresh(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Dépôt de l'affiche impossible."); }
   }
 
   const nextId = nextUpcomingId(events);
+  const action = (
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ display: "inline-flex", border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden" }}>
+        <ViewTab active={view === "list"} onClick={() => setView("list")}>{t("events.view_list", "📋 Liste")}</ViewTab>
+        <ViewTab active={view === "calendar"} onClick={() => setView("calendar")}>{t("events.view_cal", "📅 Calendrier")}</ViewTab>
+      </div>
+      {canManage && <Button variant="add" size="sm" onClick={() => setEditing("new")}>{t("events.add", "+ Ajouter")}</Button>}
+    </div>
+  );
 
   return (
     <Card
       title={t("events.title", "Planning des événements")}
       subtitle={t("events.subtitle", "Les temps forts de la maison, suivis en direct.")}
-      action={canManage ? <Button variant="add" size="sm" onClick={() => setEditing("new")}>{t("events.add", "+ Ajouter")}</Button> : undefined}
+      action={action}
     >
       {error && <div style={banner("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {!events ? (
         <p style={{ color: "var(--muted)", fontSize: 13 }}>{t("common.loading", "Chargement…")}</p>
       ) : events.length === 0 ? (
         <p style={{ color: "var(--muted)", fontSize: 13 }}>{t("events.empty", "Aucun événement pour le moment.")}</p>
+      ) : view === "calendar" ? (
+        <YearCalendar
+          events={events}
+          year={year}
+          onYear={setYear}
+          locale={locale}
+          lang={lang}
+          onDay={(label, evs) => setDayDetail({ label, events: evs })}
+          t={t}
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {events.map((ev) => (
@@ -101,6 +124,29 @@ export function AnnualEventsPlanning({ canManage }: { canManage: boolean }) {
             />
           ))}
         </div>
+      )}
+
+      {/* Détail d'un jour (depuis le calendrier) */}
+      {dayDetail && (
+        <Modal title={dayDetail.label} onClose={() => setDayDetail(null)} footer={<Button variant="view" size="sm" onClick={() => setDayDetail(null)}>{t("common.close", "Fermer")}</Button>}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {dayDetail.events.map((ev) => (
+              <div key={ev.id} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                {ev.has_affiche && <img src={annualEventAfficheUrl(ev.id, ev.updated_at)} alt="" style={{ width: 70, borderRadius: 6, border: "1px solid var(--line)", flexShrink: 0 }} />}
+                <div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: 14 }}>{ev.title}</strong>
+                    {ev.dg_present && <span style={dgBadge}>DG</span>}
+                    <span style={statusChip(ev.status)}>{STATUS[ev.status].label}</span>
+                  </div>
+                  {ev.description && <div style={{ fontSize: 12.5, color: "var(--muted)", fontStyle: "italic" }}>{ev.description}</div>}
+                  <div style={{ fontSize: 12.5, color: "var(--ink)", fontFamily: "var(--font-mono)", marginTop: 2 }}>{formatRange(ev.start_date, ev.end_date, locale)}{ev.location ? ` · ${ev.location}` : ""}</div>
+                  {canManage && <button onClick={() => { setDayDetail(null); setEditing(ev); }} style={{ ...ghostBtn, marginTop: 6 }}>{t("common.edit", "Modifier")}</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Modal>
       )}
 
       {editing && (
@@ -129,6 +175,112 @@ export function AnnualEventsPlanning({ canManage }: { canManage: boolean }) {
   );
 }
 
+// ── Vue calendrier : l'année entière (12 mois) ──────────────────────────────
+function YearCalendar({ events, year, onYear, locale, lang, onDay, t }: {
+  events: AnnualEvent[]; year: number; onYear: (y: number) => void; locale: string; lang: string;
+  onDay: (label: string, events: AnnualEvent[]) => void; t: (k: string, d: string) => string;
+}) {
+  const dayMap = useMemo(() => buildDayMap(events, year), [events, year]);
+  const weekdays = lang === "en" ? ["M", "T", "W", "T", "F", "S", "S"] : ["L", "M", "M", "J", "V", "S", "D"];
+  const total = events.filter((e) => new Date(e.start_date).getUTCFullYear() === year).length;
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={() => onYear(year - 1)} style={navBtn} aria-label="année précédente">◀</button>
+          <strong style={{ fontFamily: "var(--font-mono)", fontSize: 18 }}>{year}</strong>
+          <button onClick={() => onYear(year + 1)} style={navBtn} aria-label="année suivante">▶</button>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>· {total} {t("events.count", "événement(s)")}</span>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {STATUS_ORDER.map((s) => (
+            <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--muted)" }}>
+              <span style={{ width: 11, height: 11, borderRadius: 3, background: STATUS[s].bg, border: `1px solid ${STATUS[s].color}` }} />
+              {STATUS[s].label}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 14 }}>
+        {Array.from({ length: 12 }, (_, m) => (
+          <MiniMonth key={m} year={year} month={m} dayMap={dayMap} weekdays={weekdays} locale={locale} onDay={onDay} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MiniMonth({ year, month, dayMap, weekdays, locale, onDay }: {
+  year: number; month: number; dayMap: Record<string, AnnualEvent[]>; weekdays: string[]; locale: string;
+  onDay: (label: string, events: AnnualEvent[]) => void;
+}) {
+  const monthName = new Date(Date.UTC(year, month, 1)).toLocaleDateString(locale, { month: "long" });
+  const firstWeekday = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7; // Lundi = 0
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 8, background: "var(--card)" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--eclosion-dark)", textTransform: "capitalize", marginBottom: 6, textAlign: "center" }}>{monthName}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+        {weekdays.map((w, i) => (
+          <div key={i} style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", fontWeight: 600 }}>{w}</div>
+        ))}
+        {cells.map((d, i) => {
+          if (d === null) return <div key={i} />;
+          const evs = dayMap[`${month}-${d}`];
+          const st = evs ? STATUS[evs[0].status] : null;
+          return (
+            <button
+              key={i}
+              onClick={evs ? () => onDay(`${d} ${monthName} ${year}`, evs) : undefined}
+              disabled={!evs}
+              title={evs ? evs.map((e) => e.title).join(", ") : undefined}
+              style={{
+                aspectRatio: "1 / 1",
+                fontSize: 10.5,
+                border: st ? `1px solid ${st.color}` : "1px solid transparent",
+                background: st ? st.bg : "transparent",
+                color: st ? st.color : "var(--ink)",
+                fontWeight: st ? 700 : 400,
+                borderRadius: 5,
+                cursor: evs ? "pointer" : "default",
+                padding: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              {d}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Jours couverts par chaque événement (bornes incluses), pour l'année donnée.
+function buildDayMap(events: AnnualEvent[], year: number): Record<string, AnnualEvent[]> {
+  const map: Record<string, AnnualEvent[]> = {};
+  for (const ev of events) {
+    const s = new Date(ev.start_date);
+    const e = ev.end_date ? new Date(ev.end_date) : s;
+    const cur = new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate()));
+    const end = new Date(Date.UTC(e.getUTCFullYear(), e.getUTCMonth(), e.getUTCDate()));
+    let guard = 0;
+    while (cur <= end && guard++ < 400) {
+      if (cur.getUTCFullYear() === year) {
+        const key = `${cur.getUTCMonth()}-${cur.getUTCDate()}`;
+        (map[key] ||= []).push(ev);
+      }
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+  }
+  return map;
+}
+
 function EventRow({
   ev, locale, highlighted, canManage, onStatus, onEdit, onDelete, onPickAffiche, fileRef, onFile, t,
 }: {
@@ -151,7 +303,6 @@ function EventRow({
         flexWrap: "wrap",
       }}
     >
-      {/* Affiche affichée directement (pas de téléchargement) */}
       {ev.has_affiche && (
         <img
           src={annualEventAfficheUrl(ev.id, ev.updated_at)}
@@ -163,8 +314,8 @@ function EventRow({
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {highlighted && <span style={{ fontSize: 10, fontWeight: 800, color: "var(--eclosion-dark)", textTransform: "uppercase", letterSpacing: 0.5 }}>{t("events.next", "Prochain")}</span>}
           <span style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>{ev.title}</span>
-          {ev.dg_present && <span title={t("events.dg", "Présence de la Direction générale")} style={{ fontSize: 10.5, fontWeight: 700, color: "var(--eclosion-dark)", background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 999, padding: "1px 8px" }}>DG</span>}
-          <span style={{ fontSize: 11, fontWeight: 700, color: st.color, background: st.bg, border: `1px solid ${st.color}`, borderRadius: 999, padding: "1px 9px" }}>{st.label}</span>
+          {ev.dg_present && <span title={t("events.dg", "Présence de la Direction générale")} style={dgBadge}>DG</span>}
+          <span style={statusChip(ev.status)}>{st.label}</span>
         </div>
         {ev.description && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2, fontStyle: "italic" }}>{ev.description}</div>}
         <div style={{ fontSize: 12.5, color: "var(--ink)", marginTop: 4, fontFamily: "var(--font-mono)" }}>
@@ -272,7 +423,21 @@ function EventEditor({ event, onClose, onSaved, t }: { event: AnnualEvent | null
   );
 }
 
-// Prochain événement à venir (la première date future non « non tenu »).
+function ViewTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: "5px 12px", border: "none",
+        background: active ? "var(--eclosion-soft)" : "transparent",
+        color: active ? "var(--eclosion-dark)" : "var(--muted)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function nextUpcomingId(events: AnnualEvent[] | null): string | null {
   if (!events) return null;
   const now = Date.now();
@@ -290,10 +455,13 @@ function formatRange(start: string, end: string | null, locale: string): string 
   return `${new Date(start).toLocaleDateString(locale, { day: "2-digit", month: "short" })} → ${new Date(end).toLocaleDateString(locale, opt)}`;
 }
 
-const ghostBtn: React.CSSProperties = {
-  fontSize: 11.5, fontWeight: 600, cursor: "pointer", borderRadius: 6, padding: "3px 9px",
-  border: "1px solid var(--line)", background: "transparent", color: "var(--muted)",
-};
+function statusChip(status: AnnualEventStatus): React.CSSProperties {
+  const st = STATUS[status];
+  return { fontSize: 11, fontWeight: 700, color: st.color, background: st.bg, border: `1px solid ${st.color}`, borderRadius: 999, padding: "1px 9px" };
+}
+const dgBadge: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: "var(--eclosion-dark)", background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 999, padding: "1px 8px" };
+const ghostBtn: React.CSSProperties = { fontSize: 11.5, fontWeight: 600, cursor: "pointer", borderRadius: 6, padding: "3px 9px", border: "1px solid var(--line)", background: "transparent", color: "var(--muted)" };
+const navBtn: React.CSSProperties = { fontSize: 12, cursor: "pointer", borderRadius: 6, padding: "3px 9px", border: "1px solid var(--line)", background: "transparent", color: "var(--eclosion-dark)" };
 function banner(bg: string, color: string): React.CSSProperties {
   return { background: bg, color, borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 10 };
 }

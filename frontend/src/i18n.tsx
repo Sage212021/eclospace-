@@ -95,6 +95,7 @@ const EN: Record<string, string> = {
   "common.loading": "Loading…",
   "common.save": "Save",
   "common.edit": "Edit",
+  "common.close": "Close",
   // Planning annuel des événements
   "events.title": "Events planning",
   "events.subtitle": "The company's highlights, tracked live.",
@@ -120,6 +121,9 @@ const EN: Record<string, string> = {
   "events.f_status": "Status",
   "events.f_dg": "MD attending",
   "events.err_required": "Name and start date are required.",
+  "events.view_list": "📋 List",
+  "events.view_cal": "📅 Calendar",
+  "events.count": "event(s)",
   // Stock
   "stock.alerts_title": "Stock alerts",
   "stock.alerts_sub": "Out-of-stock and reached alert thresholds.",

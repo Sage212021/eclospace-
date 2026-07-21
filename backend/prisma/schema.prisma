@@ -3657,3 +3657,42 @@ model Newsletter {
   @@index([periodStart])
   @@map("newsletters")
 }
+
+// ── Planning annuel des événements (RH / Direction) ─────────────────────────
+// Événements de l'année (salons, festivals, réunions…) suivis par le RH et la
+// Direction générale. Chaque événement porte un statut piloté (à venir / à
+// confirmer / tenu / non tenu) et une affiche visible directement. Les employés
+// le consultent en lecture seule sur le babillard, en temps réel. Tous les
+// champs sont modifiables depuis l'ERP (pas d'intervention en coulisses).
+enum AnnualEventStatus {
+  a_venir
+  a_confirmer
+  tenu
+  non_tenu
+}
+
+model AnnualEvent {
+  id          String            @id @default(uuid())
+  title       String
+  description String? // ex. « atelier de lecture pour enfants »
+  startDate   DateTime          @map("start_date")
+  endDate     DateTime?         @map("end_date")
+  location    String?
+  dgPresent   Boolean           @default(false) @map("dg_present")
+  status      AnnualEventStatus @default(a_venir)
+
+  // Affiche de l'événement (image légère, affichée directement). Stockée hors
+  // base (disque en dev, stockage objet durable en prod) comme la GED.
+  afficheFilePath String? @map("affiche_file_path")
+  afficheMimeType String? @map("affiche_mime_type")
+  afficheFileSize Int?    @map("affiche_file_size")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([startDate])
+  @@map("annual_events")
+}

@@ -17,6 +17,39 @@ Document vivant : chaque choix technique structurant y est consigné avec sa jus
 
 | 04/07/2026 | Endpoints ajoutés hors spécification API v1 : `GET /genres`, `GET /collections`, `GET /evaluation-criteria`, `GET /users` | Plomberie minimale nécessaire aux listes déroulantes du Ch. 6 §6.2 et à la grille du Ch. 7 §7.4, absente de `03_Specification_API.md` (document explicitement « version de travail »). Lecture seule, permissions vérifiées. |
 
+## Planning annuel des événements (21/07/2026)
+
+### Besoin (opérateur)
+- Intégrer le planning 2026 (fusion de deux PDF : calendrier + planning) : une
+  liste d'événements (salons, festivals, réunions…) **suivie par le RH et la
+  Direction générale**, **consultée par tout le personnel sur le babillard, en
+  temps réel**. Le RH/DG marquent chaque événement **tenu / non tenu**, tous les
+  champs sont **modulables** (dates, lieu…), et chaque événement porte une
+  **affiche visible directement** (sans téléchargement).
+
+### Mise en œuvre
+- Modèle `AnnualEvent` (+ enum `AnnualEventStatus` : `a_venir` / `a_confirmer` /
+  `tenu` / `non_tenu`). L'**affiche** est stockée hors base (disque en dev,
+  stockage objet durable en prod — même mécanisme que la GED), **optimisée** en
+  JPG léger (`optimizeImage`) et servie **inline** (pas de `content-disposition:
+  attachment`) → elle s'affiche directement.
+- Routes `/api/v1/annual-events` : lecture = `communication:consultation` (tout
+  le personnel) ; création/modification/suppression/affiche = `rh:administration`.
+  Ce droit est détenu **exactement** par le Responsable RH **et** la Direction
+  générale — donc « RH + DG gèrent » sans nouvelle permission.
+- **Affichage** : composant `AnnualEventsPlanning` intégré au **babillard**
+  (page Communication). Lecture pour tous ; contrôles de gestion (statut en un
+  clic, édition de tous les champs, dépôt d'affiche, ajout/suppression) visibles
+  seulement si `rh:administration`. Rafraîchissement périodique (≈ 45 s) pour le
+  « temps réel ». Améliorations : mise en avant du **prochain** événement, badge
+  **DG**, code couleur Éclospace par statut.
+- **Seed** : les **11 événements 2026** (dont Festival BINGUEL, 12→15 août) sont
+  chargés une seule fois (si la table est vide) ; ensuite **tout est modifiable
+  dans l'ERP** (aucune intervention en coulisses).
+- Tests (`annual-events.test.ts`) : lecture par tout le personnel ; gestion
+  refusée à un non-RH/DG (403) ; RH crée, DG marque « tenu » ; dates modulables ;
+  affiche optimisée servie inline ; suppression logique.
+
 ## Points d'interprétation du Lot 1 à confirmer avec la Direction éditoriale
 
 Le cahier des charges décrit le comité de lecture et la décision éditoriale en langage métier ; certains détails d'implémentation ont exigé un choix non explicitement tranché par les documents. Signalés ici conformément à CLAUDE.md règle 2 :

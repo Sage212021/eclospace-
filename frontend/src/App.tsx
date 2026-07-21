@@ -562,6 +562,7 @@ export function App() {
           <AnnouncementsPage
             canPublish={permissions.has("communication:saisie")}
             canAdminister={permissions.has("communication:administration")}
+            canManageEvents={permissions.has("rh:administration")}
             openAnnouncementId={announcementToOpen}
             onOpened={() => setAnnouncementToOpen(null)}
             prefs={notifPrefs}

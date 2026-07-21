@@ -764,6 +764,58 @@ export function documentVersionDownloadUrl(versionId: string): string {
   return `${API_BASE}/api/v1/document-versions/${versionId}/download`;
 }
 
+// ── Planning annuel des événements ──────────────────────────────────────────
+export type AnnualEventStatus = "a_venir" | "a_confirmer" | "tenu" | "non_tenu";
+export interface AnnualEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  start_date: string;
+  end_date: string | null;
+  location: string | null;
+  dg_present: boolean;
+  status: AnnualEventStatus;
+  has_affiche: boolean;
+  updated_at: string;
+}
+export interface AnnualEventInput {
+  title: string;
+  description?: string;
+  start_date: string;
+  end_date?: string;
+  location?: string;
+  dg_present?: boolean;
+  status?: AnnualEventStatus;
+}
+
+export function listAnnualEvents() {
+  return request<AnnualEvent[]>("/api/v1/annual-events");
+}
+export function createAnnualEvent(input: AnnualEventInput) {
+  return request<AnnualEvent>("/api/v1/annual-events", { method: "POST", body: JSON.stringify(input) });
+}
+export function updateAnnualEvent(id: string, input: Partial<AnnualEventInput>) {
+  return request<AnnualEvent>(`/api/v1/annual-events/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function deleteAnnualEvent(id: string) {
+  return request<{ ok: true }>(`/api/v1/annual-events/${id}`, { method: "DELETE" });
+}
+// Lien direct de l'affiche (image affichée telle quelle, sans téléchargement).
+// Le paramètre `v` casse le cache après une mise à jour de l'affiche.
+export function annualEventAfficheUrl(id: string, version?: string): string {
+  return `${API_BASE}/api/v1/annual-events/${id}/affiche${version ? `?v=${encodeURIComponent(version)}` : ""}`;
+}
+export async function uploadAnnualEventAffiche(id: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/annual-events/${id}/affiche`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    throw new Error(error?.message ?? `Erreur ${response.status}`);
+  }
+  return response.json() as Promise<AnnualEvent>;
+}
+
 // Couverture « prête pour le web » : version légère (JPG de très bonne qualité)
 // transformée à la volée depuis la couverture d'impression. C'est ce lien que le
 // maquettiste utilise pour joindre l'image à la fiche du site.

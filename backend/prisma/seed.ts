@@ -809,6 +809,40 @@ async function main() {
     }
   }
 
+  // Planning annuel des événements 2026 (fourni par la maison). Chargé une seule
+  // fois (si aucun événement n'existe) ; ensuite tout est modifiable dans l'ERP
+  // par le RH et la Direction. Les statuts/dates/lieux restent modulables.
+  if ((await prisma.annualEvent.count()) === 0) {
+    const D = (s: string) => new Date(`${s}T00:00:00.000Z`);
+    const events: { title: string; description?: string; start: string; end?: string; location?: string; dg?: boolean; status?: "a_venir" | "a_confirmer" }[] = [
+      { title: "Réunion de lancement", start: "2026-01-09", location: "Siège d'Éclosion (Yaoundé)", dg: true },
+      { title: "Encre de jeune", start: "2026-02-10", location: "Yaoundé", dg: true },
+      { title: "Dame de lettre", start: "2026-03-06", location: "Yaoundé", dg: true },
+      { title: "Salon de Paris", start: "2026-03-19", end: "2026-04-30", location: "Paris", dg: true },
+      { title: "Remise du prix littéraire OSU", start: "2026-04-21", end: "2026-04-23", location: "Yaoundé", dg: true },
+      { title: "Salon de l'industrie culturelle", description: "avec l'intervention de la DG", start: "2026-05-24", end: "2026-05-28", location: "Douala", dg: true },
+      { title: "Salon du livre Éclosion", start: "2026-05-29", end: "2026-05-30", location: "Douala", dg: true },
+      { title: "Festival BINGUEL", description: "atelier de lecture pour enfants", start: "2026-08-12", end: "2026-08-15", location: "à préciser" },
+      { title: "Éclos Académie — Masterclass", description: "événement prévisionnel", start: "2026-10-17", location: "à préciser", status: "a_confirmer" },
+      { title: "Salon africain du livre féminin", start: "2026-12-12", end: "2026-12-13", location: "Yaoundé", dg: true },
+      { title: "Noël à Éclosion", start: "2026-12-22", end: "2026-12-23", location: "Yaoundé", dg: true },
+    ];
+    for (const e of events) {
+      await prisma.annualEvent.create({
+        data: {
+          title: e.title,
+          description: e.description ?? null,
+          startDate: D(e.start),
+          endDate: e.end ? D(e.end) : null,
+          location: e.location ?? null,
+          dgPresent: e.dg ?? false,
+          status: e.status ?? "a_venir",
+        },
+      });
+    }
+    console.log(`Planning annuel : ${events.length} événements 2026 chargés.`);
+  }
+
   console.log("Seed Lot 0 terminé.");
   console.log(`Compte administrateur : admin / ${adminPassword} (à changer immédiatement)`);
 }

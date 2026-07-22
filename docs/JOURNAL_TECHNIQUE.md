@@ -696,3 +696,15 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
   bulletins envoyés, saisie pour composer/envoyer) — aucune nouvelle permission.
 - **Audit** : `entity_type = "newsletter"`, mapping sur l'enum existant
   (création → `create`, édition → `update`, envoi/suppression → `status_change`).
+
+## Renforts de sécurité avant version finale (22/07/2026)
+
+Suite à l'audit de l'ERP, trois renforts de sécurité (sans changement fonctionnel visible) :
+
+- **En-têtes de sécurité navigateur** (`@fastify/helmet`) : anti-« clickjacking » (X-Frame-Options), anti-reniflage de type (X-Content-Type-Options : nosniff), HSTS, Referrer-Policy, etc. La **CSP est volontairement désactivée** (`contentSecurityPolicy: false`) : l'interface React utilise des styles en ligne et un service worker (PWA) qu'une CSP stricte casserait ; les autres protections, elles, sont sans risque. À réactiver plus tard avec une politique sur mesure si besoin.
+
+- **Filet d'erreur global** (`app.setErrorHandler`) : toute erreur non rattrapée par une route est convertie en message clair, en français, **sans détail technique** (plus jamais de « Unique constraint failed » à l'écran). Traduit les erreurs Prisma connues (P2002 → 409 « valeur déjà utilisée », P2025 → 404), garde le message métier des erreurs 4xx explicites, et renvoie un message générique pour tout imprévu (5xx) — l'erreur réelle reste journalisée côté serveur.
+
+- **Anti-force brute par compte** (throttle applicatif dans `routes/auth.ts`) : chaque identifiant a son **propre budget d'échecs** (8 échecs → verrou temporaire de 10 min) ; une connexion réussie remet le compteur à zéro. **Choix délibéré du « par compte » plutôt que « par adresse IP »** : au Cameroun, tout un bureau partage souvent une seule connexion Internet (une seule adresse publique) — une limite par IP bloquerait tous les employés d'un coup. Le « par compte » protège chaque compte des essais répétés sans jamais pénaliser les collègues. Stockage en mémoire (suffisant sur une instance web unique ; à porter en base ou Redis si l'app est un jour répartie sur plusieurs instances). `trustProxy` activé pour que l'adresse réelle du visiteur (derrière Scalingo) soit correctement lue dans les journaux.
+
+Tests : `tests/security-hardening.test.ts` (en-têtes présents, filet d'erreur en JSON propre, verrou après trop de tentatives). Typecheck OK.

@@ -2,8 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
+import { Prisma } from "@prisma/client";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import staticFiles from "@fastify/static";
 import authPlugin from "./plugins/auth.js";
@@ -48,7 +50,17 @@ import newsletterRoutes from "./routes/newsletters.js";
 import annualEventsRoutes from "./routes/annualEvents.js";
 
 export async function buildApp() {
-  const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
+  // trustProxy : derrière l'hébergeur (Scalingo), l'adresse réelle du visiteur
+  // arrive dans l'en-tête « X-Forwarded-For ». Sans cela, tout le monde
+  // partagerait la même adresse et la limite de tentatives ci-dessous
+  // bloquerait tous les utilisateurs d'un coup.
+  const app = Fastify({ logger: process.env.NODE_ENV !== "test", trustProxy: true });
+
+  // En-têtes de sécurité standard du navigateur (protection anti-« clickjacking »,
+  // anti-reniflage de type, HSTS…). On désactive la CSP par défaut : l'interface
+  // React utilise des styles en ligne et un service worker (PWA) qu'une CSP
+  // stricte casserait ; les autres protections, elles, sont sans risque.
+  await app.register(helmet, { contentSecurityPolicy: false });
 
   await app.register(cors, {
     origin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
@@ -58,6 +70,42 @@ export async function buildApp() {
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024 } });
   await app.register(authPlugin);
+
+  // Filet de sécurité global : toute erreur non rattrapée par une route est
+  // convertie ici en message clair, en français — jamais de détail technique
+  // (ex. « Unique constraint failed ») renvoyé au navigateur.
+  app.setErrorHandler((error, request, reply) => {
+    request.log.error(error);
+
+    // Erreurs de validation (schéma Fastify) : requête mal formée.
+    if ((error as { validation?: unknown }).validation) {
+      return reply.code(400).send({ code: "validation_error", message: "Requête invalide." });
+    }
+
+    // Erreurs connues de la base de données, traduites sans jargon.
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        return reply.code(409).send({ code: "conflict", message: "Cette valeur est déjà utilisée." });
+      }
+      if (error.code === "P2025") {
+        return reply.code(404).send({ code: "not_found", message: "Élément introuvable." });
+      }
+      return reply.code(409).send({ code: "data_conflict", message: "Opération impossible en l'état des données." });
+    }
+
+    // Erreurs déjà porteuses d'un code HTTP explicite (4xx) : on garde leur
+    // message métier, il est destiné à l'utilisateur.
+    const status = (error as { statusCode?: number }).statusCode;
+    if (typeof status === "number" && status >= 400 && status < 500) {
+      return reply.code(status).send({ code: (error as { code?: string }).code ?? "error", message: (error as Error).message });
+    }
+
+    // Cas imprévu (bug) : message générique, aucun détail interne exposé.
+    return reply.code(500).send({
+      code: "internal_error",
+      message: "Le serveur a rencontré un problème inattendu. Réessayez ; si cela persiste, contactez l'administrateur.",
+    });
+  });
 
   app.get("/api/v1/health", async () => ({ status: "ok" }));
 

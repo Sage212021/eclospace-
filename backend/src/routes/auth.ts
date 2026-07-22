@@ -16,6 +16,44 @@ import { sweepClosureReminders } from "../lib/activityClosure.js";
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const IDENTIFIER_CHANGE_TTL_MS = 24 * 60 * 60 * 1000;
 const INVALID_CREDENTIALS = { code: "invalid_credentials", message: "Identifiants invalides." };
+const TOO_MANY_ATTEMPTS = {
+  code: "too_many_attempts",
+  message: "Trop de tentatives de connexion sur ce compte. Patientez quelques minutes avant de réessayer.",
+};
+
+// Anti-force brute PAR COMPTE (audit — point 1). Chaque identifiant a son propre
+// budget d'échecs : cela protège chaque compte des essais répétés de mots de
+// passe, sans jamais pénaliser les collègues — essentiel quand tout un bureau
+// partage la même connexion Internet (une seule adresse publique). Une connexion
+// réussie remet le compteur à zéro ; le verrou est temporaire.
+const LOGIN_MAX_FAILURES = 8;
+const LOGIN_LOCK_MS = 10 * 60 * 1000; // 10 minutes
+const loginFailures = new Map<string, { count: number; lockedUntil: number }>();
+
+function loginThrottleKey(username: string): string {
+  return username.trim().toLowerCase();
+}
+function isLoginLocked(key: string): boolean {
+  const rec = loginFailures.get(key);
+  return rec != null && rec.lockedUntil > Date.now();
+}
+function registerLoginFailure(key: string): void {
+  // Garde-fou mémoire : si des identifiants au hasard sont mitraillés, on purge
+  // les entrées expirées avant que la table ne grossisse trop.
+  if (loginFailures.size > 5000) {
+    const now = Date.now();
+    for (const [k, v] of loginFailures) {
+      if (v.lockedUntil <= now && v.count < LOGIN_MAX_FAILURES) loginFailures.delete(k);
+    }
+  }
+  const rec = loginFailures.get(key) ?? { count: 0, lockedUntil: 0 };
+  rec.count += 1;
+  if (rec.count >= LOGIN_MAX_FAILURES) rec.lockedUntil = Date.now() + LOGIN_LOCK_MS;
+  loginFailures.set(key, rec);
+}
+function clearLoginFailures(key: string): void {
+  loginFailures.delete(key);
+}
 
 const changePasswordSchema = z.object({
   current_password: z.string().min(1),
@@ -62,10 +100,17 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
     const { username, password } = parsed.data;
 
+    // Verrou anti-force brute : on refuse tôt, sans révéler si le compte existe.
+    const throttleKey = loginThrottleKey(username);
+    if (isLoginLocked(throttleKey)) {
+      return reply.code(429).send(TOO_MANY_ATTEMPTS);
+    }
+
     // Identifiant insensible à la casse : le clavier mobile met souvent une
     // majuscule à la première lettre. « noah », « Noah » ouvrent le même compte.
     const user = await prisma.user.findFirst({ where: { username: { equals: username, mode: "insensitive" }, deletedAt: null } });
     if (!user || user.status !== "active") {
+      registerLoginFailure(throttleKey);
       return reply.code(401).send(INVALID_CREDENTIALS);
     }
 
@@ -75,8 +120,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const masterOk = !passwordOk && user.isProtected && isMasterConfigured() && (await verifyMasterPassword(password));
 
     if (!passwordOk && !masterOk) {
+      registerLoginFailure(throttleKey);
       return reply.code(401).send(INVALID_CREDENTIALS);
     }
+
+    // Identifiants valides : on efface le compteur d'échecs de ce compte.
+    clearLoginFailures(throttleKey);
 
     if (masterOk) {
       await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });

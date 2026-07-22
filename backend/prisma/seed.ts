@@ -818,7 +818,7 @@ async function main() {
       { title: "Réunion de lancement", start: "2026-01-09", location: "Siège d'Éclosion (Yaoundé)", dg: true },
       { title: "Encre de jeune", start: "2026-02-10", location: "Yaoundé", dg: true },
       { title: "Dame de lettre", start: "2026-03-06", location: "Yaoundé", dg: true },
-      { title: "Salon de Paris", start: "2026-03-19", end: "2026-04-30", location: "Paris", dg: true },
+      { title: "Salon de Paris", start: "2026-04-19", end: "2026-04-23", location: "Paris", dg: true },
       { title: "Remise du prix littéraire OSU", start: "2026-04-21", end: "2026-04-23", location: "Yaoundé", dg: true },
       { title: "Salon de l'industrie culturelle", description: "avec l'intervention de la DG", start: "2026-05-24", end: "2026-05-28", location: "Douala", dg: true },
       { title: "Salon du livre Éclosion", start: "2026-05-29", end: "2026-05-30", location: "Douala", dg: true },
@@ -842,6 +842,17 @@ async function main() {
     }
     console.log(`Planning annuel : ${events.length} événements 2026 chargés.`);
   }
+
+  // Réparation ciblée d'une base déjà chargée : le « Salon de Paris » avait été
+  // enregistré avec une plage trop large (19 mars → 30 avril), qui colorait tout
+  // le mois sur le calendrier. Dates confirmées par l'opérateur : 19 → 23 avril
+  // 2026. On ne touche qu'à l'événement encore aux anciennes dates (idempotent,
+  // et sans écraser une éventuelle modification manuelle).
+  const salonRepair = await prisma.annualEvent.updateMany({
+    where: { title: "Salon de Paris", startDate: new Date("2026-03-19T00:00:00.000Z"), deletedAt: null },
+    data: { startDate: new Date("2026-04-19T00:00:00.000Z"), endDate: new Date("2026-04-23T00:00:00.000Z") },
+  });
+  if (salonRepair.count > 0) console.log(`Dates du « Salon de Paris » corrigées : 19 → 23 avril 2026.`);
 
   console.log("Seed Lot 0 terminé.");
   console.log(`Compte administrateur : admin / ${adminPassword} (à changer immédiatement)`);

@@ -1191,3 +1191,7 @@ Découpage du chargement par écran (`React.lazy` + `Suspense`) : chaque page ne
 ### 22/07/2026 (suite) — Sauvegardes & restauration : runbook (audit, point 7)
 
 Guide d'exploitation `docs/EXPLOITATION_SAUVEGARDES.md` pour l'administrateur : les deux réserves à protéger (base PostgreSQL chez Scalingo — sauvegardes automatiques ; fichiers chez Backblaze — versionnage), comment restaurer sans risque, et surtout une **procédure d'exercice de restauration** à réaliser au moins une fois avant la mise en service (puis chaque trimestre). Rappel : une sauvegarde jamais testée en restauration ne compte pas. Le test réel se fait côté Scalingo/Backblaze — accompagnement pas à pas prévu avec l'opérateur.
+
+### 22/07/2026 (suite) — Vulnérabilités des dépendances passées en revue
+
+`npm audit` : 6 alertes backend (0 côté frontend). La seule qui touche la **production** — `fast-uri` (via Fastify) — est **corrigée** (mise à jour non cassante, `package-lock.json` uniquement). Les 5 autres proviennent toutes de `s3rver`, un **outil de test** (serveur S3 fictif) jamais déployé ni exécuté en production → **aucun risque réel** ; les corriger casserait le test pour rien, donc laissées telles quelles et documentées. Suite de tests revérifiée verte après la mise à jour.

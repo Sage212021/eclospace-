@@ -1,0 +1,90 @@
+name: CI
+
+# Contrôle automatique à chaque proposition de fusion (et sur la branche
+# principale) : on installe, on vérifie les types, on lance toute la suite de
+# tests et on compile le frontend. Objectif : ne jamais fusionner du code qui
+# casse la compilation ou un test métier.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Une seule exécution utile par branche : une nouvelle poussée annule la
+# précédente encore en cours.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — types & tests
+    runs-on: ubuntu-latest
+
+    # Base PostgreSQL éphémère, avec les mêmes identifiants que backend/.env.test.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eclospace
+          POSTGRES_PASSWORD: eclospace_dev
+          POSTGRES_DB: eclospace_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eclospace"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Installer les dépendances
+        working-directory: backend
+        run: npm ci
+
+      - name: Générer le client Prisma
+        working-directory: backend
+        run: npm run prisma:generate
+
+      - name: Vérifier les types
+        working-directory: backend
+        run: npx tsc --noEmit
+
+      # `pretest` applique les migrations puis le seed sur la base éphémère,
+      # ensuite `vitest run` exécute toute la suite (séquentielle par config).
+      - name: Lancer les tests
+        working-directory: backend
+        run: npm test
+
+  frontend:
+    name: Frontend — types & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Installer les dépendances
+        working-directory: frontend
+        run: npm ci
+
+      - name: Vérifier les types
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Compiler l'interface
+        working-directory: frontend
+        run: npm run build

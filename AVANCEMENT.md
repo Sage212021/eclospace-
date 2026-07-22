@@ -1195,3 +1195,7 @@ Guide d'exploitation `docs/EXPLOITATION_SAUVEGARDES.md` pour l'administrateur : 
 ### 22/07/2026 (suite) — Vulnérabilités des dépendances passées en revue
 
 `npm audit` : 6 alertes backend (0 côté frontend). La seule qui touche la **production** — `fast-uri` (via Fastify) — est **corrigée** (mise à jour non cassante, `package-lock.json` uniquement). Les 5 autres proviennent toutes de `s3rver`, un **outil de test** (serveur S3 fictif) jamais déployé ni exécuté en production → **aucun risque réel** ; les corriger casserait le test pour rien, donc laissées telles quelles et documentées. Suite de tests revérifiée verte après la mise à jour.
+
+### 22/07/2026 (suite) — Politique de sécurité du contenu (CSP) activée (finalise l'audit, point 3)
+
+La CSP, laissée désactivée à la première passe (pour ne pas risquer de casser l'interface), est maintenant **activée sur mesure** : les scripts ne viennent que de l'application (barrage anti-injection XSS), tout en laissant fonctionner les styles React, les images/affiches, le service worker (PWA) et la présence temps réel. `upgrade-insecure-requests` uniquement en production (HTTPS). **Vérifié en navigateur, aucune violation, interface intacte** (connexion, écrans à la demande, « en ligne » temps réel). Le point 3 de l'audit est ainsi complet.

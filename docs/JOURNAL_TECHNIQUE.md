@@ -714,3 +714,11 @@ Tests : `tests/security-hardening.test.ts` (en-têtes présents, filet d'erreur 
 - **Intégration continue** (`.github/workflows/ci.yml`) : à chaque proposition de fusion (et sur `main`), GitHub lance automatiquement — types (`tsc --noEmit`), **toute la suite de tests** backend sur une base PostgreSQL éphémère (mêmes identifiants que `backend/.env.test`, via `npm test` = migrations + seed + `vitest run`), puis les types et la compilation du frontend. Deux jobs (`backend`, `frontend`), Node 22, cache npm. Objectif : ne jamais fusionner du code qui casse la compilation ou un test métier. `concurrency` annule une exécution devenue obsolète.
 
 - **Stabilité des tests** (`vitest.config.ts`) : délais portés à 30 s (`testTimeout`/`hookTimeout`). Les rares échecs observés étaient des dépassements au « démarrage à froid » (première connexion base, chauffe d'argon2), pas des bugs. Les fichiers s'exécutent déjà en série (`fileParallelism: false`, état partagé de la période comptable).
+
+## Allègement du chargement de l'interface — « code-splitting » (22/07/2026)
+
+Le frontend était livré en **un seul fichier JS** (~732 Ko, ~196 Ko compressé) : au premier accès, tout était téléchargé d'un bloc, pénalisant sur une connexion modeste (contexte Cameroun, CLAUDE.md règle 6).
+
+Découpage par écran via `React.lazy` + `<Suspense>` (`App.tsx`) : chaque page devient un **fragment chargé à la demande**, au moment où l'utilisateur l'ouvre. Seule la page de **connexion** reste chargée d'emblée (porte d'entrée). Un court « Chargement… » s'affiche le temps qu'un écran arrive (généralement une fraction de seconde).
+
+Résultat mesuré (build de production) : **bundle initial 732 Ko → 349 Ko** (compressé **196 Ko → 107 Ko**, ~45 % de moins). Les écrans lourds ne pèsent plus sur le premier accès — ex. RH (76 Ko), fiche manuscrit (67 Ko), Finance (37 Ko) — ils ne se téléchargent qu'à l'ouverture. Aucune dépendance ajoutée (React expose déjà `lazy`/`Suspense`). Vérifié en navigateur (connexion, tableau de bord, navigation vers un écran découpé — sans erreur).

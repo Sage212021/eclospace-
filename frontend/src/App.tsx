@@ -1,31 +1,45 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { confirmIdentifierChange, fetchMe, getNotificationPreferences, logout, stopImpersonation, type EffectiveUser, type NotificationPreferences } from "./api/client";
 import { useI18n } from "./i18n";
 import { Login } from "./pages/Login";
-import { QuoteSignPage } from "./pages/QuoteSignPage";
-import { Dashboard } from "./pages/Dashboard";
-import { Manuscripts } from "./pages/Manuscripts";
-import { CatalogueReferencePage } from "./pages/CatalogueReferencePage";
-import { ArchivesPage } from "./pages/ArchivesPage";
-import { RightsMatrixPage } from "./pages/RightsMatrixPage";
-import { ManuscriptDetail } from "./pages/ManuscriptDetail";
-import { MyReadings } from "./pages/MyReadings";
-import { StockPage } from "./pages/StockPage";
-import { CommercialPage } from "./pages/CommercialPage";
-import { FinancePage } from "./pages/FinancePage";
-import { HrPage } from "./pages/HrPage";
-import { DirectionPage } from "./pages/DirectionPage";
-import { ReportsPage } from "./pages/ReportsPage";
-import { WeeklyReportsPage } from "./pages/WeeklyReportsPage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { AuditLogPage } from "./pages/AuditLogPage";
-import { UsersRolesPage } from "./pages/UsersRolesPage";
-import { DiagnosticsPage } from "./pages/DiagnosticsPage";
-import { AnnouncementsPage } from "./pages/AnnouncementsPage";
-import { AnnualEventsPlanning } from "./components/AnnualEventsPlanning";
-import { CalendarPage } from "./pages/CalendarPage";
-import { NewsFeedPage } from "./pages/NewsFeedPage";
-import { NewslettersPage } from "./pages/NewslettersPage";
+
+// Chargement à la demande (« code-splitting ») : chaque écran ne se télécharge
+// qu'au moment où l'utilisateur l'ouvre, au lieu de tout charger d'un bloc au
+// premier accès. Sur une connexion modeste, la première ouverture est bien plus
+// rapide. Seule la page de connexion reste chargée d'emblée (c'est la porte
+// d'entrée). Les modules React exportent des composants nommés : on les
+// convertit en export « par défaut » attendu par lazy().
+const QuoteSignPage = lazy(() => import("./pages/QuoteSignPage").then((m) => ({ default: m.QuoteSignPage })));
+const Dashboard = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })));
+const Manuscripts = lazy(() => import("./pages/Manuscripts").then((m) => ({ default: m.Manuscripts })));
+const CatalogueReferencePage = lazy(() => import("./pages/CatalogueReferencePage").then((m) => ({ default: m.CatalogueReferencePage })));
+const ArchivesPage = lazy(() => import("./pages/ArchivesPage").then((m) => ({ default: m.ArchivesPage })));
+const RightsMatrixPage = lazy(() => import("./pages/RightsMatrixPage").then((m) => ({ default: m.RightsMatrixPage })));
+const ManuscriptDetail = lazy(() => import("./pages/ManuscriptDetail").then((m) => ({ default: m.ManuscriptDetail })));
+const MyReadings = lazy(() => import("./pages/MyReadings").then((m) => ({ default: m.MyReadings })));
+const StockPage = lazy(() => import("./pages/StockPage").then((m) => ({ default: m.StockPage })));
+const CommercialPage = lazy(() => import("./pages/CommercialPage").then((m) => ({ default: m.CommercialPage })));
+const FinancePage = lazy(() => import("./pages/FinancePage").then((m) => ({ default: m.FinancePage })));
+const HrPage = lazy(() => import("./pages/HrPage").then((m) => ({ default: m.HrPage })));
+const DirectionPage = lazy(() => import("./pages/DirectionPage").then((m) => ({ default: m.DirectionPage })));
+const ReportsPage = lazy(() => import("./pages/ReportsPage").then((m) => ({ default: m.ReportsPage })));
+const WeeklyReportsPage = lazy(() => import("./pages/WeeklyReportsPage").then((m) => ({ default: m.WeeklyReportsPage })));
+const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
+const AuditLogPage = lazy(() => import("./pages/AuditLogPage").then((m) => ({ default: m.AuditLogPage })));
+const UsersRolesPage = lazy(() => import("./pages/UsersRolesPage").then((m) => ({ default: m.UsersRolesPage })));
+const DiagnosticsPage = lazy(() => import("./pages/DiagnosticsPage").then((m) => ({ default: m.DiagnosticsPage })));
+const AnnouncementsPage = lazy(() => import("./pages/AnnouncementsPage").then((m) => ({ default: m.AnnouncementsPage })));
+const AnnualEventsPlanning = lazy(() => import("./components/AnnualEventsPlanning").then((m) => ({ default: m.AnnualEventsPlanning })));
+const CalendarPage = lazy(() => import("./pages/CalendarPage").then((m) => ({ default: m.CalendarPage })));
+const NewsFeedPage = lazy(() => import("./pages/NewsFeedPage").then((m) => ({ default: m.NewsFeedPage })));
+const NewslettersPage = lazy(() => import("./pages/NewslettersPage").then((m) => ({ default: m.NewslettersPage })));
+
+// Court message affiché le temps qu'un écran se télécharge (en général une
+// fraction de seconde).
+function PageLoading() {
+  const { t } = useI18n();
+  return <div style={{ padding: "40px 24px", color: "var(--muted)", fontSize: 13 }}>{t("common.loading", "Chargement…")}</div>;
+}
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { PresenceToasts } from "./components/PresenceToasts";
@@ -354,7 +368,7 @@ export function App() {
   // Page publique de signature d'un devis (③), accessible sans compte via le
   // lien reçu par e-mail : /signer-devis/:token. Court-circuite l'application.
   const signMatch = window.location.pathname.match(/^\/signer-devis\/([A-Za-z0-9]+)\/?$/);
-  if (signMatch) return <QuoteSignPage token={signMatch[1]} />;
+  if (signMatch) return <Suspense fallback={<PageLoading />}><QuoteSignPage token={signMatch[1]} /></Suspense>;
 
   if (loading) return null;
 
@@ -486,7 +500,7 @@ export function App() {
         {!leafAuthorized && <UnauthorizedView poleLabel={LEAF_TO_POLE[activeKey]} moduleLabel={LEAF_LABEL[activeKey] ?? activeKey} />}
 
         {leafAuthorized && (
-        <>
+        <Suspense fallback={<PageLoading />}>
         {view.kind === "manuscript-detail" && (
           <ManuscriptDetail
             manuscriptId={view.id}
@@ -590,7 +604,7 @@ export function App() {
           <NewslettersPage canManage={permissions.has("communication:saisie")} />
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
-        </>
+        </Suspense>
         )}
       </div>
     </div>

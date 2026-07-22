@@ -1203,3 +1203,7 @@ La CSP, laissée désactivée à la première passe (pour ne pas risquer de cass
 ### 22/07/2026 (suite) — Correction des dates du « Salon de Paris »
 
 Dates confirmées par l'opérateur : **19 → 23 avril 2026** (au lieu de 19 mars → 30 avril, une plage trop large qui colorait tout le mois sur le calendrier). Corrigé dans le seed **et** réparé pour la base déjà en ligne : une réparation ciblée et idempotente met à jour l'événement au prochain déploiement, sans écraser d'éventuelles modifications manuelles. Vérifié (la réparation corrige bien un événement resté aux anciennes dates).
+
+### 22/07/2026 (suite) — Décisions de lancement actées + check-list
+
+Sur recommandation (après l'audit), la Direction acte : **D-008 — pas de mode hors-ligne en v1** (risque de synchro sur des données critiques ; la PWA tolère déjà les micro-coupures) et **D-009 — chiffrement conservé en l'état** (HTTPS + chiffrement au repos Scalingo + hachage + cloisonnement par droits suffisent ; le champ-par-champ ajouterait un risque de gestion de clés disproportionné). Consignées au `06_Registre_des_decisions.md`. Nouvelle **check-list de lancement** (`docs/CHECKLIST_LANCEMENT.md`) : sécuriser les accès (régénérer les secrets exposés, mot de passe admin, 2FA), test de restauration, recette métier par les référents, finalisation des données/comptes, bascule. L'essentiel restant relève de l'humain (recette) et de l'exploitation, pas du développement.

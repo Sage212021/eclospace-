@@ -733,3 +733,15 @@ Nouveau guide d'exploitation `docs/EXPLOITATION_SAUVEGARDES.md`, destiné à l'a
 
 - **`fast-uri` (élevée)** — dépendance transitive de **Fastify** (donc présente en production). Corrigée par `npm audit fix` (non cassant) : `fast-uri` 3.1.3 → **3.1.4**. Seul changement : `package-lock.json`.
 - **`fast-xml-parser`, `busboy`, `dicer` (5 alertes restantes)** — toutes issues de **`s3rver`**, un **outil de test uniquement** (serveur S3 fictif, `devDependencies`), qui simule le stockage objet dans `storage-s3.test.ts`. `s3rver` **n'est jamais déployé ni chargé à l'exécution** (aucun `import` hors des tests ; élagué du runtime de production) → **exposition production nulle**. Le seul correctif proposé (`npm audit fix --force`) rétrograderait `s3rver` en 2.2.9 (cassant, casserait le test) pour un risque uniquement en développement : non retenu. À surveiller ; si `s3rver` reste non maintenu, envisager un autre simulateur S3 plus tard.
+
+## Politique de sécurité du contenu (CSP) activée (22/07/2026)
+
+La CSP, laissée désactivée lors de la première passe helmet (pour ne pas risquer de casser l'interface React/PWA), est désormais **activée sur mesure** (`app.ts`). Tout se charge depuis la **même origine** :
+
+- `script-src 'self'` — les scripts ne viennent que de nous (le build ne produit **aucun script en ligne** dans la page, vérifié) : coupe l'essentiel des injections (XSS) ;
+- `style-src 'self' 'unsafe-inline'` — nécessaire aux styles en ligne de React (attribut `style=…`), sans risque notable ;
+- `img-src 'self' data: blob:` — aperçus d'images, affiches ; `worker-src 'self'` — service worker (PWA) ; `connect-src 'self'` — l'API et la **socket temps réel** (Socket.IO), toutes deux sur la même origine ;
+- `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'self'`, `form-action 'self'`.
+- `upgrade-insecure-requests` **posé uniquement en production** (HTTPS) : en local (`http://localhost`) il casserait le chargement des fichiers — retiré quand `NODE_ENV ≠ production`.
+
+Vérifié en navigateur (connexion, écrans chargés à la demande, présence temps réel « en ligne », styles intacts) : **aucune violation CSP**. Tests d'en-têtes (`security-hardening.test.ts`) toujours verts.

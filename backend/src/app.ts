@@ -56,11 +56,40 @@ export async function buildApp() {
   // bloquerait tous les utilisateurs d'un coup.
   const app = Fastify({ logger: process.env.NODE_ENV !== "test", trustProxy: true });
 
-  // En-têtes de sécurité standard du navigateur (protection anti-« clickjacking »,
-  // anti-reniflage de type, HSTS…). On désactive la CSP par défaut : l'interface
-  // React utilise des styles en ligne et un service worker (PWA) qu'une CSP
-  // stricte casserait ; les autres protections, elles, sont sans risque.
-  await app.register(helmet, { contentSecurityPolicy: false });
+  // En-têtes de sécurité standard du navigateur (anti-« clickjacking »,
+  // anti-reniflage de type, HSTS…) + une politique de sécurité du contenu (CSP)
+  // taillée pour cette application : tout se charge depuis la même origine.
+  //  - scriptSrc 'self' : les scripts ne viennent que de nous (aucun script en
+  //    ligne dans la page — vérifié au build), ce qui coupe l'essentiel des
+  //    injections (XSS) ;
+  //  - styleSrc 'unsafe-inline' : React applique des styles en ligne (attribut
+  //    style=…) — sans risque notable, contrairement aux scripts ;
+  //  - imgSrc data:/blob: : aperçus d'images et affiches ; workerSrc : le
+  //    service worker de la PWA ; connectSrc 'self' : l'API et la socket temps
+  //    réel, toutes deux sur la même origine.
+  // `upgrade-insecure-requests` n'est posé qu'en production (HTTPS) : en local
+  // (http://localhost) il casserait le chargement des fichiers.
+  const isProd = process.env.NODE_ENV === "production";
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        fontSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        workerSrc: ["'self'"],
+        manifestSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'self'"],
+        formAction: ["'self'"],
+        ...(isProd ? {} : { upgradeInsecureRequests: null }),
+      },
+    },
+  });
 
   await app.register(cors, {
     origin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",

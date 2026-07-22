@@ -726,3 +726,10 @@ Résultat mesuré (build de production) : **bundle initial 732 Ko → 349 Ko** (
 ## Sauvegardes et restauration — runbook (22/07/2026)
 
 Nouveau guide d'exploitation `docs/EXPLOITATION_SAUVEGARDES.md`, destiné à l'administrateur de la maison (non-développeur). Couvre les **deux réserves** de données — base PostgreSQL (Scalingo, sauvegardes automatiques quotidiennes) et fichiers/GED (Backblaze B2, versionnage) — avec : où sont les sauvegardes, comment restaurer (production vs base d'essai), le réglage de versionnage Backblaze, une **procédure d'exercice de restauration** à faire au moins une fois puis chaque trimestre (avec relevé du délai de reprise), et le réflexe en cas d'incident réel. Aucune modification de code : c'est de l'exploitation. L'exercice réel se fait côté Scalingo/Backblaze, accompagné pas à pas.
+
+## Vulnérabilités des dépendances — revue avant version finale (22/07/2026)
+
+`npm audit` signalait 6 alertes côté backend (frontend : 0). Analyse de l'origine :
+
+- **`fast-uri` (élevée)** — dépendance transitive de **Fastify** (donc présente en production). Corrigée par `npm audit fix` (non cassant) : `fast-uri` 3.1.3 → **3.1.4**. Seul changement : `package-lock.json`.
+- **`fast-xml-parser`, `busboy`, `dicer` (5 alertes restantes)** — toutes issues de **`s3rver`**, un **outil de test uniquement** (serveur S3 fictif, `devDependencies`), qui simule le stockage objet dans `storage-s3.test.ts`. `s3rver` **n'est jamais déployé ni chargé à l'exécution** (aucun `import` hors des tests ; élagué du runtime de production) → **exposition production nulle**. Le seul correctif proposé (`npm audit fix --force`) rétrograderait `s3rver` en 2.2.9 (cassant, casserait le test) pour un risque uniquement en développement : non retenu. À surveiller ; si `s3rver` reste non maintenu, envisager un autre simulateur S3 plus tard.

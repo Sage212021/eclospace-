@@ -1177,3 +1177,9 @@ Mise en œuvre 100 % frontend (composant `AnnualEventsPlanning`, aucune modifica
 3. **En-têtes de sécurité navigateur** (helmet) — protections standard activées (CSP laissée désactivée pour ne pas casser l'interface React/PWA, à affiner plus tard).
 
 Nouveau fichier de tests `security-hardening.test.ts` (3 tests verts). Typecheck + suite OK. Détail technique dans `docs/JOURNAL_TECHNIQUE.md`. Restent au programme : CI, allègement du chargement, exercice de restauration, recette métier, arbitrages (hors-ligne, chiffrement renforcé).
+
+### 22/07/2026 (suite) — Intégration continue + stabilité des tests (audit, points 4 & 6)
+
+**Intégration continue** (point 4) : nouveau workflow `.github/workflows/ci.yml`. À chaque proposition de fusion, GitHub vérifie automatiquement les types, lance **toute la suite de tests** (sur une base PostgreSQL jetable) et compile le frontend. Plus rien ne peut être fusionné en cassant la compilation ou un test — le filet de sécurité qui manquait.
+
+**Stabilité des tests** (point 6) : délais des tests portés à 30 s dans `vitest.config.ts`. Les quelques échecs qu'on voyait étaient de simples lenteurs de démarrage à froid, pas des bugs ; ces marges les suppriment, ce qui rend la CI fiable.

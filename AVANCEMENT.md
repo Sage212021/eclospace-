@@ -1199,3 +1199,7 @@ Guide d'exploitation `docs/EXPLOITATION_SAUVEGARDES.md` pour l'administrateur : 
 ### 22/07/2026 (suite) — Politique de sécurité du contenu (CSP) activée (finalise l'audit, point 3)
 
 La CSP, laissée désactivée à la première passe (pour ne pas risquer de casser l'interface), est maintenant **activée sur mesure** : les scripts ne viennent que de l'application (barrage anti-injection XSS), tout en laissant fonctionner les styles React, les images/affiches, le service worker (PWA) et la présence temps réel. `upgrade-insecure-requests` uniquement en production (HTTPS). **Vérifié en navigateur, aucune violation, interface intacte** (connexion, écrans à la demande, « en ligne » temps réel). Le point 3 de l'audit est ainsi complet.
+
+### 22/07/2026 (suite) — Correction des dates du « Salon de Paris »
+
+Dates confirmées par l'opérateur : **19 → 23 avril 2026** (au lieu de 19 mars → 30 avril, une plage trop large qui colorait tout le mois sur le calendrier). Corrigé dans le seed **et** réparé pour la base déjà en ligne : une réparation ciblée et idempotente met à jour l'événement au prochain déploiement, sans écraser d'éventuelles modifications manuelles. Vérifié (la réparation corrige bien un événement resté aux anciennes dates).

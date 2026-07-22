@@ -1187,3 +1187,7 @@ Nouveau fichier de tests `security-hardening.test.ts` (3 tests verts). Typecheck
 ### 22/07/2026 (suite) — Interface plus légère au premier accès (audit, point 5)
 
 Découpage du chargement par écran (`React.lazy` + `Suspense`) : chaque page ne se télécharge qu'au moment où on l'ouvre, au lieu de tout charger d'un bloc. **Bundle initial 732 Ko → 349 Ko** (compressé ~196 Ko → ~107 Ko, environ **45 % de moins**) — un vrai gain sur une connexion modeste. Seule la page de connexion reste chargée d'emblée. Aucune dépendance ajoutée. Vérifié en navigateur (connexion + navigation, sans erreur).
+
+### 22/07/2026 (suite) — Sauvegardes & restauration : runbook (audit, point 7)
+
+Guide d'exploitation `docs/EXPLOITATION_SAUVEGARDES.md` pour l'administrateur : les deux réserves à protéger (base PostgreSQL chez Scalingo — sauvegardes automatiques ; fichiers chez Backblaze — versionnage), comment restaurer sans risque, et surtout une **procédure d'exercice de restauration** à réaliser au moins une fois avant la mise en service (puis chaque trimestre). Rappel : une sauvegarde jamais testée en restauration ne compte pas. Le test réel se fait côté Scalingo/Backblaze — accompagnement pas à pas prévu avec l'opérateur.

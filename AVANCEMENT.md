@@ -1183,3 +1183,7 @@ Nouveau fichier de tests `security-hardening.test.ts` (3 tests verts). Typecheck
 **Intégration continue** (point 4) : nouveau workflow `.github/workflows/ci.yml`. À chaque proposition de fusion, GitHub vérifie automatiquement les types, lance **toute la suite de tests** (sur une base PostgreSQL jetable) et compile le frontend. Plus rien ne peut être fusionné en cassant la compilation ou un test — le filet de sécurité qui manquait.
 
 **Stabilité des tests** (point 6) : délais des tests portés à 30 s dans `vitest.config.ts`. Les quelques échecs qu'on voyait étaient de simples lenteurs de démarrage à froid, pas des bugs ; ces marges les suppriment, ce qui rend la CI fiable.
+
+### 22/07/2026 (suite) — Interface plus légère au premier accès (audit, point 5)
+
+Découpage du chargement par écran (`React.lazy` + `Suspense`) : chaque page ne se télécharge qu'au moment où on l'ouvre, au lieu de tout charger d'un bloc. **Bundle initial 732 Ko → 349 Ko** (compressé ~196 Ko → ~107 Ko, environ **45 % de moins**) — un vrai gain sur une connexion modeste. Seule la page de connexion reste chargée d'emblée. Aucune dépendance ajoutée. Vérifié en navigateur (connexion + navigation, sans erreur).

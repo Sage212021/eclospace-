@@ -1,16 +1,24 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireAnyPermission, requirePermission } from "../lib/permissions.js";
+import { requireAuth, requireAnyRole, requirePermission } from "../lib/permissions.js";
 
-// Pôles autorisés à voir « où en est un ouvrage » : éditorial (manuscrits),
-// production, finance/comptabilité et direction générale. Les autres pôles
-// (commercial, communication, RH…) n'y ont pas accès.
-const TRACKING_PERMS = [
-  "manuscripts:consultation",
-  "production:consultation",
-  "finance:consultation",
-  "direction:consultation",
+// Rôles autorisés à voir « où en est un ouvrage » : direction générale, tout le
+// pôle éditorial et tout le pôle production — et eux seuls. Les autres pôles
+// (commercial, finance/comptabilité, juridique, communication, RH, stock) n'y
+// ont pas accès. Contrôle par rôle (et non par permission) pour cibler
+// exactement ces pôles. Miroir de TRACKING_ROLES côté frontend (App.tsx).
+const TRACKING_ROLES = [
+  "ADMIN_GENERAL",
+  "DIR_GENERAL", // Direction générale
+  "DIR_EDITORIAL", // Éditorial
+  "ASSISTANT_EDITORIAL",
+  "MEMBRE_COMITE_LECTURE",
+  "CORRECTEUR",
+  "MAQUETTISTE", // Production
+  "RESP_INFOGRAPHIE",
+  "RESP_QUALITE",
+  "RESP_IMPRESSION",
 ];
 import { writeAuditLog } from "../lib/audit.js";
 
@@ -58,10 +66,10 @@ export default async function referenceRoutes(fastify: FastifyInstance) {
 
   // Suivi de production : les ouvrages engagés dans un projet de publication
   // (acceptés, à partir de la contractualisation), avec leur étape courante.
-  // Réservé aux pôles éditorial, production, finance et direction (cf.
-  // TRACKING_PERMS) pour situer un ouvrage et renseigner un auteur — sans le
+  // Réservé aux pôles éditorial et production et à la direction (cf.
+  // TRACKING_ROLES) pour situer un ouvrage et renseigner un auteur — sans le
   // détail éditorial confidentiel.
-  fastify.get("/api/v1/production-tracking", { preHandler: requireAnyPermission(TRACKING_PERMS) }, async (_request, reply) => {
+  fastify.get("/api/v1/production-tracking", { preHandler: requireAnyRole(TRACKING_ROLES) }, async (_request, reply) => {
     const rows = await prisma.manuscript.findMany({
       where: { deletedAt: null, status: { stepOrder: { gte: 5 } } },
       select: {

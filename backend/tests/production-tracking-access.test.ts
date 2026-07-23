@@ -5,9 +5,9 @@ import { prisma } from "../src/lib/prisma.js";
 import { createUserWithRole, extractSessionCookie } from "./helpers.js";
 
 // « Suivi des ouvrages » (GET /production-tracking) : réservé aux pôles
-// éditorial, production, finance et direction. Les autres pôles (ici le stock)
-// doivent recevoir 403 — contrôle d'accès vérifié côté serveur, indépendamment
-// de ce que le menu affiche.
+// éditorial et production et à la direction. Tout autre pôle (finance,
+// juridique, stock…) reçoit 403 — contrôle par RÔLE, vérifié côté serveur,
+// indépendamment de ce que le menu affiche.
 
 const PASSWORD = "TrackAccess123!";
 
@@ -17,15 +17,24 @@ async function login(app: FastifyInstance, username: string): Promise<string> {
   return extractSessionCookie(res.cookies.map((c) => `${c.name}=${c.value}`));
 }
 
+async function getTracking(app: FastifyInstance, username: string): Promise<number> {
+  const cookie = await login(app, username);
+  const res = await app.inject({ method: "GET", url: "/api/v1/production-tracking", headers: { cookie } });
+  return res.statusCode;
+}
+
 describe("accès au suivi des ouvrages", () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
     app = await buildApp();
-    // Maquettiste = pôle production (production:consultation) → autorisé.
-    await createUserWithRole("track_maquettiste", "MAQUETTISTE", PASSWORD);
-    // Magasinier = pôle stock uniquement → aucun des droits de suivi.
-    await createUserWithRole("track_magasinier", "MAGASINIER", PASSWORD);
+    // Autorisés : éditorial (assistant éditorial) et production (maquettiste).
+    await createUserWithRole("track_editorial", "ASSISTANT_EDITORIAL", PASSWORD);
+    await createUserWithRole("track_production", "MAQUETTISTE", PASSWORD);
+    // Refusés : finance (comptable), juridique, stock (magasinier).
+    await createUserWithRole("track_finance", "COMPTABLE", PASSWORD);
+    await createUserWithRole("track_juridique", "RESP_JURIDIQUE", PASSWORD);
+    await createUserWithRole("track_stock", "MAGASINIER", PASSWORD);
   });
 
   afterAll(async () => {
@@ -33,18 +42,24 @@ describe("accès au suivi des ouvrages", () => {
     await prisma.$disconnect();
   });
 
-  it("autorise un profil production (200)", async () => {
-    const cookie = await login(app, "track_maquettiste");
-    const res = await app.inject({ method: "GET", url: "/api/v1/production-tracking", headers: { cookie } });
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.json())).toBe(true);
+  it("autorise le pôle éditorial (200)", async () => {
+    expect(await getTracking(app, "track_editorial")).toBe(200);
   });
 
-  it("refuse un profil hors périmètre — stock (403)", async () => {
-    const cookie = await login(app, "track_magasinier");
-    const res = await app.inject({ method: "GET", url: "/api/v1/production-tracking", headers: { cookie } });
-    expect(res.statusCode).toBe(403);
-    expect(res.json().code).toBe("forbidden");
+  it("autorise le pôle production (200)", async () => {
+    expect(await getTracking(app, "track_production")).toBe(200);
+  });
+
+  it("refuse la finance/comptabilité (403)", async () => {
+    expect(await getTracking(app, "track_finance")).toBe(403);
+  });
+
+  it("refuse le juridique (403), même s'il a manuscripts:consultation", async () => {
+    expect(await getTracking(app, "track_juridique")).toBe(403);
+  });
+
+  it("refuse le stock (403)", async () => {
+    expect(await getTracking(app, "track_stock")).toBe(403);
   });
 
   it("refuse un visiteur non connecté (401)", async () => {

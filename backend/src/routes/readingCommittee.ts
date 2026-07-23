@@ -4,6 +4,7 @@ import { EvaluationRecommendation, EditorialDecisionType } from "@prisma/client"
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { storeFile, readStoredFile } from "../lib/storage.js";
 
 const DEFAULT_RATING_THRESHOLDS = { excellent: 8.5, very_good: 7, good: 5, to_rework: 3 };
 const DEFAULT_SCORE_GAP_THRESHOLD = 3;
@@ -122,7 +123,55 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       },
       orderBy: { dueAt: "asc" },
     });
-      return reply.send(assignments);
+      // On expose l'existence du fichier joint (has_report_file) sans divulguer
+      // le chemin de stockage interne.
+      return reply.send(
+        assignments.map(({ reportFilePath, reportFileMime, ...rest }) => ({
+          ...rest,
+          hasReportFile: Boolean(reportFilePath),
+        })),
+      );
+    },
+  );
+
+  // Dépôt d'un fichier externe de rapport de relecture (le document rédigé par
+  // le relecteur, qui a servi à l'évaluation). Le relecteur dépose le sien ;
+  // stocké tel quel (PDF, Word…), servi en téléchargement.
+  fastify.post("/api/v1/reading-assignments/:id/report-file", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const assignment = await prisma.readingAssignment.findUnique({ where: { id } });
+    if (!assignment) return reply.code(404).send({ code: "not_found", message: "Mission de lecture introuvable." });
+    if (assignment.readerId !== request.user!.id) {
+      return reply.code(403).send({ code: "forbidden", message: "Seul le relecteur peut joindre son rapport." });
+    }
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+    const buffer = await file.toBuffer();
+    if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+    const stored = await storeFile(buffer, `rapport-lecture-${id}-${file.filename}`);
+    await prisma.readingAssignment.update({
+      where: { id },
+      data: { reportFilePath: stored.filePath, reportFileName: file.filename, reportFileMime: file.mimetype, reportFileSize: stored.fileSize },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "reading_assignment", entityId: id, newValues: { report_file: "uploaded" }, ipAddress: request.ip });
+    return reply.send({ has_report_file: true, report_file_name: file.filename });
+  });
+
+  // Téléchargement du fichier joint — accessible au relecteur, au comité et à
+  // la direction (comite_lecture:consultation).
+  fastify.get(
+    "/api/v1/reading-assignments/:id/report-file",
+    { preHandler: requirePermission("comite_lecture", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const assignment = await prisma.readingAssignment.findUnique({ where: { id } });
+      if (!assignment || !assignment.reportFilePath) {
+        return reply.code(404).send({ code: "no_report_file", message: "Aucun rapport joint pour cette mission." });
+      }
+      const buffer = await readStoredFile(assignment.reportFilePath);
+      reply.header("content-type", assignment.reportFileMime ?? "application/octet-stream");
+      reply.header("content-disposition", `attachment; filename="${(assignment.reportFileName ?? "rapport-de-lecture").replace(/"/g, "")}"`);
+      return reply.send(buffer);
     },
   );
 

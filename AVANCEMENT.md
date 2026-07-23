@@ -1223,3 +1223,11 @@ Sur demande de l'opérateur : l'aide n'est plus regroupée dans une rubrique « 
 ### 23/07/2026 (suite) — « Mes lectures » : téléchargement du rapport de lecture
 
 Sur demande de l'opérateur : le relecteur peut désormais **télécharger/imprimer son rapport de lecture** (en plus de la saisie déjà prévue). Chaque évaluation remise affiche un bouton **« Télécharger mon rapport »** (Numérique/PDF, avec ou sans papier à en-tête) : le document reprend l'ouvrage, le relecteur, les critères notés (avec coefficients et commentaires), le score global, la recommandation et l'appréciation générale. Réalisation : le backend inclut désormais l'évaluation soumise (notes + critères) dans les missions du relecteur ; nouvelle fonction d'impression `printReadingReport` (même infrastructure que factures/bulletins/paie). Test ajouté (l'évaluation remise est bien fournie au relecteur). Typecheck + tests verts ; vérifié en navigateur.
+
+### 23/07/2026 (suite) — Rapport de lecture : fichier joint + accès comité/direction
+
+Deux compléments à la demande de l'opérateur :
+1. **Fichier externe de rapport de relecture** : le relecteur peut **joindre un document** (le rapport rédigé qui a servi à l'évaluation), en plus du formulaire et du rapport généré. Bouton « Joindre le rapport (fichier) » dans « Mes lectures » ; fichier stocké (GED) et téléchargeable. Champs ajoutés à `reading_assignments` (migration additive) ; endpoints dépôt (relecteur propriétaire) / téléchargement (comité/direction).
+2. **Accès comité/direction** : nouvelle section « Comité de lecture — rapports » sur la fiche manuscrit (gardée par `comite_lecture:consultation`) listant les évaluations des relecteurs, avec téléchargement du **rapport généré** (PDF) et du **fichier joint**.
+
+Réalisation : `printReadingReport`/`buildReadingReport` partagés (`lib/readingReport.ts`), composant `ReadingEvaluationsSection`, fonctions client. Tests ajoutés (dépôt + téléchargement). Types + tests verts ; vérifié en navigateur.

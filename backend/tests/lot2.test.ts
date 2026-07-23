@@ -133,6 +133,40 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
     expect(mine.reader.username).toBe("admin");
   });
 
+  it("le relecteur peut joindre un fichier de rapport de relecture, téléchargeable ensuite", async () => {
+    const manuscript = await createManuscriptAtCorrection(`Fichier ${Date.now()}`);
+    const list = (
+      await app.inject({ method: "GET", url: "/api/v1/reading-assignments?reader=me", headers: { cookie: adminCookie } })
+    ).json();
+    const mine = list.find((a: { manuscript?: { id: string } }) => a.manuscript?.id === manuscript.id);
+    expect(mine.hasReportFile).toBe(false);
+
+    const boundary = `----test${Date.now()}`;
+    const content = "Rapport de lecture détaillé.";
+    const payload = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="rapport.txt"\r\nContent-Type: text/plain\r\n\r\n${content}\r\n--${boundary}--\r\n`;
+    const up = await app.inject({
+      method: "POST",
+      url: `/api/v1/reading-assignments/${mine.id}/report-file`,
+      headers: { cookie: adminCookie, "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload,
+    });
+    expect(up.statusCode).toBe(200);
+    expect(up.json().has_report_file).toBe(true);
+
+    const list2 = (
+      await app.inject({ method: "GET", url: "/api/v1/reading-assignments?reader=me", headers: { cookie: adminCookie } })
+    ).json();
+    expect(list2.find((a: { id: string }) => a.id === mine.id).hasReportFile).toBe(true);
+
+    const dl = await app.inject({
+      method: "GET",
+      url: `/api/v1/reading-assignments/${mine.id}/report-file`,
+      headers: { cookie: adminCookie },
+    });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.body).toContain("Rapport de lecture détaillé");
+  });
+
   it("le circuit de validation du contrat interdit tout saut d'étape", async () => {
     const partner = await prisma.partner.create({ data: { category: "auteur", firstName: "Test", lastName: "Contrat" } });
     const contractResponse = await app.inject({

@@ -3,33 +3,16 @@ import {
   listEvaluationCriteria,
   listMyReadingAssignments,
   submitEvaluation,
+  uploadReadingReportFile,
+  readingReportFileUrl,
   type EvaluationCriterion,
   type ReadingAssignment,
 } from "../api/client";
 import { Button } from "../components/Button";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { Field } from "../components/Modal";
-import { printReadingReport, type ReadingReportData } from "../lib/print";
-
-// Construit le rapport imprimable à partir de l'évaluation remise.
-function buildReadingReport(a: ReadingAssignment): ReadingReportData {
-  const e = a.evaluation!;
-  return {
-    manuscriptTitle: a.manuscript?.title ?? "—",
-    manuscriptNumber: a.manuscript?.manuscriptNumber ?? "—",
-    readerName: a.reader?.username ?? "—",
-    submittedAt: e.submittedAt,
-    recommendation: e.recommendation,
-    globalScore: Number(e.globalScore),
-    overallComment: e.overallComment,
-    scores: e.scores.map((s) => ({
-      label: s.criterion.label,
-      coefficient: Number(s.criterion.coefficient),
-      score: Number(s.score),
-      comment: s.comment,
-    })),
-  };
-}
+import { printReadingReport } from "../lib/print";
+import { buildReadingReport } from "../lib/readingReport";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "À évaluer",
@@ -52,6 +35,16 @@ export function MyReadings() {
   useEffect(() => {
     refresh();
   }, []);
+
+  async function attachFile(assignmentId: string, file: File) {
+    try {
+      await uploadReadingReportFile(assignmentId, file);
+      setMessage(t("myr.file_attached_ok", "Rapport de relecture (fichier) joint."));
+      await refresh();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Dépôt du fichier impossible.");
+    }
+  }
 
   return (
     <div className="ecl-page" style={{ maxWidth: 680 }}>
@@ -90,6 +83,27 @@ export function MyReadings() {
                 label={t("myr.download_report", "Télécharger mon rapport")}
                 onPrint={(opts) => printReadingReport(buildReadingReport(assignment), opts)}
               />
+            )}
+          </div>
+
+          {/* Fichier externe de rapport de relecture : joindre le document rédigé. */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 10, fontSize: 12.5 }}>
+            <label style={fileBtnStyle}>
+              {assignment.hasReportFile ? t("myr.file_replace", "Remplacer le fichier joint") : t("myr.file_attach", "Joindre le rapport (fichier)")}
+              <input
+                type="file"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) attachFile(assignment.id, f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {assignment.hasReportFile && (
+              <a href={readingReportFileUrl(assignment.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+                📎 {assignment.reportFileName ?? t("myr.file_download", "Télécharger le fichier joint")}
+              </a>
             )}
           </div>
           {openAssignmentId === assignment.id && (
@@ -204,3 +218,12 @@ function StatusChip({ label }: { label: string }) {
     </span>
   );
 }
+
+const fileBtnStyle: React.CSSProperties = {
+  cursor: "pointer",
+  fontWeight: 600,
+  color: "var(--muted)",
+  border: "1px solid var(--line)",
+  borderRadius: 6,
+  padding: "4px 10px",
+};

@@ -342,6 +342,8 @@ export interface ReadingAssignment {
   manuscript?: { id: string; manuscriptNumber: string; title: string };
   reader?: { username: string };
   evaluation?: ReadingEvaluation | null;
+  hasReportFile?: boolean;
+  reportFileName?: string | null;
 }
 
 export function assignReader(manuscriptId: string, readerId: string, dueAt: string) {
@@ -374,6 +376,31 @@ export function submitEvaluation(
   },
 ) {
   return request(`/api/v1/reading-assignments/${assignmentId}/evaluation`, { method: "POST", body: JSON.stringify(input) });
+}
+
+// Missions de lecture d'un manuscrit (comité / direction) — avec évaluations.
+export function listManuscriptReadingAssignments(manuscriptId: string) {
+  return request<ReadingAssignment[]>(`/api/v1/reading-assignments?manuscript=${manuscriptId}`);
+}
+
+// Fichier externe de rapport de relecture : dépôt (relecteur) et téléchargement.
+export async function uploadReadingReportFile(assignmentId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/reading-assignments/${assignmentId}/report-file`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    throw new Error(error?.message ?? `Erreur ${response.status}`);
+  }
+  return response.json() as Promise<{ has_report_file: boolean; report_file_name: string }>;
+}
+
+export function readingReportFileUrl(assignmentId: string): string {
+  return `${API_BASE}/api/v1/reading-assignments/${assignmentId}/report-file`;
 }
 
 export function submitEditorialDecision(

@@ -15,6 +15,13 @@ export type HelpEntry = {
 };
 export type HelpPole = { pole: string; intro?: string; entries: HelpEntry[] };
 
+// Sélectionne le contenu d'aide selon la langue de l'interface.
+// (helpContentEn n'importe qu'un type d'ici : pas de cycle à l'exécution.)
+import { HELP_CONTENT_EN } from "./helpContentEn";
+export function getHelpContent(lang: string): HelpPole[] {
+  return lang === "en" ? HELP_CONTENT_EN : HELP_CONTENT;
+}
+
 export const HELP_CONTENT: HelpPole[] = [
   {
     pole: "Pour bien démarrer",
@@ -132,6 +139,20 @@ export const HELP_CONTENT: HelpPole[] = [
         ],
         stuck: [
           { q: "Un indicateur (chiffre d'affaires, RH) n'apparaît pas", a: "Il est réservé à un profil autorisé (finance, RH). Son absence n'est pas une panne : c'est le cloisonnement des données." },
+        ],
+      },
+      {
+        key: "suivi",
+        title: "Suivi des ouvrages",
+        purpose: "Voir d'un coup d'œil où en est chaque livre dans sa fabrication — pratique pour renseigner un auteur qui appelle.",
+        procedure: [
+          "La liste montre les ouvrages entrés en fabrication, avec leur étape en cours et un pourcentage d'avancement.",
+          "Tapez un titre, un auteur ou un numéro dans la barre de recherche pour retrouver un ouvrage précis.",
+          "Cliquez sur un ouvrage : une frise à voyants se déplie et montre chaque étape du circuit (verte = franchie, dorée = étape en cours, grise = à venir).",
+        ],
+        stuck: [
+          { q: "Un ouvrage récent n'apparaît pas dans la liste", a: "Le suivi n'affiche que les ouvrages déjà passés en fabrication (à partir de la maquette). Un manuscrit encore en lecture ou en contrat n'y figure pas encore : suivez-le depuis « Manuscrits »." },
+          { q: "Le pourcentage ne bouge pas", a: "Il n'avance que lorsque l'ouvrage change réellement d'étape dans le circuit. C'est le pôle concerné (production, BAT, impression…) qui fait avancer l'étape." },
         ],
       },
       {

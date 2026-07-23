@@ -1,7 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requirePermission } from "../lib/permissions.js";
+import { requireAuth, requireAnyPermission, requirePermission } from "../lib/permissions.js";
+
+// Pôles autorisés à voir « où en est un ouvrage » : éditorial (manuscrits),
+// production, finance/comptabilité et direction générale. Les autres pôles
+// (commercial, communication, RH…) n'y ont pas accès.
+const TRACKING_PERMS = [
+  "manuscripts:consultation",
+  "production:consultation",
+  "finance:consultation",
+  "direction:consultation",
+];
 import { writeAuditLog } from "../lib/audit.js";
 
 // Saisie d'un code court normalisé (majuscules, chiffres, tiret bas) à partir
@@ -48,9 +58,10 @@ export default async function referenceRoutes(fastify: FastifyInstance) {
 
   // Suivi de production : les ouvrages engagés dans un projet de publication
   // (acceptés, à partir de la contractualisation), avec leur étape courante.
-  // Accessible à tout le personnel (commercial, assistanat…) pour situer un
-  // ouvrage et renseigner un auteur — sans le détail éditorial confidentiel.
-  fastify.get("/api/v1/production-tracking", { preHandler: requireAuth }, async (_request, reply) => {
+  // Réservé aux pôles éditorial, production, finance et direction (cf.
+  // TRACKING_PERMS) pour situer un ouvrage et renseigner un auteur — sans le
+  // détail éditorial confidentiel.
+  fastify.get("/api/v1/production-tracking", { preHandler: requireAnyPermission(TRACKING_PERMS) }, async (_request, reply) => {
     const rows = await prisma.manuscript.findMany({
       where: { deletedAt: null, status: { stepOrder: { gte: 5 } } },
       select: {

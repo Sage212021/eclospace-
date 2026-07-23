@@ -7,9 +7,12 @@ import {
   listRoles,
   notifyDocument,
   uploadDocumentVersion,
+  listManuscriptReadingAssignments,
+  readingReportFileUrl,
   type DocumentSummary,
   type DocumentVersionSummary,
   type RoleSummary,
+  type ReadingAssignment,
 } from "../api/client";
 
 // Pièces jointes d'un ouvrage (GED, Ch. 21 §21.9) : chaque pôle dépose,
@@ -53,6 +56,7 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
   const [docs, setDocs] = useState<DocumentSummary[]>([]);
   const [versionsByDoc, setVersionsByDoc] = useState<Record<string, DocumentVersionSummary[]>>({});
   const [roles, setRoles] = useState<RoleSummary[]>([]);
+  const [reportFiles, setReportFiles] = useState<ReadingAssignment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -72,6 +76,11 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
   useEffect(() => {
     load();
     listRoles().then(setRoles).catch(() => setRoles([]));
+    // Rapports de lecture joints (visibles pour qui a accès au comité) : on
+    // ignore silencieusement un refus (403) pour les profils non concernés.
+    listManuscriptReadingAssignments(manuscriptId)
+      .then((list) => setReportFiles(list.filter((a) => a.hasReportFile)))
+      .catch(() => setReportFiles([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manuscriptId]);
 
@@ -165,7 +174,24 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
         </div>
       ))}
 
-      {docs.length === 0 && <p style={{ fontSize: 13, color: "var(--muted)", margin: "8px 0 0" }}>Aucune pièce jointe pour cet ouvrage.</p>}
+      {reportFiles.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--eclosion)", marginBottom: 6 }}>Rapports de lecture joints</div>
+          {reportFiles.map((a) => (
+            <div key={a.id} style={{ borderTop: "1px solid var(--line)", padding: "8px 0", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span>
+                {a.reportFileName ?? "Rapport de lecture"}{" "}
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>· {a.reader?.username ?? "relecteur"}</span>
+              </span>
+              <a href={readingReportFileUrl(a.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion)", fontSize: 12, fontWeight: 600 }}>
+                📎 Télécharger
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {docs.length === 0 && reportFiles.length === 0 && <p style={{ fontSize: 13, color: "var(--muted)", margin: "8px 0 0" }}>Aucune pièce jointe pour cet ouvrage.</p>}
     </div>
   );
 }

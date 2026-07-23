@@ -36,6 +36,54 @@ export default async function referenceRoutes(fastify: FastifyInstance) {
     return reply.send(collections);
   });
 
+  // Étapes du circuit d'un ouvrage, dans l'ordre — pour afficher la frise de
+  // progression (« où en est l'ouvrage ») accessible à tout le personnel.
+  fastify.get("/api/v1/workflow-statuses", { preHandler: requireAuth }, async (_request, reply) => {
+    const statuses = await prisma.workflowStatus.findMany({
+      orderBy: { stepOrder: "asc" },
+      select: { code: true, label: true, stepOrder: true, isConditional: true },
+    });
+    return reply.send(statuses);
+  });
+
+  // Suivi de production : les ouvrages engagés dans un projet de publication
+  // (acceptés, à partir de la contractualisation), avec leur étape courante.
+  // Accessible à tout le personnel (commercial, assistanat…) pour situer un
+  // ouvrage et renseigner un auteur — sans le détail éditorial confidentiel.
+  fastify.get("/api/v1/production-tracking", { preHandler: requireAuth }, async (_request, reply) => {
+    const rows = await prisma.manuscript.findMany({
+      where: { deletedAt: null, status: { stepOrder: { gte: 5 } } },
+      select: {
+        id: true,
+        title: true,
+        manuscriptNumber: true,
+        publicationDate: true,
+        status: { select: { code: true, label: true, stepOrder: true } },
+        workContributors: {
+          where: { role: "author" },
+          orderBy: { displayOrder: "asc" },
+          take: 1,
+          select: { partner: { select: { firstName: true, lastName: true, penName: true } } },
+        },
+      },
+      orderBy: [{ status: { stepOrder: "desc" } }, { title: "asc" }],
+    });
+    return reply.send(
+      rows.map((m) => {
+        const p = m.workContributors[0]?.partner;
+        return {
+          id: m.id,
+          title: m.title,
+          manuscriptNumber: m.manuscriptNumber,
+          author: p ? (p.penName ?? `${p.firstName} ${p.lastName}`) : null,
+          statusCode: m.status.code,
+          statusLabel: m.status.label,
+          stepOrder: m.status.stepOrder,
+        };
+      }),
+    );
+  });
+
   // Grille d'évaluation du comité de lecture (Ch. 7 §7.4) — nécessaire au
   // formulaire de notation pour savoir quels critères noter.
   fastify.get("/api/v1/evaluation-criteria", { preHandler: requireAuth }, async (_request, reply) => {

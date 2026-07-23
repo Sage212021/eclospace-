@@ -367,6 +367,29 @@ export function listEvaluationCriteria() {
   return request<EvaluationCriterion[]>("/api/v1/evaluation-criteria");
 }
 
+export interface WorkflowStatusRef {
+  code: string;
+  label: string;
+  stepOrder: number;
+  isConditional: boolean;
+}
+export function listWorkflowStatuses() {
+  return request<WorkflowStatusRef[]>("/api/v1/workflow-statuses");
+}
+
+export interface ProductionTrackingItem {
+  id: string;
+  title: string;
+  manuscriptNumber: string;
+  author: string | null;
+  statusCode: string;
+  statusLabel: string;
+  stepOrder: number;
+}
+export function listProductionTracking() {
+  return request<ProductionTrackingItem[]>("/api/v1/production-tracking");
+}
+
 export function submitEvaluation(
   assignmentId: string,
   input: {

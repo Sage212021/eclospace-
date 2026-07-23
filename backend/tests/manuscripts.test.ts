@@ -279,4 +279,23 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
     });
     expect(res.statusCode).toBe(403);
   });
+
+  it("expose les étapes du circuit et le suivi de production (voyants)", async () => {
+    const statuses = await app.inject({ method: "GET", url: "/api/v1/workflow-statuses", headers: { cookie: adminCookie } });
+    expect(statuses.statusCode).toBe(200);
+    const steps = statuses.json();
+    expect(steps.length).toBe(20);
+    expect(steps[0].stepOrder).toBe(1);
+    expect(steps[steps.length - 1].stepOrder).toBe(20);
+
+    const tracking = await app.inject({ method: "GET", url: "/api/v1/production-tracking", headers: { cookie: adminCookie } });
+    expect(tracking.statusCode).toBe(200);
+    const items = tracking.json();
+    // Ne liste que les ouvrages engagés en production (à partir de la contractualisation).
+    for (const m of items) {
+      expect(m.stepOrder).toBeGreaterThanOrEqual(5);
+      expect(m).toHaveProperty("statusLabel");
+      expect(m).toHaveProperty("title");
+    }
+  });
 });

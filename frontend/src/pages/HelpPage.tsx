@@ -12,7 +12,7 @@ function matches(entry: HelpEntry, q: string): boolean {
   const hay = [
     entry.title,
     entry.purpose,
-    ...entry.actions,
+    ...entry.procedure,
     ...entry.stuck.flatMap((s) => [s.q, s.a]),
   ]
     .join(" ")
@@ -103,12 +103,12 @@ export function HelpPage() {
                         <p style={{ margin: 0, fontSize: 13.5, color: "var(--ink)" }}>{entry.purpose}</p>
 
                         <div>
-                          <div style={sectionLabel}>{t("help.actions", "Les actions principales")}</div>
-                          <ul style={listStyle}>
-                            {entry.actions.map((a, i) => (
+                          <div style={sectionLabel}>{t("help.procedure", "Comment faire, étape par étape")}</div>
+                          <ol style={listStyle}>
+                            {entry.procedure.map((a, i) => (
                               <li key={i} style={{ marginBottom: 4 }}>{a}</li>
                             ))}
-                          </ul>
+                          </ol>
                         </div>
 
                         {entry.stuck.length > 0 && (

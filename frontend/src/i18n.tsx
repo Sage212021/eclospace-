@@ -131,7 +131,7 @@ const EN: Record<string, string> = {
   "help.results": "result(s)",
   "help.screens": "documented screens",
   "help.empty": "No help matches. Try another word, or contact your administrator.",
-  "help.actions": "Main actions",
+  "help.procedure": "Step by step",
   "help.stuck": "If you're stuck",
   // Stock
   "stock.alerts_title": "Stock alerts",

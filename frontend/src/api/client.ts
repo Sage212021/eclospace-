@@ -2965,13 +2965,6 @@ export function getActivityClosure() {
   return request<ActivityClosureStatus>("/api/v1/hr/activity-closure");
 }
 
-export function setActivityClosureDay(closureDay: number) {
-  return request<{ ok: true; closure_day: number }>("/api/v1/hr/activity-closure/day", {
-    method: "PUT",
-    body: JSON.stringify({ closure_day: closureDay }),
-  });
-}
-
 export function remindActivityClosure() {
   return request<{ ok: true; period_label: string; recipients: number }>("/api/v1/hr/activity-closure/remind", {
     method: "POST",

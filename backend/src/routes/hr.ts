@@ -5,7 +5,7 @@ import { EmployeeStatus, HrContractType, AbsenceType, AbsenceStatus, AccessRevie
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
-import { activityClosureStatus, sweepClosureReminders, sendClosureReminderNow, setClosureDay } from "../lib/activityClosure.js";
+import { activityClosureStatus, sweepClosureReminders, sendClosureReminderNow } from "../lib/activityClosure.js";
 
 const employeeSchema = z.object({
   first_name: z.string().min(1),
@@ -732,9 +732,9 @@ export default async function hrRoutes(fastify: FastifyInstance) {
   );
 
   // ── Signalement de clôture d'activité mensuelle (rubrique RH) ───────────────
-  // État de la prochaine clôture (le 10) + rappels émis. Consulter cette
-  // rubrique déclenche aussi, au passage, la génération paresseuse des rappels
-  // automatiques du 8/9 (au meilleur effort).
+  // État de la prochaine clôture (dernier jour ouvrable du mois) + rappels émis.
+  // Consulter cette rubrique déclenche aussi, au passage, la génération
+  // paresseuse des rappels automatiques (jour-2 / jour-1, au meilleur effort).
   fastify.get(
     "/api/v1/hr/activity-closure",
     { preHandler: requirePermission("rh", "consultation") },
@@ -758,21 +758,6 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // Paramétrage du jour de clôture (par la hiérarchie) : 10 par défaut, modifiable.
-  fastify.put(
-    "/api/v1/hr/activity-closure/day",
-    { preHandler: requirePermission("rh", "administration") },
-    async (request, reply) => {
-      const parsed = z.object({ closure_day: z.number().int().min(3).max(28) }).safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ code: "validation_error", message: "Le jour de clôture doit être un entier entre 3 et 28." });
-      }
-      try {
-        const closureDay = await setClosureDay(parsed.data.closure_day, { id: request.user!.id, ip: request.ip });
-        return reply.send({ ok: true, closure_day: closureDay });
-      } catch (err) {
-        return reply.code(400).send({ code: "invalid_day", message: err instanceof Error ? err.message : "Valeur invalide." });
-      }
-    },
-  );
+  // Le jour de clôture n'est plus paramétrable : c'est le dernier jour ouvrable
+  // du mois, calculé automatiquement (horaire de la maison + jours fériés).
 }

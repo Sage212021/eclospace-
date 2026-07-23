@@ -319,6 +319,19 @@ export function validateStep(
   });
 }
 
+export interface ReadingEvaluationScore {
+  score: string | number;
+  comment: string | null;
+  criterion: { id: string; label: string; coefficient: string | number };
+}
+export interface ReadingEvaluation {
+  recommendation: string;
+  globalScore: string | number;
+  rating: string;
+  overallComment: string | null;
+  submittedAt: string;
+  scores: ReadingEvaluationScore[];
+}
 export interface ReadingAssignment {
   id: string;
   manuscriptId: string;
@@ -327,6 +340,8 @@ export interface ReadingAssignment {
   submittedAt: string | null;
   status: "pending" | "submitted" | "late" | "cancelled";
   manuscript?: { id: string; manuscriptNumber: string; title: string };
+  reader?: { username: string };
+  evaluation?: ReadingEvaluation | null;
 }
 
 export function assignReader(manuscriptId: string, readerId: string, dueAt: string) {

@@ -578,3 +578,64 @@ export function printPayslip(d: PayslipPrintData, opts?: PrintOpts): void {
 
   openPrintWindow(`Bulletin de paie — ${d.employee_name} — ${d.period}`, body, opts);
 }
+
+const READING_RECO_LABELS: Record<string, string> = {
+  accept: "Acceptation sans modification",
+  accept_minor: "Acceptation sous réserve de corrections mineures",
+  accept_major: "Acceptation sous réserve de corrections majeures",
+  rewrite: "Demande de réécriture",
+  new_expertise: "Nouvelle expertise",
+  reject: "Refus motivé",
+};
+
+export interface ReadingReportData {
+  manuscriptTitle: string;
+  manuscriptNumber: string;
+  readerName: string;
+  submittedAt: string;
+  recommendation: string;
+  globalScore: number;
+  overallComment: string | null;
+  scores: { label: string; coefficient: number; score: number; comment: string | null }[];
+}
+
+// Rapport de lecture d'un relecteur : reprend l'évaluation remise (critères
+// notés, score global, recommandation, appréciation) en document imprimable/PDF.
+export function printReadingReport(d: ReadingReportData, opts?: PrintOpts): void {
+  const rows = d.scores
+    .map(
+      (s) =>
+        `<tr><td>${escapeHtml(s.label)}</td><td class="r num">${s.coefficient}</td><td class="r num">${s.score} / 10</td><td>${escapeHtml(s.comment ?? "")}</td></tr>`,
+    )
+    .join("");
+
+  const body = `
+    <div class="doc__title">Rapport de lecture</div>
+    <div class="meta">
+      <span>Manuscrit : <b class="num">${escapeHtml(d.manuscriptNumber)}</b></span>
+      <span>Remis le <b class="num">${new Date(d.submittedAt).toLocaleDateString("fr-FR")}</b></span>
+    </div>
+    <div class="party">
+      <div class="party__label">Ouvrage</div>
+      <div class="party__name">${escapeHtml(d.manuscriptTitle)}</div>
+    </div>
+    <div class="party" style="margin-top:10px">
+      <div class="party__label">Relecteur</div>
+      <div class="party__name">${escapeHtml(d.readerName)}</div>
+    </div>
+    <table class="lines" style="margin-top:16px"><thead><tr><th>Critère</th><th class="r">Coef.</th><th class="r">Note</th><th>Commentaire</th></tr></thead><tbody>
+      ${rows}
+      <tr><td colspan="2"><b>Score global</b></td><td class="r num"><b>${d.globalScore} / 10</b></td><td></td></tr>
+    </tbody></table>
+    <div class="party" style="margin-top:16px">
+      <div class="party__label">Recommandation</div>
+      <div class="party__name">${escapeHtml(READING_RECO_LABELS[d.recommendation] ?? d.recommendation)}</div>
+    </div>
+    ${
+      d.overallComment
+        ? `<div style="margin-top:14px"><div class="party__label">Appréciation générale</div><div style="font-size:12.5px;color:#1f2937;white-space:pre-wrap;margin-top:4px">${escapeHtml(d.overallComment)}</div></div>`
+        : ""
+    }`;
+
+  openPrintWindow(`Rapport de lecture — ${d.manuscriptTitle}`, body, opts);
+}

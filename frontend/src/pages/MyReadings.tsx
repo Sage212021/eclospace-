@@ -7,7 +7,29 @@ import {
   type ReadingAssignment,
 } from "../api/client";
 import { Button } from "../components/Button";
+import { DocPrintMenu } from "../components/DocPrintMenu";
 import { Field } from "../components/Modal";
+import { printReadingReport, type ReadingReportData } from "../lib/print";
+
+// Construit le rapport imprimable à partir de l'évaluation remise.
+function buildReadingReport(a: ReadingAssignment): ReadingReportData {
+  const e = a.evaluation!;
+  return {
+    manuscriptTitle: a.manuscript?.title ?? "—",
+    manuscriptNumber: a.manuscript?.manuscriptNumber ?? "—",
+    readerName: a.reader?.username ?? "—",
+    submittedAt: e.submittedAt,
+    recommendation: e.recommendation,
+    globalScore: Number(e.globalScore),
+    overallComment: e.overallComment,
+    scores: e.scores.map((s) => ({
+      label: s.criterion.label,
+      coefficient: Number(s.criterion.coefficient),
+      score: Number(s.score),
+      comment: s.comment,
+    })),
+  };
+}
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "À évaluer",
@@ -62,6 +84,12 @@ export function MyReadings() {
               >
                 {openAssignmentId === assignment.id ? t("myr.close", "Fermer") : t("myr.evaluate", "Évaluer")}
               </Button>
+            )}
+            {assignment.evaluation && (
+              <DocPrintMenu
+                label={t("myr.download_report", "Télécharger mon rapport")}
+                onPrint={(opts) => printReadingReport(buildReadingReport(assignment), opts)}
+              />
             )}
           </div>
           {openAssignmentId === assignment.id && (

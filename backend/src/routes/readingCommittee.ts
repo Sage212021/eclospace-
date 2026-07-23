@@ -107,7 +107,19 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
         ...(status ? { status } : {}),
         ...(manuscript ? { manuscriptId: manuscript } : {}),
       },
-      include: { manuscript: { select: { id: true, manuscriptNumber: true, title: true } } },
+      include: {
+        manuscript: { select: { id: true, manuscriptNumber: true, title: true } },
+        // Le rapport d'évaluation soumis (null tant qu'il n'est pas remis) : sert
+        // au relecteur à télécharger/imprimer son rapport, et au comité à le lire.
+        reader: { select: { username: true } },
+        evaluation: {
+          include: {
+            scores: {
+              include: { criterion: { select: { id: true, label: true, coefficient: true } } },
+            },
+          },
+        },
+      },
       orderBy: { dueAt: "asc" },
     });
       return reply.send(assignments);

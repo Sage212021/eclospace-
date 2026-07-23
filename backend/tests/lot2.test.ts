@@ -114,6 +114,25 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
     return manuscript;
   }
 
+  it("le rapport de lecture remis est inclus dans les missions du relecteur (téléchargement du rapport)", async () => {
+    const manuscript = await createManuscriptAtCorrection(`Rapport ${Date.now()}`);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/reading-assignments?reader=me",
+      headers: { cookie: adminCookie },
+    });
+    expect(res.statusCode).toBe(200);
+    const mine = res.json().find((a: { manuscript?: { id: string } }) => a.manuscript?.id === manuscript.id);
+    expect(mine).toBeTruthy();
+    // L'évaluation remise doit être fournie, avec ses notes par critère (labellées)
+    // et sa recommandation — de quoi générer le rapport imprimable côté relecteur.
+    expect(mine.evaluation).toBeTruthy();
+    expect(mine.evaluation.recommendation).toBe("accept");
+    expect(mine.evaluation.scores.length).toBeGreaterThan(0);
+    expect(mine.evaluation.scores[0].criterion.label).toBeTruthy();
+    expect(mine.reader.username).toBe("admin");
+  });
+
   it("le circuit de validation du contrat interdit tout saut d'étape", async () => {
     const partner = await prisma.partner.create({ data: { category: "auteur", firstName: "Test", lastName: "Contrat" } });
     const contractResponse = await app.inject({

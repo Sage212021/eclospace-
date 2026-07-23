@@ -745,3 +745,9 @@ La CSP, laissée désactivée lors de la première passe helmet (pour ne pas ris
 - `upgrade-insecure-requests` **posé uniquement en production** (HTTPS) : en local (`http://localhost`) il casserait le chargement des fichiers — retiré quand `NODE_ENV ≠ production`.
 
 Vérifié en navigateur (connexion, écrans chargés à la demande, présence temps réel « en ligne », styles intacts) : **aucune violation CSP**. Tests d'en-têtes (`security-hardening.test.ts`) toujours verts.
+
+## Aide intégrée (mode d'emploi par écran) (23/07/2026)
+
+Nouvelle rubrique **« Aide »** dans le menu (accessible à **tout le personnel**, sans droit particulier) : un centre d'aide parcourable qui documente **chaque écran**, organisé **par pôle puis par sous-rubrique**, pour orienter les utilisateurs quand ils bloquent. Chaque entrée donne : *à quoi sert l'écran*, *les actions principales*, et un encart *« Si vous êtes bloqué »* (questions fréquentes + réponses). Une **recherche** filtre l'ensemble (par ex. « facture », « mot de passe ») et déplie automatiquement les résultats. **36 écrans documentés** (dont une section « Pour bien démarrer » : connexion, navigation, codes couleur, recherche/notifications, compte/langue).
+
+Réalisation : contenu séparé et maintenable dans `frontend/src/help/helpContent.ts` (structure par pôle → entrées) ; page `frontend/src/pages/HelpPage.tsx` (accordéon + recherche), **chargée à la demande** (chunk séparé, ~8 Ko compressé) ; intégrée au menu et au routage (`App.tsx`), libellé via i18n (FR par défaut, EN ajouté). Contenu rédigé en français, sans jargon ; les réponses « bloqué » collent aux comportements réels (Accès non autorisé = hors périmètre, facture immuable, BAT verrouillé, ISBN non réutilisé, encours dépassé, période clôturée, journal inaltérable…). Vérifié en navigateur (rendu, recherche, dépliage). Bilingue possible : la coquille est traduite ; le contenu détaillé peut recevoir sa version EN ultérieurement.

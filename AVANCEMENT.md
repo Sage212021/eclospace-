@@ -1231,3 +1231,7 @@ Deux compléments à la demande de l'opérateur :
 2. **Accès comité/direction** : nouvelle section « Comité de lecture — rapports » sur la fiche manuscrit (gardée par `comite_lecture:consultation`) listant les évaluations des relecteurs, avec téléchargement du **rapport généré** (PDF) et du **fichier joint**.
 
 Réalisation : `printReadingReport`/`buildReadingReport` partagés (`lib/readingReport.ts`), composant `ReadingEvaluationsSection`, fonctions client. Tests ajoutés (dépôt + téléchargement). Types + tests verts ; vérifié en navigateur.
+
+### 23/07/2026 (suite) — « Suivi des ouvrages » : où en est chaque livre (voyants)
+
+Nouvelle rubrique **« Suivi des ouvrages »** (menu principal, accessible à tout le personnel) : la liste des ouvrages engagés en production (à partir de la contractualisation), chacun avec son **étape courante** et un **% d'avancement**. En cliquant un ouvrage, on déplie **« Où en est l'ouvrage »** : une frise de **voyants** (fait ✓ / étape en cours en or / à venir) sur les 20 étapes du circuit, avec l'étape courante mise en avant. Pensé pour que le commercial ou l'assistanat éditorial situe un livre et renseigne un auteur d'un coup d'œil, sans le détail éditorial confidentiel. Endpoints `GET /workflow-statuses` et `GET /production-tracking` (requireAuth, ouvrages en production seulement) ; composants `ProductionTrackingPage` + `ManuscriptProgress`. Tests ajoutés. Types + tests verts ; vérifié en navigateur.

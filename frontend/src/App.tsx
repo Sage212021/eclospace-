@@ -33,6 +33,7 @@ const AnnualEventsPlanning = lazy(() => import("./components/AnnualEventsPlannin
 const CalendarPage = lazy(() => import("./pages/CalendarPage").then((m) => ({ default: m.CalendarPage })));
 const NewsFeedPage = lazy(() => import("./pages/NewsFeedPage").then((m) => ({ default: m.NewsFeedPage })));
 const NewslettersPage = lazy(() => import("./pages/NewslettersPage").then((m) => ({ default: m.NewslettersPage })));
+const ProductionTrackingPage = lazy(() => import("./pages/ProductionTrackingPage").then((m) => ({ default: m.ProductionTrackingPage })));
 
 // Court message affiché le temps qu'un écran se télécharge (en général une
 // fraction de seconde).
@@ -72,7 +73,8 @@ type PageId =
   | "calendar"
   | "newsfeed"
   | "newsletters"
-  | "diagnostics";
+  | "diagnostics"
+  | "production-tracking";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
 
@@ -81,7 +83,7 @@ type LeafView = { page: PageId } | { stage: string; heading: string };
 // Les sous-modules « par étape » ouvrent la liste des manuscrits filtrée sur
 // le statut de workflow correspondant, d'où la permission manuscripts:consultation.
 const NAV_POLES: NavPole[] = [
-  { label: null, items: [{ key: "dashboard", label: "Tableau de bord" }, { key: "mes-rapports", label: "Mes rapports hebdo" }] },
+  { label: null, items: [{ key: "dashboard", label: "Tableau de bord" }, { key: "suivi", label: "Suivi des ouvrages" }, { key: "mes-rapports", label: "Mes rapports hebdo" }] },
   {
     label: "Éditorial",
     items: [
@@ -155,6 +157,7 @@ const NAV_POLES: NavPole[] = [
 
 const LEAF_VIEWS: Record<string, LeafView> = {
   dashboard: { page: "dashboard" },
+  suivi: { page: "production-tracking" },
   "mes-rapports": { page: "weekly-reports" },
   "ed-manuscrits": { page: "manuscripts" },
   "ed-comite": { stage: "COMITE_LECTURE", heading: "Comité de lecture" },
@@ -606,6 +609,7 @@ export function App() {
           <NewslettersPage canManage={permissions.has("communication:saisie")} />
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
+        {leaf && "page" in leaf && leaf.page === "production-tracking" && <ProductionTrackingPage />}
         </Suspense>
         )}
       </div>

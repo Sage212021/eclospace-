@@ -1,18 +1,24 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useI18n } from "../i18n";
-import { HELP_CONTENT, type HelpEntry } from "../help/helpContent";
+import { getHelpContent, type HelpEntry } from "../help/helpContent";
 
 // Aide contextuelle : intégrée EN HAUT de chaque rubrique, elle montre l'aide
 // de CET écran (procédé + blocages). Repliée par défaut, dépliée d'un clic.
 // Pas de rubrique « Aide » globale au menu : chaque écran porte la sienne.
-
-const BY_KEY: Record<string, HelpEntry> = {};
-for (const pole of HELP_CONTENT) for (const e of pole.entries) BY_KEY[e.key] = e;
-const GENERAL: HelpEntry[] = HELP_CONTENT.find((p) => p.pole === "Pour bien démarrer")?.entries ?? [];
+// Le contenu suit la langue de l'interface (FR/EN).
 
 export function RubricHelp({ helpKey }: { helpKey: string }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
+
+  const { byKey: BY_KEY, general: GENERAL } = useMemo(() => {
+    const content = getHelpContent(lang);
+    const byKey: Record<string, HelpEntry> = {};
+    for (const pole of content) for (const e of pole.entries) byKey[e.key] = e;
+    // La 1re rubrique (« Pour bien démarrer » / « Getting started ») = repères généraux.
+    const general: HelpEntry[] = content[0]?.entries ?? [];
+    return { byKey, general };
+  }, [lang]);
 
   const own = BY_KEY[helpKey];
   // Sur l'accueil, on ajoute les repères généraux (connexion, circuit, e-mail…).

@@ -46,6 +46,9 @@ export interface NavLeaf {
   key: string;
   label: string;
   permission?: string;
+  // Restriction « au moins une » de ces permissions (ex. Suivi des ouvrages,
+  // ouvert à l'éditorial, la production, la finance ou la direction).
+  anyPermission?: string[];
   // Restriction par rôle exact (ex. "ADMIN_GENERAL" pour Diagnostics système).
   role?: string;
 }
@@ -88,7 +91,11 @@ export function Sidebar({
   const { t } = useI18n();
   const visiblePoles = poles;
   const isLocked = (item: NavLeaf) =>
-    Boolean((item.permission && !permissions.has(item.permission)) || (item.role && !roles.has(item.role)));
+    Boolean(
+      (item.permission && !permissions.has(item.permission)) ||
+        (item.anyPermission && !item.anyPermission.some((p) => permissions.has(p))) ||
+        (item.role && !roles.has(item.role)),
+    );
 
   // Un seul pôle ouvert à la fois ; null = tous fermés (état par défaut).
   const [openPole, setOpenPole] = useState<string | null>(null);

@@ -77,6 +77,34 @@ export async function requireAuth(request: FastifyRequest, reply: FastifyReply):
   }
 }
 
+// Autorise l'accès dès qu'AU MOINS UNE des permissions listées est présente.
+// Utile pour un écran partagé par plusieurs pôles (ex. le suivi des ouvrages,
+// ouvert à l'éditorial, la production, la finance et la direction — et à eux
+// seuls). Chaque permission est au format "module:action".
+export function requireAnyPermission(perms: string[]) {
+  return async function anyPermissionPreHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    if (!request.user) {
+      reply.code(401).send({ code: "unauthenticated", message: "Connexion requise." });
+      return;
+    }
+    if (!perms.some((p) => request.user!.permissions.has(p))) {
+      const req = request;
+      void writeAuditLog({
+        userId: req.user!.id,
+        action: "access_denied",
+        entityType: "permission",
+        entityId: perms.join("|"),
+        newValues: { method: req.method, url: req.url },
+        ipAddress: req.ip,
+      }).catch(() => {});
+      reply.code(403).send({
+        code: "forbidden",
+        message: "Action non autorisée : accès réservé (éditorial, production, finance ou direction).",
+      });
+    }
+  };
+}
+
 export function requirePermission(module: string, action: PermissionAction) {
   return async function permissionPreHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     if (!request.user) {

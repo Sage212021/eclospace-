@@ -83,7 +83,21 @@ type LeafView = { page: PageId } | { stage: string; heading: string };
 // Les sous-modules « par étape » ouvrent la liste des manuscrits filtrée sur
 // le statut de workflow correspondant, d'où la permission manuscripts:consultation.
 const NAV_POLES: NavPole[] = [
-  { label: null, items: [{ key: "dashboard", label: "Tableau de bord" }, { key: "suivi", label: "Suivi des ouvrages" }, { key: "mes-rapports", label: "Mes rapports hebdo" }] },
+  {
+    label: null,
+    items: [
+      { key: "dashboard", label: "Tableau de bord" },
+      // Suivi des ouvrages : réservé aux pôles éditorial, production, finance et
+      // direction. Les autres pôles voient l'entrée verrouillée (comme un module
+      // hors périmètre) — contrôle confirmé aussi côté serveur.
+      {
+        key: "suivi",
+        label: "Suivi des ouvrages",
+        anyPermission: ["manuscripts:consultation", "production:consultation", "finance:consultation", "direction:consultation"],
+      },
+      { key: "mes-rapports", label: "Mes rapports hebdo" },
+    ],
+  },
   {
     label: "Éditorial",
     items: [
@@ -204,11 +218,11 @@ const POLE_LABELS: string[] = NAV_POLES.filter((p): p is typeof p & { label: str
 // Règle d'accès (permission et/ou rôle) par sous-module. Tous les pôles sont
 // visibles dans le menu (structure de la maison), mais ouvrir un module hors de
 // son périmètre affiche « Accès non autorisé » — cette table pilote ce contrôle.
-const LEAF_ACCESS: Record<string, { permission?: string; role?: string }> = {};
+const LEAF_ACCESS: Record<string, { permission?: string; anyPermission?: string[]; role?: string }> = {};
 const LEAF_LABEL: Record<string, string> = {};
 for (const pole of NAV_POLES) {
   for (const item of pole.items) {
-    LEAF_ACCESS[item.key] = { permission: item.permission, role: item.role };
+    LEAF_ACCESS[item.key] = { permission: item.permission, anyPermission: item.anyPermission, role: item.role };
     LEAF_LABEL[item.key] = item.label;
   }
 }
@@ -216,6 +230,7 @@ function isLeafAuthorized(key: string, permissions: Set<string>, roles: Set<stri
   const rule = LEAF_ACCESS[key];
   if (!rule) return true;
   if (rule.permission && !permissions.has(rule.permission)) return false;
+  if (rule.anyPermission && !rule.anyPermission.some((p) => permissions.has(p))) return false;
   if (rule.role && !roles.has(rule.role)) return false;
   return true;
 }

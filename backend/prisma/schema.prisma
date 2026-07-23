@@ -1301,6 +1301,13 @@ model ReadingAssignment {
   status          ReadingAssignmentStatus @default(pending)
   extensionReason String?                 @map("extension_reason")
 
+  // Rapport de relecture externe (facultatif) : le fichier rédigé par le
+  // relecteur ayant servi à l'évaluation, joint à sa mission (Ch. 7).
+  reportFilePath String? @map("report_file_path")
+  reportFileName String? @map("report_file_name")
+  reportFileMime String? @map("report_file_mime")
+  reportFileSize Int?    @map("report_file_size")
+
   evaluation Evaluation?
 
   @@map("reading_assignments")

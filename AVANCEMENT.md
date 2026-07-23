@@ -1215,3 +1215,19 @@ Nouvelle rubrique **« Aide »** dans le menu, pour **tout le personnel** : un m
 ### 23/07/2026 (suite) — Aide intégrée approfondie (procédé + blocages par écran)
 
 Sur retour de l'opérateur (l'aide était trop superficielle), réécriture complète du contenu : chaque écran présente désormais le **procédé réel, étape par étape** (« Comment faire ») avec les vrais boutons, puis « Si vous êtes bloqué » (blocages concrets). Corrections apportées : ajout d'une entrée dédiée **« Envoyer un document par e-mail »** (facture/relevé depuis Finance, bulletin, lien de devis — l'app n'envoie pas d'e-mails libres) ; **« Mes lectures »** précisée (formulaire d'évaluation structuré — notes/critères + recommandation + commentaire → « Remettre mon rapport » — pas de téléchargement de rapport) ; nouvelle entrée **« Comprendre le circuit d'un ouvrage »** expliquant que 9 rubriques (comité, direction, correction, maquette, infographie, ISBN, BAT, impression, contrats) sont des **étapes** (ouvrir l'ouvrage à l'étape → faire le travail → « Valider cette étape »). Vérifié en navigateur.
+
+### 23/07/2026 (suite) — Aide contextuelle par rubrique (plus de bloc unique au menu)
+
+Sur demande de l'opérateur : l'aide n'est plus regroupée dans une rubrique « Aide » unique du menu. Elle est désormais **intégrée à chaque écran** : en ouvrant une rubrique, un bandeau **« ❓ Aide de cette rubrique »** apparaît en haut, repliable, montrant l'aide **de cette rubrique-là** (procédé étape par étape + « Si vous êtes bloqué »). L'accueil affiche en plus les repères généraux (connexion, circuit, e-mail…). Nouveau composant `RubricHelp` (injecté au-dessus de chaque page via `App.tsx`, clé = rubrique courante) ; ancienne page `HelpPage` et l'entrée de menu « Aide » retirées. Le contenu (`help/helpContent.ts`) est réutilisé tel quel. Vérifié en navigateur.
+
+### 23/07/2026 (suite) — « Mes lectures » : téléchargement du rapport de lecture
+
+Sur demande de l'opérateur : le relecteur peut désormais **télécharger/imprimer son rapport de lecture** (en plus de la saisie déjà prévue). Chaque évaluation remise affiche un bouton **« Télécharger mon rapport »** (Numérique/PDF, avec ou sans papier à en-tête) : le document reprend l'ouvrage, le relecteur, les critères notés (avec coefficients et commentaires), le score global, la recommandation et l'appréciation générale. Réalisation : le backend inclut désormais l'évaluation soumise (notes + critères) dans les missions du relecteur ; nouvelle fonction d'impression `printReadingReport` (même infrastructure que factures/bulletins/paie). Test ajouté (l'évaluation remise est bien fournie au relecteur). Typecheck + tests verts ; vérifié en navigateur.
+
+### 23/07/2026 (suite) — Rapport de lecture : fichier joint + accès comité/direction
+
+Deux compléments à la demande de l'opérateur :
+1. **Fichier externe de rapport de relecture** : le relecteur peut **joindre un document** (le rapport rédigé qui a servi à l'évaluation), en plus du formulaire et du rapport généré. Bouton « Joindre le rapport (fichier) » dans « Mes lectures » ; fichier stocké (GED) et téléchargeable. Champs ajoutés à `reading_assignments` (migration additive) ; endpoints dépôt (relecteur propriétaire) / téléchargement (comité/direction).
+2. **Accès comité/direction** : nouvelle section « Comité de lecture — rapports » sur la fiche manuscrit (gardée par `comite_lecture:consultation`) listant les évaluations des relecteurs, avec téléchargement du **rapport généré** (PDF) et du **fichier joint**.
+
+Réalisation : `printReadingReport`/`buildReadingReport` partagés (`lib/readingReport.ts`), composant `ReadingEvaluationsSection`, fonctions client. Tests ajoutés (dépôt + téléchargement). Types + tests verts ; vérifié en navigateur.

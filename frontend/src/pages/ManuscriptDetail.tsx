@@ -21,6 +21,7 @@ import { IsbnSection } from "../components/IsbnSection";
 import { BatSection } from "../components/BatSection";
 import { PrintingSection } from "../components/PrintingSection";
 import { AttachmentsSection } from "../components/AttachmentsSection";
+import { ReadingEvaluationsSection } from "../components/ReadingEvaluationsSection";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 
 interface ManuscriptDetailProps {
@@ -136,6 +137,8 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         {manuscript.status.code === "COMITE_LECTURE" && canAssignReader && (
           <AssignReaderForm manuscriptId={manuscript.id} onAssigned={() => handle(async () => {}, "Lecteur affecté.")} />
         )}
+
+        {permissions.has("comite_lecture:consultation") && <ReadingEvaluationsSection manuscriptId={manuscript.id} />}
 
         {manuscript.status.code === "DECISION_EDITORIALE" && canDecide && (
           <EditorialDecisionForm

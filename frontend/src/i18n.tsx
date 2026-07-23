@@ -124,6 +124,15 @@ const EN: Record<string, string> = {
   "events.view_list": "📋 List",
   "events.view_cal": "📅 Calendar",
   "events.count": "event(s)",
+  // Aide intégrée
+  "help.title": "Help",
+  "help.subtitle": "A guide for each screen, to point you in the right direction when you're stuck.",
+  "help.search": "Search help (e.g. “invoice”, “stock”, “password”)…",
+  "help.results": "result(s)",
+  "help.screens": "documented screens",
+  "help.empty": "No help matches. Try another word, or contact your administrator.",
+  "help.actions": "Main actions",
+  "help.stuck": "If you're stuck",
   // Stock
   "stock.alerts_title": "Stock alerts",
   "stock.alerts_sub": "Out-of-stock and reached alert thresholds.",
@@ -243,6 +252,7 @@ const EN: Record<string, string> = {
   "unauth.body": "This module is not part of your scope:",
   "unauth.hint": "It appears in the menu to show you the company's structure. If you believe you should have access, please contact your administrator.",
   "nav.mes-rapports": "My weekly reports",
+  "nav.help": "Help",
   "nav.ed-manuscrits": "Manuscripts",
   "nav.ed-comite": "Reading committee",
   "nav.ed-mes-lectures": "My reviews",

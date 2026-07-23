@@ -1207,3 +1207,7 @@ Dates confirmées par l'opérateur : **19 → 23 avril 2026** (au lieu de 19 mar
 ### 22/07/2026 (suite) — Décisions de lancement actées + check-list
 
 Sur recommandation (après l'audit), la Direction acte : **D-008 — pas de mode hors-ligne en v1** (risque de synchro sur des données critiques ; la PWA tolère déjà les micro-coupures) et **D-009 — chiffrement conservé en l'état** (HTTPS + chiffrement au repos Scalingo + hachage + cloisonnement par droits suffisent ; le champ-par-champ ajouterait un risque de gestion de clés disproportionné). Consignées au `06_Registre_des_decisions.md`. Nouvelle **check-list de lancement** (`docs/CHECKLIST_LANCEMENT.md`) : sécuriser les accès (régénérer les secrets exposés, mot de passe admin, 2FA), test de restauration, recette métier par les référents, finalisation des données/comptes, bascule. L'essentiel restant relève de l'humain (recette) et de l'exploitation, pas du développement.
+
+### 23/07/2026 — Aide intégrée (mode d'emploi par écran)
+
+Nouvelle rubrique **« Aide »** dans le menu, pour **tout le personnel** : un mode d'emploi **par pôle et par sous-rubrique** qui oriente les utilisateurs quand ils bloquent. Pour chaque écran : à quoi il sert, les actions principales, et un encart « Si vous êtes bloqué » (questions fréquentes). Une **recherche** retrouve un sujet en un mot. **36 écrans documentés**. Contenu en français, sans jargon ; page chargée à la demande (n'alourdit pas le démarrage). Vérifié en navigateur. Le contenu anglais pourra être ajouté plus tard (la coquille est déjà bilingue).

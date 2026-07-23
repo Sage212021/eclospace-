@@ -46,9 +46,9 @@ export interface NavLeaf {
   key: string;
   label: string;
   permission?: string;
-  // Restriction « au moins une » de ces permissions (ex. Suivi des ouvrages,
-  // ouvert à l'éditorial, la production, la finance ou la direction).
-  anyPermission?: string[];
+  // Restriction « au moins un » de ces rôles (ex. Suivi des ouvrages, réservé
+  // aux pôles éditorial et production et à la direction).
+  anyRole?: string[];
   // Restriction par rôle exact (ex. "ADMIN_GENERAL" pour Diagnostics système).
   role?: string;
 }
@@ -93,7 +93,7 @@ export function Sidebar({
   const isLocked = (item: NavLeaf) =>
     Boolean(
       (item.permission && !permissions.has(item.permission)) ||
-        (item.anyPermission && !item.anyPermission.some((p) => permissions.has(p))) ||
+        (item.anyRole && !item.anyRole.some((r) => roles.has(r))) ||
         (item.role && !roles.has(item.role)),
     );
 

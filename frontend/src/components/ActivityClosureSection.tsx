@@ -1,28 +1,26 @@
 import { useEffect, useState } from "react";
-import { getActivityClosure, remindActivityClosure, setActivityClosureDay, type ActivityClosureStatus } from "../api/client";
+import { getActivityClosure, remindActivityClosure, type ActivityClosureStatus } from "../api/client";
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
 import { useI18n } from "../i18n";
 
 // RH → Signalement de clôture d'activité mensuelle. L'activité d'un mois se
-// clôture le « jour de clôture » du mois suivant (10 par défaut, paramétrable).
-// Des rappels automatiques sont envoyés les deux jours précédents ; la
-// hiérarchie peut ajuster le jour et déclencher un rappel manuel.
+// clôture le DERNIER JOUR OUVRABLE du mois (calculé : horaire de la maison +
+// jours fériés). Des rappels automatiques sont envoyés les deux jours
+// précédents ; la hiérarchie peut déclencher un rappel manuel.
 export function ActivityClosureSection({ canAdminister }: { canAdminister: boolean }) {
   const { t, lang } = useI18n();
   const locale = lang === "en" ? "en-GB" : "fr-FR";
   const [status, setStatus] = useState<ActivityClosureStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [dayDraft, setDayDraft] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
     try {
       const s = await getActivityClosure();
       setStatus(s);
-      setDayDraft(String(s.closure_day));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chargement impossible.");
     }
@@ -31,26 +29,6 @@ export function ActivityClosureSection({ canAdminister }: { canAdminister: boole
   useEffect(() => {
     refresh();
   }, []);
-
-  async function saveDay() {
-    const n = Number(dayDraft);
-    if (!Number.isInteger(n) || n < 3 || n > 28) {
-      setError(t("clo.err_day", "Le jour de clôture doit être un entier entre 3 et 28."));
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      await setActivityClosureDay(n);
-      setMessage(t("clo.msg_saved", "Jour de clôture enregistré."));
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Enregistrement impossible.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function sendNow() {
     setBusy(true);
@@ -94,7 +72,7 @@ export function ActivityClosureSection({ canAdminister }: { canAdminister: boole
     <Card
       title={t("clo.title", "Clôture d'activité mensuelle")}
       icon={<IconAdmin />}
-      subtitle={t("clo.subtitle", "L'activité de chaque mois est arrêtée le jour de clôture du mois suivant.")}
+      subtitle={t("clo.subtitle", "L'activité de chaque mois est arrêtée le dernier jour ouvrable du mois.")}
     >
       {error && <div style={banner("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={banner("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
@@ -125,8 +103,7 @@ export function ActivityClosureSection({ canAdminister }: { canAdminister: boole
 
       {/* Règle en vigueur */}
       <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 14 }}>
-        {t("clo.rule", "L'activité se clôture le {n} du mois suivant. Rappels automatiques aux responsables (RH, Finance, Direction) le {r} — pour finaliser la paie : présences, absences et variables.")
-          .replace("{n}", String(status.closure_day))
+        {t("clo.rule", "L'activité se clôture le dernier jour ouvrable du mois. Rappels automatiques aux responsables (RH, Finance, Direction) le {r} — pour finaliser la paie : présences, absences et variables.")
           .replace("{r}", status.reminder_days.join(t("clo.and", " et ")))}
       </p>
 
@@ -140,27 +117,9 @@ export function ActivityClosureSection({ canAdminister }: { canAdminister: boole
         </div>
       )}
 
-      {/* Administration (hiérarchie) */}
+      {/* Administration (hiérarchie) : rappel manuel, hors fenêtre automatique. */}
       {canAdminister && (
-        <div style={{ borderTop: "1px solid var(--line)", marginTop: 14, paddingTop: 14, display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div>
-            <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 5 }}>
-              {t("clo.day_label", "Jour de clôture (du mois suivant)")}
-            </label>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                type="number"
-                min={3}
-                max={28}
-                value={dayDraft}
-                onChange={(e) => setDayDraft(e.target.value)}
-                style={{ width: 84, padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 14, fontFamily: "var(--font-mono)" }}
-              />
-              <Button variant="add" size="sm" onClick={saveDay} disabled={busy || dayDraft === String(status.closure_day)}>
-                {t("clo.save", "Enregistrer")}
-              </Button>
-            </div>
-          </div>
+        <div style={{ borderTop: "1px solid var(--line)", marginTop: 14, paddingTop: 14 }}>
           <Button variant="view" size="sm" onClick={sendNow} disabled={busy || status.is_closed}>
             {t("clo.remind_now", "Envoyer le rappel maintenant")}
           </Button>

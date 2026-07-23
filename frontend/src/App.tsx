@@ -33,7 +33,6 @@ const AnnualEventsPlanning = lazy(() => import("./components/AnnualEventsPlannin
 const CalendarPage = lazy(() => import("./pages/CalendarPage").then((m) => ({ default: m.CalendarPage })));
 const NewsFeedPage = lazy(() => import("./pages/NewsFeedPage").then((m) => ({ default: m.NewsFeedPage })));
 const NewslettersPage = lazy(() => import("./pages/NewslettersPage").then((m) => ({ default: m.NewslettersPage })));
-const HelpPage = lazy(() => import("./pages/HelpPage").then((m) => ({ default: m.HelpPage })));
 
 // Court message affiché le temps qu'un écran se télécharge (en général une
 // fraction de seconde).
@@ -41,6 +40,7 @@ function PageLoading() {
   const { t } = useI18n();
   return <div style={{ padding: "40px 24px", color: "var(--muted)", fontSize: 13 }}>{t("common.loading", "Chargement…")}</div>;
 }
+import { RubricHelp } from "./components/RubricHelp";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { PresenceToasts } from "./components/PresenceToasts";
@@ -72,8 +72,7 @@ type PageId =
   | "calendar"
   | "newsfeed"
   | "newsletters"
-  | "diagnostics"
-  | "help";
+  | "diagnostics";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
 
@@ -82,7 +81,7 @@ type LeafView = { page: PageId } | { stage: string; heading: string };
 // Les sous-modules « par étape » ouvrent la liste des manuscrits filtrée sur
 // le statut de workflow correspondant, d'où la permission manuscripts:consultation.
 const NAV_POLES: NavPole[] = [
-  { label: null, items: [{ key: "dashboard", label: "Tableau de bord" }, { key: "mes-rapports", label: "Mes rapports hebdo" }, { key: "help", label: "Aide" }] },
+  { label: null, items: [{ key: "dashboard", label: "Tableau de bord" }, { key: "mes-rapports", label: "Mes rapports hebdo" }] },
   {
     label: "Éditorial",
     items: [
@@ -157,7 +156,6 @@ const NAV_POLES: NavPole[] = [
 const LEAF_VIEWS: Record<string, LeafView> = {
   dashboard: { page: "dashboard" },
   "mes-rapports": { page: "weekly-reports" },
-  help: { page: "help" },
   "ed-manuscrits": { page: "manuscripts" },
   "ed-comite": { stage: "COMITE_LECTURE", heading: "Comité de lecture" },
   "ed-mes-lectures": { page: "my-readings" },
@@ -504,6 +502,7 @@ export function App() {
 
         {leafAuthorized && (
         <Suspense fallback={<PageLoading />}>
+        <RubricHelp helpKey={activeKey} />
         {view.kind === "manuscript-detail" && (
           <ManuscriptDetail
             manuscriptId={view.id}
@@ -607,7 +606,6 @@ export function App() {
           <NewslettersPage canManage={permissions.has("communication:saisie")} />
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
-        {leaf && "page" in leaf && leaf.page === "help" && <HelpPage />}
         </Suspense>
         )}
       </div>

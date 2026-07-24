@@ -183,13 +183,39 @@ export async function buildApp() {
   // pas de serveur ni d'hébergement séparé pour le frontend (docs/JOURNAL_TECHNIQUE.md).
   const frontendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../public");
   if (existsSync(frontendDir)) {
-    await app.register(staticFiles, { root: frontendDir });
+    await app.register(staticFiles, {
+      root: frontendDir,
+      // Sert directement les fichiers pré-compressés (.br/.gz) générés au build
+      // quand le navigateur les accepte : téléchargement plus léger, sans coût
+      // processeur à chaque requête (scripts/precompress.mjs).
+      preCompressed: true,
+      // On pilote nous-mêmes l'en-tête Cache-Control (voir setHeaders) : sans
+      // cela, @fastify/static impose « max-age=0 » et annule notre réglage.
+      cacheControl: false,
+      setHeaders(res, filePath) {
+        // Le chemin peut se terminer par .br/.gz (variante compressée) : on
+        // raisonne sur le fichier d'origine.
+        const original = filePath.replace(/\.(br|gz)$/, "");
+        res.setHeader("Vary", "Accept-Encoding");
+        if (original.endsWith(".html")) {
+          // index.html référence les fichiers hachés : ne jamais le figer en
+          // cache, sinon une nouvelle version ne serait pas prise en compte.
+          res.setHeader("Cache-Control", "no-cache");
+        } else if (original.includes(`${path.sep}assets${path.sep}`)) {
+          // Fichiers au nom haché par Vite (leur contenu ne change jamais pour
+          // un nom donné) : cache long et immuable → visites suivantes instantanées.
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=86400");
+        }
+      },
+    });
     app.setNotFoundHandler((request, reply) => {
       if (request.raw.url?.startsWith("/api/")) {
         reply.code(404).send({ error: "not_found" });
         return;
       }
-      reply.type("text/html").send(readFileSync(path.join(frontendDir, "index.html")));
+      reply.header("Cache-Control", "no-cache").type("text/html").send(readFileSync(path.join(frontendDir, "index.html")));
     });
   }
 

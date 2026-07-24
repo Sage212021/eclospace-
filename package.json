@@ -5,6 +5,6 @@
     "node": ">=20.6"
   },
   "scripts": {
-    "build": "npm --prefix frontend ci && VITE_API_BASE= npm --prefix frontend run build && npm --prefix backend ci && npm --prefix backend run build && npm --prefix backend run prisma:generate && rm -rf backend/public && cp -r frontend/dist backend/public"
+    "build": "npm --prefix frontend ci && VITE_API_BASE= npm --prefix frontend run build && npm --prefix backend ci && npm --prefix backend run build && npm --prefix backend run prisma:generate && rm -rf backend/public && cp -r frontend/dist backend/public && node scripts/precompress.mjs"
   }
 }

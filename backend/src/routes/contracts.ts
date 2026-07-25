@@ -7,6 +7,12 @@ import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { nextContractNumber } from "../lib/contractNumber.js";
 
+// Bornes réglementaires du taux de droits d'auteur (décision opérateur du
+// 20/07/2026) : réglable par ouvrage, mais toujours entre 8 % et 15 %. Les
+// contrats déjà signés ne sont pas recalculés (pas de mise à jour rétroactive).
+const MIN_ROYALTY_RATE = 0.08;
+const MAX_ROYALTY_RATE = 0.15;
+
 const financialTermsSchema = z
   .object({
     base: z.nativeEnum(RoyaltyBase).optional(),
@@ -68,6 +74,18 @@ export default async function contractRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
     }
     const body = parsed.data;
+
+    // Taux de droits d'auteur borné à 8 %–15 % par ouvrage (contrôle serveur, en
+    // plus du choix côté écran). S'applique à chaque palier saisi.
+    for (const tier of body.financial_terms.tiers ?? []) {
+      if (tier.rate < MIN_ROYALTY_RATE - 1e-9 || tier.rate > MAX_ROYALTY_RATE + 1e-9) {
+        return reply.code(400).send({
+          code: "royalty_rate_out_of_bounds",
+          message: `Le taux de droits d'auteur doit être compris entre 8 % et 15 % (valeur reçue : ${(tier.rate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %).`,
+        });
+      }
+    }
+
     const contractNumber = await nextContractNumber();
 
     const contract = await prisma.$transaction(async (tx) => {

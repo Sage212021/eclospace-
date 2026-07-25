@@ -3031,7 +3031,8 @@ export function getSalesByBook(params: { from?: string; to?: string; granularity
 
 // ── Commissions commerciales ─────────────────────────────────────────────────
 export type CommissionGranularity = "week" | "month" | "semester" | "year";
-export interface CommissionAgentRow { agent_id: string | null; agent_name: string; units: number; amount: number; commission: number; }
+export interface CommissionBookRow { isbn_id: string; title: string; units: number; amount: number; commission: number; }
+export interface CommissionAgentRow { agent_id: string | null; agent_name: string; units: number; amount: number; commission: number; books: CommissionBookRow[]; }
 export interface CommissionPeriodRow { period: string; units: number; amount: number; commission: number; }
 export interface CommissionResult {
   rate: number;

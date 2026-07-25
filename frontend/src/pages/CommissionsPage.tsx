@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { getCommissions, setCommissionRate as apiSetRate, type CommissionResult, type CommissionGranularity } from "../api/client";
 import { Card } from "../components/Card";
 import { useI18n } from "../i18n";
@@ -29,6 +29,13 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [rateDraft, setRateDraft] = useState("");
+  const [openAgents, setOpenAgents] = useState<Set<string>>(new Set());
+  const toggleAgent = (k: string) =>
+    setOpenAgents((prev) => {
+      const next = new Set(prev);
+      next.has(k) ? next.delete(k) : next.add(k);
+      return next;
+    });
 
   async function load() {
     setLoading(true);
@@ -109,8 +116,10 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
             <Stat label={t("comm.commission_total", "Commissions à verser")} value={money(data.totals.commission)} accent />
           </div>
 
-          {/* Par commercial */}
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--eclosion-dark)", margin: "6px 0 8px" }}>{t("comm.by_agent", "Par commercial")}</div>
+          {/* Par commercial — chaque ligne se déplie pour montrer le détail par
+              ouvrage (ce qui justifie le total du commercial). */}
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--eclosion-dark)", margin: "6px 0 4px" }}>{t("comm.by_agent", "Par commercial")}</div>
+          <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>{t("comm.hint", "Cliquez sur un commercial pour voir le détail par ouvrage.")}</div>
           <div style={{ overflowX: "auto" }}>
             <table style={tbl}>
               <thead><tr>
@@ -121,14 +130,50 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
               </tr></thead>
               <tbody>
                 {data.by_agent.length === 0 && <tr><td colSpan={4} style={{ ...td, color: "var(--muted)", textAlign: "center" }}>{t("comm.empty", "Aucune vente sur cette période.")}</td></tr>}
-                {data.by_agent.map((r) => (
-                  <tr key={r.agent_id ?? "none"}>
-                    <td style={td}>{r.agent_name}</td>
-                    <td style={tdNum}>{r.units}</td>
-                    <td style={tdNum}>{money(r.amount)}</td>
-                    <td style={{ ...tdNum, fontWeight: 700, color: "var(--eclosion-dark)" }}>{money(r.commission)}</td>
-                  </tr>
-                ))}
+                {data.by_agent.map((r) => {
+                  const k = r.agent_id ?? "none";
+                  const isOpen = openAgents.has(k);
+                  return (
+                    <Fragment key={k}>
+                      <tr onClick={() => toggleAgent(k)} style={{ cursor: "pointer", background: isOpen ? "var(--eclosion-soft, #f6efd8)" : undefined }}>
+                        <td style={td}>
+                          <span aria-hidden style={{ display: "inline-block", width: 14, color: "var(--eclosion-dark)", transition: "transform .15s", transform: isOpen ? "rotate(90deg)" : "none" }}>▸</span>
+                          <span style={{ fontWeight: 600 }}>{r.agent_name}</span>
+                        </td>
+                        <td style={tdNum}>{r.units}</td>
+                        <td style={tdNum}>{money(r.amount)}</td>
+                        <td style={{ ...tdNum, fontWeight: 700, color: "var(--eclosion-dark)" }}>{money(r.commission)}</td>
+                      </tr>
+                      {isOpen && (
+                        <tr>
+                          <td colSpan={4} style={{ padding: 0, borderBottom: "1px solid var(--line)" }}>
+                            <div style={{ background: "var(--eclosion-soft, #f6efd8)", padding: "8px 10px 10px 26px" }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--eclosion-dark)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>{t("comm.detail", "Détail par ouvrage")}</div>
+                              <table style={{ ...tbl, minWidth: 420 }}>
+                                <thead><tr>
+                                  <th style={thSub}>{t("comm.book", "Ouvrage")}</th>
+                                  <th style={thSubNum}>{t("comm.units", "Exempl.")}</th>
+                                  <th style={thSubNum}>{t("comm.amount", "Montant")}</th>
+                                  <th style={thSubNum}>{t("comm.commission", "Commission")}</th>
+                                </tr></thead>
+                                <tbody>
+                                  {r.books.map((bk) => (
+                                    <tr key={bk.isbn_id}>
+                                      <td style={tdSub}>{bk.title}</td>
+                                      <td style={tdSubNum}>{bk.units}</td>
+                                      <td style={tdSubNum}>{money(bk.amount)}</td>
+                                      <td style={{ ...tdSubNum, fontWeight: 700, color: "var(--eclosion-dark)" }}>{money(bk.commission)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -176,3 +221,7 @@ const th: React.CSSProperties = { textAlign: "left", padding: "8px 10px", border
 const thNum: React.CSSProperties = { ...th, textAlign: "right", fontFamily: "var(--font-mono)" };
 const td: React.CSSProperties = { padding: "8px 10px", borderBottom: "1px solid var(--line)", color: "var(--ink)" };
 const tdNum: React.CSSProperties = { ...td, textAlign: "right", fontFamily: "var(--font-mono)" };
+const thSub: React.CSSProperties = { textAlign: "left", padding: "5px 8px", borderBottom: "1px solid var(--line)", color: "var(--muted)", fontSize: 11, fontWeight: 700 };
+const thSubNum: React.CSSProperties = { ...thSub, textAlign: "right", fontFamily: "var(--font-mono)" };
+const tdSub: React.CSSProperties = { padding: "5px 8px", borderBottom: "1px solid var(--line)", color: "var(--ink)", fontSize: 12.5 };
+const tdSubNum: React.CSSProperties = { ...tdSub, textAlign: "right", fontFamily: "var(--font-mono)" };

@@ -60,6 +60,9 @@ describe("commissions commerciales", () => {
     const b = res.by_agent.find((r) => r.agent_id === agentB);
     expect(a).toMatchObject({ units: 5, amount: 10000, commission: 1000 });
     expect(b).toMatchObject({ units: 3, amount: 3000, commission: 300 });
+    // Détail justificatif par ouvrage : une ligne, dont la somme fait le total.
+    expect(a!.books).toHaveLength(1);
+    expect(a!.books[0]).toMatchObject({ isbn_id: isbnId, units: 5, amount: 10000, commission: 1000 });
     expect(res.totals).toMatchObject({ units: 8, amount: 13000, commission: 1300 });
   });
 

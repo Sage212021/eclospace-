@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { CustomerCategory, SalesChannel, SalesOrderStatus, PosPaymentMethod, ReturnLineVerdict, ShippingZone } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { adjustStockItem, availableQuantity } from "../lib/stock.js";
@@ -246,7 +246,9 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
   // Commissions commerciales : par commercial, taux appliqué (10 % par défaut),
   // avec découpage semaine/mois/semestre/année. Consultation ouverte au
   // commercial, à la finance et à la direction.
-  fastify.get("/api/v1/commercial/commissions", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
+  // Commissions : consultables par le pôle commercial ET par la direction
+  // financière (qui les paie — rattachement à la finance demandé le 25/07/2026).
+  fastify.get("/api/v1/commercial/commissions", { preHandler: requireAnyPermission([{ module: "commercial", action: "consultation" }, { module: "finance", action: "consultation" }]) }, async (request, reply) => {
     const q = request.query as { from?: string; to?: string; granularity?: string };
     const allowed = ["week", "month", "semester", "year"];
     const granularity = (allowed.includes(q.granularity ?? "") ? q.granularity : "month") as CommissionGranularity;
@@ -258,8 +260,8 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     return reply.send(await commissions({ from, to, granularity }));
   });
 
-  // Taux de commission : lecture (tous profils commerciaux) / réglage (DAF).
-  fastify.get("/api/v1/commercial/commission-rate", { preHandler: requirePermission("commercial", "consultation") }, async (_request, reply) => {
+  // Taux de commission : lecture (commercial ou finance) / réglage (DAF).
+  fastify.get("/api/v1/commercial/commission-rate", { preHandler: requireAnyPermission([{ module: "commercial", action: "consultation" }, { module: "finance", action: "consultation" }]) }, async (_request, reply) => {
     return reply.send({ rate: await getCommissionRate() });
   });
   fastify.put("/api/v1/commercial/commission-rate", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {

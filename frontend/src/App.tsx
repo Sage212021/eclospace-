@@ -149,7 +149,6 @@ const NAV_POLES: NavPole[] = [
       { key: "co-stock", label: "Stock & magasin", permission: "stock:consultation" },
       { key: "co-ventes", label: "Commercial & ventes", permission: "commercial:consultation" },
       { key: "co-suivi-ventes", label: "Suivi des ventes par ouvrage", permission: "commercial:consultation" },
-      { key: "co-commissions", label: "Commissions commerciales", permission: "commercial:consultation" },
     ],
   },
   {
@@ -157,6 +156,7 @@ const NAV_POLES: NavPole[] = [
     items: [
       { key: "jf-contrats", label: "Contrats & droits d'auteur", permission: "manuscripts:consultation" },
       { key: "jf-finance", label: "Finance & comptabilité", permission: "finance:consultation" },
+      { key: "co-commissions", label: "Commissions commerciales", anyPermission: ["finance:consultation", "commercial:consultation"] },
       { key: "jf-droits-annuels", label: "États annuels de droits d'auteur", permission: "royalties:consultation" },
     ],
   },
@@ -242,11 +242,11 @@ const POLE_LABELS: string[] = NAV_POLES.filter((p): p is typeof p & { label: str
 // Règle d'accès (permission et/ou rôle) par sous-module. Tous les pôles sont
 // visibles dans le menu (structure de la maison), mais ouvrir un module hors de
 // son périmètre affiche « Accès non autorisé » — cette table pilote ce contrôle.
-const LEAF_ACCESS: Record<string, { permission?: string; anyRole?: string[]; role?: string }> = {};
+const LEAF_ACCESS: Record<string, { permission?: string; anyRole?: string[]; anyPermission?: string[]; role?: string }> = {};
 const LEAF_LABEL: Record<string, string> = {};
 for (const pole of NAV_POLES) {
   for (const item of pole.items) {
-    LEAF_ACCESS[item.key] = { permission: item.permission, anyRole: item.anyRole, role: item.role };
+    LEAF_ACCESS[item.key] = { permission: item.permission, anyRole: item.anyRole, anyPermission: item.anyPermission, role: item.role };
     LEAF_LABEL[item.key] = item.label;
   }
 }
@@ -255,6 +255,7 @@ function isLeafAuthorized(key: string, permissions: Set<string>, roles: Set<stri
   if (!rule) return true;
   if (rule.permission && !permissions.has(rule.permission)) return false;
   if (rule.anyRole && !rule.anyRole.some((r) => roles.has(r))) return false;
+  if (rule.anyPermission && !rule.anyPermission.some((p) => permissions.has(p))) return false;
   if (rule.role && !roles.has(rule.role)) return false;
   return true;
 }

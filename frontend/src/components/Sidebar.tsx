@@ -49,6 +49,9 @@ export interface NavLeaf {
   // Restriction « au moins un » de ces rôles (ex. Suivi des ouvrages, réservé
   // aux pôles éditorial et production et à la direction).
   anyRole?: string[];
+  // Restriction « au moins une » de ces permissions (ex. Commissions, visibles
+  // par le commercial ET la finance).
+  anyPermission?: string[];
   // Restriction par rôle exact (ex. "ADMIN_GENERAL" pour Diagnostics système).
   role?: string;
 }
@@ -94,6 +97,7 @@ export function Sidebar({
     Boolean(
       (item.permission && !permissions.has(item.permission)) ||
         (item.anyRole && !item.anyRole.some((r) => roles.has(r))) ||
+        (item.anyPermission && !item.anyPermission.some((p) => permissions.has(p))) ||
         (item.role && !roles.has(item.role)),
     );
 

@@ -71,11 +71,11 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
         <div>Document généré par Éclospace le ${escapeHtml(now)}.</div>
       </div>`;
 
-  // Filigrane d'authenticité : l'ampoule du papier à en-tête, en très léger, au
-  // centre — uniquement sur la version numérique élégante (ni en-tête intégré,
-  // qui la porte déjà, ni papier vierge, imprimé sur le papier physique).
-  const digital = !embed && !letterhead;
-  const watermarkStyle = digital
+  // Filigrane d'authenticité : l'ampoule Éclosion, en très léger, au centre.
+  // Décision opérateur du 25/07/2026 : présent en fond sur TOUTE impression
+  // générée, de façon permanente. Seule exception, le mode « en-tête intégré »,
+  // dont le fond A4 officiel porte déjà l'ampoule (inutile de la superposer).
+  const watermarkStyle = !embed
     ? `body { background: url("${window.location.origin}/eclosion-filigrane.png") center 54% / 52% auto no-repeat; }`
     : "";
 
@@ -577,6 +577,64 @@ export function printPayslip(d: PayslipPrintData, opts?: PrintOpts): void {
     ${mentions}`;
 
   openPrintWindow(`Bulletin de paie — ${d.employee_name} — ${d.period}`, body, opts);
+}
+
+export interface CommissionStatementData {
+  agentName: string;
+  periodLabel: string; // ex. « Mois — du 01/01/2026 au 25/07/2026 »
+  ratePct: number; // taux en pourcentage, ex. 10
+  books: { title: string; units: number; amount: number; commission: number }[];
+  totals: { units: number; amount: number; commission: number };
+}
+
+// État de commission d'un commercial sur une période (demande opérateur : la
+// maison peut payer les commissions par semaine ou par mois). Détail par
+// ouvrage — exemplaires, montant vendu, commission — puis totaux. La commission
+// est « due » (calculée par l'application) ; le versement effectif est constaté
+// à part. Prêt à imprimer / enregistrer en PDF.
+export function printCommissionStatement(d: CommissionStatementData, opts?: PrintOpts): void {
+  const cur = "XAF";
+  const rows = d.books
+    .map(
+      (b) => `<tr>
+        <td>${escapeHtml(b.title)}</td>
+        <td class="r num">${b.units.toLocaleString("fr-FR")}</td>
+        <td class="r num">${money(b.amount, cur)}</td>
+        <td class="r num">${money(b.commission, cur)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const body = `
+    <div class="doc__title">État de commission</div>
+    <div class="meta">
+      <span>Période : <b>${escapeHtml(d.periodLabel)}</b></span>
+      <span>Taux appliqué : <b class="num">${d.ratePct.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %</b></span>
+      <span>Édité le <b class="num">${new Date().toLocaleDateString("fr-FR")}</b></span>
+    </div>
+    <div class="party">
+      <div class="party__label">Commercial</div>
+      <div class="party__name">${escapeHtml(d.agentName)}</div>
+    </div>
+    <table class="lines" style="margin-top:12px">
+      <thead><tr><th>Ouvrage</th><th class="r">Exempl. vendus</th><th class="r">Montant vendu</th><th class="r">Commission due</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="4">Aucune vente sur la période.</td></tr>`}</tbody>
+    </table>
+    <div class="totals">
+      <div><span>Exemplaires vendus</span><span class="num">${d.totals.units.toLocaleString("fr-FR")}</span></div>
+      <div><span>Montant vendu</span><span class="num">${money(d.totals.amount, cur)}</span></div>
+      <div class="ttc"><span>Commission due</span><span class="num">${money(d.totals.commission, cur)}</span></div>
+    </div>
+    <div style="margin-top:26px;font-size:10.5px;color:#6b7280;line-height:1.6">
+      Commission calculée à ${d.ratePct.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} % du montant vendu sur la période.
+      Montant dû ; le versement effectif au commercial est constaté séparément.
+    </div>
+    <div style="margin-top:34px; display:flex; gap:60px; flex-wrap:wrap">
+      <div style="flex:1; min-width:200px"><div class="party__label">La direction financière</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature &amp; cachet</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">Le commercial</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Reçu — signature</div></div>
+    </div>`;
+
+  openPrintWindow(`État de commission — ${d.agentName}`, body, opts);
 }
 
 const READING_RECO_LABELS: Record<string, string> = {

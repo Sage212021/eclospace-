@@ -1385,6 +1385,30 @@ export function setInvoiceSchedule(id: string, installments: { due_date: string;
   return request<InvoiceSchedule>(`/api/v1/invoices/${id}/schedule`, { method: "POST", body: JSON.stringify({ installments }) });
 }
 
+// Export comptable normalisé (Ch. 18 §18.10, Option B) : les écritures d'un mois
+// (factures, encaissements, dépenses) avec comptes SYSCOHADA, pour le comptable
+// externe. Le CSV est renvoyé prêt à enregistrer, avec un contrôle d'exhaustivité
+// (nombre de lignes + empreinte). Les numéros de compte sont INDICATIFS.
+export interface AccountingExport {
+  id: string;
+  periodKey: string;
+  format: string;
+  lineCount: number;
+  checksum: string;
+  createdBy: string | null;
+  createdAt: string;
+}
+export interface AccountingExportResult extends AccountingExport {
+  csv: string;
+  chart_of_accounts_status: string;
+}
+export function listAccountingExports() {
+  return request<AccountingExport[]>(`/api/v1/accounting/exports`);
+}
+export function createAccountingExport(periodKey: string) {
+  return request<AccountingExportResult>(`/api/v1/accounting/exports`, { method: "POST", body: JSON.stringify({ period_key: periodKey }) });
+}
+
 // Ch. 18 : Finance et comptabilité (Lot 5).
 export interface Invoice {
   id: string;
@@ -3027,4 +3051,30 @@ export function getSalesByBook(params: { from?: string; to?: string; granularity
   if (params.from) q.set("from", params.from);
   if (params.to) q.set("to", params.to);
   return request<SalesTrackingResult>(`/api/v1/commercial/sales-by-book?${q.toString()}`);
+}
+
+// ── Commissions commerciales ─────────────────────────────────────────────────
+export type CommissionGranularity = "week" | "month" | "semester" | "year";
+export interface CommissionBookRow { isbn_id: string; title: string; units: number; amount: number; commission: number; }
+export interface CommissionAgentRow { agent_id: string | null; agent_name: string; units: number; amount: number; commission: number; books: CommissionBookRow[]; }
+export interface CommissionPeriodRow { period: string; units: number; amount: number; commission: number; }
+export interface CommissionResult {
+  rate: number;
+  granularity: CommissionGranularity;
+  by_agent: CommissionAgentRow[];
+  by_period: CommissionPeriodRow[];
+  totals: { units: number; amount: number; commission: number };
+}
+export function getCommissions(params: { from?: string; to?: string; granularity: CommissionGranularity }) {
+  const q = new URLSearchParams();
+  q.set("granularity", params.granularity);
+  if (params.from) q.set("from", params.from);
+  if (params.to) q.set("to", params.to);
+  return request<CommissionResult>(`/api/v1/commercial/commissions?${q.toString()}`);
+}
+export function getCommissionRate() {
+  return request<{ rate: number }>("/api/v1/commercial/commission-rate");
+}
+export function setCommissionRate(rate: number) {
+  return request<{ ok: true; rate: number }>("/api/v1/commercial/commission-rate", { method: "PUT", body: JSON.stringify({ rate }) });
 }

@@ -107,6 +107,34 @@ export function requireAnyRole(roles: string[]) {
   };
 }
 
+// Autorise l'accès dès que l'utilisateur porte AU MOINS UNE des permissions
+// listées (couples module:action). Utile pour un écran partagé par deux pôles :
+// ex. les commissions commerciales, consultables par le pôle commercial ET par
+// la direction financière (qui les paie, rattachement demandé le 25/07/2026).
+export function requireAnyPermission(perms: { module: string; action: PermissionAction }[]) {
+  return async function anyPermissionPreHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    if (!request.user) {
+      reply.code(401).send({ code: "unauthenticated", message: "Connexion requise." });
+      return;
+    }
+    if (!perms.some((p) => request.user!.permissions.has(permKey(p.module, p.action)))) {
+      const req = request;
+      void writeAuditLog({
+        userId: req.user!.id,
+        action: "access_denied",
+        entityType: "permission",
+        entityId: perms.map((p) => permKey(p.module, p.action)).join("|"),
+        newValues: { method: req.method, url: req.url },
+        ipAddress: req.ip,
+      }).catch(() => {});
+      reply.code(403).send({
+        code: "forbidden",
+        message: `Action non autorisée : ${perms.map((p) => `${p.module}:${p.action}`).join(" ou ")} requis.`,
+      });
+    }
+  };
+}
+
 export function requirePermission(module: string, action: PermissionAction) {
   return async function permissionPreHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     if (!request.user) {

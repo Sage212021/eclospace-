@@ -95,13 +95,16 @@ describe("commissions commerciales", () => {
     await prisma.setting.deleteMany({ where: { key: "commission_rate" } });
   });
 
-  it("permissions : commercial 200, magasinier 403 sur la vue commissions", async () => {
+  it("permissions : commercial 200, DAF (finance) 200, magasinier 403 sur la vue commissions", async () => {
     const login = async (u: string) => {
       const r = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: u, password: PWD } });
       return extractSessionCookie(r.cookies.map((c) => `${c.name}=${c.value}`));
     };
     const ok = await app.inject({ method: "GET", url: "/api/v1/commercial/commissions?granularity=month", headers: { cookie: await login("comm_agentA") } });
     expect(ok.statusCode).toBe(200);
+    // La direction financière (qui paie les commissions) y a désormais accès.
+    const daf = await app.inject({ method: "GET", url: "/api/v1/commercial/commissions?granularity=month", headers: { cookie: await login("comm_daf") } });
+    expect(daf.statusCode).toBe(200);
     const denied = await app.inject({ method: "GET", url: "/api/v1/commercial/commissions", headers: { cookie: await login("comm_agentB") } });
     expect(denied.statusCode).toBe(403);
   });

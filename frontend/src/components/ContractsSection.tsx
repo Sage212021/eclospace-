@@ -349,13 +349,35 @@ function NewContractForm({
           </button>
         </div>
         <label style={{ fontSize: 12 }}>
-          Taux de droits (%)
-          <input type="number" value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} />
-        </label>
-        <label style={{ fontSize: 12 }}>
           Avance (FCFA)
           <input type="number" value={advance} onChange={(e) => setAdvance(Number(e.target.value))} style={inputStyle} />
         </label>
+      </div>
+      <div style={{ fontSize: 12, marginTop: 10 }}>
+        Taux de droits d'auteur — cochez le pourcentage validé pour cet ouvrage (entre 8 % et 15 %)
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+          {[8, 9, 10, 11, 12, 13, 14, 15].map((p) => (
+            <button
+              type="button"
+              key={p}
+              onClick={() => setRate(p)}
+              aria-pressed={rate === p}
+              style={{
+                padding: "6px 14px",
+                borderRadius: 999,
+                border: `1px solid ${rate === p ? "var(--eclosion)" : "var(--line)"}`,
+                background: rate === p ? "var(--eclosion)" : "#fff",
+                color: rate === p ? "#fff" : "var(--muted)",
+                fontWeight: rate === p ? 700 : 500,
+                fontFamily: "var(--font-mono, monospace)",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              {p} %
+            </button>
+          ))}
+        </div>
       </div>
       <button type="submit" style={{ ...secondaryButtonStyle, marginTop: 10, background: "var(--eclosion)", color: "#fff", border: "none" }}>
         Créer le contrat

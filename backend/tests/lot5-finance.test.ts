@@ -522,7 +522,7 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
     }
 
     const printContractId = await createActiveContract(["print"], 0.10);
-    const epubContractId = await createActiveContract(["epub"], 0.25);
+    const epubContractId = await createActiveContract(["epub"], 0.15);
 
     const pool = await app.inject({
       method: "POST",
@@ -558,7 +558,7 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
 
     const customer = await createCustomer("Client Multi-Format");
     await deliverOrder(printIsbn.json().id, customer.id, 5, 10000); // 5 * 10000 * 10 % = 5000, contrat papier
-    await deliverOrder(epubIsbn.json().id, customer.id, 5, 10000); // 5 * 10000 * 25 % = 12500, contrat numérique
+    await deliverOrder(epubIsbn.json().id, customer.id, 5, 10000); // 5 * 10000 * 15 % = 7500, contrat numérique
 
     const printEntries = await app.inject({ method: "GET", url: `/api/v1/contracts/${printContractId}/royalty-entries`, headers: { cookie: adminCookie } });
     expect(printEntries.json()).toHaveLength(1);
@@ -566,7 +566,7 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
 
     const epubEntries = await app.inject({ method: "GET", url: `/api/v1/contracts/${epubContractId}/royalty-entries`, headers: { cookie: adminCookie } });
     expect(epubEntries.json()).toHaveLength(1);
-    expect(Number(epubEntries.json()[0].amount)).toBe(12500);
+    expect(Number(epubEntries.json()[0].amount)).toBe(7500);
   });
 
   it("la séparation des tâches empêche l'auto-validation d'une dépense (Ch. 18 §18.11)", async () => {

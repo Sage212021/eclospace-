@@ -112,6 +112,7 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
                 <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--eclosion-dark)", marginTop: 3 }}>{Math.round(data.rate * 1000) / 10} %</div>
               )}
             </div>
+            <Stat label={t("comm.units_total", "Exemplaires vendus (total)")} value={new Intl.NumberFormat("fr-FR").format(data.totals.units)} />
             <Stat label={t("comm.sold", "Montant vendu (total)")} value={money(data.totals.amount)} />
             <Stat label={t("comm.commission_total", "Commissions à verser")} value={money(data.totals.commission)} accent />
           </div>

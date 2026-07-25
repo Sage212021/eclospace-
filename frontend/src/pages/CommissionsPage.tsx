@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { getCommissions, setCommissionRate as apiSetRate, type CommissionResult, type CommissionGranularity } from "../api/client";
 import { Card } from "../components/Card";
+import { DocPrintMenu } from "../components/DocPrintMenu";
+import { printCommissionStatement } from "../lib/print";
 import { useI18n } from "../i18n";
 
 // Commissions commerciales : 10 % (paramétrable par la DAF) du montant vendu,
@@ -9,6 +11,10 @@ import { useI18n } from "../i18n";
 const money = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF", maximumFractionDigits: 0 }).format(n);
 function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function frDate(iso: string): string {
+  const [y, m, day] = iso.split("-");
+  return y && m && day ? `${day}/${m}/${y}` : iso;
 }
 
 const GRANULARITIES: { key: CommissionGranularity; label: string }[] = [
@@ -114,7 +120,7 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
             </div>
             <Stat label={t("comm.units_total", "Exemplaires vendus (total)")} value={new Intl.NumberFormat("fr-FR").format(data.totals.units)} />
             <Stat label={t("comm.sold", "Montant vendu (total)")} value={money(data.totals.amount)} />
-            <Stat label={t("comm.commission_total", "Commissions à verser")} value={money(data.totals.commission)} accent />
+            <Stat label={t("comm.commission_total", "Commission due (total)")} value={money(data.totals.commission)} accent />
           </div>
 
           {/* Par commercial — chaque ligne se déplie pour montrer le détail par
@@ -149,7 +155,18 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
                         <tr>
                           <td colSpan={4} style={{ padding: 0, borderBottom: "1px solid var(--line)" }}>
                             <div style={{ background: "var(--eclosion-soft, #f6efd8)", padding: "8px 10px 10px 26px" }}>
-                              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--eclosion-dark)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>{t("comm.detail", "Détail par ouvrage")}</div>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--eclosion-dark)", textTransform: "uppercase", letterSpacing: 0.4 }}>{t("comm.detail", "Détail par ouvrage")}</div>
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <DocPrintMenu label={t("comm.print", "Imprimer l'état / PDF")} onPrint={(o) => printCommissionStatement({
+                                    agentName: r.agent_name,
+                                    periodLabel: `${GRANULARITIES.find((g) => g.key === granularity)?.label ?? ""} — du ${frDate(from)} au ${frDate(to)}`,
+                                    ratePct: Math.round(data.rate * 1000) / 10,
+                                    books: r.books.map((bk) => ({ title: bk.title, units: bk.units, amount: bk.amount, commission: bk.commission })),
+                                    totals: { units: r.units, amount: r.amount, commission: r.commission },
+                                  }, o)} />
+                                </div>
+                              </div>
                               <table style={{ ...tbl, minWidth: 420 }}>
                                 <thead><tr>
                                   <th style={thSub}>{t("comm.book", "Ouvrage")}</th>

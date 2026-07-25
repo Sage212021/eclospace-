@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { getAuthorRoyalties, type AuthorRoyaltyResult } from "../api/client";
+import { getAuthorRoyalties, getRoyaltyWithholdingEnabled, setRoyaltyWithholdingEnabled, type AuthorRoyaltyResult } from "../api/client";
 import { Card } from "../components/Card";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printAuthorRoyaltyStatement } from "../lib/print";
@@ -12,13 +12,15 @@ import { useI18n } from "../i18n";
 const money = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF", maximumFractionDigits: 0 }).format(n);
 const pct = (r: number) => `${(r * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %`;
 
-export function AuthorRoyaltiesPage() {
+export function AuthorRoyaltiesPage({ canConfigure = false }: { canConfigure?: boolean }) {
   const { t } = useI18n();
   const thisYear = useMemo(() => new Date().getFullYear(), []);
   const [year, setYear] = useState(thisYear);
   const [data, setData] = useState<AuthorRoyaltyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [withholding, setWithholding] = useState<boolean | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (k: string) =>
     setOpen((prev) => {
@@ -44,6 +46,30 @@ export function AuthorRoyaltiesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year]);
 
+  useEffect(() => {
+    getRoyaltyWithholdingEnabled()
+      .then((r) => setWithholding(r.enabled))
+      .catch(() => setWithholding(null));
+  }, []);
+
+  async function toggleWithholding(next: boolean) {
+    setError(null);
+    setMessage(null);
+    setWithholding(next); // retour visuel immédiat
+    try {
+      const r = await setRoyaltyWithholdingEnabled(next);
+      setWithholding(r.enabled);
+      setMessage(
+        r.enabled
+          ? t("roy.wh_on_msg", "Retenue à la source activée : elle s'applique désormais aux nouveaux paiements et documents.")
+          : t("roy.wh_off_msg", "Retenue à la source désactivée : elle n'entre plus dans les nouveaux paiements et documents."),
+      );
+    } catch (e) {
+      setWithholding(!next); // annule en cas d'échec
+      setError(e instanceof Error ? e.message : "Enregistrement impossible.");
+    }
+  }
+
   const years = useMemo(() => Array.from({ length: 6 }, (_, i) => thisYear - i), [thisYear]);
 
   return (
@@ -66,6 +92,23 @@ export function AuthorRoyaltiesPage() {
       </div>
 
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {message && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12 }}>{message}</div>}
+
+      {/* Réglage de la retenue à la source (DAF) : cochée, elle entre dans les
+          paiements et documents ; décochée, elle n'y figure pas. */}
+      {withholding !== null && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 10, padding: "10px 14px", marginBottom: 14, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: canConfigure ? "pointer" : "default", fontSize: 13, fontWeight: 600, color: "var(--eclosion-dark)" }}>
+            <input type="checkbox" checked={withholding} disabled={!canConfigure} onChange={(e) => toggleWithholding(e.target.checked)} style={{ width: 17, height: 17, cursor: canConfigure ? "pointer" : "default" }} />
+            {t("roy.wh_label", "Appliquer la retenue à la source sur les droits d'auteur")}
+          </label>
+          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
+            {canConfigure
+              ? t("roy.wh_hint", "Décochez si la réglementation ne l'exige pas : la retenue n'entrera plus dans les nouveaux documents.")
+              : t("roy.wh_readonly", "Réglage géré par la direction financière.")}
+          </span>
+        </div>
+      )}
 
       {data && (
         <>

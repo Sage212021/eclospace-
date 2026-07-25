@@ -1650,6 +1650,15 @@ export function getAuthorRoyalties(params: { year?: number; partner_id?: string 
   return request<AuthorRoyaltyResult>(`/api/v1/royalties/by-author${query}`);
 }
 
+// Retenue à la source sur les droits d'auteur : option activable/désactivable
+// (réglage DAF). Décochée, aucune retenue par défaut n'entre dans les documents.
+export function getRoyaltyWithholdingEnabled() {
+  return request<{ enabled: boolean }>(`/api/v1/royalties/withholding-enabled`);
+}
+export function setRoyaltyWithholdingEnabled(enabled: boolean) {
+  return request<{ enabled: boolean }>(`/api/v1/royalties/withholding-enabled`, { method: "PUT", body: JSON.stringify({ enabled }) });
+}
+
 // Relevé détaillé (pour l'impression) : lignes de calcul des droits.
 export interface RoyaltyEntry {
   id: string;

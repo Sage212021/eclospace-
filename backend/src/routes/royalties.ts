@@ -7,6 +7,7 @@ import { assertPeriodOpen, PeriodClosedError } from "../lib/accountingPeriod.js"
 import { sendMail, senderIdentity } from "../lib/mailer.js";
 import { buildRoyaltyStatementEmail } from "../lib/documentEmail.js";
 import { authorRoyaltiesByYear } from "../lib/authorRoyalties.js";
+import { getRoyaltyWithholdingEnabled, setRoyaltyWithholdingEnabled } from "../lib/royaltySettings.js";
 
 const statementEmailSchema = z.object({
   to: z.string().email().optional(),
@@ -53,6 +54,29 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
       const year = Number.isInteger(Number(q.year)) && Number(q.year) > 2000 ? Number(q.year) : new Date().getFullYear();
       const result = await authorRoyaltiesByYear({ year, partnerId: q.partner_id });
       return reply.send(result);
+    },
+  );
+
+  // Réglage de la retenue à la source (activée/désactivée) : lecture pour tout
+  // consultant des droits, écriture réservée à la DAF (finance:administration).
+  fastify.get(
+    "/api/v1/royalties/withholding-enabled",
+    { preHandler: requirePermission("royalties", "consultation") },
+    async (_request, reply) => {
+      return reply.send({ enabled: await getRoyaltyWithholdingEnabled() });
+    },
+  );
+
+  fastify.put(
+    "/api/v1/royalties/withholding-enabled",
+    { preHandler: requirePermission("finance", "administration") },
+    async (request, reply) => {
+      const parsed = z.object({ enabled: z.boolean() }).safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champ « enabled » (vrai/faux) requis.", details: parsed.error.issues });
+      }
+      const enabled = await setRoyaltyWithholdingEnabled(parsed.data.enabled, { id: request.user!.id, ip: request.ip });
+      return reply.send({ enabled });
     },
   );
 
@@ -356,7 +380,10 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const defaultWithholdingPct = Number(statement.contract.royaltyTerms?.taxWithholdingPct ?? 0);
+      // La retenue à la source ne s'applique que si l'option est activée (réglage
+      // DAF). Désactivée, la retenue par défaut est nulle — sauf montant explicite.
+      const withholdingEnabled = await getRoyaltyWithholdingEnabled();
+      const defaultWithholdingPct = withholdingEnabled ? Number(statement.contract.royaltyTerms?.taxWithholdingPct ?? 0) : 0;
       const taxWithheld = parsed.data.tax_withheld ?? Math.round(((grossAmount * defaultWithholdingPct) / 100) * 100) / 100;
       const netAmount = Math.round((grossAmount - taxWithheld) * 100) / 100;
       if (netAmount <= 0) {

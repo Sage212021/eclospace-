@@ -399,12 +399,12 @@ export function printAuthorRoyaltyStatement(d: AuthorRoyaltyStatementData, opts?
     <div class="party__label" style="margin-top:22px">Récapitulatif fiscal de l'année</div>
     <div class="totals" style="margin-top:6px">
       <div><span>Droits versés (brut)</span><span class="num">${money(d.paidGross, cur)}</span></div>
-      <div><span>Retenue à la source</span><span class="num">− ${money(d.taxWithheld, cur)}</span></div>
+      ${d.taxWithheld > 0 ? `<div><span>Retenue à la source</span><span class="num">− ${money(d.taxWithheld, cur)}</span></div>` : ""}
       <div class="ttc"><span>Net versé à l'auteur</span><span class="num">${money(d.paidNet, cur)}</span></div>
     </div>
     <div style="margin-top:26px;font-size:10.5px;color:#6b7280;line-height:1.6">
       « Droits acquis » : droits générés par les ventes de l'année, par ouvrage, au taux contractuel propre à chaque livre.
-      « Droits versés » : montants effectivement payés à l'auteur dans l'année, après retenue à la source.
+      « Droits versés » : montants effectivement payés à l'auteur dans l'année${d.taxWithheld > 0 ? ", après retenue à la source" : " (aucune retenue à la source appliquée)"}.
       Document établi au titre de la réglementation camerounaise sur le droit d'auteur ; à conserver pour la déclaration fiscale.
     </div>
     <div style="margin-top:32px; display:flex; gap:60px; flex-wrap:wrap">

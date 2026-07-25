@@ -651,7 +651,7 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "production-tracking" && <ProductionTrackingPage />}
         {leaf && "page" in leaf && leaf.page === "sales-by-book" && <SalesByBookPage />}
         {leaf && "page" in leaf && leaf.page === "commissions" && <CommissionsPage canSetRate={permissions.has("finance:administration")} />}
-        {leaf && "page" in leaf && leaf.page === "author-royalties" && <AuthorRoyaltiesPage />}
+        {leaf && "page" in leaf && leaf.page === "author-royalties" && <AuthorRoyaltiesPage canConfigure={permissions.has("finance:administration")} />}
         </Suspense>
         )}
       </div>

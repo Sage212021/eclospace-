@@ -79,6 +79,38 @@ describe("états annuels de droits d'auteur par auteur", () => {
     expect(res.by_author.find((r) => r.partner_id === partnerId)).toBeUndefined();
   });
 
+  it("retenue à la source : réglage lu par défaut, écriture réservée à la DAF", async () => {
+    const login = async (u: string, p: string) => {
+      const r = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: u, password: p } });
+      return extractSessionCookie(r.cookies.map((c) => `${c.name}=${c.value}`));
+    };
+    await prisma.setting.deleteMany({ where: { key: "royalty_withholding_enabled" } }); // défaut = activée
+    await createUserWithRole(`roy_daf_${rnd()}`, "RESP_FINANCE", PWD);
+    const dafUser = await prisma.user.findFirst({ where: { username: { startsWith: "roy_daf_" } }, orderBy: { createdAt: "desc" } });
+    const dafCookie = await login(dafUser!.username, PWD);
+    const magUser = await prisma.user.findFirst({ where: { username: { startsWith: "roy_mag_" } }, orderBy: { createdAt: "desc" } });
+    const magCookie = await login(magUser!.username, PWD);
+    const adminCookie = await login("admin", process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!");
+
+    // Lecture : activée par défaut.
+    const read = await app.inject({ method: "GET", url: "/api/v1/royalties/withholding-enabled", headers: { cookie: adminCookie } });
+    expect(read.statusCode).toBe(200);
+    expect(read.json().enabled).toBe(true);
+
+    // Écriture par un non-DAF : refusée.
+    const denied = await app.inject({ method: "PUT", url: "/api/v1/royalties/withholding-enabled", headers: { cookie: magCookie }, payload: { enabled: false } });
+    expect(denied.statusCode).toBe(403);
+
+    // Écriture par la DAF : acceptée, valeur persistée.
+    const set = await app.inject({ method: "PUT", url: "/api/v1/royalties/withholding-enabled", headers: { cookie: dafCookie }, payload: { enabled: false } });
+    expect(set.statusCode).toBe(200);
+    expect(set.json().enabled).toBe(false);
+    const reread = await app.inject({ method: "GET", url: "/api/v1/royalties/withholding-enabled", headers: { cookie: dafCookie } });
+    expect(reread.json().enabled).toBe(false);
+
+    await prisma.setting.deleteMany({ where: { key: "royalty_withholding_enabled" } });
+  });
+
   it("permissions : admin 200, magasinier 403 sur la vue par auteur", async () => {
     const login = async (u: string, p: string) => {
       const r = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: u, password: p } });

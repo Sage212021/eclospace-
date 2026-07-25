@@ -34,6 +34,7 @@ const CalendarPage = lazy(() => import("./pages/CalendarPage").then((m) => ({ de
 const NewsFeedPage = lazy(() => import("./pages/NewsFeedPage").then((m) => ({ default: m.NewsFeedPage })));
 const NewslettersPage = lazy(() => import("./pages/NewslettersPage").then((m) => ({ default: m.NewslettersPage })));
 const ProductionTrackingPage = lazy(() => import("./pages/ProductionTrackingPage").then((m) => ({ default: m.ProductionTrackingPage })));
+const SalesByBookPage = lazy(() => import("./pages/SalesByBookPage").then((m) => ({ default: m.SalesByBookPage })));
 
 // Court message affiché le temps qu'un écran se télécharge (en général une
 // fraction de seconde).
@@ -74,7 +75,8 @@ type PageId =
   | "newsfeed"
   | "newsletters"
   | "diagnostics"
-  | "production-tracking";
+  | "production-tracking"
+  | "sales-by-book";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
 
@@ -142,6 +144,7 @@ const NAV_POLES: NavPole[] = [
     items: [
       { key: "co-stock", label: "Stock & magasin", permission: "stock:consultation" },
       { key: "co-ventes", label: "Commercial & ventes", permission: "commercial:consultation" },
+      { key: "co-suivi-ventes", label: "Suivi des ventes par ouvrage", permission: "commercial:consultation" },
     ],
   },
   {
@@ -199,6 +202,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "pr-impression": { stage: "IMPRESSION", heading: "Impression" },
   "co-stock": { page: "stock" },
   "co-ventes": { page: "commercial" },
+  "co-suivi-ventes": { page: "sales-by-book" },
   "jf-contrats": { stage: "CONTRACTUALISATION", heading: "Contrats & droits d'auteur" },
   "jf-finance": { page: "finance" },
   "ad-rh": { page: "hr" },
@@ -637,6 +641,7 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
         {leaf && "page" in leaf && leaf.page === "production-tracking" && <ProductionTrackingPage />}
+        {leaf && "page" in leaf && leaf.page === "sales-by-book" && <SalesByBookPage />}
         </Suspense>
         )}
       </div>

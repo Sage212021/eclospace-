@@ -13,6 +13,7 @@ import { computeCustomerOutstandingBalance } from "../lib/finance.js";
 import { lookupTaxRatePct } from "../lib/taxRate.js";
 import { computeShippingFee, computeOrderWeightGrams } from "../lib/shipping.js";
 import { salesByBook, type Granularity } from "../lib/salesTracking.js";
+import { commissions, getCommissionRate, setCommissionRate, type CommissionGranularity } from "../lib/commissions.js";
 
 const customerSchema = z.object({
   category: z.nativeEnum(CustomerCategory),
@@ -240,6 +241,38 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ code: "validation_error", message: "Dates invalides (format attendu : AAAA-MM-JJ)." });
     }
     return reply.send(await salesByBook({ from, to, granularity }));
+  });
+
+  // Commissions commerciales : par commercial, taux appliqué (10 % par défaut),
+  // avec découpage semaine/mois/semestre/année. Consultation ouverte au
+  // commercial, à la finance et à la direction.
+  fastify.get("/api/v1/commercial/commissions", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
+    const q = request.query as { from?: string; to?: string; granularity?: string };
+    const allowed = ["week", "month", "semester", "year"];
+    const granularity = (allowed.includes(q.granularity ?? "") ? q.granularity : "month") as CommissionGranularity;
+    const from = q.from ? new Date(q.from) : undefined;
+    const to = q.to ? new Date(q.to) : undefined;
+    if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+      return reply.code(400).send({ code: "validation_error", message: "Dates invalides (format attendu : AAAA-MM-JJ)." });
+    }
+    return reply.send(await commissions({ from, to, granularity }));
+  });
+
+  // Taux de commission : lecture (tous profils commerciaux) / réglage (DAF).
+  fastify.get("/api/v1/commercial/commission-rate", { preHandler: requirePermission("commercial", "consultation") }, async (_request, reply) => {
+    return reply.send({ rate: await getCommissionRate() });
+  });
+  fastify.put("/api/v1/commercial/commission-rate", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+    const parsed = z.object({ rate: z.number().positive().max(1) }).safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Le taux doit être une fraction entre 0 et 1 (ex. 0.10 pour 10 %)." });
+    }
+    try {
+      const rate = await setCommissionRate(parsed.data.rate, { id: request.user!.id, ip: request.ip });
+      return reply.send({ ok: true, rate });
+    } catch (err) {
+      return reply.code(400).send({ code: "invalid_rate", message: err instanceof Error ? err.message : "Valeur invalide." });
+    }
   });
 
   fastify.get("/api/v1/discount-grids", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {

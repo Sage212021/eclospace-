@@ -35,6 +35,7 @@ const NewsFeedPage = lazy(() => import("./pages/NewsFeedPage").then((m) => ({ de
 const NewslettersPage = lazy(() => import("./pages/NewslettersPage").then((m) => ({ default: m.NewslettersPage })));
 const ProductionTrackingPage = lazy(() => import("./pages/ProductionTrackingPage").then((m) => ({ default: m.ProductionTrackingPage })));
 const SalesByBookPage = lazy(() => import("./pages/SalesByBookPage").then((m) => ({ default: m.SalesByBookPage })));
+const CommissionsPage = lazy(() => import("./pages/CommissionsPage").then((m) => ({ default: m.CommissionsPage })));
 
 // Court message affiché le temps qu'un écran se télécharge (en général une
 // fraction de seconde).
@@ -76,7 +77,8 @@ type PageId =
   | "newsletters"
   | "diagnostics"
   | "production-tracking"
-  | "sales-by-book";
+  | "sales-by-book"
+  | "commissions";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
 
@@ -145,6 +147,7 @@ const NAV_POLES: NavPole[] = [
       { key: "co-stock", label: "Stock & magasin", permission: "stock:consultation" },
       { key: "co-ventes", label: "Commercial & ventes", permission: "commercial:consultation" },
       { key: "co-suivi-ventes", label: "Suivi des ventes par ouvrage", permission: "commercial:consultation" },
+      { key: "co-commissions", label: "Commissions commerciales", permission: "commercial:consultation" },
     ],
   },
   {
@@ -203,6 +206,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "co-stock": { page: "stock" },
   "co-ventes": { page: "commercial" },
   "co-suivi-ventes": { page: "sales-by-book" },
+  "co-commissions": { page: "commissions" },
   "jf-contrats": { stage: "CONTRACTUALISATION", heading: "Contrats & droits d'auteur" },
   "jf-finance": { page: "finance" },
   "ad-rh": { page: "hr" },
@@ -642,6 +646,7 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
         {leaf && "page" in leaf && leaf.page === "production-tracking" && <ProductionTrackingPage />}
         {leaf && "page" in leaf && leaf.page === "sales-by-book" && <SalesByBookPage />}
+        {leaf && "page" in leaf && leaf.page === "commissions" && <CommissionsPage canSetRate={permissions.has("finance:administration")} />}
         </Suspense>
         )}
       </div>

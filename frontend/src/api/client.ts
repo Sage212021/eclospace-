@@ -3028,3 +3028,28 @@ export function getSalesByBook(params: { from?: string; to?: string; granularity
   if (params.to) q.set("to", params.to);
   return request<SalesTrackingResult>(`/api/v1/commercial/sales-by-book?${q.toString()}`);
 }
+
+// ── Commissions commerciales ─────────────────────────────────────────────────
+export type CommissionGranularity = "week" | "month" | "semester" | "year";
+export interface CommissionAgentRow { agent_id: string | null; agent_name: string; units: number; amount: number; commission: number; }
+export interface CommissionPeriodRow { period: string; units: number; amount: number; commission: number; }
+export interface CommissionResult {
+  rate: number;
+  granularity: CommissionGranularity;
+  by_agent: CommissionAgentRow[];
+  by_period: CommissionPeriodRow[];
+  totals: { units: number; amount: number; commission: number };
+}
+export function getCommissions(params: { from?: string; to?: string; granularity: CommissionGranularity }) {
+  const q = new URLSearchParams();
+  q.set("granularity", params.granularity);
+  if (params.from) q.set("from", params.from);
+  if (params.to) q.set("to", params.to);
+  return request<CommissionResult>(`/api/v1/commercial/commissions?${q.toString()}`);
+}
+export function getCommissionRate() {
+  return request<{ rate: number }>("/api/v1/commercial/commission-rate");
+}
+export function setCommissionRate(rate: number) {
+  return request<{ ok: true; rate: number }>("/api/v1/commercial/commission-rate", { method: "PUT", body: JSON.stringify({ rate }) });
+}

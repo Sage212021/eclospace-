@@ -36,6 +36,7 @@ const NewslettersPage = lazy(() => import("./pages/NewslettersPage").then((m) =>
 const ProductionTrackingPage = lazy(() => import("./pages/ProductionTrackingPage").then((m) => ({ default: m.ProductionTrackingPage })));
 const SalesByBookPage = lazy(() => import("./pages/SalesByBookPage").then((m) => ({ default: m.SalesByBookPage })));
 const CommissionsPage = lazy(() => import("./pages/CommissionsPage").then((m) => ({ default: m.CommissionsPage })));
+const AuthorRoyaltiesPage = lazy(() => import("./pages/AuthorRoyaltiesPage").then((m) => ({ default: m.AuthorRoyaltiesPage })));
 
 // Court message affiché le temps qu'un écran se télécharge (en général une
 // fraction de seconde).
@@ -78,7 +79,8 @@ type PageId =
   | "diagnostics"
   | "production-tracking"
   | "sales-by-book"
-  | "commissions";
+  | "commissions"
+  | "author-royalties";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
 
@@ -155,6 +157,7 @@ const NAV_POLES: NavPole[] = [
     items: [
       { key: "jf-contrats", label: "Contrats & droits d'auteur", permission: "manuscripts:consultation" },
       { key: "jf-finance", label: "Finance & comptabilité", permission: "finance:consultation" },
+      { key: "jf-droits-annuels", label: "États annuels de droits d'auteur", permission: "royalties:consultation" },
     ],
   },
   {
@@ -209,6 +212,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "co-commissions": { page: "commissions" },
   "jf-contrats": { stage: "CONTRACTUALISATION", heading: "Contrats & droits d'auteur" },
   "jf-finance": { page: "finance" },
+  "jf-droits-annuels": { page: "author-royalties" },
   "ad-rh": { page: "hr" },
   "ad-users": { page: "users-roles" },
   "ad-rights": { page: "rights-matrix" },
@@ -647,6 +651,7 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "production-tracking" && <ProductionTrackingPage />}
         {leaf && "page" in leaf && leaf.page === "sales-by-book" && <SalesByBookPage />}
         {leaf && "page" in leaf && leaf.page === "commissions" && <CommissionsPage canSetRate={permissions.has("finance:administration")} />}
+        {leaf && "page" in leaf && leaf.page === "author-royalties" && <AuthorRoyaltiesPage canConfigure={permissions.has("finance:administration")} canGenerate={permissions.has("royalties:validation")} />}
         </Suspense>
         )}
       </div>

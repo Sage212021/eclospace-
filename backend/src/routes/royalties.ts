@@ -6,6 +6,9 @@ import { writeAuditLog } from "../lib/audit.js";
 import { assertPeriodOpen, PeriodClosedError } from "../lib/accountingPeriod.js";
 import { sendMail, senderIdentity } from "../lib/mailer.js";
 import { buildRoyaltyStatementEmail } from "../lib/documentEmail.js";
+import { authorRoyaltiesByYear } from "../lib/authorRoyalties.js";
+import { getRoyaltyWithholdingEnabled, setRoyaltyWithholdingEnabled } from "../lib/royaltySettings.js";
+import { buildContractStatement, generateYearEndStatements, royaltyYearEndStatus } from "../lib/royaltyYearEnd.js";
 
 const statementEmailSchema = z.object({
   to: z.string().email().optional(),
@@ -41,6 +44,68 @@ async function computeSettledAmount(tx: typeof prisma, statementId: string): Pro
 // ordres de paiement, en aval des royalty_entries générées automatiquement
 // par les ventes et retours (lib/royalty.ts).
 export default async function royaltiesRoutes(fastify: FastifyInstance) {
+  // État annuel des droits d'auteur PAR AUTEUR (tous ses ouvrages) : droits
+  // acquis par livre avec le taux appliqué + récapitulatif fiscal de l'année
+  // (versé brut, retenue à la source, net). Sert l'impression de l'état annuel.
+  fastify.get(
+    "/api/v1/royalties/by-author",
+    { preHandler: requirePermission("royalties", "consultation") },
+    async (request, reply) => {
+      const q = request.query as { year?: string; partner_id?: string };
+      const year = Number.isInteger(Number(q.year)) && Number(q.year) > 2000 ? Number(q.year) : new Date().getFullYear();
+      const result = await authorRoyaltiesByYear({ year, partnerId: q.partner_id });
+      return reply.send(result);
+    },
+  );
+
+  // Réglage de la retenue à la source (activée/désactivée) : lecture pour tout
+  // consultant des droits, écriture réservée à la DAF (finance:administration).
+  fastify.get(
+    "/api/v1/royalties/withholding-enabled",
+    { preHandler: requirePermission("royalties", "consultation") },
+    async (_request, reply) => {
+      return reply.send({ enabled: await getRoyaltyWithholdingEnabled() });
+    },
+  );
+
+  fastify.put(
+    "/api/v1/royalties/withholding-enabled",
+    { preHandler: requirePermission("finance", "administration") },
+    async (request, reply) => {
+      const parsed = z.object({ enabled: z.boolean() }).safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champ « enabled » (vrai/faux) requis.", details: parsed.error.issues });
+      }
+      const enabled = await setRoyaltyWithholdingEnabled(parsed.data.enabled, { id: request.user!.id, ip: request.ip });
+      return reply.send({ enabled });
+    },
+  );
+
+  // Génération de fin d'année : état affiché (échéance, déjà généré ou non,
+  // récapitulatif) et déclenchement manuel d'une année (dissociée) par un
+  // responsable habilité — la génération automatique « à la connexion » reste
+  // gérée par le sweep (lib/royaltyYearEnd.ts).
+  fastify.get(
+    "/api/v1/royalties/year-end",
+    { preHandler: requirePermission("royalties", "consultation") },
+    async (_request, reply) => {
+      return reply.send(await royaltyYearEndStatus());
+    },
+  );
+
+  fastify.post(
+    "/api/v1/royalties/year-end/generate",
+    { preHandler: requirePermission("royalties", "validation") },
+    async (request, reply) => {
+      const parsed = z.object({ year: z.number().int().min(2000).max(2100) }).safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Année invalide (AAAA).", details: parsed.error.issues });
+      }
+      const created = await generateYearEndStatements(parsed.data.year, request.user!.id);
+      return reply.send({ year: parsed.data.year, statements_created: created });
+    },
+  );
+
   fastify.get(
     "/api/v1/contracts/:id/royalty-entries",
     { preHandler: requirePermission("royalties", "consultation") },
@@ -244,40 +309,7 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
       try {
         const statement = await prisma.$transaction(async (tx) => {
           await assertPeriodOpen(tx);
-          const entries = await tx.royaltyEntry.findMany({
-            where: { contractId: id, statementId: null, computedAt: { gte: periodStart, lt: periodEnd } },
-          });
-          const totalEarned = entries.reduce((sum, e) => sum + Number(e.amount), 0);
-
-          const priorStatements = await tx.royaltyStatement.aggregate({
-            where: { contractId: id },
-            _sum: { advanceRecouped: true },
-          });
-          const advanceAmount = Number(contract.royaltyTerms!.advanceAmount ?? 0);
-          const alreadyRecouped = Number(priorStatements._sum.advanceRecouped ?? 0);
-          const remainingAdvance = Math.max(advanceAmount - alreadyRecouped, 0);
-          const advanceRecouped = Math.min(Math.max(totalEarned, 0), remainingAdvance);
-          const balanceDue = Math.round((totalEarned - advanceRecouped) * 100) / 100;
-
-          const created = await tx.royaltyStatement.create({
-            data: {
-              contractId: id,
-              periodStart,
-              periodEnd,
-              totalEarned: Math.round(totalEarned * 100) / 100,
-              advanceRecouped: Math.round(advanceRecouped * 100) / 100,
-              balanceDue,
-              status: "issued",
-              createdBy: request.user!.id,
-            },
-          });
-
-          await tx.royaltyEntry.updateMany({
-            where: { id: { in: entries.map((e) => e.id) } },
-            data: { statementId: created.id },
-          });
-
-          return created;
+          return buildContractStatement(tx, contract, periodStart, periodEnd, request.user!.id);
         });
 
         await writeAuditLog({
@@ -341,7 +373,10 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const defaultWithholdingPct = Number(statement.contract.royaltyTerms?.taxWithholdingPct ?? 0);
+      // La retenue à la source ne s'applique que si l'option est activée (réglage
+      // DAF). Désactivée, la retenue par défaut est nulle — sauf montant explicite.
+      const withholdingEnabled = await getRoyaltyWithholdingEnabled();
+      const defaultWithholdingPct = withholdingEnabled ? Number(statement.contract.royaltyTerms?.taxWithholdingPct ?? 0) : 0;
       const taxWithheld = parsed.data.tax_withheld ?? Math.round(((grossAmount * defaultWithholdingPct) / 100) * 100) / 100;
       const netAmount = Math.round((grossAmount - taxWithheld) * 100) / 100;
       if (netAmount <= 0) {

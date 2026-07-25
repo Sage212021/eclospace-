@@ -349,6 +349,74 @@ export function printRoyaltyStatement(st: RoyaltyStatementDetail, opts?: PrintOp
   openPrintWindow(`Relevé de droits ${st.contract.contractNumber}`, body, opts);
 }
 
+export interface AuthorRoyaltyStatementData {
+  authorName: string;
+  year: number;
+  books: { title: string; contractNumber: string; units: number; base: number; rate: number; earned: number }[];
+  earned: number; // total droits acquis dans l'année
+  paidGross: number; // droits versés bruts dans l'année
+  taxWithheld: number; // retenue à la source dans l'année
+  paidNet: number; // net versé dans l'année
+  remaining?: number; // reste à verser (indicatif) = droits acquis − versé brut
+}
+
+// État ANNUEL des droits d'auteur d'un auteur (demande opérateur) : consolide
+// tous ses ouvrages sur l'année, avec le taux de droit propre à chaque livre,
+// puis le récapitulatif fiscal (droits versés bruts, retenue à la source, net).
+// Document remis à l'auteur — utile à sa déclaration (réglementation
+// camerounaise sur le droit d'auteur et la retenue à la source). Imprimable/PDF.
+export function printAuthorRoyaltyStatement(d: AuthorRoyaltyStatementData, opts?: PrintOpts): void {
+  const cur = "XAF";
+  const rows = d.books
+    .map(
+      (b) => `<tr>
+        <td>${escapeHtml(b.title)}${b.contractNumber ? ` <span class="num" style="color:#6b7280;font-weight:400">(${escapeHtml(b.contractNumber)})</span>` : ""}</td>
+        <td class="r num">${b.units.toLocaleString("fr-FR")}</td>
+        <td class="r num">${money(b.base, cur)}</td>
+        <td class="r num">${(b.rate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %</td>
+        <td class="r num">${money(b.earned, cur)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const body = `
+    <div class="doc__title">État annuel des droits d'auteur</div>
+    <div class="meta">
+      <span>Année : <b class="num">${d.year}</b></span>
+      <span>Édité le <b class="num">${new Date().toLocaleDateString("fr-FR")}</b></span>
+    </div>
+    <div class="party">
+      <div class="party__label">Auteur</div>
+      <div class="party__name">${escapeHtml(d.authorName)}</div>
+    </div>
+    <table class="lines" style="margin-top:12px">
+      <thead><tr><th>Ouvrage</th><th class="r">Exempl.</th><th class="r">Assiette</th><th class="r">Taux</th><th class="r">Droits acquis</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="5">Aucun droit acquis sur l'année.</td></tr>`}</tbody>
+    </table>
+    <div class="totals">
+      <div><span>Droits acquis dans l'année</span><span class="num">${money(d.earned, cur)}</span></div>
+    </div>
+    <div style="clear:both"></div>
+    <div class="party__label" style="margin-top:22px">Récapitulatif fiscal de l'année</div>
+    <div class="totals" style="margin-top:6px">
+      <div><span>Droits versés (brut)</span><span class="num">${money(d.paidGross, cur)}</span></div>
+      ${d.taxWithheld > 0 ? `<div><span>Retenue à la source</span><span class="num">− ${money(d.taxWithheld, cur)}</span></div>` : ""}
+      <div class="ttc"><span>Net versé à l'auteur</span><span class="num">${money(d.paidNet, cur)}</span></div>
+      ${d.remaining != null && d.remaining > 0 ? `<div style="margin-top:6px"><span>Reste à verser (indicatif)</span><span class="num">${money(d.remaining, cur)}</span></div>` : ""}
+    </div>
+    <div style="margin-top:26px;font-size:10.5px;color:#6b7280;line-height:1.6">
+      « Droits acquis » : droits générés par les ventes de l'année, par ouvrage, au taux contractuel propre à chaque livre.
+      « Droits versés » : montants effectivement payés à l'auteur dans l'année${d.taxWithheld > 0 ? ", après retenue à la source" : " (aucune retenue à la source appliquée)"}.
+      Document établi au titre de la réglementation camerounaise sur le droit d'auteur ; à conserver pour la déclaration fiscale.
+    </div>
+    <div style="margin-top:32px; display:flex; gap:60px; flex-wrap:wrap">
+      <div style="flex:1; min-width:200px"><div class="party__label">L'éditeur</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature &amp; cachet</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">L'auteur</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Reçu — signature</div></div>
+    </div>`;
+
+  openPrintWindow(`État annuel des droits — ${d.authorName} — ${d.year}`, body, opts);
+}
+
 const PO_STATUS_LABELS: Record<string, string> = {
   draft: "Brouillon",
   approved: "Approuvé",

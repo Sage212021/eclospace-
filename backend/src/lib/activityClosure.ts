@@ -51,7 +51,7 @@ function isoWeekday(d: Date): number {
 // selon l'horaire de la maison et non férié. On part de la fin du mois et on
 // remonte. Si tout le mois était chômé (cas théorique), on retient le dernier
 // jour calendaire pour ne jamais renvoyer de date vide.
-async function lastWorkingDayOfMonth(year: number, monthIndex: number): Promise<Date> {
+export async function lastWorkingDayOfMonth(year: number, monthIndex: number): Promise<Date> {
   const ref = new Date(year, monthIndex, 1); // normalise un éventuel débordement (mois 12…)
   const y = ref.getFullYear();
   const m = ref.getMonth();

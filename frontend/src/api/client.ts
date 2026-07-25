@@ -1616,6 +1616,72 @@ export function listRoyaltyStatements(contractId?: string) {
   return request<RoyaltyStatement[]>(`/api/v1/royalty-statements${query}`);
 }
 
+// État annuel des droits d'auteur PAR AUTEUR : tous les ouvrages d'un auteur sur
+// une année, avec le taux par livre (droits acquis) + récapitulatif fiscal
+// (versé brut, retenue à la source, net). Alimente l'impression de l'état annuel.
+export interface AuthorRoyaltyBook {
+  contract_id: string;
+  contract_number: string;
+  title: string;
+  units: number;
+  base: number;
+  rate: number;
+  earned: number;
+}
+export interface AuthorRoyaltyRow {
+  partner_id: string;
+  author_name: string;
+  books: AuthorRoyaltyBook[];
+  earned: number;
+  paid_gross: number;
+  tax_withheld: number;
+  paid_net: number;
+  remaining: number;
+}
+export interface AuthorRoyaltyResult {
+  year: number;
+  by_author: AuthorRoyaltyRow[];
+  totals: { earned: number; paid_gross: number; tax_withheld: number; paid_net: number; remaining: number };
+}
+export function getAuthorRoyalties(params: { year?: number; partner_id?: string }) {
+  const q = new URLSearchParams();
+  if (params.year) q.set("year", String(params.year));
+  if (params.partner_id) q.set("partner_id", params.partner_id);
+  const query = q.toString() ? `?${q}` : "";
+  return request<AuthorRoyaltyResult>(`/api/v1/royalties/by-author${query}`);
+}
+
+// Retenue à la source sur les droits d'auteur : option activable/désactivable
+// (réglage DAF). Décochée, aucune retenue par défaut n'entre dans les documents.
+export function getRoyaltyWithholdingEnabled() {
+  return request<{ enabled: boolean }>(`/api/v1/royalties/withholding-enabled`);
+}
+export function setRoyaltyWithholdingEnabled(enabled: boolean) {
+  return request<{ enabled: boolean }>(`/api/v1/royalties/withholding-enabled`, { method: "PUT", body: JSON.stringify({ enabled }) });
+}
+
+// Génération de fin d'année des états de droits d'auteur : état d'avancement
+// (échéance au dernier jour ouvrable, déjà généré ou non, récapitulatif) et
+// déclenchement manuel d'une année.
+export interface RoyaltyYearEndStatus {
+  year: number;
+  closure_date: string;
+  days_until_closure: number;
+  is_generated: boolean;
+  generated_at: string | null;
+  statements_created: number | null;
+  authors: number;
+  total_earned: number;
+  total_paid_gross: number;
+  total_remaining: number;
+}
+export function getRoyaltyYearEndStatus() {
+  return request<RoyaltyYearEndStatus>(`/api/v1/royalties/year-end`);
+}
+export function generateRoyaltyYearEnd(year: number) {
+  return request<{ year: number; statements_created: number }>(`/api/v1/royalties/year-end/generate`, { method: "POST", body: JSON.stringify({ year }) });
+}
+
 // Relevé détaillé (pour l'impression) : lignes de calcul des droits.
 export interface RoyaltyEntry {
   id: string;

@@ -71,11 +71,11 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
         <div>Document généré par Éclospace le ${escapeHtml(now)}.</div>
       </div>`;
 
-  // Filigrane d'authenticité : l'ampoule du papier à en-tête, en très léger, au
-  // centre — uniquement sur la version numérique élégante (ni en-tête intégré,
-  // qui la porte déjà, ni papier vierge, imprimé sur le papier physique).
-  const digital = !embed && !letterhead;
-  const watermarkStyle = digital
+  // Filigrane d'authenticité : l'ampoule Éclosion, en très léger, au centre.
+  // Décision opérateur du 25/07/2026 : présent en fond sur TOUTE impression
+  // générée, de façon permanente. Seule exception, le mode « en-tête intégré »,
+  // dont le fond A4 officiel porte déjà l'ampoule (inutile de la superposer).
+  const watermarkStyle = !embed
     ? `body { background: url("${window.location.origin}/eclosion-filigrane.png") center 54% / 52% auto no-repeat; }`
     : "";
 

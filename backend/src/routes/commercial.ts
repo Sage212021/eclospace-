@@ -12,6 +12,7 @@ import { PeriodClosedError } from "../lib/accountingPeriod.js";
 import { computeCustomerOutstandingBalance } from "../lib/finance.js";
 import { lookupTaxRatePct } from "../lib/taxRate.js";
 import { computeShippingFee, computeOrderWeightGrams } from "../lib/shipping.js";
+import { salesByBook, type Granularity } from "../lib/salesTracking.js";
 
 const customerSchema = z.object({
   category: z.nativeEnum(CustomerCategory),
@@ -226,6 +227,20 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       return reply.code(201).send(discount);
     },
   );
+
+  // Suivi des ventes par ouvrage : sorties vs ventes réelles (montant encaissé)
+  // et écart (GAP), avec découpage semaine/mois. Réservé aux profils commerciaux,
+  // finance et direction (commercial:consultation). Dates optionnelles (ISO).
+  fastify.get("/api/v1/commercial/sales-by-book", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
+    const q = request.query as { from?: string; to?: string; granularity?: string };
+    const granularity: Granularity = q.granularity === "week" ? "week" : "month";
+    const from = q.from ? new Date(q.from) : undefined;
+    const to = q.to ? new Date(q.to) : undefined;
+    if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+      return reply.code(400).send({ code: "validation_error", message: "Dates invalides (format attendu : AAAA-MM-JJ)." });
+    }
+    return reply.send(await salesByBook({ from, to, granularity }));
+  });
 
   fastify.get("/api/v1/discount-grids", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
     const grids = await prisma.discountGrid.findMany();

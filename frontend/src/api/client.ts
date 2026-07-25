@@ -3003,3 +3003,28 @@ export function setSitePublished(manuscriptId: string, published: boolean, url?:
     { method: "POST", body: JSON.stringify({ published, url: url ?? "" }) },
   );
 }
+
+// ── Suivi des ventes par ouvrage (sorties vs ventes réelles + écart) ─────────
+export interface SalesTrackingRow {
+  key: string;
+  label: string;
+  units_out: number;
+  units_sold: number;
+  amount: number;
+  gap: number;
+}
+export interface SalesTrackingResult {
+  granularity: "week" | "month";
+  from: string | null;
+  to: string | null;
+  by_book: SalesTrackingRow[];
+  by_period: SalesTrackingRow[];
+  totals: { units_out: number; units_sold: number; amount: number; gap: number };
+}
+export function getSalesByBook(params: { from?: string; to?: string; granularity: "week" | "month" }) {
+  const q = new URLSearchParams();
+  q.set("granularity", params.granularity);
+  if (params.from) q.set("from", params.from);
+  if (params.to) q.set("to", params.to);
+  return request<SalesTrackingResult>(`/api/v1/commercial/sales-by-book?${q.toString()}`);
+}

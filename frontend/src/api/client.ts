@@ -1616,6 +1616,40 @@ export function listRoyaltyStatements(contractId?: string) {
   return request<RoyaltyStatement[]>(`/api/v1/royalty-statements${query}`);
 }
 
+// État annuel des droits d'auteur PAR AUTEUR : tous les ouvrages d'un auteur sur
+// une année, avec le taux par livre (droits acquis) + récapitulatif fiscal
+// (versé brut, retenue à la source, net). Alimente l'impression de l'état annuel.
+export interface AuthorRoyaltyBook {
+  contract_id: string;
+  contract_number: string;
+  title: string;
+  units: number;
+  base: number;
+  rate: number;
+  earned: number;
+}
+export interface AuthorRoyaltyRow {
+  partner_id: string;
+  author_name: string;
+  books: AuthorRoyaltyBook[];
+  earned: number;
+  paid_gross: number;
+  tax_withheld: number;
+  paid_net: number;
+}
+export interface AuthorRoyaltyResult {
+  year: number;
+  by_author: AuthorRoyaltyRow[];
+  totals: { earned: number; paid_gross: number; tax_withheld: number; paid_net: number };
+}
+export function getAuthorRoyalties(params: { year?: number; partner_id?: string }) {
+  const q = new URLSearchParams();
+  if (params.year) q.set("year", String(params.year));
+  if (params.partner_id) q.set("partner_id", params.partner_id);
+  const query = q.toString() ? `?${q}` : "";
+  return request<AuthorRoyaltyResult>(`/api/v1/royalties/by-author${query}`);
+}
+
 // Relevé détaillé (pour l'impression) : lignes de calcul des droits.
 export interface RoyaltyEntry {
   id: string;

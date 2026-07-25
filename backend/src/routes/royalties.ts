@@ -6,6 +6,7 @@ import { writeAuditLog } from "../lib/audit.js";
 import { assertPeriodOpen, PeriodClosedError } from "../lib/accountingPeriod.js";
 import { sendMail, senderIdentity } from "../lib/mailer.js";
 import { buildRoyaltyStatementEmail } from "../lib/documentEmail.js";
+import { authorRoyaltiesByYear } from "../lib/authorRoyalties.js";
 
 const statementEmailSchema = z.object({
   to: z.string().email().optional(),
@@ -41,6 +42,20 @@ async function computeSettledAmount(tx: typeof prisma, statementId: string): Pro
 // ordres de paiement, en aval des royalty_entries générées automatiquement
 // par les ventes et retours (lib/royalty.ts).
 export default async function royaltiesRoutes(fastify: FastifyInstance) {
+  // État annuel des droits d'auteur PAR AUTEUR (tous ses ouvrages) : droits
+  // acquis par livre avec le taux appliqué + récapitulatif fiscal de l'année
+  // (versé brut, retenue à la source, net). Sert l'impression de l'état annuel.
+  fastify.get(
+    "/api/v1/royalties/by-author",
+    { preHandler: requirePermission("royalties", "consultation") },
+    async (request, reply) => {
+      const q = request.query as { year?: string; partner_id?: string };
+      const year = Number.isInteger(Number(q.year)) && Number(q.year) > 2000 ? Number(q.year) : new Date().getFullYear();
+      const result = await authorRoyaltiesByYear({ year, partnerId: q.partner_id });
+      return reply.send(result);
+    },
+  );
+
   fastify.get(
     "/api/v1/contracts/:id/royalty-entries",
     { preHandler: requirePermission("royalties", "consultation") },

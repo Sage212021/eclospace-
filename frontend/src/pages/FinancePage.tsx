@@ -57,6 +57,7 @@ import { Button } from "../components/Button";
 import { IconFinance } from "../components/icons";
 import { printInvoice, printRoyaltyStatement, type PrintOpts } from "../lib/print";
 import { DocPrintMenu } from "../components/DocPrintMenu";
+import { AccountingExportSection } from "../components/AccountingExportSection";
 
 const ZONE_LABELS: Record<ShippingZone, string> = {
   yaounde: "Yaoundé",
@@ -366,6 +367,9 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
           </div>
         )}
       </Card>
+
+      {/* Ch. 18 §18.10-18.11 — Export comptable pour le cabinet externe (D-006) */}
+      <AccountingExportSection canAdminister={canAdminister} />
 
       {/* Ch. 18 §18.3 — Encours et relance client */}
       <Card title={t("fin.outstanding", "Encours et relance client")} icon={<IconFinance />} subtitle={t("fin.outstanding_sub", "Balance âgée d'un client et relances.")}>

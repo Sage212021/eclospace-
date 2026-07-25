@@ -1385,6 +1385,30 @@ export function setInvoiceSchedule(id: string, installments: { due_date: string;
   return request<InvoiceSchedule>(`/api/v1/invoices/${id}/schedule`, { method: "POST", body: JSON.stringify({ installments }) });
 }
 
+// Export comptable normalisé (Ch. 18 §18.10, Option B) : les écritures d'un mois
+// (factures, encaissements, dépenses) avec comptes SYSCOHADA, pour le comptable
+// externe. Le CSV est renvoyé prêt à enregistrer, avec un contrôle d'exhaustivité
+// (nombre de lignes + empreinte). Les numéros de compte sont INDICATIFS.
+export interface AccountingExport {
+  id: string;
+  periodKey: string;
+  format: string;
+  lineCount: number;
+  checksum: string;
+  createdBy: string | null;
+  createdAt: string;
+}
+export interface AccountingExportResult extends AccountingExport {
+  csv: string;
+  chart_of_accounts_status: string;
+}
+export function listAccountingExports() {
+  return request<AccountingExport[]>(`/api/v1/accounting/exports`);
+}
+export function createAccountingExport(periodKey: string) {
+  return request<AccountingExportResult>(`/api/v1/accounting/exports`, { method: "POST", body: JSON.stringify({ period_key: periodKey }) });
+}
+
 // Ch. 18 : Finance et comptabilité (Lot 5).
 export interface Invoice {
   id: string;

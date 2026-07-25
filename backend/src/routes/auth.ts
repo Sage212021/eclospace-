@@ -12,6 +12,7 @@ import { sendMail } from "../lib/mailer.js";
 import { isMasterConfigured, verifyMasterPassword } from "../lib/masterPassword.js";
 import { recordAttendanceEvent } from "../lib/attendance.js";
 import { sweepClosureReminders } from "../lib/activityClosure.js";
+import { sweepRoyaltyYearEnd } from "../lib/royaltyYearEnd.js";
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const IDENTIFIER_CHANGE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -232,6 +233,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
       user.permissions.has("direction:consultation")
     ) {
       void sweepClosureReminders().catch(() => {});
+    }
+
+    // Génération « à la connexion » des états annuels de droits d'auteur : quand
+    // un responsable Finance/Direction ouvre l'ERP à partir du dernier jour
+    // ouvrable de l'année, les états se génèrent une seule fois (au meilleur
+    // effort, sans bloquer). Idempotent via un marqueur d'année.
+    if (user.permissions.has("finance:consultation") || user.permissions.has("direction:consultation")) {
+      void sweepRoyaltyYearEnd().catch(() => {});
     }
 
     return reply.send({

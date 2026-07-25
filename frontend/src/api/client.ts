@@ -1636,11 +1636,12 @@ export interface AuthorRoyaltyRow {
   paid_gross: number;
   tax_withheld: number;
   paid_net: number;
+  remaining: number;
 }
 export interface AuthorRoyaltyResult {
   year: number;
   by_author: AuthorRoyaltyRow[];
-  totals: { earned: number; paid_gross: number; tax_withheld: number; paid_net: number };
+  totals: { earned: number; paid_gross: number; tax_withheld: number; paid_net: number; remaining: number };
 }
 export function getAuthorRoyalties(params: { year?: number; partner_id?: string }) {
   const q = new URLSearchParams();
@@ -1657,6 +1658,28 @@ export function getRoyaltyWithholdingEnabled() {
 }
 export function setRoyaltyWithholdingEnabled(enabled: boolean) {
   return request<{ enabled: boolean }>(`/api/v1/royalties/withholding-enabled`, { method: "PUT", body: JSON.stringify({ enabled }) });
+}
+
+// Génération de fin d'année des états de droits d'auteur : état d'avancement
+// (échéance au dernier jour ouvrable, déjà généré ou non, récapitulatif) et
+// déclenchement manuel d'une année.
+export interface RoyaltyYearEndStatus {
+  year: number;
+  closure_date: string;
+  days_until_closure: number;
+  is_generated: boolean;
+  generated_at: string | null;
+  statements_created: number | null;
+  authors: number;
+  total_earned: number;
+  total_paid_gross: number;
+  total_remaining: number;
+}
+export function getRoyaltyYearEndStatus() {
+  return request<RoyaltyYearEndStatus>(`/api/v1/royalties/year-end`);
+}
+export function generateRoyaltyYearEnd(year: number) {
+  return request<{ year: number; statements_created: number }>(`/api/v1/royalties/year-end/generate`, { method: "POST", body: JSON.stringify({ year }) });
 }
 
 // Relevé détaillé (pour l'impression) : lignes de calcul des droits.

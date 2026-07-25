@@ -32,11 +32,12 @@ export interface AuthorRoyaltyRow {
   paid_gross: number; // droits versés bruts dans l'année
   tax_withheld: number; // retenue à la source dans l'année
   paid_net: number; // net versé dans l'année
+  remaining: number; // reste à verser (indicatif) = droits acquis − versé brut, borné à 0
 }
 export interface AuthorRoyaltyResult {
   year: number;
   by_author: AuthorRoyaltyRow[];
-  totals: { earned: number; paid_gross: number; tax_withheld: number; paid_net: number };
+  totals: { earned: number; paid_gross: number; tax_withheld: number; paid_net: number; remaining: number };
 }
 
 type Book = { contract_id: string; contract_number: string; title: string; units: number; base: number; earned: number };
@@ -133,6 +134,7 @@ export async function authorRoyaltiesByYear(opts: { year: number; partnerId?: st
       paid_gross: round2(a.paid_gross),
       tax_withheld: round2(a.tax_withheld),
       paid_net: round2(a.paid_net),
+      remaining: round2(Math.max(a.earned - a.paid_gross, 0)),
     }))
     .sort((a, b) => b.earned - a.earned);
 
@@ -142,8 +144,9 @@ export async function authorRoyaltiesByYear(opts: { year: number; partnerId?: st
       paid_gross: round2(t.paid_gross + r.paid_gross),
       tax_withheld: round2(t.tax_withheld + r.tax_withheld),
       paid_net: round2(t.paid_net + r.paid_net),
+      remaining: round2(t.remaining + r.remaining),
     }),
-    { earned: 0, paid_gross: 0, tax_withheld: 0, paid_net: 0 },
+    { earned: 0, paid_gross: 0, tax_withheld: 0, paid_net: 0, remaining: 0 },
   );
 
   return { year, by_author, totals };

@@ -8,6 +8,7 @@ import { sendMail, senderIdentity } from "../lib/mailer.js";
 import { buildRoyaltyStatementEmail } from "../lib/documentEmail.js";
 import { authorRoyaltiesByYear } from "../lib/authorRoyalties.js";
 import { getRoyaltyWithholdingEnabled, setRoyaltyWithholdingEnabled } from "../lib/royaltySettings.js";
+import { buildContractStatement, generateYearEndStatements, royaltyYearEndStatus } from "../lib/royaltyYearEnd.js";
 
 const statementEmailSchema = z.object({
   to: z.string().email().optional(),
@@ -77,6 +78,31 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
       }
       const enabled = await setRoyaltyWithholdingEnabled(parsed.data.enabled, { id: request.user!.id, ip: request.ip });
       return reply.send({ enabled });
+    },
+  );
+
+  // Génération de fin d'année : état affiché (échéance, déjà généré ou non,
+  // récapitulatif) et déclenchement manuel d'une année (dissociée) par un
+  // responsable habilité — la génération automatique « à la connexion » reste
+  // gérée par le sweep (lib/royaltyYearEnd.ts).
+  fastify.get(
+    "/api/v1/royalties/year-end",
+    { preHandler: requirePermission("royalties", "consultation") },
+    async (_request, reply) => {
+      return reply.send(await royaltyYearEndStatus());
+    },
+  );
+
+  fastify.post(
+    "/api/v1/royalties/year-end/generate",
+    { preHandler: requirePermission("royalties", "validation") },
+    async (request, reply) => {
+      const parsed = z.object({ year: z.number().int().min(2000).max(2100) }).safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Année invalide (AAAA).", details: parsed.error.issues });
+      }
+      const created = await generateYearEndStatements(parsed.data.year, request.user!.id);
+      return reply.send({ year: parsed.data.year, statements_created: created });
     },
   );
 
@@ -283,40 +309,7 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
       try {
         const statement = await prisma.$transaction(async (tx) => {
           await assertPeriodOpen(tx);
-          const entries = await tx.royaltyEntry.findMany({
-            where: { contractId: id, statementId: null, computedAt: { gte: periodStart, lt: periodEnd } },
-          });
-          const totalEarned = entries.reduce((sum, e) => sum + Number(e.amount), 0);
-
-          const priorStatements = await tx.royaltyStatement.aggregate({
-            where: { contractId: id },
-            _sum: { advanceRecouped: true },
-          });
-          const advanceAmount = Number(contract.royaltyTerms!.advanceAmount ?? 0);
-          const alreadyRecouped = Number(priorStatements._sum.advanceRecouped ?? 0);
-          const remainingAdvance = Math.max(advanceAmount - alreadyRecouped, 0);
-          const advanceRecouped = Math.min(Math.max(totalEarned, 0), remainingAdvance);
-          const balanceDue = Math.round((totalEarned - advanceRecouped) * 100) / 100;
-
-          const created = await tx.royaltyStatement.create({
-            data: {
-              contractId: id,
-              periodStart,
-              periodEnd,
-              totalEarned: Math.round(totalEarned * 100) / 100,
-              advanceRecouped: Math.round(advanceRecouped * 100) / 100,
-              balanceDue,
-              status: "issued",
-              createdBy: request.user!.id,
-            },
-          });
-
-          await tx.royaltyEntry.updateMany({
-            where: { id: { in: entries.map((e) => e.id) } },
-            data: { statementId: created.id },
-          });
-
-          return created;
+          return buildContractStatement(tx, contract, periodStart, periodEnd, request.user!.id);
         });
 
         await writeAuditLog({

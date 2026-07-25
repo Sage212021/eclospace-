@@ -357,6 +357,7 @@ export interface AuthorRoyaltyStatementData {
   paidGross: number; // droits versés bruts dans l'année
   taxWithheld: number; // retenue à la source dans l'année
   paidNet: number; // net versé dans l'année
+  remaining?: number; // reste à verser (indicatif) = droits acquis − versé brut
 }
 
 // État ANNUEL des droits d'auteur d'un auteur (demande opérateur) : consolide
@@ -401,6 +402,7 @@ export function printAuthorRoyaltyStatement(d: AuthorRoyaltyStatementData, opts?
       <div><span>Droits versés (brut)</span><span class="num">${money(d.paidGross, cur)}</span></div>
       ${d.taxWithheld > 0 ? `<div><span>Retenue à la source</span><span class="num">− ${money(d.taxWithheld, cur)}</span></div>` : ""}
       <div class="ttc"><span>Net versé à l'auteur</span><span class="num">${money(d.paidNet, cur)}</span></div>
+      ${d.remaining != null && d.remaining > 0 ? `<div style="margin-top:6px"><span>Reste à verser (indicatif)</span><span class="num">${money(d.remaining, cur)}</span></div>` : ""}
     </div>
     <div style="margin-top:26px;font-size:10.5px;color:#6b7280;line-height:1.6">
       « Droits acquis » : droits générés par les ventes de l'année, par ouvrage, au taux contractuel propre à chaque livre.

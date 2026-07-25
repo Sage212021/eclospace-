@@ -1,5 +1,13 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { getAuthorRoyalties, getRoyaltyWithholdingEnabled, setRoyaltyWithholdingEnabled, type AuthorRoyaltyResult } from "../api/client";
+import {
+  getAuthorRoyalties,
+  getRoyaltyWithholdingEnabled,
+  setRoyaltyWithholdingEnabled,
+  getRoyaltyYearEndStatus,
+  generateRoyaltyYearEnd,
+  type AuthorRoyaltyResult,
+  type RoyaltyYearEndStatus,
+} from "../api/client";
 import { Card } from "../components/Card";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printAuthorRoyaltyStatement } from "../lib/print";
@@ -12,7 +20,7 @@ import { useI18n } from "../i18n";
 const money = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF", maximumFractionDigits: 0 }).format(n);
 const pct = (r: number) => `${(r * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %`;
 
-export function AuthorRoyaltiesPage({ canConfigure = false }: { canConfigure?: boolean }) {
+export function AuthorRoyaltiesPage({ canConfigure = false, canGenerate = false }: { canConfigure?: boolean; canGenerate?: boolean }) {
   const { t } = useI18n();
   const thisYear = useMemo(() => new Date().getFullYear(), []);
   const [year, setYear] = useState(thisYear);
@@ -21,6 +29,8 @@ export function AuthorRoyaltiesPage({ canConfigure = false }: { canConfigure?: b
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [withholding, setWithholding] = useState<boolean | null>(null);
+  const [yearEnd, setYearEnd] = useState<RoyaltyYearEndStatus | null>(null);
+  const [genBusy, setGenBusy] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (k: string) =>
     setOpen((prev) => {
@@ -50,7 +60,31 @@ export function AuthorRoyaltiesPage({ canConfigure = false }: { canConfigure?: b
     getRoyaltyWithholdingEnabled()
       .then((r) => setWithholding(r.enabled))
       .catch(() => setWithholding(null));
+    loadYearEnd();
   }, []);
+
+  function loadYearEnd() {
+    getRoyaltyYearEndStatus()
+      .then(setYearEnd)
+      .catch(() => setYearEnd(null));
+  }
+
+  async function generateYearEnd() {
+    if (!yearEnd) return;
+    setGenBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const r = await generateRoyaltyYearEnd(yearEnd.year);
+      setMessage(t("roy.gen_done", `États de ${r.year} générés : ${r.statements_created} relevé(s) créé(s).`));
+      loadYearEnd();
+      if (year === yearEnd.year) load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Génération impossible.");
+    } finally {
+      setGenBusy(false);
+    }
+  }
 
   async function toggleWithholding(next: boolean) {
     setError(null);
@@ -110,6 +144,29 @@ export function AuthorRoyaltiesPage({ canConfigure = false }: { canConfigure?: b
         </div>
       )}
 
+      {/* Génération de fin d'année : échéance (dernier jour ouvrable), état de
+          génération, et déclenchement manuel (habilités). La génération auto se
+          fait « à la connexion » côté serveur. */}
+      {yearEnd && (
+        <div style={{ display: "flex", gap: 12, alignItems: "center", background: yearEnd.is_generated ? "var(--eclosion-soft)" : "#fff", border: `1px solid ${yearEnd.is_generated ? "var(--eclosion)" : "var(--line)"}`, borderRadius: 10, padding: "10px 14px", marginBottom: 14, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--eclosion-dark)" }}>
+              {t("roy.ye_title", "Génération de fin d'année")} — {yearEnd.year}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+              {yearEnd.is_generated
+                ? t("roy.ye_done", `États générés le ${yearEnd.generated_at ? new Date(yearEnd.generated_at).toLocaleDateString("fr-FR") : ""} (${yearEnd.statements_created ?? 0} relevé(s)).`)
+                : t("roy.ye_pending", `Génération prévue au dernier jour ouvrable (${new Date(yearEnd.closure_date).toLocaleDateString("fr-FR")}) — automatique à la connexion d'un responsable. ${yearEnd.days_until_closure > 0 ? `Dans ${yearEnd.days_until_closure} jour(s).` : "Échéance atteinte."}`)}
+            </div>
+          </div>
+          {canGenerate && !yearEnd.is_generated && (
+            <button onClick={generateYearEnd} disabled={genBusy} style={{ padding: "8px 14px", cursor: "pointer", background: "var(--eclosion)", border: "1px solid var(--eclosion)", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: 700 }}>
+              {genBusy ? t("roy.ye_gen_busy", "Génération…") : t("roy.ye_gen", "Générer maintenant")}
+            </button>
+          )}
+        </div>
+      )}
+
       {data && (
         <>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
@@ -117,6 +174,7 @@ export function AuthorRoyaltiesPage({ canConfigure = false }: { canConfigure?: b
             <Stat label={t("roy.paid_gross_total", "Versé brut (total)")} value={money(data.totals.paid_gross)} />
             <Stat label={t("roy.tax_total", "Retenue à la source (total)")} value={money(data.totals.tax_withheld)} />
             <Stat label={t("roy.net_total", "Net versé (total)")} value={money(data.totals.paid_net)} />
+            <Stat label={t("roy.remaining_total", "Reste à verser (total)")} value={money(data.totals.remaining)} />
           </div>
 
           <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>{t("roy.hint", "Cliquez sur un auteur pour voir le détail par ouvrage, puis imprimez son état annuel.")}</div>
@@ -158,6 +216,7 @@ export function AuthorRoyaltiesPage({ canConfigure = false }: { canConfigure?: b
                                     paidGross: r.paid_gross,
                                     taxWithheld: r.tax_withheld,
                                     paidNet: r.paid_net,
+                                    remaining: r.remaining,
                                   }, o)} />
                                 </div>
                               </div>
@@ -185,6 +244,7 @@ export function AuthorRoyaltiesPage({ canConfigure = false }: { canConfigure?: b
                                 <span>{t("roy.paid_gross", "Versé brut")} : <b style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{money(r.paid_gross)}</b></span>
                                 <span>{t("roy.tax", "Retenue à la source")} : <b style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{money(r.tax_withheld)}</b></span>
                                 <span>{t("roy.net", "Net versé")} : <b style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{money(r.paid_net)}</b></span>
+                                <span>{t("roy.remaining", "Reste à verser")} : <b style={{ fontFamily: "var(--font-mono)", color: "var(--eclosion-dark)" }}>{money(r.remaining)}</b></span>
                               </div>
                             </div>
                           </td>

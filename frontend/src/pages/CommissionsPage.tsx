@@ -91,7 +91,7 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
         <div style={{ display: "inline-flex", border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden" }}>
           {GRANULARITIES.map((g) => (
             <button key={g.key} onClick={() => setGranularity(g.key)} style={{ border: "none", padding: "8px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", background: granularity === g.key ? "var(--eclosion, #C89A1B)" : "transparent", color: granularity === g.key ? "#fff" : "var(--muted)" }}>
-              {g.label}
+              {t(`comm.gran_${g.key}`, g.label)}
             </button>
           ))}
         </div>
@@ -197,7 +197,7 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
           </div>
 
           {/* Par période */}
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--eclosion-dark)", margin: "18px 0 8px" }}>{t("comm.by_period", "Par période")} ({GRANULARITIES.find((g) => g.key === granularity)?.label})</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--eclosion-dark)", margin: "18px 0 8px" }}>{t("comm.by_period", "Par période")} ({t(`comm.gran_${granularity}`, GRANULARITIES.find((g) => g.key === granularity)?.label ?? "")})</div>
           <div style={{ overflowX: "auto" }}>
             <table style={tbl}>
               <thead><tr>

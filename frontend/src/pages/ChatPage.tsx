@@ -69,11 +69,22 @@ export function ChatPage() {
   // rotation du téléphone affiche bien les deux colonnes, même quand le paysage
   // fait moins de 760 px. L'événement « change » suit la rotation en direct.
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 700px), (orientation: landscape) and (min-width: 560px)");
-    const update = () => setIsMobile(!mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
+    const compute = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      // Deux colonnes si l'écran est large (tablette/ordinateur) OU en paysage
+      // (largeur > hauteur), quelle que soit la taille exacte ; sinon une seule
+      // colonne (téléphone en portrait).
+      const large = w >= 700 || w > h;
+      setIsMobile(!large);
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    window.addEventListener("orientationchange", compute);
+    return () => {
+      window.removeEventListener("resize", compute);
+      window.removeEventListener("orientationchange", compute);
+    };
   }, []);
 
   useEffect(() => {

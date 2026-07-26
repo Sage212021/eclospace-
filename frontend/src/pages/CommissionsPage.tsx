@@ -160,7 +160,7 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
                                 <div onClick={(e) => e.stopPropagation()}>
                                   <DocPrintMenu label={t("comm.print", "Imprimer l'état / PDF")} onPrint={(o) => printCommissionStatement({
                                     agentName: r.agent_name,
-                                    periodLabel: `${GRANULARITIES.find((g) => g.key === granularity)?.label ?? ""} — du ${frDate(from)} au ${frDate(to)}`,
+                                    periodLabel: `${t(`comm.gran_${granularity}`, GRANULARITIES.find((g) => g.key === granularity)?.label ?? "")} — ${t("comm.period_from", "du")} ${frDate(from)} ${t("comm.period_to", "au")} ${frDate(to)}`,
                                     ratePct: Math.round(data.rate * 1000) / 10,
                                     books: r.books.map((bk) => ({ title: bk.title, units: bk.units, amount: bk.amount, commission: bk.commission })),
                                     totals: { units: r.units, amount: r.amount, commission: r.commission },

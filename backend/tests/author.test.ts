@@ -68,6 +68,7 @@ describe("Espace Auteur — portail et isolation", () => {
     // laissés en place : le journal d'audit est append-only (règle du projet) et
     // référence ces utilisateurs ; la base de test est éphémère (reséedée à
     // chaque exécution), comme pour les autres suites.
+    await prisma.authorFile.deleteMany({ where: { manuscriptId: { in: msIds } } });
     await prisma.workContributor.deleteMany({ where: { manuscriptId: { in: msIds } } });
     await prisma.manuscriptStep.deleteMany({ where: { manuscriptId: { in: msIds } } });
     await prisma.manuscript.deleteMany({ where: { id: { in: msIds } } });
@@ -130,5 +131,70 @@ describe("Espace Auteur — portail et isolation", () => {
   it("un employé sans droit d'administration ne peut pas créer de compte auteur (403)", async () => {
     const res = await app.inject({ method: "POST", url: `/api/v1/partners/${partnerNoAccountId}/author-account`, headers: { cookie: cookieEmp }, payload: { username: `y_${rnd()}`, password: PWD } });
     expect(res.statusCode).toBe(403);
+  });
+
+  // ── Échange de fichiers (inc. 2a) ──────────────────────────────────────────
+  function multipart(fileName: string, contentType: string, content: Buffer, label?: string) {
+    const boundary = "----ecl" + Math.random().toString(36).slice(2);
+    const parts: Buffer[] = [];
+    if (label) parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="label"\r\n\r\n${label}\r\n`));
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${contentType}\r\n\r\n`));
+    parts.push(content, Buffer.from(`\r\n--${boundary}--\r\n`));
+    return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` };
+  }
+
+  it("l'auteur dépose un fichier sur son ouvrage, le liste et le télécharge", async () => {
+    const mp = multipart("corr.txt", "text/plain", Buffer.from("mes corrections"), "Corrections ch. 1");
+    const up = await app.inject({ method: "POST", url: `/api/v1/author/works/${msAId}/files`, headers: { cookie: cookieA, "content-type": mp.contentType }, payload: mp.body });
+    expect(up.statusCode).toBe(201);
+    const fileId = up.json().id;
+    expect(up.json().direction).toBe("from_author");
+
+    const list = await app.inject({ method: "GET", url: `/api/v1/author/works/${msAId}/files`, headers: { cookie: cookieA } });
+    expect((list.json() as unknown[]).length).toBe(1);
+
+    const dl = await app.inject({ method: "GET", url: `/api/v1/author/files/${fileId}/download`, headers: { cookie: cookieA } });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.body).toContain("mes corrections");
+  });
+
+  it("un auteur ne peut pas déposer sur l'ouvrage d'un autre (404)", async () => {
+    const mp = multipart("x.txt", "text/plain", Buffer.from("intrus"));
+    const res = await app.inject({ method: "POST", url: `/api/v1/author/works/${msBId}/files`, headers: { cookie: cookieA, "content-type": mp.contentType }, payload: mp.body });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("la maison partage un fichier à l'auteur, qui le voit et le télécharge", async () => {
+    const mp = multipart("bat.txt", "text/plain", Buffer.from("BAT a valider"), "BAT");
+    const share = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${msAId}/author-files`, headers: { cookie: cookieAdmin, "content-type": mp.contentType }, payload: mp.body });
+    expect(share.statusCode).toBe(201);
+    expect(share.json().from_house).toBe(true);
+
+    const list = await app.inject({ method: "GET", url: `/api/v1/author/works/${msAId}/files`, headers: { cookie: cookieA } });
+    const houseFile = (list.json() as { id: string; from_house: boolean }[]).find((f) => f.from_house);
+    expect(houseFile).toBeTruthy();
+    const dl = await app.inject({ method: "GET", url: `/api/v1/author/files/${houseFile!.id}/download`, headers: { cookie: cookieA } });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.body).toContain("BAT a valider");
+  });
+
+  it("un auteur ne télécharge pas le fichier d'un autre auteur (404)", async () => {
+    const mp = multipart("b.txt", "text/plain", Buffer.from("prive B"));
+    const up = await app.inject({ method: "POST", url: `/api/v1/author/works/${msBId}/files`, headers: { cookie: cookieB, "content-type": mp.contentType }, payload: mp.body });
+    const idB = up.json().id;
+    const res = await app.inject({ method: "GET", url: `/api/v1/author/files/${idB}/download`, headers: { cookie: cookieA } });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("l'auteur retire son propre dépôt mais pas un fichier de la maison (403)", async () => {
+    const mp = multipart("todel.txt", "text/plain", Buffer.from("a retirer"));
+    const up = await app.inject({ method: "POST", url: `/api/v1/author/works/${msAId}/files`, headers: { cookie: cookieA, "content-type": mp.contentType }, payload: mp.body });
+    const del = await app.inject({ method: "DELETE", url: `/api/v1/author/files/${up.json().id}`, headers: { cookie: cookieA } });
+    expect(del.statusCode).toBe(200);
+    // Un fichier partagé par la maison ne peut pas être retiré par l'auteur.
+    const houseShare = multipart("house.txt", "text/plain", Buffer.from("maison"), "doc");
+    const share = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${msAId}/author-files`, headers: { cookie: cookieAdmin, "content-type": houseShare.contentType }, payload: houseShare.body });
+    const delHouse = await app.inject({ method: "DELETE", url: `/api/v1/author/files/${share.json().id}`, headers: { cookie: cookieA } });
+    expect(delHouse.statusCode).toBe(403);
   });
 });

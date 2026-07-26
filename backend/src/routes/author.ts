@@ -5,6 +5,44 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuthor, requirePermission } from "../lib/permissions.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { storeFile, readStoredFile } from "../lib/storage.js";
+import { notifyUsers } from "../lib/notify.js";
+import type { FastifyRequest } from "fastify";
+
+const MAX_LABEL = 120;
+
+// Lecture d'un envoi multipart : le fichier + un champ texte « label » optionnel.
+async function readUpload(request: FastifyRequest): Promise<{ buf: Buffer; name: string; mime: string; label: string } | null> {
+  if (!request.isMultipart()) return null;
+  let buf: Buffer | null = null;
+  let name = "fichier";
+  let mime = "application/octet-stream";
+  let label = "";
+  for await (const part of request.parts()) {
+    if (part.type === "file") {
+      buf = await part.toBuffer();
+      name = part.filename || "fichier";
+      mime = part.mimetype || "application/octet-stream";
+    } else if (part.fieldname === "label" && typeof part.value === "string") {
+      label = part.value.slice(0, MAX_LABEL);
+    }
+  }
+  if (!buf || buf.byteLength === 0) return null;
+  return { buf, name, mime, label };
+}
+
+function fileView(f: { id: string; label: string; fileName: string; fileMime: string; fileSize: number; direction: string; createdAt: Date }) {
+  return {
+    id: f.id,
+    label: f.label,
+    name: f.fileName,
+    mime: f.fileMime,
+    size: f.fileSize,
+    direction: f.direction,
+    from_house: f.direction === "to_author",
+    created_at: f.createdAt,
+  };
+}
 
 // Espace Auteur — incrément 1 (demande opérateur du 26/07/2026).
 // Portail réservé aux comptes externes reliés à une fiche Partenaire (auteur).
@@ -169,4 +207,105 @@ export default async function authorRoutes(fastify: FastifyInstance) {
       return reply.code(201).send({ id: user.id, username: user.username, email: user.email });
     },
   );
+
+  // ── Échange de fichiers auteur ↔ maison (inc. 2a) ──────────────────────────
+
+  // Vérifie qu'un ouvrage appartient bien à l'auteur connecté.
+  async function assertOwnWork(partnerId: string, manuscriptId: string): Promise<boolean> {
+    const c = await prisma.workContributor.findFirst({ where: { partnerId, role: "author", manuscriptId, manuscript: { deletedAt: null } } });
+    return Boolean(c);
+  }
+
+  // Fichiers d'un de mes ouvrages (déposés par moi ET partagés par la maison).
+  fastify.get("/api/v1/author/works/:id/files", { preHandler: requireAuthor }, async (request, reply) => {
+    const partnerId = request.user!.partnerId!;
+    const { id } = request.params as { id: string };
+    if (!(await assertOwnWork(partnerId, id))) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable." });
+    const files = await prisma.authorFile.findMany({ where: { manuscriptId: id, partnerId, deletedAt: null }, orderBy: { createdAt: "desc" } });
+    return reply.send(files.map(fileView));
+  });
+
+  // Dépôt d'un fichier par l'auteur (manuscrit, corrections, illustrations…).
+  fastify.post("/api/v1/author/works/:id/files", { preHandler: requireAuthor }, async (request, reply) => {
+    const partnerId = request.user!.partnerId!;
+    const { id } = request.params as { id: string };
+    if (!(await assertOwnWork(partnerId, id))) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable." });
+    const upload = await readUpload(request);
+    if (!upload) return reply.code(400).send({ code: "validation_error", message: "Aucun fichier reçu." });
+    const stored = await storeFile(upload.buf, upload.name);
+    const created = await prisma.authorFile.create({
+      data: { manuscriptId: id, partnerId, direction: "from_author", label: upload.label, fileName: upload.name, filePath: stored.filePath, fileMime: upload.mime, fileSize: stored.fileSize, uploadedById: request.user!.id },
+    });
+    // Prévient l'équipe en charge de l'ouvrage (responsable + chef de projet).
+    const m = await prisma.manuscript.findUnique({ where: { id }, select: { title: true, ownerId: true, projectManagerId: true } });
+    const staff = [...new Set([m?.ownerId, m?.projectManagerId].filter((x): x is string => Boolean(x)))];
+    if (staff.length) {
+      await notifyUsers({ userIds: staff, type: "autre", priority: "medium", title: "Nouveau fichier d'un auteur", body: `${upload.label || upload.name} — « ${m?.title ?? ""} »`, entityType: "manuscript", entityId: id }).catch(() => {});
+    }
+    return reply.code(201).send(fileView(created));
+  });
+
+  // Téléchargement d'un fichier de l'un de mes ouvrages (portée partnerId).
+  fastify.get("/api/v1/author/files/:fileId/download", { preHandler: requireAuthor }, async (request, reply) => {
+    const partnerId = request.user!.partnerId!;
+    const { fileId } = request.params as { fileId: string };
+    const f = await prisma.authorFile.findFirst({ where: { id: fileId, partnerId, deletedAt: null } });
+    if (!f) return reply.code(404).send({ code: "not_found", message: "Fichier introuvable." });
+    const buffer = await readStoredFile(f.filePath);
+    reply.header("content-type", f.fileMime);
+    reply.header("content-disposition", `attachment; filename="${f.fileName.replace(/"/g, "")}"`);
+    return reply.send(buffer);
+  });
+
+  // Suppression logique d'un fichier que J'AI déposé (pas ceux de la maison).
+  fastify.delete("/api/v1/author/files/:fileId", { preHandler: requireAuthor }, async (request, reply) => {
+    const partnerId = request.user!.partnerId!;
+    const { fileId } = request.params as { fileId: string };
+    const f = await prisma.authorFile.findFirst({ where: { id: fileId, partnerId, deletedAt: null } });
+    if (!f) return reply.code(404).send({ code: "not_found", message: "Fichier introuvable." });
+    if (f.direction !== "from_author") return reply.code(403).send({ code: "forbidden", message: "Vous ne pouvez retirer que les fichiers que vous avez déposés." });
+    await prisma.authorFile.update({ where: { id: fileId }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+    return reply.send({ ok: true });
+  });
+
+  // ── Côté personnel : voir les dépôts de l'auteur et lui partager des fichiers.
+
+  async function authorPartnerOf(manuscriptId: string): Promise<string | null> {
+    const c = await prisma.workContributor.findFirst({ where: { manuscriptId, role: "author" }, orderBy: { displayOrder: "asc" } });
+    return c?.partnerId ?? null;
+  }
+
+  fastify.get("/api/v1/manuscripts/:id/author-files", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const files = await prisma.authorFile.findMany({ where: { manuscriptId: id, deletedAt: null }, orderBy: { createdAt: "desc" } });
+    return reply.send(files.map((f) => ({ ...fileView(f), uploaded_by: f.uploadedById })));
+  });
+
+  fastify.post("/api/v1/manuscripts/:id/author-files", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const partnerId = await authorPartnerOf(id);
+    if (!partnerId) return reply.code(400).send({ code: "no_author", message: "Cet ouvrage n'a pas d'auteur enregistré." });
+    const upload = await readUpload(request);
+    if (!upload) return reply.code(400).send({ code: "validation_error", message: "Aucun fichier reçu." });
+    const stored = await storeFile(upload.buf, upload.name);
+    const created = await prisma.authorFile.create({
+      data: { manuscriptId: id, partnerId, direction: "to_author", label: upload.label, fileName: upload.name, filePath: stored.filePath, fileMime: upload.mime, fileSize: stored.fileSize, uploadedById: request.user!.id },
+    });
+    // Prévient l'auteur (si son compte existe) qu'un document lui est partagé.
+    const account = await prisma.user.findFirst({ where: { partnerId, accountType: "external", status: "active", deletedAt: null }, select: { id: true } });
+    if (account) {
+      await notifyUsers({ userIds: [account.id], type: "autre", priority: "medium", title: "Un document vous a été partagé", body: upload.label || upload.name, entityType: "manuscript", entityId: id }).catch(() => {});
+    }
+    return reply.code(201).send(fileView(created));
+  });
+
+  fastify.get("/api/v1/manuscripts/:id/author-files/:fileId/download", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+    const { id, fileId } = request.params as { id: string; fileId: string };
+    const f = await prisma.authorFile.findFirst({ where: { id: fileId, manuscriptId: id, deletedAt: null } });
+    if (!f) return reply.code(404).send({ code: "not_found", message: "Fichier introuvable." });
+    const buffer = await readStoredFile(f.filePath);
+    reply.header("content-type", f.fileMime);
+    reply.header("content-disposition", `attachment; filename="${f.fileName.replace(/"/g, "")}"`);
+    return reply.send(buffer);
+  });
 }

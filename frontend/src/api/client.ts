@@ -3256,3 +3256,51 @@ export function getAuthorWorks() {
 export function getAuthorWork(id: string) {
   return request<AuthorWorkDetail>(`/api/v1/author/works/${id}`);
 }
+
+// --- Espace Auteur : échange de fichiers (inc. 2a) -----------------------------
+export interface AuthorFile {
+  id: string;
+  label: string;
+  name: string;
+  mime: string;
+  size: number;
+  direction: "from_author" | "to_author";
+  from_house: boolean;
+  created_at: string;
+}
+// Côté auteur
+export function getAuthorWorkFiles(workId: string) {
+  return request<AuthorFile[]>(`/api/v1/author/works/${workId}/files`);
+}
+export async function uploadAuthorWorkFile(workId: string, label: string, file: File): Promise<AuthorFile> {
+  const form = new FormData();
+  if (label) form.append("label", label);
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/v1/author/works/${workId}/files`, { method: "POST", credentials: "include", body: form });
+  if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? `Erreur ${res.status}`);
+  return res.json() as Promise<AuthorFile>;
+}
+export function authorFileDownloadUrl(fileId: string): string {
+  return `${API_BASE}/api/v1/author/files/${fileId}/download`;
+}
+export function deleteAuthorFile(fileId: string) {
+  return request<{ ok: true }>(`/api/v1/author/files/${fileId}`, { method: "DELETE" });
+}
+// Côté personnel (fiche manuscrit)
+export interface StaffAuthorFile extends AuthorFile {
+  uploaded_by: string | null;
+}
+export function getManuscriptAuthorFiles(manuscriptId: string) {
+  return request<StaffAuthorFile[]>(`/api/v1/manuscripts/${manuscriptId}/author-files`);
+}
+export async function shareFileToAuthor(manuscriptId: string, label: string, file: File): Promise<AuthorFile> {
+  const form = new FormData();
+  if (label) form.append("label", label);
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/v1/manuscripts/${manuscriptId}/author-files`, { method: "POST", credentials: "include", body: form });
+  if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? `Erreur ${res.status}`);
+  return res.json() as Promise<AuthorFile>;
+}
+export function manuscriptAuthorFileDownloadUrl(manuscriptId: string, fileId: string): string {
+  return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/author-files/${fileId}/download`;
+}

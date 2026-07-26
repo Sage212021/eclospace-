@@ -1,17 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRef } from "react";
 import {
   getAuthorProfile,
   getAuthorWorks,
   getAuthorWork,
+  getAuthorWorkFiles,
+  uploadAuthorWorkFile,
+  authorFileDownloadUrl,
+  deleteAuthorFile,
   listNotifications,
   markNotificationRead,
   setMyLanguage,
   type AuthorProfile,
   type AuthorWork,
   type AuthorWorkDetail,
+  type AuthorFile,
   type Notification,
 } from "../../api/client";
 import { useI18n } from "../../i18n";
+
+function humanSize(n: number | null | undefined): string {
+  if (!n || n <= 0) return "";
+  if (n < 1024) return `${n} o`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} Ko`;
+  return `${(n / (1024 * 1024)).toFixed(1)} Mo`;
+}
 
 // Espace Auteur — portail externe (inc. 1). Interface volontairement DISTINCTE de
 // l'ERP employé : pas de menu à pôles, une coquille épurée orientée « mes
@@ -54,6 +67,10 @@ export function AuthorPortal({ userName, onLogout }: { userName: string; onLogou
   const [works, setWorks] = useState<AuthorWork[]>([]);
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [detail, setDetail] = useState<AuthorWorkDetail | null>(null);
+  const [files, setFiles] = useState<AuthorFile[]>([]);
+  const [uploadLabel, setUploadLabel] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -72,8 +89,37 @@ export function AuthorPortal({ userName, onLogout }: { userName: string; onLogou
 
   async function openWork(id: string) {
     setError(null);
+    setFiles([]);
+    setUploadLabel("");
     try {
-      setDetail(await getAuthorWork(id));
+      const [d, f] = await Promise.all([getAuthorWork(id), getAuthorWorkFiles(id).catch(() => [])]);
+      setDetail(d);
+      setFiles(f);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+    }
+  }
+
+  async function upload(file: File) {
+    if (!detail || uploading) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const created = await uploadAuthorWorkFile(detail.id, uploadLabel.trim(), file);
+      setFiles((prev) => [created, ...prev]);
+      setUploadLabel("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Envoi impossible.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removeFile(id: string) {
+    try {
+      await deleteAuthorFile(id);
+      setFiles((prev) => prev.filter((f) => f.id !== id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur");
     }
@@ -184,6 +230,39 @@ export function AuthorPortal({ userName, onLogout }: { userName: string; onLogou
                 );
               })}
             </ol>
+
+            {/* Fichiers : dépôt par l'auteur + documents partagés par la maison */}
+            <h4 style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: 1, color: "var(--marine, #16233D)", marginTop: 22 }}>{t("author.files", "Fichiers")}</h4>
+            <div style={{ display: "grid", gap: 8 }}>
+              {files.length === 0 && <p style={{ fontSize: 13, color: "var(--muted, #667085)", margin: 0 }}>{t("author.nofiles", "Aucun fichier pour le moment.")}</p>}
+              {files.map((f) => (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, border: "1px solid var(--line, #E3E8EF)", borderRadius: 8, padding: "8px 12px" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <a href={authorFileDownloadUrl(f.id)} target="_blank" rel="noreferrer" style={{ color: "var(--marine, #16233D)", fontWeight: 600, fontSize: 13.5, textDecoration: "none" }}>
+                      📎 {f.label || f.name} <span style={{ color: "var(--muted, #667085)", fontWeight: 400 }}>{f.size ? `(${humanSize(f.size)})` : ""}</span>
+                    </a>
+                    <div style={{ fontSize: 11, marginTop: 2 }}>
+                      {f.from_house
+                        ? <span style={{ color: "var(--or-dark, #8A6A12)", fontWeight: 700 }}>{t("author.from_house", "Partagé par la maison")}</span>
+                        : <span style={{ color: "var(--muted, #667085)" }}>{t("author.from_me", "Déposé par vous")}</span>}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                    <a href={authorFileDownloadUrl(f.id)} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: "var(--eclosion, #16233D)", fontWeight: 600 }}>{t("author.download", "Télécharger")}</a>
+                    {!f.from_house && <button onClick={() => removeFile(f.id)} style={{ border: "none", background: "none", color: "var(--alert, #C24B3A)", cursor: "pointer", fontSize: 12, textDecoration: "underline" }}>{t("author.remove", "Retirer")}</button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 12, border: "1px dashed var(--line, #E3E8EF)", borderRadius: 10, padding: 12 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--marine, #16233D)", marginBottom: 8 }}>{t("author.send_file", "Envoyer un fichier à la maison")}</div>
+              <input value={uploadLabel} onChange={(e) => setUploadLabel(e.target.value)} placeholder={t("author.file_label", "Intitulé (ex. corrections chapitre 3)")} style={{ width: "100%", padding: "8px 11px", border: "1px solid var(--line, #E3E8EF)", borderRadius: 8, fontSize: 13, marginBottom: 8, boxSizing: "border-box" }} />
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input ref={fileInputRef} type="file" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); }} style={{ fontSize: 12.5 }} />
+                {uploading && <span style={{ fontSize: 12.5, color: "var(--muted, #667085)" }}>{t("author.sending", "Envoi…")}</span>}
+              </div>
+            </div>
           </div>
         </div>
       )}

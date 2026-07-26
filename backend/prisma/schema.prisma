@@ -728,6 +728,37 @@ enum AccountType {
   external
 }
 
+// Sens d'un fichier échangé avec l'auteur via son portail (Espace Auteur inc. 2a).
+enum AuthorFileDirection {
+  from_author // déposé par l'auteur (manuscrit, corrections, illustrations…)
+  to_author   // partagé par la maison (BAT, épreuves, contrat…)
+}
+
+// Fichier échangé entre un auteur et la maison, rattaché à l'un de ses ouvrages.
+// Portée par partnerId : l'auteur n'accède qu'aux fichiers de ses propres œuvres.
+model AuthorFile {
+  id           String              @id @default(uuid())
+  manuscriptId String              @map("manuscript_id")
+  manuscript   Manuscript          @relation(fields: [manuscriptId], references: [id])
+  partnerId    String              @map("partner_id")
+  partner      Partner             @relation(fields: [partnerId], references: [id])
+  direction    AuthorFileDirection
+  label        String              @default("")
+  fileName     String              @map("file_name")
+  filePath     String              @map("file_path")
+  fileMime     String              @map("file_mime")
+  fileSize     Int                 @map("file_size")
+  uploadedById String?             @map("uploaded_by")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at") // suppression logique uniquement
+  deletedBy String?   @map("deleted_by")
+
+  @@index([manuscriptId])
+  @@index([partnerId])
+  @@map("author_files")
+}
+
 model User {
   id           String     @id @default(uuid())
   employeeId   String?    @unique @map("employee_id")
@@ -1157,6 +1188,7 @@ model Partner {
   billingCustomer      Customer?
   editorialQuotes      EditorialQuote[]
   userAccount          User?
+  authorFiles          AuthorFile[]
 
   @@map("partners")
 }
@@ -1271,6 +1303,7 @@ model Manuscript {
   budgets            Budget[]
   editorialQuotes    EditorialQuote[]
   sitePublication    SitePublication?
+  authorFiles        AuthorFile[]
 
   @@map("manuscripts")
 }

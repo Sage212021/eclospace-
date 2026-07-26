@@ -3144,3 +3144,68 @@ export function getCommissionRate() {
 export function setCommissionRate(rate: number) {
   return request<{ ok: true; rate: number }>("/api/v1/commercial/commission-rate", { method: "PUT", body: JSON.stringify({ rate }) });
 }
+
+// --- Messagerie interne 1-à-1 (Communication interne) --------------------------
+export const CHAT_API_BASE = API_BASE;
+export interface ChatDirectoryEntry {
+  id: string;
+  name: string;
+}
+export interface ChatConversation {
+  id: string;
+  other_id: string;
+  other_name: string;
+  last_message: string;
+  last_at: string | null;
+  unread: number;
+}
+export interface ChatMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  sender_name: string;
+  mine: boolean;
+  body: string;
+  deleted: boolean;
+  created_at: string;
+  file: { name: string; mime: string | null; size: number | null } | null;
+}
+export function getChatDirectory() {
+  return request<ChatDirectoryEntry[]>("/api/v1/chat/directory");
+}
+export function getConversations() {
+  return request<ChatConversation[]>("/api/v1/chat/conversations");
+}
+export function getChatUnread() {
+  return request<{ unread: number }>("/api/v1/chat/unread");
+}
+export function startConversation(userId: string) {
+  return request<{ id: string; other_id: string; other_name: string }>("/api/v1/chat/conversations", { method: "POST", body: JSON.stringify({ user_id: userId }) });
+}
+export function getMessages(conversationId: string) {
+  return request<ChatMessage[]>(`/api/v1/chat/conversations/${conversationId}/messages`);
+}
+export function sendChatMessage(conversationId: string, body: string) {
+  return request<ChatMessage>(`/api/v1/chat/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ body }) });
+}
+// Envoi avec pièce jointe : multipart (le navigateur pose le bon Content-Type).
+export async function sendChatMessageWithFile(conversationId: string, body: string, file: File): Promise<ChatMessage> {
+  const form = new FormData();
+  if (body) form.append("body", body);
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/v1/chat/conversations/${conversationId}/messages`, { method: "POST", credentials: "include", body: form });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(err?.message ?? `Erreur ${res.status}`);
+  }
+  return res.json() as Promise<ChatMessage>;
+}
+export function markConversationRead(conversationId: string) {
+  return request<{ ok: true }>(`/api/v1/chat/conversations/${conversationId}/read`, { method: "POST" });
+}
+export function deleteChatMessage(messageId: string) {
+  return request<{ ok: true }>(`/api/v1/chat/messages/${messageId}`, { method: "DELETE" });
+}
+export function chatFileUrl(messageId: string): string {
+  return `${API_BASE}/api/v1/chat/messages/${messageId}/file`;
+}

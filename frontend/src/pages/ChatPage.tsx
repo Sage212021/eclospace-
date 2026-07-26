@@ -62,11 +62,15 @@ export function ChatPage() {
     loadConversations();
   }, []);
 
-  // Suit la largeur de l'écran (et la rotation) pour basculer entre une et deux
-  // colonnes.
+  // Choix de la mise en page : deux colonnes dès que l'écran est assez large
+  // (tablette/ordinateur ≥ 700 px) OU en paysage sur téléphone (≥ 560 px de
+  // large). Sinon (téléphone en portrait), une seule colonne à la fois. Baser la
+  // bascule sur l'ORIENTATION — et non sur une largeur fixe — garantit que la
+  // rotation du téléphone affiche bien les deux colonnes, même quand le paysage
+  // fait moins de 760 px. L'événement « change » suit la rotation en direct.
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 760px)");
-    const update = () => setIsMobile(mq.matches);
+    const mq = window.matchMedia("(min-width: 700px), (orientation: landscape) and (min-width: 560px)");
+    const update = () => setIsMobile(!mq.matches);
     update();
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);

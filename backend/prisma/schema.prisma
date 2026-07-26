@@ -771,7 +771,69 @@ model User {
   authoredEvents         CalendarEvent[]         @relation("CalendarEventAuthor")
   authoredNewsletters    Newsletter[]            @relation("NewsletterAuthor")
 
+  conversationsAsA  Conversation[]     @relation("ConversationUserA")
+  conversationsAsB  Conversation[]     @relation("ConversationUserB")
+  chatMessages      ChatMessage[]
+  conversationReads ConversationRead[]
+
   @@map("users")
+}
+
+// ============================================================
+// Messagerie interne 1-à-1 (demande opérateur du 25/07/2026). Annuaire ouvert,
+// présence masquée hors pôle ; messages privés mais consultables au besoin par
+// la Direction (accès tracé au journal d'audit). Pièces jointes possibles.
+// ============================================================
+model Conversation {
+  id      String @id @default(uuid())
+  // Paire normalisée d'un 1-à-1 (user_a_id < user_b_id) → unicité, pas de doublon.
+  userAId String @map("user_a_id")
+  userBId String @map("user_b_id")
+  userA   User   @relation("ConversationUserA", fields: [userAId], references: [id])
+  userB   User   @relation("ConversationUserB", fields: [userBId], references: [id])
+
+  createdAt     DateTime  @default(now()) @map("created_at")
+  lastMessageAt DateTime? @map("last_message_at")
+
+  messages ChatMessage[]
+  reads    ConversationRead[]
+
+  @@unique([userAId, userBId])
+  @@index([userAId])
+  @@index([userBId])
+  @@map("conversations")
+}
+
+model ChatMessage {
+  id             String       @id @default(uuid())
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       String       @map("sender_id")
+  sender         User         @relation(fields: [senderId], references: [id])
+  body           String       @default("")
+  // Pièce jointe optionnelle (stockage réutilisé, cf. lib/storage.ts).
+  fileName String? @map("file_name")
+  filePath String? @map("file_path")
+  fileMime String? @map("file_mime")
+  fileSize Int?    @map("file_size")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at") // suppression logique uniquement
+  deletedBy String?   @map("deleted_by")
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+
+model ConversationRead {
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  userId         String       @map("user_id")
+  user           User         @relation(fields: [userId], references: [id])
+  lastReadAt     DateTime     @default(now()) @map("last_read_at")
+
+  @@id([conversationId, userId])
+  @@map("conversation_reads")
 }
 
 // Défi 2FA en attente entre l'étape mot de passe et l'étape code TOTP

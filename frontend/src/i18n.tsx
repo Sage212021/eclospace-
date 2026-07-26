@@ -1156,7 +1156,26 @@ const EN: Record<string, string> = {
   "cm.banner_title": "Headlines",
 
   // Libellés de menu des nouveaux écrans (nav labels)
+  "nav.cm-messagerie": "Messaging",
   "nav.co-suivi-ventes": "Sales tracking by title",
+
+  // Messagerie interne (internal messaging)
+  "chat.title": "Internal messaging",
+  "chat.lead": "Chat privately with your colleagues. You can attach a file.",
+  "chat.new": "New message",
+  "chat.empty_list": "No conversations. Click “New message”.",
+  "chat.pick": "Select a conversation or start one.",
+  "chat.no_msg": "No messages yet. Write the first one.",
+  "chat.deleted": "Message deleted",
+  "chat.delete": "Delete",
+  "chat.remove_file": "remove",
+  "chat.attach": "Attach a file",
+  "chat.placeholder": "Write a message…",
+  "chat.sending": "Sending…",
+  "chat.send": "Send",
+  "chat.choose": "Message a colleague",
+  "chat.search": "Search a name…",
+  "chat.no_colleague": "No colleague found.",
   "nav.co-commissions": "Sales commissions",
   "nav.jf-droits-annuels": "Annual author royalty statements",
 

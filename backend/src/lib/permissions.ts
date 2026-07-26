@@ -9,6 +9,9 @@ export interface EffectiveUser {
   email: string;
   status: string;
   mfaEnabled: boolean;
+  // "internal" = employé (accès ERP) ; "external" = auteur (portail auteur).
+  accountType: string;
+  partnerId: string | null;
   roles: string[];
   permissions: Set<string>; // "module:action"
 }
@@ -64,6 +67,8 @@ export async function loadEffectiveUser(userId: string): Promise<EffectiveUser |
     email: user.email,
     status: user.status,
     mfaEnabled: user.mfaEnabled,
+    accountType: user.accountType,
+    partnerId: user.partnerId,
     roles: [...roles],
     permissions,
   };
@@ -74,6 +79,19 @@ export async function loadEffectiveUser(userId: string): Promise<EffectiveUser |
 export async function requireAuth(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!request.user) {
     reply.code(401).send({ code: "unauthenticated", message: "Connexion requise." });
+  }
+}
+
+// Réserve une route au portail auteur : compte externe relié à une fiche
+// Partenaire. Toutes les données de l'Espace Auteur sont ensuite cantonnées à ce
+// partnerId (isolation stricte : un auteur ne voit que ses propres ouvrages).
+export async function requireAuthor(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (!request.user) {
+    reply.code(401).send({ code: "unauthenticated", message: "Connexion requise." });
+    return;
+  }
+  if (request.user.accountType !== "external" || !request.user.partnerId) {
+    reply.code(403).send({ code: "forbidden", message: "Espace réservé aux comptes auteur." });
   }
 }
 

@@ -34,7 +34,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/chat/directory", { preHandler: requireAuth }, async (request, reply) => {
     const me = request.user!.id;
     const users = await prisma.user.findMany({
-      where: { status: "active", deletedAt: null, id: { not: me } },
+      where: { status: "active", deletedAt: null, accountType: "internal", id: { not: me } },
       select: { id: true, username: true },
       orderBy: { username: "asc" },
     });

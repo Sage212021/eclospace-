@@ -753,6 +753,57 @@ async function main() {
     create: { country: "default", productType: "livre", rate: 0 },
   });
 
+  // ── Espace Auteur : compte auteur de démonstration (inc. 1) ────────────────
+  // Fiche Partenaire (auteur) + compte externe relié + un ouvrage en cours de
+  // correction, pour montrer le portail auteur. Idempotent (créé une seule fois).
+  const demoAuthorEmail = "auteur.demo@eclospace.local";
+  let demoPartner = await prisma.partner.findFirst({ where: { email: demoAuthorEmail } });
+  if (!demoPartner) {
+    demoPartner = await prisma.partner.create({
+      data: { category: "auteur", firstName: "Amina", lastName: "Nkolo", penName: "Amina Nkolo", email: demoAuthorEmail },
+    });
+  }
+  const demoAuthorExists = await prisma.user.findFirst({ where: { partnerId: demoPartner.id } });
+  if (!demoAuthorExists) {
+    await prisma.user.create({
+      data: {
+        username: "amina.auteur",
+        email: demoAuthorEmail,
+        passwordHash: await argon2.hash(process.env.DEMO_AUTHOR_PASSWORD ?? "AuteurDemo123!"),
+        status: "active",
+        accountType: "external",
+        partnerId: demoPartner.id,
+      },
+    });
+  }
+  // Un ouvrage de démonstration, positionné en « Correction éditoriale ».
+  const corrStatus = await prisma.workflowStatus.findUnique({ where: { code: "CORRECTION" } });
+  if (corrStatus && !(await prisma.manuscript.findFirst({ where: { manuscriptNumber: "MS-DEMO-0001" } }))) {
+    const demoMs = await prisma.manuscript.create({
+      data: {
+        manuscriptNumber: "MS-DEMO-0001",
+        title: "Les Palmes du Dja",
+        subtitle: "roman",
+        language: "fr",
+        origin: "soumission",
+        statusId: corrStatus.id,
+        ownerId: adminUser.id,
+        receivedAt: new Date("2026-05-04"),
+      },
+    });
+    await prisma.workContributor.create({ data: { manuscriptId: demoMs.id, partnerId: demoPartner.id, role: "author" } });
+    // Quelques étapes franchies pour illustrer le fil d'avancement.
+    for (const code of ["RECEPTION", "COMITE_LECTURE"]) {
+      const st = await prisma.workflowStatus.findUnique({ where: { code } });
+      if (st) {
+        await prisma.manuscriptStep.create({
+          data: { manuscriptId: demoMs.id, statusId: st.id, actualStart: new Date("2026-05-05"), actualEnd: new Date("2026-05-20"), validatedAt: new Date("2026-05-20") },
+        });
+      }
+    }
+    await prisma.manuscriptStep.create({ data: { manuscriptId: demoMs.id, statusId: corrStatus.id, actualStart: new Date("2026-06-01") } });
+  }
+
   // ── Centre de Communication Interne — Babillard d'annonces (évolution) ──────
   // Tout le personnel consulte les annonces qui le ciblent (consultation, bornée
   // à soi côté serveur) ; la publication et l'administration sont réservées aux

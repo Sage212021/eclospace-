@@ -38,6 +38,7 @@ const SalesByBookPage = lazy(() => import("./pages/SalesByBookPage").then((m) =>
 const CommissionsPage = lazy(() => import("./pages/CommissionsPage").then((m) => ({ default: m.CommissionsPage })));
 const AuthorRoyaltiesPage = lazy(() => import("./pages/AuthorRoyaltiesPage").then((m) => ({ default: m.AuthorRoyaltiesPage })));
 const ChatPage = lazy(() => import("./pages/ChatPage").then((m) => ({ default: m.ChatPage })));
+const AuthorPortal = lazy(() => import("./pages/author/AuthorPortal").then((m) => ({ default: m.AuthorPortal })));
 
 // Court message affiché le temps qu'un écran se télécharge (en général une
 // fraction de seconde).
@@ -441,6 +442,17 @@ export function App() {
         {confirmBannerNode}
         <Login onAuthenticated={() => refreshUser()} />
       </>
+    );
+  }
+
+  // Aiguillage : un compte auteur (externe) reçoit un portail entièrement
+  // distinct de l'ERP employé — aucune barre latérale, aucun accès aux modules
+  // internes. Court-circuite toute la coquille ERP ci-dessous.
+  if (user.account_type === "external") {
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <AuthorPortal userName={user.username} onLogout={handleLogout} />
+      </Suspense>
     );
   }
 

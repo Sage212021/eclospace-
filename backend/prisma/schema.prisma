@@ -720,10 +720,22 @@ enum UserStatus {
   disabled
 }
 
+// Type de compte : « internal » = employé (accès ERP selon rôles) ; « external »
+// = auteur disposant du portail auteur, relié à sa fiche Partenaire, sans aucun
+// accès à l'ERP interne (Espace Auteur, inc. 1 — demande opérateur du 26/07/2026).
+enum AccountType {
+  internal
+  external
+}
+
 model User {
   id           String     @id @default(uuid())
   employeeId   String?    @unique @map("employee_id")
   employee     Employee?  @relation(fields: [employeeId], references: [id])
+  // Compte auteur (externe) relié à sa fiche Partenaire. Nul pour un employé.
+  accountType  AccountType @default(internal) @map("account_type")
+  partnerId    String?     @unique @map("partner_id")
+  partner      Partner?    @relation(fields: [partnerId], references: [id])
   username     String     @unique
   email        String     @unique
   passwordHash String     @map("password_hash")
@@ -1144,6 +1156,7 @@ model Partner {
   royaltyPayments      RoyaltyPayment[]
   billingCustomer      Customer?
   editorialQuotes      EditorialQuote[]
+  userAccount          User?
 
   @@map("partners")
 }

@@ -249,6 +249,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       email: user.email,
       mfa_enabled: user.mfaEnabled,
       language: profile?.language ?? "fr",
+      account_type: user.accountType,
       roles: user.roles,
       permissions: [...user.permissions],
       impersonating: Boolean(impersonator),

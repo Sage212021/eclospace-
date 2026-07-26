@@ -14,6 +14,7 @@ export interface EffectiveUser {
   email: string;
   mfa_enabled: boolean;
   language?: "fr" | "en";
+  account_type?: "internal" | "external";
   roles: string[];
   permissions: string[];
   impersonating?: boolean;
@@ -3208,4 +3209,50 @@ export function deleteChatMessage(messageId: string) {
 }
 export function chatFileUrl(messageId: string): string {
   return `${API_BASE}/api/v1/chat/messages/${messageId}/file`;
+}
+
+// --- Espace Auteur (portail externe, inc. 1) -----------------------------------
+export interface AuthorProfile {
+  name: string;
+  email: string;
+  works_count: number;
+}
+export interface AuthorWork {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  reference: string;
+  stage_fr: string;
+  stage_en: string;
+  step_order: number;
+  received_at: string;
+  publication_date: string | null;
+  published: boolean;
+}
+export interface AuthorWorkStep {
+  stage_fr: string;
+  stage_en: string;
+  step_order: number;
+  state: "done" | "current" | "upcoming";
+  done_at: string | null;
+}
+export interface AuthorWorkDetail {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  reference: string;
+  stage_fr: string;
+  stage_en: string;
+  received_at: string;
+  publication_date: string | null;
+  timeline: AuthorWorkStep[];
+}
+export function getAuthorProfile() {
+  return request<AuthorProfile>("/api/v1/author/me");
+}
+export function getAuthorWorks() {
+  return request<AuthorWork[]>("/api/v1/author/works");
+}
+export function getAuthorWork(id: string) {
+  return request<AuthorWorkDetail>(`/api/v1/author/works/${id}`);
 }

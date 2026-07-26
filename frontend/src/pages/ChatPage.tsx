@@ -40,6 +40,9 @@ export function ChatPage() {
   const [dirFilter, setDirFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  // Affichage responsive : sous ce seuil (téléphone), une seule colonne à la
+  // fois (liste OU fil). L'écouteur matchMedia suit aussi la rotation de l'écran.
+  const [isMobile, setIsMobile] = useState(false);
   const activeRef = useRef<string | null>(null);
   activeRef.current = activeId;
   const threadRef = useRef<HTMLDivElement>(null);
@@ -57,6 +60,16 @@ export function ChatPage() {
 
   useEffect(() => {
     loadConversations();
+  }, []);
+
+  // Suit la largeur de l'écran (et la rotation) pour basculer entre une et deux
+  // colonnes.
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 760px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
   }, []);
 
   useEffect(() => {
@@ -145,9 +158,10 @@ export function ChatPage() {
 
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-      <div style={{ display: "flex", gap: 14, alignItems: "stretch", height: "62vh", minHeight: 380 }}>
-        {/* Colonne gauche : conversations */}
-        <div style={{ width: 280, flexShrink: 0, border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 14, alignItems: "stretch", height: isMobile ? "72vh" : "62vh", minHeight: 380 }}>
+        {/* Colonne gauche : conversations (masquée sur mobile quand un fil est ouvert) */}
+        {(!isMobile || !activeId) && (
+        <div style={{ flex: isMobile ? "1 1 auto" : "0 0 280px", minWidth: 0, border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ padding: 10, borderBottom: "1px solid var(--line)" }}>
             <button onClick={openPicker} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid var(--eclosion)", background: "var(--eclosion)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
               ✚ {t("chat.new", "Nouveau message")}
@@ -170,14 +184,21 @@ export function ChatPage() {
             ))}
           </div>
         </div>
+        )}
 
-        {/* Colonne droite : fil */}
-        <div style={{ flex: 1, border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {/* Colonne droite : fil (masquée sur mobile tant qu'aucun fil n'est ouvert) */}
+        {(!isMobile || activeId) && (
+        <div style={{ flex: 1, minWidth: 0, border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {!activeId ? (
-            <div style={{ margin: "auto", color: "var(--muted)", fontSize: 14 }}>{t("chat.pick", "Sélectionnez une conversation ou démarrez-en une.")}</div>
+            <div style={{ margin: "auto", color: "var(--muted)", fontSize: 14, padding: 16, textAlign: "center" }}>{t("chat.pick", "Sélectionnez une conversation ou démarrez-en une.")}</div>
           ) : (
             <>
-              <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)", fontWeight: 700, color: "var(--ink)" }}>{activeName}</div>
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)", fontWeight: 700, color: "var(--ink)", display: "flex", alignItems: "center", gap: 10 }}>
+                {isMobile && (
+                  <button onClick={() => setActiveId(null)} aria-label={t("chat.back", "Retour")} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 20, lineHeight: 1, color: "var(--eclosion-dark)", padding: 0 }}>←</button>
+                )}
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeName}</span>
+              </div>
               <div ref={threadRef} style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
                 {messages.map((m) => (
                   <div key={m.id} style={{ alignSelf: m.mine ? "flex-end" : "flex-start", maxWidth: "76%" }}>
@@ -227,6 +248,7 @@ export function ChatPage() {
             </>
           )}
         </div>
+        )}
       </div>
 
       {/* Sélecteur de correspondant (annuaire) */}

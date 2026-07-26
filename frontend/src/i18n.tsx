@@ -1173,6 +1173,7 @@ const EN: Record<string, string> = {
   "chat.placeholder": "Write a message…",
   "chat.sending": "Sending…",
   "chat.send": "Send",
+  "chat.back": "Back",
   "chat.choose": "Message a colleague",
   "chat.search": "Search a name…",
   "chat.no_colleague": "No colleague found.",

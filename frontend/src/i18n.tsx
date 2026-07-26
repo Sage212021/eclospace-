@@ -1189,6 +1189,8 @@ const EN: Record<string, string> = {
   "comm.gran_month": "Month",
   "comm.gran_semester": "Semester",
   "comm.gran_year": "Year",
+  "comm.period_from": "from",
+  "comm.period_to": "to",
 
   // Suivi des ventes par ouvrage (Sales tracking by title)
   "sbb.title": "Sales tracking by title",

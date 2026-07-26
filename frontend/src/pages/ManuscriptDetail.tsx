@@ -22,6 +22,7 @@ import { BatSection } from "../components/BatSection";
 import { PrintingSection } from "../components/PrintingSection";
 import { AttachmentsSection } from "../components/AttachmentsSection";
 import { ReadingEvaluationsSection } from "../components/ReadingEvaluationsSection";
+import { AuthorFilesSection } from "../components/AuthorFilesSection";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 
 interface ManuscriptDetailProps {
@@ -139,6 +140,10 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         )}
 
         {permissions.has("comite_lecture:consultation") && <ReadingEvaluationsSection manuscriptId={manuscript.id} />}
+
+        {permissions.has("manuscripts:consultation") && (
+          <AuthorFilesSection manuscriptId={manuscript.id} canManage={permissions.has("manuscripts:saisie")} />
+        )}
 
         {manuscript.status.code === "DECISION_EDITORIALE" && canDecide && (
           <EditorialDecisionForm

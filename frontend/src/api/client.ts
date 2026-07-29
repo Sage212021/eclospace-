@@ -3195,6 +3195,7 @@ export interface ChatMessage {
   body: string;
   deleted: boolean;
   created_at: string;
+  read: boolean;
   file: { name: string; mime: string | null; size: number | null } | null;
 }
 export function getChatDirectory() {

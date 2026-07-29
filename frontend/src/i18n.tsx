@@ -1174,6 +1174,8 @@ const EN: Record<string, string> = {
   "chat.sending": "Sending…",
   "chat.send": "Send",
   "chat.back": "Back",
+  "chat.read": "Read",
+  "chat.sent": "Sent",
 
   // Espace Auteur (author portal)
   "author.space": "Author Area",

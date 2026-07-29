@@ -25,6 +25,7 @@ function messageView(m: { id: string; conversationId: string; senderId: string; 
     body: m.deletedAt ? "" : m.body,
     deleted: Boolean(m.deletedAt),
     created_at: m.createdAt,
+    read: false, // accusé de lecture ; surchargé à la lecture du fil
     file: m.deletedAt || !m.fileName ? null : { name: m.fileName, mime: m.fileMime, size: m.fileSize },
   };
 }
@@ -144,7 +145,11 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     const senderIds = [...new Set(msgs.map((m) => m.senderId))];
     const senders = await prisma.user.findMany({ where: { id: { in: senderIds } }, select: { id: true, username: true } });
     const nameById = new Map(senders.map((s) => [s.id, s.username]));
-    return reply.send(msgs.map((m) => messageView(m, nameById.get(m.senderId) ?? "—", me)));
+    // Accusé de lecture : un message que J'AI envoyé est « lu » si le correspondant
+    // a consulté la conversation après son envoi (2 coches or côté client).
+    const otherRead = await prisma.conversationRead.findUnique({ where: { conversationId_userId: { conversationId: id, userId: otherOf(conv, me) } } });
+    const otherReadAt = otherRead?.lastReadAt ?? null;
+    return reply.send(msgs.map((m) => ({ ...messageView(m, nameById.get(m.senderId) ?? "—", me), read: m.senderId === me && !!otherReadAt && otherReadAt >= m.createdAt })));
   });
 
   // Envoi d'un message (texte et/ou pièce jointe). JSON pour le texte seul ;
@@ -207,7 +212,10 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const conv = await prisma.conversation.findUnique({ where: { id } });
     if (!conv || !isParticipant(conv, me)) return reply.code(404).send({ code: "not_found", message: "Conversation introuvable." });
-    await prisma.conversationRead.upsert({ where: { conversationId_userId: { conversationId: id, userId: me } }, create: { conversationId: id, userId: me }, update: { lastReadAt: new Date() } });
+    const readAt = new Date();
+    await prisma.conversationRead.upsert({ where: { conversationId_userId: { conversationId: id, userId: me } }, create: { conversationId: id, userId: me, lastReadAt: readAt }, update: { lastReadAt: readAt } });
+    // Prévient l'expéditeur en temps réel que ses messages sont lus (2 coches or).
+    emitToUsers([otherOf(conv, me)], "chat:read", { conversationId: id, readerId: me, readAt });
     return reply.send({ ok: true });
   });
 

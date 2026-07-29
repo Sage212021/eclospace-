@@ -66,6 +66,33 @@ export function poleForPresence(code: string | null | undefined): string {
   return poleForDepartmentCode(code) ?? FALLBACK_POLE;
 }
 
+// Rattachement d'un RÔLE à un grand pôle — utilisé en repli quand l'utilisateur
+// n'a pas de département sur sa fiche employé (fréquent pour les comptes créés
+// sans profil RH). Ainsi le voyant vert d'un pôle s'allume dès qu'un de ses
+// membres est connecté, même sans fiche employé.
+const ROLE_CODE_TO_POLE: Record<string, string> = {
+  SECR: "Éditorial", COMLEC: "Éditorial", MEMBRE_COMITE_LECTURE: "Éditorial", COMITE_LECTURE: "Éditorial", DIRED: "Éditorial", DIR_EDITORIAL: "Éditorial", CORR: "Éditorial", CORRECTEUR: "Éditorial", CORRECTION: "Éditorial", REECRITURE: "Éditorial", EXPERT: "Éditorial", EXPERTISE: "Éditorial", ARCH: "Éditorial", ARCHIVAGE: "Éditorial", ASSISTANT_EDITORIAL: "Éditorial", DECISION_EDITORIALE: "Éditorial", ROMAN: "Éditorial", ESSAI: "Éditorial", JEUNESSE: "Éditorial", MANUEL: "Éditorial", POESIE: "Éditorial",
+  MAQ: "Production", MAQUETTISTE: "Production", MISE_EN_PAGE: "Production", INFOG: "Production", INFOGRAPHIE: "Production", RESP_INFOGRAPHIE: "Production", CQ: "Production", CONTROLE_QUALITE_IMPRESSION: "Production", RESP_QUALITE: "Production", IMPR: "Production", IMPRESSION: "Production", RESP_IMPRESSION: "Production", VALIDATION_BAT: "Production", PLANIFICATION: "Production", ATTRIBUTION_REFERENCES: "Production",
+  STOCK: "Commercial", MAGASINIER: "Commercial", ENTREE_STOCK: "Commercial", COM: "Commercial", COMMERCIALISATION: "Commercial", RESP_COMMERCIAL: "Commercial", VENTE_LIVRAISON: "Commercial", MKT: "Commercial", SUIVI_POST_PUBLICATION: "Commercial", CHARGE_COMMUNICATION: "Commercial",
+  JURID: "Juridique & Finance", RESP_JURIDIQUE: "Juridique & Finance", CONTRACTUALISATION: "Juridique & Finance", FIN: "Juridique & Finance", COMPTABLE: "Juridique & Finance", RESP_FINANCE: "Juridique & Finance", VERIF_ADMIN: "Juridique & Finance",
+  RH: "Administration", RESP_RH: "Administration", ADMIN_GENERAL: "Administration",
+  DG: "Pilotage", DIR_GENERAL: "Pilotage", CHEF_DEPARTEMENT: "Pilotage",
+};
+
+export function poleForRoles(roleCodes: string[]): string | null {
+  for (const c of roleCodes) {
+    const p = ROLE_CODE_TO_POLE[c];
+    if (p) return p;
+  }
+  return null;
+}
+
+// Pôle d'appartenance d'un utilisateur : département de la fiche employé si
+// présent, sinon déduit de ses rôles, sinon repli « Administration ».
+export function poleForUser(departmentCode: string | null | undefined, roleCodes: string[]): string {
+  return poleForDepartmentCode(departmentCode) ?? poleForRoles(roleCodes) ?? FALLBACK_POLE;
+}
+
 // Référence au registre de présence en mémoire, exposée pour la seule route
 // REST de révélation des noms (réservée aux profils habilités). Le canal
 // temps réel, lui, ne diffuse jamais d'identités (voir broadcast ci-dessous).
@@ -158,14 +185,16 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
     if (!userId) return next(new Error("unauthorized"));
     const user = await prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
-      include: { employee: { include: { department: true } } },
+      include: { employee: { include: { department: true } }, userRoles: { where: { revokedAt: null }, include: { role: true } } },
     });
     if (!user) return next(new Error("unauthorized"));
     socket.data.userId = user.id;
     socket.data.username = user.username;
-    // Repli « Administration » pour les comptes sans pôle opérationnel (dont le
-    // super-administrateur) : ils restent visibles dans le Hall.
-    socket.data.pole = poleForPresence(user.employee?.department?.code ?? null);
+    // Pôle d'appartenance : département de la fiche employé si présent, sinon
+    // déduit des rôles (le voyant du pôle s'allume dès qu'un membre est en
+    // ligne), sinon repli « Administration ».
+    const roleCodes = user.userRoles.map((ur) => ur.role.code);
+    socket.data.pole = poleForUser(user.employee?.department?.code ?? null, roleCodes);
     next();
   });
 

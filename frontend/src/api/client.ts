@@ -3384,3 +3384,46 @@ export function getServiceThread(id: string) {
 export function replyServiceThread(id: string, body: string) {
   return request<{ ok: true }>(`/api/v1/service-threads/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) });
 }
+
+// --- Commandes à facturer + validation par seuil (Finance étape 3) --------------
+export type BillingOrderCategory = "livre_scolaire" | "autre";
+export interface BillingOrder {
+  id: string;
+  reference: string;
+  category: BillingOrderCategory;
+  label: string;
+  customer_name: string;
+  amount_ht: number;
+  tax_rate: number;
+  amount_ttc: number;
+  status: "pending" | "invoiced" | "cancelled";
+  created_at: string;
+}
+export function createBillingOrder(input: { customer_id: string; category: BillingOrderCategory; label: string; amount_ht: number; tax_rate?: number; note?: string }) {
+  return request<BillingOrder>("/api/v1/billing-orders", { method: "POST", body: JSON.stringify(input) });
+}
+export function getBillingOrders(status: "pending" | "invoiced" | "cancelled" = "pending") {
+  return request<BillingOrder[]>(`/api/v1/billing-orders?status=${status}`);
+}
+export function invoiceBillingOrder(id: string) {
+  return request<{ id: string; invoice_number: string; status: string; total_ttc: number; needs_validation: boolean }>(`/api/v1/billing-orders/${id}/invoice`, { method: "POST" });
+}
+export interface PendingValidationInvoice {
+  id: string;
+  invoice_number: string;
+  customer_name: string;
+  total_ttc: number;
+  created_at: string;
+}
+export function getPendingValidationInvoices() {
+  return request<PendingValidationInvoice[]>("/api/v1/invoices/pending-validation");
+}
+export function validateInvoice(id: string) {
+  return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/validate`, { method: "POST" });
+}
+export function getValidationThreshold() {
+  return request<{ threshold: number }>("/api/v1/finance/validation-threshold");
+}
+export function setValidationThreshold(threshold: number) {
+  return request<{ threshold: number }>("/api/v1/finance/validation-threshold", { method: "PUT", body: JSON.stringify({ threshold }) });
+}

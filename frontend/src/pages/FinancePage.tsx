@@ -52,6 +52,7 @@ import {
 } from "../api/client";
 import { Card } from "../components/Card";
 import { PendingQuotesCard } from "../components/PendingQuotesCard";
+import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { Modal, Field } from "../components/Modal";
 import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
@@ -339,6 +340,8 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
       <PendingQuotesCard />
+
+      <BillingOrdersSection canManage={canManage} canAdmin={canAdminister} />
 
       <Card title={t("fin.invoices", "Factures")} icon={<IconFinance />} subtitle={t("fin.invoices_sub", "Suivi des factures et encaissements.")}>
         {invoices.length === 0 ? (

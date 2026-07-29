@@ -94,6 +94,26 @@ describe("comité de lecture : doublon, retrait, clôture", () => {
     expect(await statusCode(m.id)).toBe("COMITE_LECTURE");
   });
 
+  it("revient à l'étape précédente (correction d'une validation faite par erreur)", async () => {
+    const m = await createManuscriptAtCommittee(`Retour ${rnd()}`);
+    expect(await statusCode(m.id)).toBe("COMITE_LECTURE");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${m.id}/steps/revert`,
+      headers: { cookie: adminCookie },
+      payload: { reason: "validation par erreur" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("VERIF_ADMIN");
+    expect(await statusCode(m.id)).toBe("VERIF_ADMIN");
+
+    // L'étape précédente (VERIF_ADMIN) est rouverte : sa validation est effacée.
+    const verif = await prisma.workflowStatus.findUniqueOrThrow({ where: { code: "VERIF_ADMIN" } });
+    const step = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: m.id, statusId: verif.id } });
+    if (step) expect(step.validatedAt).toBeNull();
+  });
+
   it("clôt le comité manuellement et transmet à la décision éditoriale", async () => {
     const m = await createManuscriptAtCommittee(`Cloture ${rnd()}`);
     // admin (relecteur) + reader2 (ne rendra pas).

@@ -23,7 +23,7 @@ async function createInvoiceRecord(
     sourceType: string;
     sourceId: string;
     lines: InvoiceLineInput[];
-    status?: "issued" | "paid";
+    status?: "issued" | "paid" | "pending_validation";
   },
 ) {
   await assertPeriodOpen(tx);
@@ -341,4 +341,30 @@ export async function createCreditNoteFromReturn(tx: Tx, customerReturnId: strin
   }
 
   return creditNote;
+}
+
+// Facture établie à partir d'une commande à facturer (étape 3). La commande est
+// initiée par le DG / le commercial / la Finance ; la Finance la reçoit et
+// facture. Validation par seuil : au-dessus du seuil, la facture naît « en
+// attente de validation » (le DG doit valider) ; sinon elle est émise.
+export async function createInvoiceFromBillingOrder(tx: Tx, orderId: string, thresholdTtc: number) {
+  const order = await tx.billingOrder.findUniqueOrThrow({ where: { id: orderId } });
+  if (order.status !== "pending") throw new Error("order_not_pending");
+  if (order.invoiceId) throw new Error("order_already_invoiced");
+
+  const amountHt = Number(order.amountHt);
+  const taxRate = Number(order.taxRate);
+  const totalTtc = amountHt * (1 + taxRate / 100);
+  const status: "issued" | "pending_validation" = totalTtc >= thresholdTtc && thresholdTtc > 0 ? "pending_validation" : "issued";
+
+  const invoice = await createInvoiceRecord(tx, {
+    customerId: order.customerId,
+    sourceType: "sales_order",
+    sourceId: order.id,
+    lines: [{ isbnId: null, manuscriptId: null, format: null, description: order.label, quantity: 1, unitPrice: amountHt, taxRate }],
+    status,
+  });
+
+  await tx.billingOrder.update({ where: { id: order.id }, data: { status: "invoiced", invoiceId: invoice.id } });
+  return invoice;
 }

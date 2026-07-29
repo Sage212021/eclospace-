@@ -2574,6 +2574,7 @@ model Customer {
   customerReturns CustomerReturn[]
   stockLocations  StockLocation[]
   invoices        Invoice[]
+  billingOrders   BillingOrder[]
   dunnings        Dunning[]
   serviceQuotes   EditorialQuote[]   @relation("QuoteCustomer")
 
@@ -2914,12 +2915,53 @@ model RoyaltyPayment {
 enum InvoiceType {
   invoice
   credit_note
+  proforma
+}
+
+// Commande à facturer (reconfiguration Finance étape 3) — ex. livre scolaire.
+// Initiée par le DG, le commercial ou la Finance ; la Finance la reçoit et
+// établit la facture (même principe que le jalon devis auteur). Distincte de la
+// commande commerciale « SalesOrder » (dépôt/livraison), d'où le nom BillingOrder.
+enum BillingOrderStatus {
+  pending
+  invoiced
+  cancelled
+}
+
+enum BillingOrderCategory {
+  livre_scolaire
+  autre
+}
+
+model BillingOrder {
+  id            String               @id @default(uuid())
+  orderNumber   String               @unique @map("order_number")
+  customerId    String               @map("customer_id")
+  customer      Customer             @relation(fields: [customerId], references: [id])
+  category      BillingOrderCategory @default(livre_scolaire)
+  label         String
+  amountHt      Decimal              @map("amount_ht") @db.Decimal(12, 2)
+  taxRate       Decimal              @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  note          String?
+  status        BillingOrderStatus   @default(pending)
+  initiatedById String?              @map("initiated_by")
+  invoiceId     String?              @unique @map("invoice_id")
+  invoice       Invoice?             @relation(fields: [invoiceId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([status])
+  @@map("billing_orders")
 }
 
 enum InvoiceStatus {
   issued
   paid
   cancelled
+  pending_validation
 }
 
 // Jamais modifiée après émission (Ch. 18 §18.2) : une correction est un
@@ -2949,6 +2991,7 @@ model Invoice {
   paymentAllocations PaymentAllocation[]
   editorialQuote     EditorialQuote?
   installments       Installment[]
+  billingOrder       BillingOrder?
 
   @@map("invoices")
 }

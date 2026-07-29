@@ -13,8 +13,60 @@ import {
   type UserSummary,
 } from "../api/client";
 import { Button } from "../components/Button";
+import { GuidanceNote, GuidanceSteps } from "../components/GuidanceNote";
 
 const CATALOGUE_STORAGE_KEY = "eclospace.catalogue.filters";
+
+// Encadré d'orientation par sous-rubrique éditoriale (liste globale ou vue par
+// étape). Explique ce que liste la rubrique et l'action attendue.
+function ManuscriptsGuidance({ statusFilter, heading }: { statusFilter?: string; heading?: string }) {
+  if (statusFilter === "COMITE_LECTURE") {
+    return (
+      <GuidanceSteps
+        title="Comité de lecture — dans l'ordre"
+        steps={[
+          "Ouvrez un manuscrit de la liste.",
+          "Affectez un ou plusieurs relecteurs (chacun reçoit sa mission dans « Mes lectures »).",
+          "Quand tous les rapports sont remis, le dossier passe automatiquement à la décision — ou vous cliquez « Clore le comité ».",
+        ]}
+      />
+    );
+  }
+  if (statusFilter === "DECISION_EDITORIALE") {
+    return (
+      <GuidanceNote title="Direction éditoriale">
+        Manuscrits en attente de décision. Ouvrez un manuscrit pour acter la décision (acceptation, refus motivé…) au vu
+        des rapports de lecture. Une acceptation lance la contractualisation.
+      </GuidanceNote>
+    );
+  }
+  if (statusFilter === "CORRECTION") {
+    return (
+      <GuidanceSteps
+        title="Correction éditoriale — dans l'ordre"
+        steps={[
+          "Ouvrez le manuscrit : le correcteur y dépose le manuscrit corrigé (« Correction et versions ») et signale ses points bloquants.",
+          "Les points bloquants sont levés (sinon la validation est refusée).",
+          "Vous validez l'étape → le manuscrit passe à la mise en page.",
+        ]}
+      />
+    );
+  }
+  if (statusFilter) {
+    return (
+      <GuidanceNote title={heading ?? "Cette étape"}>
+        Liste des ouvrages actuellement à cette étape. Ouvrez un ouvrage pour saisir les informations de l'étape et le
+        faire avancer.
+      </GuidanceNote>
+    );
+  }
+  return (
+    <GuidanceNote title="Manuscrits">
+      Tous les ouvrages de la maison, du dépôt à l'archivage. Ouvrez un manuscrit pour voir son étape et le faire avancer,
+      ou cliquez « + Nouveau manuscrit » pour enregistrer un dépôt.
+    </GuidanceNote>
+  );
+}
 
 // Raccourcis par période (spéc. fonctionnelle §5) : traduisent un libellé en
 // bornes de date de parution. Renvoie { from, to } au format AAAA-MM-JJ.
@@ -107,6 +159,8 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
           </div>
         )}
       </div>
+
+      <ManuscriptsGuidance statusFilter={statusFilter} heading={heading} />
 
       {error && <p style={{ color: "var(--alert)", fontSize: 13 }}>{error}</p>}
 

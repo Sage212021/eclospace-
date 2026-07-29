@@ -12,6 +12,7 @@ import {
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { Modal } from "../components/Modal";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { IconBook } from "../components/icons";
 
 // Gestion des domaines & collections (spéc. fonctionnelle §6). Le secrétariat
@@ -30,6 +31,12 @@ export function CatalogueReferencePage({ canManage }: { canManage: boolean }) {
           ? " Chaque ajout ou retrait est journalisé ; une entrée utilisée par un ouvrage ne peut pas être retirée."
           : " Leur gestion est réservée à l'administration éditoriale."}
       </p>
+
+      <GuidanceNote title="Domaines & collections">
+        Les <strong>domaines</strong> (genres) et <strong>collections</strong> servent à classer chaque ouvrage.
+        Complétez-les selon la réalité de la maison{canManage ? "" : " (gestion réservée à l'administration éditoriale)"} ;
+        ils apparaissent ensuite dans les filtres du catalogue et à la création d'un manuscrit.
+      </GuidanceNote>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

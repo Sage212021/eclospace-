@@ -193,6 +193,26 @@ export interface Manuscript {
   status: { code: string; label: string; stepOrder: number };
   genre: Genre | null;
   collection: { id: string; label: string } | null;
+  fundingMode?: "publisher" | "author";
+  quoteDecision?: "pending" | "requested" | "deferred" | "skipped";
+  quoteDecisionNote?: string | null;
+}
+
+export type FundingMode = "publisher" | "author";
+export type QuoteDecision = "pending" | "requested" | "deferred" | "skipped";
+export function setManuscriptFunding(id: string, input: { funding_mode?: FundingMode; decision?: QuoteDecision; note?: string }) {
+  return request<{ funding_mode: FundingMode; quote_decision: QuoteDecision; quote_decision_note: string | null }>(`/api/v1/manuscripts/${id}/funding`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export interface PendingQuoteRow {
+  id: string;
+  reference: string;
+  title: string;
+  author_name: string;
+  decision: QuoteDecision;
+  has_draft: boolean;
+}
+export function getPendingQuotes() {
+  return request<PendingQuoteRow[]>("/api/v1/finance/pending-quotes");
 }
 
 export interface TimelineStep {

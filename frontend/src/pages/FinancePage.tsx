@@ -51,6 +51,7 @@ import {
   type InvoiceSchedule,
 } from "../api/client";
 import { Card } from "../components/Card";
+import { PendingQuotesCard } from "../components/PendingQuotesCard";
 import { Modal, Field } from "../components/Modal";
 import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
@@ -336,6 +337,8 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
+
+      <PendingQuotesCard />
 
       <Card title={t("fin.invoices", "Factures")} icon={<IconFinance />} subtitle={t("fin.invoices_sub", "Suivi des factures et encaissements.")}>
         {invoices.length === 0 ? (

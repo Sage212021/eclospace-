@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { ManuscriptOrigin } from "@prisma/client";
+import { ManuscriptOrigin, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
 import { previewSiteFiche, setSitePublished, optimizedCoverForSite, UnsupportedImageError } from "../lib/sitePublisher.js";
 
@@ -613,4 +614,47 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       }
     },
   );
+
+  // Prise en charge & jalon devis (reconfiguration Finance, non bloquant). Permet
+  // de fixer le mode (compte d'éditeur/auteur) et de trancher le jalon devis :
+  // « établir » (demande à la Finance, notifiée), « plus tard » ou « passer »
+  // (justifié). Aucune de ces options n'empêche le travail éditorial.
+  fastify.patch("/api/v1/manuscripts/:id/funding", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z
+      .object({
+        funding_mode: z.enum(["publisher", "author"]).optional(),
+        decision: z.enum(["pending", "requested", "deferred", "skipped"]).optional(),
+        note: z.string().max(500).optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides." });
+    const ms = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+    if (!ms) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+
+    const data: Prisma.ManuscriptUpdateInput = {};
+    if (parsed.data.funding_mode) data.fundingMode = parsed.data.funding_mode;
+    if (parsed.data.decision) {
+      if (parsed.data.decision === "skipped" && !parsed.data.note?.trim()) {
+        return reply.code(400).send({ code: "note_required", message: "Une justification est requise pour passer l'étape du devis." });
+      }
+      data.quoteDecision = parsed.data.decision;
+      data.quoteDecisionNote = parsed.data.decision === "skipped" ? parsed.data.note?.trim() ?? null : null;
+      data.quoteDecisionAt = new Date();
+      data.quoteDecisionBy = request.user!.id;
+    }
+    const updated = await prisma.manuscript.update({ where: { id }, data });
+
+    if (parsed.data.decision === "requested") {
+      const staff = await prisma.user.findMany({
+        where: { status: "active", deletedAt: null, accountType: "internal", userRoles: { some: { revokedAt: null, role: { rolePermissions: { some: { permission: { module: "finance", action: "saisie" } } } } } } },
+        select: { id: true },
+      });
+      if (staff.length) {
+        await notifyUsers({ userIds: staff.map((u) => u.id), type: "autre", priority: "medium", title: "Devis à établir", body: `${ms.title} (${ms.manuscriptNumber})`, entityType: "manuscript", entityId: id }).catch(() => {});
+      }
+    }
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "manuscript", entityId: id, newValues: { fundingMode: updated.fundingMode, quoteDecision: updated.quoteDecision }, ipAddress: request.ip });
+    return reply.send({ funding_mode: updated.fundingMode, quote_decision: updated.quoteDecision, quote_decision_note: updated.quoteDecisionNote });
+  });
 }

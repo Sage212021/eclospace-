@@ -50,9 +50,19 @@ export async function productionIndicators() {
   };
 }
 
+// Les prestations « compte d'auteur » (devis éditorial / impression /
+// communication) sont facturées via la Finance mais NE SONT PAS des ventes
+// commerciales de livres : on les exclut des indicateurs commerciaux (ventes,
+// chiffre d'affaires, meilleures ventes) pour ne pas gonfler le tableau de bord
+// avec des services. Elles restent bien comptées côté Finance (créances).
+const PRESTATION_QUOTE_SOURCES = ["editorial_quote", "impression_quote", "communication_quote"];
+
 export async function commercialIndicators() {
   const [invoiceLines, stockItems] = await Promise.all([
-    prisma.invoiceLine.findMany({ include: { invoice: true, isbn: { include: { manuscript: true } } } }),
+    prisma.invoiceLine.findMany({
+      where: { invoice: { sourceType: { notIn: PRESTATION_QUOTE_SOURCES } } },
+      include: { invoice: true, isbn: { include: { manuscript: true } } },
+    }),
     prisma.stockItem.findMany({ where: { condition: "vendable" } }),
   ]);
 

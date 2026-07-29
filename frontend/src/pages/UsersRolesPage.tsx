@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  auditAccess,
   createUser,
   deleteUser,
   grantRole,
@@ -9,6 +10,7 @@ import {
   resetUserPassword,
   revokeRole,
   updateUser,
+  type AccessAuditHolder,
   type RoleSummary,
   type UserWithRoles,
 } from "../api/client";
@@ -146,6 +148,8 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
+      {canAdminister && <AccessAuditCard />}
+
       {users.map((user) => (
         <section key={user.id} className="ecl-card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
@@ -272,6 +276,82 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
         </Modal>
       )}
     </div>
+  );
+}
+
+// Audit des accès sensibles : « qui détient tel accès, et par quel rôle ? ».
+// Permet de repérer une habilitation accordée à tort (ex. un accès Utilisateurs
+// & rôles) ; le retrait se fait ensuite via la croix rouge sur le rôle du
+// compte concerné, plus bas dans la page.
+const SENSITIVE_ACCESSES: { permission: string; label: string }[] = [
+  { permission: "users:administration", label: "Gestion des utilisateurs & rôles" },
+  { permission: "comite_lecture:saisie", label: "Comité de lecture (relecteur)" },
+  { permission: "tasks:saisie", label: "Correction / tâches (correcteur)" },
+  { permission: "decision_editoriale:validation", label: "Décision éditoriale" },
+  { permission: "manuscripts:validation", label: "Validation des étapes (manuscrits)" },
+  { permission: "finance:administration", label: "Finance — administration" },
+  { permission: "paie:administration", label: "Paie — administration" },
+];
+
+function AccessAuditCard() {
+  const [permission, setPermission] = useState(SENSITIVE_ACCESSES[0].permission);
+  const [holders, setHolders] = useState<AccessAuditHolder[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHolders(null);
+    setError(null);
+    auditAccess(permission)
+      .then((r) => setHolders(r.holders))
+      .catch((e) => setError(e instanceof Error ? e.message : "Échec de l'audit."));
+  }, [permission]);
+
+  const label = SENSITIVE_ACCESSES.find((a) => a.permission === permission)?.label ?? permission;
+
+  return (
+    <section className="ecl-card" style={{ borderColor: "var(--eclosion)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--ink)" }}>🔎 Audit des accès sensibles</div>
+        <select
+          value={permission}
+          onChange={(e) => setPermission(e.target.value)}
+          style={{ padding: "7px 10px", fontSize: 12.5, border: "1px solid var(--line)", borderRadius: 8, background: "var(--card)" }}
+        >
+          {SENSITIVE_ACCESSES.map((a) => (
+            <option key={a.permission} value={a.permission}>{a.label}</option>
+          ))}
+        </select>
+      </div>
+      <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "8px 0 12px" }}>
+        Comptes actifs qui détiennent l'accès « {label} », et le rôle qui le leur donne. Pour retirer l'accès à quelqu'un,
+        retirez-lui ce rôle (croix rouge sur le rôle, dans sa fiche plus bas).
+      </p>
+
+      {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
+      {!holders && !error && <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>Chargement…</p>}
+      {holders && holders.length === 0 && (
+        <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>Aucun compte ne détient cet accès.</p>
+      )}
+      {holders && holders.length > 0 && (
+        <div style={{ display: "grid", gap: 8 }}>
+          {holders.map((h) => (
+            <div key={h.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, border: "1px solid var(--line)", borderRadius: 8, padding: "8px 12px", flexWrap: "wrap" }}>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontWeight: 700, color: "var(--ink)", fontSize: 13.5 }}>{h.username}</span>
+                <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>{h.email}</span>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {h.via_roles.map((r) => (
+                  <span key={r.code} style={{ fontSize: 11.5, fontWeight: 600, background: "var(--eclosion-soft)", color: "var(--eclosion-dark)", border: "1px solid var(--eclosion)", borderRadius: 999, padding: "2px 9px" }}>
+                    {r.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -427,6 +427,18 @@ export function listManuscriptReadingAssignments(manuscriptId: string) {
   return request<ReadingAssignment[]>(`/api/v1/reading-assignments?manuscript=${manuscriptId}`);
 }
 
+// Retire (annule) une mission de lecture erronée ou en doublon. Renvoie
+// advanced=true si ce retrait a permis de transmettre le dossier à la décision.
+export function cancelReadingAssignment(assignmentId: string) {
+  return request<{ ok: boolean; advanced: boolean }>(`/api/v1/reading-assignments/${assignmentId}/cancel`, { method: "POST" });
+}
+
+// Clôt le comité de lecture (responsable éditorial) : annule les missions en
+// attente et transmet le manuscrit à la décision éditoriale.
+export function closeReadingCommittee(manuscriptId: string) {
+  return request<{ ok: boolean; advanced: boolean }>(`/api/v1/manuscripts/${manuscriptId}/close-reading-committee`, { method: "POST" });
+}
+
 // Fichier externe de rapport de relecture : dépôt (relecteur) et téléchargement.
 export async function uploadReadingReportFile(assignmentId: string, file: File) {
   const form = new FormData();

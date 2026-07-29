@@ -291,9 +291,10 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
     const tracking = await app.inject({ method: "GET", url: "/api/v1/production-tracking", headers: { cookie: adminCookie } });
     expect(tracking.statusCode).toBe(200);
     const items = tracking.json();
-    // Ne liste que les ouvrages engagés en production (à partir de la contractualisation).
+    // « Suivi des ouvrages » : vue d'ensemble de tout le pipeline (dès la
+    // réception), pour que l'éditorial voie chaque ouvrage et son étape.
     for (const m of items) {
-      expect(m.stepOrder).toBeGreaterThanOrEqual(5);
+      expect(m.stepOrder).toBeGreaterThanOrEqual(1);
       expect(m).toHaveProperty("statusLabel");
       expect(m).toHaveProperty("title");
     }

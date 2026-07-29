@@ -73,6 +73,8 @@ interface SidebarProps {
   // (compteurs uniquement — aucune identité, par confidentialité).
   presenceByPole: Record<string, number>;
   presenceByModule: Record<string, number>;
+  // Non-lus de la messagerie interne (voyant sur l'entrée « Messagerie »).
+  chatUnread?: number;
 }
 
 // Barre latérale sombre (guide de style §6). Menu en 6 pôles dépliables
@@ -90,6 +92,7 @@ export function Sidebar({
   username,
   presenceByPole,
   presenceByModule,
+  chatUnread = 0,
 }: SidebarProps) {
   const { t } = useI18n();
   const visiblePoles = poles;
@@ -129,6 +132,7 @@ export function Sidebar({
                   onSelect={onSelect}
                   locked={isLocked(item)}
                   presentCount={isLocked(item) ? 0 : presenceByModule[item.key] ?? 0}
+                  badge={item.key === "cm-messagerie" ? chatUnread : 0}
                 />
               ))}
             </ul>
@@ -166,6 +170,9 @@ export function Sidebar({
                 </span>
                 {t(`pole.${pole.label}`, pole.label)}
                 <PresenceDot count={presenceByPole[pole.label] ?? 0} />
+                {pole.items.some((i) => i.key === "cm-messagerie") && chatUnread > 0 && (
+                  <span aria-label="messages non lus" style={{ width: 8, height: 8, borderRadius: 999, background: "var(--alert, #C24B3A)", display: "inline-block" }} />
+                )}
               </span>
               <span
                 style={{
@@ -196,6 +203,7 @@ export function Sidebar({
                     indented
                     locked={isLocked(item)}
                     presentCount={isLocked(item) ? 0 : presenceByModule[item.key] ?? 0}
+                  badge={item.key === "cm-messagerie" ? chatUnread : 0}
                   />
                 ))}
               </ul>
@@ -218,6 +226,7 @@ function LeafButton({
   indented,
   locked,
   presentCount,
+  badge,
 }: {
   item: NavLeaf;
   active: boolean;
@@ -225,6 +234,7 @@ function LeafButton({
   indented?: boolean;
   locked?: boolean;
   presentCount: number;
+  badge?: number;
 }) {
   const { t } = useI18n();
   const icon = leafIcon(item.key);
@@ -261,7 +271,13 @@ function LeafButton({
           )}
           {t(`nav.${item.key}`, item.label)}
         </span>
-        {locked ? <LockIcon /> : <PresenceDot count={presentCount} />}
+        {badge && badge > 0 ? (
+          <span style={{ background: "var(--alert, #C24B3A)", color: "#fff", borderRadius: 999, fontSize: 10.5, fontWeight: 700, padding: "1px 6px", minWidth: 16, textAlign: "center", lineHeight: 1.5 }}>{badge > 99 ? "99+" : badge}</span>
+        ) : locked ? (
+          <LockIcon />
+        ) : (
+          <PresenceDot count={presentCount} />
+        )}
       </button>
     </li>
   );

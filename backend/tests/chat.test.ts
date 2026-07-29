@@ -129,4 +129,18 @@ describe("messagerie interne (chat 1-à-1)", () => {
     const del2 = await app.inject({ method: "DELETE", url: `/api/v1/chat/messages/${send2.json().id}`, headers: { cookie: cookieB } });
     expect(del2.statusCode).toBe(403);
   });
+
+  it("accusé de lecture : mon message passe à « lu » après consultation du correspondant", async () => {
+    const send = await app.inject({ method: "POST", url: `/api/v1/chat/conversations/${convId}/messages`, headers: { cookie: cookieA }, payload: { body: "Accusé de lecture ?" } });
+    const msgId = send.json().id;
+    expect(send.json().read).toBe(false);
+    // Avant lecture par B : mon message n'est pas lu.
+    let msgs = await app.inject({ method: "GET", url: `/api/v1/chat/conversations/${convId}/messages`, headers: { cookie: cookieA } });
+    expect((msgs.json() as { id: string; read: boolean }[]).find((m) => m.id === msgId)!.read).toBe(false);
+    // B consulte la conversation.
+    await app.inject({ method: "POST", url: `/api/v1/chat/conversations/${convId}/read`, headers: { cookie: cookieB } });
+    // Après lecture : mon message est marqué lu.
+    msgs = await app.inject({ method: "GET", url: `/api/v1/chat/conversations/${convId}/messages`, headers: { cookie: cookieA } });
+    expect((msgs.json() as { id: string; read: boolean }[]).find((m) => m.id === msgId)!.read).toBe(true);
+  });
 });

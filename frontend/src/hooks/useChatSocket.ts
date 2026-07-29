@@ -8,14 +8,23 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? (import.meta.env.DEV ? "http:/
 // authentifiée par le cookie rejoint la salle `user:<id>` côté serveur, qui reçoit
 // l'événement `chat:message`. Le gestionnaire est gardé dans une ref pour ne pas
 // reconnecter la socket à chaque rendu.
-export function useChatSocket(onMessage: (m: ChatMessage) => void, enabled = true) {
+export interface ChatReadEvent {
+  conversationId: string;
+  readerId: string;
+  readAt: string;
+}
+
+export function useChatSocket(onMessage: (m: ChatMessage) => void, onRead?: (e: ChatReadEvent) => void, enabled = true) {
   const handler = useRef(onMessage);
   handler.current = onMessage;
+  const readHandler = useRef(onRead);
+  readHandler.current = onRead;
 
   useEffect(() => {
     if (!enabled) return;
     const socket: Socket = io(API_BASE || undefined, { withCredentials: true });
     socket.on("chat:message", (m: ChatMessage) => handler.current?.(m));
+    socket.on("chat:read", (e: ChatReadEvent) => readHandler.current?.(e));
     return () => {
       socket.disconnect();
     };

@@ -93,13 +93,21 @@ export function ChatPage() {
 
   // Réception temps réel : si le message concerne la conversation ouverte, on
   // l'ajoute et on marque lu ; sinon on rafraîchit la liste (non-lus, ordre).
-  useChatSocket((m) => {
-    if (m.conversation_id === activeRef.current) {
-      setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
-      markConversationRead(m.conversation_id).catch(() => {});
-    }
-    loadConversations();
-  });
+  useChatSocket(
+    (m) => {
+      if (m.conversation_id === activeRef.current) {
+        setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+        markConversationRead(m.conversation_id).catch(() => {});
+      }
+      loadConversations();
+    },
+    // Le correspondant a lu : passer mes messages antérieurs à « lu » (2 coches or).
+    (e) => {
+      if (e.conversationId !== activeRef.current) return;
+      const readAt = new Date(e.readAt).getTime();
+      setMessages((prev) => prev.map((m) => (m.mine && !m.read && new Date(m.created_at).getTime() <= readAt ? { ...m, read: true } : m)));
+    },
+  );
 
   async function openConversation(id: string, name: string) {
     setActiveId(id);
@@ -229,6 +237,15 @@ export function ChatPage() {
                     </div>
                     <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2, textAlign: m.mine ? "right" : "left" }}>
                       {dateFmt.format(new Date(m.created_at))}
+                      {m.mine && !m.deleted && (
+                        <span
+                          title={m.read ? t("chat.read", "Lu") : t("chat.sent", "Envoyé")}
+                          aria-label={m.read ? t("chat.read", "Lu") : t("chat.sent", "Envoyé")}
+                          style={{ marginLeft: 6, fontWeight: 700, letterSpacing: -2, color: m.read ? "var(--or, #C89A1B)" : "var(--muted)" }}
+                        >
+                          {m.read ? "✓✓" : "✓"}
+                        </span>
+                      )}
                       {m.mine && !m.deleted && (
                         <button onClick={() => removeMessage(m.id)} style={{ marginLeft: 8, border: "none", background: "none", color: "var(--muted)", cursor: "pointer", fontSize: 11, textDecoration: "underline" }}>{t("chat.delete", "Supprimer")}</button>
                       )}

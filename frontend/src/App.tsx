@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { confirmIdentifierChange, fetchMe, getNotificationPreferences, logout, stopImpersonation, type EffectiveUser, type NotificationPreferences } from "./api/client";
+import { confirmIdentifierChange, fetchMe, getChatUnread, getNotificationPreferences, logout, stopImpersonation, type EffectiveUser, type NotificationPreferences } from "./api/client";
 import { useI18n } from "./i18n";
 import { Login } from "./pages/Login";
 
@@ -298,6 +298,9 @@ export function App() {
   const [view, setView] = useState<View>(loadStoredView);
   const [announcementToOpen, setAnnouncementToOpen] = useState<string | null>(null);
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
+  // Voyant de non-lus de la messagerie interne (rafraîchi régulièrement et au
+  // changement de vue) pour signaler au destinataire un nouveau message.
+  const [chatUnread, setChatUnread] = useState(0);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // Compteur incrémenté à chaque nouvelle annonce temps réel : sert de signal
   // à la cloche (TopBar) pour recharger son badge de non-lus.
@@ -379,6 +382,19 @@ export function App() {
     }
     getNotificationPreferences().then(setNotifPrefs).catch(() => {});
   }, [user?.id]);
+
+  // Voyant de non-lus de la messagerie : rafraîchi à la connexion, à chaque
+  // changement de vue (ex. en quittant la messagerie), et toutes les 20 s.
+  useEffect(() => {
+    if (!user) {
+      setChatUnread(0);
+      return;
+    }
+    const refresh = () => getChatUnread().then((r) => setChatUnread(r.unread)).catch(() => {});
+    refresh();
+    const timer = setInterval(refresh, 20000);
+    return () => clearInterval(timer);
+  }, [user?.id, view]);
 
   // Signale le pôle/module courant à chaque changement de vue (présence).
   useEffect(() => {
@@ -491,6 +507,7 @@ export function App() {
       username={user.username}
       presenceByPole={presence.byPole}
       presenceByModule={presence.byModule}
+      chatUnread={chatUnread}
     />
   );
 

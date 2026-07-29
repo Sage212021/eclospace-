@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 // Compte d'auteur (Phase B) : devis de prestation → signature (interne ou en
@@ -218,5 +218,31 @@ describe("devis de prestation éditoriale (compte d'auteur)", () => {
     await app.inject({ method: "POST", url: `/api/v1/editorial-quotes/${created.id}/send`, headers: { cookie } });
     const del = await app.inject({ method: "DELETE", url: `/api/v1/editorial-quotes/${created.id}`, headers: { cookie } });
     expect(del.statusCode).toBe(409);
+  });
+
+  it("réinitialise (données de test) la chaîne complète devis + facture", async () => {
+    const author = await newAuthor();
+    const created = (await createQuote(author.id)).json();
+    await app.inject({ method: "POST", url: `/api/v1/editorial-quotes/${created.id}/accept`, headers: { cookie }, payload: { method: "internal", signer_name: "Awa", consent: true } });
+    const inv = (await app.inject({ method: "POST", url: `/api/v1/editorial-quotes/${created.id}/invoice`, headers: { cookie } })).json();
+    const invoiceId = inv.id;
+
+    const reset = await app.inject({ method: "DELETE", url: `/api/v1/editorial-quotes/${created.id}/reset`, headers: { cookie } });
+    expect(reset.statusCode).toBe(200);
+    expect(reset.json().purged.invoiceNumber).toBeTruthy();
+
+    // Devis et facture réellement purgés.
+    expect(await prisma.editorialQuote.findUnique({ where: { id: created.id } })).toBeNull();
+    expect(await prisma.invoice.findUnique({ where: { id: invoiceId } })).toBeNull();
+  });
+
+  it("réinitialisation réservée à l'administration Finance (403 pour un comptable)", async () => {
+    const author = await newAuthor();
+    const created = (await createQuote(author.id)).json();
+    const comptable = `compta_${Math.random().toString(36).slice(2, 7)}`;
+    await createUserWithRole(comptable, "COMPTABLE", "TestAdmin123!");
+    const compCookie = await loginCookie(app, comptable, "TestAdmin123!");
+    const res = await app.inject({ method: "DELETE", url: `/api/v1/editorial-quotes/${created.id}/reset`, headers: { cookie: compCookie } });
+    expect(res.statusCode).toBe(403);
   });
 });

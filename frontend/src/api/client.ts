@@ -609,6 +609,9 @@ export function createEditorialQuote(input: {
 export function deleteEditorialQuote(id: string) {
   return request<{ ok: true }>(`/api/v1/editorial-quotes/${id}`, { method: "DELETE" });
 }
+export function resetEditorialQuoteChain(id: string) {
+  return request<{ ok: true; purged: { quoteNumber: string; invoiceNumber?: string } }>(`/api/v1/editorial-quotes/${id}/reset`, { method: "DELETE" });
+}
 export function sendEditorialQuote(id: string) {
   return request<{ quote: EditorialQuote; sign_path: string; sign_url: string | null; email_sent: boolean }>(
     `/api/v1/editorial-quotes/${id}/send`,

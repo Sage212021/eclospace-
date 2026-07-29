@@ -4,6 +4,7 @@ import {
   createEditorialQuote,
   getEditorialQuote,
   deleteEditorialQuote,
+  resetEditorialQuoteChain,
   invoiceEditorialQuote,
   listCustomers,
   listEditorialQuotes,
@@ -68,12 +69,13 @@ interface Props {
   defaultPartnerId: string;
   canCreate: boolean; // finance:saisie
   canValidate: boolean; // finance:validation
+  canAdmin?: boolean; // finance:administration (réinitialisation données de test)
 }
 
 // Compte d'auteur (Phase B) : gestion des devis de prestation éditoriale d'un
 // manuscrit — création, envoi pour signature en ligne, signature interne/papier,
 // puis génération de la facture. Hors impression et communication.
-export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCreate, canValidate }: Props) {
+export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCreate, canValidate, canAdmin }: Props) {
   const [quotes, setQuotes] = useState<EditorialQuote[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +113,20 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
       refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Suppression impossible.");
+    }
+  }
+
+  async function handleReset(q: EditorialQuote) {
+    const warn = `RÉINITIALISATION (données de test)\n\nSupprimer définitivement le devis ${q.quoteNumber} ET sa facture éventuelle, et rendre les numéros ?\n\nÀ n'utiliser qu'en phase de démarrage. Action tracée.`;
+    if (!window.confirm(warn)) return;
+    setError(null);
+    setInfo(null);
+    try {
+      const r = await resetEditorialQuoteChain(q.id);
+      setInfo(`Réinitialisé : devis ${r.purged.quoteNumber}${r.purged.invoiceNumber ? ` et facture ${r.purged.invoiceNumber}` : ""} supprimés. Numéros rendus.`);
+      refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Réinitialisation impossible.");
     }
   }
 
@@ -192,6 +208,11 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
             {canCreate && q.status === "draft" && (
               <button onClick={() => handleDelete(q)} style={{ ...secondaryButtonStyle, borderColor: "var(--alert)", color: "var(--alert)" }}>
                 Supprimer
+              </button>
+            )}
+            {canAdmin && (
+              <button onClick={() => handleReset(q)} title="Supprime le devis et sa facture, rend les numéros (phase de démarrage)" style={{ ...secondaryButtonStyle, borderColor: "var(--alert)", color: "var(--alert)" }}>
+                🧹 Réinitialiser (test)
               </button>
             )}
           </div>

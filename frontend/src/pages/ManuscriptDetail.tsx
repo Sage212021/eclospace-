@@ -187,6 +187,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           defaultPartnerId={manuscript.workContributors[0]?.partner.id ?? ""}
           canCreate={permissions.has("finance:saisie")}
           canValidate={permissions.has("finance:validation")}
+          canAdmin={permissions.has("finance:administration")}
         />
       )}
 

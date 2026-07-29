@@ -203,10 +203,11 @@ function escapeHtml(s: string): string {
 // / TTC et la devise tels qu'enregistrés — aucun recalcul côté impression.
 export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
   const isCredit = invoice.type === "credit_note";
+  const isProforma = invoice.type === "proforma";
   const cur = invoice.currency || "XAF";
   const created = invoice.createdAt ? fdate(invoice.createdAt) : "—";
   const due = invoice.dueDate ? fdate(invoice.dueDate) : "—";
-  const docName = isCredit ? tr("Avoir", "Credit note") : tr("Facture", "Invoice");
+  const docName = isCredit ? tr("Avoir", "Credit note") : isProforma ? tr("Facture proforma", "Proforma invoice") : tr("Facture", "Invoice");
 
   const rows = invoice.lines
     .map(

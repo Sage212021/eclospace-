@@ -1440,7 +1440,7 @@ export function createAccountingExport(periodKey: string) {
 export interface Invoice {
   id: string;
   invoiceNumber: string;
-  type: "invoice" | "credit_note";
+  type: "invoice" | "credit_note" | "proforma";
   status: string;
   totalHt: string;
   totalTax: string;

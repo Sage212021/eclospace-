@@ -12,9 +12,11 @@ import {
   type BillingOrder,
   type BillingOrderCategory,
   type PendingValidationInvoice,
+  type InvoiceDetail,
 } from "../api/client";
 import { Card } from "./Card";
 import { IconFinance } from "./icons";
+import { printInvoice } from "../lib/print";
 
 // Commandes à facturer (Finance étape 3) : une commande (ex. livre scolaire),
 // initiée par le DG / le commercial / la Finance, est reçue par la Finance qui
@@ -67,6 +69,27 @@ export function BillingOrdersSection({ canManage, canAdmin }: { canManage: boole
     } finally {
       setBusy(false);
     }
+  }
+
+  // Proforma : document préparatoire NON fiscal, imprimé à la volée depuis la
+  // commande (ne consomme pas la numérotation légale des factures).
+  function proforma(o: BillingOrder) {
+    const tax = Math.round((o.amount_ht * o.tax_rate) / 100 * 100) / 100;
+    const doc: InvoiceDetail = {
+      id: "proforma",
+      invoiceNumber: `PRO-${o.reference}`,
+      type: "proforma",
+      status: "proforma",
+      totalHt: String(o.amount_ht),
+      totalTax: String(tax),
+      totalTtc: String(o.amount_ttc),
+      dueDate: null,
+      createdAt: new Date().toISOString(),
+      currency: "XAF",
+      customer: { name: o.customer_name },
+      lines: [{ id: "1", description: o.label, quantity: 1, unitPrice: String(o.amount_ht), taxRate: String(o.tax_rate), lineTotal: String(o.amount_ht) }],
+    };
+    printInvoice(doc);
   }
 
   async function establish(o: BillingOrder) {
@@ -155,7 +178,12 @@ export function BillingOrdersSection({ canManage, canAdmin }: { canManage: boole
                     <span style={{ fontFamily: "var(--font-mono)" }}>{o.reference}</span> · {o.customer_name} · <span style={{ fontFamily: "var(--font-mono)" }}>{fmt.format(o.amount_ttc)}</span>
                   </div>
                 </div>
-                {canManage && <button onClick={() => establish(o)} style={btnPrimary}>Établir la facture</button>}
+                {canManage && (
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => proforma(o)} style={btnGhost} title="Imprimer une facture proforma (document préparatoire, non fiscal)">Proforma (PDF)</button>
+                    <button onClick={() => establish(o)} style={btnPrimary}>Établir la facture</button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -734,6 +734,54 @@ enum AuthorFileDirection {
   to_author   // partagé par la maison (BAT, épreuves, contrat…)
 }
 
+// Guichets de la messagerie auteur (Espace Auteur inc. 2b) : l'auteur écrit à un
+// SERVICE, pas à une personne ; un agent habilité du service répond.
+enum ServiceDesk {
+  education
+  client
+}
+
+enum ServiceMessageSender {
+  author
+  staff
+}
+
+// Fil de discussion entre un auteur et un service. Portée par partnerId :
+// l'auteur ne voit que ses propres fils. Côté maison, l'accès est gardé par la
+// permission service_auteurs.
+model ServiceThread {
+  id            String      @id @default(uuid())
+  partnerId     String      @map("partner_id")
+  partner       Partner     @relation(fields: [partnerId], references: [id])
+  service       ServiceDesk
+  subject       String
+  status        String      @default("open") // open | closed
+  createdAt     DateTime    @default(now()) @map("created_at")
+  lastMessageAt DateTime?   @map("last_message_at")
+  // Suivi de lecture par côté, pour les compteurs de non-lus.
+  authorReadAt  DateTime?   @map("author_read_at")
+  staffReadAt   DateTime?   @map("staff_read_at")
+
+  messages ServiceMessage[]
+
+  @@index([partnerId])
+  @@index([service])
+  @@map("service_threads")
+}
+
+model ServiceMessage {
+  id           String               @id @default(uuid())
+  threadId     String               @map("thread_id")
+  thread       ServiceThread        @relation(fields: [threadId], references: [id])
+  senderKind   ServiceMessageSender @map("sender_kind")
+  senderUserId String?              @map("sender_user_id")
+  body         String
+  createdAt    DateTime             @default(now()) @map("created_at")
+
+  @@index([threadId, createdAt])
+  @@map("service_messages")
+}
+
 // Fichier échangé entre un auteur et la maison, rattaché à l'un de ses ouvrages.
 // Portée par partnerId : l'auteur n'accède qu'aux fichiers de ses propres œuvres.
 model AuthorFile {
@@ -1189,6 +1237,7 @@ model Partner {
   editorialQuotes      EditorialQuote[]
   userAccount          User?
   authorFiles          AuthorFile[]
+  serviceThreads       ServiceThread[]
 
   @@map("partners")
 }

@@ -202,4 +202,21 @@ describe("devis de prestation éditoriale (compte d'auteur)", () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it("supprime un devis brouillon (et le retire de la liste)", async () => {
+    const author = await newAuthor();
+    const created = (await createQuote(author.id)).json();
+    const del = await app.inject({ method: "DELETE", url: `/api/v1/editorial-quotes/${created.id}`, headers: { cookie } });
+    expect(del.statusCode).toBe(200);
+    const still = await app.inject({ method: "GET", url: `/api/v1/editorial-quotes/${created.id}`, headers: { cookie } });
+    expect(still.statusCode).toBe(404);
+  });
+
+  it("refuse la suppression d'un devis non brouillon (409)", async () => {
+    const author = await newAuthor();
+    const created = (await createQuote(author.id)).json();
+    await app.inject({ method: "POST", url: `/api/v1/editorial-quotes/${created.id}/send`, headers: { cookie } });
+    const del = await app.inject({ method: "DELETE", url: `/api/v1/editorial-quotes/${created.id}`, headers: { cookie } });
+    expect(del.statusCode).toBe(409);
+  });
 });

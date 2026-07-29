@@ -606,6 +606,9 @@ export function createEditorialQuote(input: {
 
 // Prépare l'envoi pour signature en ligne : renvoie le lien (et l'envoie par
 // e-mail à l'auteur si une adresse est connue).
+export function deleteEditorialQuote(id: string) {
+  return request<{ ok: true }>(`/api/v1/editorial-quotes/${id}`, { method: "DELETE" });
+}
 export function sendEditorialQuote(id: string) {
   return request<{ quote: EditorialQuote; sign_path: string; sign_url: string | null; email_sent: boolean }>(
     `/api/v1/editorial-quotes/${id}/send`,
@@ -3303,4 +3306,58 @@ export async function shareFileToAuthor(manuscriptId: string, label: string, fil
 }
 export function manuscriptAuthorFileDownloadUrl(manuscriptId: string, fileId: string): string {
   return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/author-files/${fileId}/download`;
+}
+
+// --- Espace Auteur : messagerie vers les services (inc. 2b) ---------------------
+export type ServiceDesk = "education" | "client";
+export interface ServiceThreadSummary {
+  id: string;
+  service: ServiceDesk;
+  service_label: string;
+  subject: string;
+  status: string;
+  last_message: string;
+  last_at: string | null;
+  unread: number;
+  author_name?: string;
+}
+export interface ServiceThreadMessage {
+  id: string;
+  body: string;
+  created_at: string;
+  mine?: boolean;
+  from_service?: boolean;
+  from_author?: boolean;
+}
+export interface ServiceThreadDetail {
+  id: string;
+  service: ServiceDesk;
+  service_label: string;
+  subject: string;
+  status: string;
+  author_name?: string;
+  messages: ServiceThreadMessage[];
+}
+// Côté auteur
+export function getAuthorServiceThreads() {
+  return request<ServiceThreadSummary[]>("/api/v1/author/service-threads");
+}
+export function createAuthorServiceThread(service: ServiceDesk, subject: string, body: string) {
+  return request<{ id: string }>("/api/v1/author/service-threads", { method: "POST", body: JSON.stringify({ service, subject, body }) });
+}
+export function getAuthorServiceThread(id: string) {
+  return request<ServiceThreadDetail>(`/api/v1/author/service-threads/${id}`);
+}
+export function replyAuthorServiceThread(id: string, body: string) {
+  return request<{ ok: true }>(`/api/v1/author/service-threads/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) });
+}
+// Côté personnel
+export function getServiceThreads(service?: ServiceDesk) {
+  return request<ServiceThreadSummary[]>(`/api/v1/service-threads${service ? `?service=${service}` : ""}`);
+}
+export function getServiceThread(id: string) {
+  return request<ServiceThreadDetail>(`/api/v1/service-threads/${id}`);
+}
+export function replyServiceThread(id: string, body: string) {
+  return request<{ ok: true }>(`/api/v1/service-threads/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) });
 }

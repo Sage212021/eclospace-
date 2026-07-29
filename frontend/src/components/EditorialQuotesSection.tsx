@@ -3,6 +3,7 @@ import {
   acceptEditorialQuote,
   createEditorialQuote,
   getEditorialQuote,
+  deleteEditorialQuote,
   invoiceEditorialQuote,
   listCustomers,
   listEditorialQuotes,
@@ -100,6 +101,19 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
     }
   }
 
+  async function handleDelete(q: EditorialQuote) {
+    if (!window.confirm(`Supprimer le devis ${q.quoteNumber} (brouillon) ? Son numéro sera rendu si c'est le dernier de l'année.`)) return;
+    setError(null);
+    setInfo(null);
+    try {
+      await deleteEditorialQuote(q.id);
+      setInfo(`Devis ${q.quoteNumber} supprimé.`);
+      refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Suppression impossible.");
+    }
+  }
+
   async function handleInvoice(q: EditorialQuote) {
     setError(null);
     setInfo(null);
@@ -173,6 +187,11 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
             {canCreate && q.status === "accepted" && (
               <button onClick={() => handleInvoice(q)} style={{ ...secondaryButtonStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)", fontWeight: 600 }}>
                 Générer la facture
+              </button>
+            )}
+            {canCreate && q.status === "draft" && (
+              <button onClick={() => handleDelete(q)} style={{ ...secondaryButtonStyle, borderColor: "var(--alert)", color: "var(--alert)" }}>
+                Supprimer
               </button>
             )}
           </div>

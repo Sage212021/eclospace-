@@ -50,6 +50,7 @@ import newsletterRoutes from "./routes/newsletters.js";
 import annualEventsRoutes from "./routes/annualEvents.js";
 import chatRoutes from "./routes/chat.js";
 import authorRoutes from "./routes/author.js";
+import serviceDeskRoutes from "./routes/serviceDesk.js";
 
 export async function buildApp() {
   // trustProxy : derrière l'hébergeur (Scalingo), l'adresse réelle du visiteur
@@ -181,6 +182,7 @@ export async function buildApp() {
   await app.register(annualEventsRoutes);
   await app.register(chatRoutes);
   await app.register(authorRoutes);
+  await app.register(serviceDeskRoutes);
 
   // En production, le frontend compilé (frontend/dist) est copié dans backend/public
   // par le script de build racine (npm run build) : une seule application déployée,

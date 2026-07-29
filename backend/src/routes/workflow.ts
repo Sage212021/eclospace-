@@ -27,6 +27,19 @@ async function findNextApplicableStatus(fromStepOrder: number, manuscript: Manus
   return candidates.find((candidate) => !candidate.isConditional || isStepRequired(candidate.code, manuscript)) ?? null;
 }
 
+// Symétrique de findNextApplicableStatus : l'étape applicable immédiatement
+// précédente (en sautant les étapes conditionnelles non requises). Sert au
+// retour arrière (correction d'une validation faite par erreur).
+async function findPreviousApplicableStatus(fromStepOrder: number, manuscript: Manuscript) {
+  const candidates = await prisma.workflowStatus.findMany({
+    where: { stepOrder: { lt: fromStepOrder } },
+    orderBy: { stepOrder: "desc" },
+  });
+  return candidates.find((candidate) => !candidate.isConditional || isStepRequired(candidate.code, manuscript)) ?? null;
+}
+
+const revertStepSchema = z.object({ reason: z.string().max(500).optional() });
+
 const validateStepSchema = z.object({
   observations: z.string().optional(),
   // Utilisé uniquement par l'étape VERIF_ADMIN (Ch. 4 §4.3, étape 2) : un
@@ -358,6 +371,70 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       });
 
       return reply.send({ advanced: true, status: nextStatus?.code ?? null });
+    },
+  );
+
+  // Retour à l'étape précédente (Ch. 4 §4.5, correction d'erreur) : ramène le
+  // manuscrit à l'étape applicable immédiatement précédente et « rouvre » cette
+  // étape (sa validation est effacée pour pouvoir être refaite). Tracé au
+  // journal d'audit. Réservé aux profils habilités à valider les étapes ; à
+  // n'utiliser que pour corriger une validation faite par erreur.
+  fastify.post(
+    "/api/v1/manuscripts/:id/steps/revert",
+    { preHandler: requirePermission("manuscripts", "validation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = revertStepSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, include: { status: true } });
+      if (!manuscript) {
+        return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      }
+      const current = manuscript.status;
+      const previous = await findPreviousApplicableStatus(current.stepOrder, manuscript);
+      if (!previous) {
+        return reply.code(409).send({
+          code: "no_previous_step",
+          message: `« ${current.label} » est la première étape du circuit : impossible de revenir en arrière.`,
+        });
+      }
+
+      const now = new Date();
+      await prisma.$transaction(async (tx) => {
+        // Rouvre l'étape précédente (efface sa validation) pour qu'elle puisse
+        // être de nouveau validée normalement.
+        await tx.manuscriptStep.updateMany({
+          where: { manuscriptId: id, statusId: previous.id },
+          data: { validationBy: null, validatedAt: null, actualEnd: null },
+        });
+        await tx.manuscript.update({ where: { id }, data: { statusId: previous.id, updatedBy: request.user!.id } });
+        await tx.stepTransition.create({
+          data: {
+            manuscriptId: id,
+            fromStatusCode: current.code,
+            toStatusCode: previous.code,
+            fromDepartmentId: current.departmentId,
+            toDepartmentId: previous.departmentId,
+            responsibleId: request.user!.id,
+            observations: parsed.data.reason ?? "Retour à l'étape précédente (correction d'une validation erronée).",
+          },
+        });
+      });
+
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "status_change",
+        entityType: "manuscript",
+        entityId: id,
+        oldValues: { statusCode: current.code },
+        newValues: { statusCode: previous.code, reverted: true, reason: parsed.data.reason ?? null },
+        ipAddress: request.ip,
+      });
+
+      return reply.send({ reverted: true, status: previous.code, statusLabel: previous.label });
     },
   );
 }

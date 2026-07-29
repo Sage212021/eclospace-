@@ -5,6 +5,7 @@ import {
   getManuscript,
   getManuscriptTimeline,
   listUsers,
+  revertManuscriptStep,
   setPublicationDate,
   submitEditorialDecision,
   validateStep,
@@ -12,6 +13,7 @@ import {
   type TimelineStep,
   type UserSummary,
 } from "../api/client";
+import { useConfirm } from "../components/ConfirmProvider";
 import { Spine } from "../components/Spine";
 import { ContractsSection } from "../components/ContractsSection";
 import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
@@ -43,6 +45,7 @@ const PLANIFICATION_STEP_ORDER = 6;
 const MISE_EN_PAGE_STEP_ORDER = 10;
 
 export function ManuscriptDetail({ manuscriptId, permissions, onBack }: ManuscriptDetailProps) {
+  const confirm = useConfirm();
   const [manuscript, setManuscript] = useState<ManuscriptWithExtras | null>(null);
   const [timeline, setTimeline] = useState<TimelineStep[]>([]);
   const [message, setMessage] = useState<string | null>(null);
@@ -75,6 +78,16 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
     } catch (err) {
       setError(err instanceof Error ? err.message : "Une action a échoué.");
     }
+  }
+
+  // Validation en deux temps : toute action d'étape (valider, revenir en
+  // arrière, décider) est précédée d'une confirmation pour éviter les erreurs.
+  async function confirmThen(
+    opts: { title: string; message: string; detail?: string; confirmLabel?: string; tone?: "default" | "danger" },
+    action: () => Promise<unknown>,
+    successMessage: string,
+  ) {
+    if (await confirm(opts)) await handle(action, successMessage);
   }
 
   return (
@@ -117,7 +130,13 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           <div style={{ display: "flex", gap: 8 }}>
             <ActionButton
               onClick={() =>
-                handle(
+                confirmThen(
+                  {
+                    title: "Valider l'étape",
+                    message: "Confirmer que le dossier est conforme ?",
+                    detail: "Le manuscrit passera au comité de lecture.",
+                    confirmLabel: "Dossier conforme",
+                  },
                   () => validateStep(manuscript.id, "VERIF_ADMIN", { outcome: "conforme" }),
                   "Dossier conforme : passage au comité de lecture.",
                 )
@@ -127,7 +146,13 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
             </ActionButton>
             <SecondaryButton
               onClick={() =>
-                handle(
+                confirmThen(
+                  {
+                    title: "Dossier incomplet",
+                    message: "Signaler ce dossier comme incomplet ?",
+                    detail: "Le secrétariat sera notifié ; le passage à l'étape suivante reste bloqué.",
+                    confirmLabel: "Signaler incomplet",
+                  },
                   () => validateStep(manuscript.id, "VERIF_ADMIN", { outcome: "incomplet", observations: "Pièces manquantes" }),
                   "Dossier incomplet : le secrétariat a été notifié.",
                 )
@@ -150,7 +175,13 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           <div style={{ marginTop: 12 }}>
             <SecondaryButton
               onClick={() =>
-                handle(
+                confirmThen(
+                  {
+                    title: "Clore le comité",
+                    message: "Clore le comité de lecture et passer à la décision éditoriale ?",
+                    detail: "Les lectures encore en attente seront annulées.",
+                    confirmLabel: "Clore le comité",
+                  },
                   () => closeReadingCommittee(manuscript.id),
                   "Comité clos : le manuscrit passe à la décision éditoriale.",
                 )
@@ -179,14 +210,28 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         {manuscript.status.code === "DECISION_EDITORIALE" && canDecide && (
           <EditorialDecisionForm
             manuscriptId={manuscript.id}
+            confirm={confirm}
             onDecided={(msg) => handle(async () => {}, msg)}
+            onError={setError}
           />
+        )}
+
+        {manuscript.status.code === "CORRECTION" && (
+          <div style={{ background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 8, padding: "10px 13px", fontSize: 12.5, color: "var(--ink)", marginBottom: 12 }}>
+            <strong>Étape de correction — dans l'ordre :</strong>
+            <ol style={{ margin: "6px 0 0", paddingLeft: 18, lineHeight: 1.6 }}>
+              <li>Le correcteur dépose le manuscrit corrigé dans « Correction et versions » (plus bas) et signale ses points bloquants.</li>
+              <li>Les points bloquants sont levés (sinon la validation est refusée).</li>
+              <li>Vous validez l'étape ci-dessous — le manuscrit passe alors à la mise en page.</li>
+            </ol>
+          </div>
         )}
 
         {["CONTRACTUALISATION", "PLANIFICATION", "CORRECTION"].includes(manuscript.status.code) && canValidate && (
           <GenericStepValidation
             manuscriptId={manuscript.id}
             stepCode={manuscript.status.code}
+            confirm={confirm}
             onValidated={(status) =>
               handle(async () => {}, status ? `Étape validée : passage à « ${status} ».` : "Étape validée.")
             }
@@ -200,6 +245,34 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           <p style={{ fontSize: 13, color: "var(--muted)" }}>
             Aucune action disponible à cette étape dans les lots actuellement livrés.
           </p>
+        )}
+
+        {/* Retour arrière : corriger une étape validée par erreur. Réservé aux
+            profils habilités à valider (comme la validation elle-même). */}
+        {canValidate && manuscript.status.stepOrder > 1 && (
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px dashed var(--line)" }}>
+            <button
+              onClick={() =>
+                confirmThen(
+                  {
+                    title: "Revenir à l'étape précédente",
+                    message: `Ramener « ${manuscript.title} » à l'étape précédant « ${manuscript.status.label} » ?`,
+                    detail: "À n'utiliser que pour corriger une validation faite par erreur. L'étape précédente sera rouverte. Action tracée au journal.",
+                    tone: "danger",
+                    confirmLabel: "Revenir en arrière",
+                  },
+                  () => revertManuscriptStep(manuscript.id),
+                  "Manuscrit ramené à l'étape précédente.",
+                )
+              }
+              style={{ background: "#fff", color: "var(--alert)", border: "1px solid var(--alert)", borderRadius: 6, padding: "7px 13px", fontSize: 12.5, cursor: "pointer" }}
+            >
+              ↩ Revenir à l'étape précédente
+            </button>
+            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "6px 0 0" }}>
+              Corrige une étape validée par erreur (l'étape précédente redevient active).
+            </p>
+          </div>
         )}
       </div>
 
@@ -426,15 +499,55 @@ function AssignReaderForm({
   );
 }
 
-function EditorialDecisionForm({ manuscriptId, onDecided }: { manuscriptId: string; onDecided: (message: string) => void }) {
+const DECISION_LABELS: Record<string, string> = {
+  acceptation: "Acceptation",
+  acceptation_conditions: "Acceptation sous conditions",
+  revision: "Demande de révision",
+  attente: "Mise en attente",
+  refus: "Refus motivé",
+};
+
+function EditorialDecisionForm({
+  manuscriptId,
+  confirm,
+  onDecided,
+  onError,
+}: {
+  manuscriptId: string;
+  confirm: (opts: { title: string; message: string; detail?: string; confirmLabel?: string; tone?: "default" | "danger" }) => Promise<boolean>;
+  onDecided: (message: string) => void;
+  onError: (message: string) => void;
+}) {
   const [decision, setDecision] = useState<"acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus">("acceptation");
   const [motivation, setMotivation] = useState("");
+
+  async function submit() {
+    const terminal = ["acceptation", "acceptation_conditions", "refus"].includes(decision);
+    const ok = await confirm({
+      title: "Décision éditoriale",
+      message: `Enregistrer la décision « ${DECISION_LABELS[decision]} » ?`,
+      detail: terminal
+        ? decision === "refus"
+          ? "Un refus clôt le circuit (archivage)."
+          : "Une acceptation fait passer le manuscrit à la contractualisation."
+        : "Le manuscrit reste à l'étape de décision.",
+      tone: decision === "refus" ? "danger" : "default",
+      confirmLabel: "Enregistrer la décision",
+    });
+    if (!ok) return;
+    try {
+      await submitEditorialDecision(manuscriptId, decision, motivation);
+      onDecided(`Décision enregistrée : ${DECISION_LABELS[decision]}.`);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de l'enregistrement de la décision.");
+    }
+  }
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        submitEditorialDecision(manuscriptId, decision, motivation).then(() => onDecided(`Décision enregistrée : ${decision}.`));
+        submit();
       }}
     >
       <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
@@ -475,17 +588,28 @@ const STEP_ACTION_LABELS: Record<string, string> = {
 function GenericStepValidation({
   manuscriptId,
   stepCode,
+  confirm,
   onValidated,
   onError,
 }: {
   manuscriptId: string;
   stepCode: string;
+  confirm: (opts: { title: string; message: string; detail?: string; confirmLabel?: string }) => Promise<boolean>;
   onValidated: (status: string | null) => void;
   onError: (message: string) => void;
 }) {
   const [requiresRewrite, setRequiresRewrite] = useState(false);
 
+  const label = STEP_ACTION_LABELS[stepCode] ?? "Valider cette étape";
+
   async function handleValidate() {
+    const ok = await confirm({
+      title: "Valider l'étape",
+      message: `${label} ?`,
+      detail: "Le manuscrit passera à l'étape suivante.",
+      confirmLabel: label,
+    });
+    if (!ok) return;
     try {
       const result = await validateStep(
         manuscriptId,
@@ -506,7 +630,7 @@ function GenericStepValidation({
           Cette version nécessite une réécriture avant de poursuivre
         </label>
       )}
-      <ActionButton onClick={handleValidate}>{STEP_ACTION_LABELS[stepCode] ?? "Valider cette étape"}</ActionButton>
+      <ActionButton onClick={handleValidate}>{label}</ActionButton>
     </div>
   );
 }

@@ -340,6 +340,14 @@ export function validateStep(
   });
 }
 
+// Retour à l'étape précédente (correction d'une validation faite par erreur).
+export function revertManuscriptStep(manuscriptId: string, reason?: string) {
+  return request<{ reverted: boolean; status: string | null; statusLabel: string }>(
+    `/api/v1/manuscripts/${manuscriptId}/steps/revert`,
+    { method: "POST", body: JSON.stringify(reason ? { reason } : {}) },
+  );
+}
+
 export interface ReadingEvaluationScore {
   score: string | number;
   comment: string | null;

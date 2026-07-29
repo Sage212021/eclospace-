@@ -87,8 +87,13 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     return reply.code(201).send(orderView(order, customer.name));
   });
 
-  // File des commandes à facturer (Finance).
-  fastify.get("/api/v1/billing-orders", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+  // File des commandes à facturer — visible par la Finance ET le Commercial /
+  // la Direction (qui peuvent aussi les initier).
+  fastify.get("/api/v1/billing-orders", { preHandler: requireAuth }, async (request, reply) => {
+    const perms = request.user!.permissions;
+    if (!(perms.has("finance:consultation") || perms.has("commercial:consultation") || perms.has("commercial:saisie") || perms.has("commercial:validation"))) {
+      return reply.code(403).send({ code: "forbidden", message: "Accès réservé à la Finance, au commercial ou à la direction." });
+    }
     const q = z.object({ status: z.enum(["pending", "invoiced", "cancelled"]).optional() }).safeParse(request.query);
     const status = q.success ? q.data.status : undefined;
     const orders = await prisma.billingOrder.findMany({

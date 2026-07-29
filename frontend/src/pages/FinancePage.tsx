@@ -341,7 +341,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
       <PendingQuotesCard />
 
-      <BillingOrdersSection canManage={canManage} canAdmin={canAdminister} />
+      <BillingOrdersSection canCreate={canManage} canInvoice={canManage} canAdmin={canAdminister} />
 
       <Card title={t("fin.invoices", "Factures")} icon={<IconFinance />} subtitle={t("fin.invoices_sub", "Suivi des factures et encaissements.")}>
         {invoices.length === 0 ? (

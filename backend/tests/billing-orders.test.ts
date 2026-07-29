@@ -97,4 +97,20 @@ describe("commandes à facturer + validation par seuil", () => {
     const again = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin } });
     expect(again.statusCode).toBe(409);
   });
+
+  it("le commercial initie une commande et la voit, mais ne peut pas la facturer", async () => {
+    const com = `com_${rnd()}`;
+    await createUserWithRole(com, "RESP_COMMERCIAL", PWD);
+    const comCookie = await login(com);
+    // création : autorisée
+    const create = await app.inject({ method: "POST", url: "/api/v1/billing-orders", headers: { cookie: comCookie }, payload: { customer_id: customerId, category: "livre_scolaire", label: `Commercial ${rnd()}`, amount_ht: 120_000, tax_rate: 0 } });
+    expect(create.statusCode).toBe(201);
+    orderIds.push(create.json().id);
+    // lecture de la file : autorisée
+    const list = await app.inject({ method: "GET", url: "/api/v1/billing-orders?status=pending", headers: { cookie: comCookie } });
+    expect(list.statusCode).toBe(200);
+    // établir la facture : réservé à la Finance → refusé
+    const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${create.json().id}/invoice`, headers: { cookie: comCookie } });
+    expect(inv.statusCode).toBe(403);
+  });
 });

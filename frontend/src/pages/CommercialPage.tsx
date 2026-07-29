@@ -19,6 +19,7 @@ import {
   type StockLocation,
 } from "../api/client";
 import { Card } from "../components/Card";
+import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconCommercial } from "../components/icons";
@@ -104,6 +105,10 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
+
+      {/* Commandes à facturer (ex. livre scolaire) : le commercial les initie ; la
+          Finance établit la facture. */}
+      <BillingOrdersSection canCreate={canManage} canInvoice={false} canAdmin={false} />
 
       <Card
         title={t("com.customers", "Clients")}

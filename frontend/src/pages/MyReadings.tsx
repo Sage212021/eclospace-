@@ -10,6 +10,7 @@ import {
 } from "../api/client";
 import { Button } from "../components/Button";
 import { DocPrintMenu } from "../components/DocPrintMenu";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { Field } from "../components/Modal";
 import { printReadingReport } from "../lib/print";
 import { buildReadingReport } from "../lib/readingReport";
@@ -50,6 +51,13 @@ export function MyReadings() {
     <div className="ecl-page" style={{ maxWidth: 680 }}>
       <h1 className="ecl-page__title">{t("page.myreadings.title", "Mes lectures")}</h1>
       <p className="ecl-page__lead">{t("page.myreadings.lead", "Vos missions de lecture et la remise de vos évaluations.")}</p>
+
+      <GuidanceNote title={t("myr.note.title", "Votre boîte de lecture personnelle")}>
+        {t(
+          "myr.note.body",
+          "Cette page n'affiche que les missions confiées à VOTRE compte. Elle reste vide tant qu'un responsable ne vous a pas affecté(e) comme relecteur d'un manuscrit (au « Comité de lecture »). Les missions que vous confiez à d'autres apparaissent dans LEUR page « Mes lectures », pas ici.",
+        )}
+      </GuidanceNote>
 
       {message && (
         <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 12 }}>

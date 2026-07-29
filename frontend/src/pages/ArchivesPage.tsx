@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { listArchives, type ArchiveItem } from "../api/client";
+import { GuidanceNote } from "../components/GuidanceNote";
 
 // Archivage hiérarchique (spéc. fonctionnelle §7) : les ouvrages sont classés
 // en arborescence selon des axes choisis (année/mois/jour, collection, domaine,
@@ -80,6 +81,13 @@ export function ArchivesPage({ onOpenManuscript }: { onOpenManuscript: (id: stri
         Classement hiérarchique de tous les ouvrages ({items.length}). Dépliez les niveaux pour parcourir le fonds ; cliquez un
         ouvrage pour ouvrir sa fiche.
       </p>
+
+      <div style={{ marginTop: 12 }}>
+        <GuidanceNote title="Archives">
+          Le fonds complet de la maison, classé en arborescence. Choisissez un axe de classement (année, collection,
+          domaine, auteur…), dépliez les niveaux, puis cliquez un ouvrage pour ouvrir sa fiche.
+        </GuidanceNote>
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0" }}>
         <span style={{ fontSize: 12, color: "var(--muted)" }}>Organiser par</span>

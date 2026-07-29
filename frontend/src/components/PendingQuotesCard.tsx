@@ -24,10 +24,13 @@ export function PendingQuotesCard() {
       .finally(() => setLoaded(true));
   }, []);
 
-  if (loaded && rows.length === 0) return null;
-
   return (
     <Card title="En attente de devis" icon={<IconFinance />} subtitle="Ouvrages à compte d'auteur dont le devis reste à établir.">
+      {loaded && rows.length === 0 && (
+        <p style={{ fontSize: 13.5, color: "var(--muted)", margin: 0 }}>
+          Aucun ouvrage en attente de devis. Un ouvrage y apparaît dès qu'il est passé « à compte d'auteur » sur sa fiche.
+        </p>
+      )}
       <div style={{ display: "grid", gap: 8 }}>
         {rows.map((r) => {
           const d = DECISION_LABEL[r.decision] ?? DECISION_LABEL.pending;

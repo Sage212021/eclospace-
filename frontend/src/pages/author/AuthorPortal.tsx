@@ -18,6 +18,7 @@ import {
   type Notification,
 } from "../../api/client";
 import { useI18n } from "../../i18n";
+import { AuthorMessages } from "./AuthorMessages";
 
 function humanSize(n: number | null | undefined): string {
   if (!n || n <= 0) return "";
@@ -174,6 +175,9 @@ export function AuthorPortal({ userName, onLogout }: { userName: string; onLogou
                 })}
               </div>
             </section>
+
+            {/* Messagerie vers les services */}
+            <AuthorMessages />
 
             {/* Notifications */}
             <section style={{ marginTop: 26 }}>

@@ -63,7 +63,7 @@ const lot5Modules = ["finance", "royalties"];
 const lot6Modules = ["rh", "rh_confidentiel", "direction", "pilotage", "rapports"];
 // Évolution : modules « Présences & Temps de travail » et « Paie » (D-007),
 // indépendants et désactivables.
-const evolutionModules = ["presences", "paie", "communication"];
+const evolutionModules = ["presences", "paie", "communication", "service_auteurs"];
 const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules, ...lot5Modules, ...lot6Modules, ...evolutionModules];
 const actions = Object.values(PermissionAction);
 
@@ -815,6 +815,13 @@ async function main() {
   }
   for (const publisher of ["DIR_GENERAL", "RESP_RH", "RESP_FINANCE", "DIR_EDITORIAL"]) {
     await grant(publisher, ["communication:saisie", "communication:administration"]);
+  }
+
+  // ── Espace Auteur : guichets Service Éducation / Service Client (inc. 2b) ────
+  // Les messages des auteurs vers les services sont traités par les profils
+  // transverses (communication, commercial, direction éditoriale et générale).
+  for (const desk of ["CHARGE_COMMUNICATION", "RESP_COMMERCIAL", "DIR_EDITORIAL", "DIR_GENERAL"]) {
+    await grant(desk, ["service_auteurs:consultation", "service_auteurs:saisie"]);
   }
 
   // Catégories d'annonces par défaut (référentiel extensible depuis l'écran).

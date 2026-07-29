@@ -39,6 +39,7 @@ const CommissionsPage = lazy(() => import("./pages/CommissionsPage").then((m) =>
 const AuthorRoyaltiesPage = lazy(() => import("./pages/AuthorRoyaltiesPage").then((m) => ({ default: m.AuthorRoyaltiesPage })));
 const ChatPage = lazy(() => import("./pages/ChatPage").then((m) => ({ default: m.ChatPage })));
 const AuthorPortal = lazy(() => import("./pages/author/AuthorPortal").then((m) => ({ default: m.AuthorPortal })));
+const ServiceDeskPage = lazy(() => import("./pages/ServiceDeskPage").then((m) => ({ default: m.ServiceDeskPage })));
 
 // Court message affiché le temps qu'un écran se télécharge (en général une
 // fraction de seconde).
@@ -83,7 +84,8 @@ type PageId =
   | "sales-by-book"
   | "commissions"
   | "author-royalties"
-  | "chat";
+  | "chat"
+  | "service-desk";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
 
@@ -177,6 +179,7 @@ const NAV_POLES: NavPole[] = [
     label: "Communication interne",
     items: [
       { key: "cm-messagerie", label: "Messagerie" },
+      { key: "cm-messages-auteurs", label: "Messages des auteurs", permission: "service_auteurs:consultation" },
       { key: "cm-actualites", label: "Fil d'actualités", permission: "communication:consultation" },
       { key: "cm-babillard", label: "Babillard d'annonces", permission: "communication:consultation" },
       { key: "cm-evenements", label: "Planning des événements", permission: "communication:consultation" },
@@ -223,6 +226,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ad-parametres": { page: "settings" },
   "ad-diagnostics": { page: "diagnostics" },
   "cm-messagerie": { page: "chat" },
+  "cm-messages-auteurs": { page: "service-desk" },
   "cm-actualites": { page: "newsfeed" },
   "cm-babillard": { page: "communication" },
   "cm-evenements": { page: "annual-events" },
@@ -656,6 +660,7 @@ export function App() {
           <CalendarPage canPublish={permissions.has("communication:saisie")} />
         )}
         {leaf && "page" in leaf && leaf.page === "chat" && <ChatPage />}
+        {leaf && "page" in leaf && leaf.page === "service-desk" && <ServiceDeskPage canReply={permissions.has("service_auteurs:saisie")} />}
         {leaf && "page" in leaf && leaf.page === "newsfeed" && (
           <NewsFeedPage
             onOpenAnnouncement={openAnnouncement}

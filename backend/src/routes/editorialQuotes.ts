@@ -188,6 +188,43 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
     return reply.send(quote);
   });
 
+  // Suppression d'un devis à l'état BROUILLON uniquement (un devis envoyé,
+  // accepté ou facturé engage la maison : il n'est jamais supprimé). Suppression
+  // logique (règle du projet) : la ligne est conservée mais son numéro est
+  // « libéré » (renommé) pour lever la contrainte d'unicité, et si ce devis
+  // portait le dernier numéro de l'année, le compteur est décrémenté — le
+  // prochain devis réel repart donc à ce numéro (remise à zéro propre).
+  fastify.delete("/api/v1/editorial-quotes/:id", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const quote = await prisma.editorialQuote.findFirst({ where: { id, deletedAt: null } });
+    if (!quote) return reply.code(404).send({ code: "not_found", message: "Devis introuvable." });
+    if (quote.status !== "draft") {
+      return reply.code(409).send({ code: "not_draft", message: "Seul un devis au brouillon peut être supprimé. Un devis envoyé ou accepté ne peut pas l'être." });
+    }
+    // Numéro de la forme DE-AAAA-NNNN → on isole l'année et la séquence.
+    const match = quote.quoteNumber.match(/^DE-(\d{4})-(\d+)$/);
+    const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.editorialQuote.update({
+        where: { id },
+        data: { deletedAt: now, updatedBy: request.user!.id, quoteNumber: `${quote.quoteNumber}~SUPPR~${id.slice(0, 8)}` },
+      });
+      if (match) {
+        const year = Number(match[1]);
+        const seq = Number(match[2]);
+        // On ne rend le numéro que s'il s'agit bien du dernier émis de l'année,
+        // pour ne pas créer de collision avec des devis ultérieurs.
+        await tx.$executeRaw`
+          UPDATE editorial_quote_number_counters
+          SET last_value = last_value - 1
+          WHERE year = ${year} AND last_value = ${seq}
+        `;
+      }
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "editorial_quote", entityId: id, oldValues: { quoteNumber: quote.quoteNumber, status: quote.status }, newValues: { deleted: true }, ipAddress: request.ip });
+    return reply.send({ ok: true });
+  });
+
   // Prépare l'envoi pour signature en ligne (③) : génère un jeton unique et
   // marque le devis « envoyé ». Le jeton alimente le lien public de signature.
   fastify.post("/api/v1/editorial-quotes/:id/send", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {

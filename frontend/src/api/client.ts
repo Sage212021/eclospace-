@@ -606,6 +606,9 @@ export function createEditorialQuote(input: {
 
 // Prépare l'envoi pour signature en ligne : renvoie le lien (et l'envoie par
 // e-mail à l'auteur si une adresse est connue).
+export function deleteEditorialQuote(id: string) {
+  return request<{ ok: true }>(`/api/v1/editorial-quotes/${id}`, { method: "DELETE" });
+}
 export function sendEditorialQuote(id: string) {
   return request<{ quote: EditorialQuote; sign_path: string; sign_url: string | null; email_sent: boolean }>(
     `/api/v1/editorial-quotes/${id}/send`,

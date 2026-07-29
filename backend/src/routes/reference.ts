@@ -70,8 +70,11 @@ export default async function referenceRoutes(fastify: FastifyInstance) {
   // TRACKING_ROLES) pour situer un ouvrage et renseigner un auteur — sans le
   // détail éditorial confidentiel.
   fastify.get("/api/v1/production-tracking", { preHandler: requireAnyRole(TRACKING_ROLES) }, async (_request, reply) => {
+    // « Suivi des ouvrages » : vue d'ensemble de TOUT le pipeline (dès la
+    // réception du manuscrit), pour que l'éditorial voie chaque ouvrage et son
+    // étape d'un coup d'œil — pas seulement ceux entrés en production.
     const rows = await prisma.manuscript.findMany({
-      where: { deletedAt: null, status: { stepOrder: { gte: 5 } } },
+      where: { deletedAt: null },
       select: {
         id: true,
         title: true,

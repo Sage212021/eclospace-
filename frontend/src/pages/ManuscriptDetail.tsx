@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   assignReader,
+  closeReadingCommittee,
   getManuscript,
   getManuscriptTimeline,
   listUsers,
@@ -61,6 +62,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
 
   const canValidate = permissions.has("manuscripts:validation");
   const canAssignReader = permissions.has("comite_lecture:saisie");
+  const canCloseCommittee = permissions.has("comite_lecture:validation");
   const canDecide = permissions.has("decision_editoriale:validation");
 
   async function handle(action: () => Promise<unknown>, successMessage: string) {
@@ -137,10 +139,38 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         )}
 
         {manuscript.status.code === "COMITE_LECTURE" && canAssignReader && (
-          <AssignReaderForm manuscriptId={manuscript.id} onAssigned={() => handle(async () => {}, "Lecteur affecté.")} />
+          <AssignReaderForm
+            manuscriptId={manuscript.id}
+            onAssigned={() => handle(async () => {}, "Lecteur affecté.")}
+            onError={setError}
+          />
         )}
 
-        {permissions.has("comite_lecture:consultation") && <ReadingEvaluationsSection manuscriptId={manuscript.id} />}
+        {manuscript.status.code === "COMITE_LECTURE" && canCloseCommittee && (
+          <div style={{ marginTop: 12 }}>
+            <SecondaryButton
+              onClick={() =>
+                handle(
+                  () => closeReadingCommittee(manuscript.id),
+                  "Comité clos : le manuscrit passe à la décision éditoriale.",
+                )
+              }
+            >
+              Clore le comité et passer à la décision
+            </SecondaryButton>
+            <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>
+              Annule les lectures encore en attente et transmet le dossier à la décision éditoriale (au moins un rapport de lecture doit être remis).
+            </p>
+          </div>
+        )}
+
+        {permissions.has("comite_lecture:consultation") && (
+          <ReadingEvaluationsSection
+            manuscriptId={manuscript.id}
+            canManage={canAssignReader}
+            onChanged={() => refresh().catch((e) => setError(e.message))}
+          />
+        )}
 
         {permissions.has("manuscripts:consultation") && (
           <AuthorFilesSection manuscriptId={manuscript.id} canManage={permissions.has("manuscripts:saisie")} />
@@ -347,7 +377,15 @@ function SecondaryButton({ children, onClick }: { children: React.ReactNode; onC
   );
 }
 
-function AssignReaderForm({ manuscriptId, onAssigned }: { manuscriptId: string; onAssigned: () => void }) {
+function AssignReaderForm({
+  manuscriptId,
+  onAssigned,
+  onError,
+}: {
+  manuscriptId: string;
+  onAssigned: () => void;
+  onError: (message: string) => void;
+}) {
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [readerId, setReaderId] = useState("");
   const [dueAt, setDueAt] = useState("");
@@ -363,7 +401,9 @@ function AssignReaderForm({ manuscriptId, onAssigned }: { manuscriptId: string; 
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        assignReader(manuscriptId, readerId, new Date(dueAt).toISOString()).then(onAssigned);
+        assignReader(manuscriptId, readerId, new Date(dueAt).toISOString())
+          .then(onAssigned)
+          .catch((err) => onError(err instanceof Error ? err.message : "Affectation impossible."));
       }}
       style={{ display: "flex", gap: 8, alignItems: "flex-end" }}
     >

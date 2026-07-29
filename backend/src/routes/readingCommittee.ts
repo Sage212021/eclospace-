@@ -62,6 +62,20 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
       }
 
+      // Anti-doublon : un même relecteur ne peut pas cumuler plusieurs missions
+      // en cours sur le même manuscrit (évite les « évaluation en attente »
+      // fantômes qui bloquent ensuite le passage à l'étape suivante).
+      const duplicate = await prisma.readingAssignment.findFirst({
+        where: { manuscriptId: id, readerId: parsed.data.reader_id, status: { in: ["pending", "late"] } },
+        include: { reader: { select: { username: true } } },
+      });
+      if (duplicate) {
+        return reply.code(409).send({
+          code: "reader_already_assigned",
+          message: `${duplicate.reader.username} a déjà une mission de lecture en cours sur ce manuscrit.`,
+        });
+      }
+
       const assignment = await prisma.readingAssignment.create({
         data: { manuscriptId: id, readerId: parsed.data.reader_id, dueAt: parsed.data.due_at },
       });
@@ -131,6 +145,97 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
           hasReportFile: Boolean(reportFilePath),
         })),
       );
+    },
+  );
+
+  // Retrait (annulation) d'une mission de lecture — pour corriger une
+  // affectation erronée ou un doublon. Une mission déjà évaluée (« remise »)
+  // n'est jamais retirée (le rapport engage le comité). Si, après retrait, il
+  // ne reste plus de mission en attente et qu'au moins un rapport a été remis,
+  // le dossier est transmis automatiquement à la décision éditoriale.
+  fastify.post(
+    "/api/v1/reading-assignments/:id/cancel",
+    { preHandler: requirePermission("comite_lecture", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const assignment = await prisma.readingAssignment.findUnique({ where: { id } });
+      if (!assignment) {
+        return reply.code(404).send({ code: "not_found", message: "Mission de lecture introuvable." });
+      }
+      if (assignment.status === "submitted") {
+        return reply.code(409).send({ code: "already_submitted", message: "Cette évaluation a déjà été remise : elle ne peut pas être retirée." });
+      }
+      if (assignment.status === "cancelled") {
+        return reply.send({ ok: true, advanced: false });
+      }
+
+      await prisma.readingAssignment.update({ where: { id }, data: { status: "cancelled" } });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "status_change",
+        entityType: "reading_assignment",
+        entityId: id,
+        oldValues: { status: assignment.status },
+        newValues: { status: "cancelled" },
+        ipAddress: request.ip,
+      });
+
+      const remaining = await prisma.readingAssignment.count({
+        where: { manuscriptId: assignment.manuscriptId, status: { in: ["pending", "late"] } },
+      });
+      const submitted = await prisma.readingAssignment.count({
+        where: { manuscriptId: assignment.manuscriptId, status: "submitted" },
+      });
+      let advanced = false;
+      if (remaining === 0 && submitted > 0) {
+        advanced = await completeReadingCommitteeStep(assignment.manuscriptId, request.user!.id);
+      }
+      return reply.send({ ok: true, advanced });
+    },
+  );
+
+  // Clôture manuelle du comité de lecture par un responsable éditorial : annule
+  // les missions encore en attente et transmet le dossier à la décision
+  // éditoriale. Exige qu'au moins un rapport ait été remis (on ne décide pas
+  // d'un ouvrage sans lecture). Donne au responsable un moyen explicite de
+  // « passer à la suite » sans attendre des relecteurs qui ne rendront pas.
+  fastify.post(
+    "/api/v1/manuscripts/:id/close-reading-committee",
+    { preHandler: requirePermission("comite_lecture", "validation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, include: { status: true } });
+      if (!manuscript) {
+        return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      }
+      if (manuscript.status.code !== "COMITE_LECTURE") {
+        return reply.code(409).send({
+          code: "step_out_of_order",
+          message: `Le manuscrit est à l'étape « ${manuscript.status.label} », pas au comité de lecture.`,
+        });
+      }
+      const submitted = await prisma.readingAssignment.count({ where: { manuscriptId: id, status: "submitted" } });
+      if (submitted === 0) {
+        return reply.code(409).send({
+          code: "no_evaluation",
+          message: "Au moins un rapport de lecture doit être remis avant de clore le comité.",
+        });
+      }
+
+      await prisma.readingAssignment.updateMany({
+        where: { manuscriptId: id, status: { in: ["pending", "late"] } },
+        data: { status: "cancelled" },
+      });
+      const advanced = await completeReadingCommitteeStep(id, request.user!.id);
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "validate",
+        entityType: "manuscript",
+        entityId: id,
+        newValues: { step: "COMITE_LECTURE", closed: true },
+        ipAddress: request.ip,
+      });
+      return reply.send({ ok: true, advanced });
     },
   );
 
@@ -341,10 +446,15 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
   );
 }
 
-async function completeReadingCommitteeStep(manuscriptId: string, userId: string) {
+async function completeReadingCommitteeStep(manuscriptId: string, userId: string): Promise<boolean> {
   const comiteStatus = await prisma.workflowStatus.findUniqueOrThrow({ where: { code: "COMITE_LECTURE" } });
   const decisionStatus = await prisma.workflowStatus.findUniqueOrThrow({ where: { code: "DECISION_EDITORIALE" } });
   const now = new Date();
+
+  // Garde-fou : ne transmettre que si le manuscrit est encore au comité de
+  // lecture (évite un double passage si l'étape a déjà avancé).
+  const current = await prisma.manuscript.findUniqueOrThrow({ where: { id: manuscriptId }, select: { statusId: true } });
+  if (current.statusId !== comiteStatus.id) return false;
 
   await prisma.$transaction(async (tx) => {
     await tx.manuscriptStep.upsert({
@@ -384,4 +494,5 @@ async function completeReadingCommitteeStep(manuscriptId: string, userId: string
       }
     }
   });
+  return true;
 }

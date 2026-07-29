@@ -178,10 +178,13 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
                     <span style={{ fontFamily: "var(--font-mono)" }}>{o.reference}</span> · {o.customer_name} · <span style={{ fontFamily: "var(--font-mono)" }}>{fmt.format(o.amount_ttc)}</span>
                   </div>
                 </div>
-                {canInvoice && (
+                {(canCreate || canInvoice) && (
                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    {/* Proforma : document préparatoire non fiscal — disponible à
+                        l'initiateur (DG / commercial) comme à la Finance. */}
                     <button onClick={() => proforma(o)} style={btnGhost} title="Imprimer une facture proforma (document préparatoire, non fiscal)">Proforma (PDF)</button>
-                    <button onClick={() => establish(o)} style={btnPrimary}>Établir la facture</button>
+                    {/* Établir la facture officielle : réservé à la Finance. */}
+                    {canInvoice && <button onClick={() => establish(o)} style={btnPrimary}>Établir la facture</button>}
                   </div>
                 )}
               </div>

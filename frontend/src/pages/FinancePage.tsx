@@ -91,6 +91,8 @@ const STATUS_LABELS: Record<string, string> = {
 interface FinancePageProps {
   canManage: boolean;
   canAdminister: boolean;
+  // Initiation d'une commande à facturer / proforma (Finance, commercial ou DG).
+  canInitiateOrder: boolean;
 }
 
 // Fenêtres intégrées de la page (remplacent les pop-up du navigateur).
@@ -110,7 +112,7 @@ type FinanceModal =
 // droits d'auteur.
 import { useI18n } from "../i18n";
 
-export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
+export function FinancePage({ canManage, canAdminister, canInitiateOrder }: FinancePageProps) {
   const { t, lang } = useI18n();
   // Alias de `t` pour les endroits où la variable de boucle s'appelle aussi `t`
   // (ex. la liste des « tenders » du paiement mixte), afin d'éviter le masquage.
@@ -341,7 +343,7 @@ export function FinancePage({ canManage, canAdminister }: FinancePageProps) {
 
       <PendingQuotesCard />
 
-      <BillingOrdersSection canCreate={canManage} canInvoice={canManage} canAdmin={canAdminister} />
+      <BillingOrdersSection canCreate={canInitiateOrder} canInvoice={canManage} canAdmin={canAdminister} />
 
       <Card title={t("fin.invoices", "Factures")} icon={<IconFinance />} subtitle={t("fin.invoices_sub", "Suivi des factures et encaissements.")}>
         {invoices.length === 0 ? (

@@ -12,6 +12,7 @@ import {
   type Recommendation,
 } from "../api/client";
 import { DataTable } from "../components/DataTable";
+import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
@@ -26,13 +27,15 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 interface DirectionPageProps {
   canTreatRecommendations: boolean;
+  // Le DG peut initier une commande à facturer / proforma depuis sa rubrique.
+  canInitiateOrder: boolean;
 }
 
 // Ch. 5 : tableau de bord Direction générale consolidé, recherche globale,
 // alertes automatiques et centre de pilotage intelligent (Ch. 5 §5.9).
 import { useI18n } from "../i18n";
 
-export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
+export function DirectionPage({ canTreatRecommendations, canInitiateOrder }: DirectionPageProps) {
   const { t, lang } = useI18n();
   const [dashboard, setDashboard] = useState<DirectionDashboard | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -153,6 +156,10 @@ export function DirectionPage({ canTreatRecommendations }: DirectionPageProps) {
           <p style={{ color: "var(--muted)", fontSize: 13 }}>{t("dir.loading", "Chargement…")}</p>
         )}
       </Card>
+
+      {/* Commandes à facturer : le DG peut initier une commande / proforma
+          (ex. livre scolaire) depuis sa rubrique ; la Finance l'établit. */}
+      {canInitiateOrder && <BillingOrdersSection canCreate canInvoice={false} canAdmin={false} />}
 
       {/* Ch. 5 §5.4 — Recherche globale */}
       <Card title={t("dir.search", "Recherche globale")} icon={<IconPilotage />} subtitle={t("dir.search_sub", "Numéro, titre, contributeur, collection, ISBN.")}>

@@ -111,6 +111,51 @@ export default async function userRoutes(fastify: FastifyInstance) {
     );
   });
 
+  // Audit des accès (Ch. 2 §2.4) : « qui détient tel accès sensible, et par
+  // quel rôle ? ». Résout, pour une permission module:action, la liste des
+  // comptes actifs qui la détiennent (via leurs rôles) — pour repérer et
+  // corriger les habilitations accordées à tort. Réservé à l'administration.
+  fastify.get("/api/v1/access-audit", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const q = request.query as { permission?: string };
+    const target = (q.permission ?? "users:administration").trim();
+    const [module, action] = target.split(":");
+    if (!module || !action) {
+      return reply.code(400).send({ code: "validation_error", message: "Permission invalide (format attendu : module:action)." });
+    }
+
+    // Rôles qui incluent la permission cible.
+    const roles = await prisma.role.findMany({ include: { rolePermissions: { include: { permission: true } } } });
+    const grantingRoleIds = new Set(
+      roles
+        .filter((r) => r.rolePermissions.some((rp) => rp.permission.module === module && rp.permission.action === action))
+        .map((r) => r.id),
+    );
+
+    const users = await prisma.user.findMany({
+      where: { deletedAt: null, status: "active" },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        userRoles: { where: { revokedAt: null }, select: { role: { select: { id: true, code: true, label: true } } } },
+      },
+      orderBy: { username: "asc" },
+    });
+
+    const holders = users
+      .map((u) => ({
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        via_roles: u.userRoles
+          .filter((ur) => grantingRoleIds.has(ur.role.id))
+          .map((ur) => ({ code: ur.role.code, label: ur.role.label })),
+      }))
+      .filter((u) => u.via_roles.length > 0);
+
+    return reply.send({ permission: target, holders });
+  });
+
   // Comptes avec leurs rôles actifs (Ch. 2 §2.4) — vue consolidée pour la
   // gestion des habilitations.
   fastify.get("/api/v1/users-with-roles", { preHandler: requirePermission("users", "consultation") }, async (_request, reply) => {

@@ -1947,6 +1947,19 @@ export function listUsersWithRoles() {
   return request<UserWithRoles[]>("/api/v1/users-with-roles");
 }
 
+// Audit des accès : qui détient une permission sensible, et via quels rôles.
+export interface AccessAuditHolder {
+  id: string;
+  username: string;
+  email: string;
+  via_roles: { code: string; label: string }[];
+}
+export function auditAccess(permission: string) {
+  return request<{ permission: string; holders: AccessAuditHolder[] }>(
+    `/api/v1/access-audit?permission=${encodeURIComponent(permission)}`,
+  );
+}
+
 // --- Gouvernance : comptes, matrice des droits, pôles (spéc. fonctionnelle §2/§3) ---
 
 export function createUser(input: { username: string; email: string; password: string; role_codes?: string[] }) {

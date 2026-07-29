@@ -28,7 +28,7 @@ const CATS: { key: BillingOrderCategory; label: string }[] = [
   { key: "autre", label: "Autre" },
 ];
 
-export function BillingOrdersSection({ canManage, canAdmin }: { canManage: boolean; canAdmin: boolean }) {
+export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canCreate: boolean; canInvoice: boolean; canAdmin: boolean }) {
   const [orders, setOrders] = useState<BillingOrder[]>([]);
   const [pending, setPending] = useState<PendingValidationInvoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -139,7 +139,7 @@ export function BillingOrdersSection({ canManage, canAdmin }: { canManage: boole
         {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{error}</div>}
         {msg && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{msg}</div>}
 
-        {canManage && !showForm && (
+        {canCreate && !showForm && (
           <button onClick={() => { setShowForm(true); setError(null); }} style={{ border: "1px solid var(--eclosion)", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "7px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 12 }}>+ Nouvelle commande</button>
         )}
         {showForm && (
@@ -178,7 +178,7 @@ export function BillingOrdersSection({ canManage, canAdmin }: { canManage: boole
                     <span style={{ fontFamily: "var(--font-mono)" }}>{o.reference}</span> · {o.customer_name} · <span style={{ fontFamily: "var(--font-mono)" }}>{fmt.format(o.amount_ttc)}</span>
                   </div>
                 </div>
-                {canManage && (
+                {canInvoice && (
                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                     <button onClick={() => proforma(o)} style={btnGhost} title="Imprimer une facture proforma (document préparatoire, non fiscal)">Proforma (PDF)</button>
                     <button onClick={() => establish(o)} style={btnPrimary}>Établir la facture</button>

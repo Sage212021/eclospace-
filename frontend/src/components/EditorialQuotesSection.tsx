@@ -18,6 +18,7 @@ import { printEditorialQuote, printInvoice } from "../lib/print";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
+import { useConfirm } from "./ConfirmProvider";
 
 const STATUS_LABELS: Record<EditorialQuoteStatus, string> = {
   draft: "Brouillon",
@@ -76,6 +77,7 @@ interface Props {
 // manuscrit — création, envoi pour signature en ligne, signature interne/papier,
 // puis génération de la facture. Hors impression et communication.
 export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCreate, canValidate, canAdmin }: Props) {
+  const confirm = useConfirm();
   const [quotes, setQuotes] = useState<EditorialQuote[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +106,14 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
   }
 
   async function handleDelete(q: EditorialQuote) {
-    if (!window.confirm(`Supprimer le devis ${q.quoteNumber} (brouillon) ? Son numéro sera rendu si c'est le dernier de l'année.`)) return;
+    const ok = await confirm({
+      title: "Supprimer le devis",
+      message: `Supprimer le devis ${q.quoteNumber} (brouillon) ?`,
+      detail: "Son numéro sera rendu si c'est le dernier de l'année.",
+      tone: "danger",
+      confirmLabel: "Supprimer",
+    });
+    if (!ok) return;
     setError(null);
     setInfo(null);
     try {
@@ -117,8 +126,14 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
   }
 
   async function handleReset(q: EditorialQuote) {
-    const warn = `RÉINITIALISATION (données de test)\n\nSupprimer définitivement le devis ${q.quoteNumber} ET sa facture éventuelle, et rendre les numéros ?\n\nÀ n'utiliser qu'en phase de démarrage. Action tracée.`;
-    if (!window.confirm(warn)) return;
+    const ok = await confirm({
+      title: "Réinitialisation (données de test)",
+      message: `Supprimer définitivement le devis ${q.quoteNumber} ET sa facture éventuelle, et rendre les numéros ?`,
+      detail: "À n'utiliser qu'en phase de démarrage. Cette action ne touche que ce devis et sa facture — jamais les ventes commerciales. Elle est tracée au journal d'audit.",
+      tone: "danger",
+      confirmLabel: "Réinitialiser",
+    });
+    if (!ok) return;
     setError(null);
     setInfo(null);
     try {
@@ -131,6 +146,13 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
   }
 
   async function handleInvoice(q: EditorialQuote) {
+    const ok = await confirm({
+      title: "Établir la facture",
+      message: `Générer la facture de prestation depuis le devis ${q.quoteNumber} ?`,
+      detail: "Une facture émise est définitive (numérotation légale, non supprimable).",
+      confirmLabel: "Établir la facture",
+    });
+    if (!ok) return;
     setError(null);
     setInfo(null);
     try {

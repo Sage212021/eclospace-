@@ -91,6 +91,12 @@ const EN: Record<string, string> = {
   // Commun
   "common.type": "Type",
   "common.cancel": "Cancel",
+  // Confirmation en deux temps (actions de validation)
+  "confirm.title": "Confirmation",
+  "confirm.cancel": "Cancel",
+  "confirm.ok": "Confirm",
+  "fin.confirm.expense": "Approve this expense?",
+  "com.confirm.approve": "Unblock this order (commercial management approval)?",
   "common.create": "Create",
   "common.loading": "Loading…",
   "common.save": "Save",

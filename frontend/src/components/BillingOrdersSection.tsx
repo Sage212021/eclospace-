@@ -17,6 +17,7 @@ import {
 import { Card } from "./Card";
 import { IconFinance } from "./icons";
 import { printInvoice } from "../lib/print";
+import { useConfirm } from "./ConfirmProvider";
 
 // Commandes à facturer (Finance étape 3) : une commande (ex. livre scolaire),
 // initiée par le DG / le commercial / la Finance, est reçue par la Finance qui
@@ -29,6 +30,7 @@ const CATS: { key: BillingOrderCategory; label: string }[] = [
 ];
 
 export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canCreate: boolean; canInvoice: boolean; canAdmin: boolean }) {
+  const confirm = useConfirm();
   const [orders, setOrders] = useState<BillingOrder[]>([]);
   const [pending, setPending] = useState<PendingValidationInvoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -93,6 +95,13 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
   }
 
   async function establish(o: BillingOrder) {
+    const ok = await confirm({
+      title: "Établir la facture",
+      message: `Établir la facture officielle pour « ${o.label} » ?`,
+      detail: `Client : ${o.customer_name} · Montant : ${fmt.format(o.amount_ttc)}. Une facture émise ne peut plus être supprimée (numérotation légale).`,
+      confirmLabel: "Établir la facture",
+    });
+    if (!ok) return;
     setError(null);
     setMsg(null);
     try {
@@ -105,6 +114,13 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
   }
 
   async function approve(inv: PendingValidationInvoice) {
+    const ok = await confirm({
+      title: "Valider la facture",
+      message: `Valider et émettre la facture ${inv.invoice_number} ?`,
+      detail: `Client : ${inv.customer_name} · Montant : ${fmt.format(inv.total_ttc)}. Cette validation (DG) émet définitivement la facture.`,
+      confirmLabel: "Valider",
+    });
+    if (!ok) return;
     setError(null);
     try {
       await validateInvoice(inv.id);

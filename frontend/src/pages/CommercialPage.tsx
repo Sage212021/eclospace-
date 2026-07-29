@@ -20,6 +20,7 @@ import {
 } from "../api/client";
 import { Card } from "../components/Card";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
+import { useConfirm } from "../components/ConfirmProvider";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconCommercial } from "../components/icons";
@@ -54,6 +55,7 @@ import { useI18n } from "../i18n";
 
 export function CommercialPage({ canManage, canValidate, canInitiateOrder }: CommercialPageProps) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [isbns, setIsbns] = useState<IsbnRef[]>([]);
@@ -91,6 +93,13 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
   }
 
   async function handleApprove(order: SalesOrder) {
+    const ok = await confirm({
+      title: t("com.unblock", "Débloquer"),
+      message: t("com.confirm.approve", "Débloquer cette commande (validation direction commerciale) ?"),
+      detail: order.orderNumber,
+      confirmLabel: t("com.unblock", "Débloquer"),
+    });
+    if (!ok) return;
     try {
       await approveSalesOrder(order.id);
       setMessage(`Commande ${order.orderNumber} débloquée.`);

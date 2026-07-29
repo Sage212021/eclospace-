@@ -53,6 +53,7 @@ import {
 import { Card } from "../components/Card";
 import { PendingQuotesCard } from "../components/PendingQuotesCard";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
+import { useConfirm } from "../components/ConfirmProvider";
 import { Modal, Field } from "../components/Modal";
 import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
@@ -114,6 +115,7 @@ import { useI18n } from "../i18n";
 
 export function FinancePage({ canManage, canAdminister, canInitiateOrder }: FinancePageProps) {
   const { t, lang } = useI18n();
+  const confirm = useConfirm();
   // Alias de `t` pour les endroits où la variable de boucle s'appelle aussi `t`
   // (ex. la liste des « tenders » du paiement mixte), afin d'éviter le masquage.
   const tr = t;
@@ -235,6 +237,14 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
   }
 
   async function handleValidateExpense(expense: Expense) {
+    const amount = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF", maximumFractionDigits: 0 }).format(Number(expense.amount));
+    const ok = await confirm({
+      title: t("fin.validate", "Valider"),
+      message: t("fin.confirm.expense", "Valider cette dépense ?"),
+      detail: [expense.supplier, expense.description, amount].filter(Boolean).join(" · ") || undefined,
+      confirmLabel: t("fin.validate", "Valider"),
+    });
+    if (!ok) return;
     try {
       await validateExpense(expense.id);
       setMessage(t("fin.msg.expense_validated", "Dépense validée."));

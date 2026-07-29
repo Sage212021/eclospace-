@@ -188,6 +188,38 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
     return reply.send(quote);
   });
 
+  // Liste Finance « en attente de devis » : ouvrages à compte d'auteur dont le
+  // devis n'est pas encore établi/accepté et dont l'étape n'a pas été passée.
+  // Alimente le tableau de bord du financier (reconfiguration Finance).
+  fastify.get("/api/v1/finance/pending-quotes", { preHandler: requirePermission("finance", "consultation") }, async (_request, reply) => {
+    const manuscripts = await prisma.manuscript.findMany({
+      where: {
+        deletedAt: null,
+        fundingMode: "author",
+        quoteDecision: { not: "skipped" },
+        editorialQuotes: { none: { deletedAt: null, status: { in: ["accepted", "invoiced"] } } },
+      },
+      include: {
+        workContributors: { where: { role: "author" }, include: { partner: true }, take: 1 },
+        editorialQuotes: { where: { deletedAt: null }, select: { status: true } },
+      },
+      orderBy: { receivedAt: "desc" },
+    });
+    return reply.send(
+      manuscripts.map((m) => {
+        const p = m.workContributors[0]?.partner;
+        return {
+          id: m.id,
+          reference: m.manuscriptNumber,
+          title: m.title,
+          author_name: p ? p.penName || `${p.firstName} ${p.lastName}`.trim() : "—",
+          decision: m.quoteDecision,
+          has_draft: m.editorialQuotes.some((q) => q.status === "draft" || q.status === "sent"),
+        };
+      }),
+    );
+  });
+
   // Suppression d'un devis à l'état BROUILLON uniquement (un devis envoyé,
   // accepté ou facturé engage la maison : il n'est jamais supprimé). Suppression
   // logique (règle du projet) : la ligne est conservée mais son numéro est

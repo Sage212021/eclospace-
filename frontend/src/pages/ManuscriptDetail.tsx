@@ -23,6 +23,7 @@ import { PrintingSection } from "../components/PrintingSection";
 import { AttachmentsSection } from "../components/AttachmentsSection";
 import { ReadingEvaluationsSection } from "../components/ReadingEvaluationsSection";
 import { AuthorFilesSection } from "../components/AuthorFilesSection";
+import { FundingCheckpoint } from "../components/FundingCheckpoint";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 
 interface ManuscriptDetailProps {
@@ -178,6 +179,17 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
           defaultPartnerId={manuscript.workContributors[0]?.partner.id ?? ""}
           canCreate={permissions.has("contracts:saisie")}
           canValidate={permissions.has("contracts:validation")}
+        />
+      )}
+
+      {permissions.has("manuscripts:consultation") && (
+        <FundingCheckpoint
+          manuscriptId={manuscript.id}
+          fundingMode={manuscript.fundingMode ?? "publisher"}
+          quoteDecision={manuscript.quoteDecision ?? "pending"}
+          quoteDecisionNote={manuscript.quoteDecisionNote}
+          canManage={permissions.has("manuscripts:saisie")}
+          onChanged={() => refresh().catch((e) => setError(e.message))}
         />
       )}
 

@@ -1281,6 +1281,25 @@ enum ManuscriptOrigin {
   commande
 }
 
+// Mode de prise en charge financière de l'ouvrage (reconfiguration Finance,
+// 29/07/2026) : à compte d'éditeur (la maison finance) ou à compte d'auteur
+// (l'auteur finance — un devis de prestation est alors attendu côté Finance).
+enum FundingMode {
+  publisher
+  author
+}
+
+// Décision de l'utilisateur sur le jalon « devis » — VOLONTAIREMENT NON
+// BLOQUANTE : l'utilisateur n'est jamais coincé. Il peut demander l'établissement
+// du devis (Finance en est notifiée), le remettre à plus tard, ou passer l'étape
+// (avec justification). Le travail éditorial n'est jamais empêché.
+enum QuoteDecision {
+  pending   // aucune décision prise
+  requested // établissement demandé à la Finance
+  deferred  // « plus tard »
+  skipped   // étape passée (justifiée)
+}
+
 // Entité centrale (modèle §4.2) : le « manuscrit » et le « projet éditorial »
 // sont une même ligne dont le cycle de vie est porté par le statut.
 model Manuscript {
@@ -1297,6 +1316,12 @@ model Manuscript {
   summary          String?
   keywords         String[]         @default([])
   origin           ManuscriptOrigin @default(soumission)
+  // Prise en charge & jalon devis (non bloquant) — reconfiguration Finance.
+  fundingMode       FundingMode   @default(publisher) @map("funding_mode")
+  quoteDecision     QuoteDecision @default(pending) @map("quote_decision")
+  quoteDecisionNote String?       @map("quote_decision_note")
+  quoteDecisionAt   DateTime?     @map("quote_decision_at")
+  quoteDecisionBy   String?       @map("quote_decision_by")
 
   statusId                      String         @map("status_id")
   status                        WorkflowStatus @relation(fields: [statusId], references: [id])

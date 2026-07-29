@@ -225,6 +225,63 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
     return reply.send({ ok: true });
   });
 
+  // Réinitialisation « données de test » (phase de démarrage). Réservé à
+  // l'administration Finance : purge la CHAÎNE COMPLÈTE d'un devis d'essai — le
+  // devis, sa facture générée, ses lignes, échéances, encaissements — et rend
+  // les numéros DE-/FA- (compteurs décrémentés s'il s'agit des derniers de
+  // l'année). Suppression réelle assumée (remise à zéro), mais tracée au journal
+  // d'audit inviolable. À neutraliser une fois la maison en production.
+  fastify.delete("/api/v1/editorial-quotes/:id/reset", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const quote = await prisma.editorialQuote.findFirst({ where: { id, deletedAt: null }, include: { invoice: true } });
+    if (!quote) return reply.code(404).send({ code: "not_found", message: "Devis introuvable." });
+
+    const year = new Date().getFullYear();
+    const deQ = quote.quoteNumber.match(/^DE-(\d{4})-(\d+)$/);
+    const purged: { quoteNumber: string; invoiceNumber?: string } = { quoteNumber: quote.quoteNumber };
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (quote.invoice) {
+          const inv = quote.invoice;
+          purged.invoiceNumber = inv.invoiceNumber;
+          // Refus si des avoirs dépendent de cette facture (chaîne non triviale).
+          const children = await tx.invoice.count({ where: { parentInvoiceId: inv.id } });
+          if (children > 0) throw new Error("credit_notes_exist");
+          // On délie d'abord le devis de la facture, puis on purge la facture.
+          await tx.editorialQuote.update({ where: { id }, data: { invoiceId: null } });
+          const allocations = await tx.paymentAllocation.findMany({ where: { invoiceId: inv.id }, select: { paymentId: true } });
+          await tx.paymentAllocation.deleteMany({ where: { invoiceId: inv.id } });
+          for (const pid of [...new Set(allocations.map((a) => a.paymentId))]) {
+            const remaining = await tx.paymentAllocation.count({ where: { paymentId: pid } });
+            if (remaining === 0) await tx.payment.delete({ where: { id: pid } });
+          }
+          await tx.installment.deleteMany({ where: { invoiceId: inv.id } });
+          await tx.invoiceLine.deleteMany({ where: { invoiceId: inv.id } });
+          await tx.invoice.delete({ where: { id: inv.id } });
+          const faMatch = inv.invoiceNumber.match(/^FA-(\d{4})-(\d+)$/);
+          if (faMatch) {
+            await tx.$executeRaw`UPDATE invoice_number_counters SET last_value = last_value - 1 WHERE year = ${Number(faMatch[1])} AND last_value = ${Number(faMatch[2])}`;
+          }
+        }
+        // Purge du devis lui-même et de ses lignes.
+        await tx.editorialQuoteLine.deleteMany({ where: { quoteId: id } });
+        await tx.editorialQuote.delete({ where: { id } });
+        if (deQ) {
+          await tx.$executeRaw`UPDATE editorial_quote_number_counters SET last_value = last_value - 1 WHERE year = ${Number(deQ[1])} AND last_value = ${Number(deQ[2])}`;
+        }
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message === "credit_notes_exist") {
+        return reply.code(409).send({ code: "credit_notes_exist", message: "Cette facture porte des avoirs : réinitialisation impossible." });
+      }
+      throw e;
+    }
+
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "editorial_quote", entityId: id, oldValues: purged, newValues: { reset: true }, ipAddress: request.ip });
+    return reply.send({ ok: true, purged });
+  });
+
   // Prépare l'envoi pour signature en ligne (③) : génère un jeton unique et
   // marque le devis « envoyé ». Le jeton alimente le lien public de signature.
   fastify.post("/api/v1/editorial-quotes/:id/send", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {

@@ -9,6 +9,7 @@ import {
   type RoyaltyYearEndStatus,
 } from "../api/client";
 import { Card } from "../components/Card";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printAuthorRoyaltyStatement } from "../lib/print";
 import { useI18n } from "../i18n";
@@ -111,6 +112,10 @@ export function AuthorRoyaltiesPage({ canConfigure = false, canGenerate = false 
       title={t("roy.title", "États annuels de droits d'auteur")}
       subtitle={t("roy.subtitle", "Par auteur, tous ses ouvrages sur l'année, avec le taux par livre et le récapitulatif fiscal.")}
     >
+      <GuidanceNote title="États annuels de droits d'auteur">
+        Récapitule, pour un auteur et une année, tous ses ouvrages, le taux de droits par livre et le total — pour établir
+        son relevé annuel et le récapitulatif fiscal. Choisissez l'auteur et l'année.
+      </GuidanceNote>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 12 }}>
         <label style={{ fontSize: 12, color: "var(--muted)" }}>
           {t("roy.year", "Année")}

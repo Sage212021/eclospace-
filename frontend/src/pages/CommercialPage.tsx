@@ -44,13 +44,15 @@ const ZONE_OPTIONS: { value: string; label: string }[] = [
 interface CommercialPageProps {
   canManage: boolean;
   canValidate: boolean;
+  // Initiation d'une commande à facturer / proforma (commercial ou DG).
+  canInitiateOrder: boolean;
 }
 
 // Commercial, distribution et ventes (Ch. 17) : clients, commandes, vente
 // directe. Écran transverse, non rattaché à un seul manuscrit.
 import { useI18n } from "../i18n";
 
-export function CommercialPage({ canManage, canValidate }: CommercialPageProps) {
+export function CommercialPage({ canManage, canValidate, canInitiateOrder }: CommercialPageProps) {
   const { t } = useI18n();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<SalesOrder[]>([]);
@@ -108,7 +110,7 @@ export function CommercialPage({ canManage, canValidate }: CommercialPageProps) 
 
       {/* Commandes à facturer (ex. livre scolaire) : le commercial les initie ; la
           Finance établit la facture. */}
-      <BillingOrdersSection canCreate={canManage} canInvoice={false} canAdmin={false} />
+      <BillingOrdersSection canCreate={canInitiateOrder} canInvoice={false} canAdmin={false} />
 
       <Card
         title={t("com.customers", "Clients")}

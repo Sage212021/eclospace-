@@ -478,6 +478,13 @@ export function App() {
 
   const permissions = new Set(user.permissions);
   const roles = new Set(user.roles);
+  // Initiation d'une commande à facturer / proforma : ouverte au commercial
+  // (saisie/validation) et à la Finance (saisie) — le DG, qui détient
+  // commercial:validation, peut donc initier depuis sa propre rubrique.
+  const canInitiateOrder =
+    permissions.has("commercial:saisie") ||
+    permissions.has("commercial:validation") ||
+    permissions.has("finance:saisie");
   const activeKey = view.kind === "manuscript-detail" ? view.originKey : view.key;
   const leaf = view.kind === "leaf" ? LEAF_VIEWS[view.key] : undefined;
   // Modèle « tout visible, gardé à l'ouverture » : un module hors périmètre
@@ -624,10 +631,10 @@ export function App() {
           <StockPage canManage={permissions.has("stock:saisie")} canAdminister={permissions.has("stock:administration")} />
         )}
         {leaf && "page" in leaf && leaf.page === "commercial" && (
-          <CommercialPage canManage={permissions.has("commercial:saisie")} canValidate={permissions.has("commercial:administration")} />
+          <CommercialPage canManage={permissions.has("commercial:saisie")} canValidate={permissions.has("commercial:administration")} canInitiateOrder={canInitiateOrder} />
         )}
         {leaf && "page" in leaf && leaf.page === "finance" && (
-          <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} />
+          <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} canInitiateOrder={canInitiateOrder} />
         )}
         {leaf && "page" in leaf && leaf.page === "hr" && (
           <HrPage
@@ -649,7 +656,7 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "users-roles" && (
           <UsersRolesPage canAdminister={permissions.has("users:administration")} />
         )}
-        {leaf && "page" in leaf && leaf.page === "direction" && <DirectionPage canTreatRecommendations={permissions.has("pilotage:saisie")} />}
+        {leaf && "page" in leaf && leaf.page === "direction" && <DirectionPage canTreatRecommendations={permissions.has("pilotage:saisie")} canInitiateOrder={canInitiateOrder} />}
         {leaf && "page" in leaf && leaf.page === "reports" && (
           <ReportsPage canCreateAnalysis={permissions.has("rapports:saisie")} canPromoteAnalysis={permissions.has("rapports:administration")} />
         )}

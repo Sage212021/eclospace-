@@ -111,7 +111,7 @@ export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar }: Dashboar
 
       {/* Pipeline éditorial : où en sont les ouvrages (par étape du workflow). */}
       {stats?.pipeline && stats.pipeline.length > 0 && (
-        <Pipeline stages={stats.pipeline} />
+        <Pipeline stages={stats.pipeline} totalSteps={stats.pipeline_steps_total ?? 20} />
       )}
 
       <h2 style={{ fontFamily: "var(--font-title)", fontSize: 15, margin: "24px 0 0" }}>{t("dash.session", "Ma session")}</h2>
@@ -182,34 +182,49 @@ function KpiCard({ icon, label, value, money, tone }: { icon: string; label: str
   );
 }
 
-// Frise « pipeline éditorial » : pour chaque étape portant des ouvrages, une
-// barre proportionnelle et le nombre d'ouvrages — coup d'œil sur l'avancement.
-function Pipeline({ stages }: { stages: { code: string; label: string; step_order: number; count: number }[] }) {
+// Frise « pipeline éditorial » : pour chaque étape portant des ouvrages, la
+// barre montre l'AVANCEMENT RÉEL dans le circuit (position de l'étape parmi les
+// N étapes, de la réception à l'archivage) — et non un simple comptage. Le
+// nombre d'ouvrages à cette étape est affiché à droite. Ainsi une étape en
+// début de circuit (ex. comité de lecture) n'apparaît jamais « pleine » même si
+// elle concentre le plus d'ouvrages.
+function Pipeline({ stages, totalSteps }: { stages: { code: string; label: string; step_order: number; count: number }[]; totalSteps: number }) {
   const { t } = useI18n();
-  const max = Math.max(...stages.map((s) => s.count), 1);
   const total = stages.reduce((sum, s) => sum + s.count, 0);
+  const denom = Math.max(totalSteps - 1, 1);
+  const progressPct = (stepOrder: number) => Math.round((Math.max(stepOrder - 1, 0) / denom) * 100);
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 14, padding: 18, marginTop: 16, maxWidth: 640 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
         <h2 style={{ fontFamily: "var(--font-title)", fontSize: 15, margin: 0 }}>{t("dash.pipeline", "Pipeline éditorial")}</h2>
         <span style={{ fontSize: 12, color: "var(--muted)" }}>
           {t("dash.pipeline_total", "ouvrages au total")} : <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{total}</strong>
         </span>
       </div>
+      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "0 0 12px" }}>
+        {t("dash.pipeline_sub", "Barre = avancement de l'étape dans le circuit · nombre = ouvrages à cette étape.")}
+      </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {stages.map((s) => (
-          <div key={s.code} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ flex: "0 0 40%", fontSize: 12.5, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.label}>
-              {s.label}
+        {stages.map((s) => {
+          const pct = progressPct(s.step_order);
+          return (
+            <div key={s.code} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: "0 0 38%", fontSize: 12.5, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.label}>
+                {s.label}
+              </div>
+              <div style={{ flex: 1, height: 10, background: "var(--eclosion-soft)", borderRadius: 999, overflow: "hidden" }} title={`${pct}% du circuit`}>
+                <div style={{ width: `${Math.max(4, pct)}%`, height: "100%", background: "var(--eclosion)", borderRadius: 999 }} />
+              </div>
+              <div style={{ flex: "0 0 38px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>
+                {pct}%
+              </div>
+              <div style={{ flex: "0 0 46px", textAlign: "right", fontSize: 12, color: "var(--ink)" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>{s.count}</span>
+                <span style={{ color: "var(--muted)" }}> {s.count > 1 ? t("dash.pipeline_books", "livres") : t("dash.pipeline_book", "livre")}</span>
+              </div>
             </div>
-            <div style={{ flex: 1, height: 10, background: "var(--eclosion-soft)", borderRadius: 999, overflow: "hidden" }}>
-              <div style={{ width: `${Math.max(6, (s.count / max) * 100)}%`, height: "100%", background: "var(--eclosion)", borderRadius: 999 }} />
-            </div>
-            <div style={{ flex: "0 0 34px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>
-              {s.count}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

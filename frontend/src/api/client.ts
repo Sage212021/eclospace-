@@ -64,6 +64,8 @@ export interface DashboardStats {
   ruptures: number | null;
   taches_en_retard: number | null;
   pipeline: PipelineStage[] | null;
+  // Nombre total d'étapes du circuit (pour l'avancement réel de chaque étape).
+  pipeline_steps_total: number | null;
 }
 
 export function getDashboardStats() {

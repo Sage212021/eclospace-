@@ -55,6 +55,11 @@ describe("indicateurs de synthèse du tableau de bord", () => {
     }
     const pipelineTotal = body.pipeline.reduce((sum: number, s: { count: number }) => sum + s.count, 0);
     expect(pipelineTotal).toBe(expectedOuvrages);
+    // Le nombre total d'étapes est fourni pour calculer l'avancement réel (et
+    // doit couvrir l'étape la plus avancée présente dans la frise).
+    expect(typeof body.pipeline_steps_total).toBe("number");
+    const maxStep = Math.max(...body.pipeline.map((s: { step_order: number }) => s.step_order));
+    expect(body.pipeline_steps_total).toBeGreaterThanOrEqual(maxStep);
   });
 
   it("masque les indicateurs hors périmètre d'un profil restreint (null)", async () => {

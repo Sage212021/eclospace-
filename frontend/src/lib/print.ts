@@ -176,12 +176,10 @@ function wirePrint(win: Window, doc: Document): void {
   setTimeout(fire, 600);
 }
 
-function openPrintWindow(title: string, body: string, opts?: PrintOpts): void {
-  const html = documentShell(title, body, opts);
-
-  // Voie principale : iframe cachée dans la page courante — contourne les
-  // BLOQUEURS DE POP-UP et fonctionne sur mobile, contrairement à window.open.
-  // Repli sur une fenêtre dédiée si l'iframe échoue.
+// Impression via une IFRAME cachée : impression directe et silencieuse, idéale
+// sur ORDINATEUR, et non bloquée par les bloqueurs de pop-up (utile quand
+// l'impression suit une étape asynchrone, ex. « Établir la facture »).
+function printViaIframe(html: string): boolean {
   try {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
@@ -197,25 +195,50 @@ function openPrintWindow(title: string, body: string, opts?: PrintOpts): void {
     const remove = () => {
       if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
     };
-    // Retire l'iframe après l'impression ; filet de sécurité à 2 min si
-    // l'évènement afterprint ne se déclenche pas (certains mobiles).
     win.addEventListener("afterprint", () => setTimeout(remove, 500));
     setTimeout(remove, 120000);
-    return;
+    return true;
   } catch {
-    /* iframe indisponible : repli sur une fenêtre dédiée ci-dessous */
+    return false;
   }
+}
 
-  const w = window.open("", "_blank", "width=860,height=1000");
-  if (!w) {
-    // Bloqueur de pop-up : on informe plutôt que d'échouer en silence.
-    alert(tr("Autorisez les fenêtres pop-up pour imprimer ce document.", "Allow pop-up windows to print this document."));
-    return;
-  }
+// Impression via un NOUVEL ONGLET : le document y est seul, donc il s'imprime
+// CORRECTEMENT sur mobile — contrairement à l'iframe, qui sur Android Chrome
+// imprime la page entière de l'application au lieu du document. Peut être bloqué
+// par un bloqueur de pop-up si l'appel ne suit pas une action de l'utilisateur.
+function printViaWindow(html: string): boolean {
+  const w = window.open("", "_blank");
+  if (!w) return false;
   w.document.open();
   w.document.write(html);
   w.document.close();
   wirePrint(w, w.document);
+  // Referme l'onglet une fois l'impression terminée (au mieux : afterprint
+  // n'est pas garanti sur tous les mobiles — l'utilisateur peut fermer l'onglet).
+  try {
+    w.addEventListener("afterprint", () => setTimeout(() => w.close(), 300));
+  } catch {
+    /* ignore */
+  }
+  return true;
+}
+
+function openPrintWindow(title: string, body: string, opts?: PrintOpts): void {
+  const html = documentShell(title, body, opts);
+
+  // Choix de la méthode selon l'appareil :
+  //  • MOBILE : nouvel onglet d'abord (l'iframe imprime la page entière sur
+  //    Android Chrome) ; repli sur l'iframe si le pop-up est bloqué.
+  //  • ORDINATEUR : iframe d'abord (impression directe, sans onglet visible, et
+  //    non bloquée après une étape asynchrone) ; repli sur un nouvel onglet.
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+  const chain = isMobile ? [printViaWindow, printViaIframe] : [printViaIframe, printViaWindow];
+  for (const method of chain) {
+    if (method(html)) return;
+  }
+  // Aucune méthode n'a pu s'ouvrir (pop-up bloqué et iframe indisponible).
+  alert(tr("Autorisez les fenêtres pop-up pour imprimer ce document.", "Allow pop-up windows to print this document."));
 }
 
 // Langue des documents imprimés (option Français / Anglais) : suit la langue de

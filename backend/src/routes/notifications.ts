@@ -22,12 +22,22 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     }
     const { unread, priority } = parsed.data;
 
+    // Expiration d'affichage (demande opérateur du 30/07/2026) : une
+    // notification disparaît de la cloche à son échéance ; si elle n'a pas
+    // d'échéance propre (expires_at nul), elle disparaît 24 h après sa création.
+    const now = new Date();
+    const cutoff24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
     const notifications = await prisma.notification.findMany({
       where: {
         userId: request.user!.id,
         ...(unread === "true" ? { readAt: null } : {}),
         ...(unread === "false" ? { readAt: { not: null } } : {}),
         ...(priority ? { priority } : {}),
+        OR: [
+          { expiresAt: { gt: now } }, // échéance propre non dépassée
+          { expiresAt: null, createdAt: { gt: cutoff24h } }, // sans échéance → fenêtre de 24 h
+        ],
       },
       orderBy: { createdAt: "desc" },
     });

@@ -188,6 +188,9 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
           body: `Le manuscrit ${manuscript.manuscriptNumber} vous est confié pour évaluation, échéance ${parsed.data.due_at.toLocaleDateString("fr-FR")}.`,
           entityType: "manuscript",
           entityId: id,
+          // Cette notification porte une vraie échéance : elle reste visible
+          // jusqu'à la date limite de la mission (et non 24 h seulement).
+          expiresAt: parsed.data.due_at,
         },
       });
 

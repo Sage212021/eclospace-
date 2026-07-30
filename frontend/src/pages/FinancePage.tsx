@@ -54,6 +54,7 @@ import { Card } from "../components/Card";
 import { PendingQuotesCard } from "../components/PendingQuotesCard";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { useConfirm } from "../components/ConfirmProvider";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
@@ -347,6 +348,12 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
     <div className="ecl-page">
       <h1 className="ecl-page__title">{t("page.finance.title", "Finance et comptabilité")}</h1>
       <p className="ecl-page__lead">{t("page.finance.lead", "Factures, encaissements, dépenses, droits d'auteur et trésorerie.")}</p>
+
+      <GuidanceNote title="Finance & comptabilité">
+        Établissez et suivez les factures et proforma, enregistrez les encaissements et les dépenses, versez les droits
+        d'auteur et suivez la trésorerie. Les commandes à facturer initiées par le DG/commercial se transforment ici en
+        facture (validation par seuil au-dessus d'un montant).
+      </GuidanceNote>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

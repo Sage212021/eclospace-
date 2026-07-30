@@ -19,6 +19,23 @@ const CATALOGUE_STORAGE_KEY = "eclospace.catalogue.filters";
 
 // Encadré d'orientation par sous-rubrique éditoriale (liste globale ou vue par
 // étape). Explique ce que liste la rubrique et l'action attendue.
+// Notes d'orientation par étape de production / contractualisation (une phrase
+// disant ce qui s'y fait et la condition pour avancer).
+const STAGE_NOTES: Record<string, string> = {
+  CONTRACTUALISATION:
+    "Établissez et activez le contrat d'édition (section « Contrats » dans la fiche). Un contrat actif est requis pour lancer la production, puis validez l'étape.",
+  MISE_EN_PAGE:
+    "Maquette et mise en page : ouvrez l'ouvrage pour la fiche technique de fabrication et le dépôt des fichiers. Validez pour passer à l'infographie.",
+  INFOGRAPHIE:
+    "Couverture et éléments graphiques. La convergence maquette/infographie (fiche complète, dos à jour, couverture conforme) est requise avant de valider.",
+  ATTRIBUTION_REFERENCES:
+    "ISBN, dépôt légal, métadonnées et classification. La liste de contrôle doit être complète avant de libérer l'ouvrage vers le BAT.",
+  VALIDATION_BAT:
+    "Bon à tirer : le BAT doit être signé électroniquement pour valider l'étape et autoriser le lancement de l'impression.",
+  IMPRESSION:
+    "Impression : bon de commande transmis à l'imprimeur, réception des exemplaires puis contrôle qualité avant l'entrée en stock.",
+};
+
 function ManuscriptsGuidance({ statusFilter, heading }: { statusFilter?: string; heading?: string }) {
   if (statusFilter === "COMITE_LECTURE") {
     return (
@@ -52,11 +69,12 @@ function ManuscriptsGuidance({ statusFilter, heading }: { statusFilter?: string;
       />
     );
   }
+  const note = statusFilter ? STAGE_NOTES[statusFilter] : undefined;
   if (statusFilter) {
     return (
       <GuidanceNote title={heading ?? "Cette étape"}>
-        Liste des ouvrages actuellement à cette étape. Ouvrez un ouvrage pour saisir les informations de l'étape et le
-        faire avancer.
+        {note ??
+          "Liste des ouvrages actuellement à cette étape. Ouvrez un ouvrage pour saisir les informations de l'étape et le faire avancer."}
       </GuidanceNote>
     );
   }

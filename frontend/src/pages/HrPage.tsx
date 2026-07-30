@@ -27,6 +27,7 @@ import {
   type EmployeeStatus,
 } from "../api/client";
 import { Card } from "../components/Card";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconAdmin } from "../components/icons";
@@ -243,6 +244,11 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
     <div className="ecl-page">
       <h1 className="ecl-page__title">{t("page.hr.title", "Ressources humaines")}</h1>
       <p className="ecl-page__lead">{t("page.hr.lead", "Dossiers collaborateurs, absences et revue des habilitations.")}</p>
+
+      <GuidanceNote title="Ressources humaines">
+        Dossiers des collaborateurs, absences et présences, et paie. Les onglets ci-dessous regroupent chaque domaine ;
+        les informations confidentielles sont réservées aux profils habilités.
+      </GuidanceNote>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

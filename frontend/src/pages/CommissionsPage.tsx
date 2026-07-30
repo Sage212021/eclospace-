@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { getCommissions, setCommissionRate as apiSetRate, type CommissionResult, type CommissionGranularity } from "../api/client";
 import { Card } from "../components/Card";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printCommissionStatement } from "../lib/print";
 import { useI18n } from "../i18n";
@@ -84,6 +85,10 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
       title={t("comm.title", "Commissions commerciales")}
       subtitle={t("comm.subtitle", "Commission par commercial sur le montant vendu — par semaine, mois, semestre ou année.")}
     >
+      <GuidanceNote title="Commissions commerciales">
+        Calcule la commission due à chaque commercial sur le montant qu'il a vendu, sur la période choisie. Ajustez les
+        bornes de dates et la granularité (semaine, mois, semestre, année).
+      </GuidanceNote>
       {/* Filtres */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 12 }}>
         <label style={{ fontSize: 12, color: "var(--muted)" }}>{t("comm.from", "Du")}<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={inp} /></label>

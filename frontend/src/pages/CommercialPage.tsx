@@ -19,6 +19,7 @@ import {
   type StockLocation,
 } from "../api/client";
 import { Card } from "../components/Card";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { useConfirm } from "../components/ConfirmProvider";
 import { Modal, Field } from "../components/Modal";
@@ -113,6 +114,11 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
     <div className="ecl-page" style={{ maxWidth: 960 }}>
       <h1 className="ecl-page__title">{t("page.commercial.title", "Commercial, distribution et ventes")}</h1>
       <p className="ecl-page__lead">{t("page.commercial.lead", "Clients, commandes et ventes directes.")}</p>
+
+      <GuidanceNote title="Commercial & ventes">
+        Gérez les clients, les commandes et les ventes directes (comptoir/salon). Les commandes à facturer (livre scolaire…)
+        se saisissent ici et sont ensuite facturées par la Finance.
+      </GuidanceNote>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

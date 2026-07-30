@@ -13,6 +13,7 @@ import {
   type StockMovementType,
 } from "../api/client";
 import { Card } from "../components/Card";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconCommercial } from "../components/icons";
@@ -88,6 +89,11 @@ export function StockPage({ canManage, canAdminister }: StockPageProps) {
     <div className="ecl-page" style={{ maxWidth: 960 }}>
       <h1 className="ecl-page__title">{t("page.stock.title", "Stock et magasin")}</h1>
       <p className="ecl-page__lead">{t("page.stock.lead", "Lieux de stockage, mouvements et alertes de réapprovisionnement.")}</p>
+
+      <GuidanceNote title="Stock & magasin">
+        Suivez les quantités par ouvrage et par lieu de stockage. Enregistrez les entrées et sorties (mouvements) ; les
+        ouvrages sous le seuil d'alerte remontent en réapprovisionnement.
+      </GuidanceNote>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

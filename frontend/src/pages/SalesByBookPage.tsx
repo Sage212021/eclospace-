@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getSalesByBook, type SalesTrackingResult } from "../api/client";
 import { Card } from "../components/Card";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { useI18n } from "../i18n";
 
 // Suivi des ventes par ouvrage : sorties du stock vs ventes réelles (montant
@@ -47,6 +48,10 @@ export function SalesByBookPage() {
       title={t("sbb.title", "Suivi des ventes par ouvrage")}
       subtitle={t("sbb.subtitle", "Exemplaires sortis, ventes réelles et écart — par ouvrage, par semaine ou par mois.")}
     >
+      <GuidanceNote title="Suivi des ventes par ouvrage">
+        Comparez, pour chaque ouvrage, les exemplaires <strong>sortis du stock</strong> aux <strong>ventes réellement
+        enregistrées</strong> : l'écart révèle les sorties non vendues (exemplaires gratuits, dépôt-vente non converti).
+      </GuidanceNote>
       {/* Filtres */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
         <label style={{ fontSize: 12, color: "var(--muted)" }}>

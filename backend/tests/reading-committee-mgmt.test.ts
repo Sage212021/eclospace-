@@ -56,6 +56,17 @@ describe("comité de lecture : doublon, retrait, clôture", () => {
     return m.status.code;
   }
 
+  it("candidats à la lecture : uniquement les rôles éditoriaux habilités (pas les autres pôles)", async () => {
+    // reader2 (CORRECTEUR) est habilité ; un magasinier ne l'est pas.
+    const magU = `mag_${rnd()}`;
+    const mag = await createUserWithRole(magU, "MAGASINIER", "Passw0rd!");
+    const res = await app.inject({ method: "GET", url: "/api/v1/reading-candidates", headers: { cookie: adminCookie } });
+    expect(res.statusCode).toBe(200);
+    const ids = (res.json() as { id: string }[]).map((u) => u.id);
+    expect(ids).toContain(reader2Id); // CORRECTEUR habilité
+    expect(ids).not.toContain(mag.id); // MAGASINIER exclu
+  });
+
   it("refuse d'affecter deux fois le même relecteur (anti-doublon)", async () => {
     const m = await createManuscriptAtCommittee(`Doublon ${rnd()}`);
     const first = await app.inject({

@@ -53,6 +53,7 @@ import { GuidanceNote } from "./components/GuidanceNote";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { PresenceToasts } from "./components/PresenceToasts";
+import { MessageBubble } from "./components/MessageBubble";
 import { AnnouncementToasts, type ToastItem } from "./components/AnnouncementToasts";
 import { usePresence, type AnnouncementPush } from "./hooks/usePresence";
 import { playNotificationSound } from "./lib/notificationSound";
@@ -131,6 +132,10 @@ const NAV_POLES: NavPole[] = [
       { key: "ed-mes-lectures", label: "Mes lectures", permission: "comite_lecture:saisie" },
       { key: "ed-direction", label: "Direction éditoriale", permission: "manuscripts:consultation" },
       { key: "ed-correction", label: "Correction éditoriale", permission: "manuscripts:consultation" },
+      // Messagerie des auteurs : rattachée au pôle Éditorial (décision opérateur) —
+      // la relation avec les auteurs est un travail éditorial. La clé reste
+      // « cm-messages-auteurs » (identifiant interne inchangé, vue service-desk).
+      { key: "cm-messages-auteurs", label: "Messagerie des auteurs", permission: "service_auteurs:consultation" },
       { key: "ed-catalogue-ref", label: "Domaines & collections", permission: "manuscripts:consultation" },
       { key: "ed-archives", label: "Archives", permission: "manuscripts:consultation" },
     ],
@@ -181,7 +186,6 @@ const NAV_POLES: NavPole[] = [
     label: "Communication interne",
     items: [
       { key: "cm-messagerie", label: "Messagerie" },
-      { key: "cm-messages-auteurs", label: "Messages des auteurs", permission: "service_auteurs:consultation" },
       { key: "cm-actualites", label: "Fil d'actualités", permission: "communication:consultation" },
       { key: "cm-babillard", label: "Babillard d'annonces", permission: "communication:consultation" },
       { key: "cm-evenements", label: "Planning des événements", permission: "communication:consultation" },
@@ -303,6 +307,10 @@ export function App() {
   // Voyant de non-lus de la messagerie interne (rafraîchi régulièrement et au
   // changement de vue) pour signaler au destinataire un nouveau message.
   const [chatUnread, setChatUnread] = useState(0);
+  // Bulle de messagerie flottante « rabattue » par l'utilisateur : masquée
+  // jusqu'à l'arrivée d'un nouveau message (le compteur repart à la hausse).
+  const [bubbleHidden, setBubbleHidden] = useState(false);
+  const prevUnreadRef = useRef(0);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // Compteur incrémenté à chaque nouvelle annonce temps réel : sert de signal
   // à la cloche (TopBar) pour recharger son badge de non-lus.
@@ -397,6 +405,56 @@ export function App() {
     const timer = setInterval(refresh, 20000);
     return () => clearInterval(timer);
   }, [user?.id, view]);
+
+  // Bulle de messagerie : si le nombre de non-lus augmente (nouveau message),
+  // on « déplie » la bulle même si l'utilisateur l'avait rabattue.
+  useEffect(() => {
+    if (chatUnread > prevUnreadRef.current) setBubbleHidden(false);
+    prevUnreadRef.current = chatUnread;
+  }, [chatUnread]);
+
+  // Bouton « retour » du téléphone / navigateur : navigue vers l'écran
+  // PRÉCÉDENT au lieu de fermer l'application. La navigation se fait par état
+  // (`view`) et non par URL ; on la synchronise donc avec l'historique du
+  // navigateur — chaque ouverture d'écran empile une entrée, « retour » la
+  // dépile. `isPopRef` évite de réempiler une entrée lors d'un retour.
+  const isPopRef = useRef(false);
+  const historySeededRef = useRef(false);
+  const lastHistoryViewRef = useRef<View | null>(null);
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      isPopRef.current = true;
+      const v = (e.state as { eclView?: View } | null)?.eclView;
+      const valid =
+        v &&
+        ((v.kind === "leaf" && typeof v.key === "string" && v.key in LEAF_VIEWS) ||
+          (v.kind === "manuscript-detail" && typeof v.id === "string"));
+      setView(valid ? (v as View) : DEFAULT_VIEW);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    // Un simple rafraîchissement du profil (même `view`) ne doit rien empiler :
+    // on ne réagit qu'à un VRAI changement d'écran (nouvelle référence `view`).
+    if (lastHistoryViewRef.current === view) return;
+    lastHistoryViewRef.current = view;
+    // Première vue de la session : on remplace l'entrée courante (pas d'empilement).
+    if (!historySeededRef.current) {
+      historySeededRef.current = true;
+      window.history.replaceState({ eclView: view }, "");
+      return;
+    }
+    // Vue issue d'un « retour » : ne pas réempiler.
+    if (isPopRef.current) {
+      isPopRef.current = false;
+      return;
+    }
+    // Navigation vers un nouvel écran : on empile une entrée d'historique.
+    window.history.pushState({ eclView: view }, "");
+  }, [view, user]);
 
   // Signale le pôle/module courant à chaque changement de vue (présence).
   useEffect(() => {
@@ -539,6 +597,19 @@ export function App() {
         }}
         onDismiss={(tid) => setToasts((list) => list.filter((x) => x.toastId !== tid))}
       />
+      {/* Bulle de messagerie flottante (or) : signale les messages internes non
+          lus, en plus du point rouge de la barre latérale. Masquée sur la
+          messagerie elle-même et une fois rabattue par l'utilisateur. */}
+      {chatUnread > 0 && !bubbleHidden && !(view.kind === "leaf" && view.key === "cm-messagerie") && (
+        <MessageBubble
+          count={chatUnread}
+          onOpen={() => {
+            setBubbleHidden(true);
+            setView({ kind: "leaf", key: "cm-messagerie" });
+          }}
+          onDismiss={() => setBubbleHidden(true)}
+        />
+      )}
       {/* Layout responsive piloté par CSS (média-requêtes) : fiable sur un vrai
           téléphone, indépendant du JavaScript. La classe --open ne fait glisser
           le tiroir que sous 900px ; au-dessus, la barre reste fixe en flux. */}

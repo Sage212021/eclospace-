@@ -52,6 +52,25 @@ describe("commandes à facturer + validation par seuil", () => {
     return res;
   }
 
+  it("notifie le pôle Finance mais PAS l'administrateur général", async () => {
+    // Un comptable (finance:saisie) reçoit la notification ; l'admin non.
+    const comptaU = `compta_${rnd()}`;
+    const compta = await createUserWithRole(comptaU, "COMPTABLE", PWD);
+    const adminUser = await prisma.user.findUniqueOrThrow({ where: { username: "admin" } });
+
+    const before = { compta: 0, admin: 0 };
+    before.compta = await prisma.notification.count({ where: { userId: compta.id, entityType: "billing_order" } });
+    before.admin = await prisma.notification.count({ where: { userId: adminUser.id, entityType: "billing_order" } });
+
+    const res = await createOrder(300_000);
+    expect(res.statusCode).toBe(201);
+
+    const afterCompta = await prisma.notification.count({ where: { userId: compta.id, entityType: "billing_order" } });
+    const afterAdmin = await prisma.notification.count({ where: { userId: adminUser.id, entityType: "billing_order" } });
+    expect(afterCompta).toBe(before.compta + 1); // le comptable est notifié
+    expect(afterAdmin).toBe(before.admin); // l'administrateur ne l'est pas
+  });
+
   it("crée une commande à facturer et l'affiche dans la file", async () => {
     const res = await createOrder(500_000);
     expect(res.statusCode).toBe(201);

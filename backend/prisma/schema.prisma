@@ -1047,6 +1047,11 @@ model Notification {
   channel    NotificationChannel  @default(in_app)
   readAt     DateTime?            @map("read_at")
   sentAt     DateTime?            @map("sent_at")
+  // Échéance d'affichage : au-delà, la notification disparaît de la cloche.
+  // Null = pas de délai propre → règle par défaut de 24 h après création
+  // (appliquée à la lecture). Renseignée quand la notification porte une vraie
+  // échéance (ex. lecture assignée : échéance = date limite de la mission).
+  expiresAt  DateTime?            @map("expires_at")
 
   createdAt DateTime @default(now()) @map("created_at")
 

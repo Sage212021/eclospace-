@@ -3,7 +3,15 @@ import { z } from "zod";
 import argon2 from "argon2";
 import { PermissionAction } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
+
+// Lecture des comptes/rôles/départements : accessible aux profils en
+// consultation OU en administration des utilisateurs (un administrateur qui n'a
+// pas explicitement la consultation doit tout de même pouvoir charger la page).
+const canReadUsers = requireAnyPermission([
+  { module: "users", action: "consultation" },
+  { module: "users", action: "administration" },
+]);
 import { writeAuditLog } from "../lib/audit.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "../lib/session.js";
@@ -101,7 +109,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
 
   // Référentiel des rôles applicatifs (Ch. 2 §2.2) — pour le sélecteur
   // d'attribution de rôle de l'écran Utilisateurs & rôles.
-  fastify.get("/api/v1/roles", { preHandler: requirePermission("users", "consultation") }, async (_request, reply) => {
+  fastify.get("/api/v1/roles", { preHandler: canReadUsers }, async (_request, reply) => {
     const roles = await prisma.role.findMany({
       include: { department: { select: { name: true } } },
       orderBy: { label: "asc" },
@@ -158,7 +166,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
 
   // Comptes avec leurs rôles actifs (Ch. 2 §2.4) — vue consolidée pour la
   // gestion des habilitations.
-  fastify.get("/api/v1/users-with-roles", { preHandler: requirePermission("users", "consultation") }, async (_request, reply) => {
+  fastify.get("/api/v1/users-with-roles", { preHandler: canReadUsers }, async (_request, reply) => {
     const users = await prisma.user.findMany({
       where: { deletedAt: null },
       select: {
@@ -467,7 +475,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
   // --- Gestion des pôles / départements (spéc. fonctionnelle §3, décision A :
   // pôle = département, créable par l'administrateur). ---
 
-  fastify.get("/api/v1/departments", { preHandler: requirePermission("users", "consultation") }, async (_request, reply) => {
+  fastify.get("/api/v1/departments", { preHandler: canReadUsers }, async (_request, reply) => {
     const departments = await prisma.department.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },

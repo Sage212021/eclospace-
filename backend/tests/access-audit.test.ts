@@ -18,15 +18,15 @@ async function loginCookie(app: FastifyInstance, username: string, password: str
 describe("audit des accès", () => {
   let app: FastifyInstance;
   let adminCookie: string;
-  let rhUser: string;
+  let dgUser: string;
   let correcteurUser: string;
 
   beforeAll(async () => {
     app = await buildApp();
     adminCookie = await loginCookie(app, "admin", ADMIN_PASSWORD);
-    rhUser = `rh_${rnd()}`;
+    dgUser = `dg_${rnd()}`;
     correcteurUser = `corr_${rnd()}`;
-    await createUserWithRole(rhUser, "RESP_RH", "Passw0rd!"); // détient users:administration
+    await createUserWithRole(dgUser, "DIR_GENERAL", "Passw0rd!"); // détient users:administration
     await createUserWithRole(correcteurUser, "CORRECTEUR", "Passw0rd!"); // ne le détient pas
   });
 
@@ -39,11 +39,19 @@ describe("audit des accès", () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/access-audit?permission=users:administration", headers: { cookie: adminCookie } });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { holders: { username: string; via_roles: { code: string }[] }[] };
-    const rh = body.holders.find((h) => h.username === rhUser);
-    expect(rh).toBeTruthy();
-    expect(rh!.via_roles.some((r) => r.code === "RESP_RH")).toBe(true);
+    const dg = body.holders.find((h) => h.username === dgUser);
+    expect(dg).toBeTruthy();
+    expect(dg!.via_roles.some((r) => r.code === "DIR_GENERAL")).toBe(true);
     // Un correcteur ne détient pas cet accès.
     expect(body.holders.some((h) => h.username === correcteurUser)).toBe(false);
+  });
+
+  it("la fonction RH ne détient plus l'accès « Utilisateurs & rôles » d'office", async () => {
+    const rhUser = `rh_${rnd()}`;
+    await createUserWithRole(rhUser, "RESP_RH", "Passw0rd!");
+    const res = await app.inject({ method: "GET", url: "/api/v1/access-audit?permission=users:administration", headers: { cookie: adminCookie } });
+    const body = res.json() as { holders: { username: string }[] };
+    expect(body.holders.some((h) => h.username === rhUser)).toBe(false);
   });
 
   it("refuse l'audit à un profil non administrateur (403)", async () => {

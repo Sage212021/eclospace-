@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listSettings, updateSetting, type AppSetting, type EffectiveUser } from "../api/client";
 import { AccountSecurity } from "../components/AccountSecurity";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { SettingCard } from "../components/SettingCard";
 
 interface SettingsPageProps {
@@ -90,6 +91,11 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
         Seuils, pondérations et réglages métier, ajustables sans redéploiement.
         {!canAdminister && " Consultation seule : la modification requiert l'habilitation d'administration."}
       </p>
+
+      <GuidanceNote title="Paramètres">
+        Les réglages métier de l'application (seuils, pondérations…), ajustables sans redéploiement. Chaque changement est
+        journalisé{canAdminister ? "" : " ; leur modification requiert l'habilitation d'administration"}.
+      </GuidanceNote>
 
       <AccountSecurity user={user} />
 

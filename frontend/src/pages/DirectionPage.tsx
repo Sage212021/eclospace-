@@ -14,6 +14,7 @@ import {
 import { DataTable } from "../components/DataTable";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { Card } from "../components/Card";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconPilotage } from "../components/icons";
@@ -103,6 +104,11 @@ export function DirectionPage({ canTreatRecommendations, canInitiateOrder }: Dir
     <div className="ecl-page">
       <h1 className="ecl-page__title">{t("page.direction.title", "Direction générale")}</h1>
       <p className="ecl-page__lead">{t("page.direction.lead", "Vue consolidée, recherche globale, alertes et recommandations de pilotage.")}</p>
+
+      <GuidanceNote title="Direction générale">
+        Le poste de pilotage de la maison : tableau de bord consolidé (éditorial, production, commercial, financier),
+        recherche globale, alertes et recommandations. Le DG peut aussi y initier une commande à facturer.
+      </GuidanceNote>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

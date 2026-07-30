@@ -17,6 +17,7 @@ import {
   type UserWithRoles,
 } from "../api/client";
 import { Button } from "../components/Button";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { EmailInput } from "../components/EmailInput";
 
@@ -139,6 +140,11 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
         )}
       </div>
       <p className="ecl-page__lead">{t("page.users.lead", "Comptes et habilitations. Chaque changement est justifié et journalisé.")}</p>
+
+      <GuidanceNote title="Utilisateurs & rôles">
+        Créez les comptes, attribuez ou retirez des rôles (chaque rôle donne un ensemble d'accès). « Voir les accès »
+        montre, pour un compte, d'où vient chaque accès ; « Audit des accès sensibles » montre qui détient un accès donné.
+      </GuidanceNote>
 
       {showCreate && canAdminister && (
         <CreateAccountForm

@@ -25,6 +25,7 @@ import {
   type TargetOptions,
 } from "../api/client";
 import { Card } from "../components/Card";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { RichTextEditor } from "../components/RichTextEditor";
@@ -266,6 +267,11 @@ export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementI
     <div className="ecl-page">
       <h1 className="ecl-page__title">{t("page.communication.title", "Communication interne")}</h1>
       <p className="ecl-page__lead">{t("page.communication.lead", "Babillard d'annonces : informations officielles diffusées au personnel.")}</p>
+
+      <GuidanceNote title="Babillard d'annonces">
+        Les informations officielles diffusées au personnel. Les profils habilités y publient des annonces (ciblées par
+        pôle si besoin) ; chacun les consulte ici et en est notifié.
+      </GuidanceNote>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

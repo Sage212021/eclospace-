@@ -13,6 +13,7 @@ import {
   type TargetOptions,
 } from "../api/client";
 import { Modal, Field } from "../components/Modal";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { Button } from "../components/Button";
 import { useI18n } from "../i18n";
 
@@ -231,6 +232,11 @@ export function CalendarPage({ canPublish }: CalendarPageProps) {
     <div className="ecl-page">
       <h1 className="ecl-page__title">{t("cal.title", "Calendrier partagé")}</h1>
       <p className="ecl-page__lead">{t("cal.lead", "Les événements de la maison d'édition qui vous concernent.")}</p>
+
+      <GuidanceNote title="Calendrier partagé">
+        Les événements de la maison qui vous concernent, en vue calendrier. Basculez entre les mois ; les profils habilités
+        peuvent créer et modifier des événements.
+      </GuidanceNote>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

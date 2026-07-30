@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getNewsfeed, type NewsfeedItem } from "../api/client";
 import { useI18n } from "../i18n";
+import { GuidanceNote } from "../components/GuidanceNote";
 
 const PRIORITY_COLORS: Record<string, string> = {
   normale: "var(--muted)",
@@ -41,6 +42,11 @@ export function NewsFeedPage({ onOpenAnnouncement, onOpenCalendar }: NewsFeedPag
     <div className="ecl-page">
       <h1 className="ecl-page__title">{t("news.title", "Fil d'actualités")}</h1>
       <p className="ecl-page__lead">{t("news.lead", "Le « quoi de neuf » de la maison : annonces et événements qui vous concernent.")}</p>
+
+      <GuidanceNote title="Fil d'actualités">
+        Le « quoi de neuf » de la maison, agrégé : les annonces et événements qui vous concernent, du plus récent au plus
+        ancien. Cliquez un élément pour l'ouvrir.
+      </GuidanceNote>
 
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 12 }}>{error}</div>}
 

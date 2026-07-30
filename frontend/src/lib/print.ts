@@ -72,11 +72,14 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
       </div>`;
 
   // Filigrane d'authenticité : l'ampoule Éclosion, en très léger, au centre.
-  // Décision opérateur du 25/07/2026 : présent en fond sur TOUTE impression
-  // générée, de façon permanente. Seule exception, le mode « en-tête intégré »,
-  // dont le fond A4 officiel porte déjà l'ampoule (inutile de la superposer).
-  const watermarkStyle = !embed
-    ? `body { background: url("${window.location.origin}/eclosion-filigrane.png") center 54% / 52% auto no-repeat; }`
+  // Décision opérateur du 25/07/2026 : présent sur TOUTE impression générée, de
+  // façon permanente. Seule exception, le mode « en-tête intégré », dont le fond
+  // A4 officiel porte déjà l'ampoule (inutile de la superposer).
+  // Rendu en IMAGE DE CONTENU (élément <img> derrière le texte) et non en image
+  // de fond CSS : les images de fond ne s'impriment pas de façon fiable, surtout
+  // sur mobile — un <img> positionné, lui, s'imprime partout.
+  const watermark = !embed
+    ? `<img class="wm" src="${window.location.origin}/eclosion-filigrane.png" alt="" aria-hidden="true">`
     : "";
 
   const pageMargin = embed ? "0" : "18mm 16mm";
@@ -93,13 +96,15 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     @page { size: A4; margin: ${pageMargin}; }
     * { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #16233d; margin: 0; font-size: 12.5px; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .doc { max-width: 720px; margin: 0 auto; padding: 8px; }
+    .doc { max-width: 720px; margin: 0 auto; padding: 8px; position: relative; z-index: 1; }
+    /* Filigrane ampoule Éclosion : image de contenu, derrière le texte, centrée
+       sur la page (position fixe → se répète sur chaque page d'un document long). */
+    .wm { position: fixed; left: 50%; top: 54%; transform: translate(-50%, -50%); width: 52%; height: auto; z-index: 0; pointer-events: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     /* Espace réservé à l'en-tête / au pied pré-imprimés (bandeaux ~56 mm ;
        la marge @page de 18 mm compte déjà, on complète ici). */
     .lh-space { height: 40mm; }
     .lh-foot-space { height: 40mm; }
     ${embedStyle}
-    ${watermarkStyle}
     .lh { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
     .lh__logo { height: 62px; width: auto; }
     .lh__contact { text-align: right; font-size: 10.5px; color: #4b5563; line-height: 1.7; max-width: 340px; }
@@ -129,6 +134,7 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     @media print { .actions { display: none; } ${embed ? "" : ".doc { padding: 0; }"} }
   </style></head>
   <body>
+    ${watermark}
     <div class="doc">
       ${head}
       ${body}
@@ -173,7 +179,11 @@ function wirePrint(win: Window, doc: Document): void {
   // (variable selon les navigateurs après un document.write). Le verrou `printed`
   // évite d'ouvrir deux fois la boîte d'impression.
   win.addEventListener("load", fire);
-  setTimeout(fire, 600);
+  // Filet de sécurité si « load » ne se déclenche pas. Marge un peu large pour
+  // laisser le filigrane (image) se charger avant l'impression, y compris sur
+  // mobile ; sur ordinateur, « load » se déclenche bien avant et l'impression
+  // part sans attendre ce délai.
+  setTimeout(fire, 1500);
 }
 
 // Impression via une IFRAME cachée : impression directe et silencieuse, idéale

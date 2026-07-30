@@ -164,6 +164,51 @@ export default async function userRoutes(fastify: FastifyInstance) {
     return reply.send({ permission: target, holders });
   });
 
+  // Profil d'accès d'UN compte (Ch. 2 §2.4) : la liste de ses permissions
+  // effectives, chacune avec le ou les rôles qui la lui donnent. Permet de
+  // répondre à « pourquoi ce compte a-t-il tel accès ? » et de repérer le rôle
+  // à retirer. Réservé à l'administration.
+  fastify.get("/api/v1/users/:id/access", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const user = await prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        username: true,
+        userRoles: {
+          where: { revokedAt: null },
+          select: {
+            role: {
+              select: {
+                code: true,
+                label: true,
+                rolePermissions: { select: { permission: { select: { module: true, action: true } } } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!user) return reply.code(404).send({ code: "not_found", message: "Compte introuvable." });
+
+    // permission "module:action" -> rôles qui la donnent.
+    const byPermission = new Map<string, { code: string; label: string }[]>();
+    for (const ur of user.userRoles) {
+      for (const rp of ur.role.rolePermissions) {
+        const key = `${rp.permission.module}:${rp.permission.action}`;
+        const list = byPermission.get(key) ?? [];
+        if (!list.some((r) => r.code === ur.role.code)) list.push({ code: ur.role.code, label: ur.role.label });
+        byPermission.set(key, list);
+      }
+    }
+
+    const permissions = [...byPermission.entries()]
+      .map(([key, viaRoles]) => ({ key, via_roles: viaRoles }))
+      .sort((a, b) => a.key.localeCompare(b.key));
+
+    return reply.send({ id: user.id, username: user.username, permissions });
+  });
+
   // Comptes avec leurs rôles actifs (Ch. 2 §2.4) — vue consolidée pour la
   // gestion des habilitations.
   fastify.get("/api/v1/users-with-roles", { preHandler: canReadUsers }, async (_request, reply) => {

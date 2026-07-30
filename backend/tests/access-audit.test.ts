@@ -54,6 +54,18 @@ describe("audit des accès", () => {
     expect(body.holders.some((h) => h.username === rhUser)).toBe(false);
   });
 
+  it("profil d'accès d'un compte : liste ses permissions avec le rôle qui les donne", async () => {
+    const assistant = `assist_${rnd()}`;
+    const created = await createUserWithRole(assistant, "ASSISTANT_EDITORIAL", "Passw0rd!");
+    const res = await app.inject({ method: "GET", url: `/api/v1/users/${created.id}/access`, headers: { cookie: adminCookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { permissions: { key: string; via_roles: { code: string }[] }[] };
+    // L'assistant éditorial a bien l'accès ISBN (consultation), via son rôle.
+    const isbn = body.permissions.find((p) => p.key === "isbn:consultation");
+    expect(isbn).toBeTruthy();
+    expect(isbn!.via_roles.some((r) => r.code === "ASSISTANT_EDITORIAL")).toBe(true);
+  });
+
   it("refuse l'audit à un profil non administrateur (403)", async () => {
     const corrCookie = await loginCookie(app, correcteurUser, "Passw0rd!");
     const res = await app.inject({ method: "GET", url: "/api/v1/access-audit?permission=users:administration", headers: { cookie: corrCookie } });

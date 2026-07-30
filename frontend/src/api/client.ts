@@ -1960,6 +1960,18 @@ export function auditAccess(permission: string) {
   );
 }
 
+// Profil d'accès d'un compte : ses permissions effectives et le rôle qui donne
+// chacune (pour comprendre « pourquoi ce compte a tel accès »).
+export interface UserAccessPermission {
+  key: string;
+  via_roles: { code: string; label: string }[];
+}
+export function getUserAccess(userId: string) {
+  return request<{ id: string; username: string; permissions: UserAccessPermission[] }>(
+    `/api/v1/users/${userId}/access`,
+  );
+}
+
 // --- Gouvernance : comptes, matrice des droits, pôles (spéc. fonctionnelle §2/§3) ---
 
 export function createUser(input: { username: string; email: string; password: string; role_codes?: string[] }) {

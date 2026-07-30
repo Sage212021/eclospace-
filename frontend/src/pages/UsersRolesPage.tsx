@@ -3,6 +3,7 @@ import {
   auditAccess,
   createUser,
   deleteUser,
+  getUserAccess,
   grantRole,
   impersonateUser,
   listRoles,
@@ -12,6 +13,7 @@ import {
   updateUser,
   type AccessAuditHolder,
   type RoleSummary,
+  type UserAccessPermission,
   type UserWithRoles,
 } from "../api/client";
 import { Button } from "../components/Button";
@@ -43,6 +45,7 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [modal, setModal] = useState<UModal | null>(null);
+  const [accessUserId, setAccessUserId] = useState<string | null>(null);
 
   const refresh = async () => {
     const [userList, roleList] = await Promise.all([listUsersWithRoles(), listRoles()]);
@@ -160,6 +163,7 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               {canAdminister && (
                 <>
+                  <Button variant="view" size="sm" onClick={() => setAccessUserId(accessUserId === user.id ? null : user.id)}>{accessUserId === user.id ? t("usr.hide_access", "Masquer les accès") : t("usr.show_access", "Voir les accès")}</Button>
                   <Button variant="view" size="sm" onClick={() => setModal({ kind: "reset-password", user, password: "" })}>{t("usr.reset_password", "Réinitialiser le mot de passe")}</Button>
                   <Button variant="edit" size="sm" onClick={() => setModal({ kind: "toggle-status", user })}>{user.status === "active" ? t("usr.suspend", "Suspendre") : t("usr.reactivate", "Réactiver")}</Button>
                   {user.status === "active" && (
@@ -183,6 +187,8 @@ export function UsersRolesPage({ canAdminister }: UsersRolesPageProps) {
               </span>
             ))}
           </div>
+
+          {canAdminister && accessUserId === user.id && <UserAccessPanel userId={user.id} />}
 
           {canAdminister && (
             <div style={{ marginTop: 12 }}>
@@ -352,6 +358,73 @@ function AccessAuditCard() {
         </div>
       )}
     </section>
+  );
+}
+
+// Libellés lisibles des modules de permission — pour présenter les accès d'un
+// compte dans les mots des rubriques plutôt qu'en clés techniques.
+const MODULE_LABELS: Record<string, string> = {
+  manuscripts: "Manuscrits", comite_lecture: "Comité de lecture", decision_editoriale: "Décision éditoriale",
+  contracts: "Contrats & droits", tasks: "Tâches / correction", production: "Maquette / infographie",
+  isbn: "ISBN & dépôt légal", bat: "BAT & contrôle qualité", printing: "Impression", stock: "Stock & magasin",
+  commercial: "Commercial & ventes", finance: "Finance & comptabilité", royalties: "États de droits d'auteur",
+  rh: "Ressources humaines", rh_confidentiel: "RH confidentiel", paie: "Paie", presences: "Présences",
+  users: "Utilisateurs & rôles", settings: "Paramètres", direction: "Direction générale", pilotage: "Pilotage",
+  rapports: "Rapports & statistiques", documents: "Documents", notifications: "Notifications",
+  communication: "Communication interne", service_auteurs: "Messages des auteurs",
+};
+const ACTION_LABELS: Record<string, string> = { consultation: "consultation", saisie: "saisie", validation: "validation", administration: "administration" };
+
+// Panneau « accès de ce compte » : chaque module accessible, les actions
+// autorisées, et le(s) rôle(s) qui le donnent — pour repérer d'où vient un
+// accès indu et retirer le rôle en cause (croix rouge sur le rôle, plus haut).
+function UserAccessPanel({ userId }: { userId: string }) {
+  const [perms, setPerms] = useState<UserAccessPermission[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPerms(null);
+    setError(null);
+    getUserAccess(userId)
+      .then((r) => setPerms(r.permissions))
+      .catch((e) => setError(e instanceof Error ? e.message : "Échec du chargement des accès."));
+  }, [userId]);
+
+  // Regroupe par module : { module -> { actions:Set, roles:Map(code->label) } }.
+  const byModule = new Map<string, { actions: Set<string>; roles: Map<string, string> }>();
+  for (const p of perms ?? []) {
+    const [module, action] = p.key.split(":");
+    const entry = byModule.get(module) ?? { actions: new Set<string>(), roles: new Map<string, string>() };
+    entry.actions.add(action);
+    for (const r of p.via_roles) entry.roles.set(r.code, r.label);
+    byModule.set(module, entry);
+  }
+  const rows = [...byModule.entries()].sort((a, b) => (MODULE_LABELS[a[0]] ?? a[0]).localeCompare(MODULE_LABELS[b[0]] ?? b[0]));
+
+  return (
+    <div style={{ marginTop: 12, border: "1px solid var(--line)", borderRadius: 8, padding: 12, background: "var(--paper)" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink)", marginBottom: 8 }}>Accès de ce compte (et le rôle qui les donne)</div>
+      {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
+      {!perms && !error && <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>Chargement…</p>}
+      {perms && rows.length === 0 && <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>Aucun accès (aucun rôle actif).</p>}
+      {perms && rows.length > 0 && (
+        <div style={{ display: "grid", gap: 6 }}>
+          {rows.map(([module, entry]) => (
+            <div key={module} style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", fontSize: 12.5 }}>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontWeight: 600, color: "var(--ink)" }}>{MODULE_LABELS[module] ?? module}</span>
+                <span style={{ color: "var(--muted)" }}> — {[...entry.actions].map((a) => ACTION_LABELS[a] ?? a).join(", ")}</span>
+              </div>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {[...entry.roles.values()].map((label) => (
+                  <span key={label} style={{ fontSize: 11, fontWeight: 600, background: "var(--eclosion-soft)", color: "var(--eclosion-dark)", border: "1px solid var(--eclosion)", borderRadius: 999, padding: "1px 8px" }}>{label}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

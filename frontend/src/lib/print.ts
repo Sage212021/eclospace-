@@ -140,6 +140,35 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
 }
 
 function openPrintWindow(title: string, body: string, opts?: PrintOpts): void {
+  const html = documentShell(title, body, opts);
+
+  // Impression via une iframe cachée dans la page courante : contourne les
+  // BLOQUEURS DE POP-UP et fonctionne sur mobile — contrairement à
+  // window.open, qui est bloqué ou n'imprime pas sur téléphone. Le document
+  // écrit déclenche lui-même la boîte d'impression au chargement (script inline
+  // de documentShell). Repli sur une fenêtre dédiée si l'iframe échoue.
+  try {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+    document.body.appendChild(iframe);
+    const idoc = iframe.contentWindow?.document;
+    if (!idoc) throw new Error("iframe indisponible");
+    idoc.open();
+    idoc.write(html);
+    idoc.close();
+    const remove = () => {
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    };
+    // Retire l'iframe après l'impression ; filet de sécurité à 2 min si
+    // l'évènement afterprint ne se déclenche pas (certains mobiles).
+    iframe.contentWindow?.addEventListener("afterprint", () => setTimeout(remove, 500));
+    setTimeout(remove, 120000);
+    return;
+  } catch {
+    /* iframe indisponible : repli sur une fenêtre dédiée ci-dessous */
+  }
+
   const w = window.open("", "_blank", "width=860,height=1000");
   if (!w) {
     // Bloqueur de pop-up : on informe plutôt que d'échouer en silence.
@@ -147,7 +176,7 @@ function openPrintWindow(title: string, body: string, opts?: PrintOpts): void {
     return;
   }
   w.document.open();
-  w.document.write(documentShell(title, body, opts));
+  w.document.write(html);
   w.document.close();
 }
 

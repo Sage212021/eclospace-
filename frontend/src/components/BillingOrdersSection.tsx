@@ -4,6 +4,7 @@ import {
   createBillingOrder,
   getBillingOrders,
   invoiceBillingOrder,
+  getInvoice,
   getPendingValidationInvoices,
   validateInvoice,
   getValidationThreshold,
@@ -106,7 +107,18 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
     setMsg(null);
     try {
       const r = await invoiceBillingOrder(o.id);
-      setMsg(r.needs_validation ? `Facture ${r.invoice_number} créée — en attente de validation du DG (montant ≥ seuil).` : `Facture ${r.invoice_number} émise.`);
+      if (r.needs_validation) {
+        setMsg(`Facture ${r.invoice_number} créée — en attente de validation du DG (montant ≥ seuil). Impression possible une fois validée.`);
+      } else {
+        setMsg(`Facture ${r.invoice_number} émise — ouverture de l'impression…`);
+        // La facture est émise : on ouvre directement le document imprimable/PDF.
+        try {
+          const detail = await getInvoice(r.id);
+          printInvoice(detail);
+        } catch {
+          setMsg(`Facture ${r.invoice_number} émise. Retrouvez-la dans « Factures » pour l'imprimer.`);
+        }
+      }
       reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Facturation impossible.");

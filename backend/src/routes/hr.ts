@@ -98,9 +98,24 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     const body = parsed.data;
 
     if (body.account) {
-      const role = await prisma.role.findUnique({ where: { code: body.account.role_code } });
+      const role = await prisma.role.findUnique({
+        where: { code: body.account.role_code },
+        include: { rolePermissions: { include: { permission: true } } },
+      });
       if (!role) {
         return reply.code(400).send({ code: "validation_error", message: `Rôle inconnu : ${body.account.role_code}.` });
+      }
+      // Garde-fou anti-escalade : ouvrir un compte à l'embauche ne doit pas
+      // permettre d'accorder un rôle de gestion des comptes (users:administration,
+      // ou l'administrateur général) à quelqu'un qui n'a pas lui-même ce droit.
+      const grantsUserAdmin =
+        role.code === "ADMIN_GENERAL" ||
+        role.rolePermissions.some((rp) => rp.permission.module === "users" && rp.permission.action === "administration");
+      if (grantsUserAdmin && !request.user!.permissions.has("users:administration")) {
+        return reply.code(403).send({
+          code: "forbidden_role",
+          message: `Le rôle « ${role.label} » donne la gestion des utilisateurs : son attribution est réservée à l'administration des comptes.`,
+        });
       }
     }
 

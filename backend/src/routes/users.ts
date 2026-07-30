@@ -12,6 +12,15 @@ const canReadUsers = requireAnyPermission([
   { module: "users", action: "consultation" },
   { module: "users", action: "administration" },
 ]);
+
+// Données de référence (rôles, départements) : lecture élargie à la RH, qui en
+// a besoin pour l'embauche (rôle du poste, département) sans détenir la gestion
+// des utilisateurs.
+const canReadRefData = requireAnyPermission([
+  { module: "users", action: "consultation" },
+  { module: "users", action: "administration" },
+  { module: "rh", action: "consultation" },
+]);
 import { writeAuditLog } from "../lib/audit.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "../lib/session.js";
@@ -109,7 +118,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
 
   // Référentiel des rôles applicatifs (Ch. 2 §2.2) — pour le sélecteur
   // d'attribution de rôle de l'écran Utilisateurs & rôles.
-  fastify.get("/api/v1/roles", { preHandler: canReadUsers }, async (_request, reply) => {
+  fastify.get("/api/v1/roles", { preHandler: canReadRefData }, async (_request, reply) => {
     const roles = await prisma.role.findMany({
       include: { department: { select: { name: true } } },
       orderBy: { label: "asc" },
@@ -520,7 +529,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
   // --- Gestion des pôles / départements (spéc. fonctionnelle §3, décision A :
   // pôle = département, créable par l'administrateur). ---
 
-  fastify.get("/api/v1/departments", { preHandler: canReadUsers }, async (_request, reply) => {
+  fastify.get("/api/v1/departments", { preHandler: canReadRefData }, async (_request, reply) => {
     const departments = await prisma.department.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },

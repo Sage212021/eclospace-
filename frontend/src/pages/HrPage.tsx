@@ -11,7 +11,9 @@ import {
   listAccessAnomalies,
   listAccessReviewItems,
   listAccessReviews,
+  listDepartments,
   listEmployees,
+  listRoles,
   reinstateEmployee,
   setEmployeeDeparture,
   suspendEmployee,
@@ -23,8 +25,10 @@ import {
   type AccessReview,
   type AccessReviewItem,
   type Absence,
+  type Department,
   type Employee,
   type EmployeeStatus,
+  type RoleSummary,
 } from "../api/client";
 import { Card } from "../components/Card";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -86,7 +90,23 @@ interface HrPageProps {
 }
 
 type HrModal =
-  | { kind: "employee"; firstName: string; lastName: string; position: string; departmentId: string; birthDate: string }
+  | {
+      kind: "employee";
+      firstName: string;
+      lastName: string;
+      status: EmployeeStatus;
+      position: string;
+      departmentId: string;
+      managerId: string;
+      birthDate: string;
+      hireDate: string;
+      // Ouverture d'un compte de connexion à l'embauche (facultatif).
+      createAccount: boolean;
+      username: string;
+      email: string;
+      password: string;
+      roleCode: string;
+    }
   | { kind: "mobility"; employee: Employee; position: string; birthDate: string }
   | { kind: "departure"; employee: Employee; date: string }
   | { kind: "view-confidential"; employee: Employee; baseSalary: string; notes: string }
@@ -101,6 +121,8 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   const { t } = useI18n();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [absences, setAbsences] = useState<Absence[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [anomalies, setAnomalies] = useState<AccessAnomaly[]>([]);
   const [reviews, setReviews] = useState<AccessReview[]>([]);
   const [selectedReviewId, setSelectedReviewId] = useState("");
@@ -122,6 +144,12 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
+    // Référentiels pour les listes déroulantes de l'embauche (départements,
+    // rôles). Au meilleur effort : une indisponibilité ne bloque pas la page.
+    if (canManage) {
+      listDepartments().then(setDepartments).catch(() => {});
+      listRoles().then(setRoles).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -138,9 +166,25 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
   async function submitEmployee() {
     if (modal?.kind !== "employee" || !modal.firstName.trim() || !modal.lastName.trim()) return;
+    if (modal.createAccount && (!modal.username.trim() || !modal.email.trim() || !modal.password || !modal.roleCode)) {
+      setError("Pour ouvrir un compte : identifiant, e-mail, mot de passe et rôle sont requis.");
+      return;
+    }
     try {
-      await createEmployee({ first_name: modal.firstName.trim(), last_name: modal.lastName.trim(), position: modal.position || undefined, department_id: modal.departmentId || undefined, birth_date: modal.birthDate ? new Date(modal.birthDate).toISOString() : undefined });
-      setMessage(t("hr.msg.file_created", "Dossier collaborateur créé."));
+      await createEmployee({
+        first_name: modal.firstName.trim(),
+        last_name: modal.lastName.trim(),
+        status: modal.status,
+        position: modal.position || undefined,
+        department_id: modal.departmentId || undefined,
+        manager_id: modal.managerId || undefined,
+        hire_date: modal.hireDate ? new Date(modal.hireDate).toISOString() : undefined,
+        birth_date: modal.birthDate ? new Date(modal.birthDate).toISOString() : undefined,
+        account: modal.createAccount
+          ? { username: modal.username.trim(), email: modal.email.trim(), password: modal.password, role_code: modal.roleCode }
+          : undefined,
+      });
+      setMessage(modal.createAccount ? t("hr.msg.file_account_created", "Dossier et compte créés.") : t("hr.msg.file_created", "Dossier collaborateur créé."));
       setModal(null);
       await refresh();
     } catch (err) {
@@ -289,7 +333,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
         title={t("hr.files", "Dossiers collaborateurs")}
         icon={<IconAdmin />}
         subtitle={t("hr.files_sub", "Statut, poste, congés et cycle de vie du compte.")}
-        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "employee", firstName: "", lastName: "", position: "", departmentId: "", birthDate: "" })}>{t("hr.add_employee", "+ Collaborateur")}</Button> : undefined}
+        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "employee", firstName: "", lastName: "", status: "salarie", position: "", departmentId: "", managerId: "", birthDate: "", hireDate: new Date().toISOString().slice(0, 10), createAccount: false, username: "", email: "", password: "", roleCode: "" })}>{t("hr.add_employee", "+ Collaborateur")}</Button> : undefined}
       >
         {employees.length === 0 ? (
           <Empty>{t("hr.no_employee", "Aucun collaborateur.")}</Empty>
@@ -416,9 +460,46 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
         <Modal title={t("hr.new_file_title", "Nouveau dossier collaborateur")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitEmployee} confirmLabel={t("hr.create", "Créer")} />}>
           <Field label={t("hr.first_name", "Prénom")}><input value={modal.firstName} onChange={(e) => setModal({ ...modal, firstName: e.target.value })} autoFocus /></Field>
           <Field label={t("hr.last_name", "Nom")}><input value={modal.lastName} onChange={(e) => setModal({ ...modal, lastName: e.target.value })} /></Field>
+          <Field label={t("hr.status", "Statut")}>
+            <select value={modal.status} onChange={(e) => setModal({ ...modal, status: e.target.value as EmployeeStatus })}>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{t("hr.st." + value, label)}</option>)}
+            </select>
+          </Field>
           <Field label={t("hr.position_opt", "Poste (optionnel)")}><input value={modal.position} onChange={(e) => setModal({ ...modal, position: e.target.value })} /></Field>
+          <Field label={t("hr.department_opt", "Département (optionnel)")}>
+            <select value={modal.departmentId} onChange={(e) => setModal({ ...modal, departmentId: e.target.value })}>
+              <option value="">{t("hr.no_department", "— aucun —")}</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </Field>
+          <Field label={t("hr.manager_opt", "Responsable (optionnel)")}>
+            <select value={modal.managerId} onChange={(e) => setModal({ ...modal, managerId: e.target.value })}>
+              <option value="">{t("hr.no_manager", "— aucun —")}</option>
+              {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>)}
+            </select>
+          </Field>
+          <Field label={t("hr.hire_date_opt", "Date d'arrivée (optionnel)")}><input type="date" value={modal.hireDate} onChange={(e) => setModal({ ...modal, hireDate: e.target.value })} /></Field>
           <Field label={t("hr.birth_date_opt", "Date de naissance (optionnel)")}><input type="date" value={modal.birthDate} onChange={(e) => setModal({ ...modal, birthDate: e.target.value })} /></Field>
-          <Field label={t("hr.department_id_opt", "Identifiant du département (optionnel)")}><input value={modal.departmentId} onChange={(e) => setModal({ ...modal, departmentId: e.target.value })} /></Field>
+
+          {/* Ouverture du compte de connexion à l'embauche (Ch. 19 §19.3). */}
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginTop: 6, cursor: "pointer" }}>
+            <input type="checkbox" checked={modal.createAccount} onChange={(e) => setModal({ ...modal, createAccount: e.target.checked })} />
+            {t("hr.create_account", "Ouvrir un compte de connexion Eclospace")}
+          </label>
+          {modal.createAccount && (
+            <div style={{ border: "1px dashed var(--line)", borderRadius: 8, padding: 12, display: "grid", gap: 8, marginTop: 4 }}>
+              <Field label={t("hr.username", "Identifiant")}><input value={modal.username} onChange={(e) => setModal({ ...modal, username: e.target.value })} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} /></Field>
+              <Field label={t("hr.email", "E-mail")}><input type="email" value={modal.email} onChange={(e) => setModal({ ...modal, email: e.target.value })} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} /></Field>
+              <Field label={t("hr.password", "Mot de passe (min. 8 car., une majuscule, un chiffre)")}><input type="text" value={modal.password} onChange={(e) => setModal({ ...modal, password: e.target.value })} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} /></Field>
+              <Field label={t("hr.role_poste", "Rôle du poste")}>
+                <select value={modal.roleCode} onChange={(e) => setModal({ ...modal, roleCode: e.target.value })}>
+                  <option value="">{t("hr.select_role", "— choisir un rôle —")}</option>
+                  {roles.filter((r) => r.code !== "ADMIN_GENERAL").map((r) => <option key={r.id} value={r.code}>{r.label}{r.department ? ` — ${r.department}` : ""}</option>)}
+                </select>
+              </Field>
+              <p style={{ fontSize: 11.5, color: "var(--muted)", margin: 0 }}>{t("hr.role_note", "Le rôle donne les accès du poste. Les rôles de gestion des comptes ne sont attribuables que par l'administration.")}</p>
+            </div>
+          )}
         </Modal>
       )}
 
@@ -455,7 +536,12 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       {modal?.kind === "grant-role" && (
         <Modal title={t("hr.grant_role_title", "Attribuer un rôle")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitGrantRole} confirmLabel={t("hr.grant", "Attribuer")} />}>
           <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
-          <Field label={t("hr.role_code", "Code du rôle")}><input value={modal.roleCode} onChange={(e) => setModal({ ...modal, roleCode: e.target.value })} autoFocus /></Field>
+          <Field label={t("hr.role", "Rôle")}>
+            <select value={modal.roleCode} onChange={(e) => setModal({ ...modal, roleCode: e.target.value })} autoFocus>
+              <option value="">{t("hr.select_role", "— choisir un rôle —")}</option>
+              {roles.filter((r) => r.code !== "ADMIN_GENERAL").map((r) => <option key={r.id} value={r.code}>{r.label}{r.department ? ` — ${r.department}` : ""}</option>)}
+            </select>
+          </Field>
           <Field label={t("hr.justification", "Justification")}><input value={modal.justification} onChange={(e) => setModal({ ...modal, justification: e.target.value })} /></Field>
         </Modal>
       )}

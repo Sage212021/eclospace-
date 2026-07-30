@@ -15,13 +15,20 @@ export interface DeductionRuleView {
 }
 
 // Minutes « retenables » d'une journée : le temps dû mais non presté, hors
-// justification. Une absence pleine journée injustifiée compte pour la totalité
-// du temps attendu ; sinon retard + départ anticipé + interruptions. Un jour
-// justifié (congé/mission validé) ne génère aucune retenue.
-export function retainableMinutes(day: DayResult): number {
+// justification. Un jour justifié (congé/mission validé) ne génère aucune
+// retenue.
+//
+// Décision opérateur (30/07/2026) : une ABSENCE pleine journée n'est PLUS
+// déduite automatiquement du salaire — la présence repose sur la connexion
+// Eclospace, information insuffisamment fiable pour retenir sur la paie. La
+// rubrique « absences » reste un outil de suivi ; la retenue d'absence n'est
+// appliquée que si l'option `deductAbsences` est explicitement activée (quand la
+// maison dispose d'un vrai pointeur / registre de présence). Les retards, départs
+// anticipés et interruptions (issus d'un pointage réel) restent, eux, retenables.
+export function retainableMinutes(day: DayResult, deductAbsences = false): number {
   if (day.justified) return 0;
   if (!day.is_working_day) return 0;
-  if (day.absent_full_day) return day.expected_minutes;
+  if (day.absent_full_day) return deductAbsences ? day.expected_minutes : 0;
   return day.late_minutes + day.early_leave_minutes + day.interruption_minutes;
 }
 
@@ -62,13 +69,14 @@ export interface DeductionResult {
 }
 
 // Applique la règle sur une liste de jours : retenue par jour (plafond
-// journalier), puis somme plafonnée au mois.
-export function computeDeduction(days: DayResult[], rule: DeductionRuleView): DeductionResult {
+// journalier), puis somme plafonnée au mois. `deductAbsences` (défaut false)
+// commande si les absences pleine journée génèrent une retenue.
+export function computeDeduction(days: DayResult[], rule: DeductionRuleView, deductAbsences = false): DeductionResult {
   const byDay: DeductionDay[] = [];
   let totalMinutes = 0;
   let totalBefore = 0;
   for (const d of days) {
-    const minutes = retainableMinutes(d);
+    const minutes = retainableMinutes(d, deductAbsences);
     let amount = deductionForMinutes(minutes, rule);
     if (rule.daily_cap != null) amount = Math.min(amount, rule.daily_cap);
     totalMinutes += minutes;

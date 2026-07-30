@@ -133,36 +133,73 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
       ${head}
       ${body}
       ${foot}
-      <div class="actions"><button onclick="window.print()">${tr("Imprimer / Enregistrer en PDF", "Print / Save as PDF")}</button></div>
+      <div class="actions"><button type="button" data-print>${tr("Imprimer / Enregistrer en PDF", "Print / Save as PDF")}</button></div>
     </div>
-    <script>window.addEventListener('load', function(){ setTimeout(function(){ window.focus(); window.print(); }, 250); });</script>
   </body></html>`;
+}
+
+// Câble l'impression d'un document généré (iframe ou fenêtre). L'impression est
+// déclenchée DEPUIS LA PAGE COURANTE (code fourni par l'application), et non par
+// un script inline dans le document : la politique de sécurité de l'app
+// (`script-src 'self'`, voir backend app.ts) bloque tout script/handler inline —
+// l'ancienne méthode (script inline `window.print()`) ne s'exécutait donc jamais
+// et rien ne s'imprimait. Appeler `print()` depuis le parent est conforme à la
+// CSP et fiable sur ordinateur comme sur mobile.
+function wirePrint(win: Window, doc: Document): void {
+  let printed = false;
+  const fire = () => {
+    if (printed) return;
+    printed = true;
+    try {
+      win.focus();
+      win.print();
+    } catch {
+      /* certains contextes refusent print() : le bouton manuel reste dispo */
+    }
+  };
+  // Bouton « Imprimer / Enregistrer en PDF » du document : câblé ici
+  // (addEventListener), l'attribut onclick inline étant lui aussi bloqué par la CSP.
+  const btn = doc.querySelector("button[data-print]");
+  btn?.addEventListener("click", () => {
+    try {
+      win.focus();
+      win.print();
+    } catch {
+      /* ignore */
+    }
+  });
+  // Impression automatique : à l'évènement load (une fois les images chargées)
+  // et, filet de sécurité, après un court délai si load ne se déclenche pas
+  // (variable selon les navigateurs après un document.write). Le verrou `printed`
+  // évite d'ouvrir deux fois la boîte d'impression.
+  win.addEventListener("load", fire);
+  setTimeout(fire, 600);
 }
 
 function openPrintWindow(title: string, body: string, opts?: PrintOpts): void {
   const html = documentShell(title, body, opts);
 
-  // Impression via une iframe cachée dans la page courante : contourne les
-  // BLOQUEURS DE POP-UP et fonctionne sur mobile — contrairement à
-  // window.open, qui est bloqué ou n'imprime pas sur téléphone. Le document
-  // écrit déclenche lui-même la boîte d'impression au chargement (script inline
-  // de documentShell). Repli sur une fenêtre dédiée si l'iframe échoue.
+  // Voie principale : iframe cachée dans la page courante — contourne les
+  // BLOQUEURS DE POP-UP et fonctionne sur mobile, contrairement à window.open.
+  // Repli sur une fenêtre dédiée si l'iframe échoue.
   try {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
     iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
     document.body.appendChild(iframe);
-    const idoc = iframe.contentWindow?.document;
-    if (!idoc) throw new Error("iframe indisponible");
+    const win = iframe.contentWindow;
+    const idoc = win?.document;
+    if (!win || !idoc) throw new Error("iframe indisponible");
     idoc.open();
     idoc.write(html);
     idoc.close();
+    wirePrint(win, idoc);
     const remove = () => {
       if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
     };
     // Retire l'iframe après l'impression ; filet de sécurité à 2 min si
     // l'évènement afterprint ne se déclenche pas (certains mobiles).
-    iframe.contentWindow?.addEventListener("afterprint", () => setTimeout(remove, 500));
+    win.addEventListener("afterprint", () => setTimeout(remove, 500));
     setTimeout(remove, 120000);
     return;
   } catch {
@@ -178,6 +215,7 @@ function openPrintWindow(title: string, body: string, opts?: PrintOpts): void {
   w.document.open();
   w.document.write(html);
   w.document.close();
+  wirePrint(w, w.document);
 }
 
 // Langue des documents imprimés (option Français / Anglais) : suit la langue de

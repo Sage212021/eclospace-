@@ -66,8 +66,12 @@ describe("retainableMinutes — assiette de la retenue", () => {
     expect(retainableMinutes(makeDay({ late_minutes: 30, early_leave_minutes: 15, interruption_minutes: 10 }))).toBe(55);
   });
 
-  it("absence pleine journée injustifiée = temps attendu", () => {
-    expect(retainableMinutes(makeDay({ absent_full_day: true, has_data: false, expected_minutes: 510 }))).toBe(510);
+  it("absence pleine journée : NON retenue par défaut (informative), retenue si activé", () => {
+    const day = makeDay({ absent_full_day: true, has_data: false, expected_minutes: 510 });
+    // Par défaut, une absence ne génère aucune retenue (décision opérateur).
+    expect(retainableMinutes(day)).toBe(0);
+    // Si la maison active la retenue d'absence (vrai pointeur/registre) :
+    expect(retainableMinutes(day, true)).toBe(510);
   });
 
   it("jour justifié → 0 (exonération)", () => {

@@ -472,7 +472,7 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
         return reply.send({ from, to, rule, no_employee: true, by_day: [], total_deduction: 0, total_retainable_minutes: 0, total_before_monthly_cap: 0 });
       }
       const summary = await computeRange(target.employeeId, target.departmentId, from, to);
-      const result = computeDeduction(summary.days, rule);
+      const result = computeDeduction(summary.days, rule, await deductAbsencesEnabled());
       return reply.send({ from, to, rule, ...result });
     },
   );
@@ -1052,6 +1052,15 @@ export interface ReportRow {
   deduction_proposed: number;
 }
 
+// Retenue des absences sur la paie : DÉSACTIVÉE par défaut (décision opérateur
+// du 30/07/2026). Activable seulement si la maison dispose d'un vrai pointeur /
+// registre de présence fiable — la simple connexion Eclospace ne suffit pas à
+// justifier une retenue sur salaire.
+async function deductAbsencesEnabled(): Promise<boolean> {
+  const s = await prisma.setting.findUnique({ where: { key: "presences.deduct_absences" } });
+  return s?.value === true;
+}
+
 async function computeBatchReport(from: string, to: string, departmentId: string | null) {
   const offset = await businessOffsetMinutes();
   const toDate = new Date(`${to}T00:00:00.000Z`);
@@ -1061,13 +1070,14 @@ async function computeBatchReport(from: string, to: string, departmentId: string
   const toUtc = new Date(toDate);
   toUtc.setUTCDate(toUtc.getUTCDate() + 2);
 
-  const [employees, schedules, holidays, rule, events, absences] = await Promise.all([
+  const [employees, schedules, holidays, rule, events, absences, deductAbsences] = await Promise.all([
     prisma.employee.findMany({ where: { deletedAt: null, ...(departmentId ? { departmentId } : {}) }, include: { department: true } }),
     prisma.workSchedule.findMany({ where: { deletedAt: null, active: true, effectiveFrom: { lte: toDate } } }),
     prisma.publicHoliday.findMany({ where: { day: { gte: fromDate, lte: toDate } }, select: { day: true } }),
     resolveDeductionRule(toDate),
     prisma.attendanceEvent.findMany({ where: { occurredAt: { gte: fromUtc, lte: toUtc }, employeeId: { not: null } }, select: { employeeId: true, kind: true, occurredAt: true } }),
     prisma.absence.findMany({ where: { status: "validee", fromDate: { lte: new Date(`${to}T23:59:59.000Z`) }, toDate: { gte: fromDate } }, select: { employeeId: true, type: true, fromDate: true, toDate: true } }),
+    deductAbsencesEnabled(),
   ]);
 
   const holidaySet = new Set(holidays.map((h) => h.day.toISOString().slice(0, 10)));
@@ -1106,7 +1116,7 @@ async function computeBatchReport(from: string, to: string, departmentId: string
       });
     });
     const summary = summarize(from, to, days);
-    const ded = rule ? computeDeduction(days, rule).total_deduction : 0;
+    const ded = rule ? computeDeduction(days, rule, deductAbsences).total_deduction : 0;
     rows.push({
       employee_id: emp.id,
       employee_name: `${emp.firstName} ${emp.lastName}`,

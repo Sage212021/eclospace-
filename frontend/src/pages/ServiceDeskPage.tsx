@@ -7,6 +7,7 @@ import {
   type ServiceThreadSummary,
   type ServiceThreadDetail,
 } from "../api/client";
+import { GuidanceNote } from "../components/GuidanceNote";
 
 // Guichets Service Éducation / Service Client (Espace Auteur inc. 2b), côté
 // personnel : les agents habilités (permission service_auteurs) traitent les
@@ -62,6 +63,11 @@ export function ServiceDeskPage({ canReply }: { canReply: boolean }) {
     <div className="ecl-page">
       <h1 className="ecl-page__title">Messages des auteurs</h1>
       <p className="ecl-page__lead">Les demandes des auteurs adressées au Service Éducation et au Service Client.</p>
+
+      <GuidanceNote title="Messages des auteurs">
+        La boîte de réception des messages envoyés par les auteurs depuis leur espace, vers le Service Éducation ou le
+        Service Client. Ouvrez un fil pour répondre (selon vos droits).
+      </GuidanceNote>
 
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
 

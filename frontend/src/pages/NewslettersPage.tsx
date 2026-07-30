@@ -12,6 +12,7 @@ import {
   type NewsletterSummary,
 } from "../api/client";
 import { Modal, Field } from "../components/Modal";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { Button } from "../components/Button";
 import { useI18n } from "../i18n";
 
@@ -225,6 +226,11 @@ export function NewslettersPage({ canManage }: NewslettersPageProps) {
       <p className="ecl-page__lead">
         {t("nlt.lead", "Un digest périodique des annonces et événements de la maison, diffusé par e-mail à tout le personnel.")}
       </p>
+
+      <GuidanceNote title="Bulletin d'actualités">
+        Le digest périodique (annonces et événements) diffusé par e-mail au personnel. Préparez un bulletin, prévisualisez
+        son contenu, puis envoyez-le (selon vos droits).
+      </GuidanceNote>
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

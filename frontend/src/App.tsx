@@ -48,6 +48,7 @@ function PageLoading() {
   return <div style={{ padding: "40px 24px", color: "var(--muted)", fontSize: 13 }}>{t("common.loading", "Chargement…")}</div>;
 }
 import { RubricHelp } from "./components/RubricHelp";
+import { GuidanceNote } from "./components/GuidanceNote";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { PresenceToasts } from "./components/PresenceToasts";
@@ -677,6 +678,10 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "annual-events" && (
           <div className="ecl-page">
+            <GuidanceNote title="Planning des événements">
+              Le calendrier des temps forts de l'année (salons, sorties, échéances…). Les profils habilités y ajoutent et
+              organisent les événements ; chacun les retrouve aussi dans le calendrier partagé.
+            </GuidanceNote>
             <AnnualEventsPlanning canManage={permissions.has("rh:administration")} />
           </div>
         )}

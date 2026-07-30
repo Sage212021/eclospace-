@@ -13,6 +13,7 @@ import {
   type RoleSummary,
 } from "../api/client";
 import { Button } from "../components/Button";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal } from "../components/Modal";
 
 const ACTIONS: { key: string; label: string }[] = [
@@ -36,6 +37,11 @@ export function RightsMatrixPage({ canManage }: { canManage: boolean }) {
         Ajustez les droits de chaque profil (rôle) par module, et gérez les pôles de la maison. Toute modification est
         appliquée immédiatement et journalisée.
       </p>
+
+      <GuidanceNote title="Droits & pôles">
+        La matrice « qui peut quoi » : pour chaque rôle, cochez/décochez l'accès à chaque module (consultation, saisie,
+        validation, administration). C'est ici qu'on retire un accès à un rôle entier — plutôt qu'à un seul compte.
+      </GuidanceNote>
 
       {error && (
         <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 12 }}>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listAuditLog, type AuditEntry } from "../api/client";
+import { GuidanceNote } from "../components/GuidanceNote";
 
 // Libellés lisibles des actions journalisées (enum AuditAction côté back).
 const ACTION_LABELS: Record<string, string> = {
@@ -54,6 +55,11 @@ export function AuditLogPage() {
       <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>
         Registre inviolable de toutes les opérations (append-only) : qui a fait quoi, quand.
       </p>
+
+      <GuidanceNote title="Journal d'activité">
+        La trace inviolable de toutes les actions sensibles (validations, retraits d'accès, factures…). Filtrez par
+        période, utilisateur ou type d'entité pour retrouver qui a fait quoi et quand.
+      </GuidanceNote>
 
       {error && (
         <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>

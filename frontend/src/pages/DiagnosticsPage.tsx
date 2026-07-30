@@ -1,4 +1,5 @@
 import type { EffectiveUser } from "../api/client";
+import { GuidanceNote } from "../components/GuidanceNote";
 
 interface DiagnosticsPageProps {
   user: EffectiveUser;
@@ -27,6 +28,11 @@ export function DiagnosticsPage({ user }: DiagnosticsPageProps) {
       <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>
         Audit des droits d'accès (RBAC) de la session courante : rôles et permissions effectives résolues côté serveur.
       </p>
+
+      <GuidanceNote title="Diagnostics système">
+        Vue technique réservée à l'administrateur général : les rôles et permissions effectives de VOTRE session, tels que
+        le serveur les résout. Utile pour vérifier un problème d'accès.
+      </GuidanceNote>
 
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Rôles</div>

@@ -14,6 +14,7 @@ import {
   type SavedAnalysis,
 } from "../api/client";
 import { DataTable } from "../components/DataTable";
+import { GuidanceNote } from "../components/GuidanceNote";
 import { Card } from "../components/Card";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
@@ -129,6 +130,11 @@ export function ReportsPage({ canCreateAnalysis, canPromoteAnalysis }: ReportsPa
     <div className="ecl-page">
       <h1 className="ecl-page__title">{t("page.reports.title", "Rapports et indicateurs")}</h1>
       <p className="ecl-page__lead">{t("page.reports.lead", "Rapports standards, indicateurs de pilotage, analyses personnelles et simulations.")}</p>
+
+      <GuidanceNote title="Rapports & statistiques">
+        Générez les rapports standards et suivez les indicateurs de pilotage. Vous pouvez créer des analyses personnelles
+        et des simulations, puis les promouvoir en rapports partagés (selon vos droits).
+      </GuidanceNote>
 
       {error && (
         <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>

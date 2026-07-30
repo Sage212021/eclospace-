@@ -20,9 +20,19 @@ async function getThreshold(): Promise<number> {
   return DEFAULT_THRESHOLD;
 }
 
+// Personnel FINANCIER opérationnel : comptes internes actifs dont un rôle porte
+// finance:saisie. On EXCLUT l'administrateur général : il détient toutes les
+// permissions (dont finance:saisie) mais n'est pas un financier — il ne doit
+// pas recevoir les notifications opérationnelles du pôle Finance.
 async function financeStaffIds(): Promise<string[]> {
   const rows = await prisma.user.findMany({
-    where: { status: "active", deletedAt: null, accountType: "internal", userRoles: { some: { revokedAt: null, role: { rolePermissions: { some: { permission: { module: "finance", action: "saisie" } } } } } } },
+    where: {
+      status: "active",
+      deletedAt: null,
+      accountType: "internal",
+      userRoles: { some: { revokedAt: null, role: { rolePermissions: { some: { permission: { module: "finance", action: "saisie" } } } } } },
+      NOT: { userRoles: { some: { revokedAt: null, role: { code: "ADMIN_GENERAL" } } } },
+    },
     select: { id: true },
   });
   return rows.map((r) => r.id);

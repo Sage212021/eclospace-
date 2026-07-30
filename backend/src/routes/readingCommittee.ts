@@ -45,8 +45,41 @@ function ratingFor(score: number, thresholds: typeof DEFAULT_RATING_THRESHOLDS) 
   return "refused" as const;
 }
 
+// Rôles habilités à recevoir une lecture / correction d'un ouvrage (décision
+// opérateur du 30/07/2026) : correcteur, membre du comité, assistant éditorial,
+// direction éditoriale et DG (+ l'administrateur général). On ne propose à
+// l'affectation QUE ces profils — jamais les auteurs ni les autres pôles.
+const READER_ROLE_CODES = [
+  "CORRECTEUR",
+  "MEMBRE_COMITE_LECTURE",
+  "ASSISTANT_EDITORIAL",
+  "DIR_EDITORIAL",
+  "DIR_GENERAL",
+  "ADMIN_GENERAL",
+];
+
 // Comité de lecture (Ch. 7) et décision éditoriale (Ch. 8 §8.2).
 export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
+  // Candidats à l'affectation d'une lecture : uniquement les comptes internes
+  // portant un rôle éditorial de lecture/correction (jamais un auteur).
+  fastify.get(
+    "/api/v1/reading-candidates",
+    { preHandler: requirePermission("comite_lecture", "saisie") },
+    async (_request, reply) => {
+      const users = await prisma.user.findMany({
+        where: {
+          deletedAt: null,
+          status: "active",
+          accountType: "internal",
+          userRoles: { some: { revokedAt: null, role: { code: { in: READER_ROLE_CODES } } } },
+        },
+        select: { id: true, username: true },
+        orderBy: { username: "asc" },
+      });
+      return reply.send(users);
+    },
+  );
+
   fastify.post(
     "/api/v1/manuscripts/:id/reading-assignments",
     { preHandler: requirePermission("comite_lecture", "saisie") },

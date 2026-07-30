@@ -4,7 +4,7 @@ import {
   closeReadingCommittee,
   getManuscript,
   getManuscriptTimeline,
-  listUsers,
+  listReadingCandidates,
   revertManuscriptStep,
   setPublicationDate,
   submitEditorialDecision,
@@ -464,16 +464,28 @@ function AssignReaderForm({
   const [dueAt, setDueAt] = useState("");
 
   useEffect(() => {
-    listUsers().then((u) => {
+    // Seuls les comptes habilités (correcteur, comité, assistant/directeur
+    // éditorial, DG) sont proposés — jamais un auteur ou un autre pôle.
+    listReadingCandidates().then((u) => {
       setUsers(u);
       if (u[0]) setReaderId(u[0].id);
     });
   }, []);
 
+  if (users.length === 0) {
+    return (
+      <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>
+        Aucun compte habilité (correcteur, comité de lecture, assistant ou directeur éditorial, DG) n'est disponible pour
+        l'affectation. Créez-en un ou attribuez le rôle correspondant dans « Utilisateurs & rôles ».
+      </p>
+    );
+  }
+
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        if (!readerId) return;
         assignReader(manuscriptId, readerId, new Date(dueAt).toISOString())
           .then(onAssigned)
           .catch((err) => onError(err instanceof Error ? err.message : "Affectation impossible."));

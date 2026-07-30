@@ -377,6 +377,12 @@ export interface ReadingAssignment {
   reportFileName?: string | null;
 }
 
+// Candidats à l'affectation d'une lecture/correction : uniquement les comptes
+// internes habilités (correcteur, comité, assistant/directeur éditorial, DG).
+export function listReadingCandidates() {
+  return request<UserSummary[]>("/api/v1/reading-candidates");
+}
+
 export function assignReader(manuscriptId: string, readerId: string, dueAt: string) {
   return request<ReadingAssignment>(`/api/v1/manuscripts/${manuscriptId}/reading-assignments`, {
     method: "POST",

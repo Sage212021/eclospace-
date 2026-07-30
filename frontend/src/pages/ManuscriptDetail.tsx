@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   assignReader,
   closeReadingCommittee,
+  createExternalReviewer,
   getManuscript,
   getManuscriptTimeline,
   listReadingCandidates,
@@ -10,6 +11,7 @@ import {
   submitEditorialDecision,
   validateStep,
   type Manuscript,
+  type ReadingCandidate,
   type TimelineStep,
   type UserSummary,
 } from "../api/client";
@@ -459,57 +461,110 @@ function AssignReaderForm({
   onAssigned: () => void;
   onError: (message: string) => void;
 }) {
-  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [users, setUsers] = useState<ReadingCandidate[]>([]);
   const [readerId, setReaderId] = useState("");
   const [dueAt, setDueAt] = useState("");
+  const [showExternal, setShowExternal] = useState(false);
+  const [ext, setExt] = useState({ username: "", email: "", password: "" });
+  const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    // Seuls les comptes habilités (correcteur, comité, assistant/directeur
-    // éditorial, DG) sont proposés — jamais un auteur ou un autre pôle.
+  const reload = (selectId?: string) =>
+    // Comptes habilités (correcteur, comité, assistant/directeur éditorial, DG)
+    // et relecteurs externes — jamais un auteur ou un autre pôle.
     listReadingCandidates().then((u) => {
       setUsers(u);
-      if (u[0]) setReaderId(u[0].id);
+      if (selectId) setReaderId(selectId);
+      else if (u[0] && !readerId) setReaderId(u[0].id);
     });
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (users.length === 0) {
-    return (
-      <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>
-        Aucun compte habilité (correcteur, comité de lecture, assistant ou directeur éditorial, DG) n'est disponible pour
-        l'affectation. Créez-en un ou attribuez le rôle correspondant dans « Utilisateurs & rôles ».
-      </p>
-    );
+  async function createExternal() {
+    if (creating) return;
+    if (!ext.username.trim() || !ext.email.trim() || !ext.password) {
+      onError("Relecteur externe : identifiant, e-mail et mot de passe sont requis.");
+      return;
+    }
+    setCreating(true);
+    try {
+      const created = await createExternalReviewer({ username: ext.username.trim(), email: ext.email.trim(), password: ext.password });
+      await reload(created.id);
+      setShowExternal(false);
+      setExt({ username: "", email: "", password: "" });
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Création du relecteur externe impossible.");
+    } finally {
+      setCreating(false);
+    }
   }
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!readerId) return;
-        assignReader(manuscriptId, readerId, new Date(dueAt).toISOString())
-          .then(onAssigned)
-          .catch((err) => onError(err instanceof Error ? err.message : "Affectation impossible."));
-      }}
-      style={{ display: "flex", gap: 8, alignItems: "flex-end" }}
-    >
-      <label style={{ fontSize: 12 }}>
-        Lecteur
-        <select value={readerId} onChange={(e) => setReaderId(e.target.value)} style={{ display: "block", padding: 6 }}>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.username}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label style={{ fontSize: 12 }}>
-        Échéance
-        <input type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} required style={{ display: "block", padding: 6 }} />
-      </label>
-      <ActionButton onClick={() => {}}>Affecter</ActionButton>
-    </form>
+    <div>
+      {users.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 0 10px" }}>
+          Aucun relecteur disponible. Créez un relecteur externe ci-dessous, ou attribuez un rôle éditorial (correcteur,
+          comité de lecture…) à un compte dans « Utilisateurs & rôles ».
+        </p>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!readerId) return;
+            assignReader(manuscriptId, readerId, new Date(dueAt).toISOString())
+              .then(onAssigned)
+              .catch((err) => onError(err instanceof Error ? err.message : "Affectation impossible."));
+          }}
+          style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}
+        >
+          <label style={{ fontSize: 12 }}>
+            Lecteur
+            <select value={readerId} onChange={(e) => setReaderId(e.target.value)} style={{ display: "block", padding: 6 }}>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.username}{u.external ? " · externe" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ fontSize: 12 }}>
+            Échéance
+            <input type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} required style={{ display: "block", padding: 6 }} />
+          </label>
+          <ActionButton onClick={() => {}}>Affecter</ActionButton>
+        </form>
+      )}
+
+      {/* Relecteur externe : compte dédié à accès limité (espace relecteur). */}
+      <div style={{ marginTop: 10 }}>
+        {!showExternal ? (
+          <button
+            onClick={() => setShowExternal(true)}
+            style={{ background: "none", border: "none", color: "var(--eclosion, #C89A1B)", cursor: "pointer", fontSize: 12.5, padding: 0, textDecoration: "underline" }}
+          >
+            + Relecteur externe (compte dédié)
+          </button>
+        ) : (
+          <div style={{ border: "1px dashed var(--line)", borderRadius: 10, padding: 12, display: "grid", gap: 8, maxWidth: 420 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)" }}>Nouveau relecteur externe</div>
+            <input value={ext.username} onChange={(e) => setExt((f) => ({ ...f, username: e.target.value }))} placeholder="Identifiant (ex. j.dupont.ext)" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={extInp} />
+            <input type="email" value={ext.email} onChange={(e) => setExt((f) => ({ ...f, email: e.target.value }))} placeholder="E-mail" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={extInp} />
+            <input type="text" value={ext.password} onChange={(e) => setExt((f) => ({ ...f, password: e.target.value }))} placeholder="Mot de passe (min. 8 car., une majuscule, un chiffre)" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={extInp} />
+            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: 0 }}>Le relecteur reçoit un compte à accès limité (espace relecteur) pour faire ses lectures. Communiquez-lui l'identifiant et le mot de passe.</p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => setShowExternal(false)} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "6px 12px", fontSize: 13, cursor: "pointer" }}>Annuler</button>
+              <button onClick={createExternal} disabled={creating} style={{ background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Créer le relecteur</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
+
+const extInp: React.CSSProperties = { padding: "8px 11px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13.5, boxSizing: "border-box", width: "100%" };
 
 const DECISION_LABELS: Record<string, string> = {
   acceptation: "Acceptation",

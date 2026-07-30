@@ -39,6 +39,7 @@ const CommissionsPage = lazy(() => import("./pages/CommissionsPage").then((m) =>
 const AuthorRoyaltiesPage = lazy(() => import("./pages/AuthorRoyaltiesPage").then((m) => ({ default: m.AuthorRoyaltiesPage })));
 const ChatPage = lazy(() => import("./pages/ChatPage").then((m) => ({ default: m.ChatPage })));
 const AuthorPortal = lazy(() => import("./pages/author/AuthorPortal").then((m) => ({ default: m.AuthorPortal })));
+const ReviewerPortal = lazy(() => import("./pages/reviewer/ReviewerPortal").then((m) => ({ default: m.ReviewerPortal })));
 const ServiceDeskPage = lazy(() => import("./pages/ServiceDeskPage").then((m) => ({ default: m.ServiceDeskPage })));
 
 // Court message affiché le temps qu'un écran se télécharge (en général une
@@ -466,13 +467,19 @@ export function App() {
     );
   }
 
-  // Aiguillage : un compte auteur (externe) reçoit un portail entièrement
-  // distinct de l'ERP employé — aucune barre latérale, aucun accès aux modules
-  // internes. Court-circuite toute la coquille ERP ci-dessous.
+  // Aiguillage : un compte externe reçoit un portail entièrement distinct de
+  // l'ERP employé — aucune barre latérale, aucun accès aux modules internes.
+  // Un relecteur externe (rôle « membre du comité de lecture ») va dans l'espace
+  // relecteur ; sinon c'est un auteur → espace auteur.
   if (user.account_type === "external") {
+    const isReviewer = user.roles.includes("MEMBRE_COMITE_LECTURE");
     return (
       <Suspense fallback={<PageLoading />}>
-        <AuthorPortal userName={user.username} onLogout={handleLogout} />
+        {isReviewer ? (
+          <ReviewerPortal userName={user.username} onLogout={handleLogout} />
+        ) : (
+          <AuthorPortal userName={user.username} onLogout={handleLogout} />
+        )}
       </Suspense>
     );
   }

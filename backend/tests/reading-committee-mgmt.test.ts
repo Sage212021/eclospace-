@@ -67,6 +67,30 @@ describe("comité de lecture : doublon, retrait, clôture", () => {
     expect(ids).not.toContain(mag.id); // MAGASINIER exclu
   });
 
+  it("relecteur externe : compte dédié créé, listé comme candidat externe, et capable de se connecter", async () => {
+    const username = `ext_${rnd()}`;
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/v1/reading-candidates/external",
+      headers: { cookie: adminCookie },
+      payload: { username, email: `${username}@externe.test`, password: "Passw0rd!" },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json().external).toBe(true);
+
+    // Apparaît dans les candidats, marqué externe.
+    const cand = await app.inject({ method: "GET", url: "/api/v1/reading-candidates", headers: { cookie: adminCookie } });
+    const row = (cand.json() as { id: string; username: string; external: boolean }[]).find((u) => u.username === username);
+    expect(row).toBeTruthy();
+    expect(row!.external).toBe(true);
+
+    // Le compte est bien externe (espace relecteur) et peut se connecter.
+    const account = await prisma.user.findUniqueOrThrow({ where: { username } });
+    expect(account.accountType).toBe("external");
+    const login = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username, password: "Passw0rd!" } });
+    expect(login.statusCode).toBe(200);
+  });
+
   it("refuse d'affecter deux fois le même relecteur (anti-doublon)", async () => {
     const m = await createManuscriptAtCommittee(`Doublon ${rnd()}`);
     const first = await app.inject({

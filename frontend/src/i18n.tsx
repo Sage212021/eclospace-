@@ -1203,6 +1203,9 @@ const EN: Record<string, string> = {
 
   // Espace Auteur (author portal)
   "author.space": "Author Area",
+  "reviewer.space": "Reviewer Area",
+  "reviewer.hello": "Hello",
+  "reviewer.subtitle": "Your manuscripts to review for Éclosion Édition, and submitting your assessments.",
   "author.logout": "Log out",
   "author.hello": "Hello",
   "author.subtitle": "Track the progress of your works at Éclosion Édition.",

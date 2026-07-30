@@ -1,10 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import argon2 from "argon2";
 import { EvaluationRecommendation, EditorialDecisionType } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
+import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 
 const DEFAULT_RATING_THRESHOLDS = { excellent: 8.5, very_good: 7, good: 5, to_rework: 3 };
 const DEFAULT_SCORE_GAP_THRESHOLD = 3;
@@ -58,10 +60,22 @@ const READER_ROLE_CODES = [
   "ADMIN_GENERAL",
 ];
 
+// Un relecteur EXTERNE est un compte externe (comme l'espace auteur) portant le
+// rôle « membre du comité de lecture » : il se connecte à un espace dédié pour
+// faire ses lectures, sans accéder à l'ERP interne.
+const EXTERNAL_REVIEWER_ROLE = "MEMBRE_COMITE_LECTURE";
+
+const createExternalReviewerSchema = z.object({
+  username: z.string().trim().min(3).max(60),
+  email: z.string().trim().email(),
+  password: z.string().min(8),
+});
+
 // Comité de lecture (Ch. 7) et décision éditoriale (Ch. 8 §8.2).
 export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
-  // Candidats à l'affectation d'une lecture : uniquement les comptes internes
-  // portant un rôle éditorial de lecture/correction (jamais un auteur).
+  // Candidats à l'affectation d'une lecture : les comptes internes portant un
+  // rôle éditorial de lecture/correction, ET les relecteurs EXTERNES (comptes
+  // externes « membre du comité de lecture »). Jamais un auteur ni un autre pôle.
   fastify.get(
     "/api/v1/reading-candidates",
     { preHandler: requirePermission("comite_lecture", "saisie") },
@@ -70,13 +84,65 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
         where: {
           deletedAt: null,
           status: "active",
-          accountType: "internal",
-          userRoles: { some: { revokedAt: null, role: { code: { in: READER_ROLE_CODES } } } },
+          OR: [
+            { accountType: "internal", userRoles: { some: { revokedAt: null, role: { code: { in: READER_ROLE_CODES } } } } },
+            { accountType: "external", userRoles: { some: { revokedAt: null, role: { code: EXTERNAL_REVIEWER_ROLE } } } },
+          ],
         },
-        select: { id: true, username: true },
+        select: { id: true, username: true, accountType: true },
         orderBy: { username: "asc" },
       });
-      return reply.send(users);
+      return reply.send(users.map((u) => ({ id: u.id, username: u.username, external: u.accountType === "external" })));
+    },
+  );
+
+  // Création d'un relecteur EXTERNE (compte externe dédié) : identifiant,
+  // e-mail, mot de passe + rôle « membre du comité de lecture ». Il se connecte
+  // à son espace relecteur pour faire ses lectures. Réservé aux profils qui
+  // affectent les lectures (comite_lecture:saisie).
+  fastify.post(
+    "/api/v1/reading-candidates/external",
+    { preHandler: requirePermission("comite_lecture", "saisie") },
+    async (request, reply) => {
+      const parsed = createExternalReviewerSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const { username, email, password } = parsed.data;
+      const complexityError = validatePasswordComplexity(password);
+      if (complexityError) {
+        return reply.code(400).send({ code: "weak_password", message: complexityError });
+      }
+      if (await prisma.user.findFirst({ where: { username, deletedAt: null } })) {
+        return reply.code(409).send({ code: "username_taken", message: `L'identifiant « ${username} » est déjà utilisé.` });
+      }
+      if (await prisma.user.findFirst({ where: { email, deletedAt: null } })) {
+        return reply.code(409).send({ code: "email_taken", message: `L'e-mail « ${email} » est déjà utilisé.` });
+      }
+      const role = await prisma.role.findUniqueOrThrow({ where: { code: EXTERNAL_REVIEWER_ROLE } });
+      const passwordHash = await argon2.hash(password);
+      const user = await prisma.user.create({
+        data: {
+          username,
+          email,
+          passwordHash,
+          accountType: "external",
+          status: "active",
+          createdBy: request.user!.id,
+          updatedBy: request.user!.id,
+          userRoles: { create: [{ roleId: role.id, grantedBy: request.user!.id, justification: "Relecteur externe (compte dédié)." }] },
+        },
+        select: { id: true, username: true },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "user",
+        entityId: user.id,
+        newValues: { accountType: "external", role: EXTERNAL_REVIEWER_ROLE, reviewer: true },
+        ipAddress: request.ip,
+      });
+      return reply.code(201).send({ id: user.id, username: user.username, external: true });
     },
   );
 

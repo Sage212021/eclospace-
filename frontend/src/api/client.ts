@@ -377,10 +377,21 @@ export interface ReadingAssignment {
   reportFileName?: string | null;
 }
 
-// Candidats à l'affectation d'une lecture/correction : uniquement les comptes
-// internes habilités (correcteur, comité, assistant/directeur éditorial, DG).
+// Candidats à l'affectation d'une lecture/correction : comptes internes
+// habilités (correcteur, comité, assistant/directeur éditorial, DG) et
+// relecteurs externes (comptes externes dédiés), marqués `external`.
+export interface ReadingCandidate {
+  id: string;
+  username: string;
+  external: boolean;
+}
 export function listReadingCandidates() {
-  return request<UserSummary[]>("/api/v1/reading-candidates");
+  return request<ReadingCandidate[]>("/api/v1/reading-candidates");
+}
+
+// Crée un relecteur externe (compte externe dédié + rôle comité de lecture).
+export function createExternalReviewer(input: { username: string; email: string; password: string }) {
+  return request<ReadingCandidate>("/api/v1/reading-candidates/external", { method: "POST", body: JSON.stringify(input) });
 }
 
 export function assignReader(manuscriptId: string, readerId: string, dueAt: string) {

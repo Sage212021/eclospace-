@@ -354,9 +354,12 @@ async function main() {
   await grant("RESP_RH", ["rh:saisie", "rh:validation", "rh:administration", "rh_confidentiel:consultation", "rh_confidentiel:saisie"]);
   await grant("DIR_GENERAL", ["rh:saisie", "rh:validation", "rh:administration", "rh_confidentiel:consultation", "rh_confidentiel:saisie"]);
 
-  // Attribution/retrait des rôles applicatifs (Ch. 2 §2.4, Ch. 19 §19.3-19.4)
-  // — réservé au responsable RH et à la Direction générale.
-  await grant("RESP_RH", ["users:administration"]);
+  // Gestion des comptes et des rôles (Ch. 2 §2.4, Ch. 19 §19.3-19.4) — accès
+  // « Utilisateurs & rôles ». Décision opérateur (30/07/2026) : cet accès n'est
+  // PAS accordé d'office à la fonction RH ; il reste réservé à la Direction
+  // générale (et à l'administrateur général, qui a tout), l'administrateur
+  // pouvant l'attribuer explicitement à un autre profil via « Droits & pôles ».
+  await revoke("RESP_RH", ["users:administration"]); // retire l'accès donné par erreur sur les bases existantes
   await grant("DIR_GENERAL", ["users:administration"]);
 
   // Direction générale et pilotage intelligent (Ch. 5) : tableau de bord

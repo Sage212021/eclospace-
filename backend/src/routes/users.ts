@@ -3,7 +3,15 @@ import { z } from "zod";
 import argon2 from "argon2";
 import { PermissionAction } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
+
+// Lecture des comptes/rôles/départements : accessible aux profils en
+// consultation OU en administration des utilisateurs (un administrateur qui n'a
+// pas explicitement la consultation doit tout de même pouvoir charger la page).
+const canReadUsers = requireAnyPermission([
+  { module: "users", action: "consultation" },
+  { module: "users", action: "administration" },
+]);
 import { writeAuditLog } from "../lib/audit.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "../lib/session.js";
@@ -101,7 +109,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
 
   // Référentiel des rôles applicatifs (Ch. 2 §2.2) — pour le sélecteur
   // d'attribution de rôle de l'écran Utilisateurs & rôles.
-  fastify.get("/api/v1/roles", { preHandler: requirePermission("users", "consultation") }, async (_request, reply) => {
+  fastify.get("/api/v1/roles", { preHandler: canReadUsers }, async (_request, reply) => {
     const roles = await prisma.role.findMany({
       include: { department: { select: { name: true } } },
       orderBy: { label: "asc" },
@@ -156,9 +164,54 @@ export default async function userRoutes(fastify: FastifyInstance) {
     return reply.send({ permission: target, holders });
   });
 
+  // Profil d'accès d'UN compte (Ch. 2 §2.4) : la liste de ses permissions
+  // effectives, chacune avec le ou les rôles qui la lui donnent. Permet de
+  // répondre à « pourquoi ce compte a-t-il tel accès ? » et de repérer le rôle
+  // à retirer. Réservé à l'administration.
+  fastify.get("/api/v1/users/:id/access", { preHandler: requirePermission("users", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const user = await prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        username: true,
+        userRoles: {
+          where: { revokedAt: null },
+          select: {
+            role: {
+              select: {
+                code: true,
+                label: true,
+                rolePermissions: { select: { permission: { select: { module: true, action: true } } } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!user) return reply.code(404).send({ code: "not_found", message: "Compte introuvable." });
+
+    // permission "module:action" -> rôles qui la donnent.
+    const byPermission = new Map<string, { code: string; label: string }[]>();
+    for (const ur of user.userRoles) {
+      for (const rp of ur.role.rolePermissions) {
+        const key = `${rp.permission.module}:${rp.permission.action}`;
+        const list = byPermission.get(key) ?? [];
+        if (!list.some((r) => r.code === ur.role.code)) list.push({ code: ur.role.code, label: ur.role.label });
+        byPermission.set(key, list);
+      }
+    }
+
+    const permissions = [...byPermission.entries()]
+      .map(([key, viaRoles]) => ({ key, via_roles: viaRoles }))
+      .sort((a, b) => a.key.localeCompare(b.key));
+
+    return reply.send({ id: user.id, username: user.username, permissions });
+  });
+
   // Comptes avec leurs rôles actifs (Ch. 2 §2.4) — vue consolidée pour la
   // gestion des habilitations.
-  fastify.get("/api/v1/users-with-roles", { preHandler: requirePermission("users", "consultation") }, async (_request, reply) => {
+  fastify.get("/api/v1/users-with-roles", { preHandler: canReadUsers }, async (_request, reply) => {
     const users = await prisma.user.findMany({
       where: { deletedAt: null },
       select: {
@@ -467,7 +520,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
   // --- Gestion des pôles / départements (spéc. fonctionnelle §3, décision A :
   // pôle = département, créable par l'administrateur). ---
 
-  fastify.get("/api/v1/departments", { preHandler: requirePermission("users", "consultation") }, async (_request, reply) => {
+  fastify.get("/api/v1/departments", { preHandler: canReadUsers }, async (_request, reply) => {
     const departments = await prisma.department.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },

@@ -169,7 +169,7 @@ const NAV_POLES: NavPole[] = [
     label: "Administration",
     items: [
       { key: "ad-rh", label: "Ressources humaines", permission: "rh:consultation" },
-      { key: "ad-users", label: "Utilisateurs & rôles", permission: "users:consultation" },
+      { key: "ad-users", label: "Utilisateurs & rôles", permission: "users:administration" },
       { key: "ad-rights", label: "Droits & pôles", permission: "users:administration" },
       { key: "ad-parametres", label: "Paramètres", permission: "settings:consultation" },
       { key: "ad-diagnostics", label: "Diagnostics système", role: "ADMIN_GENERAL" },

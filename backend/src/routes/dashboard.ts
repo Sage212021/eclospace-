@@ -55,6 +55,9 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       // Frise « pipeline éditorial » : uniquement les étapes qui portent des
       // ouvrages, dans l'ordre du workflow (lisible sur la page d'accueil).
       pipeline: editorial ? editorial.by_status.filter((s) => s.count > 0) : null,
+      // Nombre total d'étapes du circuit — permet d'afficher l'avancement RÉEL
+      // de chaque étape (position dans le circuit), et non un simple comptage.
+      pipeline_steps_total: editorial ? Math.max(...editorial.by_status.map((s) => s.step_order), 1) : null,
     });
   });
 }

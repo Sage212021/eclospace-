@@ -463,6 +463,16 @@ async function main() {
   // sélectionne les rubriques avant calcul), commutable en « auto ».
   await prisma.setting.upsert({ where: { key: "attendance_payroll_mode" }, update: {}, create: { key: "attendance_payroll_mode", value: "manuel" } });
 
+  // Retenue des ABSENCES pleine journée sur la paie — DÉSACTIVÉE par défaut
+  // (décision opérateur RH du 30/07/2026). La présence repose aujourd'hui sur la
+  // connexion Eclospace, information trop peu fiable pour retenir sur le salaire :
+  // la rubrique « Absences » sert au SUIVI, pas au calcul automatique. À réactiver
+  // (valeur true) le jour où la maison dispose d'un vrai pointeur / registre de
+  // présence. NB : les retards / départs anticipés / interruptions issus d'un
+  // pointage réel restent, eux, retenables — ce réglage ne concerne que l'absence
+  // pleine journée. `update: {}` : idempotent, ne réécrit jamais un choix opérateur.
+  await prisma.setting.upsert({ where: { key: "presences.deduct_absences" }, update: {}, create: { key: "presences.deduct_absences", value: false } });
+
   // Module Paie natif (D-007) : permissions par rôle + interrupteur oui/non.
   await grant("RESP_FINANCE", ["paie:consultation", "paie:saisie", "paie:validation", "paie:administration"]);
   await grant("RESP_RH", ["paie:consultation", "paie:saisie"]);

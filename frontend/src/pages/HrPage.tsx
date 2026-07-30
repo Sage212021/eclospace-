@@ -106,6 +106,10 @@ type HrModal =
       email: string;
       password: string;
       roleCode: string;
+      // Régularisation d'un « compte actif sans dossier RH » : on rattache ce
+      // dossier au compte déjà ouvert par l'administrateur au lieu d'en créer un.
+      linkUserId?: string;
+      linkUsername?: string;
     }
   | { kind: "mobility"; employee: Employee; position: string; birthDate: string }
   | { kind: "departure"; employee: Employee; date: string }
@@ -180,11 +184,18 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
         manager_id: modal.managerId || undefined,
         hire_date: modal.hireDate ? new Date(modal.hireDate).toISOString() : undefined,
         birth_date: modal.birthDate ? new Date(modal.birthDate).toISOString() : undefined,
-        account: modal.createAccount
+        account: modal.createAccount && !modal.linkUserId
           ? { username: modal.username.trim(), email: modal.email.trim(), password: modal.password, role_code: modal.roleCode }
           : undefined,
+        link_user_id: modal.linkUserId,
       });
-      setMessage(modal.createAccount ? t("hr.msg.file_account_created", "Dossier et compte créés.") : t("hr.msg.file_created", "Dossier collaborateur créé."));
+      setMessage(
+        modal.linkUserId
+          ? t("hr.msg.file_linked", "Dossier RH créé et rattaché au compte.")
+          : modal.createAccount
+            ? t("hr.msg.file_account_created", "Dossier et compte créés.")
+            : t("hr.msg.file_created", "Dossier collaborateur créé."),
+      );
       setModal(null);
       await refresh();
     } catch (err) {
@@ -401,14 +412,47 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       {/* Ch. 19 §19.4 — Anomalies d'accès */}
       {canManage && (
         <Card title={t("hr.access_anomalies", "Anomalies d'accès")} icon={<IconAdmin />} subtitle={t("hr.access_anomalies_sub", "Écarts détectés entre comptes et habilitations.")}>
+          <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
+            {t("hr.access_anomalies_help", "« Compte actif sans dossier RH » : le compte a été ouvert par l'administrateur, mais aucune fiche collaborateur ne lui est encore rattachée (ni salaire, ni présences, ni paie). Cliquez sur « Créer le dossier RH » pour ouvrir une fiche déjà liée à ce compte — aucun nouveau mot de passe n'est créé.")}
+          </p>
           {anomalies.length === 0 ? (
             <Empty>{t("hr.no_anomaly", "Aucune anomalie détectée.")}</Empty>
           ) : (
             <div className="ecl-list">
               {anomalies.map((anomaly, i) => (
                 <div key={i} className="ecl-row">
-                  <span className="ecl-row__title">{anomaly.username}</span>
-                  <span style={{ color: "var(--amber)", fontSize: 12.5 }}>{anomaly.detail}</span>
+                  <div className="ecl-row__main">
+                    <span className="ecl-row__title">{anomaly.username}</span>
+                    <span style={{ color: "var(--amber)", fontSize: 12.5 }}>{anomaly.detail}</span>
+                  </div>
+                  {anomaly.type === "compte_sans_dossier_rh" && canManage && (
+                    <Button
+                      variant="add"
+                      size="sm"
+                      onClick={() =>
+                        setModal({
+                          kind: "employee",
+                          firstName: "",
+                          lastName: "",
+                          status: "salarie",
+                          position: "",
+                          departmentId: "",
+                          managerId: "",
+                          birthDate: "",
+                          hireDate: new Date().toISOString().slice(0, 10),
+                          createAccount: false,
+                          username: "",
+                          email: "",
+                          password: "",
+                          roleCode: "",
+                          linkUserId: anomaly.user_id,
+                          linkUsername: anomaly.username,
+                        })
+                      }
+                    >
+                      {t("hr.create_dossier", "Créer le dossier RH")}
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
@@ -457,7 +501,12 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* ── Fenêtres intégrées ─────────────────────────────────────────────── */}
       {modal?.kind === "employee" && (
-        <Modal title={t("hr.new_file_title", "Nouveau dossier collaborateur")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitEmployee} confirmLabel={t("hr.create", "Créer")} />}>
+        <Modal title={modal.linkUserId ? t("hr.link_file_title", "Créer le dossier RH d'un compte existant") : t("hr.new_file_title", "Nouveau dossier collaborateur")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitEmployee} confirmLabel={t("hr.create", "Créer")} />}>
+          {modal.linkUserId && (
+            <div style={{ background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 8, padding: "8px 12px", fontSize: 12.5, marginBottom: 4 }}>
+              {t("hr.link_note", "Ce dossier sera rattaché au compte")} <strong>{modal.linkUsername}</strong>{t("hr.link_note2", ", déjà ouvert par l'administrateur. Renseignez l'identité du collaborateur ; le compte et son mot de passe restent inchangés.")}
+            </div>
+          )}
           <Field label={t("hr.first_name", "Prénom")}><input value={modal.firstName} onChange={(e) => setModal({ ...modal, firstName: e.target.value })} autoFocus /></Field>
           <Field label={t("hr.last_name", "Nom")}><input value={modal.lastName} onChange={(e) => setModal({ ...modal, lastName: e.target.value })} /></Field>
           <Field label={t("hr.status", "Statut")}>
@@ -481,12 +530,15 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
           <Field label={t("hr.hire_date_opt", "Date d'arrivée (optionnel)")}><input type="date" value={modal.hireDate} onChange={(e) => setModal({ ...modal, hireDate: e.target.value })} /></Field>
           <Field label={t("hr.birth_date_opt", "Date de naissance (optionnel)")}><input type="date" value={modal.birthDate} onChange={(e) => setModal({ ...modal, birthDate: e.target.value })} /></Field>
 
-          {/* Ouverture du compte de connexion à l'embauche (Ch. 19 §19.3). */}
+          {/* Ouverture du compte de connexion à l'embauche (Ch. 19 §19.3).
+              Masquée en mode rattachement : le compte existe déjà. */}
+          {!modal.linkUserId && (
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginTop: 6, cursor: "pointer" }}>
             <input type="checkbox" checked={modal.createAccount} onChange={(e) => setModal({ ...modal, createAccount: e.target.checked })} />
             {t("hr.create_account", "Ouvrir un compte de connexion Eclospace")}
           </label>
-          {modal.createAccount && (
+          )}
+          {!modal.linkUserId && modal.createAccount && (
             <div style={{ border: "1px dashed var(--line)", borderRadius: 8, padding: 12, display: "grid", gap: 8, marginTop: 4 }}>
               <Field label={t("hr.username", "Identifiant")}><input value={modal.username} onChange={(e) => setModal({ ...modal, username: e.target.value })} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} /></Field>
               <Field label={t("hr.email", "E-mail")}><input type="email" value={modal.email} onChange={(e) => setModal({ ...modal, email: e.target.value })} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} /></Field>

@@ -27,6 +27,10 @@ const employeeSchema = z.object({
       role_code: z.string().min(1),
     })
     .optional(),
+  // Rattachement à un compte EXISTANT (créé auparavant par l'administrateur,
+  // sans dossier RH) : on lie ce compte au nouveau dossier au lieu d'en créer
+  // un. Exclusif avec `account`.
+  link_user_id: z.string().uuid().optional(),
 });
 
 const employeeUpdateSchema = z.object({
@@ -97,6 +101,25 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     }
     const body = parsed.data;
 
+    if (body.account && body.link_user_id) {
+      return reply.code(400).send({ code: "validation_error", message: "Choisissez soit un nouveau compte, soit le rattachement à un compte existant — pas les deux." });
+    }
+
+    // Rattachement à un compte existant : il doit exister, être actif, interne
+    // et ne pas déjà porter un dossier RH.
+    if (body.link_user_id) {
+      const target = await prisma.user.findFirst({ where: { id: body.link_user_id, deletedAt: null } });
+      if (!target) {
+        return reply.code(404).send({ code: "not_found", message: "Compte à rattacher introuvable." });
+      }
+      if (target.accountType !== "internal") {
+        return reply.code(400).send({ code: "external_account", message: "Un compte externe (auteur, relecteur) ne peut pas porter un dossier RH." });
+      }
+      if (target.employeeId) {
+        return reply.code(409).send({ code: "already_linked", message: "Ce compte a déjà un dossier RH." });
+      }
+    }
+
     if (body.account) {
       const role = await prisma.role.findUnique({
         where: { code: body.account.role_code },
@@ -149,6 +172,12 @@ export default async function hrRoutes(fastify: FastifyInstance) {
         await tx.userRole.create({
           data: { userId: user.id, roleId: role.id, grantedBy: request.user!.id, justification: "Arrivée : rôle du poste (Ch. 19 §19.3)." },
         });
+      } else if (body.link_user_id) {
+        // Rattachement d'un compte déjà ouvert par l'administrateur à ce nouveau
+        // dossier RH : le compte existe déjà, on ne crée ni compte ni rôle, on
+        // le relie simplement à la fiche employé. Régularise les « comptes
+        // actifs sans dossier RH ».
+        await tx.user.update({ where: { id: body.link_user_id }, data: { employeeId: created.id, updatedBy: request.user!.id } });
       }
 
       if (created.managerId) {

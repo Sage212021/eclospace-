@@ -1897,6 +1897,8 @@ export function createEmployee(input: {
   hire_date?: string;
   birth_date?: string;
   account?: { username: string; email: string; password: string; role_code: string };
+  // Rattachement à un compte déjà ouvert par l'administrateur (exclusif avec account).
+  link_user_id?: string;
 }) {
   return request<Employee>("/api/v1/employees", { method: "POST", body: JSON.stringify(input) });
 }

@@ -39,7 +39,10 @@ const CATS: { key: BillingOrderCategory; label: string }[] = [
 type BookLine = { isbn_id: string; description: string; quantity: string; unit_price_ht: string; royalty_rate: string };
 const emptyLine = (): BookLine => ({ isbn_id: "", description: "", quantity: "", unit_price_ht: "", royalty_rate: "" });
 
-export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canCreate: boolean; canInvoice: boolean; canAdmin: boolean }) {
+// canValidateThreshold : validation des factures au-dessus du seuil — décision
+// de GOUVERNANCE (DG / administrateur général, pilotage:administration), pas la
+// Finance. Sert aussi le réglage du seuil (que seuls ces décideurs pilotent ici).
+export function BillingOrdersSection({ canCreate, canInvoice, canValidateThreshold }: { canCreate: boolean; canInvoice: boolean; canValidateThreshold: boolean }) {
   const confirm = useConfirm();
   const [orders, setOrders] = useState<BillingOrder[]>([]);
   const [pending, setPending] = useState<PendingValidationInvoice[]>([]);
@@ -364,7 +367,7 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
         )}
       </Card>
 
-      {canAdmin && (
+      {canValidateThreshold && (
         <Card title="Factures à valider (au-dessus du seuil)" icon={<IconFinance />} subtitle={`Décision du DG : valider (émettre la facture) ou refuser. Seuil actuel : ${threshold != null ? fmt.format(threshold) : "…"}.`}>
           <button onClick={editThreshold} style={{ ...btnGhost, marginBottom: 10 }}>Modifier le seuil</button>
           {pending.length === 0 ? (

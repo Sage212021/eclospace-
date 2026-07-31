@@ -109,6 +109,27 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(val.json().status).toBe("issued");
   });
 
+  it("au-dessus du seuil : la Finance ne peut ni valider ni refuser (réservé DG / admin)", async () => {
+    const dafU = `daf_seuil_${rnd()}`;
+    await createUserWithRole(dafU, "RESP_FINANCE", PWD);
+    const dafCookie = await login(dafU);
+
+    const order = await createOrder(2_000_000);
+    const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin } });
+    invoiceIds.push(inv.json().id);
+    expect(inv.json().status).toBe("pending_validation");
+
+    // La Finance (finance:administration, sans pilotage:administration) : refusée.
+    const val = await app.inject({ method: "POST", url: `/api/v1/invoices/${inv.json().id}/validate`, headers: { cookie: dafCookie } });
+    expect(val.statusCode).toBe(403);
+    const rej = await app.inject({ method: "POST", url: `/api/v1/invoices/${inv.json().id}/validate-reject`, headers: { cookie: dafCookie }, payload: { reason: "x" } });
+    expect(rej.statusCode).toBe(403);
+
+    // Le DG / administrateur général valide.
+    const ok = await app.inject({ method: "POST", url: `/api/v1/invoices/${inv.json().id}/validate`, headers: { cookie: admin } });
+    expect(ok.statusCode).toBe(200);
+  });
+
   it("au-dessus du seuil : le DG peut REFUSER — facture annulée, commande à refacturer", async () => {
     const order = await createOrder(2_000_000);
     const orderId = order.json().id as string;

@@ -1387,6 +1387,7 @@ model Manuscript {
   editorialQuotes    EditorialQuote[]
   sitePublication    SitePublication?
   authorFiles        AuthorFile[]
+  schoolRoyaltyEntries SchoolRoyaltyEntry[]
 
   @@map("manuscripts")
 }
@@ -2045,6 +2046,8 @@ model Isbn {
   posSales        PosSale[]
   returnLines     ReturnLine[]
   invoiceLines    InvoiceLine[]
+  billingOrderLines  BillingOrderLine[]
+  schoolRoyaltyEntries SchoolRoyaltyEntry[]
 
   @@map("isbns")
 }
@@ -2962,8 +2965,65 @@ model BillingOrder {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
+  lines BillingOrderLine[]
+
   @@index([status])
   @@map("billing_orders")
+}
+
+// Détail par ouvrage d'une commande à facturer « livre scolaire » : permet de
+// facturer et surtout de calculer les droits d'auteur livre par livre (ISBN,
+// quantité, prix unitaire HT). Sans lignes, la commande reste un montant global
+// (rétrocompatible, ex. catégorie « autre »).
+model BillingOrderLine {
+  id             String       @id @default(uuid())
+  billingOrderId String       @map("billing_order_id")
+  billingOrder   BillingOrder @relation(fields: [billingOrderId], references: [id])
+  isbnId         String?      @map("isbn_id")
+  isbn           Isbn?        @relation(fields: [isbnId], references: [id])
+  description    String
+  quantity       Int
+  unitPriceHt    Decimal      @map("unit_price_ht") @db.Decimal(10, 2)
+  // Taux de droits d'auteur spécifique à cette ligne (modulable au cas par cas).
+  // Null = taux maison du livre scolaire (réglage royalty.scolaire_default_rate,
+  // 12 % par défaut).
+  royaltyRate    Decimal?     @map("royalty_rate") @db.Decimal(5, 4)
+
+  @@map("billing_order_lines")
+}
+
+// Relevé des droits d'auteur du LIVRE SCOLAIRE, segmenté par ouvrage et par
+// mouvement (Ch. 9 §9.5). Instantané figé et immuable (append-only, comme les
+// autres écritures financières) portant tous les renseignements obligatoires à
+// la conformité : ouvrage, auteur, co-auteurs, ISBN, prix unitaire HT, quantité,
+// assiette, taux appliqué et montant. Un avoir/annulation contre-passe par une
+// écriture de quantité négative (jamais de modification rétroactive).
+model SchoolRoyaltyEntry {
+  id            String      @id @default(uuid())
+  invoiceId     String      @map("invoice_id")
+  invoice       Invoice     @relation(fields: [invoiceId], references: [id])
+  invoiceLineId String?     @map("invoice_line_id")
+  manuscriptId  String?     @map("manuscript_id")
+  manuscript    Manuscript? @relation(fields: [manuscriptId], references: [id])
+  isbnId        String?     @map("isbn_id")
+  isbn          Isbn?       @relation(fields: [isbnId], references: [id])
+
+  bookTitle   String   @map("book_title")
+  isbnCode    String?  @map("isbn_code")
+  authorName  String?  @map("author_name")
+  coAuthors   String[] @default([]) @map("co_authors")
+  unitPriceHt Decimal  @map("unit_price_ht") @db.Decimal(10, 2)
+  quantity    Int // signé : négatif pour un avoir / une annulation
+  baseAmount  Decimal  @map("base_amount") @db.Decimal(12, 2) // assiette HT (qté × prix unitaire)
+  rateApplied Decimal  @map("rate_applied") @db.Decimal(5, 4)
+  amount      Decimal  @db.Decimal(12, 2) // droits dus (assiette × taux)
+  sourceType  String   @map("source_type") // billing_order_invoice | credit_note
+
+  computedAt DateTime @default(now()) @map("computed_at")
+
+  @@index([manuscriptId])
+  @@index([invoiceId])
+  @@map("school_royalty_entries")
 }
 
 // Segment éditorial d'un ouvrage — base de la ventilation du chiffre d'affaires
@@ -3018,6 +3078,7 @@ model Invoice {
   editorialQuote     EditorialQuote?
   installments       Installment[]
   billingOrder       BillingOrder?
+  schoolRoyaltyEntries SchoolRoyaltyEntry[]
 
   @@map("invoices")
 }

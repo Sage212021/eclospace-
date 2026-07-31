@@ -84,14 +84,45 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
         customer_id: z.string().uuid(),
         category: z.enum(["livre_scolaire", "autre"]).default("livre_scolaire"),
         label: z.string().min(1).max(200),
-        amount_ht: z.number().positive(),
+        // Montant global (mode simple) OU détail par ouvrage (mode livre scolaire,
+        // qui déclenche le calcul des droits d'auteur). Au moins l'un des deux.
+        amount_ht: z.number().positive().optional(),
         tax_rate: z.number().min(0).max(100).default(0),
         note: z.string().max(500).optional(),
+        lines: z
+          .array(
+            z.object({
+              isbn_id: z.string().uuid().optional(),
+              description: z.string().min(1).max(200),
+              quantity: z.number().int().positive(),
+              unit_price_ht: z.number().positive(),
+              // Taux de droits spécifique (0–100 %) ; sinon le taux maison s'applique.
+              royalty_rate: z.number().min(0).max(1).optional(),
+            }),
+          )
+          .max(200)
+          .optional(),
       })
       .safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides (client, intitulé, montant)." });
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides (client, intitulé, montant ou lignes)." });
+    const { lines } = parsed.data;
+    if (!lines?.length && parsed.data.amount_ht == null) {
+      return reply.code(400).send({ code: "validation_error", message: "Renseignez un montant global ou au moins une ligne d'ouvrage." });
+    }
     const customer = await prisma.customer.findFirst({ where: { id: parsed.data.customer_id, deletedAt: null } });
     if (!customer) return reply.code(404).send({ code: "not_found", message: "Client introuvable." });
+
+    // Contrôle des ISBN fournis (doivent exister) — segmentation fiable des droits.
+    if (lines?.length) {
+      const isbnIds = [...new Set(lines.map((l) => l.isbn_id).filter((v): v is string => !!v))];
+      if (isbnIds.length) {
+        const found = await prisma.isbn.count({ where: { id: { in: isbnIds } } });
+        if (found !== isbnIds.length) return reply.code(400).send({ code: "validation_error", message: "Un ISBN référencé est introuvable." });
+      }
+    }
+
+    // Montant HT : somme des lignes si détaillé, sinon le montant global saisi.
+    const amountHt = lines?.length ? Math.round(lines.reduce((s, l) => s + l.quantity * l.unit_price_ht, 0) * 100) / 100 : parsed.data.amount_ht!;
 
     const order = await prisma.billingOrder.create({
       data: {
@@ -99,11 +130,24 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
         customerId: customer.id,
         category: parsed.data.category,
         label: parsed.data.label.trim(),
-        amountHt: parsed.data.amount_ht,
+        amountHt,
         taxRate: parsed.data.tax_rate,
         note: parsed.data.note?.trim() || null,
         initiatedById: request.user!.id,
         createdBy: request.user!.id,
+        ...(lines?.length
+          ? {
+              lines: {
+                create: lines.map((l) => ({
+                  isbnId: l.isbn_id ?? undefined,
+                  description: l.description.trim(),
+                  quantity: l.quantity,
+                  unitPriceHt: l.unit_price_ht,
+                  royaltyRate: l.royalty_rate ?? undefined,
+                })),
+              },
+            }
+          : {}),
       },
     });
     const staff = await financeStaffIds();

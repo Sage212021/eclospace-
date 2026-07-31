@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { nextInvoiceNumber } from "./invoiceNumber.js";
 import { assertPeriodOpen } from "./accountingPeriod.js";
 import { recordRoyaltyEntry } from "./royalty.js";
+import { recordSchoolRoyaltyEntries } from "./schoolRoyalty.js";
 import { lookupTaxRatePct } from "./taxRate.js";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
@@ -364,7 +365,7 @@ export async function createCreditNoteFromReturn(tx: Tx, customerReturnId: strin
 // d'affaires s'en trouve ramené à zéro pour cette facture (l'avoir compte en
 // négatif). Les droits d'auteur des lignes livres sont contre-passés.
 export async function createCreditNoteFromInvoice(tx: Tx, invoiceId: string, reason?: string) {
-  const origin = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { lines: true, creditNotes: true } });
+  const origin = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { lines: true, creditNotes: true, schoolRoyaltyEntries: true } });
   if (origin.type !== "invoice") throw new Error("not_an_invoice");
   if (origin.creditNotes.length > 0) throw new Error("already_credited");
   await assertPeriodOpen(tx);
@@ -399,20 +400,38 @@ export async function createCreditNoteFromInvoice(tx: Tx, invoiceId: string, rea
     include: { lines: true },
   });
 
-  // Contre-passation des droits d'auteur pour les lignes rattachées à un ouvrage.
-  for (const l of origin.lines) {
-    const isbn = l.isbnId ? await tx.isbn.findUnique({ where: { id: l.isbnId } }) : null;
-    if (!isbn?.manuscriptId || !isbn.format) continue;
-    await recordRoyaltyEntry(tx, {
-      manuscriptId: isbn.manuscriptId,
-      format: isbn.format,
-      quantity: -l.quantity,
-      // Même assiette qu'à la vente : contre-passe exactement l'entrée d'origine.
-      unitPublicPrice: Number(l.unitPublicPrice ?? l.unitPrice),
-      unitNetPrice: Number(l.unitPrice),
-      sourceType: "invoice_cancellation",
-      sourceId: origin.id,
+  // Contre-passation des droits d'auteur. Une facture « livre scolaire » a été
+  // calculée par le moteur maison : on contre-passe alors ses entrées scolaires
+  // (et on n'exécute PAS le moteur « contrat », qui n'a rien enregistré à la
+  // vente). Sinon, contre-passation contrat pour les lignes rattachées à un ouvrage.
+  if (origin.schoolRoyaltyEntries.length > 0) {
+    await recordSchoolRoyaltyEntries(tx, {
+      invoiceId: creditNote.id,
+      sourceType: "credit_note",
+      lines: origin.schoolRoyaltyEntries.map((e) => ({
+        invoiceLineId: null,
+        isbnId: e.isbnId,
+        description: e.bookTitle,
+        quantity: -e.quantity,
+        unitPriceHt: Number(e.unitPriceHt),
+        rate: Number(e.rateApplied),
+      })),
     });
+  } else {
+    for (const l of origin.lines) {
+      const isbn = l.isbnId ? await tx.isbn.findUnique({ where: { id: l.isbnId } }) : null;
+      if (!isbn?.manuscriptId || !isbn.format) continue;
+      await recordRoyaltyEntry(tx, {
+        manuscriptId: isbn.manuscriptId,
+        format: isbn.format,
+        quantity: -l.quantity,
+        // Même assiette qu'à la vente : contre-passe exactement l'entrée d'origine.
+        unitPublicPrice: Number(l.unitPublicPrice ?? l.unitPrice),
+        unitNetPrice: Number(l.unitPrice),
+        sourceType: "invoice_cancellation",
+        sourceId: origin.id,
+      });
+    }
   }
 
   return creditNote;
@@ -423,12 +442,32 @@ export async function createCreditNoteFromInvoice(tx: Tx, invoiceId: string, rea
 // facture. Validation par seuil : au-dessus du seuil, la facture naît « en
 // attente de validation » (le DG doit valider) ; sinon elle est émise.
 export async function createInvoiceFromBillingOrder(tx: Tx, orderId: string, thresholdTtc: number) {
-  const order = await tx.billingOrder.findUniqueOrThrow({ where: { id: orderId } });
+  const order = await tx.billingOrder.findUniqueOrThrow({ where: { id: orderId }, include: { lines: true } });
   if (order.status !== "pending") throw new Error("order_not_pending");
   if (order.invoiceId) throw new Error("order_already_invoiced");
 
-  const amountHt = Number(order.amountHt);
   const taxRate = Number(order.taxRate);
+  const bookLines = order.lines;
+
+  // Commande détaillée par ouvrage (livre scolaire) : une ligne de facture par
+  // livre, et calcul des droits d'auteur livre par livre. Les manuscriptId/format
+  // sont laissés nuls sur les lignes : le moteur de droits « contrat » ne s'y
+  // applique pas — c'est le moteur « livre scolaire » (taux maison) qui prend le
+  // relais, pour éviter tout double comptage.
+  const lines: InvoiceLineInput[] =
+    bookLines.length > 0
+      ? bookLines.map((bl) => ({
+          isbnId: bl.isbnId,
+          manuscriptId: null,
+          format: null,
+          description: bl.description,
+          quantity: bl.quantity,
+          unitPrice: Number(bl.unitPriceHt),
+          taxRate,
+        }))
+      : [{ isbnId: null, manuscriptId: null, format: null, description: order.label, quantity: 1, unitPrice: Number(order.amountHt), taxRate }];
+
+  const amountHt = lines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
   const totalTtc = amountHt * (1 + taxRate / 100);
   const status: "issued" | "pending_validation" = totalTtc >= thresholdTtc && thresholdTtc > 0 ? "pending_validation" : "issued";
 
@@ -436,9 +475,25 @@ export async function createInvoiceFromBillingOrder(tx: Tx, orderId: string, thr
     customerId: order.customerId,
     sourceType: "sales_order",
     sourceId: order.id,
-    lines: [{ isbnId: null, manuscriptId: null, format: null, description: order.label, quantity: 1, unitPrice: amountHt, taxRate }],
+    lines,
     status,
   });
+
+  // Droits d'auteur du livre scolaire : une entrée segmentée par ligne-livre.
+  if (bookLines.length > 0) {
+    await recordSchoolRoyaltyEntries(tx, {
+      invoiceId: invoice.id,
+      sourceType: "billing_order_invoice",
+      lines: bookLines.map((bl, i) => ({
+        invoiceLineId: invoice.lines[i]?.id ?? null,
+        isbnId: bl.isbnId,
+        description: bl.description,
+        quantity: bl.quantity,
+        unitPriceHt: Number(bl.unitPriceHt),
+        rate: bl.royaltyRate != null ? Number(bl.royaltyRate) : null,
+      })),
+    });
+  }
 
   await tx.billingOrder.update({ where: { id: order.id }, data: { status: "invoiced", invoiceId: invoice.id } });
   return invoice;

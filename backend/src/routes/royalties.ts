@@ -7,7 +7,8 @@ import { assertPeriodOpen, PeriodClosedError } from "../lib/accountingPeriod.js"
 import { sendMail, senderIdentity } from "../lib/mailer.js";
 import { buildRoyaltyStatementEmail } from "../lib/documentEmail.js";
 import { authorRoyaltiesByYear } from "../lib/authorRoyalties.js";
-import { getRoyaltyWithholdingEnabled, setRoyaltyWithholdingEnabled } from "../lib/royaltySettings.js";
+import { getRoyaltyWithholdingEnabled, setRoyaltyWithholdingEnabled, getSchoolRoyaltyRate, setSchoolRoyaltyRate } from "../lib/royaltySettings.js";
+import { schoolRoyaltiesReport } from "../lib/schoolRoyalty.js";
 import { buildContractStatement, generateYearEndStatements, royaltyYearEndStatus } from "../lib/royaltyYearEnd.js";
 
 const statementEmailSchema = z.object({
@@ -78,6 +79,51 @@ export default async function royaltiesRoutes(fastify: FastifyInstance) {
       }
       const enabled = await setRoyaltyWithholdingEnabled(parsed.data.enabled, { id: request.user!.id, ip: request.ip });
       return reply.send({ enabled });
+    },
+  );
+
+  // Taux de droits d'auteur du LIVRE SCOLAIRE (12 % par défaut, modulable) :
+  // lecture ouverte aux consultants des droits, écriture réservée à la DAF.
+  fastify.get(
+    "/api/v1/royalties/school-rate",
+    { preHandler: requirePermission("royalties", "consultation") },
+    async (_request, reply) => {
+      return reply.send({ rate: await getSchoolRoyaltyRate() });
+    },
+  );
+
+  fastify.put(
+    "/api/v1/royalties/school-rate",
+    { preHandler: requirePermission("finance", "administration") },
+    async (request, reply) => {
+      const parsed = z.object({ rate: z.number().gt(0).max(1) }).safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Taux invalide : une fraction strictement positive et au plus 1 (ex. 0,12 pour 12 %).", details: parsed.error.issues });
+      }
+      const rate = await setSchoolRoyaltyRate(parsed.data.rate, { id: request.user!.id, ip: request.ip });
+      return reply.send({ rate });
+    },
+  );
+
+  // Relevé segmenté des droits d'auteur du livre scolaire (par ouvrage : auteur,
+  // co-auteurs, ISBN, prix unitaire, quantité, assiette, taux, droits) — filtrable
+  // par année ou par ouvrage. Support de la conformité réglementaire.
+  fastify.get(
+    "/api/v1/royalties/school",
+    { preHandler: requirePermission("royalties", "consultation") },
+    async (request, reply) => {
+      const q = request.query as { year?: string; from?: string; to?: string; manuscript_id?: string };
+      let from: Date | undefined;
+      let to: Date | undefined;
+      if (q.year && Number.isInteger(Number(q.year)) && Number(q.year) > 2000) {
+        from = new Date(Date.UTC(Number(q.year), 0, 1));
+        to = new Date(Date.UTC(Number(q.year), 11, 31, 23, 59, 59, 999));
+      } else {
+        if (q.from) from = new Date(q.from);
+        if (q.to) to = new Date(q.to);
+      }
+      const report = await schoolRoyaltiesReport({ from, to, manuscriptId: q.manuscript_id });
+      return reply.send(report);
     },
   );
 

@@ -10,11 +10,14 @@ import {
   validateInvoice,
   getValidationThreshold,
   setValidationThreshold,
+  listIsbnCatalogue,
   type Customer,
   type BillingOrder,
   type BillingOrderCategory,
+  type BillingOrderLineInput,
   type PendingValidationInvoice,
   type InvoiceDetail,
+  type IsbnCatalogueItem,
 } from "../api/client";
 import { Card } from "./Card";
 import { IconFinance } from "./icons";
@@ -31,6 +34,10 @@ const CATS: { key: BillingOrderCategory; label: string }[] = [
   { key: "autre", label: "Autre" },
 ];
 
+// Ligne d'ouvrage (livre scolaire) en cours de saisie.
+type BookLine = { isbn_id: string; description: string; quantity: string; unit_price_ht: string; royalty_rate: string };
+const emptyLine = (): BookLine => ({ isbn_id: "", description: "", quantity: "", unit_price_ht: "", royalty_rate: "" });
+
 export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canCreate: boolean; canInvoice: boolean; canAdmin: boolean }) {
   const confirm = useConfirm();
   const [orders, setOrders] = useState<BillingOrder[]>([]);
@@ -39,6 +46,8 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
   const [threshold, setThreshold] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ customer_id: "", category: "livre_scolaire" as BillingOrderCategory, label: "", amount_ht: "", tax_rate: "0" });
+  const [bookLines, setBookLines] = useState<BookLine[]>([emptyLine()]);
+  const [isbns, setIsbns] = useState<IsbnCatalogueItem[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,22 +60,73 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
   useEffect(() => {
     reload();
     listCustomers().then(setCustomers).catch(() => {});
+    // Catalogue des ISBN imprimés (livre papier) pour le sélecteur d'ouvrage.
+    listIsbnCatalogue("print").then(setIsbns).catch(() => {});
   }, []);
+
+  const detailed = form.category === "livre_scolaire"; // le scolaire se saisit par ouvrage → droits d'auteur
+  const linesTotalHt = bookLines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price_ht) || 0), 0);
+
+  function setLine(i: number, patch: Partial<BookLine>) {
+    setBookLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  }
+  function pickIsbn(i: number, isbnId: string) {
+    const item = isbns.find((x) => x.id === isbnId);
+    setBookLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, isbn_id: isbnId, description: l.description || item?.manuscript?.title || "" } : l)));
+  }
+  function resetForm() {
+    setForm({ customer_id: "", category: "livre_scolaire", label: "", amount_ht: "", tax_rate: "0" });
+    setBookLines([emptyLine()]);
+  }
 
   async function submitOrder() {
     if (busy) return;
-    const amount = Number(form.amount_ht);
-    if (!form.customer_id || !form.label.trim() || !(amount > 0)) {
-      setError("Client, intitulé et montant (> 0) sont requis.");
+    if (!form.customer_id || !form.label.trim()) {
+      setError("Client et intitulé sont requis.");
+      return;
+    }
+    let payloadLines: BillingOrderLineInput[] | undefined;
+    if (detailed) {
+      const filled = bookLines.filter((l) => l.description.trim() || l.quantity || l.unit_price_ht);
+      if (filled.length === 0) {
+        setError("Ajoutez au moins un ouvrage (titre, quantité, prix unitaire).");
+        return;
+      }
+      for (const l of filled) {
+        if (!l.description.trim() || !(Number(l.quantity) > 0) || !(Number(l.unit_price_ht) > 0)) {
+          setError("Chaque ouvrage doit avoir un titre, une quantité et un prix unitaire (> 0).");
+          return;
+        }
+        const r = l.royalty_rate.trim();
+        if (r && !(Number(r) > 0 && Number(r) <= 100)) {
+          setError("Le taux de droits par ouvrage doit être un pourcentage entre 0 et 100.");
+          return;
+        }
+      }
+      payloadLines = filled.map((l) => ({
+        isbn_id: l.isbn_id || undefined,
+        description: l.description.trim(),
+        quantity: Number(l.quantity),
+        unit_price_ht: Number(l.unit_price_ht),
+        royalty_rate: l.royalty_rate.trim() ? Number(l.royalty_rate) / 100 : undefined,
+      }));
+    } else if (!(Number(form.amount_ht) > 0)) {
+      setError("Le montant HT (> 0) est requis.");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await createBillingOrder({ customer_id: form.customer_id, category: form.category, label: form.label.trim(), amount_ht: amount, tax_rate: Number(form.tax_rate) || 0 });
+      await createBillingOrder({
+        customer_id: form.customer_id,
+        category: form.category,
+        label: form.label.trim(),
+        tax_rate: Number(form.tax_rate) || 0,
+        ...(detailed ? { lines: payloadLines } : { amount_ht: Number(form.amount_ht) }),
+      });
       setShowForm(false);
-      setForm({ customer_id: "", category: "livre_scolaire", label: "", amount_ht: "", tax_rate: "0" });
-      setMsg("Commande enregistrée.");
+      resetForm();
+      setMsg(detailed ? "Commande enregistrée. Les droits d'auteur seront calculés à l'établissement de la facture." : "Commande enregistrée.");
       reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Enregistrement impossible.");
@@ -204,12 +264,51 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
               </select>
             </div>
             <input value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder="Intitulé (ex. Manuels 6e — lot de 200)" style={inp} />
-            <div style={{ display: "flex", gap: 8 }}>
-              <input value={form.amount_ht} onChange={(e) => setForm((f) => ({ ...f, amount_ht: e.target.value }))} placeholder="Montant HT (XAF)" inputMode="numeric" style={{ ...inp, flex: 1 }} />
-              <input value={form.tax_rate} onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))} placeholder="TVA %" inputMode="numeric" style={{ ...inp, width: 90 }} />
-            </div>
+
+            {detailed ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontSize: 12.5, color: "var(--muted)" }}>
+                  Détail par ouvrage — sert au calcul des droits d'auteur (12&nbsp;% par défaut, sauf taux précisé).
+                </div>
+                {bookLines.map((l, i) => (
+                  <div key={i} style={{ display: "grid", gap: 6, border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <select value={l.isbn_id} onChange={(e) => pickIsbn(i, e.target.value)} style={{ ...inp, flex: 1 }}>
+                        <option value="">— Ouvrage / ISBN (facultatif) —</option>
+                        {isbns.map((x) => (
+                          <option key={x.id} value={x.id}>{(x.manuscript?.title ?? "Sans titre") + " · " + x.isbn13}</option>
+                        ))}
+                      </select>
+                      {bookLines.length > 1 && (
+                        <button type="button" onClick={() => setBookLines((ls) => ls.filter((_, idx) => idx !== i))} style={btnDanger} title="Retirer cet ouvrage">✕</button>
+                      )}
+                    </div>
+                    <input value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="Titre de l'ouvrage" style={inp} />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} placeholder="Quantité" inputMode="numeric" style={{ ...inp, flex: 1 }} />
+                      <input value={l.unit_price_ht} onChange={(e) => setLine(i, { unit_price_ht: e.target.value })} placeholder="Prix unit. HT" inputMode="numeric" style={{ ...inp, flex: 1 }} />
+                      <input value={l.royalty_rate} onChange={(e) => setLine(i, { royalty_rate: e.target.value })} placeholder="Taux % (déf. 12)" inputMode="numeric" style={{ ...inp, width: 120 }} title="Taux de droits d'auteur pour cet ouvrage. Laisser vide = taux maison (12 % par défaut)." />
+                    </div>
+                  </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <button type="button" onClick={() => setBookLines((ls) => [...ls, emptyLine()])} style={btnGhost}>+ Ajouter un ouvrage</button>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Total HT :</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>{fmt.format(linesTotalHt)}</span>
+                    <input value={form.tax_rate} onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))} placeholder="TVA %" inputMode="numeric" style={{ ...inp, width: 84 }} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 8 }}>
+                <input value={form.amount_ht} onChange={(e) => setForm((f) => ({ ...f, amount_ht: e.target.value }))} placeholder="Montant HT (XAF)" inputMode="numeric" style={{ ...inp, flex: 1 }} />
+                <input value={form.tax_rate} onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))} placeholder="TVA %" inputMode="numeric" style={{ ...inp, width: 90 }} />
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={() => setShowForm(false)} style={btnGhost}>Annuler</button>
+              <button onClick={() => { setShowForm(false); resetForm(); }} style={btnGhost}>Annuler</button>
               <button onClick={submitOrder} disabled={busy} style={btnPrimary}>Enregistrer la commande</button>
             </div>
           </div>

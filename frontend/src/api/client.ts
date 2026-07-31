@@ -3584,6 +3584,11 @@ export function getPendingValidationInvoices() {
 export function validateInvoice(id: string) {
   return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/validate`, { method: "POST" });
 }
+// Refus d'une facture en attente de validation (DG) : motif obligatoire ; la
+// facture est annulée (hors CA) et la commande d'origine repasse « à facturer ».
+export function rejectInvoiceValidation(id: string, reason: string) {
+  return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/validate-reject`, { method: "POST", body: JSON.stringify({ reason }) });
+}
 // Annulation d'une facture soumise à validation du DG.
 export function requestInvoiceCancellation(id: string, reason: string) {
   return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/request-cancellation`, { method: "POST", body: JSON.stringify({ reason }) });

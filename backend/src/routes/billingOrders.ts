@@ -6,6 +6,7 @@ import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextBillingOrderNumber } from "../lib/billingOrderNumber.js";
 import { createInvoiceFromBillingOrder, createCreditNoteFromInvoice } from "../lib/invoicing.js";
+import { recordSchoolRoyaltyEntries } from "../lib/schoolRoyalty.js";
 
 // Commandes à facturer (reconfiguration Finance étape 3) — ex. livre scolaire.
 // Initiées par le DG / le commercial / la Finance ; la Finance les reçoit et
@@ -225,6 +226,15 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     try {
       const invoice = await prisma.$transaction((tx) => createInvoiceFromBillingOrder(tx, id, threshold));
       await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "invoice", entityId: invoice.id, newValues: { invoiceNumber: invoice.invoiceNumber, fromBillingOrder: order.orderNumber, status: invoice.status }, ipAddress: request.ip });
+      // Facture au-dessus du seuil → le DG doit la valider : on l'en avertit par
+      // une cloche (même logique de gouvernance que l'annulation : administrateur
+      // général inclus, sans se notifier soi-même).
+      if (invoice.status === "pending_validation") {
+        const deciders = (await financeAdminIds()).filter((uid) => uid !== request.user!.id);
+        if (deciders.length) {
+          await notifyUsers({ userIds: deciders, type: "autre", priority: "high", title: "Facture à valider (au-dessus du seuil)", body: `${invoice.invoiceNumber} — ${order.label} · ${Number(invoice.totalTtc).toLocaleString("fr-FR")} XAF`, entityType: "invoice", entityId: invoice.id }).catch(() => {});
+        }
+      }
       return reply.code(201).send({ id: invoice.id, invoice_number: invoice.invoiceNumber, status: invoice.status, total_ttc: Number(invoice.totalTtc), needs_validation: invoice.status === "pending_validation" });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erreur";
@@ -264,6 +274,43 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     await prisma.invoice.update({ where: { id }, data: { status: "issued" } });
     await writeAuditLog({ userId: request.user!.id, action: "validate", entityType: "invoice", entityId: id, oldValues: { status: "pending_validation" }, newValues: { status: "issued" }, ipAddress: request.ip });
     return reply.send({ ok: true, status: "issued" });
+  });
+
+  // Refus d'une facture en attente de validation (DG) : elle n'est jamais émise.
+  // Son numéro légal étant déjà attribué, on ne la supprime pas — on la passe
+  // « annulée » (hors CA) avec un motif obligatoire. Les droits d'auteur du livre
+  // scolaire éventuellement calculés à sa création sont contre-passés, et la
+  // commande à facturer d'origine repasse « à facturer » (à revoir ou annuler).
+  fastify.post("/api/v1/invoices/:id/validate-reject", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ reason: z.string().min(1).max(500) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Un motif de refus est requis." });
+    const invoice = await prisma.invoice.findUnique({ where: { id }, include: { schoolRoyaltyEntries: true } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    if (invoice.status !== "pending_validation") return reply.code(409).send({ code: "not_pending", message: "Cette facture n'est pas en attente de validation." });
+
+    await prisma.$transaction(async (tx) => {
+      // Contre-passe les droits scolaires enregistrés à la création de la facture.
+      if (invoice.schoolRoyaltyEntries.length) {
+        await recordSchoolRoyaltyEntries(tx, {
+          invoiceId: invoice.id,
+          sourceType: "credit_note",
+          lines: invoice.schoolRoyaltyEntries.map((e) => ({ invoiceLineId: null, isbnId: e.isbnId, description: e.bookTitle, quantity: -e.quantity, unitPriceHt: Number(e.unitPriceHt), rate: Number(e.rateApplied) })),
+        });
+      }
+      await tx.invoice.update({ where: { id }, data: { status: "cancelled", cancellationReason: parsed.data.reason.trim() } });
+      // La commande à facturer d'origine redevient « à facturer ».
+      const bo = await tx.billingOrder.findFirst({ where: { invoiceId: id } });
+      if (bo) await tx.billingOrder.update({ where: { id: bo.id }, data: { status: "pending", invoiceId: null } });
+    });
+
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "invoice", entityId: id, oldValues: { status: "pending_validation" }, newValues: { status: "cancelled", rejected: true, reason: parsed.data.reason.trim() }, ipAddress: request.ip });
+    // Prévenir le pôle Finance que la facture a été refusée (commande à revoir).
+    const staff = (await financeStaffIds()).filter((uid) => uid !== request.user!.id);
+    if (staff.length) {
+      await notifyUsers({ userIds: staff, type: "autre", priority: "medium", title: "Facture refusée par le DG", body: `${invoice.invoiceNumber} — ${parsed.data.reason.trim()} · la commande repasse « à facturer ».`, entityType: "invoice", entityId: id }).catch(() => {});
+    }
+    return reply.send({ ok: true, status: "cancelled" });
   });
 
   // --- Annulation d'une facture, soumise à validation du DG (Ch. 18) ---------

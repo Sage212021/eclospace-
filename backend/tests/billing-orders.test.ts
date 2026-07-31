@@ -109,6 +109,38 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(val.json().status).toBe("issued");
   });
 
+  it("au-dessus du seuil : le DG peut REFUSER — facture annulée, commande à refacturer", async () => {
+    const order = await createOrder(2_000_000);
+    const orderId = order.json().id as string;
+    const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${orderId}/invoice`, headers: { cookie: admin } });
+    invoiceIds.push(inv.json().id);
+    expect(inv.json().status).toBe("pending_validation");
+
+    // Refus sans motif : refusé.
+    const noReason = await app.inject({ method: "POST", url: `/api/v1/invoices/${inv.json().id}/validate-reject`, headers: { cookie: admin }, payload: {} });
+    expect(noReason.statusCode).toBe(400);
+
+    // Refus avec motif : la facture passe « annulée » et la commande repasse « pending ».
+    const rej = await app.inject({ method: "POST", url: `/api/v1/invoices/${inv.json().id}/validate-reject`, headers: { cookie: admin }, payload: { reason: "Montant à revoir" } });
+    expect(rej.statusCode).toBe(200);
+    expect(rej.json().status).toBe("cancelled");
+
+    const invoice = await prisma.invoice.findUnique({ where: { id: inv.json().id } });
+    expect(invoice?.status).toBe("cancelled");
+    const bo = await prisma.billingOrder.findUnique({ where: { id: orderId } });
+    expect(bo?.status).toBe("pending");
+    expect(bo?.invoiceId).toBeNull();
+
+    // Elle n'est plus dans la file « à valider ».
+    const pending = await app.inject({ method: "GET", url: "/api/v1/invoices/pending-validation", headers: { cookie: admin } });
+    expect((pending.json() as { id: string }[]).some((i) => i.id === inv.json().id)).toBe(false);
+
+    // La commande peut être refacturée.
+    const inv2 = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${orderId}/invoice`, headers: { cookie: admin } });
+    expect(inv2.statusCode).toBe(201);
+    invoiceIds.push(inv2.json().id);
+  });
+
   it("une commande déjà facturée ne peut pas l'être à nouveau (409)", async () => {
     const order = await createOrder(300_000);
     const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin } });

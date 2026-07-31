@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listSettings, updateSetting, type AppSetting, type EffectiveUser } from "../api/client";
 import { AccountSecurity } from "../components/AccountSecurity";
+import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { SettingCard } from "../components/SettingCard";
 
@@ -98,6 +99,9 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
       </GuidanceNote>
 
       <AccountSecurity user={user} />
+
+      {/* Diagnostic de persistance : vérifier que les données sont bien conservées en base. */}
+      <SystemDiagnosticCard />
 
       {error && (
         <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>

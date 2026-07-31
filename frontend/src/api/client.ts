@@ -2424,6 +2424,21 @@ export function listSettings() {
   return request<AppSetting[]>("/api/v1/settings");
 }
 
+// Diagnostic de persistance : confirme que la base est joignable, à jour et
+// durable (nombre réel d'enregistrements). Sert à vérifier qu'une donnée est
+// bien persistée, et à détecter une base non partagée (l'identifiant d'instance
+// changerait d'un rafraîchissement à l'autre).
+export interface SystemDiagnostic {
+  instance_id: string;
+  uptime_seconds: number;
+  database: { connected: boolean; server_time: string | null; latency_ms: number };
+  migrations: { applied: number | null; last: string | null };
+  records: { users: number; employees: number; weekly_reports: number; invoices: number; billing_orders: number; manuscripts: number };
+}
+export function getSystemDiagnostic() {
+  return request<SystemDiagnostic>("/api/v1/system/diagnostic");
+}
+
 // Journal d'activité inviolable (Ch. 5 §5.8) — lecture seule.
 export interface AuditEntry {
   id: string;

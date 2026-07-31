@@ -39,22 +39,8 @@ async function financeStaffIds(): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-// Décideurs habilités pour la validation par SEUIL (facture au-dessus du seuil) :
-// titulaires de finance:administration (DG, responsable financier, admin général).
-async function financeAdminIds(): Promise<string[]> {
-  const rows = await prisma.user.findMany({
-    where: {
-      status: "active",
-      deletedAt: null,
-      accountType: "internal",
-      userRoles: { some: { revokedAt: null, role: { rolePermissions: { some: { permission: { module: "finance", action: "administration" } } } } } },
-    },
-    select: { id: true },
-  });
-  return rows.map((r) => r.id);
-}
-
-// Décideurs de GOUVERNANCE, seuls habilités à VALIDER l'annulation d'une facture :
+// Décideurs de GOUVERNANCE, seuls habilités à VALIDER l'annulation d'une facture
+// OU une facture au-dessus du seuil :
 // le Directeur général et l'administrateur général — PAS la Finance (séparation
 // des pouvoirs : la Finance DEMANDE l'annulation, la Direction la valide). Le
 // discriminant est la permission « pilotage:administration », détenue par le DG
@@ -239,11 +225,11 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     try {
       const invoice = await prisma.$transaction((tx) => createInvoiceFromBillingOrder(tx, id, threshold));
       await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "invoice", entityId: invoice.id, newValues: { invoiceNumber: invoice.invoiceNumber, fromBillingOrder: order.orderNumber, status: invoice.status }, ipAddress: request.ip });
-      // Facture au-dessus du seuil → le DG doit la valider : on l'en avertit par
-      // une cloche (même logique de gouvernance que l'annulation : administrateur
-      // général inclus, sans se notifier soi-même).
+      // Facture au-dessus du seuil → décision de GOUVERNANCE : c'est le DG (ou
+      // l'administrateur général) qui valide, pas la Finance. On avertit les
+      // décideurs de gouvernance par une cloche, sans se notifier soi-même.
       if (invoice.status === "pending_validation") {
-        const deciders = (await financeAdminIds()).filter((uid) => uid !== request.user!.id);
+        const deciders = (await governanceDeciderIds()).filter((uid) => uid !== request.user!.id);
         if (deciders.length) {
           await notifyUsers({ userIds: deciders, type: "autre", priority: "high", title: "Facture à valider (au-dessus du seuil)", body: `${invoice.invoiceNumber} — ${order.label} · ${Number(invoice.totalTtc).toLocaleString("fr-FR")} XAF`, entityType: "invoice", entityId: invoice.id }).catch(() => {});
         }
@@ -278,8 +264,10 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     return reply.send(invoices.map((i) => ({ id: i.id, invoice_number: i.invoiceNumber, customer_name: i.customer.name, total_ttc: Number(i.totalTtc), created_at: i.createdAt })));
   });
 
-  // Validation d'une facture par le DG / responsable Finance → émise.
-  fastify.post("/api/v1/invoices/:id/validate", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+  // Validation d'une facture au-dessus du seuil → émise. Décision de GOUVERNANCE
+  // (pilotage:administration) : le DG / l'administrateur général valide, pas la
+  // Finance qui a établi la facture (séparation des pouvoirs).
+  fastify.post("/api/v1/invoices/:id/validate", { preHandler: requirePermission("pilotage", "administration") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const invoice = await prisma.invoice.findUnique({ where: { id } });
     if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
@@ -294,7 +282,7 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
   // « annulée » (hors CA) avec un motif obligatoire. Les droits d'auteur du livre
   // scolaire éventuellement calculés à sa création sont contre-passés, et la
   // commande à facturer d'origine repasse « à facturer » (à revoir ou annuler).
-  fastify.post("/api/v1/invoices/:id/validate-reject", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+  fastify.post("/api/v1/invoices/:id/validate-reject", { preHandler: requirePermission("pilotage", "administration") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const parsed = z.object({ reason: z.string().min(1).max(500) }).safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Un motif de refus est requis." });

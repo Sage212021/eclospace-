@@ -180,7 +180,7 @@ export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canVa
 
       {/* Commandes à facturer : le DG peut initier une commande / proforma
           (ex. livre scolaire) depuis sa rubrique ; la Finance l'établit. */}
-      {canInitiateOrder && <BillingOrdersSection canCreate canInvoice={false} canAdmin={false} />}
+      {(canInitiateOrder || canValidateCancellation) && <BillingOrdersSection canCreate={canInitiateOrder} canInvoice={false} canValidateThreshold={canValidateCancellation} />}
 
       {/* Ch. 5 §5.4 — Recherche globale */}
       <Card title={t("dir.search", "Recherche globale")} icon={<IconPilotage />} subtitle={t("dir.search_sub", "Numéro, titre, contributeur, collection, ISBN.")}>

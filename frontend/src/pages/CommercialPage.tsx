@@ -125,7 +125,7 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
 
       {/* Commandes à facturer (ex. livre scolaire) : le commercial les initie ; la
           Finance établit la facture. */}
-      <BillingOrdersSection canCreate={canInitiateOrder} canInvoice={false} canAdmin={false} />
+      <BillingOrdersSection canCreate={canInitiateOrder} canInvoice={false} canValidateThreshold={false} />
 
       <Card
         title={t("com.customers", "Clients")}

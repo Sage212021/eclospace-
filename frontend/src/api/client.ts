@@ -3543,6 +3543,7 @@ export interface BillingOrder {
   amount_ht: number;
   tax_rate: number;
   amount_ttc: number;
+  discount_pct: number;
   status: "pending" | "invoiced" | "cancelled";
   created_at: string;
 }
@@ -3561,6 +3562,7 @@ export function createBillingOrder(input: {
   label: string;
   amount_ht?: number;
   tax_rate?: number;
+  discount_pct?: number;
   note?: string;
   lines?: BillingOrderLineInput[];
 }) {

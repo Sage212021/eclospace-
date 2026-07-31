@@ -153,6 +153,28 @@ describe("commandes à facturer + validation par seuil", () => {
     return inv.json().id as string;
   }
 
+  it("la demande d'annulation notifie le décideur (DG / administrateur général)", async () => {
+    // Le comptable (finance:saisie, sans administration) demande l'annulation ;
+    // l'administrateur général — décideur habilité — doit en être notifié, faute
+    // de quoi la demande n'atteindrait personne dans une structure sans compte DG dédié.
+    const comptaU = `compta_notif_${rnd()}`;
+    const compta = await createUserWithRole(comptaU, "COMPTABLE", PWD);
+    const comptaCookie = await login(comptaU);
+    const adminUser = await prisma.user.findUniqueOrThrow({ where: { username: "admin" } });
+
+    const invId = await issueInvoice(120_000);
+    const before = await prisma.notification.count({ where: { userId: adminUser.id, entityType: "invoice", entityId: invId } });
+
+    const req = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/request-cancellation`, headers: { cookie: comptaCookie }, payload: { reason: "Erreur client" } });
+    expect(req.statusCode).toBe(200);
+
+    const after = await prisma.notification.count({ where: { userId: adminUser.id, entityType: "invoice", entityId: invId } });
+    expect(after).toBe(before + 1); // le DG (admin général) est notifié
+    // Le demandeur ne se notifie pas lui-même.
+    const selfNotif = await prisma.notification.count({ where: { userId: compta.id, entityType: "invoice", entityId: invId } });
+    expect(selfNotif).toBe(0);
+  });
+
   it("le comptable demande l'annulation, le DG la valide → facture annulée", async () => {
     const invId = await issueInvoice(150_000);
     const req = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/request-cancellation`, headers: { cookie: admin }, payload: { reason: "Erreur de saisie" } });

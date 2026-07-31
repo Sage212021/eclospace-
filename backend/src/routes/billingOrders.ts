@@ -39,8 +39,12 @@ async function financeStaffIds(): Promise<string[]> {
 }
 
 // Décideurs habilités à VALIDER une annulation de facture : titulaires de
-// finance:administration (DG / responsable Finance). Même exclusion de
-// l'administrateur général que pour les notifications opérationnelles.
+// finance:administration (Directeur général, responsable financier). Contrairement
+// aux notifications OPÉRATIONNELLES du pôle (nouvelle commande…), on N'EXCLUT PAS
+// l'administrateur général ici : l'annulation d'une facture est une décision de
+// GOUVERNANCE (DG) et, dans une petite structure, l'administrateur général tient
+// souvent ce rôle — sans lui, la demande n'atteindrait personne. La validation
+// reste par ailleurs gardée par la permission finance:administration.
 async function financeAdminIds(): Promise<string[]> {
   const rows = await prisma.user.findMany({
     where: {
@@ -48,7 +52,6 @@ async function financeAdminIds(): Promise<string[]> {
       deletedAt: null,
       accountType: "internal",
       userRoles: { some: { revokedAt: null, role: { rolePermissions: { some: { permission: { module: "finance", action: "administration" } } } } } },
-      NOT: { userRoles: { some: { revokedAt: null, role: { code: "ADMIN_GENERAL" } } } },
     },
     select: { id: true },
   });
@@ -288,7 +291,9 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
       where: { id },
       data: { status: "cancellation_requested", cancellationReason: parsed.data.reason.trim(), cancellationRequestedAt: new Date(), cancellationRequestedBy: request.user!.id },
     });
-    const deciders = await financeAdminIds();
+    // On notifie les décideurs, sans se notifier soi-même (le demandeur peut être
+    // lui-même titulaire de finance:administration).
+    const deciders = (await financeAdminIds()).filter((uid) => uid !== request.user!.id);
     if (deciders.length) {
       await notifyUsers({ userIds: deciders, type: "autre", priority: "high", title: "Annulation de facture à valider", body: `${invoice.invoiceNumber} — ${invoice.customer.name} · Motif : ${parsed.data.reason.trim()}`, entityType: "invoice", entityId: id }).catch(() => {});
     }

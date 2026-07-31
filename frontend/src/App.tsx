@@ -400,7 +400,9 @@ export function App() {
       setChatUnread(0);
       return;
     }
-    const refresh = () => getChatUnread().then((r) => setChatUnread(r.unread)).catch(() => {});
+    // On ne sollicite pas le serveur quand l'onglet est en arrière-plan (économie
+    // de CPU/batterie sur les machines modestes et les mobiles).
+    const refresh = () => { if (document.hidden) return; getChatUnread().then((r) => setChatUnread(r.unread)).catch(() => {}); };
     refresh();
     const timer = setInterval(refresh, 20000);
     return () => clearInterval(timer);

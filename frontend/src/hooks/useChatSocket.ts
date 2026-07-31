@@ -22,7 +22,10 @@ export function useChatSocket(onMessage: (m: ChatMessage) => void, onRead?: (e: 
 
   useEffect(() => {
     if (!enabled) return;
-    const socket: Socket = io(API_BASE || undefined, { withCredentials: true });
+    // Reconnexion espacée (jusqu'à 20 s entre tentatives) pour ne pas solliciter
+    // la machine en boucle serrée quand le serveur est momentanément indisponible
+    // (ex. pendant un redéploiement).
+    const socket: Socket = io(API_BASE || undefined, { withCredentials: true, reconnectionDelayMax: 20000, timeout: 20000 });
     socket.on("chat:message", (m: ChatMessage) => handler.current?.(m));
     socket.on("chat:read", (e: ChatReadEvent) => readHandler.current?.(e));
     return () => {

@@ -948,21 +948,22 @@ async function main() {
       const firstName = parts.length > 1 ? parts.slice(0, -1).join(" ") : "";
       return prisma.partner.create({ data: { category: "auteur", firstName, lastName, penName: name } });
     };
-    // 8 ouvrages distincts (les titres couvrant deux classes ne sont saisis qu'une
-    // fois). matiere/classe sont portés par le sous-titre, affiché à côté du titre.
-    const catalogue: { num: string; title: string; matiere: string; classe: string; authors: string[]; coAuthors: string[]; price: number }[] = [
-      { num: "MS-CAT-0001", title: "LATINISTAS 6ème-5ème", matiere: "Latin", classe: "6ᵉ-5ᵉ", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
-      { num: "MS-CAT-0002", title: "LATINISTAS 4ème-3ème", matiere: "Latin", classe: "4ᵉ-3ᵉ", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
-      { num: "MS-CAT-0003", title: "Je découvre la langue grecque 4ème-3ème", matiere: "Grec", classe: "4ᵉ-3ᵉ", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
-      { num: "MS-CAT-0004", title: "Informatique 6ème", matiere: "Informatique", classe: "6ᵉ", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 3500 },
-      { num: "MS-CAT-0005", title: "Informatique 4ème", matiere: "Informatique", classe: "4ᵉ", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 4000 },
-      { num: "MS-CAT-0006", title: "Informatique 3ème", matiere: "Informatique", classe: "3ᵉ", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 4000 },
+    // Catalogue des manuels. `isbn` = ISBN OFFICIEL de la maison (fourni). Les
+    // ouvrages sans ISBN officiel connu gardent un ISBN provisoire (préfixe
+    // interne) calculé depuis leur rang. matiere/classe sont portés par le
+    // sous-titre, affiché à côté du titre.
+    const catalogue: { num: string; title: string; matiere: string; classe: string; authors: string[]; coAuthors: string[]; price: number; isbn?: string }[] = [
+      { num: "MS-CAT-0001", title: "LATINISTAS 6ème-5ème", matiere: "Latin", classe: "6ᵉ-5ᵉ", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000, isbn: "9789956362769" },
+      { num: "MS-CAT-0002", title: "LATINISTAS 4ème-3ème", matiere: "Latin", classe: "4ᵉ-3ᵉ", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000, isbn: "9789956362752" },
+      { num: "MS-CAT-0003", title: "Je découvre la langue grecque 4ème-3ème", matiere: "Grec", classe: "4ᵉ-3ᵉ", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000, isbn: "9789956362776" },
+      { num: "MS-CAT-0004", title: "Informatique 6ème", matiere: "Informatique", classe: "6ᵉ", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 3500, isbn: "9789956362653" },
+      { num: "MS-CAT-0005", title: "Informatique 4ème", matiere: "Informatique", classe: "4ᵉ", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 4000, isbn: "9789956362646" },
+      { num: "MS-CAT-0006", title: "Informatique 3ème", matiere: "Informatique", classe: "3ᵉ", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 4000, isbn: "9789956362691" },
+      { num: "MS-CAT-0009", title: "LATINISTAS 2nde-1ère-Tle", matiere: "Latin", classe: "2nde-1ère-Tle", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000, isbn: "9789956362745" },
       { num: "MS-CAT-0007", title: "Au cœur des ténèbres", matiere: "Littérature", classe: "1ᵉʳᵉˢ", authors: ["Joseph Conrad"], coAuthors: [], price: 1900 },
       { num: "MS-CAT-0008", title: "Stances et Poèmes, suivi de Les Épreuves", matiere: "Littérature", classe: "Terminales", authors: ["Sully Prudhomme"], coAuthors: [], price: 1900 },
     ];
-    let idx = 0;
     for (const b of catalogue) {
-      idx++;
       const subtitle = `${b.matiere} · ${b.classe}`;
       const ms = await prisma.manuscript.upsert({
         where: { manuscriptNumber: b.num },
@@ -998,11 +999,19 @@ async function main() {
           create: { manuscriptId: ms.id, partnerId: p.id, role: "co_author", displayOrder: order++ },
         });
       }
+      // ISBN officiel s'il est fourni, sinon provisoire (préfixe interne) dérivé
+      // du NUMÉRO DE MANUSCRIT (stable, insensible à l'ordre du tableau).
+      const seq = Number(b.num.replace("MS-CAT-", ""));
+      const targetIsbn = b.isbn ?? ean13("97820010000" + seq);
       let isbn = await prisma.isbn.findFirst({ where: { manuscriptId: ms.id, format: "print" } });
       if (!isbn) {
         isbn = await prisma.isbn.create({
-          data: { isbn13: ean13("97820010000" + idx), format: "print", manuscriptId: ms.id, status: "published", assignedAt: new Date() },
+          data: { isbn13: targetIsbn, format: "print", manuscriptId: ms.id, status: "published", assignedAt: new Date() },
         });
+      } else if (isbn.isbn13 !== targetIsbn) {
+        // Remplace l'ISBN provisoire par l'ISBN officiel (l'identifiant interne de
+        // la ligne ne change pas : les références existantes restent valides).
+        isbn = await prisma.isbn.update({ where: { id: isbn.id }, data: { isbn13: targetIsbn } });
       }
       const hasPrice = await prisma.priceList.findFirst({ where: { isbnId: isbn.id } });
       if (!hasPrice) {

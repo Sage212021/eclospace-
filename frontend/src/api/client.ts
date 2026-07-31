@@ -3475,6 +3475,9 @@ export function getBillingOrders(status: "pending" | "invoiced" | "cancelled" = 
 export function invoiceBillingOrder(id: string) {
   return request<{ id: string; invoice_number: string; status: string; total_ttc: number; needs_validation: boolean }>(`/api/v1/billing-orders/${id}/invoice`, { method: "POST" });
 }
+export function cancelBillingOrder(id: string, reason?: string) {
+  return request<BillingOrder>(`/api/v1/billing-orders/${id}/cancel`, { method: "POST", body: JSON.stringify(reason ? { reason } : {}) });
+}
 export interface PendingValidationInvoice {
   id: string;
   invoice_number: string;

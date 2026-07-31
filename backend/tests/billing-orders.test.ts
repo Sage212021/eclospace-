@@ -117,6 +117,34 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(again.statusCode).toBe(409);
   });
 
+  it("le commercial peut annuler une commande (client désisté) ; elle quitte la file", async () => {
+    const com = `comx_${rnd()}`;
+    await createUserWithRole(com, "RESP_COMMERCIAL", PWD);
+    const comCookie = await login(com);
+    const order = await createOrder(90_000);
+    const cancel = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/cancel`, headers: { cookie: comCookie }, payload: { reason: "Client désisté" } });
+    expect(cancel.statusCode).toBe(200);
+    expect(cancel.json().status).toBe("cancelled");
+    // Elle ne figure plus dans la file « en attente ».
+    const list = await app.inject({ method: "GET", url: "/api/v1/billing-orders?status=pending", headers: { cookie: admin } });
+    expect((list.json() as { id: string }[]).some((o) => o.id === order.json().id)).toBe(false);
+  });
+
+  it("une commande déjà facturée ne peut pas être annulée (409 → avoir)", async () => {
+    const order = await createOrder(80_000);
+    const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin } });
+    invoiceIds.push(inv.json().id);
+    const cancel = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/cancel`, headers: { cookie: admin }, payload: {} });
+    expect(cancel.statusCode).toBe(409);
+    expect(cancel.json().code).toBe("already_invoiced");
+  });
+
+  it("un rôle non habilité ne peut pas annuler une commande (403)", async () => {
+    const order = await createOrder(70_000);
+    const cancel = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/cancel`, headers: { cookie: magasinier }, payload: {} });
+    expect(cancel.statusCode).toBe(403);
+  });
+
   it("le commercial initie une commande et la voit, mais ne peut pas la facturer", async () => {
     const com = `com_${rnd()}`;
     await createUserWithRole(com, "RESP_COMMERCIAL", PWD);

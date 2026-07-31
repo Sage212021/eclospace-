@@ -341,6 +341,16 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
       <div><span>${tr("Total HT", "Total (excl. tax)")}</span><span class="num">${money(invoice.totalHt, cur)}</span></div>
       <div><span>${tr("TVA", "VAT")}</span><span class="num">${money(invoice.totalTax, cur)}</span></div>
       <div class="ttc"><span>${tr("Total TTC", "Total (incl. tax)")}</span><span class="num">${money(invoice.totalTtc, cur)}</span></div>
+    </div>
+    <div style="clear:both"></div>
+    <!-- Espace de signature réservé à la maison (demande opérateur) : la facture
+         est signée par le responsable pour le compte d'Éclosion Édition. -->
+    <div style="margin-top:44px; display:flex; justify-content:flex-end">
+      <div style="min-width:240px">
+        <div class="party__label">${tr("Pour", "For")} ${escapeHtml(HOUSE.legalName)}</div>
+        <div style="font-size:11px; color:#6b7280; margin-top:2px">${tr("Le responsable — signature &amp; cachet", "The manager — signature &amp; stamp")}</div>
+        <div style="border-top:1px solid #16233d; margin-top:46px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Nom, date et signature", "Name, date and signature")}</div>
+      </div>
     </div>`;
 
   openPrintWindow(`${docName} ${invoice.invoiceNumber}`, body, opts);

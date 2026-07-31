@@ -468,7 +468,10 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     for (const user of users) {
       const roleCodes = user.userRoles.map((ur) => ur.role.code);
       const hasEmployee = user.employee !== null && !user.employee.departureDate;
-      if (!hasEmployee && !roleCodes.includes("ADMIN_GENERAL")) {
+      // Un compte EXTERNE (auteur, relecteur externe) n'a légitimement pas de
+      // dossier RH : ce n'est pas un salarié. On ne le signale donc pas comme
+      // « compte sans dossier RH » (sinon faux positif, ex. amina.auteur).
+      if (!hasEmployee && user.accountType === "internal" && !roleCodes.includes("ADMIN_GENERAL")) {
         anomalies.push({ type: "compte_sans_dossier_rh", user_id: user.id, username: user.username, detail: "Compte actif sans dossier RH actif." });
       }
       for (const module of sensitiveModules) {

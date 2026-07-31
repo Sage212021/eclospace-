@@ -42,7 +42,9 @@ export function usePresence(enabled: boolean, onAnnouncement?: (a: AnnouncementP
       setPresence(EMPTY);
       return;
     }
-    const socket = io(API_BASE || undefined, { withCredentials: true });
+    // Reconnexion espacée (jusqu'à 20 s) pour éviter une boucle serrée de
+    // reconnexion qui charge la machine quand le serveur est indisponible.
+    const socket = io(API_BASE || undefined, { withCredentials: true, reconnectionDelayMax: 20000, timeout: 20000 });
     socketRef.current = socket;
     socket.on("presence:update", (p: PresenceState) => setPresence(p));
     socket.on("announcement:new", (a: AnnouncementPush) => annHandler.current?.(a));

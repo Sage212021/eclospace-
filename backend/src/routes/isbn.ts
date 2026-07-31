@@ -122,10 +122,15 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
     const query = request.query as { format?: IsbnFormat };
     const isbns = await prisma.isbn.findMany({
       where: query.format ? { format: query.format } : {},
-      include: { manuscript: { select: { title: true } } },
+      include: {
+        manuscript: { select: { title: true } },
+        // Prix courant (dernier tarif) : permet de pré-remplir le prix unitaire
+        // au moment de la sélection d'un ouvrage dans une commande à facturer.
+        priceList: { orderBy: { effectiveFrom: "desc" }, take: 1, select: { price: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
-    return reply.send(isbns);
+    return reply.send(isbns.map((i) => ({ ...i, price_ht: i.priceList[0] ? Number(i.priceList[0].price) : null })));
   });
 
   // Attribution (Ch. 13 §13.3) : conditions vérifiées (contrat actif), ISBN

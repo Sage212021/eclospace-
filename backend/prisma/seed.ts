@@ -927,6 +927,87 @@ async function main() {
   });
   if (salonRepair.count > 0) console.log(`Dates du « Salon de Paris » corrigées : 19 → 23 avril 2026.`);
 
+  // ── Catalogue des manuels scolaires d'Éclosion (fourni par la maison) ───────
+  // Charge les ouvrages du catalogue pour qu'ils soient SÉLECTIONNABLES dans le
+  // formulaire de commande à facturer (plus besoin de les ressaisir : on choisit
+  // l'ouvrage, on attribue quantité/prix). Idempotent : manuscrit repéré par son
+  // numéro, ISBN par (manuscrit, format), prix créé s'il manque. Les ISBN sont
+  // provisoires (préfixe interne) tant que les ISBN officiels ne sont pas fournis.
+  const catStatus = (await prisma.workflowStatus.findFirst({ orderBy: { stepOrder: "desc" } })) ?? (await prisma.workflowStatus.findFirst());
+  if (catStatus) {
+    const ean13 = (base12: string): string => {
+      let sum = 0;
+      for (let k = 0; k < 12; k++) sum += Number(base12[k]) * (k % 2 === 0 ? 1 : 3);
+      return base12 + String((10 - (sum % 10)) % 10);
+    };
+    const ensureAuthor = async (name: string) => {
+      const found = await prisma.partner.findFirst({ where: { category: "auteur", penName: name } });
+      if (found) return found;
+      const parts = name.trim().split(/\s+/);
+      const lastName = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+      const firstName = parts.length > 1 ? parts.slice(0, -1).join(" ") : "";
+      return prisma.partner.create({ data: { category: "auteur", firstName, lastName, penName: name } });
+    };
+    // 8 ouvrages distincts (les titres couvrant deux classes ne sont saisis qu'une fois).
+    const catalogue: { num: string; title: string; authors: string[]; coAuthors: string[]; price: number }[] = [
+      { num: "MS-CAT-0001", title: "LATINISTAS 6ème-5ème", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
+      { num: "MS-CAT-0002", title: "LATINISTAS 4ème-3ème", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
+      { num: "MS-CAT-0003", title: "Je découvre la langue grecque 4ème-3ème", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
+      { num: "MS-CAT-0004", title: "Informatique 6ème", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 3500 },
+      { num: "MS-CAT-0005", title: "Informatique 4ème", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 4000 },
+      { num: "MS-CAT-0006", title: "Informatique 3ème", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 4000 },
+      { num: "MS-CAT-0007", title: "Au cœur des ténèbres", authors: ["Joseph Conrad"], coAuthors: [], price: 1900 },
+      { num: "MS-CAT-0008", title: "Stances et Poèmes, suivi de Les Épreuves", authors: ["Sully Prudhomme"], coAuthors: [], price: 1900 },
+    ];
+    let idx = 0;
+    for (const b of catalogue) {
+      idx++;
+      const ms = await prisma.manuscript.upsert({
+        where: { manuscriptNumber: b.num },
+        update: { title: b.title, editorialSegment: "scolaire", isBackCatalogue: true },
+        create: {
+          manuscriptNumber: b.num,
+          title: b.title,
+          language: "fr",
+          statusId: catStatus.id,
+          ownerId: adminUser.id,
+          receivedAt: new Date("2026-01-01"),
+          publicationDate: new Date("2025-09-01"),
+          isBackCatalogue: true,
+          editorialSegment: "scolaire",
+        },
+      });
+      let order = 0;
+      for (const name of b.authors) {
+        const p = await ensureAuthor(name);
+        await prisma.workContributor.upsert({
+          where: { manuscriptId_partnerId_role: { manuscriptId: ms.id, partnerId: p.id, role: "author" } },
+          update: {},
+          create: { manuscriptId: ms.id, partnerId: p.id, role: "author", displayOrder: order++ },
+        });
+      }
+      for (const name of b.coAuthors) {
+        const p = await ensureAuthor(name);
+        await prisma.workContributor.upsert({
+          where: { manuscriptId_partnerId_role: { manuscriptId: ms.id, partnerId: p.id, role: "co_author" } },
+          update: {},
+          create: { manuscriptId: ms.id, partnerId: p.id, role: "co_author", displayOrder: order++ },
+        });
+      }
+      let isbn = await prisma.isbn.findFirst({ where: { manuscriptId: ms.id, format: "print" } });
+      if (!isbn) {
+        isbn = await prisma.isbn.create({
+          data: { isbn13: ean13("97820010000" + idx), format: "print", manuscriptId: ms.id, status: "published", assignedAt: new Date() },
+        });
+      }
+      const hasPrice = await prisma.priceList.findFirst({ where: { isbnId: isbn.id } });
+      if (!hasPrice) {
+        await prisma.priceList.create({ data: { isbnId: isbn.id, country: "CM", currency: "XAF", price: b.price, effectiveFrom: new Date("2026-01-01") } });
+      }
+    }
+    console.log(`Catalogue scolaire : ${catalogue.length} ouvrages disponibles à la commande.`);
+  }
+
   console.log("Seed Lot 0 terminé.");
   console.log(`Compte administrateur : admin / ${adminPassword} (à changer immédiatement)`);
 }

@@ -89,7 +89,19 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   }
   function pickIsbn(i: number, isbnId: string) {
     const item = isbns.find((x) => x.id === isbnId);
-    setBookLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, isbn_id: isbnId, description: l.description || item?.manuscript?.title || "" } : l)));
+    setBookLines((ls) =>
+      ls.map((l, idx) =>
+        idx === i
+          ? {
+              ...l,
+              isbn_id: isbnId,
+              // On pré-remplit le titre et le prix depuis le catalogue (modifiables).
+              description: l.description || item?.manuscript?.title || "",
+              unit_price_ht: l.unit_price_ht || (item?.price_ht != null ? String(item.price_ht) : ""),
+            }
+          : l,
+      ),
+    );
   }
   function resetForm() {
     setForm({ customer_id: "", category: "livre_scolaire", label: "", amount_ht: "", tax_rate: "0" });

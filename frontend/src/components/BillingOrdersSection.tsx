@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   listCustomers,
   createCustomer,
@@ -83,6 +83,23 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
 
   const detailed = form.category === "livre_scolaire"; // le scolaire se saisit par ouvrage → droits d'auteur
   const linesTotalHt = bookLines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price_ht) || 0), 0);
+
+  // Menu d'ouvrages groupé par matière (le sous-titre porte « Matière · Classe »).
+  // Les ouvrages sans matière connue tombent dans « Autres ouvrages », en dernier.
+  const groupedIsbns = useMemo(() => {
+    const groups = new Map<string, IsbnCatalogueItem[]>();
+    for (const x of isbns) {
+      const st = x.manuscript?.subtitle ?? "";
+      const matiere = st.includes("·") ? st.split("·")[0].trim() : st.trim() || "Autres ouvrages";
+      if (!groups.has(matiere)) groups.set(matiere, []);
+      groups.get(matiere)!.push(x);
+    }
+    return [...groups.entries()].sort((a, b) => {
+      if (a[0] === "Autres ouvrages") return 1;
+      if (b[0] === "Autres ouvrages") return -1;
+      return a[0].localeCompare(b[0], "fr");
+    });
+  }, [isbns]);
 
   function setLine(i: number, patch: Partial<BookLine>) {
     setBookLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -366,11 +383,16 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <select value={l.isbn_id} onChange={(e) => pickIsbn(i, e.target.value)} style={{ ...inp, flex: 1 }}>
                         <option value="">— Ouvrage / ISBN (facultatif) —</option>
-                        {isbns.map((x) => {
-                          const t = x.manuscript?.title ?? "Sans titre";
-                          const st = x.manuscript?.subtitle; // « Matière · Classe »
-                          return <option key={x.id} value={x.id}>{st ? `${t} — ${st}` : t} · {x.isbn13}</option>;
-                        })}
+                        {groupedIsbns.map(([matiere, items]) => (
+                          <optgroup key={matiere} label={matiere}>
+                            {items.map((x) => {
+                              const t = x.manuscript?.title ?? "Sans titre";
+                              const st = x.manuscript?.subtitle; // « Matière · Classe »
+                              const classe = st && st.includes("·") ? st.split("·")[1].trim() : null;
+                              return <option key={x.id} value={x.id}>{classe ? `${t} — ${classe}` : t} · {x.isbn13}</option>;
+                            })}
+                          </optgroup>
+                        ))}
                       </select>
                       {bookLines.length > 1 && (
                         <button type="button" onClick={() => setBookLines((ls) => ls.filter((_, idx) => idx !== i))} style={btnDanger} title="Retirer cet ouvrage">✕</button>

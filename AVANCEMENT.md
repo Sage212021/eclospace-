@@ -1322,3 +1322,7 @@ Demande opérateur : intégrer la liste des manuels de la maison pour que les ou
 ### 31/07/2026 (suite) — Catalogue : matière et classe affichées à côté du titre
 
 Sur demande de l'opérateur, chaque manuel du catalogue porte désormais sa **matière** et sa **classe** (Latin · 6ᵉ‑5ᵉ, Informatique · 3ᵉ, Littérature · Terminales…), stockées dans le **sous‑titre** du manuscrit (et en mots‑clés). `GET /isbns` renvoie le sous‑titre ; le sélecteur d'ouvrage affiche « Titre — Matière · Classe · ISBN », pour repérer l'ouvrage d'un coup d'œil. Seed idempotent (mise à jour des ouvrages existants au redéploiement). `tsc` back+front + build OK ; tests isbn/billing au vert.
+
+### 31/07/2026 (suite) — Sélecteur d'ouvrage groupé par matière
+
+Le menu de sélection d'ouvrage (commande à facturer) est désormais **groupé par matière** (`optgroup` : Grec, Informatique, Latin, Littérature…), la matière étant déduite du sous‑titre « Matière · Classe ». Dans chaque groupe, l'option affiche « Titre — Classe · ISBN » (la matière figurant déjà en en‑tête). Les ouvrages sans matière connue vont dans « Autres ouvrages », en dernier. Changement purement interface ; `tsc` + build OK.

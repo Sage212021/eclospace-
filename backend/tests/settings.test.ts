@@ -72,4 +72,18 @@ describe("paramètres (settings)", () => {
     });
     expect(patch.statusCode).toBe(404);
   });
+
+  it("diagnostic de persistance : base connectée et comptes réels d'enregistrements", async () => {
+    const cookie = await loginCookie(app, "admin", ADMIN_PASSWORD);
+    const res = await app.inject({ method: "GET", url: "/api/v1/system/diagnostic", headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const d = res.json();
+    expect(d.database.connected).toBe(true);
+    expect(typeof d.instance_id).toBe("string");
+    // Le compteur d'un enregistrement réel augmente après une création.
+    const before = d.records.users;
+    await createUserWithRole(`diag_${Math.random().toString(36).slice(2, 7)}`, "MAGASINIER", "DiagTest123!");
+    const after = (await app.inject({ method: "GET", url: "/api/v1/system/diagnostic", headers: { cookie } })).json();
+    expect(after.records.users).toBe(before + 1);
+  });
 });

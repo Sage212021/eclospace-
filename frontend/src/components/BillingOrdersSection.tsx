@@ -4,6 +4,7 @@ import {
   createBillingOrder,
   getBillingOrders,
   invoiceBillingOrder,
+  cancelBillingOrder,
   getInvoice,
   getPendingValidationInvoices,
   validateInvoice,
@@ -125,6 +126,26 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
     }
   }
 
+  // Annulation d'une commande (client désisté) — ouverte au commercial, au DG et
+  // au comptable. Impossible une fois la commande facturée (→ avoir). On demande
+  // le motif (facultatif) : « Annuler » du prompt = abandon, sinon on annule.
+  async function cancelOrder(o: BillingOrder) {
+    const reason = window.prompt(
+      `Annuler la commande « ${o.label} » (${o.customer_name}) ?\n\nMotif de l'annulation (facultatif — ex. client désisté) :`,
+      "",
+    );
+    if (reason === null) return; // abandon
+    setError(null);
+    setMsg(null);
+    try {
+      await cancelBillingOrder(o.id, reason.trim() || undefined);
+      setMsg(`Commande « ${o.label} » annulée.`);
+      reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Annulation impossible.");
+    }
+  }
+
   async function approve(inv: PendingValidationInvoice) {
     const ok = await confirm({
       title: "Valider la facture",
@@ -211,6 +232,8 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
                     {/* Proforma : document préparatoire non fiscal — disponible à
                         l'initiateur (DG / commercial) comme à la Finance. */}
                     <button onClick={() => proforma(o)} style={btnGhost} title="Imprimer une facture proforma (document préparatoire, non fiscal)">Proforma (PDF)</button>
+                    {/* Annuler la commande (client désisté) : commercial, DG, comptable. */}
+                    <button onClick={() => cancelOrder(o)} style={btnDanger} title="Annuler la commande (client désisté)">Annuler la commande</button>
                     {/* Établir la facture officielle : réservé à la Finance. */}
                     {canInvoice && <button onClick={() => establish(o)} style={btnPrimary}>Établir la facture</button>}
                   </div>
@@ -249,3 +272,4 @@ const inp: React.CSSProperties = { padding: "8px 11px", border: "1px solid var(-
 const row: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, border: "1px solid var(--line)", borderRadius: 8, padding: "9px 13px" };
 const btnPrimary: React.CSSProperties = { border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0 };
 const btnGhost: React.CSSProperties = { border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", borderRadius: 8, padding: "7px 12px", fontSize: 13, cursor: "pointer" };
+const btnDanger: React.CSSProperties = { border: "1px solid var(--alert)", background: "#fff", color: "var(--alert)", borderRadius: 8, padding: "7px 12px", fontSize: 13, cursor: "pointer", flexShrink: 0 };

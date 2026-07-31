@@ -115,6 +115,41 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     return reply.send(orders.map((o) => orderView(o, o.customer.name)));
   });
 
+  // Annulation d'une commande à facturer (client qui se désiste). Ouvert au
+  // Commercial, à la Direction et au comptable/Finance — les mêmes profils qui
+  // peuvent l'initier ou la traiter. Impossible si elle est déjà FACTURÉE : dans
+  // ce cas, c'est un avoir (note de crédit) qu'il faut établir, pas une annulation.
+  fastify.post("/api/v1/billing-orders/:id/cancel", { preHandler: requireAuth }, async (request, reply) => {
+    const perms = request.user!.permissions;
+    if (!(perms.has("commercial:saisie") || perms.has("commercial:validation") || perms.has("finance:saisie"))) {
+      return reply.code(403).send({ code: "forbidden", message: "Réservé à la direction, au commercial ou à la Finance." });
+    }
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ reason: z.string().max(500).optional() }).safeParse(request.body ?? {});
+    const reason = parsed.success ? parsed.data.reason?.trim() || null : null;
+
+    const order = await prisma.billingOrder.findFirst({ where: { id, deletedAt: null }, include: { customer: { select: { name: true } } } });
+    if (!order) return reply.code(404).send({ code: "not_found", message: "Commande introuvable." });
+    if (order.status === "invoiced") {
+      return reply.code(409).send({ code: "already_invoiced", message: "Cette commande est déjà facturée : établissez un avoir plutôt que de l'annuler." });
+    }
+    if (order.status === "cancelled") {
+      return reply.code(409).send({ code: "already_cancelled", message: "Cette commande est déjà annulée." });
+    }
+
+    const note = reason ? `${order.note ? order.note + " · " : ""}Annulée : ${reason}` : order.note;
+    const updated = await prisma.billingOrder.update({ where: { id }, data: { status: "cancelled", note } });
+
+    // Retire la commande de la file du pôle Finance : on les prévient (priorité
+    // basse) qu'elle a été annulée, pour éviter qu'ils la facturent par erreur.
+    const staff = await financeStaffIds();
+    if (staff.length) {
+      await notifyUsers({ userIds: staff, type: "autre", priority: "low", title: "Commande annulée", body: `${order.label} — ${order.customer.name}${reason ? " · " + reason : ""}`, entityType: "billing_order", entityId: order.id }).catch(() => {});
+    }
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "billing_order", entityId: order.id, oldValues: { status: order.status }, newValues: { status: "cancelled", reason }, ipAddress: request.ip });
+    return reply.send(orderView(updated, order.customer.name));
+  });
+
   // La Finance établit la facture depuis la commande (validation par seuil).
   fastify.post("/api/v1/billing-orders/:id/invoice", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
     const { id } = request.params as { id: string };

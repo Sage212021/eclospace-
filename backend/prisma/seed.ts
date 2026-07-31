@@ -475,7 +475,9 @@ async function main() {
 
   // Module Paie natif (D-007) : permissions par rôle + interrupteur oui/non.
   await grant("RESP_FINANCE", ["paie:consultation", "paie:saisie", "paie:validation", "paie:administration"]);
-  await grant("RESP_RH", ["paie:consultation", "paie:saisie"]);
+  // Décision opérateur (31/07/2026) : le Responsable RH gère la paie de bout en
+  // bout — consultation, saisie, validation ET administration.
+  await grant("RESP_RH", ["paie:consultation", "paie:saisie", "paie:validation", "paie:administration"]);
   await grant("DIR_GENERAL", ["paie:consultation", "paie:validation", "paie:administration"]);
 
   // Internalisation de la paie DÉSACTIVÉE par défaut (D-007) : tant qu'elle est

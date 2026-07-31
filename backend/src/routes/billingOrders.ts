@@ -217,13 +217,16 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
   // La Finance établit la facture depuis la commande (validation par seuil).
   fastify.post("/api/v1/billing-orders/:id/invoice", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const parsed = z.object({ discount_pct: z.number().min(0).max(100).optional() }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Remise invalide (0 à 100 %)." });
+    const discountPct = parsed.data.discount_pct ?? 0;
     const order = await prisma.billingOrder.findFirst({ where: { id, deletedAt: null } });
     if (!order) return reply.code(404).send({ code: "not_found", message: "Commande introuvable." });
     if (order.status !== "pending") return reply.code(409).send({ code: "not_pending", message: "Cette commande est déjà facturée ou annulée." });
 
     const threshold = await getThreshold();
     try {
-      const invoice = await prisma.$transaction((tx) => createInvoiceFromBillingOrder(tx, id, threshold));
+      const invoice = await prisma.$transaction((tx) => createInvoiceFromBillingOrder(tx, id, threshold, discountPct));
       await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "invoice", entityId: invoice.id, newValues: { invoiceNumber: invoice.invoiceNumber, fromBillingOrder: order.orderNumber, status: invoice.status }, ipAddress: request.ip });
       // Facture au-dessus du seuil → décision de GOUVERNANCE : c'est le DG (ou
       // l'administrateur général) qui valide, pas la Finance. On avertit les

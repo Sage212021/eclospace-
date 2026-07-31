@@ -1524,6 +1524,8 @@ export interface Invoice {
   status: string;
   totalHt: string;
   totalTax: string;
+  // Remise commerciale globale (0–100 %) : totalTtc est le NET à payer après remise.
+  discountPct?: string;
   totalTtc: string;
   dueDate: string | null;
   createdAt: string;
@@ -3567,8 +3569,8 @@ export function createBillingOrder(input: {
 export function getBillingOrders(status: "pending" | "invoiced" | "cancelled" = "pending") {
   return request<BillingOrder[]>(`/api/v1/billing-orders?status=${status}`);
 }
-export function invoiceBillingOrder(id: string) {
-  return request<{ id: string; invoice_number: string; status: string; total_ttc: number; needs_validation: boolean }>(`/api/v1/billing-orders/${id}/invoice`, { method: "POST" });
+export function invoiceBillingOrder(id: string, discountPct = 0) {
+  return request<{ id: string; invoice_number: string; status: string; total_ttc: number; needs_validation: boolean }>(`/api/v1/billing-orders/${id}/invoice`, { method: "POST", body: JSON.stringify({ discount_pct: discountPct }) });
 }
 export function cancelBillingOrder(id: string, reason?: string) {
   return request<BillingOrder>(`/api/v1/billing-orders/${id}/cancel`, { method: "POST", body: JSON.stringify(reason ? { reason } : {}) });

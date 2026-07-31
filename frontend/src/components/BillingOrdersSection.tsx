@@ -68,6 +68,9 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   // Création rapide d'un client, sans quitter le formulaire de commande.
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: "", category: "institution" as CustomerCategory });
+  // Remise (%) choisie par commande, appliquée à l'établissement de la facture.
+  const [remises, setRemises] = useState<Record<string, number>>({});
+  const getRemise = (id: string) => remises[id] ?? 0;
 
   const reload = () => {
     getBillingOrders("pending").then(setOrders).catch(() => {});
@@ -210,14 +213,18 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   // commande (ne consomme pas la numérotation légale des factures).
   function proforma(o: BillingOrder) {
     const tax = Math.round((o.amount_ht * o.tax_rate) / 100 * 100) / 100;
+    const d = getRemise(o.id);
+    const factor = 1 - d / 100;
     const doc: InvoiceDetail = {
       id: "proforma",
       invoiceNumber: `PRO-${o.reference}`,
       type: "proforma",
       status: "proforma",
-      totalHt: String(o.amount_ht),
-      totalTax: String(tax),
-      totalTtc: String(o.amount_ttc),
+      // Totaux NETS (après remise) ; la remise se lit à l'impression.
+      totalHt: String(Math.round(o.amount_ht * factor * 100) / 100),
+      totalTax: String(Math.round(tax * factor * 100) / 100),
+      discountPct: String(d),
+      totalTtc: String(Math.round(o.amount_ttc * factor * 100) / 100),
       dueDate: null,
       createdAt: new Date().toISOString(),
       currency: "XAF",
@@ -228,17 +235,20 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   }
 
   async function establish(o: BillingOrder) {
+    const d = getRemise(o.id);
+    const nap = Math.round(o.amount_ttc * (1 - d / 100) * 100) / 100;
+    const remiseLine = d > 0 ? ` Remise ${d} % : −${fmt.format(o.amount_ttc - nap)} → Net à payer ${fmt.format(nap)}.` : "";
     const ok = await confirm({
       title: "Établir la facture",
       message: `Établir la facture officielle pour « ${o.label} » ?`,
-      detail: `Client : ${o.customer_name} · Montant : ${fmt.format(o.amount_ttc)}. Une facture émise ne peut plus être supprimée (numérotation légale).`,
+      detail: `Client : ${o.customer_name} · Montant : ${fmt.format(o.amount_ttc)}.${remiseLine} Une facture émise ne peut plus être supprimée (numérotation légale).`,
       confirmLabel: "Établir la facture",
     });
     if (!ok) return;
     setError(null);
     setMsg(null);
     try {
-      const r = await invoiceBillingOrder(o.id);
+      const r = await invoiceBillingOrder(o.id, d);
       if (r.needs_validation) {
         setMsg(`Facture ${r.invoice_number} créée — en attente de validation du DG (montant ≥ seuil). Impression possible une fois validée.`);
       } else {
@@ -433,27 +443,42 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
           <p style={{ fontSize: 13.5, color: "var(--muted)", margin: 0 }}>Aucune commande en attente de facturation.</p>
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
-            {orders.map((o) => (
-              <div key={o.id} style={row}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, color: "var(--ink)", fontSize: 14 }}>{o.label}</div>
-                  <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>
-                    <span style={{ fontFamily: "var(--font-mono)" }}>{o.reference}</span> · {o.customer_name} · <span style={{ fontFamily: "var(--font-mono)" }}>{fmt.format(o.amount_ttc)}</span>
+            {orders.map((o) => {
+              const d = getRemise(o.id);
+              const nap = Math.round(o.amount_ttc * (1 - d / 100) * 100) / 100;
+              return (
+                <div key={o.id} style={{ ...row, flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: "var(--ink)", fontSize: 14 }}>{o.label}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>
+                      <span style={{ fontFamily: "var(--font-mono)" }}>{o.reference}</span> · {o.customer_name} · <span style={{ fontFamily: "var(--font-mono)" }}>{fmt.format(o.amount_ttc)}</span>
+                    </div>
                   </div>
+                  {(canCreate || canInvoice) && (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "space-between" }}>
+                      {/* Remise commerciale : déroulé 0 à 100 %, calcul immédiat du
+                          net à payer (comme sur une facture proforma classique). */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+                        <label style={{ color: "var(--muted)" }}>Remise</label>
+                        <select value={d} onChange={(e) => setRemises((m) => ({ ...m, [o.id]: Number(e.target.value) }))} style={{ ...inp, width: 78, padding: "6px 8px" }}>
+                          {Array.from({ length: 101 }, (_, i) => i).map((p) => <option key={p} value={p}>{p} %</option>)}
+                        </select>
+                        {d > 0 && (
+                          <span style={{ color: "var(--muted)" }}>
+                            −<span style={{ fontFamily: "var(--font-mono)", color: "var(--alert)" }}>{fmt.format(o.amount_ttc - nap)}</span> · Net à payer <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--ink)" }}>{fmt.format(nap)}</span>
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        <button onClick={() => proforma(o)} style={btnGhost} title="Imprimer une facture proforma (document préparatoire, non fiscal)">Proforma (PDF)</button>
+                        <button onClick={() => cancelOrder(o)} style={btnDanger} title="Annuler la commande (client désisté)">Annuler la commande</button>
+                        {canInvoice && <button onClick={() => establish(o)} style={btnPrimary}>Établir la facture</button>}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {(canCreate || canInvoice) && (
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    {/* Proforma : document préparatoire non fiscal — disponible à
-                        l'initiateur (DG / commercial) comme à la Finance. */}
-                    <button onClick={() => proforma(o)} style={btnGhost} title="Imprimer une facture proforma (document préparatoire, non fiscal)">Proforma (PDF)</button>
-                    {/* Annuler la commande (client désisté) : commercial, DG, comptable. */}
-                    <button onClick={() => cancelOrder(o)} style={btnDanger} title="Annuler la commande (client désisté)">Annuler la commande</button>
-                    {/* Établir la facture officielle : réservé à la Finance. */}
-                    {canInvoice && <button onClick={() => establish(o)} style={btnPrimary}>Établir la facture</button>}
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>

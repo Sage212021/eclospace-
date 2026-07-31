@@ -248,4 +248,21 @@ describe("droits d'auteur du livre scolaire (12 % par défaut, modulable, segmen
     // L'avoir contre-passe exactement les 12 000 de cette facture.
     expect(Math.round((earnedBefore - earnedAfter) * 100) / 100).toBe(12000);
   });
+
+  // Placé en dernier : cette vente supplémentaire ne perturbe pas les cumuls
+  // vérifiés par les tests précédents.
+  it("une remise sur la facture ne réduit pas les droits d'auteur (assiette = prix plein)", async () => {
+    const create = await createDetailedOrder([{ isbn_id: isbnAId, description: "Mathématiques 6e", quantity: 10, unit_price_ht: 3000 }]);
+    const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${create.json().id}/invoice`, headers: { cookie: admin }, payload: { discount_pct: 50 } });
+    expect(inv.statusCode).toBe(201);
+    invoiceIds.push(inv.json().id);
+
+    // Droits calculés sur le prix PLEIN : 10 × 3 000 × 12 % = 3 600, malgré la remise de 50 %.
+    const entry = await prisma.schoolRoyaltyEntry.findFirstOrThrow({ where: { invoiceId: inv.json().id, manuscriptId: manuscriptAId } });
+    expect(Number(entry.baseAmount)).toBe(30000);
+    expect(Number(entry.amount)).toBe(3600);
+    // La facture, elle, est nette : 30 000 × (1 − 50 %) = 15 000.
+    const invoice = await prisma.invoice.findUnique({ where: { id: inv.json().id } });
+    expect(Number(invoice!.totalTtc)).toBe(15000);
+  });
 });

@@ -337,11 +337,28 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
       <thead><tr><th>${tr("Description", "Description")}</th><th class="r">${tr("Qté", "Qty")}</th><th class="r">${tr("P.U. HT", "Unit price (excl. tax)")}</th><th class="r">${tr("TVA", "VAT")}</th><th class="r">${tr("Total HT", "Total (excl. tax)")}</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="5">${tr("Aucune ligne.", "No lines.")}</td></tr>`}</tbody>
     </table>
-    <div class="totals">
+    ${(() => {
+      const d = Number(invoice.discountPct ?? 0);
+      if (!(d > 0)) {
+        // Sans remise : présentation classique HT / TVA / TTC.
+        return `<div class="totals">
       <div><span>${tr("Total HT", "Total (excl. tax)")}</span><span class="num">${money(invoice.totalHt, cur)}</span></div>
       <div><span>${tr("TVA", "VAT")}</span><span class="num">${money(invoice.totalTax, cur)}</span></div>
       <div class="ttc"><span>${tr("Total TTC", "Total (incl. tax)")}</span><span class="num">${money(invoice.totalTtc, cur)}</span></div>
-    </div>
+    </div>`;
+      }
+      // Avec remise : Total (brut, somme des lignes) → Remise d % → Net à payer.
+      const grossHt = invoice.lines.reduce((s, l) => s + Number(l.lineTotal), 0);
+      const grossTax = invoice.lines.reduce((s, l) => s + Number(l.lineTotal) * (Number(l.taxRate) / 100), 0);
+      const grossTtc = grossHt + grossTax;
+      const remise = Math.round((grossTtc - Number(invoice.totalTtc)) * 100) / 100;
+      const dLabel = d.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+      return `<div class="totals">
+      <div><span>${tr("Total", "Total")}</span><span class="num">${money(grossTtc, cur)}</span></div>
+      <div><span>${tr("Remise", "Discount")} ${dLabel} %</span><span class="num">− ${money(remise, cur)}</span></div>
+      <div class="ttc"><span>${tr("Net à payer", "Net payable")}</span><span class="num">${money(invoice.totalTtc, cur)}</span></div>
+    </div>`;
+    })()}
     <div style="clear:both"></div>
     ${
       !isCredit && !isProforma && invoice.status === "issued"

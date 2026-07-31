@@ -7,9 +7,11 @@ import {
   getManuscriptTimeline,
   listReadingCandidates,
   revertManuscriptStep,
+  setManuscriptSegment,
   setPublicationDate,
   submitEditorialDecision,
   validateStep,
+  type EditorialSegment,
   type Manuscript,
   type ReadingCandidate,
   type TimelineStep,
@@ -111,6 +113,32 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         onSaved={(msg) => handle(async () => {}, msg)}
         onError={setError}
       />
+
+      {/* Segment éditorial : classe l'ouvrage pour la ventilation du chiffre
+          d'affaires (livre scolaire & parascolaire vs général & littérature). */}
+      {permissions.has("manuscripts:consultation") && (
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13 }}>
+            <span style={{ fontWeight: 600 }}>Segment éditorial</span>
+            <span style={{ color: "var(--muted)" }}> — pour la ventilation du chiffre d'affaires</span>
+          </div>
+          {permissions.has("manuscripts:saisie") ? (
+            <select
+              value={manuscript.editorialSegment ?? ""}
+              onChange={(e) => handle(() => setManuscriptSegment(manuscript.id, e.target.value as EditorialSegment), "Segment éditorial enregistré.")}
+              style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--line)", fontSize: 13 }}
+            >
+              <option value="" disabled>— à classer —</option>
+              <option value="scolaire">Livre scolaire &amp; parascolaire</option>
+              <option value="general">Livre général &amp; littérature</option>
+            </select>
+          ) : (
+            <span style={{ fontSize: 13, color: manuscript.editorialSegment ? "var(--ink)" : "var(--amber)" }}>
+              {manuscript.editorialSegment === "scolaire" ? "Livre scolaire & parascolaire" : manuscript.editorialSegment === "general" ? "Livre général & littérature" : "à classer"}
+            </span>
+          )}
+        </div>
+      )}
 
       <Spine steps={timeline} currentStatusCode={manuscript.status.code} />
 

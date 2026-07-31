@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { ManuscriptOrigin, type Prisma } from "@prisma/client";
+import { ManuscriptOrigin, EditorialSegment, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -23,6 +23,7 @@ const createManuscriptSchema = z.object({
   summary: z.string().optional(),
   keywords: z.array(z.string()).default([]),
   origin: z.nativeEnum(ManuscriptOrigin).default("soumission"),
+  editorial_segment: z.nativeEnum(EditorialSegment).optional(),
   owner_id: z.string().uuid(),
   author: authorSchema,
 });
@@ -36,6 +37,7 @@ const patchManuscriptSchema = z.object({
   estimated_pages: z.number().int().positive().optional(),
   summary: z.string().optional(),
   keywords: z.array(z.string()).optional(),
+  editorial_segment: z.nativeEnum(EditorialSegment).optional(),
   owner_id: z.string().uuid().optional(),
   project_manager_id: z.string().uuid().optional(),
   requires_expertise: z.boolean().optional(),
@@ -59,6 +61,7 @@ const importManuscriptSchema = z.object({
   estimated_pages: z.number().int().positive().optional(),
   summary: z.string().optional(),
   keywords: z.array(z.string()).default([]),
+  editorial_segment: z.nativeEnum(EditorialSegment).optional(),
   owner_id: z.string().uuid(),
   author: authorSchema,
   publication_date: z.coerce.date(),
@@ -143,6 +146,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           collectionId: body.collection_id,
           genreId: body.genre_id,
           language: body.language,
+          editorialSegment: body.editorial_segment,
           estimatedPages: body.estimated_pages,
           summary: body.summary,
           keywords: body.keywords,
@@ -293,6 +297,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           collectionId: body.collection_id,
           genreId: body.genre_id,
           language: body.language,
+          editorialSegment: body.editorial_segment,
           estimatedPages: body.estimated_pages,
           summary: body.summary,
           keywords: body.keywords,
@@ -415,6 +420,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         collectionId: body.collection_id,
         genreId: body.genre_id,
         language: body.language,
+        editorialSegment: body.editorial_segment,
         estimatedPages: body.estimated_pages,
         summary: body.summary,
         keywords: body.keywords,

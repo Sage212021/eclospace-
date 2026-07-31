@@ -1318,6 +1318,10 @@ model Manuscript {
   genre            Genre?           @relation(fields: [genreId], references: [id])
   language         String
   estimatedPages   Int?             @map("estimated_pages")
+  // Segment éditorial (renseigné par l'éditorial) : sépare le chiffre d'affaires
+  // « livre scolaire & parascolaire » du « livre général / littérature ».
+  // Null = non classé (compté en « général » en attendant le classement).
+  editorialSegment EditorialSegment? @map("editorial_segment")
   summary          String?
   keywords         String[]         @default([])
   origin           ManuscriptOrigin @default(soumission)
@@ -2960,6 +2964,13 @@ model BillingOrder {
 
   @@index([status])
   @@map("billing_orders")
+}
+
+// Segment éditorial d'un ouvrage — base de la ventilation du chiffre d'affaires
+// livre (scolaire & parascolaire vs général & littérature).
+enum EditorialSegment {
+  scolaire
+  general
 }
 
 enum InvoiceStatus {

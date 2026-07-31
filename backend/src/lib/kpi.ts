@@ -94,6 +94,81 @@ export async function commercialIndicators() {
   };
 }
 
+// Ventilation du chiffre d'affaires par famille (décision opérateur du
+// 31/07/2026) : livre scolaire & parascolaire, livre général & littérature,
+// communication & marketing, prestations d'édition (compte d'auteur). Pour
+// chaque famille on distingue le CA FACTURÉ, le CA ENCAISSÉ et les CRÉANCES
+// (vente à crédit restant à encaisser). Montants TTC, pour que
+// facturé = encaissé + créances. Les factures annulées sont exclues et les
+// avoirs viennent en déduction du facturé.
+export type RevenueFamilyKey = "livre_scolaire" | "livre_general" | "communication" | "prestations";
+
+const FAMILY_LABELS: Record<RevenueFamilyKey, string> = {
+  livre_scolaire: "Livre scolaire & parascolaire",
+  livre_general: "Livre général & littérature",
+  communication: "Communication & marketing",
+  prestations: "Prestations d'édition (compte d'auteur)",
+};
+
+type InvoiceForFamily = {
+  sourceType: string;
+  billingOrder: { category: string } | null;
+  lines: { isbn: { manuscript: { editorialSegment: string | null } | null } | null }[];
+};
+
+function classifyInvoiceFamily(inv: InvoiceForFamily): RevenueFamilyKey {
+  if (inv.sourceType === "communication_quote") return "communication";
+  if (inv.sourceType === "editorial_quote" || inv.sourceType === "impression_quote") return "prestations";
+  // Vente de livre : une commande à facturer « livre scolaire » fait foi ;
+  // sinon on lit le segment éditorial des ouvrages facturés ; défaut « général ».
+  if (inv.billingOrder?.category === "livre_scolaire") return "livre_scolaire";
+  if (inv.lines.some((l) => l.isbn?.manuscript?.editorialSegment === "scolaire")) return "livre_scolaire";
+  return "livre_general";
+}
+
+export async function revenueByFamily() {
+  const invoices = await prisma.invoice.findMany({
+    where: { type: "invoice", status: { not: "cancelled" } },
+    include: {
+      paymentAllocations: true,
+      creditNotes: true,
+      billingOrder: true,
+      lines: { include: { isbn: { include: { manuscript: true } } } },
+    },
+  });
+
+  const acc: Record<RevenueFamilyKey, { facture: number; encaisse: number; creances: number }> = {
+    livre_scolaire: { facture: 0, encaisse: 0, creances: 0 },
+    livre_general: { facture: 0, encaisse: 0, creances: 0 },
+    communication: { facture: 0, encaisse: 0, creances: 0 },
+    prestations: { facture: 0, encaisse: 0, creances: 0 },
+  };
+
+  for (const inv of invoices) {
+    const fam = classifyInvoiceFamily(inv);
+    const credited = inv.creditNotes.reduce((s, c) => s + Number(c.totalTtc), 0);
+    const facture = Math.max(Number(inv.totalTtc) - credited, 0);
+    const allocated = inv.paymentAllocations.reduce((s, a) => s + Number(a.amount), 0);
+    const encaisse = Math.min(allocated, facture);
+    acc[fam].facture += facture;
+    acc[fam].encaisse += encaisse;
+    acc[fam].creances += Math.max(facture - encaisse, 0);
+  }
+
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const total = { facture: 0, encaisse: 0, creances: 0 };
+  const families = (Object.keys(acc) as RevenueFamilyKey[]).map((key) => {
+    total.facture += acc[key].facture;
+    total.encaisse += acc[key].encaisse;
+    total.creances += acc[key].creances;
+    return { key, label: FAMILY_LABELS[key], facture: round(acc[key].facture), encaisse: round(acc[key].encaisse), creances: round(acc[key].creances) };
+  });
+  return {
+    families,
+    total: { facture: round(total.facture), encaisse: round(total.encaisse), creances: round(total.creances) },
+  };
+}
+
 // Réservé aux profils habilités (finance:consultation, Ch. 5 §5.2, §18).
 export async function financialIndicators() {
   const [costEntries, purchaseOrders, expensesUnpaid, royaltyDue, invoices] = await Promise.all([

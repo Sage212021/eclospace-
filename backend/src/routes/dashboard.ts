@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../lib/permissions.js";
-import { editorialIndicators, commercialIndicators } from "../lib/kpi.js";
+import { editorialIndicators, commercialIndicators, revenueByFamily } from "../lib/kpi.js";
 
 // Indicateurs de synthèse du tableau de bord (grands KPI de la page d'accueil).
 // Chaque indicateur n'est calculé et renvoyé que si l'utilisateur a la
@@ -59,5 +59,15 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       // de chaque étape (position dans le circuit), et non un simple comptage.
       pipeline_steps_total: editorial ? Math.max(...editorial.by_status.map((s) => s.step_order), 1) : null,
     });
+  });
+
+  // Chiffre d'affaires ventilé par famille (facturé / encaissé / créances +
+  // total). Donnée financière : réservée à la Finance et à la Direction.
+  fastify.get("/api/v1/dashboard/revenue-by-family", { preHandler: requireAuth }, async (request, reply) => {
+    const perms = request.user!.permissions;
+    if (!perms.has("finance:consultation") && !perms.has("direction:consultation")) {
+      return reply.code(403).send({ code: "forbidden", message: "Accès réservé à la Finance et à la Direction." });
+    }
+    return reply.send(await revenueByFamily());
   });
 }

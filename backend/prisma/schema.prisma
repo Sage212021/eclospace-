@@ -3140,6 +3140,11 @@ model InvoiceLine {
   description String
   quantity    Int
   unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
+  // Prix public HT unitaire AVANT remise commerciale (Ch. 9 §9.5) : sert
+  // d'assiette aux droits d'auteur des contrats « prix public HT », pour qu'une
+  // remise consentie au libraire ne réduise pas la rémunération de l'auteur.
+  // Null = pas de remise (assiette = unitPrice).
+  unitPublicPrice Decimal? @map("unit_public_price") @db.Decimal(10, 2)
   taxRate     Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
   lineTotal   Decimal @map("line_total") @db.Decimal(12, 2)
 

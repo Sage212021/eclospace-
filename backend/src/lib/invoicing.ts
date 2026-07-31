@@ -12,7 +12,10 @@ interface InvoiceLineInput {
   format: string | null;
   description: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice: number; // prix net facturé (après remise)
+  // Prix public HT unitaire AVANT remise, quand il diffère du net : assiette des
+  // droits d'auteur « prix public HT ». Absent = pas de remise (= unitPrice).
+  unitPublicPrice?: number;
   taxRate: number;
 }
 
@@ -55,6 +58,7 @@ async function createInvoiceRecord(
           description: l.description,
           quantity: l.quantity,
           unitPrice: l.unitPrice,
+          unitPublicPrice: l.unitPublicPrice ?? undefined,
           taxRate: l.taxRate,
           lineTotal: Math.round(l.quantity * l.unitPrice * 100) / 100,
         })),
@@ -69,7 +73,10 @@ async function createInvoiceRecord(
       manuscriptId: line.manuscriptId,
       format: line.format,
       quantity: line.quantity,
-      unitPublicPrice: line.unitPrice,
+      // Assiette « prix public HT » = prix AVANT remise ; assiette « prix net
+      // éditeur » = prix effectivement facturé. Une remise ne doit pas rogner
+      // les droits d'un contrat au prix public.
+      unitPublicPrice: line.unitPublicPrice ?? line.unitPrice,
       unitNetPrice: line.unitPrice,
       sourceType: params.sourceType,
       sourceId: params.sourceId,
@@ -92,7 +99,8 @@ export async function createInvoiceFromDelivery(tx: Tx, deliveryId: string) {
     const orderLine = delivery.order.lines.find((l) => l.isbnId === deliveryLine.isbnId);
     if (!orderLine) continue;
     const isbn = await tx.isbn.findUnique({ where: { id: deliveryLine.isbnId } });
-    const netUnitPrice = Number(orderLine.unitPrice) * (1 - Number(orderLine.discountPct) / 100);
+    const publicUnitPrice = Number(orderLine.unitPrice);
+    const netUnitPrice = publicUnitPrice * (1 - Number(orderLine.discountPct) / 100);
     lines.push({
       isbnId: deliveryLine.isbnId,
       manuscriptId: isbn?.manuscriptId ?? null,
@@ -100,6 +108,8 @@ export async function createInvoiceFromDelivery(tx: Tx, deliveryId: string) {
       description: `Livraison ${delivery.deliveryNumber}`,
       quantity: deliveryLine.quantity,
       unitPrice: netUnitPrice,
+      // Prix public HT (avant remise) conservé pour l'assiette des droits.
+      unitPublicPrice: publicUnitPrice,
       taxRate: Number(orderLine.taxRate),
     });
   }
@@ -288,6 +298,9 @@ export async function createCreditNoteFromReturn(tx: Tx, customerReturnId: strin
     const originLine = originInvoice?.lines.find((l) => l.isbnId === line.isbnId);
     const isbn = await tx.isbn.findUnique({ where: { id: line.isbnId } });
     const unitPrice = originLine ? Number(originLine.unitPrice) : Number((await tx.priceList.findFirst({ where: { isbnId: line.isbnId }, orderBy: { effectiveFrom: "desc" } }))?.price ?? 0);
+    // Reprend l'assiette « prix public HT » de la facture d'origine pour que le
+    // retour contre-passe exactement l'entrée de droits enregistrée à la vente.
+    const unitPublicPrice = originLine ? Number(originLine.unitPublicPrice ?? originLine.unitPrice) : unitPrice;
     const taxRate = originLine ? Number(originLine.taxRate) : await lookupTaxRatePct(tx);
     lineInputs.push({
       isbnId: line.isbnId,
@@ -296,6 +309,7 @@ export async function createCreditNoteFromReturn(tx: Tx, customerReturnId: strin
       description: `Retour client — ${line.verdict ?? "à contrôler"}`,
       quantity: line.quantity,
       unitPrice,
+      unitPublicPrice,
       taxRate,
     });
   }
@@ -320,6 +334,7 @@ export async function createCreditNoteFromReturn(tx: Tx, customerReturnId: strin
           description: l.description,
           quantity: l.quantity,
           unitPrice: l.unitPrice,
+          unitPublicPrice: l.unitPublicPrice ?? undefined,
           taxRate: l.taxRate,
           lineTotal: Math.round(l.quantity * l.unitPrice * 100) / 100,
         })),
@@ -333,7 +348,7 @@ export async function createCreditNoteFromReturn(tx: Tx, customerReturnId: strin
       manuscriptId: line.manuscriptId,
       format: line.format,
       quantity: -line.quantity,
-      unitPublicPrice: line.unitPrice,
+      unitPublicPrice: line.unitPublicPrice ?? line.unitPrice,
       unitNetPrice: line.unitPrice,
       sourceType: "customer_return",
       sourceId: customerReturn.id,
@@ -375,6 +390,7 @@ export async function createCreditNoteFromInvoice(tx: Tx, invoiceId: string, rea
           description: reason ? `${l.description} — avoir : ${reason.trim()}` : `${l.description} — avoir`,
           quantity: l.quantity,
           unitPrice: l.unitPrice,
+          unitPublicPrice: l.unitPublicPrice ?? undefined,
           taxRate: l.taxRate,
           lineTotal: l.lineTotal,
         })),
@@ -391,7 +407,8 @@ export async function createCreditNoteFromInvoice(tx: Tx, invoiceId: string, rea
       manuscriptId: isbn.manuscriptId,
       format: isbn.format,
       quantity: -l.quantity,
-      unitPublicPrice: Number(l.unitPrice),
+      // Même assiette qu'à la vente : contre-passe exactement l'entrée d'origine.
+      unitPublicPrice: Number(l.unitPublicPrice ?? l.unitPrice),
       unitNetPrice: Number(l.unitPrice),
       sourceType: "invoice_cancellation",
       sourceId: origin.id,

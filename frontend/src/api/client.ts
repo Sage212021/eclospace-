@@ -1115,6 +1115,19 @@ export function listIsbns(manuscriptId: string) {
   return request<Isbn[]>(`/api/v1/manuscripts/${manuscriptId}/isbn`);
 }
 
+// Catalogue global des ISBN (avec le titre de l'ouvrage) — sélecteur des lignes
+// « livre scolaire » à facturer.
+export interface IsbnCatalogueItem {
+  id: string;
+  isbn13: string;
+  format: IsbnFormat;
+  status: string;
+  manuscript: { title: string } | null;
+}
+export function listIsbnCatalogue(format?: IsbnFormat) {
+  return request<IsbnCatalogueItem[]>(`/api/v1/isbns${format ? `?format=${format}` : ""}`);
+}
+
 export function assignIsbn(manuscriptId: string, format: IsbnFormat, poolId?: string) {
   return request<Isbn>(`/api/v1/manuscripts/${manuscriptId}/isbn`, {
     method: "POST",
@@ -1755,6 +1768,38 @@ export function getRoyaltyWithholdingEnabled() {
 }
 export function setRoyaltyWithholdingEnabled(enabled: boolean) {
   return request<{ enabled: boolean }>(`/api/v1/royalties/withholding-enabled`, { method: "PUT", body: JSON.stringify({ enabled }) });
+}
+
+// Droits d'auteur du LIVRE SCOLAIRE : taux maison (12 % par défaut, modulable)
+// et relevé segmenté par ouvrage (auteur, co-auteurs, ISBN, prix unitaire).
+export function getSchoolRoyaltyRate() {
+  return request<{ rate: number }>(`/api/v1/royalties/school-rate`);
+}
+export function setSchoolRoyaltyRate(rate: number) {
+  return request<{ rate: number }>(`/api/v1/royalties/school-rate`, { method: "PUT", body: JSON.stringify({ rate }) });
+}
+export interface SchoolRoyaltyBook {
+  manuscript_id: string | null;
+  isbn_code: string | null;
+  book_title: string;
+  author_name: string | null;
+  co_authors: string[];
+  unit_price_ht: number;
+  units: number;
+  base: number;
+  earned: number;
+  rate: number | null;
+}
+export interface SchoolRoyaltyReport {
+  total: { units: number; base: number; earned: number };
+  by_book: SchoolRoyaltyBook[];
+}
+export function getSchoolRoyalties(params: { year?: number; manuscript_id?: string } = {}) {
+  const q = new URLSearchParams();
+  if (params.year) q.set("year", String(params.year));
+  if (params.manuscript_id) q.set("manuscript_id", params.manuscript_id);
+  const query = q.toString() ? `?${q}` : "";
+  return request<SchoolRoyaltyReport>(`/api/v1/royalties/school${query}`);
 }
 
 // Génération de fin d'année des états de droits d'auteur : état d'avancement
@@ -3497,7 +3542,24 @@ export interface BillingOrder {
   status: "pending" | "invoiced" | "cancelled";
   created_at: string;
 }
-export function createBillingOrder(input: { customer_id: string; category: BillingOrderCategory; label: string; amount_ht: number; tax_rate?: number; note?: string }) {
+// Ligne d'ouvrage d'une commande « livre scolaire » : support du calcul des
+// droits d'auteur (ISBN, quantité, prix unitaire HT, taux éventuel).
+export interface BillingOrderLineInput {
+  isbn_id?: string;
+  description: string;
+  quantity: number;
+  unit_price_ht: number;
+  royalty_rate?: number; // fraction (ex. 0,12) ; sinon taux maison
+}
+export function createBillingOrder(input: {
+  customer_id: string;
+  category: BillingOrderCategory;
+  label: string;
+  amount_ht?: number;
+  tax_rate?: number;
+  note?: string;
+  lines?: BillingOrderLineInput[];
+}) {
   return request<BillingOrder>("/api/v1/billing-orders", { method: "POST", body: JSON.stringify(input) });
 }
 export function getBillingOrders(status: "pending" | "invoiced" | "cancelled" = "pending") {

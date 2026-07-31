@@ -9,6 +9,7 @@ import {
   type RoyaltyYearEndStatus,
 } from "../api/client";
 import { Card } from "../components/Card";
+import { SchoolRoyaltiesSection } from "../components/SchoolRoyaltiesSection";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printAuthorRoyaltyStatement } from "../lib/print";
@@ -108,6 +109,7 @@ export function AuthorRoyaltiesPage({ canConfigure = false, canGenerate = false 
   const years = useMemo(() => Array.from({ length: 6 }, (_, i) => thisYear - i), [thisYear]);
 
   return (
+    <div style={{ display: "grid", gap: 18 }}>
     <Card
       title={t("roy.title", "États annuels de droits d'auteur")}
       subtitle={t("roy.subtitle", "Par auteur, tous ses ouvrages sur l'année, avec le taux par livre et le récapitulatif fiscal.")}
@@ -264,6 +266,11 @@ export function AuthorRoyaltiesPage({ canConfigure = false, canGenerate = false 
         </>
       )}
     </Card>
+
+    {/* Droits d'auteur du livre scolaire : taux maison 12 % (modulable) et relevé
+        segmenté par ouvrage — conformité réglementaire. */}
+    <SchoolRoyaltiesSection canConfigure={canConfigure} />
+    </div>
   );
 }
 

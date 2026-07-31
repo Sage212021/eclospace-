@@ -17,8 +17,6 @@ import {
   approveInvoiceCancellation,
   rejectInvoiceCancellation,
   createInvoiceCreditNote,
-  getRevenueByFamily,
-  type RevenueByFamily,
   type PendingCancellationInvoice,
   listRoyaltyStatements,
   listShippingRates,
@@ -61,6 +59,7 @@ import {
 } from "../api/client";
 import { Card } from "../components/Card";
 import { PendingQuotesCard } from "../components/PendingQuotesCard";
+import { RevenueByFamilyCard } from "../components/RevenueByFamilyCard";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { useConfirm } from "../components/ConfirmProvider";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -124,18 +123,6 @@ type FinanceModal =
 // droits d'auteur.
 import { useI18n } from "../i18n";
 
-// Bloc « chiffre d'affaires » mis en avant (total facturé / encaissé / créances).
-function CaTotal({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div style={{ flex: "1 1 160px", minWidth: 160, border: "1px solid var(--line)", borderRadius: 8, padding: "10px 14px", background: "var(--surface-2, transparent)" }}>
-      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "var(--font-mono)", color }}>
-        <Amount value={value} />
-      </div>
-    </div>
-  );
-}
-
 export function FinancePage({ canManage, canAdminister, canInitiateOrder }: FinancePageProps) {
   const { t, lang } = useI18n();
   const confirm = useConfirm();
@@ -159,7 +146,6 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
   const [emailStatement, setEmailStatement] = useState<RoyaltyStatement | null>(null);
   const [scheduleInvoice, setScheduleInvoice] = useState<Invoice | null>(null);
   const [pendingCancels, setPendingCancels] = useState<PendingCancellationInvoice[]>([]);
-  const [caFamilies, setCaFamilies] = useState<RevenueByFamily | null>(null);
 
   const refresh = async () => {
     const [invoiceList, customerList, expenseList, statementList, shippingRateList, bankAccountList, methodList] = await Promise.all([
@@ -172,7 +158,6 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
       listPaymentMethods(),
     ]);
     getPendingCancellationInvoices().then(setPendingCancels).catch(() => {});
-    getRevenueByFamily().then(setCaFamilies).catch(() => {});
     setInvoices(invoiceList);
     setCustomers(customerList);
     setExpenses(expenseList);
@@ -455,51 +440,7 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
-      {caFamilies && (
-        <Card
-          title={t("fin.ca_families", "Chiffre d'affaires par famille")}
-          icon={<IconFinance />}
-          subtitle={t("fin.ca_families_sub", "Facturé, encaissé et créances (vente à crédit) — montants TTC. Facturé = encaissé + créances.")}
-        >
-          {/* Totaux mis en avant */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
-            <CaTotal label={t("fin.ca_total_facture", "CA total facturé")} value={caFamilies.total.facture} color="var(--ink)" />
-            <CaTotal label={t("fin.ca_total_encaisse", "Encaissé")} value={caFamilies.total.encaisse} color="var(--eclosion)" />
-            <CaTotal label={t("fin.ca_total_creances", "Créances (à encaisser)")} value={caFamilies.total.creances} color="var(--amber)" />
-          </div>
-          {/* Détail par famille */}
-          <div style={{ overflowX: "auto" }}>
-            <table className="ecl-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
-              <thead>
-                <tr style={{ textAlign: "left", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
-                  <th style={{ padding: "6px 8px" }}>{t("fin.ca_family", "Famille")}</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>{t("fin.ca_facture", "Facturé")}</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>{t("fin.ca_encaisse", "Encaissé")}</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>{t("fin.ca_creances", "Créances")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {caFamilies.families.map((f) => (
-                  <tr key={f.key} style={{ borderBottom: "1px solid var(--line)" }}>
-                    <td style={{ padding: "8px" }}>{f.label}</td>
-                    <td style={{ padding: "8px", textAlign: "right", fontFamily: "var(--font-mono)" }}><Amount value={f.facture} /></td>
-                    <td style={{ padding: "8px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--eclosion)" }}><Amount value={f.encaisse} /></td>
-                    <td style={{ padding: "8px", textAlign: "right", fontFamily: "var(--font-mono)", color: f.creances > 0 ? "var(--amber)" : "var(--muted)" }}><Amount value={f.creances} /></td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={{ fontWeight: 700, borderTop: "2px solid var(--line)" }}>
-                  <td style={{ padding: "8px" }}>{t("fin.ca_total", "Total")}</td>
-                  <td style={{ padding: "8px", textAlign: "right", fontFamily: "var(--font-mono)" }}><Amount value={caFamilies.total.facture} /></td>
-                  <td style={{ padding: "8px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--eclosion)" }}><Amount value={caFamilies.total.encaisse} /></td>
-                  <td style={{ padding: "8px", textAlign: "right", fontFamily: "var(--font-mono)", color: caFamilies.total.creances > 0 ? "var(--amber)" : "var(--muted)" }}><Amount value={caFamilies.total.creances} /></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </Card>
-      )}
+      <RevenueByFamilyCard />
 
       <PendingQuotesCard />
 

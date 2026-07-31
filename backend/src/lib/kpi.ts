@@ -60,7 +60,9 @@ const PRESTATION_QUOTE_SOURCES = ["editorial_quote", "impression_quote", "commun
 export async function commercialIndicators() {
   const [invoiceLines, stockItems] = await Promise.all([
     prisma.invoiceLine.findMany({
-      where: { invoice: { sourceType: { notIn: PRESTATION_QUOTE_SOURCES } } },
+      // Une facture ANNULÉE (annulation validée par le DG) sort du chiffre
+      // d'affaires ; celle dont l'annulation est seulement DEMANDÉE compte encore.
+      where: { invoice: { sourceType: { notIn: PRESTATION_QUOTE_SOURCES }, status: { not: "cancelled" } } },
       include: { invoice: true, isbn: { include: { manuscript: true } } },
     }),
     prisma.stockItem.findMany({ where: { condition: "vendable" } }),

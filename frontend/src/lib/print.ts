@@ -343,6 +343,13 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
       <div class="ttc"><span>${tr("Total TTC", "Total (incl. tax)")}</span><span class="num">${money(invoice.totalTtc, cur)}</span></div>
     </div>
     <div style="clear:both"></div>
+    ${
+      !isCredit && !isProforma && invoice.status === "issued"
+        ? `<div style="margin-top:14px; border:1px solid #C4661F; background:#f9e9db; color:#8a4712; border-radius:6px; padding:8px 12px; font-size:12px; font-weight:700">
+             ${tr("VENTE À CRÉDIT", "CREDIT SALE")} — ${tr("montant dû, à régler", "amount due")}${due !== "—" ? ` ${tr("avant le", "by")} <span class="num">${escapeHtml(due)}</span>` : ""}.
+           </div>`
+        : ""
+    }
     <!-- Espace de signature réservé à la maison (demande opérateur) : la facture
          est signée par le responsable pour le compte d'Éclosion Édition. -->
     <div style="margin-top:44px; display:flex; justify-content:flex-end">

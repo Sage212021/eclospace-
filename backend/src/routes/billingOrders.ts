@@ -38,6 +38,23 @@ async function financeStaffIds(): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
+// Décideurs habilités à VALIDER une annulation de facture : titulaires de
+// finance:administration (DG / responsable Finance). Même exclusion de
+// l'administrateur général que pour les notifications opérationnelles.
+async function financeAdminIds(): Promise<string[]> {
+  const rows = await prisma.user.findMany({
+    where: {
+      status: "active",
+      deletedAt: null,
+      accountType: "internal",
+      userRoles: { some: { revokedAt: null, role: { rolePermissions: { some: { permission: { module: "finance", action: "administration" } } } } } },
+      NOT: { userRoles: { some: { revokedAt: null, role: { code: "ADMIN_GENERAL" } } } },
+    },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
 function orderView(o: { id: string; orderNumber: string; category: string; label: string; amountHt: unknown; taxRate: unknown; status: string; createdAt: Date }, customerName: string) {
   const ht = Number(o.amountHt);
   const rate = Number(o.taxRate);
@@ -200,5 +217,83 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     await prisma.invoice.update({ where: { id }, data: { status: "issued" } });
     await writeAuditLog({ userId: request.user!.id, action: "validate", entityType: "invoice", entityId: id, oldValues: { status: "pending_validation" }, newValues: { status: "issued" }, ipAddress: request.ip });
     return reply.send({ ok: true, status: "issued" });
+  });
+
+  // --- Annulation d'une facture, soumise à validation du DG (Ch. 18) ---------
+  // Une facture émise est immuable ; son annulation n'est donc pas une
+  // suppression mais un changement d'état CONTRÔLÉ : le comptable la DEMANDE
+  // (avec motif), le DG la VALIDE. Ce n'est qu'une fois validée qu'elle sort du
+  // chiffre d'affaires.
+
+  // Le comptable demande l'annulation d'une facture émise.
+  fastify.post("/api/v1/invoices/:id/request-cancellation", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ reason: z.string().min(1).max(500) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Un motif d'annulation est requis." });
+    const invoice = await prisma.invoice.findUnique({ where: { id }, include: { customer: { select: { name: true } } } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    if (invoice.type !== "invoice") return reply.code(409).send({ code: "not_an_invoice", message: "Seule une facture peut être annulée (un avoir ou une proforma, non)." });
+    if (invoice.status === "cancelled") return reply.code(409).send({ code: "already_cancelled", message: "Cette facture est déjà annulée." });
+    if (invoice.status === "cancellation_requested") return reply.code(409).send({ code: "already_requested", message: "L'annulation de cette facture est déjà en attente de validation du DG." });
+    if (invoice.status !== "issued") return reply.code(409).send({ code: "not_cancellable", message: "Seule une facture émise (non réglée) peut être annulée ; sinon, passez par un avoir." });
+    // Une facture déjà TIRÉE (imprimée) est un document sorti : on ne l'annule
+    // plus dans le système — la correction passe alors par un avoir.
+    if (invoice.printedAt) return reply.code(409).send({ code: "already_printed", message: "Cette facture a déjà été imprimée : elle ne peut plus être annulée. Émettez un avoir pour la corriger." });
+
+    await prisma.invoice.update({
+      where: { id },
+      data: { status: "cancellation_requested", cancellationReason: parsed.data.reason.trim(), cancellationRequestedAt: new Date(), cancellationRequestedBy: request.user!.id },
+    });
+    const deciders = await financeAdminIds();
+    if (deciders.length) {
+      await notifyUsers({ userIds: deciders, type: "autre", priority: "high", title: "Annulation de facture à valider", body: `${invoice.invoiceNumber} — ${invoice.customer.name} · Motif : ${parsed.data.reason.trim()}`, entityType: "invoice", entityId: id }).catch(() => {});
+    }
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "invoice", entityId: id, oldValues: { status: invoice.status }, newValues: { status: "cancellation_requested", reason: parsed.data.reason.trim() }, ipAddress: request.ip });
+    return reply.send({ ok: true, status: "cancellation_requested" });
+  });
+
+  // Factures dont l'annulation est en attente de validation du DG.
+  fastify.get("/api/v1/invoices/pending-cancellation", { preHandler: requirePermission("finance", "consultation") }, async (_request, reply) => {
+    const invoices = await prisma.invoice.findMany({
+      where: { status: "cancellation_requested" },
+      include: { customer: { select: { name: true } } },
+      orderBy: { cancellationRequestedAt: "desc" },
+    });
+    return reply.send(invoices.map((i) => ({ id: i.id, invoice_number: i.invoiceNumber, customer_name: i.customer.name, total_ttc: Number(i.totalTtc), reason: i.cancellationReason, requested_at: i.cancellationRequestedAt })));
+  });
+
+  // Le DG valide l'annulation → la facture passe « annulée » (sort du CA).
+  fastify.post("/api/v1/invoices/:id/cancel-approve", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    if (invoice.status !== "cancellation_requested") return reply.code(409).send({ code: "not_pending", message: "Aucune annulation en attente pour cette facture." });
+    await prisma.invoice.update({ where: { id }, data: { status: "cancelled" } });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "invoice", entityId: id, oldValues: { status: "cancellation_requested" }, newValues: { status: "cancelled" }, ipAddress: request.ip });
+    return reply.send({ ok: true, status: "cancelled" });
+  });
+
+  // Le DG refuse l'annulation → la facture reste émise.
+  fastify.post("/api/v1/invoices/:id/cancel-reject", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    if (invoice.status !== "cancellation_requested") return reply.code(409).send({ code: "not_pending", message: "Aucune annulation en attente pour cette facture." });
+    await prisma.invoice.update({ where: { id }, data: { status: "issued", cancellationReason: null, cancellationRequestedAt: null, cancellationRequestedBy: null } });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "invoice", entityId: id, oldValues: { status: "cancellation_requested" }, newValues: { status: "issued", rejected: true }, ipAddress: request.ip });
+    return reply.send({ ok: true, status: "issued" });
+  });
+
+  // Marque une facture comme « tirée » (imprimée) à sa première impression :
+  // elle ne pourra plus être annulée. Idempotent (ne réécrit pas la date).
+  fastify.post("/api/v1/invoices/:id/mark-printed", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    // Seules les vraies factures portent le verrou ; proforma / avoir : sans effet.
+    if (invoice.type === "invoice" && !invoice.printedAt) {
+      await prisma.invoice.update({ where: { id }, data: { printedAt: new Date() } });
+    }
+    return reply.send({ ok: true, printed_at: (invoice.printedAt ?? new Date()).toISOString() });
   });
 }

@@ -145,6 +145,54 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(cancel.statusCode).toBe(403);
   });
 
+  // --- Annulation d'une facture, validée par le DG ---------------------------
+  async function issueInvoice(amountHt: number): Promise<string> {
+    const order = await createOrder(amountHt);
+    const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin } });
+    invoiceIds.push(inv.json().id);
+    return inv.json().id as string;
+  }
+
+  it("le comptable demande l'annulation, le DG la valide → facture annulée", async () => {
+    const invId = await issueInvoice(150_000);
+    const req = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/request-cancellation`, headers: { cookie: admin }, payload: { reason: "Erreur de saisie" } });
+    expect(req.statusCode).toBe(200);
+    expect(req.json().status).toBe("cancellation_requested");
+
+    const pending = await app.inject({ method: "GET", url: "/api/v1/invoices/pending-cancellation", headers: { cookie: admin } });
+    expect((pending.json() as { id: string }[]).some((i) => i.id === invId)).toBe(true);
+
+    const approve = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/cancel-approve`, headers: { cookie: admin } });
+    expect(approve.statusCode).toBe(200);
+    const inv = await prisma.invoice.findUnique({ where: { id: invId } });
+    expect(inv?.status).toBe("cancelled");
+  });
+
+  it("le DG peut refuser l'annulation → la facture reste émise", async () => {
+    const invId = await issueInvoice(140_000);
+    await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/request-cancellation`, headers: { cookie: admin }, payload: { reason: "Doute" } });
+    const reject = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/cancel-reject`, headers: { cookie: admin } });
+    expect(reject.statusCode).toBe(200);
+    const inv = await prisma.invoice.findUnique({ where: { id: invId } });
+    expect(inv?.status).toBe("issued");
+    expect(inv?.cancellationReason).toBeNull();
+  });
+
+  it("une facture déjà TIRÉE (imprimée) ne peut plus être annulée (409)", async () => {
+    const invId = await issueInvoice(130_000);
+    const mark = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/mark-printed`, headers: { cookie: admin } });
+    expect(mark.statusCode).toBe(200);
+    const req = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/request-cancellation`, headers: { cookie: admin }, payload: { reason: "Trop tard" } });
+    expect(req.statusCode).toBe(409);
+    expect(req.json().code).toBe("already_printed");
+  });
+
+  it("l'annulation exige un motif (400 si absent)", async () => {
+    const invId = await issueInvoice(120_000);
+    const req = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/request-cancellation`, headers: { cookie: admin }, payload: {} });
+    expect(req.statusCode).toBe(400);
+  });
+
   it("le commercial initie une commande et la voit, mais ne peut pas la facturer", async () => {
     const com = `com_${rnd()}`;
     await createUserWithRole(com, "RESP_COMMERCIAL", PWD);

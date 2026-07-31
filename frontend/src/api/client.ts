@@ -1487,6 +1487,11 @@ export interface Invoice {
   dueDate: string | null;
   createdAt: string;
   customer: { name: string };
+  // Date de première impression : une fois « tirée », la facture n'est plus annulable.
+  printedAt?: string | null;
+}
+export function markInvoicePrinted(id: string) {
+  return request<{ ok: true; printed_at: string | null }>(`/api/v1/invoices/${id}/mark-printed`, { method: "POST" });
 }
 
 export function listInvoices(filters?: { customer_id?: string; type?: string }) {
@@ -3490,6 +3495,27 @@ export function getPendingValidationInvoices() {
 }
 export function validateInvoice(id: string) {
   return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/validate`, { method: "POST" });
+}
+// Annulation d'une facture soumise à validation du DG.
+export function requestInvoiceCancellation(id: string, reason: string) {
+  return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/request-cancellation`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+export interface PendingCancellationInvoice {
+  id: string;
+  invoice_number: string;
+  customer_name: string;
+  total_ttc: number;
+  reason: string | null;
+  requested_at: string | null;
+}
+export function getPendingCancellationInvoices() {
+  return request<PendingCancellationInvoice[]>("/api/v1/invoices/pending-cancellation");
+}
+export function approveInvoiceCancellation(id: string) {
+  return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/cancel-approve`, { method: "POST" });
+}
+export function rejectInvoiceCancellation(id: string) {
+  return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/cancel-reject`, { method: "POST" });
 }
 export function getValidationThreshold() {
   return request<{ threshold: number }>("/api/v1/finance/validation-threshold");

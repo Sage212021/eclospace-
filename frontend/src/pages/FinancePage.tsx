@@ -11,6 +11,12 @@ import {
   listCustomers,
   listExpenses,
   listInvoices,
+  markInvoicePrinted,
+  requestInvoiceCancellation,
+  getPendingCancellationInvoices,
+  approveInvoiceCancellation,
+  rejectInvoiceCancellation,
+  type PendingCancellationInvoice,
   listRoyaltyStatements,
   listShippingRates,
   nextDunning,
@@ -84,6 +90,7 @@ const STATUS_LABELS: Record<string, string> = {
   issued: "Émise",
   paid: "Réglée",
   cancelled: "Annulée",
+  cancellation_requested: "Annulation en attente",
   credit_note: "Avoir",
   a_valider: "À valider",
   validee: "Validée",
@@ -136,6 +143,7 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
   const [emailInvoice, setEmailInvoice] = useState<Invoice | null>(null);
   const [emailStatement, setEmailStatement] = useState<RoyaltyStatement | null>(null);
   const [scheduleInvoice, setScheduleInvoice] = useState<Invoice | null>(null);
+  const [pendingCancels, setPendingCancels] = useState<PendingCancellationInvoice[]>([]);
 
   const refresh = async () => {
     const [invoiceList, customerList, expenseList, statementList, shippingRateList, bankAccountList, methodList] = await Promise.all([
@@ -147,6 +155,7 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
       listBankAccounts(),
       listPaymentMethods(),
     ]);
+    getPendingCancellationInvoices().then(setPendingCancels).catch(() => {});
     setInvoices(invoiceList);
     setCustomers(customerList);
     setExpenses(expenseList);
@@ -179,8 +188,54 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
   async function handlePrintInvoice(invoiceId: string, opts?: PrintOpts) {
     try {
       printInvoice(await getInvoice(invoiceId), opts);
+      // Une facture imprimée est « tirée » : on la verrouille (plus annulable).
+      // Au meilleur effort et sans bloquer l'impression ; on rafraîchit pour
+      // masquer le bouton d'annulation devenu caduc.
+      markInvoicePrinted(invoiceId)
+        .then(() => refresh())
+        .catch(() => {});
     } catch (err) {
       fail(err, "Échec de l'ouverture de la facture.");
+    }
+  }
+
+  // Annulation d'une facture : le comptable la DEMANDE (motif obligatoire), le
+  // DG la VALIDE. Tant que non validée, la facture reste dans le chiffre d'affaires.
+  async function handleRequestCancel(invoice: Invoice) {
+    const reason = window.prompt(`Demander l'annulation de la facture ${invoice.invoiceNumber} ?\n\nMotif (obligatoire — ex. erreur de saisie, essai, client désisté) :`, "");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("Un motif d'annulation est requis.");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    try {
+      await requestInvoiceCancellation(invoice.id, reason.trim());
+      setMessage(`Annulation de ${invoice.invoiceNumber} demandée — en attente de validation du DG.`);
+      await refresh();
+    } catch (err) {
+      fail(err, "Demande d'annulation impossible.");
+    }
+  }
+  async function handleApproveCancel(inv: PendingCancellationInvoice) {
+    setError(null);
+    try {
+      await approveInvoiceCancellation(inv.id);
+      setMessage(`Facture ${inv.invoice_number} annulée — retirée du chiffre d'affaires.`);
+      await refresh();
+    } catch (err) {
+      fail(err, "Validation de l'annulation impossible.");
+    }
+  }
+  async function handleRejectCancel(inv: PendingCancellationInvoice) {
+    setError(null);
+    try {
+      await rejectInvoiceCancellation(inv.id);
+      setMessage(`Annulation de ${inv.invoice_number} refusée — la facture reste émise.`);
+      await refresh();
+    } catch (err) {
+      fail(err, "Refus impossible.");
     }
   }
 
@@ -384,6 +439,9 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
                       <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, tenders: [{ method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: String(invoice.totalTtc) }] })}>
                         {t("fin.collect", "Encaisser")}
                       </Button>
+                      {/* Demande d'annulation (soumise au DG) : erreur de saisie, essai,
+                          désistement. Impossible une fois la facture imprimée (« tirée »). */}
+                      {!invoice.printedAt && <Button variant="danger" size="sm" onClick={() => handleRequestCancel(invoice)}>{t("fin.request_cancel", "Annuler la facture")}</Button>}
                     </>
                   )}
                 </div>
@@ -392,6 +450,32 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
           </div>
         )}
       </Card>
+
+      {/* Annulations de factures en attente de validation du DG. */}
+      {canAdminister && pendingCancels.length > 0 && (
+        <Card
+          title={t("fin.pending_cancel", "Annulations de factures à valider")}
+          icon={<IconFinance />}
+          subtitle={t("fin.pending_cancel_sub", "Le comptable a demandé l'annulation ; votre validation (DG) la retire du chiffre d'affaires.")}
+        >
+          <div className="ecl-list">
+            {pendingCancels.map((inv) => (
+              <div key={inv.id} className="ecl-row">
+                <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{inv.invoice_number}</span>
+                  <span className="ecl-row__desc" style={{ margin: 0 }}>{inv.customer_name}</span>
+                  <Amount value={inv.total_ttc} />
+                  {inv.reason && <span style={{ fontSize: 12.5, color: "var(--amber)" }}>{t("fin.reason", "Motif :")} {inv.reason}</span>}
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <Button variant="danger" size="sm" onClick={() => handleApproveCancel(inv)}>{t("fin.approve_cancel", "Valider l'annulation")}</Button>
+                  <Button variant="view" size="sm" onClick={() => handleRejectCancel(inv)}>{t("fin.reject_cancel", "Refuser")}</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Ch. 18 §18.10-18.11 — Export comptable pour le cabinet externe (D-006) */}
       <AccountingExportSection canAdminister={canAdminister} />

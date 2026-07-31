@@ -72,6 +72,22 @@ export function getDashboardStats() {
   return request<DashboardStats>("/api/v1/dashboard/stats");
 }
 
+// Chiffre d'affaires ventilé par famille (facturé / encaissé / créances).
+export interface RevenueFamily {
+  key: "livre_scolaire" | "livre_general" | "communication" | "prestations";
+  label: string;
+  facture: number;
+  encaisse: number;
+  creances: number;
+}
+export interface RevenueByFamily {
+  families: RevenueFamily[];
+  total: { facture: number; encaisse: number; creances: number };
+}
+export function getRevenueByFamily() {
+  return request<RevenueByFamily>("/api/v1/dashboard/revenue-by-family");
+}
+
 // Recherche rapide de la barre supérieure : un aperçu léger et cliquable par
 // ouvrage (titre, auteur, ISBN). Filtrée côté serveur selon les droits.
 export interface QuickSearchResult {
@@ -198,6 +214,15 @@ export interface Manuscript {
   fundingMode?: "publisher" | "author";
   quoteDecision?: "pending" | "requested" | "deferred" | "skipped";
   quoteDecisionNote?: string | null;
+  // Segment éditorial (base de la ventilation du CA livre). Null = non classé.
+  editorialSegment?: EditorialSegment | null;
+}
+
+export type EditorialSegment = "scolaire" | "general";
+// Classe un ouvrage dans un segment éditorial (scolaire & parascolaire, ou
+// général & littérature) — renseigné par l'éditorial.
+export function setManuscriptSegment(id: string, segment: EditorialSegment) {
+  return request<Manuscript>(`/api/v1/manuscripts/${id}`, { method: "PATCH", body: JSON.stringify({ editorial_segment: segment }) });
 }
 
 export type FundingMode = "publisher" | "author";

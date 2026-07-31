@@ -209,6 +209,33 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(again.json().code).toBe("already_credited");
   });
 
+  it("ventile le CA par famille : une facture non réglée alimente facturé et créances (livre scolaire)", async () => {
+    type Fam = { key: string; facture: number; encaisse: number; creances: number };
+    type Resp = { families: Fam[]; total: { facture: number; encaisse: number; creances: number } };
+    const get = async (): Promise<Resp> => (await app.inject({ method: "GET", url: "/api/v1/dashboard/revenue-by-family", headers: { cookie: admin } })).json() as Resp;
+    const before = await get();
+    const bScol = before.families.find((f) => f.key === "livre_scolaire")!;
+    await issueInvoice(200_000); // commande livre_scolaire, taxe 0 → TTC 200 000, non réglée
+    const after = await get();
+    const aScol = after.families.find((f) => f.key === "livre_scolaire")!;
+    expect(aScol.facture - bScol.facture).toBeCloseTo(200_000, 2);
+    expect(aScol.creances - bScol.creances).toBeCloseTo(200_000, 2);
+    expect(aScol.encaisse).toBeCloseTo(bScol.encaisse, 2); // rien d'encaissé
+    expect(after.total.facture - before.total.facture).toBeCloseTo(200_000, 2);
+  });
+
+  it("un avoir retire la facture du CA (facturé net revient à zéro)", async () => {
+    type Fam = { key: string; facture: number };
+    const get = async () => ((await app.inject({ method: "GET", url: "/api/v1/dashboard/revenue-by-family", headers: { cookie: admin } })).json() as { families: Fam[] }).families.find((f) => f.key === "livre_scolaire")!.facture;
+    const invId = await issueInvoice(180_000);
+    const mid = await get();
+    const cn = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/credit-note`, headers: { cookie: admin }, payload: { reason: "Correction" } });
+    invoiceIds.push(cn.json().id);
+    const after = await get();
+    // L'avoir (même montant) annule la facture : le facturé net redescend.
+    expect(mid - after).toBeCloseTo(180_000, 2);
+  });
+
   it("le commercial initie une commande et la voit, mais ne peut pas la facturer", async () => {
     const com = `com_${rnd()}`;
     await createUserWithRole(com, "RESP_COMMERCIAL", PWD);

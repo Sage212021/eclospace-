@@ -1268,3 +1268,15 @@ Trois évolutions demandées par l'opérateur.
 3. **Hall — voyant vert par pôle** : le pôle s'allume en vert dès qu'un de ses membres est connecté. Correctif : le pôle d'appartenance est désormais déduit du **département de la fiche employé OU, à défaut, des rôles** de l'utilisateur (beaucoup de comptes n'ayant pas de fiche RH tombaient tous en « Administration »). Vérifié en navigateur (deux comptes : un correcteur → Éditorial, l'admin → Administration ; les deux pôles s'allument).
 
 Tests : accusé de lecture (le message passe à « lu » après consultation). Suite complète au vert sur base neuve.
+
+### 31/07/2026 — Correction de facture (annulation validée DG + avoir) et chiffre d'affaires par famille
+
+Trois demandes de l'opérateur, livrées en deux incréments.
+
+1. **Annuler une facture (validée par le DG)** : une facture émise étant immuable, son annulation est un changement d'état **contrôlé en deux temps** — le **comptable la demande** (motif obligatoire → statut `cancellation_requested`), le **DG la valide** (`cancelled`) ou la refuse. Ce n'est **qu'à la validation** que la facture **sort du chiffre d'affaires** (kpi exclut `cancelled`). Garde-fou : une facture **déjà tirée (imprimée)** ne peut plus être annulée (`printed_at` posé à la première impression → 409). Mention **« Vente à crédit — montant dû »** sur le document tant que la facture n'est pas réglée. Écrans : bouton « Annuler la facture » (comptable), carte « Annulations à valider » (DG).
+
+2. **Avoir (note de crédit)** : voie légale de correction quand la facture ne peut plus être annulée (tirée/réglée). `createCreditNoteFromInvoice` crée un avoir de mêmes montants rattaché à la facture (`parentInvoiceId`), contre-passe les droits d'auteur, respecte la période comptable ; un seul avoir par facture. Bouton « Avoir » sur les factures émises/réglées ; l'avoir s'imprime aussitôt et ramène le CA de la facture à zéro.
+
+3. **Chiffre d'affaires par famille** : nouveau bloc sur la page Finance affichant, pour chaque **famille** (livre scolaire & parascolaire, livre général & littérature, communication & marketing, prestations d'édition/compte d'auteur), le **CA facturé**, le **CA encaissé** et les **créances** (vente à crédit), plus les **totaux** (facturé = encaissé + créances, TTC). Base de ventilation livre : nouveau **segment éditorial** (`EditorialSegment` scolaire/général) posé par l'éditorial sur la fiche ouvrage ; les prestations et la communication se déduisent du type de devis, le scolaire d'une commande à facturer ou du segment. Endpoint `GET /dashboard/revenue-by-family` (finance ou direction).
+
+Réalisation : migrations `invoice_cancellation` (statut + colonnes `cancellation_*`), `invoice_printed` (`printed_at`), `editorial_segment` (enum + colonne) ; `lib/kpi.revenueByFamily`, `lib/invoicing.createCreditNoteFromInvoice` ; endpoints dans `billingOrders.ts` et `dashboard.ts`. Tests : 17 `billing-orders` (demande/validation/refus, verrou impression, motif requis, avoir + doublon refusé, ventilation facturé/créances, avoir hors CA) ; manuscrits/finance/dashboard au vert (36). `tsc` back+front + build OK.

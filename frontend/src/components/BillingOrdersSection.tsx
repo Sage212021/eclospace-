@@ -8,6 +8,7 @@ import {
   getInvoice,
   getPendingValidationInvoices,
   validateInvoice,
+  rejectInvoiceValidation,
   getValidationThreshold,
   setValidationThreshold,
   listIsbnCatalogue,
@@ -224,6 +225,26 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
     }
   }
 
+  // Refus (DG) d'une facture au-dessus du seuil : motif obligatoire. La facture
+  // est annulée (hors CA) et la commande d'origine repasse « à facturer ».
+  async function reject(inv: PendingValidationInvoice) {
+    const reason = window.prompt(`Refuser la facture ${inv.invoice_number} (${inv.customer_name} · ${fmt.format(inv.total_ttc)}) ?\n\nMotif du refus (obligatoire) :`, "");
+    if (reason === null) return; // abandon
+    if (!reason.trim()) {
+      setError("Un motif de refus est requis.");
+      return;
+    }
+    setError(null);
+    setMsg(null);
+    try {
+      await rejectInvoiceValidation(inv.id, reason.trim());
+      setMsg(`Facture ${inv.invoice_number} refusée — la commande repasse « à facturer ».`);
+      reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Refus impossible.");
+    }
+  }
+
   async function editThreshold() {
     const cur = threshold ?? 0;
     const input = window.prompt("Seuil de validation du DG (XAF). Au-dessus de ce montant, une facture doit être validée par le DG. Mettre 0 pour désactiver.", String(cur));
@@ -344,7 +365,7 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
       </Card>
 
       {canAdmin && (
-        <Card title="Factures en attente de validation" icon={<IconFinance />} subtitle={`Factures au-dessus du seuil (${threshold != null ? fmt.format(threshold) : "…"}) — à valider par le DG.`}>
+        <Card title="Factures à valider (au-dessus du seuil)" icon={<IconFinance />} subtitle={`Décision du DG : valider (émettre la facture) ou refuser. Seuil actuel : ${threshold != null ? fmt.format(threshold) : "…"}.`}>
           <button onClick={editThreshold} style={{ ...btnGhost, marginBottom: 10 }}>Modifier le seuil</button>
           {pending.length === 0 ? (
             <p style={{ fontSize: 13.5, color: "var(--muted)", margin: 0 }}>Aucune facture en attente de validation.</p>
@@ -352,11 +373,14 @@ export function BillingOrdersSection({ canCreate, canInvoice, canAdmin }: { canC
             <div style={{ display: "grid", gap: 8 }}>
               {pending.map((i) => (
                 <div key={i.id} style={row}>
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 600, color: "var(--ink)", fontSize: 14, fontFamily: "var(--font-mono)" }}>{i.invoice_number}</div>
                     <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>{i.customer_name} · <span style={{ fontFamily: "var(--font-mono)" }}>{fmt.format(i.total_ttc)}</span></div>
                   </div>
-                  <button onClick={() => approve(i)} style={btnPrimary}>Valider</button>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => reject(i)} style={btnDanger} title="Refuser : la facture est annulée et la commande repasse « à facturer »">Refuser</button>
+                    <button onClick={() => approve(i)} style={btnPrimary}>Valider</button>
+                  </div>
                 </div>
               ))}
             </div>

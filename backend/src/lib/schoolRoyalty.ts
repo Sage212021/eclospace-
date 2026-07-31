@@ -18,8 +18,8 @@ export async function resolveBookInfo(
   tx: Tx,
   isbnId: string | null,
   fallbackTitle: string,
-): Promise<{ manuscriptId: string | null; isbnCode: string | null; bookTitle: string; authorName: string | null; coAuthors: string[] }> {
-  if (!isbnId) return { manuscriptId: null, isbnCode: null, bookTitle: fallbackTitle, authorName: null, coAuthors: [] };
+): Promise<{ manuscriptId: string | null; format: string | null; isbnCode: string | null; bookTitle: string; authorName: string | null; coAuthors: string[] }> {
+  if (!isbnId) return { manuscriptId: null, format: null, isbnCode: null, bookTitle: fallbackTitle, authorName: null, coAuthors: [] };
   const isbn = await tx.isbn.findUnique({
     where: { id: isbnId },
     include: {
@@ -30,7 +30,7 @@ export async function resolveBookInfo(
       },
     },
   });
-  if (!isbn) return { manuscriptId: null, isbnCode: null, bookTitle: fallbackTitle, authorName: null, coAuthors: [] };
+  if (!isbn) return { manuscriptId: null, format: null, isbnCode: null, bookTitle: fallbackTitle, authorName: null, coAuthors: [] };
   const ms = isbn.manuscript;
   const contributors = ms?.workContributors ?? [];
   const fullName = (p: { firstName: string | null; lastName: string }) => `${p.firstName ? p.firstName + " " : ""}${p.lastName}`.trim();
@@ -38,6 +38,7 @@ export async function resolveBookInfo(
   const others = contributors.filter((c) => c !== principal);
   return {
     manuscriptId: ms?.id ?? null,
+    format: isbn.format,
     isbnCode: isbn.isbn13,
     bookTitle: ms?.title ?? fallbackTitle,
     authorName: principal ? fullName(principal.partner) : null,
@@ -46,6 +47,37 @@ export async function resolveBookInfo(
       return label ? `${fullName(c.partner)} (${label})` : fullName(c.partner);
     }),
   };
+}
+
+interface RoyaltyTier {
+  up_to: number | null;
+  rate: number;
+}
+function rateForCumulativeQuantity(tiers: RoyaltyTier[], cumulativeQuantity: number): number {
+  for (const tier of tiers) {
+    if (tier.up_to === null || cumulativeQuantity <= tier.up_to) return tier.rate;
+  }
+  return tiers.length > 0 ? tiers[tiers.length - 1].rate : 0;
+}
+
+// Décision opérateur (31/07/2026) : pour un livre scolaire disposant d'un
+// contrat d'édition actif, le CONTRAT PRIME sur le taux maison. On emprunte le
+// taux du contrat (paliers évalués sur la quantité déjà écoulée du livre au
+// canal scolaire), s'il en existe un ; sinon on retombe sur le taux maison.
+// L'assiette reste le prix unitaire de la vente scolaire. Un taux saisi sur la
+// ligne prime sur tout (géré en amont).
+async function contractRateFor(tx: Tx, manuscriptId: string, format: string, moveQuantity: number): Promise<number | null> {
+  const candidates = await tx.contract.findMany({
+    where: { manuscriptId, status: "active", type: { in: ["edition", "coedition"] }, deletedAt: null, royaltyTerms: { isNot: null } },
+    include: { royaltyTerms: true },
+    orderBy: { createdAt: "desc" },
+  });
+  const contract = candidates.find((c) => c.formats.includes(format)) ?? candidates.find((c) => c.formats.length === 0) ?? null;
+  if (!contract?.royaltyTerms) return null;
+  const priorSum = await tx.schoolRoyaltyEntry.aggregate({ where: { manuscriptId }, _sum: { quantity: true } });
+  const cumulativeAfter = (priorSum._sum.quantity ?? 0) + moveQuantity;
+  const tiers = contract.royaltyTerms.tiers as unknown as RoyaltyTier[];
+  return rateForCumulativeQuantity(tiers, cumulativeAfter);
 }
 
 interface SchoolRoyaltyLine {
@@ -59,8 +91,11 @@ interface SchoolRoyaltyLine {
 
 // Écrit une entrée de droits « livre scolaire » par ligne : instantané figé
 // (ouvrage, auteur, co-auteurs, ISBN, prix unitaire, quantité, assiette, taux,
-// montant). Le taux appliqué = taux de la ligne s'il est fourni, sinon le taux
-// maison configurable (12 % par défaut).
+// montant). Priorité du taux appliqué (décision opérateur 31/07/2026) :
+//   1. taux saisi sur la ligne (cas particulier, prime sur tout) ;
+//   2. taux du CONTRAT d'édition actif du livre s'il en existe un (le contrat
+//      prime sur le taux maison) — paliers respectés ;
+//   3. taux maison configurable (12 % par défaut).
 export async function recordSchoolRoyaltyEntries(
   tx: Tx,
   params: { invoiceId: string; sourceType: "billing_order_invoice" | "credit_note"; lines: SchoolRoyaltyLine[] },
@@ -68,8 +103,14 @@ export async function recordSchoolRoyaltyEntries(
   if (params.lines.length === 0) return;
   const houseRate = await getSchoolRoyaltyRate();
   for (const line of params.lines) {
-    const rate = line.rate != null && line.rate > 0 ? line.rate : houseRate;
     const info = await resolveBookInfo(tx, line.isbnId, line.description);
+    let rate: number;
+    if (line.rate != null && line.rate > 0) {
+      rate = line.rate; // taux de la ligne (ou contre-passation d'avoir : taux d'origine)
+    } else {
+      const contractRate = info.manuscriptId && info.format ? await contractRateFor(tx, info.manuscriptId, info.format, line.quantity) : null;
+      rate = contractRate ?? houseRate;
+    }
     const baseAmount = Math.round(line.quantity * line.unitPriceHt * 100) / 100;
     const amount = Math.round(line.quantity * line.unitPriceHt * rate * 100) / 100;
     await tx.schoolRoyaltyEntry.create({

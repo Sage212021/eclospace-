@@ -26,6 +26,9 @@ describe("droits d'auteur du livre scolaire (12 % par défaut, modulable, segmen
   let isbnAId = "";
   let isbnBId = "";
   let isbnACode = "";
+  let manuscriptCId = "";
+  let isbnCId = "";
+  let contractCId = "";
   const orderIds: string[] = [];
   const invoiceIds: string[] = [];
   const partnerIds: string[] = [];
@@ -72,6 +75,29 @@ describe("droits d'auteur du livre scolaire (12 % par défaut, modulable, segmen
     isbnAId = isbnA.id;
     isbnBId = isbnB.id;
 
+    // Ouvrage C : livre scolaire disposant EN PLUS d'un contrat d'édition actif
+    // (base prix public, taux 8 %). Le contrat doit primer sur le taux maison.
+    const msC = await prisma.manuscript.create({
+      data: { manuscriptNumber: `MS-SCO-${rnd()}`, title: "Sciences 4e", language: "fr", statusId: status.id, ownerId: owner.id, receivedAt: new Date(), editorialSegment: "scolaire" },
+    });
+    manuscriptCId = msC.id;
+    await prisma.workContributor.create({ data: { manuscriptId: msC.id, partnerId: author.id, role: "author", displayOrder: 0 } });
+    const isbnC = await prisma.isbn.create({ data: { isbn13: rndIsbn(), format: "print", manuscriptId: msC.id } });
+    isbnCId = isbnC.id;
+    const contractC = await prisma.contract.create({
+      data: {
+        contractNumber: `CT-SCO-${rnd()}`,
+        type: "edition",
+        manuscriptId: msC.id,
+        partnerId: author.id,
+        formats: ["print"],
+        financialTerms: {},
+        status: "active",
+        royaltyTerms: { create: { base: "prix_public_ht", tiers: [{ up_to: null, rate: 0.08 }] } },
+      },
+    });
+    contractCId = contractC.id;
+
     // Seuil de validation neutre : les factures restent « émises » (le calcul des
     // droits est indépendant du statut, mais on garde le test lisible).
     await prisma.setting.upsert({ where: { key: "finance.validation_threshold" }, create: { key: "finance.validation_threshold", value: 0 }, update: { value: 0 } });
@@ -86,9 +112,11 @@ describe("droits d'auteur du livre scolaire (12 % par défaut, modulable, segmen
     await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
     await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
     await prisma.billingOrder.deleteMany({ where: { id: { in: orderIds } } });
-    await prisma.isbn.deleteMany({ where: { id: { in: [isbnAId, isbnBId] } } });
-    await prisma.workContributor.deleteMany({ where: { manuscriptId: { in: [manuscriptAId, manuscriptBId] } } });
-    await prisma.manuscript.deleteMany({ where: { id: { in: [manuscriptAId, manuscriptBId] } } });
+    await prisma.royaltyTerms.deleteMany({ where: { contractId: contractCId } });
+    await prisma.contract.deleteMany({ where: { id: contractCId } });
+    await prisma.isbn.deleteMany({ where: { id: { in: [isbnAId, isbnBId, isbnCId] } } });
+    await prisma.workContributor.deleteMany({ where: { manuscriptId: { in: [manuscriptAId, manuscriptBId, manuscriptCId] } } });
+    await prisma.manuscript.deleteMany({ where: { id: { in: [manuscriptAId, manuscriptBId, manuscriptCId] } } });
     await prisma.partner.deleteMany({ where: { id: { in: partnerIds } } });
     await prisma.customer.deleteMany({ where: { id: customerId } });
     await prisma.setting.deleteMany({ where: { key: "royalty.scolaire_default_rate" } });
@@ -140,6 +168,25 @@ describe("droits d'auteur du livre scolaire (12 % par défaut, modulable, segmen
     expect(Number(histo.rateApplied)).toBe(0.1);
     expect(Number(histo.amount)).toBe(25000);
     expect(histo.coAuthors.length).toBe(0);
+  });
+
+  it("le contrat d'édition prime sur le taux maison ; un taux de ligne prime sur le contrat", async () => {
+    const create = await createDetailedOrder([
+      // Sans taux de ligne → le contrat (8 %) doit primer sur le taux maison (12 %).
+      { isbn_id: isbnCId, description: "Sciences 4e", quantity: 100, unit_price_ht: 4000 },
+    ]);
+    const inv = await invoiceOrder(create.json().id);
+    const entry = await prisma.schoolRoyaltyEntry.findFirstOrThrow({ where: { invoiceId: inv.json().id, manuscriptId: manuscriptCId } });
+    // Taux du contrat 8 % : 100 × 4000 × 0,08 = 32 000 (et non 12 % = 48 000).
+    expect(Number(entry.rateApplied)).toBe(0.08);
+    expect(Number(entry.amount)).toBe(32000);
+
+    // Un taux explicite sur la ligne prime même sur le contrat.
+    const create2 = await createDetailedOrder([{ isbn_id: isbnCId, description: "Sciences 4e", quantity: 10, unit_price_ht: 4000, royalty_rate: 0.05 }]);
+    const inv2 = await invoiceOrder(create2.json().id);
+    const entry2 = await prisma.schoolRoyaltyEntry.findFirstOrThrow({ where: { invoiceId: inv2.json().id, manuscriptId: manuscriptCId } });
+    expect(Number(entry2.rateApplied)).toBe(0.05);
+    expect(Number(entry2.amount)).toBe(2000); // 10 × 4000 × 0,05
   });
 
   it("taux maison modulable : la DAF le règle, les nouvelles factures l'appliquent", async () => {

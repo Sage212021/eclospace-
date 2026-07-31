@@ -76,13 +76,14 @@ export function getDashboardStats() {
 export interface RevenueFamily {
   key: "livre_scolaire" | "livre_general" | "communication" | "prestations";
   label: string;
+  factureHt: number;
   facture: number;
   encaisse: number;
   creances: number;
 }
 export interface RevenueByFamily {
   families: RevenueFamily[];
-  total: { facture: number; encaisse: number; creances: number };
+  total: { factureHt: number; facture: number; encaisse: number; creances: number };
 }
 export function getRevenueByFamily() {
   return request<RevenueByFamily>("/api/v1/dashboard/revenue-by-family");

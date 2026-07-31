@@ -13,6 +13,7 @@ import {
 } from "../api/client";
 import { DataTable } from "../components/DataTable";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
+import { RevenueByFamilyCard } from "../components/RevenueByFamilyCard";
 import { Card } from "../components/Card";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
@@ -162,6 +163,11 @@ export function DirectionPage({ canTreatRecommendations, canInitiateOrder }: Dir
           <p style={{ color: "var(--muted)", fontSize: 13 }}>{t("dir.loading", "Chargement…")}</p>
         )}
       </Card>
+
+      {/* Chiffre d'affaires ventilé par famille (facturé HT/TTC, encaissé,
+          créances). Visible par la Direction ; le composant se masque seul si
+          l'API refuse l'accès. */}
+      <RevenueByFamilyCard />
 
       {/* Commandes à facturer : le DG peut initier une commande / proforma
           (ex. livre scolaire) depuis sa rubrique ; la Finance l'établit. */}

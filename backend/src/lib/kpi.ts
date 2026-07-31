@@ -137,35 +137,40 @@ export async function revenueByFamily() {
     },
   });
 
-  const acc: Record<RevenueFamilyKey, { facture: number; encaisse: number; creances: number }> = {
-    livre_scolaire: { facture: 0, encaisse: 0, creances: 0 },
-    livre_general: { facture: 0, encaisse: 0, creances: 0 },
-    communication: { facture: 0, encaisse: 0, creances: 0 },
-    prestations: { facture: 0, encaisse: 0, creances: 0 },
+  const blank = () => ({ factureHt: 0, facture: 0, encaisse: 0, creances: 0 });
+  const acc: Record<RevenueFamilyKey, ReturnType<typeof blank>> = {
+    livre_scolaire: blank(),
+    livre_general: blank(),
+    communication: blank(),
+    prestations: blank(),
   };
 
   for (const inv of invoices) {
     const fam = classifyInvoiceFamily(inv);
-    const credited = inv.creditNotes.reduce((s, c) => s + Number(c.totalTtc), 0);
-    const facture = Math.max(Number(inv.totalTtc) - credited, 0);
+    const creditedTtc = inv.creditNotes.reduce((s, c) => s + Number(c.totalTtc), 0);
+    const creditedHt = inv.creditNotes.reduce((s, c) => s + Number(c.totalHt), 0);
+    const facture = Math.max(Number(inv.totalTtc) - creditedTtc, 0);
+    const factureHt = Math.max(Number(inv.totalHt) - creditedHt, 0);
     const allocated = inv.paymentAllocations.reduce((s, a) => s + Number(a.amount), 0);
     const encaisse = Math.min(allocated, facture);
     acc[fam].facture += facture;
+    acc[fam].factureHt += factureHt;
     acc[fam].encaisse += encaisse;
     acc[fam].creances += Math.max(facture - encaisse, 0);
   }
 
   const round = (n: number) => Math.round(n * 100) / 100;
-  const total = { facture: 0, encaisse: 0, creances: 0 };
+  const total = blank();
   const families = (Object.keys(acc) as RevenueFamilyKey[]).map((key) => {
+    total.factureHt += acc[key].factureHt;
     total.facture += acc[key].facture;
     total.encaisse += acc[key].encaisse;
     total.creances += acc[key].creances;
-    return { key, label: FAMILY_LABELS[key], facture: round(acc[key].facture), encaisse: round(acc[key].encaisse), creances: round(acc[key].creances) };
+    return { key, label: FAMILY_LABELS[key], factureHt: round(acc[key].factureHt), facture: round(acc[key].facture), encaisse: round(acc[key].encaisse), creances: round(acc[key].creances) };
   });
   return {
     families,
-    total: { facture: round(total.facture), encaisse: round(total.encaisse), creances: round(total.creances) },
+    total: { factureHt: round(total.factureHt), facture: round(total.facture), encaisse: round(total.encaisse), creances: round(total.creances) },
   };
 }
 

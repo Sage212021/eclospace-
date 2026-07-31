@@ -713,7 +713,7 @@ export function App() {
           <CommercialPage canManage={permissions.has("commercial:saisie")} canValidate={permissions.has("commercial:administration")} canInitiateOrder={canInitiateOrder} />
         )}
         {leaf && "page" in leaf && leaf.page === "finance" && (
-          <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} canInitiateOrder={canInitiateOrder} />
+          <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} canInitiateOrder={canInitiateOrder} canValidateCancellation={permissions.has("pilotage:administration")} />
         )}
         {leaf && "page" in leaf && leaf.page === "hr" && (
           <HrPage
@@ -735,7 +735,7 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "users-roles" && (
           <UsersRolesPage canAdminister={permissions.has("users:administration")} />
         )}
-        {leaf && "page" in leaf && leaf.page === "direction" && <DirectionPage canTreatRecommendations={permissions.has("pilotage:saisie")} canInitiateOrder={canInitiateOrder} />}
+        {leaf && "page" in leaf && leaf.page === "direction" && <DirectionPage canTreatRecommendations={permissions.has("pilotage:saisie")} canInitiateOrder={canInitiateOrder} canValidateCancellation={permissions.has("pilotage:administration")} />}
         {leaf && "page" in leaf && leaf.page === "reports" && (
           <ReportsPage canCreateAnalysis={permissions.has("rapports:saisie")} canPromoteAnalysis={permissions.has("rapports:administration")} />
         )}

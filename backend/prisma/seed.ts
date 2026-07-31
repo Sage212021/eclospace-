@@ -948,26 +948,30 @@ async function main() {
       const firstName = parts.length > 1 ? parts.slice(0, -1).join(" ") : "";
       return prisma.partner.create({ data: { category: "auteur", firstName, lastName, penName: name } });
     };
-    // 8 ouvrages distincts (les titres couvrant deux classes ne sont saisis qu'une fois).
-    const catalogue: { num: string; title: string; authors: string[]; coAuthors: string[]; price: number }[] = [
-      { num: "MS-CAT-0001", title: "LATINISTAS 6ème-5ème", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
-      { num: "MS-CAT-0002", title: "LATINISTAS 4ème-3ème", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
-      { num: "MS-CAT-0003", title: "Je découvre la langue grecque 4ème-3ème", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
-      { num: "MS-CAT-0004", title: "Informatique 6ème", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 3500 },
-      { num: "MS-CAT-0005", title: "Informatique 4ème", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 4000 },
-      { num: "MS-CAT-0006", title: "Informatique 3ème", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 4000 },
-      { num: "MS-CAT-0007", title: "Au cœur des ténèbres", authors: ["Joseph Conrad"], coAuthors: [], price: 1900 },
-      { num: "MS-CAT-0008", title: "Stances et Poèmes, suivi de Les Épreuves", authors: ["Sully Prudhomme"], coAuthors: [], price: 1900 },
+    // 8 ouvrages distincts (les titres couvrant deux classes ne sont saisis qu'une
+    // fois). matiere/classe sont portés par le sous-titre, affiché à côté du titre.
+    const catalogue: { num: string; title: string; matiere: string; classe: string; authors: string[]; coAuthors: string[]; price: number }[] = [
+      { num: "MS-CAT-0001", title: "LATINISTAS 6ème-5ème", matiere: "Latin", classe: "6ᵉ-5ᵉ", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
+      { num: "MS-CAT-0002", title: "LATINISTAS 4ème-3ème", matiere: "Latin", classe: "4ᵉ-3ᵉ", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
+      { num: "MS-CAT-0003", title: "Je découvre la langue grecque 4ème-3ème", matiere: "Grec", classe: "4ᵉ-3ᵉ", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000 },
+      { num: "MS-CAT-0004", title: "Informatique 6ème", matiere: "Informatique", classe: "6ᵉ", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 3500 },
+      { num: "MS-CAT-0005", title: "Informatique 4ème", matiere: "Informatique", classe: "4ᵉ", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 4000 },
+      { num: "MS-CAT-0006", title: "Informatique 3ème", matiere: "Informatique", classe: "3ᵉ", authors: ["Jean Paul Paul"], coAuthors: ["Wida Orpa"], price: 4000 },
+      { num: "MS-CAT-0007", title: "Au cœur des ténèbres", matiere: "Littérature", classe: "1ᵉʳᵉˢ", authors: ["Joseph Conrad"], coAuthors: [], price: 1900 },
+      { num: "MS-CAT-0008", title: "Stances et Poèmes, suivi de Les Épreuves", matiere: "Littérature", classe: "Terminales", authors: ["Sully Prudhomme"], coAuthors: [], price: 1900 },
     ];
     let idx = 0;
     for (const b of catalogue) {
       idx++;
+      const subtitle = `${b.matiere} · ${b.classe}`;
       const ms = await prisma.manuscript.upsert({
         where: { manuscriptNumber: b.num },
-        update: { title: b.title, editorialSegment: "scolaire", isBackCatalogue: true },
+        update: { title: b.title, subtitle, editorialSegment: "scolaire", isBackCatalogue: true, keywords: [b.matiere, b.classe] },
         create: {
           manuscriptNumber: b.num,
           title: b.title,
+          subtitle,
+          keywords: [b.matiere, b.classe],
           language: "fr",
           statusId: catStatus.id,
           ownerId: adminUser.id,

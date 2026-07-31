@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { CustomerCategory, SalesChannel, SalesOrderStatus, PosPaymentMethod, ReturnLineVerdict, ShippingZone } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { adjustStockItem, availableQuantity } from "../lib/stock.js";
@@ -142,7 +142,14 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     return reply.send(customers);
   });
 
-  fastify.post("/api/v1/customers", { preHandler: requirePermission("commercial", "saisie") }, async (request, reply) => {
+  fastify.post("/api/v1/customers", { preHandler: requireAuth }, async (request, reply) => {
+    // Création d'un client : le commercial, mais aussi la Direction et la Finance
+    // — les mêmes profils qui peuvent initier une commande à facturer, pour
+    // pouvoir ajouter un client sans quitter ce formulaire (sinon, blocage).
+    const perms = request.user!.permissions;
+    if (!(perms.has("commercial:saisie") || perms.has("commercial:validation") || perms.has("finance:saisie"))) {
+      return reply.code(403).send({ code: "forbidden", message: "Réservé au commercial, à la direction ou à la Finance." });
+    }
     const parsed = customerSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });

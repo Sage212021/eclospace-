@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   getPresenceNames,
-  listNotifications,
   listUnreadNotifications,
   markAllNotificationsRead,
   markNotificationRead,
@@ -100,7 +99,10 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
   // pour rester à jour.
   useEffect(() => {
     if (!notifOpen) return;
-    listNotifications()
+    // Le panneau ne montre que les notifications NON LUES : une notification
+    // ouverte (donc lue) disparaît. Décision opérateur — la cloche reste propre,
+    // l'historique complet restant consultable ailleurs (journal / audit).
+    listUnreadNotifications()
       .then((list) => setNotifs(list.slice(0, 30)))
       .catch(() => setNotifs([]));
   }, [notifOpen, refreshSignal]);
@@ -111,10 +113,13 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
 
   async function handleNotifClick(n: Notification) {
     if (!n.readAt) {
-      setNotifs((list) => list.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)));
       setUnreadCount((c) => Math.max(0, c - 1));
       void markNotificationRead(n.id).catch(() => {});
     }
+    // Une notification OUVERTE disparaît du panneau (décision opérateur) : le
+    // financier voit « Commande à facturer », l'ouvre, elle s'en va ; idem pour
+    // l'administrateur qui la verrait exceptionnellement.
+    setNotifs((list) => list.filter((x) => x.id !== n.id));
     if (n.entityType === "announcement" && n.entityId && onOpenAnnouncement) {
       setNotifOpen(false);
       onOpenAnnouncement(n.entityId);
@@ -412,11 +417,11 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
                   <div style={{ padding: "16px 14px", fontSize: 13, color: "var(--muted)" }}>{t("notif.empty", "Aucune notification.")}</div>
                 ) : (
                   notifs.map((n) => {
-                    const clickable = (n.entityType === "announcement" && n.entityId && onOpenAnnouncement) || (n.entityType === "calendar_event" && onOpenCalendar);
                     return (
                       <button
                         key={n.id}
                         onClick={() => handleNotifClick(n)}
+                        title={t("notif.open_dismiss", "Ouvrir — la notification disparaît une fois lue")}
                         style={{
                           display: "block",
                           width: "100%",
@@ -425,7 +430,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
                           border: "none",
                           borderBottom: "1px solid var(--line)",
                           padding: "10px 14px",
-                          cursor: clickable ? "pointer" : "default",
+                          cursor: "pointer",
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>

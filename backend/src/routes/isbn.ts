@@ -123,7 +123,7 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
     const isbns = await prisma.isbn.findMany({
       where: query.format ? { format: query.format } : {},
       include: {
-        manuscript: { select: { title: true } },
+        manuscript: { select: { title: true, subtitle: true } },
         // Prix courant (dernier tarif) : permet de pré-remplir le prix unitaire
         // au moment de la sélection d'un ouvrage dans une commande à facturer.
         priceList: { orderBy: { effectiveFrom: "desc" }, take: 1, select: { price: true } },

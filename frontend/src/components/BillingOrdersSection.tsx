@@ -366,9 +366,11 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <select value={l.isbn_id} onChange={(e) => pickIsbn(i, e.target.value)} style={{ ...inp, flex: 1 }}>
                         <option value="">— Ouvrage / ISBN (facultatif) —</option>
-                        {isbns.map((x) => (
-                          <option key={x.id} value={x.id}>{(x.manuscript?.title ?? "Sans titre") + " · " + x.isbn13}</option>
-                        ))}
+                        {isbns.map((x) => {
+                          const t = x.manuscript?.title ?? "Sans titre";
+                          const st = x.manuscript?.subtitle; // « Matière · Classe »
+                          return <option key={x.id} value={x.id}>{st ? `${t} — ${st}` : t} · {x.isbn13}</option>;
+                        })}
                       </select>
                       {bookLines.length > 1 && (
                         <button type="button" onClick={() => setBookLines((ls) => ls.filter((_, idx) => idx !== i))} style={btnDanger} title="Retirer cet ouvrage">✕</button>

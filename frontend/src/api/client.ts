@@ -1122,7 +1122,7 @@ export interface IsbnCatalogueItem {
   isbn13: string;
   format: IsbnFormat;
   status: string;
-  manuscript: { title: string } | null;
+  manuscript: { title: string; subtitle?: string | null } | null;
   // Prix courant HT (dernier tarif), pour pré-remplir le prix unitaire à la sélection.
   price_ht?: number | null;
 }

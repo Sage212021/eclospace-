@@ -112,7 +112,7 @@ export function IsbnSection({ manuscriptId, canManage }: IsbnSectionProps) {
         <div key={isbn.id} style={{ display: "flex", alignItems: "center", gap: 12, borderTop: "1px solid var(--line)", padding: "8px 0" }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}>{isbn.isbn13}</span>
           <span style={{ fontSize: 11, color: "var(--muted)" }}>{isbn.format}</span>
-          <img src={isbnBarcodeUrl(isbn.id)} alt={`Code-barres ${isbn.isbn13}`} style={{ height: 40 }} />
+          <img src={isbnBarcodeUrl(isbn.id)} alt={`Code-barres ${isbn.isbn13}`} loading="lazy" decoding="async" style={{ height: 40 }} />
         </div>
       ))}
 

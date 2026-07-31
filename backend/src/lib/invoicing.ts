@@ -28,12 +28,23 @@ async function createInvoiceRecord(
     sourceId: string;
     lines: InvoiceLineInput[];
     status?: "issued" | "paid" | "pending_validation";
+    // Remise commerciale globale (0–100 %) : réduit le net à payer (totalTtc) ;
+    // le brut (total_ht/total_tax) reste la somme des lignes. N'affecte PAS les
+    // droits d'auteur (calculés au prix unitaire de chaque ligne, avant remise).
+    discountPct?: number;
   },
 ) {
   await assertPeriodOpen(tx);
   const invoiceNumber = await nextInvoiceNumber();
-  const totalHt = params.lines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
-  const totalTax = params.lines.reduce((sum, l) => sum + l.quantity * l.unitPrice * (l.taxRate / 100), 0);
+  const grossHt = params.lines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
+  const grossTax = params.lines.reduce((sum, l) => sum + l.quantity * l.unitPrice * (l.taxRate / 100), 0);
+  const discountPct = Math.max(0, Math.min(100, params.discountPct ?? 0));
+  // La remise réduit le chiffre d'affaires : on stocke les totaux NETS (après
+  // remise) — HT, TVA et TTC. Le BRUT reste reconstituable depuis les lignes
+  // (somme des montants), et discountPct permet d'imprimer Total → Remise → NAP.
+  const factor = 1 - discountPct / 100;
+  const totalHt = grossHt * factor;
+  const totalTax = grossTax * factor;
   const totalTtc = totalHt + totalTax;
   // Échéance par défaut à 30 jours (Ch. 18 §18.3) : le cahier des charges ne
   // fixe pas de délai standard ; customer.paymentTerms reste un champ libre
@@ -50,6 +61,7 @@ async function createInvoiceRecord(
       sourceId: params.sourceId,
       totalHt: Math.round(totalHt * 100) / 100,
       totalTax: Math.round(totalTax * 100) / 100,
+      discountPct,
       totalTtc: Math.round(totalTtc * 100) / 100,
       dueDate,
       status: params.status ?? "issued",
@@ -381,6 +393,7 @@ export async function createCreditNoteFromInvoice(tx: Tx, invoiceId: string, rea
       sourceId: origin.id,
       totalHt: origin.totalHt,
       totalTax: origin.totalTax,
+      discountPct: origin.discountPct, // même remise → l'avoir neutralise le net facturé
       totalTtc: origin.totalTtc,
       currency: origin.currency,
       status: "issued",
@@ -441,7 +454,7 @@ export async function createCreditNoteFromInvoice(tx: Tx, invoiceId: string, rea
 // initiée par le DG / le commercial / la Finance ; la Finance la reçoit et
 // facture. Validation par seuil : au-dessus du seuil, la facture naît « en
 // attente de validation » (le DG doit valider) ; sinon elle est émise.
-export async function createInvoiceFromBillingOrder(tx: Tx, orderId: string, thresholdTtc: number) {
+export async function createInvoiceFromBillingOrder(tx: Tx, orderId: string, thresholdTtc: number, discountPct = 0) {
   const order = await tx.billingOrder.findUniqueOrThrow({ where: { id: orderId }, include: { lines: true } });
   if (order.status !== "pending") throw new Error("order_not_pending");
   if (order.invoiceId) throw new Error("order_already_invoiced");
@@ -468,7 +481,9 @@ export async function createInvoiceFromBillingOrder(tx: Tx, orderId: string, thr
       : [{ isbnId: null, manuscriptId: null, format: null, description: order.label, quantity: 1, unitPrice: Number(order.amountHt), taxRate }];
 
   const amountHt = lines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
-  const totalTtc = amountHt * (1 + taxRate / 100);
+  const clampedDiscount = Math.max(0, Math.min(100, discountPct));
+  // Le seuil de validation s'apprécie sur le NET à payer (après remise).
+  const totalTtc = amountHt * (1 + taxRate / 100) * (1 - clampedDiscount / 100);
   const status: "issued" | "pending_validation" = totalTtc >= thresholdTtc && thresholdTtc > 0 ? "pending_validation" : "issued";
 
   const invoice = await createInvoiceRecord(tx, {
@@ -477,6 +492,7 @@ export async function createInvoiceFromBillingOrder(tx: Tx, orderId: string, thr
     sourceId: order.id,
     lines,
     status,
+    discountPct: clampedDiscount,
   });
 
   // Droits d'auteur du livre scolaire : une entrée segmentée par ligne-livre.

@@ -3056,6 +3056,10 @@ model Invoice {
   sourceId        String        @map("source_id")
   totalHt         Decimal       @map("total_ht") @db.Decimal(12, 2)
   totalTax        Decimal       @map("total_tax") @db.Decimal(12, 2)
+  // Remise commerciale globale accordée à l'établissement (0–100 %). totalTtc est
+  // le NET À PAYER après remise ; total_ht/total_tax restent le brut (somme des
+  // lignes), la remise se lisant à l'impression (Total → Remise → Net à payer).
+  discountPct     Decimal       @default(0) @map("discount_pct") @db.Decimal(5, 2)
   totalTtc        Decimal       @map("total_ttc") @db.Decimal(12, 2)
   currency        String        @default("XAF")
   dueDate         DateTime?     @map("due_date")

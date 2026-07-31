@@ -109,6 +109,26 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(val.json().status).toBe("issued");
   });
 
+  it("remise à l'établissement : net à payer réduit, totaux nets, brut conservé sur les lignes", async () => {
+    const order = await createOrder(100_000); // sous le seuil → émise directement
+    const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin }, payload: { discount_pct: 26 } });
+    expect(inv.statusCode).toBe(201);
+    invoiceIds.push(inv.json().id);
+
+    const invoice = await prisma.invoice.findUnique({ where: { id: inv.json().id }, include: { lines: true } });
+    expect(Number(invoice!.discountPct)).toBe(26);
+    // Net à payer = 100 000 × (1 − 26 %) = 74 000 (HT et TTC nets, TVA 0).
+    expect(Number(invoice!.totalTtc)).toBe(74000);
+    expect(Number(invoice!.totalHt)).toBe(74000);
+    // La ligne conserve le montant BRUT (plein), la remise étant globale.
+    expect(Number(invoice!.lines[0].lineTotal)).toBe(100000);
+
+    // Remise invalide (> 100) refusée.
+    const order2 = await createOrder(50_000);
+    const bad = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order2.json().id}/invoice`, headers: { cookie: admin }, payload: { discount_pct: 150 } });
+    expect(bad.statusCode).toBe(400);
+  });
+
   it("au-dessus du seuil : la Finance ne peut ni valider ni refuser (réservé DG / admin)", async () => {
     const dafU = `daf_seuil_${rnd()}`;
     await createUserWithRole(dafU, "RESP_FINANCE", PWD);

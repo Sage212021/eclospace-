@@ -343,6 +343,64 @@ export async function createCreditNoteFromReturn(tx: Tx, customerReturnId: strin
   return creditNote;
 }
 
+// Avoir (note de crédit) neutralisant une facture précise (Ch. 18 §18.2) : la
+// facture étant immuable, on ne la supprime pas — on émet un avoir de mêmes
+// montants, rattaché à la facture d'origine (parentInvoiceId). Le chiffre
+// d'affaires s'en trouve ramené à zéro pour cette facture (l'avoir compte en
+// négatif). Les droits d'auteur des lignes livres sont contre-passés.
+export async function createCreditNoteFromInvoice(tx: Tx, invoiceId: string, reason?: string) {
+  const origin = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { lines: true, creditNotes: true } });
+  if (origin.type !== "invoice") throw new Error("not_an_invoice");
+  if (origin.creditNotes.length > 0) throw new Error("already_credited");
+  await assertPeriodOpen(tx);
+  const invoiceNumber = await nextInvoiceNumber();
+
+  const creditNote = await tx.invoice.create({
+    data: {
+      invoiceNumber,
+      type: "credit_note",
+      parentInvoiceId: origin.id,
+      customerId: origin.customerId,
+      sourceType: "invoice_cancellation",
+      sourceId: origin.id,
+      totalHt: origin.totalHt,
+      totalTax: origin.totalTax,
+      totalTtc: origin.totalTtc,
+      currency: origin.currency,
+      status: "issued",
+      cancellationReason: reason?.trim() || null,
+      lines: {
+        create: origin.lines.map((l) => ({
+          isbnId: l.isbnId ?? undefined,
+          description: reason ? `${l.description} — avoir : ${reason.trim()}` : `${l.description} — avoir`,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          taxRate: l.taxRate,
+          lineTotal: l.lineTotal,
+        })),
+      },
+    },
+    include: { lines: true },
+  });
+
+  // Contre-passation des droits d'auteur pour les lignes rattachées à un ouvrage.
+  for (const l of origin.lines) {
+    const isbn = l.isbnId ? await tx.isbn.findUnique({ where: { id: l.isbnId } }) : null;
+    if (!isbn?.manuscriptId || !isbn.format) continue;
+    await recordRoyaltyEntry(tx, {
+      manuscriptId: isbn.manuscriptId,
+      format: isbn.format,
+      quantity: -l.quantity,
+      unitPublicPrice: Number(l.unitPrice),
+      unitNetPrice: Number(l.unitPrice),
+      sourceType: "invoice_cancellation",
+      sourceId: origin.id,
+    });
+  }
+
+  return creditNote;
+}
+
 // Facture établie à partir d'une commande à facturer (étape 3). La commande est
 // initiée par le DG / le commercial / la Finance ; la Finance la reçoit et
 // facture. Validation par seuil : au-dessus du seuil, la facture naît « en

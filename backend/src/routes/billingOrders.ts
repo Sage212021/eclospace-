@@ -5,7 +5,7 @@ import { requireAuth, requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextBillingOrderNumber } from "../lib/billingOrderNumber.js";
-import { createInvoiceFromBillingOrder } from "../lib/invoicing.js";
+import { createInvoiceFromBillingOrder, createCreditNoteFromInvoice } from "../lib/invoicing.js";
 
 // Commandes à facturer (reconfiguration Finance étape 3) — ex. livre scolaire.
 // Initiées par le DG / le commercial / la Finance ; la Finance les reçoit et
@@ -282,6 +282,28 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     await prisma.invoice.update({ where: { id }, data: { status: "issued", cancellationReason: null, cancellationRequestedAt: null, cancellationRequestedBy: null } });
     await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "invoice", entityId: id, oldValues: { status: "cancellation_requested" }, newValues: { status: "issued", rejected: true }, ipAddress: request.ip });
     return reply.send({ ok: true, status: "issued" });
+  });
+
+  // Avoir (note de crédit) sur une facture : la voie légale quand la facture ne
+  // peut plus être annulée (déjà tirée / réglée) — on ne supprime pas, on
+  // neutralise. Réservé au comptable/Finance (finance:saisie).
+  fastify.post("/api/v1/invoices/:id/credit-note", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ reason: z.string().max(500).optional() }).safeParse(request.body ?? {});
+    const reason = parsed.success ? parsed.data.reason?.trim() || undefined : undefined;
+    const origin = await prisma.invoice.findUnique({ where: { id } });
+    if (!origin) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    if (origin.type !== "invoice") return reply.code(409).send({ code: "not_an_invoice", message: "Un avoir se fait sur une facture (pas sur une proforma ni un avoir)." });
+    try {
+      const creditNote = await prisma.$transaction((tx) => createCreditNoteFromInvoice(tx, id, reason));
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "invoice", entityId: creditNote.id, newValues: { type: "credit_note", invoiceNumber: creditNote.invoiceNumber, parentInvoice: origin.invoiceNumber, reason }, ipAddress: request.ip });
+      return reply.code(201).send({ id: creditNote.id, invoice_number: creditNote.invoiceNumber, total_ttc: Number(creditNote.totalTtc) });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erreur";
+      if (msg === "already_credited") return reply.code(409).send({ code: "already_credited", message: "Un avoir a déjà été émis pour cette facture." });
+      if (msg === "period_closed") return reply.code(409).send({ code: "period_closed", message: "La période comptable est clôturée." });
+      throw e;
+    }
   });
 
   // Marque une facture comme « tirée » (imprimée) à sa première impression :

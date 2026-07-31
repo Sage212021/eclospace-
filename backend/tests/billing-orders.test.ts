@@ -193,6 +193,22 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(req.statusCode).toBe(400);
   });
 
+  it("établit un avoir sur une facture (neutralisation) ; un seul avoir possible", async () => {
+    const invId = await issueInvoice(160_000);
+    // Une facture tirée n'est plus annulable → l'avoir est la voie légale.
+    await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/mark-printed`, headers: { cookie: admin } });
+    const cn = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/credit-note`, headers: { cookie: admin }, payload: { reason: "Facture erronée" } });
+    expect(cn.statusCode).toBe(201);
+    invoiceIds.push(cn.json().id);
+    const credit = await prisma.invoice.findUnique({ where: { id: cn.json().id } });
+    expect(credit?.type).toBe("credit_note");
+    expect(credit?.parentInvoiceId).toBe(invId);
+    // Un second avoir sur la même facture est refusé.
+    const again = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/credit-note`, headers: { cookie: admin }, payload: {} });
+    expect(again.statusCode).toBe(409);
+    expect(again.json().code).toBe("already_credited");
+  });
+
   it("le commercial initie une commande et la voit, mais ne peut pas la facturer", async () => {
     const com = `com_${rnd()}`;
     await createUserWithRole(com, "RESP_COMMERCIAL", PWD);

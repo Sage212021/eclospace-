@@ -3517,6 +3517,11 @@ export function approveInvoiceCancellation(id: string) {
 export function rejectInvoiceCancellation(id: string) {
   return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/cancel-reject`, { method: "POST" });
 }
+// Avoir (note de crédit) neutralisant une facture — voie légale quand la facture
+// ne peut plus être annulée (déjà tirée / réglée).
+export function createInvoiceCreditNote(id: string, reason?: string) {
+  return request<{ id: string; invoice_number: string; total_ttc: number }>(`/api/v1/invoices/${id}/credit-note`, { method: "POST", body: JSON.stringify(reason ? { reason } : {}) });
+}
 export function getValidationThreshold() {
   return request<{ threshold: number }>("/api/v1/finance/validation-threshold");
 }

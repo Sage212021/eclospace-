@@ -16,6 +16,7 @@ import {
   getPendingCancellationInvoices,
   approveInvoiceCancellation,
   rejectInvoiceCancellation,
+  createInvoiceCreditNote,
   type PendingCancellationInvoice,
   listRoyaltyStatements,
   listShippingRates,
@@ -218,6 +219,31 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
       fail(err, "Demande d'annulation impossible.");
     }
   }
+  // Avoir (note de crédit) : la voie légale quand la facture ne peut plus être
+  // annulée (déjà tirée / réglée). On ne supprime pas, on neutralise, puis on
+  // imprime l'avoir.
+  async function handleCreditNote(invoice: Invoice) {
+    const reason = window.prompt(
+      `Établir un AVOIR pour la facture ${invoice.invoiceNumber} ?\n\nCela neutralise la facture : son montant sort du chiffre d'affaires (l'avoir compte en négatif). Motif (facultatif) :`,
+      "",
+    );
+    if (reason === null) return;
+    setError(null);
+    setMessage(null);
+    try {
+      const cn = await createInvoiceCreditNote(invoice.id, reason.trim() || undefined);
+      setMessage(`Avoir ${cn.invoice_number} établi — la facture ${invoice.invoiceNumber} est neutralisée.`);
+      try {
+        printInvoice(await getInvoice(cn.id));
+      } catch {
+        /* impression au meilleur effort */
+      }
+      await refresh();
+    } catch (err) {
+      fail(err, "Établissement de l'avoir impossible.");
+    }
+  }
+
   async function handleApproveCancel(inv: PendingCancellationInvoice) {
     setError(null);
     try {
@@ -433,6 +459,11 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
                 <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
                   <DocPrintMenu onPrint={(o) => handlePrintInvoice(invoice.id, o)} />
                   <Button variant="view" size="sm" onClick={() => setEmailInvoice(invoice)}>{t("fin.send_email", "Envoyer par e-mail")}</Button>
+                  {/* Avoir (note de crédit) : voie légale de correction — utile
+                      quand la facture est déjà tirée ou réglée (annulation impossible). */}
+                  {canManage && invoice.type === "invoice" && (invoice.status === "issued" || invoice.status === "paid") && (
+                    <Button variant="view" size="sm" onClick={() => handleCreditNote(invoice)}>{t("fin.credit_note", "Avoir")}</Button>
+                  )}
                   {canManage && invoice.type === "invoice" && invoice.status === "issued" && (
                     <>
                       <Button variant="view" size="sm" onClick={() => setScheduleInvoice(invoice)}>{t("fin.schedule_btn", "Échéancier")}</Button>

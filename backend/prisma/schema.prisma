@@ -2954,6 +2954,9 @@ model BillingOrder {
   label         String
   amountHt      Decimal              @map("amount_ht") @db.Decimal(12, 2)
   taxRate       Decimal              @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  // Remise commerciale prévue (0–100 %), saisie dès la commande et reprise (mais
+  // ajustable) à l'établissement de la facture.
+  discountPct   Decimal              @default(0) @map("discount_pct") @db.Decimal(5, 2)
   note          String?
   status        BillingOrderStatus   @default(pending)
   initiatedById String?              @map("initiated_by")

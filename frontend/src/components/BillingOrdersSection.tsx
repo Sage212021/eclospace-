@@ -59,7 +59,7 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [threshold, setThreshold] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ customer_id: "", category: "livre_scolaire" as BillingOrderCategory, label: "", amount_ht: "", tax_rate: "0" });
+  const [form, setForm] = useState({ customer_id: "", category: "livre_scolaire" as BillingOrderCategory, label: "", amount_ht: "", tax_rate: "0", discount_pct: 0 });
   const [bookLines, setBookLines] = useState<BookLine[]>([emptyLine()]);
   const [isbns, setIsbns] = useState<IsbnCatalogueItem[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
@@ -73,7 +73,11 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   const getRemise = (id: string) => remises[id] ?? 0;
 
   const reload = () => {
-    getBillingOrders("pending").then(setOrders).catch(() => {});
+    getBillingOrders("pending").then((os) => {
+      setOrders(os);
+      // Pré-remplit le déroulé de remise de chaque ligne avec la remise prévue sur la commande.
+      setRemises((prev) => { const next = { ...prev }; for (const o of os) if (next[o.id] == null) next[o.id] = o.discount_pct ?? 0; return next; });
+    }).catch(() => {});
     getPendingValidationInvoices().then(setPending).catch(() => {});
     getValidationThreshold().then((t) => setThreshold(t.threshold)).catch(() => {});
   };
@@ -86,6 +90,9 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
 
   const detailed = form.category === "livre_scolaire"; // le scolaire se saisit par ouvrage → droits d'auteur
   const linesTotalHt = bookLines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price_ht) || 0), 0);
+  // Brut TTC du formulaire (selon le mode) et net à payer après remise saisie.
+  const formGrossTtc = (detailed ? linesTotalHt : Number(form.amount_ht) || 0) * (1 + (Number(form.tax_rate) || 0) / 100);
+  const formNet = Math.round(formGrossTtc * (1 - form.discount_pct / 100) * 100) / 100;
 
   // Menu d'ouvrages groupé par matière (le sous-titre porte « Matière · Classe »).
   // Les ouvrages sans matière connue tombent dans « Autres ouvrages », en dernier.
@@ -124,7 +131,7 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
     );
   }
   function resetForm() {
-    setForm({ customer_id: "", category: "livre_scolaire", label: "", amount_ht: "", tax_rate: "0" });
+    setForm({ customer_id: "", category: "livre_scolaire", label: "", amount_ht: "", tax_rate: "0", discount_pct: 0 });
     setBookLines([emptyLine()]);
   }
 
@@ -196,6 +203,7 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
         category: form.category,
         label: form.label.trim(),
         tax_rate: Number(form.tax_rate) || 0,
+        discount_pct: form.discount_pct || 0,
         ...(detailed ? { lines: payloadLines } : { amount_ht: Number(form.amount_ht) }),
       });
       setShowForm(false);
@@ -431,6 +439,19 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
                 <input value={form.tax_rate} onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))} placeholder="TVA %" inputMode="numeric" style={{ ...inp, width: 90 }} />
               </div>
             )}
+
+            {/* Remise commerciale (0 à 100 %) : calcul immédiat du net à payer.
+                Enregistrée sur la commande et reprise à l'établissement de la facture. */}
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", background: "var(--eclosion-soft, #f6efd8)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px" }}>
+              <label style={{ fontSize: 12.5, color: "var(--eclosion-dark)", fontWeight: 600 }}>Remise</label>
+              <select value={form.discount_pct} onChange={(e) => setForm((f) => ({ ...f, discount_pct: Number(e.target.value) }))} style={{ ...inp, width: 84 }}>
+                {Array.from({ length: 101 }, (_, i) => i).map((p) => <option key={p} value={p}>{p} %</option>)}
+              </select>
+              <span style={{ fontSize: 12.5, color: "var(--muted)", marginLeft: "auto" }}>
+                {form.discount_pct > 0 && <>Remise −<span style={{ fontFamily: "var(--font-mono)", color: "var(--alert)" }}>{fmt.format(formGrossTtc - formNet)}</span> · </>}
+                Net à payer <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--ink)" }}>{fmt.format(formNet)}</span>
+              </span>
+            </div>
 
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button onClick={() => { setShowForm(false); resetForm(); }} style={btnGhost}>Annuler</button>

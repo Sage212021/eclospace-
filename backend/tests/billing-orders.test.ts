@@ -109,6 +109,21 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(val.json().status).toBe("issued");
   });
 
+  it("remise saisie dès la commande : reprise à l'établissement si non redéfinie", async () => {
+    const res = await app.inject({ method: "POST", url: "/api/v1/billing-orders", headers: { cookie: admin }, payload: { customer_id: customerId, category: "livre_scolaire", label: `Remise ${rnd()}`, amount_ht: 200_000, tax_rate: 0, discount_pct: 10 } });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().discount_pct).toBe(10);
+    orderIds.push(res.json().id);
+
+    // Établissement sans remise explicite → on reprend celle de la commande (10 %).
+    const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${res.json().id}/invoice`, headers: { cookie: admin }, payload: {} });
+    expect(inv.statusCode).toBe(201);
+    invoiceIds.push(inv.json().id);
+    const invoice = await prisma.invoice.findUnique({ where: { id: inv.json().id } });
+    expect(Number(invoice!.discountPct)).toBe(10);
+    expect(Number(invoice!.totalTtc)).toBe(180000); // 200 000 × (1 − 10 %)
+  });
+
   it("remise à l'établissement : net à payer réduit, totaux nets, brut conservé sur les lignes", async () => {
     const order = await createOrder(100_000); // sous le seuil → émise directement
     const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin }, payload: { discount_pct: 26 } });

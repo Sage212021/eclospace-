@@ -58,9 +58,10 @@ async function governanceDeciderIds(): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-function orderView(o: { id: string; orderNumber: string; category: string; label: string; amountHt: unknown; taxRate: unknown; status: string; createdAt: Date }, customerName: string) {
+function orderView(o: { id: string; orderNumber: string; category: string; label: string; amountHt: unknown; taxRate: unknown; discountPct?: unknown; status: string; createdAt: Date }, customerName: string) {
   const ht = Number(o.amountHt);
   const rate = Number(o.taxRate);
+  const discount = Number(o.discountPct ?? 0);
   return {
     id: o.id,
     reference: o.orderNumber,
@@ -70,6 +71,7 @@ function orderView(o: { id: string; orderNumber: string; category: string; label
     amount_ht: ht,
     tax_rate: rate,
     amount_ttc: Math.round(ht * (1 + rate / 100) * 100) / 100,
+    discount_pct: discount,
     status: o.status,
     created_at: o.createdAt,
   };
@@ -91,6 +93,8 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
         // qui déclenche le calcul des droits d'auteur). Au moins l'un des deux.
         amount_ht: z.number().positive().optional(),
         tax_rate: z.number().min(0).max(100).default(0),
+        // Remise commerciale prévue (0–100 %), reprise à l'établissement.
+        discount_pct: z.number().min(0).max(100).default(0),
         note: z.string().max(500).optional(),
         lines: z
           .array(
@@ -135,6 +139,7 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
         label: parsed.data.label.trim(),
         amountHt,
         taxRate: parsed.data.tax_rate,
+        discountPct: parsed.data.discount_pct,
         note: parsed.data.note?.trim() || null,
         initiatedById: request.user!.id,
         createdBy: request.user!.id,
@@ -219,10 +224,11 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const parsed = z.object({ discount_pct: z.number().min(0).max(100).optional() }).safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Remise invalide (0 à 100 %)." });
-    const discountPct = parsed.data.discount_pct ?? 0;
     const order = await prisma.billingOrder.findFirst({ where: { id, deletedAt: null } });
     if (!order) return reply.code(404).send({ code: "not_found", message: "Commande introuvable." });
     if (order.status !== "pending") return reply.code(409).send({ code: "not_pending", message: "Cette commande est déjà facturée ou annulée." });
+    // Remise fournie à l'établissement, sinon celle prévue sur la commande.
+    const discountPct = parsed.data.discount_pct ?? Number(order.discountPct);
 
     const threshold = await getThreshold();
     try {

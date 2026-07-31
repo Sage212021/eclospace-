@@ -1123,6 +1123,8 @@ export interface IsbnCatalogueItem {
   format: IsbnFormat;
   status: string;
   manuscript: { title: string } | null;
+  // Prix courant HT (dernier tarif), pour pré-remplir le prix unitaire à la sélection.
+  price_ht?: number | null;
 }
 export function listIsbnCatalogue(format?: IsbnFormat) {
   return request<IsbnCatalogueItem[]>(`/api/v1/isbns${format ? `?format=${format}` : ""}`);

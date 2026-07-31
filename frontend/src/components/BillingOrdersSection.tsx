@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   listCustomers,
+  createCustomer,
   createBillingOrder,
   getBillingOrders,
   invoiceBillingOrder,
@@ -13,6 +14,7 @@ import {
   setValidationThreshold,
   listIsbnCatalogue,
   type Customer,
+  type CustomerCategory,
   type BillingOrder,
   type BillingOrderCategory,
   type BillingOrderLineInput,
@@ -33,6 +35,14 @@ const fmt = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF",
 const CATS: { key: BillingOrderCategory; label: string }[] = [
   { key: "livre_scolaire", label: "Livre scolaire" },
   { key: "autre", label: "Autre" },
+];
+const CUSTOMER_CATS: { key: CustomerCategory; label: string }[] = [
+  { key: "institution", label: "Institution (ministère, école…)" },
+  { key: "librairie", label: "Librairie" },
+  { key: "distributeur", label: "Distributeur" },
+  { key: "particulier", label: "Particulier" },
+  { key: "plateforme", label: "Plateforme" },
+  { key: "auteur", label: "Auteur" },
 ];
 
 // Ligne d'ouvrage (livre scolaire) en cours de saisie.
@@ -55,6 +65,9 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Création rapide d'un client, sans quitter le formulaire de commande.
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({ name: "", category: "institution" as CustomerCategory });
 
   const reload = () => {
     getBillingOrders("pending").then(setOrders).catch(() => {});
@@ -81,6 +94,31 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   function resetForm() {
     setForm({ customer_id: "", category: "livre_scolaire", label: "", amount_ht: "", tax_rate: "0" });
     setBookLines([emptyLine()]);
+  }
+
+  async function submitNewCustomer() {
+    if (busy) return;
+    const name = newCustomer.name.trim();
+    if (!name) {
+      setError("Le nom du client est requis.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const created = await createCustomer({ name, category: newCustomer.category });
+      // Recharge la liste et sélectionne d'emblée le client créé.
+      const list = await listCustomers();
+      setCustomers(list);
+      setForm((f) => ({ ...f, customer_id: created.id }));
+      setShowNewCustomer(false);
+      setNewCustomer({ name: "", category: "institution" });
+      setMsg(`Client « ${created.name} » créé et sélectionné.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Création du client impossible.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function submitOrder() {
@@ -277,11 +315,28 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
         )}
         {showForm && (
           <div style={{ border: "1px dashed var(--line)", borderRadius: 10, padding: 12, marginBottom: 12, display: "grid", gap: 8 }}>
-            <select value={form.customer_id} onChange={(e) => setForm((f) => ({ ...f, customer_id: e.target.value }))} style={inp}>
-              <option value="">— Choisir un client —</option>
-              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            {customers.length === 0 && <div style={{ fontSize: 12, color: "var(--muted)" }}>Aucun client : créez-en un dans le module Commercial.</div>}
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <select value={form.customer_id} onChange={(e) => setForm((f) => ({ ...f, customer_id: e.target.value }))} style={{ ...inp, flex: 1 }}>
+                <option value="">— Choisir un client —</option>
+                {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button type="button" onClick={() => { setShowNewCustomer((v) => !v); setError(null); }} style={btnGhost} title="Créer un nouveau client sans quitter le formulaire">
+                {showNewCustomer ? "Fermer" : "+ Nouveau client"}
+              </button>
+            </div>
+            {showNewCustomer && (
+              <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, display: "grid", gap: 8, background: "var(--eclosion-soft, #f6efd8)" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--eclosion-dark)" }}>Nouveau client</div>
+                <input value={newCustomer.name} onChange={(e) => setNewCustomer((c) => ({ ...c, name: e.target.value }))} placeholder="Nom du client (ex. Ministère de l'Éducation)" style={inp} />
+                <select value={newCustomer.category} onChange={(e) => setNewCustomer((c) => ({ ...c, category: e.target.value as CustomerCategory }))} style={inp}>
+                  {CUSTOMER_CATS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                </select>
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <button type="button" onClick={() => { setShowNewCustomer(false); setNewCustomer({ name: "", category: "institution" }); }} style={btnGhost}>Annuler</button>
+                  <button type="button" onClick={submitNewCustomer} disabled={busy} style={btnPrimary}>Créer le client</button>
+                </div>
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8 }}>
               <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as BillingOrderCategory }))} style={{ ...inp, flex: 1 }}>
                 {CATS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}

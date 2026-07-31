@@ -228,6 +228,29 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(selfNotif).toBe(0);
   });
 
+  it("création de client ouverte aux profils qui initient une commande (DG / Finance), refusée aux autres", async () => {
+    // Le DG (commercial:validation, sans commercial:saisie) doit pouvoir créer un
+    // client sans quitter le formulaire de commande — sinon impossible de facturer.
+    const dgU = `dg_cli_${rnd()}`;
+    await createUserWithRole(dgU, "DIR_GENERAL", PWD);
+    const dgCookie = await login(dgU);
+    const asDg = await app.inject({ method: "POST", url: "/api/v1/customers", headers: { cookie: dgCookie }, payload: { category: "institution", name: `Ministère ${rnd()}` } });
+    expect(asDg.statusCode).toBe(201);
+
+    // Le comptable (finance:saisie) aussi.
+    const compU = `comp_cli_${rnd()}`;
+    await createUserWithRole(compU, "COMPTABLE", PWD);
+    const compCookie = await login(compU);
+    const asComp = await app.inject({ method: "POST", url: "/api/v1/customers", headers: { cookie: compCookie }, payload: { category: "librairie", name: `Librairie ${rnd()}` } });
+    expect(asComp.statusCode).toBe(201);
+
+    // Un magasinier (aucun des profils) : refusé.
+    const magUser = await prisma.user.findFirstOrThrow({ where: { username: { startsWith: "mag_" } }, orderBy: { createdAt: "desc" } });
+    const magCookie = await login(magUser.username);
+    const asMag = await app.inject({ method: "POST", url: "/api/v1/customers", headers: { cookie: magCookie }, payload: { category: "librairie", name: "X" } });
+    expect(asMag.statusCode).toBe(403);
+  });
+
   it("séparation des pouvoirs : la Finance ne peut PAS valider une annulation (réservé DG / admin)", async () => {
     // Le responsable financier détient finance:administration mais PAS
     // pilotage:administration : il peut demander l'annulation, pas la valider.

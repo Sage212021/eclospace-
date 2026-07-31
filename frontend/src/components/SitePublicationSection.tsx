@@ -111,6 +111,8 @@ export function SitePublicationSection({ manuscriptId, canPublish }: { manuscrip
             <img
               src={siteCoverDownloadUrl(manuscriptId)}
               alt={t("sitepub.cover", "Couverture")}
+              loading="lazy"
+              decoding="async"
               style={{ width: 84, height: "auto", borderRadius: 6, border: "1px solid var(--line)", boxShadow: "0 1px 4px rgba(16,35,61,.12)" }}
             />
             <div>

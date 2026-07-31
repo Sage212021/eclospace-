@@ -57,6 +57,10 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
   const [hallOpen, setHallOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notification[]>([]);
+  // Glissement d'une notification vers la gauche pour la rabattre (mobile).
+  const [swipe, setSwipe] = useState<{ id: string; dx: number } | null>(null);
+  const swipeStartX = useRef(0);
+  const swipedRef = useRef(false);
   // Noms par grand pôle, chargés à la demande à l'ouverture du Hall, pour les
   // seuls profils habilités. Rechargés à chaque ouverture pour rester à jour.
   const [namesByPole, setNamesByPole] = useState<Record<string, string[]>>({});
@@ -127,6 +131,33 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
       setNotifOpen(false);
       onOpenCalendar();
     }
+  }
+
+  // Rabattre (faire disparaître) une notification sans l'ouvrir — via le
+  // glissement vers la gauche. Elle est marquée lue et retirée du panneau.
+  function dismissNotif(n: Notification) {
+    if (!n.readAt) {
+      setUnreadCount((c) => Math.max(0, c - 1));
+      void markNotificationRead(n.id).catch(() => {});
+    }
+    setNotifs((list) => list.filter((x) => x.id !== n.id));
+    setSwipe(null);
+  }
+
+  const DISMISS_THRESHOLD = 70; // px de glissement vers la gauche pour rabattre
+  function onNotifTouchStart(e: React.TouchEvent) {
+    swipeStartX.current = e.touches[0].clientX;
+    swipedRef.current = false;
+  }
+  function onNotifTouchMove(id: string, e: React.TouchEvent) {
+    const dx = e.touches[0].clientX - swipeStartX.current;
+    if (dx < -6) swipedRef.current = true; // c'est un glissement, pas un tap
+    setSwipe({ id, dx: Math.min(0, dx) }); // ne suit que vers la gauche
+  }
+  function onNotifTouchEnd(n: Notification) {
+    const dx = swipe?.id === n.id ? swipe.dx : 0;
+    if (dx <= -DISMISS_THRESHOLD) dismissNotif(n);
+    else setSwipe(null); // revient en place
   }
 
   async function handleMarkAll() {
@@ -417,29 +448,43 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
                   <div style={{ padding: "16px 14px", fontSize: 13, color: "var(--muted)" }}>{t("notif.empty", "Aucune notification.")}</div>
                 ) : (
                   notifs.map((n) => {
+                    const dx = swipe?.id === n.id ? swipe.dx : 0;
+                    const swiping = dx < 0;
                     return (
-                      <button
-                        key={n.id}
-                        onClick={() => handleNotifClick(n)}
-                        title={t("notif.open_dismiss", "Ouvrir — la notification disparaît une fois lue")}
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          textAlign: "left",
-                          background: n.readAt ? "transparent" : "var(--eclosion-soft)",
-                          border: "none",
-                          borderBottom: "1px solid var(--line)",
-                          padding: "10px 14px",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: 999, background: NOTIF_COLORS[n.priority] ?? "var(--muted)", display: "inline-block", flexShrink: 0 }} />
-                          <span style={{ fontSize: 13, fontWeight: n.readAt ? 500 : 700, color: "var(--ink)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title}</span>
-                          <span style={{ fontSize: 10.5, color: "var(--muted)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>{notifTime(n.createdAt)}</span>
+                      // Conteneur : un fond rouge « rabattre » se révèle au glissement
+                      // vers la gauche ; la carte glisse par-dessus (translateX).
+                      <div key={n.id} style={{ position: "relative", overflow: "hidden", borderBottom: "1px solid var(--line)" }}>
+                        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 16, background: "var(--alert, #C24B3A)", color: "#fff", fontSize: 12.5, fontWeight: 700 }}>
+                          Rabattre ✕
                         </div>
-                        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, marginLeft: 15, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{n.body}</div>
-                      </button>
+                        <button
+                          onClick={() => { if (swipedRef.current) { swipedRef.current = false; return; } handleNotifClick(n); }}
+                          onTouchStart={onNotifTouchStart}
+                          onTouchMove={(e) => onNotifTouchMove(n.id, e)}
+                          onTouchEnd={() => onNotifTouchEnd(n)}
+                          title={t("notif.open_dismiss_swipe", "Ouvrir — ou glisser vers la gauche pour rabattre")}
+                          style={{
+                            position: "relative",
+                            display: "block",
+                            width: "100%",
+                            textAlign: "left",
+                            background: n.readAt ? "var(--card, #fff)" : "var(--eclosion-soft)",
+                            border: "none",
+                            padding: "10px 14px",
+                            cursor: "pointer",
+                            transform: `translateX(${dx}px)`,
+                            transition: swiping ? "none" : "transform .18s ease",
+                            touchAction: "pan-y",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 999, background: NOTIF_COLORS[n.priority] ?? "var(--muted)", display: "inline-block", flexShrink: 0 }} />
+                            <span style={{ fontSize: 13, fontWeight: n.readAt ? 500 : 700, color: "var(--ink)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.title}</span>
+                            <span style={{ fontSize: 10.5, color: "var(--muted)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>{notifTime(n.createdAt)}</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, marginLeft: 15, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{n.body}</div>
+                        </button>
+                      </div>
                     );
                   })
                 )}

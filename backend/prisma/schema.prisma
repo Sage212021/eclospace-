@@ -2967,6 +2967,7 @@ enum InvoiceStatus {
   paid
   cancelled
   pending_validation
+  cancellation_requested // annulation demandée par le comptable, en attente du DG
 }
 
 // Jamais modifiée après émission (Ch. 18 §18.2) : une correction est un
@@ -2988,6 +2989,15 @@ model Invoice {
   currency        String        @default("XAF")
   dueDate         DateTime?     @map("due_date")
   status          InvoiceStatus @default(issued)
+
+  // Demande d'annulation (validée par le DG) — Ch. 18 : une facture émise n'est
+  // annulée qu'après validation de la direction. Trace de la demande.
+  cancellationReason      String?   @map("cancellation_reason")
+  cancellationRequestedAt DateTime? @map("cancellation_requested_at")
+  cancellationRequestedBy String?   @map("cancellation_requested_by")
+  // Date de première impression du document officiel : une fois la facture
+  // « tirée », elle ne peut plus être annulée dans le système (décision opérateur).
+  printedAt               DateTime? @map("printed_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")

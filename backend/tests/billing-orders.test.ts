@@ -207,6 +207,29 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(selfNotif).toBe(0);
   });
 
+  it("séparation des pouvoirs : la Finance ne peut PAS valider une annulation (réservé DG / admin)", async () => {
+    // Le responsable financier détient finance:administration mais PAS
+    // pilotage:administration : il peut demander l'annulation, pas la valider.
+    const dafU = `daf_sep_${rnd()}`;
+    await createUserWithRole(dafU, "RESP_FINANCE", PWD);
+    const dafCookie = await login(dafU);
+
+    const invId = await issueInvoice(130_000);
+    const req = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/request-cancellation`, headers: { cookie: dafCookie }, payload: { reason: "Erreur" } });
+    expect(req.statusCode).toBe(200);
+
+    // La Finance tente de valider / refuser sa propre demande : refusé (403).
+    const approve = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/cancel-approve`, headers: { cookie: dafCookie } });
+    expect(approve.statusCode).toBe(403);
+    const reject = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/cancel-reject`, headers: { cookie: dafCookie } });
+    expect(reject.statusCode).toBe(403);
+
+    // Le DG / administrateur général, lui, valide.
+    const approveDg = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/cancel-approve`, headers: { cookie: admin } });
+    expect(approveDg.statusCode).toBe(200);
+    expect(approveDg.json().status).toBe("cancelled");
+  });
+
   it("le comptable demande l'annulation, le DG la valide → facture annulée", async () => {
     const invId = await issueInvoice(150_000);
     const req = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/request-cancellation`, headers: { cookie: admin }, payload: { reason: "Erreur de saisie" } });

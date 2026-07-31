@@ -104,6 +104,10 @@ interface FinancePageProps {
   canAdminister: boolean;
   // Initiation d'une commande à facturer / proforma (Finance, commercial ou DG).
   canInitiateOrder: boolean;
+  // Validation de l'annulation d'une facture : réservée à la gouvernance (DG /
+  // administrateur général, pilotage:administration). La Finance qui DEMANDE
+  // l'annulation ne peut pas la valider (séparation des pouvoirs).
+  canValidateCancellation: boolean;
 }
 
 // Fenêtres intégrées de la page (remplacent les pop-up du navigateur).
@@ -123,7 +127,7 @@ type FinanceModal =
 // droits d'auteur.
 import { useI18n } from "../i18n";
 
-export function FinancePage({ canManage, canAdminister, canInitiateOrder }: FinancePageProps) {
+export function FinancePage({ canManage, canAdminister, canInitiateOrder, canValidateCancellation }: FinancePageProps) {
   const { t, lang } = useI18n();
   const confirm = useConfirm();
   // Alias de `t` pour les endroits où la variable de boucle s'appelle aussi `t`
@@ -485,8 +489,10 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder }: Fina
         )}
       </Card>
 
-      {/* Annulations de factures en attente de validation du DG. */}
-      {canAdminister && pendingCancels.length > 0 && (
+      {/* Annulations de factures en attente de validation — réservé à la
+          gouvernance (DG / admin général) : la Finance ne valide pas ses propres
+          demandes. */}
+      {canValidateCancellation && pendingCancels.length > 0 && (
         <Card
           title={t("fin.pending_cancel", "Annulations de factures à valider")}
           icon={<IconFinance />}

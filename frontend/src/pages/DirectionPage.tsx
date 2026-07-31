@@ -13,6 +13,7 @@ import {
 } from "../api/client";
 import { DataTable } from "../components/DataTable";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
+import { InvoiceCancellationsToValidate } from "../components/InvoiceCancellationsToValidate";
 import { RevenueByFamilyCard } from "../components/RevenueByFamilyCard";
 import { Card } from "../components/Card";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -31,13 +32,17 @@ interface DirectionPageProps {
   canTreatRecommendations: boolean;
   // Le DG peut initier une commande à facturer / proforma depuis sa rubrique.
   canInitiateOrder: boolean;
+  // Le DG (ou l'administrateur général) valide les décisions de gouvernance
+  // (annulation de facture) depuis sa propre page — permission pilotage:administration,
+  // que la Finance ne détient pas (séparation des pouvoirs).
+  canValidateCancellation: boolean;
 }
 
 // Ch. 5 : tableau de bord Direction générale consolidé, recherche globale,
 // alertes automatiques et centre de pilotage intelligent (Ch. 5 §5.9).
 import { useI18n } from "../i18n";
 
-export function DirectionPage({ canTreatRecommendations, canInitiateOrder }: DirectionPageProps) {
+export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canValidateCancellation }: DirectionPageProps) {
   const { t, lang } = useI18n();
   const [dashboard, setDashboard] = useState<DirectionDashboard | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -113,6 +118,10 @@ export function DirectionPage({ canTreatRecommendations, canInitiateOrder }: Dir
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
+
+      {/* Décision de gouvernance du DG : annulations de factures à valider —
+          présentées ici, sur la page du DG, pas seulement côté Finance. */}
+      {canValidateCancellation && <InvoiceCancellationsToValidate showWhenEmpty />}
 
       {/* Ch. 5 §5.1 — Tableau de bord consolidé */}
       <Card title={t("dir.dashboard", "Tableau de bord consolidé")} icon={<IconPilotage />} subtitle={t("dir.dashboard_sub", "Indicateurs clés par domaine.")}>

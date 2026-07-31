@@ -39,13 +39,8 @@ async function financeStaffIds(): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-// Décideurs habilités à VALIDER une annulation de facture : titulaires de
-// finance:administration (Directeur général, responsable financier). Contrairement
-// aux notifications OPÉRATIONNELLES du pôle (nouvelle commande…), on N'EXCLUT PAS
-// l'administrateur général ici : l'annulation d'une facture est une décision de
-// GOUVERNANCE (DG) et, dans une petite structure, l'administrateur général tient
-// souvent ce rôle — sans lui, la demande n'atteindrait personne. La validation
-// reste par ailleurs gardée par la permission finance:administration.
+// Décideurs habilités pour la validation par SEUIL (facture au-dessus du seuil) :
+// titulaires de finance:administration (DG, responsable financier, admin général).
 async function financeAdminIds(): Promise<string[]> {
   const rows = await prisma.user.findMany({
     where: {
@@ -53,6 +48,24 @@ async function financeAdminIds(): Promise<string[]> {
       deletedAt: null,
       accountType: "internal",
       userRoles: { some: { revokedAt: null, role: { rolePermissions: { some: { permission: { module: "finance", action: "administration" } } } } } },
+    },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
+// Décideurs de GOUVERNANCE, seuls habilités à VALIDER l'annulation d'une facture :
+// le Directeur général et l'administrateur général — PAS la Finance (séparation
+// des pouvoirs : la Finance DEMANDE l'annulation, la Direction la valide). Le
+// discriminant est la permission « pilotage:administration », détenue par le DG
+// et l'admin général, mais pas par le responsable financier.
+async function governanceDeciderIds(): Promise<string[]> {
+  const rows = await prisma.user.findMany({
+    where: {
+      status: "active",
+      deletedAt: null,
+      accountType: "internal",
+      userRoles: { some: { revokedAt: null, role: { rolePermissions: { some: { permission: { module: "pilotage", action: "administration" } } } } } },
     },
     select: { id: true },
   });
@@ -338,9 +351,10 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
       where: { id },
       data: { status: "cancellation_requested", cancellationReason: parsed.data.reason.trim(), cancellationRequestedAt: new Date(), cancellationRequestedBy: request.user!.id },
     });
-    // On notifie les décideurs, sans se notifier soi-même (le demandeur peut être
-    // lui-même titulaire de finance:administration).
-    const deciders = (await financeAdminIds()).filter((uid) => uid !== request.user!.id);
+    // Séparation des pouvoirs : la Finance DEMANDE, la Direction VALIDE. On notifie
+    // donc les décideurs de gouvernance (DG / administrateur général), pas la
+    // Finance, et jamais soi-même.
+    const deciders = (await governanceDeciderIds()).filter((uid) => uid !== request.user!.id);
     if (deciders.length) {
       await notifyUsers({ userIds: deciders, type: "autre", priority: "high", title: "Annulation de facture à valider", body: `${invoice.invoiceNumber} — ${invoice.customer.name} · Motif : ${parsed.data.reason.trim()}`, entityType: "invoice", entityId: id }).catch(() => {});
     }
@@ -358,8 +372,10 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     return reply.send(invoices.map((i) => ({ id: i.id, invoice_number: i.invoiceNumber, customer_name: i.customer.name, total_ttc: Number(i.totalTtc), reason: i.cancellationReason, requested_at: i.cancellationRequestedAt })));
   });
 
-  // Le DG valide l'annulation → la facture passe « annulée » (sort du CA).
-  fastify.post("/api/v1/invoices/:id/cancel-approve", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+  // Le DG (ou l'administrateur général) valide l'annulation → « annulée » (sort du
+  // CA). Réservé à la GOUVERNANCE (pilotage:administration) : la Finance, qui a
+  // demandé l'annulation, ne peut pas la valider elle-même (séparation des pouvoirs).
+  fastify.post("/api/v1/invoices/:id/cancel-approve", { preHandler: requirePermission("pilotage", "administration") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const invoice = await prisma.invoice.findUnique({ where: { id } });
     if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
@@ -369,8 +385,9 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     return reply.send({ ok: true, status: "cancelled" });
   });
 
-  // Le DG refuse l'annulation → la facture reste émise.
-  fastify.post("/api/v1/invoices/:id/cancel-reject", { preHandler: requirePermission("finance", "administration") }, async (request, reply) => {
+  // Le DG (ou l'administrateur général) refuse l'annulation → la facture reste
+  // émise. Même réserve de gouvernance que la validation (pas la Finance).
+  fastify.post("/api/v1/invoices/:id/cancel-reject", { preHandler: requirePermission("pilotage", "administration") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const invoice = await prisma.invoice.findUnique({ where: { id } });
     if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });

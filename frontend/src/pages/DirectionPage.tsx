@@ -14,6 +14,7 @@ import {
 import { DataTable } from "../components/DataTable";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { InvoiceCancellationsToValidate } from "../components/InvoiceCancellationsToValidate";
+import { EmittedInvoicesForCancellation } from "../components/EmittedInvoicesForCancellation";
 import { RevenueByFamilyCard } from "../components/RevenueByFamilyCard";
 import { AnnualSummarySection } from "../components/AnnualSummarySection";
 import { Card } from "../components/Card";
@@ -123,6 +124,10 @@ export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canVa
       {/* Décision de gouvernance du DG : annulations de factures à valider —
           présentées ici, sur la page du DG, pas seulement côté Finance. */}
       {canValidateCancellation && <InvoiceCancellationsToValidate showWhenEmpty />}
+
+      {/* Historique des factures émises + annulation directe (essai / erreur),
+          réservé au DG / administrateur général — sur sa propre page (pilotage). */}
+      {canValidateCancellation && <EmittedInvoicesForCancellation />}
 
       {/* Ch. 5 §5.1 — Tableau de bord consolidé */}
       <Card title={t("dir.dashboard", "Tableau de bord consolidé")} icon={<IconPilotage />} subtitle={t("dir.dashboard_sub", "Indicateurs clés par domaine.")}>

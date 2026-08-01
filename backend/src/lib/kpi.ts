@@ -58,7 +58,7 @@ export async function productionIndicators() {
 const PRESTATION_QUOTE_SOURCES = ["editorial_quote", "impression_quote", "communication_quote"];
 
 export async function commercialIndicators() {
-  const [invoiceLines, stockItems] = await Promise.all([
+  const [invoiceLines, stockItems, revenueInvoices] = await Promise.all([
     prisma.invoiceLine.findMany({
       // Une facture ANNULÉE (annulation validée par le DG) sort du chiffre
       // d'affaires ; celle dont l'annulation est seulement DEMANDÉE compte encore.
@@ -66,15 +66,27 @@ export async function commercialIndicators() {
       include: { invoice: true, isbn: { include: { manuscript: true } } },
     }),
     prisma.stockItem.findMany({ where: { condition: "vendable" } }),
+    // Chiffre d'affaires = montant RÉELLEMENT facturé : le TTC NET (après remise)
+    // porté par l'en-tête de facture, avoirs déduits — même base que le « Bilan
+    // par année » et le « CA par famille », pour un seul chiffre cohérent partout
+    // (les lignes conservent le brut avant remise : on ne s'en sert donc PAS ici).
+    prisma.invoice.findMany({
+      where: { type: "invoice", status: { not: "cancelled" }, sourceType: { notIn: PRESTATION_QUOTE_SOURCES } },
+      include: { creditNotes: true },
+    }),
   ]);
 
-  let unitsSold = 0;
   let revenueTotal = 0;
+  for (const inv of revenueInvoices) {
+    const credited = inv.creditNotes.reduce((s, c) => s + Number(c.totalTtc), 0);
+    revenueTotal += Math.max(Number(inv.totalTtc) - credited, 0);
+  }
+
+  let unitsSold = 0;
   const byTitle = new Map<string, { title: string; units: number; revenue: number }>();
   for (const line of invoiceLines) {
     const sign = line.invoice.type === "credit_note" ? -1 : 1;
     unitsSold += sign * line.quantity;
-    revenueTotal += sign * Number(line.lineTotal);
     const title = line.isbn?.manuscript?.title;
     if (title) {
       const entry = byTitle.get(title) ?? { title, units: 0, revenue: 0 };

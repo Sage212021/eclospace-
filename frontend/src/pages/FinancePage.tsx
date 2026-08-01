@@ -511,10 +511,10 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
                   {!invoice.printedAt && <Button variant="danger" size="sm" onClick={() => handleRequestCancel(invoice)}>{t("fin.request_cancel", "Annuler la facture")}</Button>}
                 </>
               )}
-              {/* Facture déjà imprimée : la Finance ne peut plus la demander en
-                  annulation. Le DG / administrateur général peut néanmoins l'annuler
-                  directement (essai, erreur), avec motif — réservé à la direction. */}
-              {canValidateCancellation && invoice.type === "invoice" && (invoice.status === "issued" || invoice.status === "pending_validation") && invoice.printedAt && (
+              {/* Annulation directe par le DG / administrateur général (essai,
+                  erreur), avec motif — réservé à la direction. Fonctionne aussi sur
+                  une facture déjà imprimée, que la Finance ne peut plus annuler. */}
+              {canValidateCancellation && invoice.type === "invoice" && (invoice.status === "issued" || invoice.status === "pending_validation") && (
                 <Button variant="danger" size="sm" onClick={() => handleForceCancel(invoice)}>{t("fin.force_cancel", "Annuler (direction)")}</Button>
               )}
             </div>

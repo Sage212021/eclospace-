@@ -1019,6 +1019,65 @@ async function main() {
       }
     }
     console.log(`Catalogue scolaire : ${catalogue.length} ouvrages disponibles à la commande.`);
+
+    // ── Catalogue des livres GÉNÉRAUX / simples d'Éclosion (par collection) ────
+    // Même mécanisme que le scolaire : les ouvrages sont SÉLECTIONNABLES dans le
+    // formulaire de commande à facturer (catégorie « Livre général / simple »),
+    // groupés par collection. Les ISBN sont les ISBN OFFICIELS de la maison
+    // (catalogue fourni). Première tranche — la liste est complétée
+    // progressivement. Seuls les ouvrages à ISBN valide et unique sont chargés
+    // (les ISBN malformés ou dupliqués de la source sont écartés, cf. contrainte
+    // « ISBN jamais réutilisé »). Pas de prix catalogue : il est saisi à la commande.
+    const generalCatalogue: { num: string; title: string; collection: string; authors: string[]; isbn: string; year: number }[] = [
+      { num: "LG-CAT-0001", title: "06 Étapes à suivre pour trouver le travail", collection: "Collection Source", authors: ["Olive Ndjabi"], isbn: "9789956996179", year: 2022 },
+      { num: "LG-CAT-0002", title: "Institutions de Bretton Woods et changement des paradigmes du discours sur l'économie", collection: "Collection Source", authors: ["Alphonse Joseph Tonye"], isbn: "9789956996278", year: 2021 },
+      { num: "LG-CAT-0003", title: "Commentaires", collection: "Collection Source", authors: ["Georges Alain Boyomo"], isbn: "9789956362592", year: 2023 },
+      { num: "LG-CAT-0004", title: "Comprendre le Règlement N° 02/18/CEMAC/UMAC/CM du 21 décembre portant réglementation des changes de la CEMAC", collection: "Collection Source", authors: ["Batuo John Ndah"], isbn: "9789956996391", year: 2022 },
+      { num: "LG-CAT-0005", title: "Voici pourquoi la Chine dominera le Monde", collection: "Collection Source", authors: ["Pierre Chemete"], isbn: "9789956363025", year: 2025 },
+      { num: "LG-CAT-0006", title: "Coup d'État manqué du 06 avril 1984 au Cameroun", collection: "Collection Source", authors: ["Jean Pascal Mendam Nsa"], isbn: "9789956362813", year: 2024 },
+      { num: "LG-CAT-0007", title: "Politiques publiques, action publique internationale et les grands évènements sportifs internationaux", collection: "Collection Source", authors: ["Armand Elono Essono"], isbn: "9789956996162", year: 2022 },
+      { num: "LG-CAT-0008", title: "Quand journalisme et communication des organisations", collection: "Collection Source", authors: ["Dominique Pekassa Ngou"], isbn: "9789956078424", year: 2025 },
+      { num: "LG-CAT-0009", title: "Disruption monétaire et financière en Afrique centrale", collection: "Collection Source", authors: ["Jean René Fils Ndouma"], isbn: "9789956362608", year: 2022 },
+      { num: "LG-CAT-0010", title: "Énigme de prévention et de résolution des conflits en Afrique", collection: "Collection Source", authors: ["David Gadji"], isbn: "9789956078202", year: 2025 },
+      { num: "LG-CAT-0011", title: "Guerre de Bakassi", collection: "Collection Source", authors: ["Vincent Ntuda Ebode"], isbn: "9789956078493", year: 2025 },
+      { num: "LG-CAT-0012", title: "Marketing Territorial", collection: "Collection Source", authors: ["Lionel Nga"], isbn: "9789956996353", year: 2021 },
+      { num: "LG-CAT-0013", title: "Itinéraire d'une débrouillarde devenue milliardaire", collection: "Collection Source", authors: ["Françoise Puene"], isbn: "9789956077939", year: 2022 },
+    ];
+    for (const b of generalCatalogue) {
+      const ms = await prisma.manuscript.upsert({
+        where: { manuscriptNumber: b.num },
+        update: { title: b.title, subtitle: b.collection, editorialSegment: "general", isBackCatalogue: true, keywords: [b.collection] },
+        create: {
+          manuscriptNumber: b.num,
+          title: b.title,
+          subtitle: b.collection,
+          keywords: [b.collection],
+          language: "fr",
+          statusId: catStatus.id,
+          ownerId: adminUser.id,
+          receivedAt: new Date(`${b.year}-01-01`),
+          publicationDate: new Date(`${b.year}-09-01`),
+          isBackCatalogue: true,
+          editorialSegment: "general",
+        },
+      });
+      let order = 0;
+      for (const name of b.authors) {
+        const p = await ensureAuthor(name);
+        await prisma.workContributor.upsert({
+          where: { manuscriptId_partnerId_role: { manuscriptId: ms.id, partnerId: p.id, role: "author" } },
+          update: {},
+          create: { manuscriptId: ms.id, partnerId: p.id, role: "author", displayOrder: order++ },
+        });
+      }
+      let isbn = await prisma.isbn.findFirst({ where: { manuscriptId: ms.id, format: "print" } });
+      if (!isbn) {
+        isbn = await prisma.isbn.create({ data: { isbn13: b.isbn, format: "print", manuscriptId: ms.id, status: "published", assignedAt: new Date() } });
+      } else if (isbn.isbn13 !== b.isbn) {
+        isbn = await prisma.isbn.update({ where: { id: isbn.id }, data: { isbn13: b.isbn } });
+      }
+    }
+    console.log(`Catalogue général : ${generalCatalogue.length} ouvrages disponibles à la commande.`);
   }
 
   console.log("Seed Lot 0 terminé.");

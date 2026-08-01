@@ -1151,7 +1151,7 @@ export interface IsbnCatalogueItem {
   isbn13: string;
   format: IsbnFormat;
   status: string;
-  manuscript: { title: string; subtitle?: string | null } | null;
+  manuscript: { title: string; subtitle?: string | null; editorialSegment?: EditorialSegment | null } | null;
   // Prix courant HT (dernier tarif), pour pré-remplir le prix unitaire à la sélection.
   price_ht?: number | null;
 }
@@ -3577,7 +3577,7 @@ export function replyServiceThread(id: string, body: string) {
 }
 
 // --- Commandes à facturer + validation par seuil (Finance étape 3) --------------
-export type BillingOrderCategory = "livre_scolaire" | "autre";
+export type BillingOrderCategory = "livre_scolaire" | "livre_general" | "autre";
 export interface BillingOrder {
   id: string;
   reference: string;

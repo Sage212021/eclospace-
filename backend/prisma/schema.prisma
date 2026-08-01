@@ -2942,6 +2942,7 @@ enum BillingOrderStatus {
 
 enum BillingOrderCategory {
   livre_scolaire
+  livre_general
   autre
 }
 

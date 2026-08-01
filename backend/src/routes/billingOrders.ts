@@ -87,7 +87,7 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     const parsed = z
       .object({
         customer_id: z.string().uuid(),
-        category: z.enum(["livre_scolaire", "autre"]).default("livre_scolaire"),
+        category: z.enum(["livre_scolaire", "livre_general", "autre"]).default("livre_scolaire"),
         label: z.string().min(1).max(200),
         // Montant global (mode simple) OU détail par ouvrage (mode livre scolaire,
         // qui déclenche le calcul des droits d'auteur). Au moins l'un des deux.

@@ -29,13 +29,11 @@ Les ISBN provisoires (préfixe interne 978-2-00190-…) sont temporaires. Merci 
 | LG-CAT-0094 | Aminatou Ndam Mbendia | Réalités épineuses | Collection Canari & les Héritiers | `9782001900213` | ISBN invalide (chiffre-clé) : « 978-9956-0-7815-4 » |
 ---
 
-## Catalogue scolaire — ISBN provisoire (littérature CM1/CM2)
+## Catalogue scolaire — littérature CM1/CM2 : RÉSOLU (fiches éditoriales)
 
-La liste ISBN de la maison attribue **le même ISBN** (`978-9956-07-761-8`) aux deux ouvrages ci-dessous. Un ISBN ne pouvant appartenir qu'à un seul ouvrage, le CM1 conserve l'ISBN officiel et le CM2 reçoit un ISBN provisoire.
+Les fiches éditoriales ont levé l'ambiguïté : les deux ISBN sont bien distincts et officiels. Auteurs et illustrateurs renseignés. Plus aucun provisoire pour ces ouvrages.
 
-| Réf | Titre | Classe | ISBN | Statut |
-|---|---|---|---|---|
-| MS-CAT-0010 | La naissance d'une grande nation | CM1 | `9789956077618` | officiel (repris de la liste) |
-| MS-CAT-0011 | Une nation bénie | CM2 | `9782001910014` | **provisoire** — la source donnait le même ISBN que le CM1 ; merci de fournir le bon |
-
-> Auteurs des deux ouvrages non fournis dans la liste — à compléter.
+| Réf | Titre | Classe | ISBN | Auteurs (texte) | Illustrateurs |
+|---|---|---|---|---|---|
+| MS-CAT-0010 | La naissance d'une grande nation | CM1 | `9789956077625` | Endele Damaris, Obela Fréderic Russel | Yaneinstein, Foch |
+| MS-CAT-0011 | Une nation bénie | CM2 | `9789956077618` | Endele Damaris, Obela Fréderic Russel | Yaneinstein, Foch |

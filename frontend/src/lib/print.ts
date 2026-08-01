@@ -195,7 +195,12 @@ function printViaIframe(html: string): boolean {
   try {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
-    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+    // IMPORTANT : l'iframe doit avoir une VRAIE taille de page (A4), pas 0×0.
+    // Une iframe 0×0 n'a pas de fenêtre de mise en page : à l'impression, le
+    // navigateur rastérise alors le document à la résolution de l'écran — TOUT
+    // le texte sort flou. En lui donnant les dimensions A4 (hors écran, à
+    // gauche), le rendu d'impression reste vectoriel et net.
+    iframe.style.cssText = "position:fixed;left:-11000px;top:0;width:210mm;height:297mm;border:0;";
     document.body.appendChild(iframe);
     const win = iframe.contentWindow;
     const idoc = win?.document;

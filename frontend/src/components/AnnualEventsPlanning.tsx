@@ -135,7 +135,7 @@ export function AnnualEventsPlanning({ canManage }: { canManage: boolean }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {dayDetail.events.map((ev) => (
               <div key={ev.id} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                {ev.has_affiche && <img src={annualEventAfficheUrl(ev.id, ev.updated_at)} alt="" loading="lazy" decoding="async" style={{ width: 70, borderRadius: 6, border: "1px solid var(--line)", flexShrink: 0 }} />}
+                {ev.has_affiche && <img src={annualEventAfficheUrl(ev.id, ev.updated_at, true)} alt="" loading="lazy" decoding="async" style={{ width: 70, borderRadius: 6, border: "1px solid var(--line)", flexShrink: 0 }} />}
                 <div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     <strong style={{ fontSize: 14 }}>{ev.title}</strong>
@@ -321,7 +321,7 @@ function EventRow({
     >
       {ev.has_affiche && (
         <img
-          src={annualEventAfficheUrl(ev.id, ev.updated_at)}
+          src={annualEventAfficheUrl(ev.id, ev.updated_at, true)}
           alt={t("events.affiche", "Affiche")}
           loading="lazy"
           decoding="async"

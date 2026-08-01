@@ -1,7 +1,7 @@
 import { prisma } from "./prisma.js";
 import { writeAuditLog } from "./audit.js";
 import { readStoredFile } from "./storage.js";
-import { optimizeImage, UnsupportedImageError } from "./imageOptimize.js";
+import { optimizeImage, getOrCreateThumbnail, UnsupportedImageError } from "./imageOptimize.js";
 
 // Publication d'un ouvrage sur le site vitrine (site sur-mesure PHP + React,
 // sans API dédiée). Le site ne pouvant pas recevoir automatiquement les fiches,
@@ -154,6 +154,20 @@ export async function optimizedCoverForSite(manuscriptId: string): Promise<{
   const base = slugify(payload.title || "couverture");
   const filename = `couverture-${base}.${optimized.ext}`;
   return { buffer: optimized.buffer, mime: optimized.mime, filename };
+}
+
+// Miniature (aperçu léger) de la couverture — mise en cache au 1er accès. Évite
+// de ré-optimiser la couverture pleine taille (≈1600 px) à chaque affichage
+// d'un petit aperçu (listes, fiches).
+export async function siteCoverThumbnail(manuscriptId: string): Promise<{ buffer: Buffer; mime: string } | null> {
+  const asset = await prisma.imageAsset.findFirst({
+    where: { manuscriptId, type: "couverture_1", documentVersionId: { not: null } },
+    orderBy: { createdAt: "desc" },
+    include: { documentVersion: { select: { filePath: true, mimeType: true } } },
+  });
+  const v = asset?.documentVersion;
+  if (!v || !v.mimeType?.startsWith("image/")) return null;
+  return getOrCreateThumbnail(v.filePath);
 }
 
 export { UnsupportedImageError };

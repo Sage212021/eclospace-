@@ -6,7 +6,7 @@ import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
-import { previewSiteFiche, setSitePublished, optimizedCoverForSite, UnsupportedImageError } from "../lib/sitePublisher.js";
+import { previewSiteFiche, setSitePublished, optimizedCoverForSite, siteCoverThumbnail, UnsupportedImageError } from "../lib/sitePublisher.js";
 
 const authorSchema = z.union([
   z.object({ author_id: z.string().uuid() }),
@@ -585,7 +585,19 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     { preHandler: requirePermission("manuscripts", "consultation") },
     async (request, reply) => {
       const { id } = request.params as { id: string };
+      const { size } = request.query as { size?: string };
       try {
+        // Aperçu : miniature légère mise en cache (évite de ré-optimiser la
+        // couverture pleine taille à chaque affichage). Repli sur la version web
+        // complète si la miniature échoue.
+        if (size === "thumb") {
+          const thumb = await siteCoverThumbnail(id);
+          if (thumb) {
+            reply.header("content-type", thumb.mime);
+            reply.header("cache-control", "private, max-age=300");
+            return reply.send(thumb.buffer);
+          }
+        }
         const cover = await optimizedCoverForSite(id);
         if (!cover) {
           return reply.code(404).send({ code: "no_cover", message: "Aucune couverture (image) déposée pour cet ouvrage." });

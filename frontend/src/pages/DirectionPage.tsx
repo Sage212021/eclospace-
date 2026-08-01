@@ -15,6 +15,7 @@ import { DataTable } from "../components/DataTable";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { InvoiceCancellationsToValidate } from "../components/InvoiceCancellationsToValidate";
 import { RevenueByFamilyCard } from "../components/RevenueByFamilyCard";
+import { AnnualSummarySection } from "../components/AnnualSummarySection";
 import { Card } from "../components/Card";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
@@ -177,6 +178,11 @@ export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canVa
           créances). Visible par la Direction ; le composant se masque seul si
           l'API refuse l'accès. */}
       <RevenueByFamilyCard />
+
+      {/* Bilan par année : chaque grand indicateur décliné par année (filtre
+          d'année) + mouvement global. Ventes scolaires dissociées des ventes
+          de livres simples. Réservé finance/direction (se masque si refus). */}
+      <AnnualSummarySection />
 
       {/* Commandes à facturer : le DG peut initier une commande / proforma
           (ex. livre scolaire) depuis sa rubrique ; la Finance l'établit. */}

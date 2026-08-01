@@ -60,6 +60,7 @@ import {
 import { Card } from "../components/Card";
 import { PendingQuotesCard } from "../components/PendingQuotesCard";
 import { RevenueByFamilyCard } from "../components/RevenueByFamilyCard";
+import { AnnualSummarySection } from "../components/AnnualSummarySection";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { useConfirm } from "../components/ConfirmProvider";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -445,6 +446,8 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
       <RevenueByFamilyCard />
+
+      <AnnualSummarySection />
 
       <PendingQuotesCard />
 

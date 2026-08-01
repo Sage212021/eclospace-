@@ -89,3 +89,75 @@ describe("indicateurs de synthèse du tableau de bord", () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+describe("bilan par année (annual-summary)", () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    app = await buildApp();
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await prisma.$disconnect();
+  });
+
+  it("renvoie la structure attendue et un mouvement global cohérent", async () => {
+    const cookie = await loginCookie(app, "admin", ADMIN_PASSWORD);
+    const res = await app.inject({ method: "GET", url: "/api/v1/dashboard/annual-summary", headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+
+    // Structure : liste d'années (triée décroissante), année sélectionnée
+    // présente dans la liste, année courante toujours proposée.
+    expect(Array.isArray(body.years)).toBe(true);
+    expect(body.years).toContain(new Date().getUTCFullYear());
+    expect(body.years).toContain(body.year);
+    for (let i = 1; i < body.years.length; i++) expect(body.years[i]).toBeLessThan(body.years[i - 1]);
+
+    // CA par famille : le scolaire ET le général sont toujours présents,
+    // dissociés (exigence métier), et le total ≥ somme des deux.
+    const keys = body.ca.families.map((f: { key: string }) => f.key);
+    expect(keys).toContain("livre_scolaire");
+    expect(keys).toContain("livre_general");
+
+    // Exemplaires dissociés (scolaire vs simple), nombres ≥ 0.
+    expect(typeof body.exemplaires.scolaire).toBe("number");
+    expect(typeof body.exemplaires.simple).toBe("number");
+    expect(body.exemplaires.scolaire).toBeGreaterThanOrEqual(0);
+    expect(body.exemplaires.simple).toBeGreaterThanOrEqual(0);
+    expect(typeof body.ouvrages_parus).toBe("number");
+    expect(typeof body.droits_verses).toBe("number");
+
+    // Mouvement global : le cumul tout-temps = somme des lignes par année.
+    const g = body.global;
+    expect(Array.isArray(g.per_year)).toBe(true);
+    const sumParus = g.per_year.reduce((s: number, p: { ouvrages_parus: number }) => s + p.ouvrages_parus, 0);
+    expect(g.total.ouvrages_parus).toBe(sumParus);
+    const sumFacture = Math.round(g.per_year.reduce((s: number, p: { ca_facture: number }) => s + p.ca_facture, 0) * 100) / 100;
+    expect(g.total.ca_facture).toBeCloseTo(sumFacture, 2);
+    // La tendance est triée par année croissante (lecture chronologique).
+    for (let i = 1; i < g.per_year.length; i++) expect(g.per_year[i].year).toBeGreaterThan(g.per_year[i - 1].year);
+  });
+
+  it("respecte l'année demandée quand elle existe", async () => {
+    const cookie = await loginCookie(app, "admin", ADMIN_PASSWORD);
+    const base = (await app.inject({ method: "GET", url: "/api/v1/dashboard/annual-summary", headers: { cookie } })).json();
+    const target = base.years[base.years.length - 1]; // année la plus ancienne disponible
+    const res = await app.inject({ method: "GET", url: `/api/v1/dashboard/annual-summary?year=${target}`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().year).toBe(target);
+  });
+
+  it("est réservé à la Finance / Direction (403 pour un profil non habilité)", async () => {
+    await createUserWithRole("correcteur_annual_test", "CORRECTEUR", "Correcteur123!");
+    const cookie = await loginCookie(app, "correcteur_annual_test", "Correcteur123!");
+    const res = await app.inject({ method: "GET", url: "/api/v1/dashboard/annual-summary", headers: { cookie } });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("exige une session (401 sans authentification)", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/v1/dashboard/annual-summary" });
+    expect(res.statusCode).toBe(401);
+  });
+});

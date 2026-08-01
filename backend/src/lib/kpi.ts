@@ -126,9 +126,13 @@ function classifyInvoiceFamily(inv: InvoiceForFamily): RevenueFamilyKey {
   return "livre_general";
 }
 
-export async function revenueByFamily() {
+export async function revenueByFamily(range?: { from?: Date; to?: Date }) {
   const invoices = await prisma.invoice.findMany({
-    where: { type: "invoice", status: { not: "cancelled" } },
+    where: {
+      type: "invoice",
+      status: { not: "cancelled" },
+      ...(range?.from || range?.to ? { createdAt: { ...(range.from ? { gte: range.from } : {}), ...(range.to ? { lte: range.to } : {}) } } : {}),
+    },
     include: {
       paymentAllocations: true,
       creditNotes: true,
@@ -215,3 +219,100 @@ export const KPI_REGISTRY: Record<string, () => Promise<unknown>> = {
   royalties_due: async () => (await financialIndicators()).royalties_due,
   treasury_position: async () => (await financialIndicators()).treasury_position,
 };
+
+// ── Bilan par année (Ch. 5) : chaque grand indicateur décliné par année, plus
+// le mouvement global (tendance annuelle + cumul tout-temps). Les ventes de
+// livre SCOLAIRE (canal « commande à facturer ») sont dissociées des ventes de
+// livre SIMPLE/général (sorties de stock). Un seul chargement par source.
+export async function annualSummary(requestedYear?: number) {
+  const yearOf = (d: Date | null | undefined) => (d ? new Date(d).getUTCFullYear() : null);
+  const blankFam = () => ({ factureHt: 0, facture: 0, encaisse: 0, creances: 0 });
+  type Fam = { factureHt: number; facture: number; encaisse: number; creances: number };
+
+  // 1) Chiffre d'affaires (factures) bucketé par année + famille.
+  const invoices = await prisma.invoice.findMany({
+    where: { type: "invoice", status: { not: "cancelled" } },
+    include: { paymentAllocations: true, creditNotes: true, billingOrder: true, lines: { include: { isbn: { include: { manuscript: true } } } } },
+  });
+  const caByYear = new Map<number, Record<RevenueFamilyKey, Fam>>();
+  const ensureYear = (y: number) => {
+    let rec = caByYear.get(y);
+    if (!rec) { rec = { livre_scolaire: blankFam(), livre_general: blankFam(), communication: blankFam(), prestations: blankFam() }; caByYear.set(y, rec); }
+    return rec;
+  };
+  for (const inv of invoices) {
+    const y = yearOf(inv.createdAt);
+    if (!y) continue;
+    const fam = classifyInvoiceFamily(inv);
+    const creditedTtc = inv.creditNotes.reduce((s, c) => s + Number(c.totalTtc), 0);
+    const creditedHt = inv.creditNotes.reduce((s, c) => s + Number(c.totalHt), 0);
+    const facture = Math.max(Number(inv.totalTtc) - creditedTtc, 0);
+    const factureHt = Math.max(Number(inv.totalHt) - creditedHt, 0);
+    const allocated = inv.paymentAllocations.reduce((s, a) => s + Number(a.amount), 0);
+    const encaisse = Math.min(allocated, facture);
+    const b = ensureYear(y)[fam];
+    b.facture += facture; b.factureHt += factureHt; b.encaisse += encaisse; b.creances += Math.max(facture - encaisse, 0);
+  }
+
+  // 2) Ouvrages parus (date de parution).
+  const parus = await prisma.manuscript.findMany({ where: { deletedAt: null, publicationDate: { not: null } }, select: { publicationDate: true } });
+  const parusByYear = new Map<number, number>();
+  for (const m of parus) { const y = yearOf(m.publicationDate); if (y) parusByYear.set(y, (parusByYear.get(y) ?? 0) + 1); }
+
+  // 3) Exemplaires — livre SCOLAIRE (canal commande à facturer).
+  const schoolEntries = await prisma.schoolRoyaltyEntry.findMany({ select: { quantity: true, computedAt: true } });
+  const scoUnitsByYear = new Map<number, number>();
+  for (const e of schoolEntries) { const y = yearOf(e.computedAt); if (y) scoUnitsByYear.set(y, (scoUnitsByYear.get(y) ?? 0) + e.quantity); }
+
+  // 4) Exemplaires — livre SIMPLE/général (sorties de stock : ventes).
+  const outs = await prisma.stockMovement.findMany({ where: { type: "sale_out" }, select: { quantity: true, movedAt: true } });
+  const genUnitsByYear = new Map<number, number>();
+  for (const o of outs) { const y = yearOf(o.movedAt); if (y) genUnitsByYear.set(y, (genUnitsByYear.get(y) ?? 0) + o.quantity); }
+
+  // 5) Droits versés aux auteurs (paiements de droits), brut, par année.
+  const pays = await prisma.royaltyPayment.findMany({ select: { amount: true, taxWithheld: true, paidAt: true } });
+  const droitsByYear = new Map<number, number>();
+  for (const p of pays) { const y = yearOf(p.paidAt); if (y) droitsByYear.set(y, (droitsByYear.get(y) ?? 0) + Number(p.amount) + Number(p.taxWithheld)); }
+
+  const allYears = new Set<number>([...caByYear.keys(), ...parusByYear.keys(), ...scoUnitsByYear.keys(), ...genUnitsByYear.keys(), ...droitsByYear.keys()]);
+  allYears.add(new Date().getUTCFullYear());
+  const years = [...allYears].sort((a, b) => b - a);
+  const year = requestedYear && years.includes(requestedYear) ? requestedYear : years[0];
+
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const famView = (rec?: Record<RevenueFamilyKey, Fam>) => {
+    const acc = rec ?? { livre_scolaire: blankFam(), livre_general: blankFam(), communication: blankFam(), prestations: blankFam() };
+    const total = blankFam();
+    const families = (Object.keys(acc) as RevenueFamilyKey[]).map((key) => {
+      total.factureHt += acc[key].factureHt; total.facture += acc[key].facture; total.encaisse += acc[key].encaisse; total.creances += acc[key].creances;
+      return { key, label: FAMILY_LABELS[key], factureHt: round(acc[key].factureHt), facture: round(acc[key].facture), encaisse: round(acc[key].encaisse), creances: round(acc[key].creances) };
+    });
+    return { families, total: { factureHt: round(total.factureHt), facture: round(total.facture), encaisse: round(total.encaisse), creances: round(total.creances) } };
+  };
+
+  const perYear = years.slice().sort((a, b) => a - b).map((y) => {
+    const fv = famView(caByYear.get(y));
+    return { year: y, ca_facture: fv.total.facture, ca_encaisse: fv.total.encaisse, ouvrages_parus: parusByYear.get(y) ?? 0 };
+  });
+  const sum = (m: Map<number, number>) => [...m.values()].reduce((s, v) => s + v, 0);
+
+  return {
+    years,
+    year,
+    ca: famView(caByYear.get(year)),
+    ouvrages_parus: parusByYear.get(year) ?? 0,
+    exemplaires: { scolaire: scoUnitsByYear.get(year) ?? 0, simple: genUnitsByYear.get(year) ?? 0 },
+    droits_verses: round(droitsByYear.get(year) ?? 0),
+    global: {
+      per_year: perYear,
+      total: {
+        ca_facture: round(perYear.reduce((s, p) => s + p.ca_facture, 0)),
+        ca_encaisse: round(perYear.reduce((s, p) => s + p.ca_encaisse, 0)),
+        ouvrages_parus: sum(parusByYear),
+        exemplaires_scolaire: sum(scoUnitsByYear),
+        exemplaires_simple: sum(genUnitsByYear),
+        droits_verses: round(sum(droitsByYear)),
+      },
+    },
+  };
+}

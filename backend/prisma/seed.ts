@@ -962,6 +962,12 @@ async function main() {
       { num: "MS-CAT-0009", title: "LATINISTAS 2nde-1ère-Tle", matiere: "Latin", classe: "2nde-1ère-Tle", authors: ["Ottou Fouda"], coAuthors: ["Sabikanda"], price: 5000, isbn: "9789956362745" },
       { num: "MS-CAT-0007", title: "Au cœur des ténèbres", matiere: "Littérature", classe: "1ᵉʳᵉˢ", authors: ["Joseph Conrad"], coAuthors: [], price: 1900 },
       { num: "MS-CAT-0008", title: "Stances et Poèmes, suivi de Les Épreuves", matiere: "Littérature", classe: "Terminales", authors: ["Sully Prudhomme"], coAuthors: [], price: 1900 },
+      // Littérature CM1 / CM2 (liste ISBN de la maison). ATTENTION : la source
+      // donne le MÊME ISBN (978-9956-07-761-8) aux DEUX ouvrages. « ISBN jamais
+      // réutilisé » : le CM1 conserve l'ISBN officiel, le CM2 reçoit un ISBN
+      // PROVISOIRE (préfixe interne 978-2-00191-…) en attendant le bon ISBN.
+      { num: "MS-CAT-0010", title: "La naissance d'une grande nation", matiere: "Littérature", classe: "CM1", authors: [], coAuthors: [], price: 1000, isbn: "9789956077618" },
+      { num: "MS-CAT-0011", title: "Une nation bénie", matiere: "Littérature", classe: "CM2", authors: [], coAuthors: [], price: 1000, isbn: "9782001910014" },
     ];
     for (const b of catalogue) {
       const subtitle = `${b.matiere} · ${b.classe}`;

@@ -27,3 +27,15 @@ Les ISBN provisoires (préfixe interne 978-2-00190-…) sont temporaires. Merci 
 | LG-CAT-0087 | Arsène Mangoumou | À qui la faute ? | Collection Canari & les Héritiers | `9782001900190` | ISBN absent de la source |
 | LG-CAT-0089 | Bibiche Kound | L'Afrique en larmes | Collection Canari & les Héritiers | `9782001900206` | ISBN absent de la source |
 | LG-CAT-0094 | Aminatou Ndam Mbendia | Réalités épineuses | Collection Canari & les Héritiers | `9782001900213` | ISBN invalide (chiffre-clé) : « 978-9956-0-7815-4 » |
+---
+
+## Catalogue scolaire — ISBN provisoire (littérature CM1/CM2)
+
+La liste ISBN de la maison attribue **le même ISBN** (`978-9956-07-761-8`) aux deux ouvrages ci-dessous. Un ISBN ne pouvant appartenir qu'à un seul ouvrage, le CM1 conserve l'ISBN officiel et le CM2 reçoit un ISBN provisoire.
+
+| Réf | Titre | Classe | ISBN | Statut |
+|---|---|---|---|---|
+| MS-CAT-0010 | La naissance d'une grande nation | CM1 | `9789956077618` | officiel (repris de la liste) |
+| MS-CAT-0011 | Une nation bénie | CM2 | `9782001910014` | **provisoire** — la source donnait le même ISBN que le CM1 ; merci de fournir le bon |
+
+> Auteurs des deux ouvrages non fournis dans la liste — à compléter.

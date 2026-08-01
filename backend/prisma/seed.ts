@@ -1023,26 +1023,125 @@ async function main() {
     // ── Catalogue des livres GÉNÉRAUX / simples d'Éclosion (par collection) ────
     // Même mécanisme que le scolaire : les ouvrages sont SÉLECTIONNABLES dans le
     // formulaire de commande à facturer (catégorie « Livre général / simple »),
-    // groupés par collection. Les ISBN sont les ISBN OFFICIELS de la maison
-    // (catalogue fourni). Première tranche — la liste est complétée
-    // progressivement. Seuls les ouvrages à ISBN valide et unique sont chargés
-    // (les ISBN malformés ou dupliqués de la source sont écartés, cf. contrainte
-    // « ISBN jamais réutilisé »). Pas de prix catalogue : il est saisi à la commande.
-    const generalCatalogue: { num: string; title: string; collection: string; authors: string[]; isbn: string; year: number }[] = [
+    // groupés par collection. Collections Source et Canari & les Héritiers.
+    // Les ISBN sont les ISBN OFFICIELS de la maison quand ils sont valides et
+    // uniques ; quand la source les donne malformés, dupliqués ou absents, un
+    // ISBN PROVISOIRE (préfixe interne 978-2-00190-…) est attribué en attendant
+    // le bon ISBN (cf. rapport `docs/RAPPORT_ISBN_LIVRES_GENERAUX.md`), pour
+    // respecter la contrainte « ISBN jamais réutilisé ». Pas de prix catalogue :
+    // il est saisi à la commande.
+    const generalCatalogue: { num: string; title: string; collection: string; authors: string[]; isbn: string; year: number; provisional?: boolean }[] = [
       { num: "LG-CAT-0001", title: "06 Étapes à suivre pour trouver le travail", collection: "Collection Source", authors: ["Olive Ndjabi"], isbn: "9789956996179", year: 2022 },
       { num: "LG-CAT-0002", title: "Institutions de Bretton Woods et changement des paradigmes du discours sur l'économie", collection: "Collection Source", authors: ["Alphonse Joseph Tonye"], isbn: "9789956996278", year: 2021 },
-      { num: "LG-CAT-0003", title: "Commentaires", collection: "Collection Source", authors: ["Georges Alain Boyomo"], isbn: "9789956362592", year: 2023 },
-      { num: "LG-CAT-0004", title: "Comprendre le Règlement N° 02/18/CEMAC/UMAC/CM du 21 décembre portant réglementation des changes de la CEMAC", collection: "Collection Source", authors: ["Batuo John Ndah"], isbn: "9789956996391", year: 2022 },
-      { num: "LG-CAT-0005", title: "Voici pourquoi la Chine dominera le Monde", collection: "Collection Source", authors: ["Pierre Chemete"], isbn: "9789956363025", year: 2025 },
-      { num: "LG-CAT-0006", title: "Coup d'État manqué du 06 avril 1984 au Cameroun", collection: "Collection Source", authors: ["Jean Pascal Mendam Nsa"], isbn: "9789956362813", year: 2024 },
-      { num: "LG-CAT-0007", title: "Politiques publiques, action publique internationale et les grands évènements sportifs internationaux", collection: "Collection Source", authors: ["Armand Elono Essono"], isbn: "9789956996162", year: 2022 },
-      { num: "LG-CAT-0008", title: "Quand journalisme et communication des organisations", collection: "Collection Source", authors: ["Dominique Pekassa Ngou"], isbn: "9789956078424", year: 2025 },
-      { num: "LG-CAT-0009", title: "Disruption monétaire et financière en Afrique centrale", collection: "Collection Source", authors: ["Jean René Fils Ndouma"], isbn: "9789956362608", year: 2022 },
-      { num: "LG-CAT-0010", title: "Énigme de prévention et de résolution des conflits en Afrique", collection: "Collection Source", authors: ["David Gadji"], isbn: "9789956078202", year: 2025 },
-      { num: "LG-CAT-0011", title: "Guerre de Bakassi", collection: "Collection Source", authors: ["Vincent Ntuda Ebode"], isbn: "9789956078493", year: 2025 },
-      { num: "LG-CAT-0012", title: "Marketing Territorial", collection: "Collection Source", authors: ["Lionel Nga"], isbn: "9789956996353", year: 2021 },
-      { num: "LG-CAT-0013", title: "Itinéraire d'une débrouillarde devenue milliardaire", collection: "Collection Source", authors: ["Françoise Puene"], isbn: "9789956077939", year: 2022 },
+      { num: "LG-CAT-0003", title: "Cas Pratique de Gestion", collection: "Collection Source", authors: ["Philippe Mouangue Mbale"], isbn: "9782001900015", year: 2021, provisional: true },
+      { num: "LG-CAT-0004", title: "Commentaires", collection: "Collection Source", authors: ["Georges Alain Boyomo"], isbn: "9789956362592", year: 2023 },
+      { num: "LG-CAT-0005", title: "Comprendre le Règlement N° 02/18/CEMAC/UMAC/CM du 21 décembre portant réglementation des changes de la CEMAC", collection: "Collection Source", authors: ["Batuo John Ndah"], isbn: "9789956996391", year: 2022 },
+      { num: "LG-CAT-0006", title: "Voici pourquoi la Chine dominera le Monde", collection: "Collection Source", authors: ["Pierre Chemete"], isbn: "9789956363025", year: 2025 },
+      { num: "LG-CAT-0007", title: "Coup d'État manqué du 06 avril 1984 au Cameroun", collection: "Collection Source", authors: ["Jean Pascal Mendam Nsa"], isbn: "9789956362813", year: 2024 },
+      { num: "LG-CAT-0008", title: "Politiques publiques, action publique internationale et les grands évènements sportifs internationaux", collection: "Collection Source", authors: ["Armand Elono Essono"], isbn: "9789956996162", year: 2022 },
+      { num: "LG-CAT-0009", title: "Quand journalisme et communication des organisations", collection: "Collection Source", authors: ["Dominique Pekassa Ngou"], isbn: "9789956078424", year: 2025 },
+      { num: "LG-CAT-0010", title: "Management financier — Structures, valeur et méthodes", collection: "Collection Source", authors: ["Yves Alain Secke"], isbn: "9782001900022", year: 2022, provisional: true },
+      { num: "LG-CAT-0011", title: "25 Questions-réponses sur la présidentielle 2025", collection: "Collection Source", authors: ["Georges Alain Boyomo"], isbn: "9782001900039", year: 2025, provisional: true },
+      { num: "LG-CAT-0012", title: "25 Questions and answers on the 2025 presidentials", collection: "Collection Source", authors: ["Georges Alain Boyomo"], isbn: "9782001900046", year: 2025, provisional: true },
+      { num: "LG-CAT-0013", title: "In the public Service Arena — Shady slopes and glimmers of hope", collection: "Collection Source", authors: ["Philip Ngwese Ngole"], isbn: "9789956077908", year: 2022 },
+      { num: "LG-CAT-0014", title: "Dans l'arène de la fonction publique — Cônes d'ombres et lueurs d'espoir", collection: "Collection Source", authors: ["Philip Ngwese Ngole"], isbn: "9782001900053", year: 2022, provisional: true },
+      { num: "LG-CAT-0015", title: "Disruption monétaire et financière en Afrique centrale", collection: "Collection Source", authors: ["Jean René Fils Ndouma"], isbn: "9789956362608", year: 2022 },
+      { num: "LG-CAT-0016", title: "Énigme de prévention et de résolution des conflits en Afrique", collection: "Collection Source", authors: ["David Gadji"], isbn: "9789956078202", year: 2025 },
+      { num: "LG-CAT-0017", title: "Mpod bo kl mbon", collection: "Collection Source", authors: ["Yamb Timba"], isbn: "9789956077762", year: 2022 },
+      { num: "LG-CAT-0018", title: "Guerre de Bakassi", collection: "Collection Source", authors: ["Vincent Ntuda Ebode"], isbn: "9789956078493", year: 2025 },
+      { num: "LG-CAT-0019", title: "Marketing Territorial", collection: "Collection Source", authors: ["Lionel Nga"], isbn: "9789956996353", year: 2021 },
+      { num: "LG-CAT-0020", title: "Le Miracle Camerounais", collection: "Collection Source", authors: ["Pr Olivier Bile"], isbn: "9782001900060", year: 2025, provisional: true },
+      { num: "LG-CAT-0021", title: "Itinéraire d'une débrouillarde devenue milliardaire", collection: "Collection Source", authors: ["Françoise Puene"], isbn: "9789956077939", year: 2022 },
+      { num: "LG-CAT-0022", title: "Zéro", collection: "Collection Source", authors: ["Simon Mougnol"], isbn: "9789956996322", year: 2022 },
+      { num: "LG-CAT-0023", title: "Industrialisez-vous et taisez-vous !", collection: "Collection Source", authors: ["Martial Bissog"], isbn: "9789956078097", year: 2022 },
+      { num: "LG-CAT-0024", title: "Spatial chez l'Ewondo", collection: "Collection Source", authors: ["Francis Pascal Obono Esthos"], isbn: "9782001900077", year: 2022, provisional: true },
+      { num: "LG-CAT-0025", title: "Sortir de la Prostitution", collection: "Collection Source", authors: ["Christian Mouandjo Ebongue"], isbn: "9789956078370", year: 2025 },
+      { num: "LG-CAT-0026", title: "Éloges Funèbres", collection: "Collection Source", authors: ["Fridolin Nke"], isbn: "9789956362967", year: 2024 },
+      { num: "LG-CAT-0027", title: "Pratique des fondamentaux du développement optimal par l'Afrique", collection: "Collection Source", authors: ["Erik Essousse"], isbn: "9789956077595", year: 2023 },
+      { num: "LG-CAT-0028", title: "Et Dieu de plus en plus haut", collection: "Collection Source", authors: ["Dr Bingono Bingono"], isbn: "9789956077946", year: 2023 },
+      { num: "LG-CAT-0029", title: "Fossi Jacob, le Gamin et son héros", collection: "Collection Source", authors: ["Pr Tetanye Ekoe"], isbn: "9789956362820", year: 2024 },
+      { num: "LG-CAT-0030", title: "La bonne préparation au mariage favorise l'exaucement", collection: "Collection Source", authors: ["Jovic Beleck"], isbn: "9789956362622", year: 2022 },
+      { num: "LG-CAT-0031", title: "La Commune de Yokadouma : L'Éléphant devait tomber", collection: "Collection Source", authors: ["Jean-Dunon Kemche"], isbn: "9782001900084", year: 2022, provisional: true },
+      { num: "LG-CAT-0032", title: "La Révolution de la Pensée africaine", collection: "Collection Source", authors: ["Fridolin Nke"], isbn: "9789956996421", year: 2024 },
+      { num: "LG-CAT-0033", title: "Le Hamburger, c'est quoi ?", collection: "Collection Source", authors: ["Pr Jean Bahebeck"], isbn: "9789956362905", year: 2024 },
+      { num: "LG-CAT-0034", title: "Le Contrôle des Marchés Publics", collection: "Collection Source", authors: ["Mouncherou Abdoul Aziz"], isbn: "9789956077571", year: 2023 },
+      { num: "LG-CAT-0035", title: "Management financier — Épargnes / Réserve de valeur", collection: "Collection Source", authors: ["Yves Alain Secke"], isbn: "9789956078028", year: 2022 },
+      { num: "LG-CAT-0036", title: "L'auto-motivation, une arme efficace pour réaliser ses projets", collection: "Collection Source", authors: ["Olive Ndjabi"], isbn: "9789956077663", year: 2022 },
+      { num: "LG-CAT-0037", title: "Pauvreté et misère", collection: "Collection Source", authors: ["Moise Nlend"], isbn: "9789956078042", year: 2025 },
+      { num: "LG-CAT-0038", title: "Pratique de la Police Judiciaire au Cameroun", collection: "Collection Source", authors: ["David Leroi Nono Behalal"], isbn: "9789956077656", year: 2022 },
+      { num: "LG-CAT-0039", title: "Comment mener le Cameroun à l'émergence en 10 ans", collection: "Collection Source", authors: ["Célestin Bedzigui"], isbn: "9789956996339", year: 2024 },
+      { num: "LG-CAT-0040", title: "Management Toolkit of methods", collection: "Collection Source", authors: ["Joel Nana Kontchou"], isbn: "9789956996148", year: 2021 },
+      { num: "LG-CAT-0041", title: "La diplomatie sanitaire — Pour une causalité d'accès aux soins", collection: "Collection Source", authors: ["Véronique Lehman"], isbn: "9789956078035", year: 2022 },
+      { num: "LG-CAT-0042", title: "Viol", collection: "Collection Canari & les Héritiers", authors: ["Aline Fomete"], isbn: "9789956996346", year: 2020 },
+      { num: "LG-CAT-0043", title: "Le cri de l'amnésie", collection: "Collection Canari & les Héritiers", authors: ["Coretta Forcin"], isbn: "9789956078103", year: 2023 },
+      { num: "LG-CAT-0044", title: "Le village d'Ining", collection: "Collection Canari & les Héritiers", authors: ["Wilfried Ekanga"], isbn: "9789956362639", year: 2022 },
+      { num: "LG-CAT-0045", title: "L'enfant bâtard", collection: "Collection Canari & les Héritiers", authors: ["Tchebal Dafrik"], isbn: "9789956077670", year: 2022 },
+      { num: "LG-CAT-0046", title: "Libre", collection: "Collection Canari & les Héritiers", authors: ["Bibiche Kound"], isbn: "9789956077885", year: 2023 },
+      { num: "LG-CAT-0047", title: "Mon enfant, ma vie", collection: "Collection Canari & les Héritiers", authors: ["Rosine Yemele"], isbn: "9859956996322", year: 2022 },
+      { num: "LG-CAT-0048", title: "J'étais une femme riche", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9789956078363", year: 2023 },
+      { num: "LG-CAT-0049", title: "Je suis nègre, mais les noirs ne m'aiment pas", collection: "Collection Canari & les Héritiers", authors: ["Junior Haussin"], isbn: "9789956078196", year: 2023 },
+      { num: "LG-CAT-0050", title: "Que d'être une femme", collection: "Collection Canari & les Héritiers", authors: ["Davy Djomeni"], isbn: "9789956362844", year: 2023 },
+      { num: "LG-CAT-0051", title: "Victime", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9789956362783", year: 2023 },
+      { num: "LG-CAT-0052", title: "L'ailleurs", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9789956078349", year: 2024 },
+      { num: "LG-CAT-0053", title: "ADA et Agnès, pas de vêtements courts", collection: "Collection Canari & les Héritiers", authors: ["Fridoline Mvondo"], isbn: "9782001900091", year: 2021, provisional: true },
+      { num: "LG-CAT-0054", title: "MAFEU et les travaux ménagers", collection: "Collection Canari & les Héritiers", authors: ["Aline Fomete"], isbn: "9789956996261", year: 2020 },
+      { num: "LG-CAT-0055", title: "MOLO et TAKAM en vacances au village", collection: "Collection Canari & les Héritiers", authors: ["Olive Ndjabi"], isbn: "9782001900107", year: 2022, provisional: true },
+      { num: "LG-CAT-0056", title: "Makwan, mon bijou", collection: "Collection Canari & les Héritiers", authors: ["Aline Fomete"], isbn: "9789956362806", year: 2023 },
+      { num: "LG-CAT-0057", title: "Devenir un homme", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9789956078356", year: 2025 },
+      { num: "LG-CAT-0058", title: "Aïe a ses règles", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9782001900114", year: 2021, provisional: true },
+      { num: "LG-CAT-0059", title: "DJANGA n'est pas propre", collection: "Collection Canari & les Héritiers", authors: ["Aline Fomete"], isbn: "9782001900121", year: 2022, provisional: true },
+      { num: "LG-CAT-0060", title: "NOUNPOU A et YENTEMA apprennent l'argent", collection: "Collection Canari & les Héritiers", authors: ["Larissa Lankoa Nde"], isbn: "9789956363001", year: 2024 },
+      { num: "LG-CAT-0061", title: "La fête à la maternelle", collection: "Collection Canari & les Héritiers", authors: ["Caroline Thérèse Boumny Emb"], isbn: "9789956078301", year: 2025 },
+      { num: "LG-CAT-0062", title: "Contes et légendes du sahel", collection: "Collection Canari & les Héritiers", authors: ["Ghislain Thomas Tchofo"], isbn: "9789956363018", year: 2024 },
+      { num: "LG-CAT-0063", title: "MERO face aux moqueries des camarades", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9789956078387", year: 2024 },
+      { num: "LG-CAT-0064", title: "MERO au défilé du 20 mai", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9789956362875", year: 2023 },
+      { num: "LG-CAT-0065", title: "MERO à la découverte du Cameroun", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9782001900138", year: 2024, provisional: true },
+      { num: "LG-CAT-0066", title: "Palmes d'or T1 : les fables — Livre d'histoires africaines", collection: "Collection Canari & les Héritiers", authors: ["Princesse Sika Beha"], isbn: "9789956077878", year: 2022 },
+      { num: "LG-CAT-0067", title: "MERO discovering Cameroon", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9782001900145", year: 2024, provisional: true },
+      { num: "LG-CAT-0068", title: "MERO et les traditions", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9782001900152", year: 2024, provisional: true },
+      { num: "LG-CAT-0069", title: "The wolves valley", collection: "Collection Canari & les Héritiers", authors: ["Ndongo Tsango Pastel"], isbn: "9789956077984", year: 2024 },
+      { num: "LG-CAT-0070", title: "MERO and the traditions", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9782001900169", year: 2024, provisional: true },
+      { num: "LG-CAT-0071", title: "Au-delà de l'autisme", collection: "Collection Canari & les Héritiers", authors: ["Généviève Nga"], isbn: "9789956078080", year: 2021 },
+      { num: "LG-CAT-0072", title: "Ces Vies que j'aurais vécues", collection: "Collection Canari & les Héritiers", authors: ["Irène Maben"], isbn: "9789956362851", year: 2025 },
+      { num: "LG-CAT-0073", title: "Chansons pour mon pays l'Afrique", collection: "Collection Canari & les Héritiers", authors: ["Nti Z Matriz Ibori"], isbn: "9789956362943", year: 2024 },
+      { num: "LG-CAT-0074", title: "Dans la Tourmente", collection: "Collection Canari & les Héritiers", authors: ["Aline Fomete"], isbn: "9789956996216", year: 2022 },
+      { num: "LG-CAT-0075", title: "Felonica, la femme de chez nous", collection: "Collection Canari & les Héritiers", authors: ["Solange Nsomo"], isbn: "9782001900176", year: 2025, provisional: true },
+      { num: "LG-CAT-0076", title: "L'Antenne de nos 30 ans", collection: "Collection Canari & les Héritiers", authors: ["Rashel Malongo (dir.)"], isbn: "9789956078400", year: 2025 },
+      { num: "LG-CAT-0077", title: "Impossible", collection: "Collection Canari & les Héritiers", authors: ["Faustin Mvogo"], isbn: "9789956362790", year: 2020 },
+      { num: "LG-CAT-0078", title: "L'œil du Loup, tome 1", collection: "Collection Canari & les Héritiers", authors: ["Me Simon Ahielton"], isbn: "9789956362912", year: 2025 },
+      { num: "LG-CAT-0079", title: "L'œil du Loup, tome II", collection: "Collection Canari & les Héritiers", authors: ["Me Simon Ahielton"], isbn: "9789956362929", year: 2025 },
+      { num: "LG-CAT-0080", title: "Le Roi Mbella", collection: "Collection Canari & les Héritiers", authors: ["Samuel Eddy Mbog"], isbn: "9789956077977", year: 2024 },
+      { num: "LG-CAT-0081", title: "Un Sourire apaise les larmes", collection: "Collection Canari & les Héritiers", authors: ["Vincent Siankam"], isbn: "9789956078219", year: 2024 },
+      { num: "LG-CAT-0082", title: "Vers Amers", collection: "Collection Canari & les Héritiers", authors: ["Louis Ebene"], isbn: "9789956077892", year: 2025 },
+      { num: "LG-CAT-0083", title: "La troisième Manquée", collection: "Collection Canari & les Héritiers", authors: ["Léopold Ngodji"], isbn: "9789956077823", year: 2022 },
+      { num: "LG-CAT-0084", title: "L'enfance effacée", collection: "Collection Canari & les Héritiers", authors: ["William Timma"], isbn: "9782001900183", year: 2022, provisional: true },
+      { num: "LG-CAT-0085", title: "Née au MBOKO, fille d'une Nanga", collection: "Collection Canari & les Héritiers", authors: ["Jocelyne Ebanga"], isbn: "9789956077793", year: 2022 },
+      { num: "LG-CAT-0086", title: "On a volé Dieu", collection: "Collection Canari & les Héritiers", authors: ["David Serge Mvondo"], isbn: "9789956077816", year: 2022 },
+      { num: "LG-CAT-0087", title: "À qui la faute ?", collection: "Collection Canari & les Héritiers", authors: ["Arsène Mangoumou"], isbn: "9782001900190", year: 2022, provisional: true },
+      { num: "LG-CAT-0088", title: "Amnésique", collection: "Collection Canari & les Héritiers", authors: ["Yvette Nouga"], isbn: "9789956078110", year: 2023 },
+      { num: "LG-CAT-0089", title: "L'Afrique en larmes", collection: "Collection Canari & les Héritiers", authors: ["Bibiche Kound"], isbn: "9782001900206", year: 2023, provisional: true },
+      { num: "LG-CAT-0090", title: "L'appel Pressant", collection: "Collection Canari & les Héritiers", authors: ["Mgr Jean Ndjewel"], isbn: "9789956362547", year: 2023 },
+      { num: "LG-CAT-0091", title: "Le journal d'un enseignant", collection: "Collection Canari & les Héritiers", authors: ["Arthur Bilounga"], isbn: "9789956362554", year: 2023 },
+      { num: "LG-CAT-0092", title: "Les fantômes du passé", collection: "Collection Canari & les Héritiers", authors: ["Marie Nicaise Ebanga"], isbn: "9789956078141", year: 2023 },
+      { num: "LG-CAT-0093", title: "Les Petits-Africains", collection: "Collection Canari & les Héritiers", authors: ["Princesse Sika-Beha"], isbn: "9789956362530", year: 2023 },
+      { num: "LG-CAT-0094", title: "Réalités épineuses", collection: "Collection Canari & les Héritiers", authors: ["Aminatou Ndam Mbendia"], isbn: "9782001900213", year: 2023, provisional: true },
+      { num: "LG-CAT-0095", title: "Vérité Mensongère", collection: "Collection Canari & les Héritiers", authors: ["Jordan Tegoudjon"], isbn: "9789956362523", year: 2023 },
+      { num: "LG-CAT-0096", title: "Stella and corruption", collection: "Collection Canari & les Héritiers", authors: ["Pastel Ndongo"], isbn: "9789956362981", year: 2024 },
+      { num: "LG-CAT-0097", title: "Les Mémoires d'une Terre Camerounaise", collection: "Collection Canari & les Héritiers", authors: ["Sara Timb"], isbn: "9789956078233", year: 2024 },
+      { num: "LG-CAT-0098", title: "Ronoowo", collection: "Collection Canari & les Héritiers", authors: ["Nadine Ndjomo"], isbn: "9789956078271", year: 2024 },
+      { num: "LG-CAT-0099", title: "Matricule E.C.I", collection: "Collection Canari & les Héritiers", authors: ["Ibrahim Fioko"], isbn: "9789956078288", year: 2024 },
+      { num: "LG-CAT-0100", title: "Nkobi et Djobi", collection: "Collection Canari & les Héritiers", authors: ["Muriel Menye"], isbn: "9789956078295", year: 2024 },
     ];
+    // Réorganisation idempotente : au re-seed, on repart d'ISBN temporaires pour
+    // les manuscrits du catalogue général, afin d'éviter tout conflit d'unicité
+    // si un ISBN change d'ouvrage entre deux versions de la liste.
+    {
+      const existingLg = await prisma.isbn.findMany({ where: { format: "print", manuscript: { manuscriptNumber: { startsWith: "LG-CAT-" } } }, select: { id: true } });
+      let tmp = 0;
+      for (const row of existingLg) {
+        await prisma.isbn.update({ where: { id: row.id }, data: { isbn13: `TMP-LGCAT-${String(tmp++).padStart(5, "0")}` } });
+      }
+    }
     for (const b of generalCatalogue) {
       const ms = await prisma.manuscript.upsert({
         where: { manuscriptNumber: b.num },
@@ -1077,7 +1176,8 @@ async function main() {
         isbn = await prisma.isbn.update({ where: { id: isbn.id }, data: { isbn13: b.isbn } });
       }
     }
-    console.log(`Catalogue général : ${generalCatalogue.length} ouvrages disponibles à la commande.`);
+    const provCount = generalCatalogue.filter((b) => b.provisional).length;
+    console.log(`Catalogue général : ${generalCatalogue.length} ouvrages disponibles à la commande (${provCount} avec ISBN provisoire à corriger).`);
   }
 
   console.log("Seed Lot 0 terminé.");

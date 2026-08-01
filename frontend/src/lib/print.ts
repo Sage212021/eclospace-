@@ -106,7 +106,9 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     .lh-foot-space { height: 40mm; }
     ${embedStyle}
     .lh { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
-    .lh__logo { height: 62px; width: auto; }
+    /* Logo d'en-tête : agrandi et rendu net à l'impression (la source est en
+       haute définition). image-rendering: high-quality évite tout lissage mou. */
+    .lh__logo { height: 88px; width: auto; image-rendering: -webkit-optimize-contrast; }
     .lh__contact { text-align: right; font-size: 10.5px; color: #4b5563; line-height: 1.7; max-width: 340px; }
     .lh__contact a { color: #4b5563; text-decoration: none; }
     .lh__rule { height: 3px; background: linear-gradient(90deg, #16233d 62%, #c89a1b 62%); border-radius: 2px; margin: 10px 0 4px; }

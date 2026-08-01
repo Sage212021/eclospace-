@@ -227,6 +227,39 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
     expect(aging.json().not_due).toBe(Number(invoice.totalTtc) / 2);
   });
 
+  it("passe la facture à « Réglée » quand le solde atteint 0 (encaissement complet)", async () => {
+    const { isbnId } = await createIsbnWithContractAndStock("Manuscrit Finance Soldée", 20);
+    const customer = await createCustomer("Client Soldée");
+    const { delivery } = await deliverOrder(isbnId, customer.id, 5, 10000);
+    const invoice = await prisma.invoice.findFirstOrThrow({ where: { sourceType: "delivery", sourceId: delivery.id } });
+    const ttc = Number(invoice.totalTtc);
+    expect(invoice.status).toBe("issued");
+
+    // Paiement partiel (moitié) : la facture reste « Émise ».
+    const p1 = await app.inject({
+      method: "POST",
+      url: "/api/v1/payments",
+      headers: { cookie: adminCookie },
+      payload: { method: "cash", amount: ttc / 2, allocations: [{ invoice_id: invoice.id, amount: ttc / 2 }] },
+    });
+    expect(p1.statusCode).toBe(201);
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe("issued");
+
+    // Solde réglé : la facture bascule automatiquement sur « Réglée » (paid).
+    const p2 = await app.inject({
+      method: "POST",
+      url: "/api/v1/payments",
+      headers: { cookie: adminCookie },
+      payload: { method: "cash", amount: ttc / 2, allocations: [{ invoice_id: invoice.id, amount: ttc / 2 }] },
+    });
+    expect(p2.statusCode).toBe(201);
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe("paid");
+
+    // Traçabilité : le changement de statut est journalisé (audit_log).
+    const audit = await prisma.auditLog.findFirst({ where: { entityType: "invoice", entityId: invoice.id, action: "update" } });
+    expect(audit).not.toBeNull();
+  });
+
   it("refuse un lettrage dont le total ne correspond pas au montant du paiement (Ch. 18 §18.3)", async () => {
     const { isbnId } = await createIsbnWithContractAndStock("Manuscrit Finance Lettrage Invalide", 10);
     const customer = await createCustomer("Client Lettrage Invalide");

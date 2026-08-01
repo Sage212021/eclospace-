@@ -186,6 +186,7 @@ export default async function financeRoutes(fastify: FastifyInstance) {
     const bankAccountId = body.bank_account_id ?? methodDef.defaultAccountId ?? null;
 
     try {
+      const settledInvoiceIds: string[] = [];
       const payment = await prisma.$transaction(async (tx) => {
         await assertPeriodOpen(tx);
         const created = await tx.payment.create({
@@ -203,6 +204,22 @@ export default async function financeRoutes(fastify: FastifyInstance) {
             data: { paymentId: created.id, invoiceId: allocation.invoice_id, amount: allocation.amount },
           });
         }
+        // Passage automatique à « Réglée » : quand le solde d'une facture émise
+        // atteint 0 (encaissements + avoirs ≥ total TTC), elle bascule sur
+        // « paid ». Le reste-à-payer était déjà suivi ; ceci met le STATUT à jour
+        // pour que « Réglée » s'affiche et que le bouton « Encaisser » disparaisse.
+        const invoiceIds = [...new Set(body.allocations.map((a) => a.invoice_id))];
+        for (const invId of invoiceIds) {
+          const inv = await tx.invoice.findUnique({ where: { id: invId }, include: { paymentAllocations: true, creditNotes: true } });
+          if (!inv || inv.type !== "invoice" || inv.status !== "issued") continue;
+          const allocated = inv.paymentAllocations.reduce((s, a) => s + Number(a.amount), 0);
+          const credited = inv.creditNotes.reduce((s, c) => s + Number(c.totalTtc), 0);
+          const due = Number(inv.totalTtc) - allocated - credited;
+          if (due <= 0.01) {
+            await tx.invoice.update({ where: { id: invId }, data: { status: "paid" } });
+            settledInvoiceIds.push(invId);
+          }
+        }
         return created;
       });
 
@@ -214,6 +231,17 @@ export default async function financeRoutes(fastify: FastifyInstance) {
         newValues: body,
         ipAddress: request.ip,
       });
+      // Trace du changement de statut (audit_log) pour chaque facture soldée.
+      for (const invId of settledInvoiceIds) {
+        await writeAuditLog({
+          userId: request.user!.id,
+          action: "update",
+          entityType: "invoice",
+          entityId: invId,
+          newValues: { status: "paid", reason: "solde atteint par encaissement" },
+          ipAddress: request.ip,
+        });
+      }
 
       return reply.code(201).send(payment);
     } catch (err) {

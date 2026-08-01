@@ -89,6 +89,31 @@ export function getRevenueByFamily() {
   return request<RevenueByFamily>("/api/v1/dashboard/revenue-by-family");
 }
 
+// Bilan par année : grands indicateurs déclinés par année + mouvement global.
+export interface AnnualSummary {
+  years: number[];
+  year: number;
+  ca: RevenueByFamily;
+  ouvrages_parus: number;
+  exemplaires: { scolaire: number; simple: number };
+  droits_verses: number;
+  global: {
+    per_year: { year: number; ca_facture: number; ca_encaisse: number; ouvrages_parus: number }[];
+    total: {
+      ca_facture: number;
+      ca_encaisse: number;
+      ouvrages_parus: number;
+      exemplaires_scolaire: number;
+      exemplaires_simple: number;
+      droits_verses: number;
+    };
+  };
+}
+export function getAnnualSummary(year?: number) {
+  const qs = year ? `?year=${encodeURIComponent(String(year))}` : "";
+  return request<AnnualSummary>(`/api/v1/dashboard/annual-summary${qs}`);
+}
+
 // Recherche rapide de la barre supérieure : un aperçu léger et cliquable par
 // ouvrage (titre, auteur, ISBN). Filtrée côté serveur selon les droits.
 export interface QuickSearchResult {

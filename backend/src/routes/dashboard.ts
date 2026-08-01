@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../lib/permissions.js";
-import { editorialIndicators, commercialIndicators, revenueByFamily } from "../lib/kpi.js";
+import { editorialIndicators, commercialIndicators, revenueByFamily, annualSummary } from "../lib/kpi.js";
 
 // Indicateurs de synthèse du tableau de bord (grands KPI de la page d'accueil).
 // Chaque indicateur n'est calculé et renvoyé que si l'utilisateur a la
@@ -70,4 +70,22 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
     }
     return reply.send(await revenueByFamily());
   });
+
+  // Bilan par année : chaque grand indicateur décliné par année, plus le
+  // mouvement global (tendance annuelle + cumul tout-temps). Vue de pilotage —
+  // réservée à la Finance et à la Direction.
+  fastify.get<{ Querystring: { year?: string } }>(
+    "/api/v1/dashboard/annual-summary",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const perms = request.user!.permissions;
+      if (!perms.has("finance:consultation") && !perms.has("direction:consultation")) {
+        return reply.code(403).send({ code: "forbidden", message: "Accès réservé à la Finance et à la Direction." });
+      }
+      const raw = request.query.year;
+      const parsed = raw ? Number(raw) : undefined;
+      const year = parsed && Number.isFinite(parsed) ? Math.trunc(parsed) : undefined;
+      return reply.send(await annualSummary(year));
+    },
+  );
 }

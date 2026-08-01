@@ -959,8 +959,12 @@ export function deleteAnnualEvent(id: string) {
 }
 // Lien direct de l'affiche (image affichée telle quelle, sans téléchargement).
 // Le paramètre `v` casse le cache après une mise à jour de l'affiche.
-export function annualEventAfficheUrl(id: string, version?: string): string {
-  return `${API_BASE}/api/v1/annual-events/${id}/affiche${version ? `?v=${encodeURIComponent(version)}` : ""}`;
+export function annualEventAfficheUrl(id: string, version?: string, thumb?: boolean): string {
+  const q = new URLSearchParams();
+  if (version) q.set("v", version);
+  if (thumb) q.set("size", "thumb"); // miniature légère pour les aperçus/listes
+  const s = q.toString();
+  return `${API_BASE}/api/v1/annual-events/${id}/affiche${s ? `?${s}` : ""}`;
 }
 export async function uploadAnnualEventAffiche(id: string, file: File) {
   const form = new FormData();
@@ -976,8 +980,8 @@ export async function uploadAnnualEventAffiche(id: string, file: File) {
 // Couverture « prête pour le web » : version légère (JPG de très bonne qualité)
 // transformée à la volée depuis la couverture d'impression. C'est ce lien que le
 // maquettiste utilise pour joindre l'image à la fiche du site.
-export function siteCoverDownloadUrl(manuscriptId: string): string {
-  return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/site-cover`;
+export function siteCoverDownloadUrl(manuscriptId: string, thumb?: boolean): string {
+  return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/site-cover${thumb ? "?size=thumb" : ""}`;
 }
 
 // « Signaler au pôle » : notifier les titulaires d'un rôle qu'une pièce est

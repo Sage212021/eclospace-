@@ -1,4 +1,5 @@
 import { Jimp } from "jimp";
+import { readStoredFile, readStoredFileOrNull, writeStoredFileAt } from "./storage.js";
 
 // Optimisation d'image « prête pour le web » (couvertures à publier sur le site).
 //
@@ -71,4 +72,27 @@ export async function optimizeImage(input: Buffer, opts: OptimizeOptions = {}): 
   }
   const buffer = await image.getBuffer("image/jpeg", { quality });
   return { buffer, mime: "image/jpeg", ext: "jpg" };
+}
+
+// Suffixe de la clé d'une miniature, dérivée du fichier d'origine (aucune
+// colonne en base : le chemin de la miniature = chemin d'origine + ce suffixe).
+const THUMB_SUFFIX = ".thumb.jpg";
+
+// Miniature (≈360 px, JPG léger) d'une image stockée, générée et MISE EN CACHE
+// au premier accès : les aperçus et les listes n'ont plus à télécharger l'image
+// pleine taille (souvent 1600 px / plusieurs centaines de Ko) — d'où un
+// défilement bien plus fluide et beaucoup moins de mémoire sur les postes qui
+// manipulent des images (infographistes). Le fichier d'origine reste intact
+// (téléchargement / affichage en grand au clic).
+export async function getOrCreateThumbnail(originalFilePath: string): Promise<{ buffer: Buffer; mime: string }> {
+  const thumbPath = originalFilePath + THUMB_SUFFIX;
+  const cached = await readStoredFileOrNull(thumbPath);
+  if (cached) return { buffer: cached, mime: "image/jpeg" };
+
+  const original = await readStoredFile(originalFilePath);
+  const thumb = await optimizeImage(original, { maxLongSide: 360, quality: 78 });
+  // Mise en cache au meilleur effort : un échec d'écriture ne bloque pas le
+  // service de la miniature (elle sera simplement régénérée au prochain accès).
+  await writeStoredFileAt(thumbPath, thumb.buffer).catch(() => undefined);
+  return { buffer: thumb.buffer, mime: thumb.mime };
 }

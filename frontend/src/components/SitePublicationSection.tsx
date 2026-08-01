@@ -109,7 +109,7 @@ export function SitePublicationSection({ manuscriptId, canPublish }: { manuscrip
         {view.cover.available && view.cover.is_image ? (
           <>
             <img
-              src={siteCoverDownloadUrl(manuscriptId)}
+              src={siteCoverDownloadUrl(manuscriptId, true)}
               alt={t("sitepub.cover", "Couverture")}
               loading="lazy"
               decoding="async"

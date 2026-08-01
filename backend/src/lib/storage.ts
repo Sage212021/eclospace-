@@ -83,3 +83,24 @@ export async function readStoredFile(filePath: string): Promise<Buffer> {
   }
   return readFile(filePath);
 }
+
+// Lecture tolérante : renvoie null si le fichier/objet n'existe pas (au lieu de
+// lever). Sert au cache des miniatures (voir imageOptimize.getOrCreateThumbnail).
+export async function readStoredFileOrNull(filePath: string): Promise<Buffer | null> {
+  try {
+    return await readStoredFile(filePath);
+  } catch {
+    return null;
+  }
+}
+
+// Écriture à une CLÉ/chemin EXACT (dérivé), sans le nommage par empreinte de
+// storeFile — utilisé pour les fichiers dérivés comme les miniatures.
+export async function writeStoredFileAt(filePath: string, buffer: Buffer): Promise<void> {
+  if (s3Configured() && isS3Key(filePath)) {
+    await s3Client().send(new PutObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: filePath, Body: buffer }));
+    return;
+  }
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, buffer);
+}

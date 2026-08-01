@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
-import { optimizeImage, UnsupportedImageError } from "../lib/imageOptimize.js";
+import { optimizeImage, getOrCreateThumbnail, UnsupportedImageError } from "../lib/imageOptimize.js";
 
 // Planning annuel des événements (salons, festivals, réunions…).
 // - Lecture : tout le personnel (babillard), en temps réel.
@@ -151,9 +151,22 @@ export default async function annualEventsRoutes(fastify: FastifyInstance) {
   // Affiche servie directement (image) — vue par tout le personnel sur le babillard.
   fastify.get("/api/v1/annual-events/:id/affiche", { preHandler: READ }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const { size } = request.query as { size?: string };
     const event = await prisma.annualEvent.findFirst({ where: { id, deletedAt: null } });
     if (!event || !event.afficheFilePath || !event.afficheMimeType) {
       return reply.code(404).send({ code: "no_affiche", message: "Aucune affiche pour cet événement." });
+    }
+    // Aperçu/liste : miniature légère (générée et mise en cache au 1er accès) ;
+    // en cas d'échec, on retombe sur l'affiche pleine taille.
+    if (size === "thumb") {
+      try {
+        const thumb = await getOrCreateThumbnail(event.afficheFilePath);
+        reply.header("content-type", thumb.mime);
+        reply.header("cache-control", "private, max-age=300");
+        return reply.send(thumb.buffer);
+      } catch {
+        /* repli sur l'image pleine taille ci-dessous */
+      }
     }
     const buffer = await readStoredFile(event.afficheFilePath);
     reply.header("content-type", event.afficheMimeType);

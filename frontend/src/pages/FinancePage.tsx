@@ -135,6 +135,10 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
   // (ex. la liste des « tenders » du paiement mixte), afin d'éviter le masquage.
   const tr = t;
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  // Historiques repliés (déroulés au clic) : factures émises / réglées / autres.
+  const [openEmises, setOpenEmises] = useState(false);
+  const [openReglees, setOpenReglees] = useState(false);
+  const [openAutres, setOpenAutres] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [royaltyStatements, setRoyaltyStatements] = useState<RoyaltyStatement[]>([]);
@@ -453,44 +457,85 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
 
       <BillingOrdersSection canCreate={canInitiateOrder} canInvoice={canManage} canValidateThreshold={canValidateCancellation} />
 
-      <Card title={t("fin.invoices", "Factures")} icon={<IconFinance />} subtitle={t("fin.invoices_sub", "Suivi des factures et encaissements.")}>
-        {invoices.length === 0 ? (
-          <Empty>{t("fin.no_invoice", "Aucune facture.")}</Empty>
-        ) : (
-          <div className="ecl-list">
-            {invoices.map((invoice) => (
-              <div key={invoice.id} className="ecl-row">
-                <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{invoice.invoiceNumber}</span>
-                  <span className="ecl-row__desc" style={{ margin: 0 }}>{invoice.customer.name}</span>
-                  <Amount value={invoice.totalTtc} />
-                  <StatusChip label={t("fin.st." + invoice.status, STATUS_LABELS[invoice.status] ?? invoice.status)} />
-                </div>
-                <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
-                  <DocPrintMenu onPrint={(o) => handlePrintInvoice(invoice.id, o)} />
-                  <Button variant="view" size="sm" onClick={() => setEmailInvoice(invoice)}>{t("fin.send_email", "Envoyer par e-mail")}</Button>
-                  {/* Avoir (note de crédit) : voie légale de correction — utile
-                      quand la facture est déjà tirée ou réglée (annulation impossible). */}
-                  {canManage && invoice.type === "invoice" && (invoice.status === "issued" || invoice.status === "paid") && (
-                    <Button variant="view" size="sm" onClick={() => handleCreditNote(invoice)}>{t("fin.credit_note", "Avoir")}</Button>
-                  )}
-                  {canManage && invoice.type === "invoice" && invoice.status === "issued" && (
-                    <>
-                      <Button variant="view" size="sm" onClick={() => setScheduleInvoice(invoice)}>{t("fin.schedule_btn", "Échéancier")}</Button>
-                      <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, tenders: [{ method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: String(invoice.totalTtc) }] })}>
-                        {t("fin.collect", "Encaisser")}
-                      </Button>
-                      {/* Demande d'annulation (soumise au DG) : erreur de saisie, essai,
-                          désistement. Impossible une fois la facture imprimée (« tirée »). */}
-                      {!invoice.printedAt && <Button variant="danger" size="sm" onClick={() => handleRequestCancel(invoice)}>{t("fin.request_cancel", "Annuler la facture")}</Button>}
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
+      {(() => {
+        // Une ligne de facture (numéro, client, montant, statut + actions).
+        const renderRow = (invoice: Invoice) => (
+          <div key={invoice.id} className="ecl-row">
+            <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{invoice.invoiceNumber}</span>
+              <span className="ecl-row__desc" style={{ margin: 0 }}>{invoice.customer.name}</span>
+              <Amount value={invoice.totalTtc} />
+              <StatusChip label={t("fin.st." + invoice.status, STATUS_LABELS[invoice.status] ?? invoice.status)} />
+            </div>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
+              <DocPrintMenu onPrint={(o) => handlePrintInvoice(invoice.id, o)} />
+              <Button variant="view" size="sm" onClick={() => setEmailInvoice(invoice)}>{t("fin.send_email", "Envoyer par e-mail")}</Button>
+              {/* Avoir (note de crédit) : voie légale de correction — utile
+                  quand la facture est déjà tirée ou réglée (annulation impossible). */}
+              {canManage && invoice.type === "invoice" && (invoice.status === "issued" || invoice.status === "paid") && (
+                <Button variant="view" size="sm" onClick={() => handleCreditNote(invoice)}>{t("fin.credit_note", "Avoir")}</Button>
+              )}
+              {canManage && invoice.type === "invoice" && invoice.status === "issued" && (
+                <>
+                  <Button variant="view" size="sm" onClick={() => setScheduleInvoice(invoice)}>{t("fin.schedule_btn", "Échéancier")}</Button>
+                  <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, tenders: [{ method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: String(invoice.totalTtc) }] })}>
+                    {t("fin.collect", "Encaisser")}
+                  </Button>
+                  {/* Demande d'annulation (soumise au DG) : erreur de saisie, essai,
+                      désistement. Impossible une fois la facture imprimée (« tirée »). */}
+                  {!invoice.printedAt && <Button variant="danger" size="sm" onClick={() => handleRequestCancel(invoice)}>{t("fin.request_cancel", "Annuler la facture")}</Button>}
+                </>
+              )}
+            </div>
           </div>
-        )}
-      </Card>
+        );
+        const emises = invoices.filter((i) => i.type === "invoice" && (i.status === "issued" || i.status === "pending_validation" || i.status === "cancellation_requested"));
+        const reglees = invoices.filter((i) => i.type === "invoice" && i.status === "paid");
+        const autres = invoices.filter((i) => !emises.includes(i) && !reglees.includes(i)); // proforma, avoirs, annulées
+        // Bouton « dérouler / masquer » (compteur + chevron) pour le repli.
+        const toggle = (count: number, open: boolean, onToggle: () => void) => (
+          <button
+            type="button"
+            onClick={onToggle}
+            style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: "1px solid var(--line)", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 13, color: "var(--ink)" }}
+          >
+            <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--eclosion-dark)", background: "var(--eclosion-soft)", borderRadius: 999, padding: "0 8px" }}>{count}</span>
+            <span style={{ color: "var(--muted)" }}>{open ? t("fin.hide", "Masquer") : t("fin.show", "Dérouler")}</span>
+            <span style={{ transition: "transform .15s", transform: open ? "rotate(90deg)" : "none", color: "var(--eclosion-dark)" }}>▸</span>
+          </button>
+        );
+        return (
+          <>
+            <Card
+              title={t("fin.hist_emises", "Historique des factures émises")}
+              icon={<IconFinance />}
+              subtitle={t("fin.hist_emises_sub", "Factures en attente de règlement — cliquez pour dérouler.")}
+              action={toggle(emises.length, openEmises, () => setOpenEmises((v) => !v))}
+            >
+              {openEmises && (emises.length === 0 ? <Empty>{t("fin.no_invoice_emise", "Aucune facture émise en attente.")}</Empty> : <div className="ecl-list">{emises.map(renderRow)}</div>)}
+            </Card>
+
+            <Card
+              title={t("fin.hist_reglees", "Historique des factures réglées")}
+              icon={<IconFinance />}
+              subtitle={t("fin.hist_reglees_sub", "Factures entièrement encaissées — cliquez pour dérouler.")}
+              action={toggle(reglees.length, openReglees, () => setOpenReglees((v) => !v))}
+            >
+              {openReglees && (reglees.length === 0 ? <Empty>{t("fin.no_invoice_reglee", "Aucune facture réglée.")}</Empty> : <div className="ecl-list">{reglees.map(renderRow)}</div>)}
+            </Card>
+
+            {autres.length > 0 && (
+              <Card
+                title={t("fin.hist_autres", "Autres documents (proforma, avoirs, annulées)")}
+                icon={<IconFinance />}
+                action={toggle(autres.length, openAutres, () => setOpenAutres((v) => !v))}
+              >
+                {openAutres && <div className="ecl-list">{autres.map(renderRow)}</div>}
+              </Card>
+            )}
+          </>
+        );
+      })()}
 
       {/* Annulations de factures en attente de validation — réservé à la
           gouvernance (DG / admin général) : la Finance ne valide pas ses propres

@@ -34,6 +34,7 @@ import { useConfirm } from "./ConfirmProvider";
 const fmt = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF", maximumFractionDigits: 0 });
 const CATS: { key: BillingOrderCategory; label: string }[] = [
   { key: "livre_scolaire", label: "Livre scolaire" },
+  { key: "livre_general", label: "Livre général / simple" },
   { key: "autre", label: "Autre" },
 ];
 const CUSTOMER_CATS: { key: CustomerCategory; label: string }[] = [
@@ -88,7 +89,12 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
     listIsbnCatalogue("print").then(setIsbns).catch(() => {});
   }, []);
 
-  const detailed = form.category === "livre_scolaire"; // le scolaire se saisit par ouvrage → droits d'auteur
+  // Le livre (scolaire ou général) se saisit par ouvrage → droits d'auteur par livre.
+  const detailed = form.category === "livre_scolaire" || form.category === "livre_general";
+  // Segment attendu du catalogue selon la catégorie (scolaire ↔ manuels ;
+  // général ↔ ouvrages simples). Le sélecteur d'ouvrage ne montre que le bon segment.
+  const wantSegment: "scolaire" | "general" | null =
+    form.category === "livre_scolaire" ? "scolaire" : form.category === "livre_general" ? "general" : null;
   const linesTotalHt = bookLines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price_ht) || 0), 0);
   // Brut TTC du formulaire (selon le mode) et net à payer après remise saisie.
   const formGrossTtc = (detailed ? linesTotalHt : Number(form.amount_ht) || 0) * (1 + (Number(form.tax_rate) || 0) / 100);
@@ -99,17 +105,21 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   const groupedIsbns = useMemo(() => {
     const groups = new Map<string, IsbnCatalogueItem[]>();
     for (const x of isbns) {
+      // On ne propose que les ouvrages du segment correspondant à la catégorie
+      // (scolaire ↔ manuels, général ↔ ouvrages simples) pour ne pas les mélanger.
+      if (wantSegment && (x.manuscript?.editorialSegment ?? "general") !== wantSegment) continue;
       const st = x.manuscript?.subtitle ?? "";
-      const matiere = st.includes("·") ? st.split("·")[0].trim() : st.trim() || "Autres ouvrages";
-      if (!groups.has(matiere)) groups.set(matiere, []);
-      groups.get(matiere)!.push(x);
+      // Scolaire : « Matière · Classe » → groupe par matière. Général : « Collection … » → groupe par collection.
+      const grp = st.includes("·") ? st.split("·")[0].trim() : st.trim() || "Autres ouvrages";
+      if (!groups.has(grp)) groups.set(grp, []);
+      groups.get(grp)!.push(x);
     }
     return [...groups.entries()].sort((a, b) => {
       if (a[0] === "Autres ouvrages") return 1;
       if (b[0] === "Autres ouvrages") return -1;
       return a[0].localeCompare(b[0], "fr");
     });
-  }, [isbns]);
+  }, [isbns, wantSegment]);
 
   function setLine(i: number, patch: Partial<BookLine>) {
     setBookLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -385,7 +395,16 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
               </div>
             )}
             <div style={{ display: "flex", gap: 8 }}>
-              <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as BillingOrderCategory }))} style={{ ...inp, flex: 1 }}>
+              <select
+                value={form.category}
+                onChange={(e) => {
+                  // Changer de catégorie repart d'une ligne vierge : le catalogue
+                  // proposé change de segment (scolaire ↔ général).
+                  setForm((f) => ({ ...f, category: e.target.value as BillingOrderCategory }));
+                  setBookLines([emptyLine()]);
+                }}
+                style={{ ...inp, flex: 1 }}
+              >
                 {CATS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select>
             </div>

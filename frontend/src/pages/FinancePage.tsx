@@ -508,7 +508,7 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
                   </Button>
                   {/* Demande d'annulation (soumise au DG) : erreur de saisie, essai,
                       désistement. Impossible une fois la facture imprimée (« tirée »). */}
-                  {!invoice.printedAt && <Button variant="danger" size="sm" onClick={() => handleRequestCancel(invoice)}>{t("fin.request_cancel", "Annuler la facture")}</Button>}
+                  {!invoice.printedAt && <Button variant="view" size="sm" onClick={() => handleRequestCancel(invoice)}>{t("fin.request_cancel", "Demander l'annulation")}</Button>}
                 </>
               )}
               {/* Annulation directe par le DG / administrateur général (essai,

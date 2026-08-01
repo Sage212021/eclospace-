@@ -3657,6 +3657,11 @@ export function getPendingCancellationInvoices() {
 export function approveInvoiceCancellation(id: string) {
   return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/cancel-approve`, { method: "POST" });
 }
+// Annulation directe par le DG / administrateur général — possible même sur une
+// facture déjà imprimée (essai / erreur). Motif obligatoire.
+export function forceCancelInvoice(id: string, reason: string) {
+  return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/force-cancel`, { method: "POST", body: JSON.stringify({ reason }) });
+}
 export function rejectInvoiceCancellation(id: string) {
   return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/cancel-reject`, { method: "POST" });
 }

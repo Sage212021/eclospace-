@@ -309,6 +309,47 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(approveDg.json().status).toBe("cancelled");
   });
 
+  it("le DG peut annuler directement une facture IMPRIMÉE (essai) ; la Finance non", async () => {
+    const invId = await issueInvoice(200_000);
+    // Facture « tirée » (imprimée) : la Finance ne peut plus la demander en annulation.
+    await prisma.invoice.update({ where: { id: invId }, data: { printedAt: new Date() } });
+
+    const daf = `daf_force_${rnd()}`;
+    await createUserWithRole(daf, "RESP_FINANCE", PWD);
+    const dafCookie = await login(daf);
+
+    // La Finance : refusée sur l'annulation directe (réservée à la gouvernance).
+    const asFinance = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/force-cancel`, headers: { cookie: dafCookie }, payload: { reason: "essai" } });
+    expect(asFinance.statusCode).toBe(403);
+
+    // Motif obligatoire.
+    const noReason = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/force-cancel`, headers: { cookie: admin }, payload: {} });
+    expect(noReason.statusCode).toBe(400);
+
+    // Le DG / administrateur général annule directement, malgré l'impression.
+    const forced = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/force-cancel`, headers: { cookie: admin }, payload: { reason: "Facture d'essai" } });
+    expect(forced.statusCode).toBe(200);
+    expect(forced.json().status).toBe("cancelled");
+
+    const stored = await prisma.invoice.findUniqueOrThrow({ where: { id: invId } });
+    expect(stored.status).toBe("cancelled");
+    expect(stored.cancellationReason).toBe("Facture d'essai");
+    // Les droits « livre » de cette facture d'essai sont retirés.
+    expect(await prisma.schoolRoyaltyEntry.count({ where: { invoiceId: invId } })).toBe(0);
+    // Traçabilité : l'annulation forcée est journalisée.
+    const audit = await prisma.auditLog.findFirst({ where: { entityType: "invoice", entityId: invId, action: "status_change" } });
+    expect(audit).not.toBeNull();
+  });
+
+  it("annulation directe refusée sur une facture déjà réglée (→ passer par un avoir)", async () => {
+    const invId = await issueInvoice(90_000);
+    const ttc = Number((await prisma.invoice.findUniqueOrThrow({ where: { id: invId } })).totalTtc);
+    await app.inject({ method: "POST", url: "/api/v1/payments", headers: { cookie: admin }, payload: { method: "cash", amount: ttc, allocations: [{ invoice_id: invId, amount: ttc }] } });
+    const forced = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/force-cancel`, headers: { cookie: admin }, payload: { reason: "trop tard" } });
+    expect(forced.statusCode).toBe(409);
+    expect(forced.json().code).toBe("already_paid");
+  });
+
   it("le comptable demande l'annulation, le DG la valide → facture annulée", async () => {
     const invId = await issueInvoice(150_000);
     const req = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/request-cancellation`, headers: { cookie: admin }, payload: { reason: "Erreur de saisie" } });

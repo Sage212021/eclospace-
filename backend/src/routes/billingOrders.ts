@@ -394,6 +394,35 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     return reply.send({ ok: true, status: "issued" });
   });
 
+  // Annulation DIRECTE par la GOUVERNANCE (DG / administrateur général), possible
+  // MÊME sur une facture déjà imprimée (« tirée ») — réservée aux erreurs de
+  // saisie / essais. Ce n'est PAS une suppression : la facture passe « Annulée »
+  // (statut conservé, motif obligatoire, journal d'audit), et sort du chiffre
+  // d'affaires. Réservé à pilotage:administration ; la Finance ne l'a pas. Ne
+  // s'applique pas à une facture déjà réglée (là, la correction passe par un avoir).
+  fastify.post("/api/v1/invoices/:id/force-cancel", { preHandler: requirePermission("pilotage", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ reason: z.string().min(1).max(500) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Un motif d'annulation est requis." });
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    if (invoice.type !== "invoice") return reply.code(409).send({ code: "not_an_invoice", message: "Seule une facture peut être annulée (un avoir ou une proforma, non)." });
+    if (invoice.status === "cancelled") return reply.code(409).send({ code: "already_cancelled", message: "Cette facture est déjà annulée." });
+    if (invoice.status === "paid") return reply.code(409).send({ code: "already_paid", message: "Cette facture est réglée : corrigez-la par un avoir, pas par une annulation." });
+
+    await prisma.$transaction(async (tx) => {
+      // Facture d'essai : on retire aussi ses droits d'auteur « livre » calculés à
+      // l'émission, pour qu'ils ne pèsent plus sur les exemplaires / droits.
+      await tx.schoolRoyaltyEntry.deleteMany({ where: { invoiceId: id } });
+      await tx.invoice.update({
+        where: { id },
+        data: { status: "cancelled", cancellationReason: parsed.data.reason.trim(), cancellationRequestedAt: new Date(), cancellationRequestedBy: request.user!.id },
+      });
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "invoice", entityId: id, oldValues: { status: invoice.status, printed: !!invoice.printedAt }, newValues: { status: "cancelled", forced: true, reason: parsed.data.reason.trim() }, ipAddress: request.ip });
+    return reply.send({ ok: true, status: "cancelled" });
+  });
+
   // Avoir (note de crédit) sur une facture : la voie légale quand la facture ne
   // peut plus être annulée (déjà tirée / réglée) — on ne supprime pas, on
   // neutralise. Réservé au comptable/Finance (finance:saisie).

@@ -13,6 +13,7 @@ import {
   listInvoices,
   markInvoicePrinted,
   requestInvoiceCancellation,
+  forceCancelInvoice,
   getPendingCancellationInvoices,
   approveInvoiceCancellation,
   rejectInvoiceCancellation,
@@ -227,6 +228,30 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
       await refresh();
     } catch (err) {
       fail(err, "Demande d'annulation impossible.");
+    }
+  }
+  // Annulation directe par le DG / administrateur général — possible même sur une
+  // facture déjà imprimée (essai / erreur de saisie). Ce n'est pas une
+  // suppression : la facture passe « Annulée » (motif obligatoire, audit) et sort
+  // du chiffre d'affaires.
+  async function handleForceCancel(invoice: Invoice) {
+    const reason = window.prompt(
+      `Annuler définitivement la facture ${invoice.invoiceNumber} (${invoice.customer.name}) ?\n\nRéservé à la direction. La facture passera « Annulée » et sortira du chiffre d'affaires (elle reste tracée, non supprimée).\n\nMotif (obligatoire — ex. essai, erreur de saisie, client fictif) :`,
+      "",
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("Un motif d'annulation est requis.");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    try {
+      await forceCancelInvoice(invoice.id, reason.trim());
+      setMessage(`Facture ${invoice.invoiceNumber} annulée (retirée du chiffre d'affaires).`);
+      await refresh();
+    } catch (err) {
+      fail(err, "Annulation impossible.");
     }
   }
   // Avoir (note de crédit) : la voie légale quand la facture ne peut plus être
@@ -485,6 +510,12 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
                       désistement. Impossible une fois la facture imprimée (« tirée »). */}
                   {!invoice.printedAt && <Button variant="danger" size="sm" onClick={() => handleRequestCancel(invoice)}>{t("fin.request_cancel", "Annuler la facture")}</Button>}
                 </>
+              )}
+              {/* Facture déjà imprimée : la Finance ne peut plus la demander en
+                  annulation. Le DG / administrateur général peut néanmoins l'annuler
+                  directement (essai, erreur), avec motif — réservé à la direction. */}
+              {canValidateCancellation && invoice.type === "invoice" && (invoice.status === "issued" || invoice.status === "pending_validation") && invoice.printedAt && (
+                <Button variant="danger" size="sm" onClick={() => handleForceCancel(invoice)}>{t("fin.force_cancel", "Annuler (direction)")}</Button>
               )}
             </div>
           </div>

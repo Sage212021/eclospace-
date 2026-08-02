@@ -1,11 +1,80 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { ContractType, ContractStatus, RoyaltyBase, SignatureParty, StatementPeriodicity } from "@prisma/client";
+import { ContractDocumentKind, ContractType, ContractStatus, RoyaltyBase, SignatureParty, StatementPeriodicity } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { nextContractNumber } from "../lib/contractNumber.js";
+import { storeFile, readStoredFile } from "../lib/storage.js";
+
+const MAX_DOC_LABEL = 120;
+
+// Résout un ensemble d'identifiants d'utilisateurs en noms lisibles (nom de
+// l'employé si disponible, sinon identifiant de connexion) — pour la
+// traçabilité affichée (« saisi par », « modifié par »).
+async function resolveActorNames(ids: (string | null | undefined)[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter((x): x is string => Boolean(x)))];
+  if (unique.length === 0) return new Map();
+  const users = await prisma.user.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, username: true, employee: { select: { firstName: true, lastName: true } } },
+  });
+  const map = new Map<string, string>();
+  for (const u of users) {
+    const full = `${u.employee?.firstName ?? ""} ${u.employee?.lastName ?? ""}`.trim();
+    map.set(u.id, full || u.username);
+  }
+  return map;
+}
+
+// Lecture d'un envoi multipart : le fichier + un champ texte « label » optionnel
+// et un « kind » (signed_scan | annexe).
+async function readContractUpload(
+  request: FastifyRequest,
+): Promise<{ buf: Buffer; name: string; mime: string; label: string; kind: ContractDocumentKind } | null> {
+  if (!request.isMultipart()) return null;
+  let buf: Buffer | null = null;
+  let name = "fichier";
+  let mime = "application/octet-stream";
+  let label = "";
+  let kind: ContractDocumentKind = "signed_scan";
+  for await (const part of request.parts()) {
+    if (part.type === "file") {
+      buf = await part.toBuffer();
+      name = part.filename || "fichier";
+      mime = part.mimetype || "application/octet-stream";
+    } else if (part.fieldname === "label" && typeof part.value === "string") {
+      label = part.value.slice(0, MAX_DOC_LABEL);
+    } else if (part.fieldname === "kind" && (part.value === "signed_scan" || part.value === "annexe")) {
+      kind = part.value;
+    }
+  }
+  if (!buf || buf.byteLength === 0) return null;
+  return { buf, name, mime, label, kind };
+}
+
+function contractDocView(d: {
+  id: string;
+  kind: ContractDocumentKind;
+  label: string;
+  fileName: string;
+  fileMime: string;
+  fileSize: number;
+  uploadedById: string | null;
+  createdAt: Date;
+}, actorNames: Map<string, string>) {
+  return {
+    id: d.id,
+    kind: d.kind,
+    label: d.label,
+    name: d.fileName,
+    mime: d.fileMime,
+    size: d.fileSize,
+    uploaded_by: d.uploadedById ? actorNames.get(d.uploadedById) ?? null : null,
+    created_at: d.createdAt,
+  };
+}
 
 // Bornes réglementaires du taux de droits d'auteur (décision opérateur du
 // 20/07/2026) : réglable par ouvrage, mais toujours entre 8 % et 15 %. Les
@@ -163,7 +232,15 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         })
       : contracts;
 
-    return reply.send(filtered);
+    // Traçabilité : qui a saisi / modifié en dernier chaque contrat.
+    const actorNames = await resolveActorNames(filtered.flatMap((c) => [c.createdBy, c.updatedBy]));
+    const withTrace = filtered.map((c) => ({
+      ...c,
+      createdByName: c.createdBy ? actorNames.get(c.createdBy) ?? null : null,
+      updatedByName: c.updatedBy ? actorNames.get(c.updatedBy) ?? null : null,
+    }));
+
+    return reply.send(withTrace);
   });
 
   fastify.get("/api/v1/contracts/:id", { preHandler: requirePermission("contracts", "consultation") }, async (request, reply) => {
@@ -191,7 +268,13 @@ export default async function contractRoutes(fastify: FastifyInstance) {
     if (!contract) {
       return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
     }
-    return reply.send(contract);
+    // Traçabilité : noms lisibles du saisisseur et du dernier modificateur.
+    const actorNames = await resolveActorNames([contract.createdBy, contract.updatedBy]);
+    return reply.send({
+      ...contract,
+      createdByName: contract.createdBy ? actorNames.get(contract.createdBy) ?? null : null,
+      updatedByName: contract.updatedBy ? actorNames.get(contract.updatedBy) ?? null : null,
+    });
   });
 
   fastify.patch(
@@ -335,6 +418,103 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         },
       });
       return reply.send(refreshed);
+    },
+  );
+
+  // ── Pièces numérisées du contrat (Ch. 9 §9.9) ─────────────────────────────
+  // Contrat physique signé scanné (PDF ou images) + annexes. Conservation des
+  // originaux signés. Demande opérateur du 02/08/2026.
+
+  async function contractExists(id: string): Promise<boolean> {
+    const c = await prisma.contract.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    return Boolean(c);
+  }
+
+  // Liste des pièces d'un contrat.
+  fastify.get(
+    "/api/v1/contracts/:id/documents",
+    { preHandler: requirePermission("contracts", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!(await contractExists(id))) return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
+      const docs = await prisma.contractDocument.findMany({
+        where: { contractId: id, deletedAt: null },
+        orderBy: { createdAt: "desc" },
+      });
+      const actorNames = await resolveActorNames(docs.map((d) => d.uploadedById));
+      return reply.send(docs.map((d) => contractDocView(d, actorNames)));
+    },
+  );
+
+  // Téléversement d'une pièce (multipart). Réservé à la saisie des contrats.
+  fastify.post(
+    "/api/v1/contracts/:id/documents",
+    { preHandler: requirePermission("contracts", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!(await contractExists(id))) return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
+      const upload = await readContractUpload(request);
+      if (!upload) return reply.code(400).send({ code: "validation_error", message: "Aucun fichier reçu." });
+      const stored = await storeFile(upload.buf, upload.name);
+      const created = await prisma.contractDocument.create({
+        data: {
+          contractId: id,
+          kind: upload.kind,
+          label: upload.label,
+          fileName: upload.name,
+          filePath: stored.filePath,
+          fileMime: upload.mime,
+          fileSize: stored.fileSize,
+          uploadedById: request.user!.id,
+        },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "contract_document",
+        entityId: created.id,
+        newValues: { contractId: id, kind: upload.kind, fileName: upload.name },
+        ipAddress: request.ip,
+      });
+      const actorNames = await resolveActorNames([created.uploadedById]);
+      return reply.code(201).send(contractDocView(created, actorNames));
+    },
+  );
+
+  // Téléchargement d'une pièce.
+  fastify.get(
+    "/api/v1/contracts/:id/documents/:docId/download",
+    { preHandler: requirePermission("contracts", "consultation") },
+    async (request, reply) => {
+      const { id, docId } = request.params as { id: string; docId: string };
+      const doc = await prisma.contractDocument.findFirst({ where: { id: docId, contractId: id, deletedAt: null } });
+      if (!doc) return reply.code(404).send({ code: "not_found", message: "Pièce introuvable." });
+      const buffer = await readStoredFile(doc.filePath);
+      reply.header("content-type", doc.fileMime);
+      reply.header("content-disposition", `attachment; filename="${doc.fileName.replace(/"/g, "")}"`);
+      return reply.send(buffer);
+    },
+  );
+
+  // Retrait logique d'une pièce (conservation : suppression logique uniquement).
+  fastify.delete(
+    "/api/v1/contracts/:id/documents/:docId",
+    { preHandler: requirePermission("contracts", "saisie") },
+    async (request, reply) => {
+      const { id, docId } = request.params as { id: string; docId: string };
+      const doc = await prisma.contractDocument.findFirst({ where: { id: docId, contractId: id, deletedAt: null } });
+      if (!doc) return reply.code(404).send({ code: "not_found", message: "Pièce introuvable." });
+      await prisma.contractDocument.update({ where: { id: docId }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "contract_document",
+        entityId: docId,
+        oldValues: { fileName: doc.fileName },
+        newValues: { deleted: true },
+        ipAddress: request.ip,
+      });
+      return reply.send({ ok: true });
     },
   );
 }

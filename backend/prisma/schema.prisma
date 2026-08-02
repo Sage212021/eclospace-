@@ -1221,6 +1221,9 @@ model Partner {
   penName   String?         @map("pen_name")
   email     String?
   phone     String?
+  // Numéro WhatsApp de la contrepartie (auteur/prestataire) — sert à lui
+  // adresser les notifications de suivi (demande opérateur du 02/08/2026).
+  whatsapp  String?
   address   String?
   bio       String?
   taxStatus Json?           @map("tax_status")
@@ -1678,8 +1681,40 @@ model Contract {
   royaltyBeneficiaries ContractBeneficiary[]
   hrContracts          HrContract[]
   signatures           ContractSignature[]
+  documents            ContractDocument[]
 
   @@map("contracts")
+}
+
+// Nature d'un document rattaché à un contrat.
+enum ContractDocumentKind {
+  signed_scan // contrat physique signé, numérisé (PDF ou images)
+  annexe      // pièce jointe / annexe complémentaire
+}
+
+// Pièces numérisées d'un contrat (Ch. 9 §9.9 — conservation des originaux
+// signés). Demande opérateur du 02/08/2026 : pouvoir téléverser le contrat
+// physique scanné et signé de l'auteur (PDF ou images). Comme la GED, le
+// fichier vit hors base ; seule sa référence (chemin/clé + empreinte via le
+// nom de stockage) est enregistrée. Suppression logique uniquement.
+model ContractDocument {
+  id           String               @id @default(uuid())
+  contractId   String               @map("contract_id")
+  contract     Contract             @relation(fields: [contractId], references: [id])
+  kind         ContractDocumentKind @default(signed_scan)
+  label        String               @default("")
+  fileName     String               @map("file_name")
+  filePath     String               @map("file_path")
+  fileMime     String               @map("file_mime")
+  fileSize     Int                  @map("file_size")
+  uploadedById String?              @map("uploaded_by")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at") // suppression logique uniquement
+  deletedBy String?   @map("deleted_by")
+
+  @@index([contractId])
+  @@map("contract_documents")
 }
 
 // Partie qui appose une signature (Ch. 9 §9.3) : la « partie contractante »

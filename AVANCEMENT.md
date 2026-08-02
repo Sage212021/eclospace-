@@ -13,6 +13,31 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 02/08/2026 (suite) — Anti-doublon de contrat + options de messagerie (Modifier / Transférer / Répondre / Infos)
+
+**Fait (demande opérateur du 02/08/2026) :**
+- **Contrat en double empêché** : à la création (`POST /api/v1/contracts`), le système refuse (409 `contract_duplicate`) un 2ᵉ contrat **identique** — même ouvrage + même partenaire + même type — tant qu'un tel contrat est encore actif (ni résilié, ni expiré). Message explicite : « Un contrat « édition » existe déjà pour cet ouvrage avec … (CTR-…) ». Les contrats **différents** (autre type, autre partenaire) restent autorisés — un ouvrage a légitimement plusieurs contrats. Le message d'erreur s'affiche tel quel sur la page Contrats. Test : `contract-duplicate.test.ts` (premier accepté, doublon refusé, type différent autorisé, réautorisé après résiliation).
+- **Messagerie enrichie** : les messages disposent désormais d'un menu d'actions (⋯) avec **Répondre / citer**, **Transférer**, **Modifier**, **Infos** (+ Supprimer déjà présent).
+  - *Répondre* : le message cite l'original (aperçu auteur + extrait) ; contrôle serveur que le message cité appartient bien au fil.
+  - *Modifier* : l'auteur corrige son texte ; le message est marqué « modifié » (horodaté). La pièce jointe reste immuable. Réservé à l'auteur du message.
+  - *Transférer* : recopie le texte et la pièce jointe vers un collègue (conversation créée au besoin) ; message marqué « ↪ Transféré ». La pièce jointe (immuable, adressée par empreinte) est réutilisée sans re-téléversement.
+  - *Infos* : panneau détaillant expéditeur, envoi le…, modifié le…, statut de lecture, origine (transféré), pièce jointe.
+  - Temps réel : nouvel évènement `chat:message:update` (édition/suppression répercutées en direct chez le correspondant).
+  - Schéma : `chat_messages` gagne `edited_at`, `forwarded`, `reply_to_id` (auto-référence). Test : `chat-actions.test.ts` (répondre + garde de fil, modifier + refus tiers, transférer + refus auto-transfert).
+
+**Prochaine étape :** au besoin, étendre le transfert à une sélection multiple de destinataires et ajouter une recherche dans le fil.
+
+### 02/08/2026 — Page Contrats : contrat signé scanné, coordonnées auteur (e-mail + WhatsApp), traçabilité
+
+**Fait (demande opérateur du 02/08/2026, page Contrats) :**
+- **Contrat physique signé numérisé** : nouvelle entité `contract_documents` (PDF **ou** images) rattachée au contrat, avec téléversement, téléchargement et retrait (**suppression logique uniquement** — conformité modèle §13). Nature de la pièce : « contrat signé (scan) » ou « annexe ». Endpoints `GET/POST/DELETE /api/v1/contracts/:id/documents` et `.../download`. Fichier stocké hors base (GED, S3 en prod / disque en dev), seule la référence est en base.
+- **Coordonnées de l'auteur pour les notifications** : ajout du champ `whatsapp` à la fiche Partenaire (l'e-mail existait déjà). Nouveau `PATCH /api/v1/partners/:id` pour compléter/modifier e-mail, WhatsApp, téléphone — tracé au journal avec l'ancien et le nouveau contenu. Le formulaire « Nouveau partenaire » (auparavant une série de fenêtres `prompt`) devient un vrai formulaire avec e-mail + WhatsApp.
+- **Traçabilité rendue visible** : la liste et le détail d'un contrat renvoient désormais le nom lisible du saisisseur et du dernier modificateur (« 🔒 Traçabilité — saisi par …, dernière modification par … »). Rappel : la traçabilité de fond existait déjà partout (champs `created_by`/`updated_by` systématiques + journal `audit_log` **append-only au niveau base**) ; cette session la **fait apparaître** à l'écran sur la page Contrats.
+- **Frontend** (`ContractsSection.tsx`) : bloc « Contrat signé & pièces jointes » (upload PDF/images), bloc coordonnées de la contrepartie éditable en place, ligne de traçabilité, et modale de création de partenaire complète.
+- **Tests** : `contract-documents-contact.test.ts` (5 cas) — enregistrement e-mail/WhatsApp, rejet d'un e-mail invalide, upload + liste du scan signé, téléchargement + retrait en suppression logique, exposition de la traçabilité. Tous verts ; non-régression vérifiée sur les tests contrats existants.
+
+**Prochaine étape :** brancher l'**envoi effectif** des notifications à l'auteur (e-mail + WhatsApp) sur ces coordonnées — aujourd'hui elles sont collectées et l'auteur disposant d'un compte est déjà notifié dans l'ERP ; l'expédition externe (passerelle e-mail / WhatsApp) reste à câbler.
+
 ### 04/07/2026 — Décompression du dossier de conception + démarrage du Lot 0
 
 **Fait :**

@@ -571,6 +571,11 @@ export interface Partner {
   category: PartnerCategory;
   firstName: string;
   lastName: string;
+  penName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+  address?: string | null;
 }
 
 export function listPartners(category?: PartnerCategory) {
@@ -578,8 +583,24 @@ export function listPartners(category?: PartnerCategory) {
   return request<Partner[]>(`/api/v1/partners${query}`);
 }
 
-export function createPartner(input: { category: PartnerCategory; first_name: string; last_name: string }) {
+export function createPartner(input: {
+  category: PartnerCategory;
+  first_name: string;
+  last_name: string;
+  pen_name?: string;
+  email?: string;
+  phone?: string;
+  whatsapp?: string;
+}) {
   return request<Partner>("/api/v1/partners", { method: "POST", body: JSON.stringify(input) });
+}
+
+// Modification des coordonnées d'un partenaire (e-mail, téléphone, WhatsApp…).
+export function updatePartner(
+  id: string,
+  input: { pen_name?: string; email?: string; phone?: string; whatsapp?: string; address?: string },
+) {
+  return request<Partner>(`/api/v1/partners/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
 export interface Contract {
@@ -588,8 +609,13 @@ export interface Contract {
   type: string;
   status: ContractStatus;
   signedAt: string | null;
-  partner: { id: string; firstName: string; lastName: string };
+  partner: { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; whatsapp?: string | null };
   manuscript: { id: string; manuscriptNumber: string; title: string } | null;
+  // Traçabilité : noms lisibles du saisisseur et du dernier modificateur.
+  createdByName?: string | null;
+  updatedByName?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export function listContracts(manuscriptId?: string) {
@@ -654,6 +680,48 @@ export function createContract(input: {
 
 export function updateContractStatus(id: string, status: ContractStatus) {
   return request<Contract>(`/api/v1/contracts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
+// --- Pièces numérisées d'un contrat (contrat signé scanné, annexes) --------
+export type ContractDocumentKind = "signed_scan" | "annexe";
+export interface ContractDocument {
+  id: string;
+  kind: ContractDocumentKind;
+  label: string;
+  name: string;
+  mime: string;
+  size: number;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
+export function listContractDocuments(contractId: string) {
+  return request<ContractDocument[]>(`/api/v1/contracts/${contractId}/documents`);
+}
+
+export async function uploadContractDocument(
+  contractId: string,
+  input: { label: string; kind: ContractDocumentKind; file: File },
+): Promise<ContractDocument> {
+  const form = new FormData();
+  if (input.label) form.append("label", input.label);
+  form.append("kind", input.kind);
+  form.append("file", input.file);
+  const res = await fetch(`${API_BASE}/api/v1/contracts/${contractId}/documents`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? `Erreur ${res.status}`);
+  return res.json() as Promise<ContractDocument>;
+}
+
+export function contractDocumentDownloadUrl(contractId: string, docId: string): string {
+  return `${API_BASE}/api/v1/contracts/${contractId}/documents/${docId}/download`;
+}
+
+export function deleteContractDocument(contractId: string, docId: string) {
+  return request<{ ok: true }>(`/api/v1/contracts/${contractId}/documents/${docId}`, { method: "DELETE" });
 }
 
 // --- Devis de prestation (éditoriale / impression / communication) --------
@@ -3376,6 +3444,11 @@ export interface ChatConversation {
   last_at: string | null;
   unread: number;
 }
+export interface ChatReplyPreview {
+  id: string;
+  sender_name: string;
+  excerpt: string;
+}
 export interface ChatMessage {
   id: string;
   conversation_id: string;
@@ -3387,6 +3460,11 @@ export interface ChatMessage {
   created_at: string;
   read: boolean;
   file: { name: string; mime: string | null; size: number | null } | null;
+  // Options messagerie (Modifier / Transférer / Répondre)
+  edited?: boolean;
+  edited_at?: string | null;
+  forwarded?: boolean;
+  reply_to?: ChatReplyPreview | null;
 }
 export function getChatDirectory() {
   return request<ChatDirectoryEntry[]>("/api/v1/chat/directory");
@@ -3403,13 +3481,17 @@ export function startConversation(userId: string) {
 export function getMessages(conversationId: string) {
   return request<ChatMessage[]>(`/api/v1/chat/conversations/${conversationId}/messages`);
 }
-export function sendChatMessage(conversationId: string, body: string) {
-  return request<ChatMessage>(`/api/v1/chat/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ body }) });
+export function sendChatMessage(conversationId: string, body: string, replyToId?: string) {
+  return request<ChatMessage>(`/api/v1/chat/conversations/${conversationId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ body, ...(replyToId ? { reply_to_id: replyToId } : {}) }),
+  });
 }
 // Envoi avec pièce jointe : multipart (le navigateur pose le bon Content-Type).
-export async function sendChatMessageWithFile(conversationId: string, body: string, file: File): Promise<ChatMessage> {
+export async function sendChatMessageWithFile(conversationId: string, body: string, file: File, replyToId?: string): Promise<ChatMessage> {
   const form = new FormData();
   if (body) form.append("body", body);
+  if (replyToId) form.append("reply_to_id", replyToId);
   form.append("file", file);
   const res = await fetch(`${API_BASE}/api/v1/chat/conversations/${conversationId}/messages`, { method: "POST", credentials: "include", body: form });
   if (!res.ok) {
@@ -3423,6 +3505,17 @@ export function markConversationRead(conversationId: string) {
 }
 export function deleteChatMessage(messageId: string) {
   return request<{ ok: true }>(`/api/v1/chat/messages/${messageId}`, { method: "DELETE" });
+}
+// Modifier le texte d'un message déjà envoyé.
+export function editChatMessage(messageId: string, body: string) {
+  return request<ChatMessage>(`/api/v1/chat/messages/${messageId}`, { method: "PATCH", body: JSON.stringify({ body }) });
+}
+// Transférer un message vers un collègue (conversation créée au besoin).
+export function forwardChatMessage(messageId: string, toUserId: string) {
+  return request<ChatMessage & { other_id: string; other_name: string }>(`/api/v1/chat/messages/${messageId}/forward`, {
+    method: "POST",
+    body: JSON.stringify({ to_user_id: toUserId }),
+  });
 }
 export function chatFileUrl(messageId: string): string {
   return `${API_BASE}/api/v1/chat/messages/${messageId}/file`;

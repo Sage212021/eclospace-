@@ -7,6 +7,7 @@ import {
   invoiceBillingOrder,
   cancelBillingOrder,
   getInvoice,
+  markInvoicePrinted,
   getPendingValidationInvoices,
   validateInvoice,
   rejectInvoiceValidation,
@@ -275,6 +276,9 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
         try {
           const detail = await getInvoice(r.id);
           printInvoice(detail);
+          // Ce tout premier tirage est l'original : on l'enregistre pour que
+          // toute réimpression ultérieure porte la mention « DUPLICATA ».
+          markInvoicePrinted(r.id).catch(() => {});
         } catch {
           setMsg(`Facture ${r.invoice_number} émise. Retrouvez-la dans « Factures » pour l'imprimer.`);
         }

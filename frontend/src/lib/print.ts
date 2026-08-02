@@ -316,6 +316,14 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
   const due = invoice.dueDate ? fdate(invoice.dueDate) : "—";
   const docName = isCredit ? tr("Avoir", "Credit note") : isProforma ? tr("Facture proforma", "Proforma invoice") : tr("Facture", "Invoice");
 
+  // DUPLICATA (demande opérateur) : une vraie facture n'a qu'UN original — le
+  // premier tirage. Toute réimpression (2ᵉ, 3ᵉ fois…) porte la mention
+  // « DUPLICATA ». Le signal fait foi est `printedAt` : posé au premier tirage
+  // (route mark-printed), il est déjà renseigné quand on rouvre le document.
+  // Proforma et avoir ne sont pas concernés (pas de valeur d'original fiscal).
+  const isDuplicate = invoice.type === "invoice" && !!invoice.printedAt;
+  const firstPrinted = invoice.printedAt ? fdate(invoice.printedAt) : "";
+
   const rows = invoice.lines
     .map(
       (l) => `<tr>
@@ -329,13 +337,29 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
     .join("");
 
   const body = `
-    <div class="doc__title">${docName}</div>
+    ${
+      isDuplicate
+        ? `<div aria-hidden="true" style="position:fixed; left:50%; top:50%; transform:translate(-50%,-50%) rotate(-30deg); font-family:ui-monospace,'IBM Plex Mono',monospace; font-size:110px; font-weight:800; letter-spacing:8px; color:#C24B3A; opacity:.09; z-index:-1; pointer-events:none; white-space:nowrap; -webkit-print-color-adjust:exact; print-color-adjust:exact">DUPLICATA</div>`
+        : ""
+    }
+    <div class="doc__title">${docName}${
+      isDuplicate
+        ? ` <span style="font-family:ui-monospace,'IBM Plex Mono',monospace; font-size:13px; color:#C24B3A; border:1.5px solid #C24B3A; border-radius:6px; padding:1px 9px; vertical-align:middle; letter-spacing:1.5px; font-weight:700">DUPLICATA</span>`
+        : ""
+    }</div>
     <div class="meta">
       <span>${tr("N°", "No.")} <b class="num">${escapeHtml(invoice.invoiceNumber)}</b></span>
       <span>${tr("Émise le", "Issued on")} <b class="num">${escapeHtml(created)}</b></span>
       <span>${tr("Échéance", "Due")} <b class="num">${escapeHtml(due)}</b></span>
       <span><span class="badge">${escapeHtml(statusLabel(invoice.status))}</span></span>
     </div>
+    ${
+      isDuplicate
+        ? `<div style="margin:0 0 18px; border:1px solid #C24B3A; background:#f7e2de; color:#8f2f22; border-radius:6px; padding:8px 12px; font-size:12px; font-weight:700">
+             ${tr("DUPLICATA", "DUPLICATE")} — ${tr("copie conforme d'une facture déjà imprimée", "true copy of an already-printed invoice")}${firstPrinted ? ` (${tr("original tiré le", "original printed on")} <span class="num">${escapeHtml(firstPrinted)}</span>)` : ""}. ${tr("Seul l'original fait foi.", "Only the original is authoritative.")}
+           </div>`
+        : ""
+    }
     <div class="party">
       <div class="party__label">${isCredit ? tr("Avoir au profit de", "Credit note for") : tr("Facturé à", "Billed to")}</div>
       <div class="party__name">${escapeHtml(invoice.customer.name)}</div>
@@ -384,7 +408,7 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
       </div>
     </div>`;
 
-  openPrintWindow(`${docName} ${invoice.invoiceNumber}`, body, opts);
+  openPrintWindow(`${docName} ${invoice.invoiceNumber}${isDuplicate ? " (DUPLICATA)" : ""}`, body, opts);
 }
 
 function statusLabel(status: string): string {

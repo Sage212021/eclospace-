@@ -15,7 +15,39 @@ import { getOrCreateConversation, otherOf, isParticipant } from "../lib/chat.js"
 
 const MAX_BODY = 4000;
 
-function messageView(m: { id: string; conversationId: string; senderId: string; body: string; fileName: string | null; fileMime: string | null; fileSize: number | null; createdAt: Date; deletedAt: Date | null }, senderName: string, me: string) {
+// Aperçu court d'un message cité (« Répondre ») : de qui, et un extrait.
+interface ReplyPreview {
+  id: string;
+  sender_name: string;
+  excerpt: string;
+}
+
+function replyExcerpt(m: { body: string; fileName: string | null; deletedAt: Date | null }): string {
+  if (m.deletedAt) return "Message supprimé";
+  if (m.body) return m.body.length > 120 ? `${m.body.slice(0, 120)}…` : m.body;
+  if (m.fileName) return `📎 ${m.fileName}`;
+  return "";
+}
+
+function messageView(
+  m: {
+    id: string;
+    conversationId: string;
+    senderId: string;
+    body: string;
+    fileName: string | null;
+    fileMime: string | null;
+    fileSize: number | null;
+    createdAt: Date;
+    deletedAt: Date | null;
+    editedAt?: Date | null;
+    forwarded?: boolean;
+    replyToId?: string | null;
+  },
+  senderName: string,
+  me: string,
+  replyPreview?: ReplyPreview | null,
+) {
   return {
     id: m.id,
     conversation_id: m.conversationId,
@@ -25,6 +57,10 @@ function messageView(m: { id: string; conversationId: string; senderId: string; 
     body: m.deletedAt ? "" : m.body,
     deleted: Boolean(m.deletedAt),
     created_at: m.createdAt,
+    edited: Boolean(m.editedAt) && !m.deletedAt,
+    edited_at: m.deletedAt ? null : m.editedAt ?? null,
+    forwarded: Boolean(m.forwarded) && !m.deletedAt,
+    reply_to: m.deletedAt ? null : replyPreview ?? null,
     read: false, // accusé de lecture ; surchargé à la lecture du fil
     file: m.deletedAt || !m.fileName ? null : { name: m.fileName, mime: m.fileMime, size: m.fileSize },
   };
@@ -145,11 +181,24 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     const senderIds = [...new Set(msgs.map((m) => m.senderId))];
     const senders = await prisma.user.findMany({ where: { id: { in: senderIds } }, select: { id: true, username: true } });
     const nameById = new Map(senders.map((s) => [s.id, s.username]));
+    // Aperçus des messages cités (« Répondre ») : résolus en un seul lot.
+    const byId = new Map(msgs.map((m) => [m.id, m]));
+    const replyPreview = (replyToId: string | null): ReplyPreview | null => {
+      if (!replyToId) return null;
+      const src = byId.get(replyToId);
+      if (!src) return null;
+      return { id: src.id, sender_name: nameById.get(src.senderId) ?? "—", excerpt: replyExcerpt(src) };
+    };
     // Accusé de lecture : un message que J'AI envoyé est « lu » si le correspondant
     // a consulté la conversation après son envoi (2 coches or côté client).
     const otherRead = await prisma.conversationRead.findUnique({ where: { conversationId_userId: { conversationId: id, userId: otherOf(conv, me) } } });
     const otherReadAt = otherRead?.lastReadAt ?? null;
-    return reply.send(msgs.map((m) => ({ ...messageView(m, nameById.get(m.senderId) ?? "—", me), read: m.senderId === me && !!otherReadAt && otherReadAt >= m.createdAt })));
+    return reply.send(
+      msgs.map((m) => ({
+        ...messageView(m, nameById.get(m.senderId) ?? "—", me, replyPreview(m.replyToId)),
+        read: m.senderId === me && !!otherReadAt && otherReadAt >= m.createdAt,
+      })),
+    );
   });
 
   // Envoi d'un message (texte et/ou pièce jointe). JSON pour le texte seul ;
@@ -166,6 +215,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     let filePath: string | null = null;
     let fileMime: string | null = null;
     let fileSize: number | null = null;
+    let replyToId: string | null = null;
 
     if (request.isMultipart()) {
       for await (const part of request.parts()) {
@@ -180,26 +230,39 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           }
         } else if (part.fieldname === "body" && typeof part.value === "string") {
           body = part.value;
+        } else if (part.fieldname === "reply_to_id" && typeof part.value === "string" && part.value) {
+          replyToId = part.value;
         }
       }
     } else {
-      const parsed = z.object({ body: z.string().max(MAX_BODY) }).safeParse(request.body);
+      const parsed = z.object({ body: z.string().max(MAX_BODY), reply_to_id: z.string().uuid().optional() }).safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Message invalide." });
       body = parsed.data.body;
+      replyToId = parsed.data.reply_to_id ?? null;
     }
 
     body = body.trim().slice(0, MAX_BODY);
     if (!body && !filePath) return reply.code(400).send({ code: "validation_error", message: "Message vide : saisissez un texte ou joignez un fichier." });
 
+    // Le message cité doit exister et appartenir à CE fil (« Répondre »).
+    let replyPreview: ReplyPreview | null = null;
+    if (replyToId) {
+      const src = await prisma.chatMessage.findUnique({ where: { id: replyToId }, include: { sender: { select: { username: true } } } });
+      if (!src || src.conversationId !== id) {
+        return reply.code(400).send({ code: "validation_error", message: "Message cité introuvable dans cette conversation." });
+      }
+      replyPreview = { id: src.id, sender_name: src.sender.username, excerpt: replyExcerpt(src) };
+    }
+
     const created = await prisma.$transaction(async (tx) => {
-      const msg = await tx.chatMessage.create({ data: { conversationId: id, senderId: me, body, fileName, filePath, fileMime, fileSize } });
+      const msg = await tx.chatMessage.create({ data: { conversationId: id, senderId: me, body, fileName, filePath, fileMime, fileSize, replyToId } });
       await tx.conversation.update({ where: { id }, data: { lastMessageAt: msg.createdAt } });
       // L'expéditeur a « lu » jusqu'à son propre message.
       await tx.conversationRead.upsert({ where: { conversationId_userId: { conversationId: id, userId: me } }, create: { conversationId: id, userId: me, lastReadAt: msg.createdAt }, update: { lastReadAt: msg.createdAt } });
       return msg;
     });
 
-    const view = messageView(created, request.user!.username, me);
+    const view = messageView(created, request.user!.username, me, replyPreview);
     // Livraison temps réel au correspondant connecté (le badge non-lus prend le
     // relais s'il est hors ligne).
     emitToUsers([otherOf(conv, me)], "chat:message", view);
@@ -227,7 +290,86 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     if (!msg || msg.deletedAt) return reply.code(404).send({ code: "not_found", message: "Message introuvable." });
     if (msg.senderId !== me) return reply.code(403).send({ code: "forbidden", message: "Vous ne pouvez supprimer que vos propres messages." });
     await prisma.chatMessage.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: me } });
+    // Prévient le correspondant pour qu'il retire le message en temps réel.
+    const conv = await prisma.conversation.findUnique({ where: { id: msg.conversationId } });
+    if (conv) emitToUsers([otherOf(conv, me)], "chat:message:update", { ...messageView({ ...msg, deletedAt: new Date() }, "", me), read: false });
     return reply.send({ ok: true });
+  });
+
+  // Modification (« Modifier ») du texte de son propre message. La pièce jointe
+  // n'est pas modifiée (immuable) ; seul le texte change, et l'édition est
+  // signalée (horodatage « modifié »).
+  fastify.patch("/api/v1/chat/messages/:id", { preHandler: requireAuth }, async (request, reply) => {
+    const me = request.user!.id;
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ body: z.string().max(MAX_BODY) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Message invalide." });
+
+    const msg = await prisma.chatMessage.findUnique({ where: { id } });
+    if (!msg || msg.deletedAt) return reply.code(404).send({ code: "not_found", message: "Message introuvable." });
+    if (msg.senderId !== me) return reply.code(403).send({ code: "forbidden", message: "Vous ne pouvez modifier que vos propres messages." });
+
+    const nextBody = parsed.data.body.trim().slice(0, MAX_BODY);
+    if (!nextBody && !msg.filePath) return reply.code(400).send({ code: "validation_error", message: "Un message sans pièce jointe ne peut pas être vidé : supprimez-le plutôt." });
+
+    const editedAt = new Date();
+    const updated = await prisma.chatMessage.update({ where: { id }, data: { body: nextBody, editedAt } });
+
+    // Aperçu du message cité éventuel, pour que la vue reste complète.
+    let replyPreview: ReplyPreview | null = null;
+    if (updated.replyToId) {
+      const src = await prisma.chatMessage.findUnique({ where: { id: updated.replyToId }, include: { sender: { select: { username: true } } } });
+      if (src) replyPreview = { id: src.id, sender_name: src.sender.username, excerpt: replyExcerpt(src) };
+    }
+    const view = messageView(updated, request.user!.username, me, replyPreview);
+    const conv = await prisma.conversation.findUnique({ where: { id: updated.conversationId } });
+    if (conv) emitToUsers([otherOf(conv, me)], "chat:message:update", { ...view, mine: false, read: false });
+    return reply.send(view);
+  });
+
+  // Transfert (« Transférer ») d'un message vers un collègue : recopie le texte
+  // et la pièce jointe éventuelle dans la conversation avec ce collègue (créée au
+  // besoin). Le message transféré est marqué comme tel.
+  fastify.post("/api/v1/chat/messages/:id/forward", { preHandler: requireAuth }, async (request, reply) => {
+    const me = request.user!.id;
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ to_user_id: z.string().uuid() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Destinataire invalide." });
+    if (parsed.data.to_user_id === me) return reply.code(400).send({ code: "validation_error", message: "Vous ne pouvez pas vous transférer un message à vous-même." });
+
+    const src = await prisma.chatMessage.findUnique({ where: { id }, include: { conversation: true } });
+    if (!src || src.deletedAt) return reply.code(404).send({ code: "not_found", message: "Message introuvable." });
+    // Seul un participant du fil d'origine peut transférer (confidentialité).
+    if (!isParticipant(src.conversation, me) && !request.user!.permissions.has("direction:consultation")) {
+      return reply.code(403).send({ code: "forbidden", message: "Conversation privée : transfert réservé aux participants." });
+    }
+    const target = await prisma.user.findFirst({ where: { id: parsed.data.to_user_id, status: "active", deletedAt: null }, select: { id: true, username: true } });
+    if (!target) return reply.code(404).send({ code: "not_found", message: "Destinataire introuvable." });
+
+    const conv = await getOrCreateConversation(me, target.id);
+    const created = await prisma.$transaction(async (tx) => {
+      const msg = await tx.chatMessage.create({
+        data: {
+          conversationId: conv.id,
+          senderId: me,
+          body: src.body,
+          // La pièce jointe est immuable et adressée par empreinte : on réutilise
+          // la même référence de stockage, sans recopier le fichier.
+          fileName: src.fileName,
+          filePath: src.filePath,
+          fileMime: src.fileMime,
+          fileSize: src.fileSize,
+          forwarded: true,
+        },
+      });
+      await tx.conversation.update({ where: { id: conv.id }, data: { lastMessageAt: msg.createdAt } });
+      await tx.conversationRead.upsert({ where: { conversationId_userId: { conversationId: conv.id, userId: me } }, create: { conversationId: conv.id, userId: me, lastReadAt: msg.createdAt }, update: { lastReadAt: msg.createdAt } });
+      return msg;
+    });
+
+    const view = messageView(created, request.user!.username, me);
+    emitToUsers([target.id], "chat:message", { ...view, mine: false, read: false });
+    return reply.code(201).send({ ...view, conversation_id: conv.id, other_id: target.id, other_name: target.username });
   });
 
   // Téléchargement d'une pièce jointe (participant ou Direction avec traçage).

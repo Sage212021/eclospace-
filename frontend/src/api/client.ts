@@ -3444,6 +3444,11 @@ export interface ChatConversation {
   last_at: string | null;
   unread: number;
 }
+export interface ChatReplyPreview {
+  id: string;
+  sender_name: string;
+  excerpt: string;
+}
 export interface ChatMessage {
   id: string;
   conversation_id: string;
@@ -3455,6 +3460,11 @@ export interface ChatMessage {
   created_at: string;
   read: boolean;
   file: { name: string; mime: string | null; size: number | null } | null;
+  // Options messagerie (Modifier / Transférer / Répondre)
+  edited?: boolean;
+  edited_at?: string | null;
+  forwarded?: boolean;
+  reply_to?: ChatReplyPreview | null;
 }
 export function getChatDirectory() {
   return request<ChatDirectoryEntry[]>("/api/v1/chat/directory");
@@ -3471,13 +3481,17 @@ export function startConversation(userId: string) {
 export function getMessages(conversationId: string) {
   return request<ChatMessage[]>(`/api/v1/chat/conversations/${conversationId}/messages`);
 }
-export function sendChatMessage(conversationId: string, body: string) {
-  return request<ChatMessage>(`/api/v1/chat/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ body }) });
+export function sendChatMessage(conversationId: string, body: string, replyToId?: string) {
+  return request<ChatMessage>(`/api/v1/chat/conversations/${conversationId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ body, ...(replyToId ? { reply_to_id: replyToId } : {}) }),
+  });
 }
 // Envoi avec pièce jointe : multipart (le navigateur pose le bon Content-Type).
-export async function sendChatMessageWithFile(conversationId: string, body: string, file: File): Promise<ChatMessage> {
+export async function sendChatMessageWithFile(conversationId: string, body: string, file: File, replyToId?: string): Promise<ChatMessage> {
   const form = new FormData();
   if (body) form.append("body", body);
+  if (replyToId) form.append("reply_to_id", replyToId);
   form.append("file", file);
   const res = await fetch(`${API_BASE}/api/v1/chat/conversations/${conversationId}/messages`, { method: "POST", credentials: "include", body: form });
   if (!res.ok) {
@@ -3491,6 +3505,17 @@ export function markConversationRead(conversationId: string) {
 }
 export function deleteChatMessage(messageId: string) {
   return request<{ ok: true }>(`/api/v1/chat/messages/${messageId}`, { method: "DELETE" });
+}
+// Modifier le texte d'un message déjà envoyé.
+export function editChatMessage(messageId: string, body: string) {
+  return request<ChatMessage>(`/api/v1/chat/messages/${messageId}`, { method: "PATCH", body: JSON.stringify({ body }) });
+}
+// Transférer un message vers un collègue (conversation créée au besoin).
+export function forwardChatMessage(messageId: string, toUserId: string) {
+  return request<ChatMessage & { other_id: string; other_name: string }>(`/api/v1/chat/messages/${messageId}/forward`, {
+    method: "POST",
+    body: JSON.stringify({ to_user_id: toUserId }),
+  });
 }
 export function chatFileUrl(messageId: string): string {
   return `${API_BASE}/api/v1/chat/messages/${messageId}/file`;

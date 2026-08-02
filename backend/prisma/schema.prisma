@@ -908,6 +908,15 @@ model ChatMessage {
   fileMime String? @map("file_mime")
   fileSize Int?    @map("file_size")
 
+  // Modification (« Modifier ») : horodatage de la dernière édition du texte.
+  editedAt DateTime? @map("edited_at")
+  // Transfert (« Transférer ») : message issu d'un transfert depuis un autre fil.
+  forwarded Boolean @default(false)
+  // Réponse citée (« Répondre ») : message auquel celui-ci répond (même fil).
+  replyToId String?      @map("reply_to_id")
+  replyTo   ChatMessage? @relation("ChatReply", fields: [replyToId], references: [id])
+  replies   ChatMessage[] @relation("ChatReply")
+
   createdAt DateTime  @default(now()) @map("created_at")
   deletedAt DateTime? @map("deleted_at") // suppression logique uniquement
   deletedBy String?   @map("deleted_by")

@@ -107,6 +107,17 @@ const createContractSchema = z.object({
   financial_terms: financialTermsSchema,
 });
 
+// Libellés lisibles des types de contrat (pour les messages d'erreur).
+const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  edition: "édition",
+  coedition: "coédition",
+  cession: "cession de droits",
+  traduction: "traduction",
+  correction: "correction",
+  illustration: "illustration",
+  prestation: "prestation de services",
+};
+
 // Circuit de validation (Ch. 9 §9.8) : on n'avance que d'un cran, jamais de saut.
 const STATUS_CHAIN: ContractStatus[] = [
   "preparation",
@@ -151,6 +162,34 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({
           code: "royalty_rate_out_of_bounds",
           message: `Le taux de droits d'auteur doit être compris entre 8 % et 15 % (valeur reçue : ${(tier.rate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %).`,
+        });
+      }
+    }
+
+    // Garde anti-doublon (demande opérateur du 02/08/2026) : un même ouvrage ne
+    // peut pas recevoir deux fois le MÊME contrat, c.-à-d. même partenaire ET même
+    // type, tant qu'un tel contrat est encore en vie (ni résilié, ni expiré). Les
+    // contrats différents (autre type, autre partenaire) restent autorisés — un
+    // ouvrage a légitimement plusieurs contrats (édition, traduction, illustration…).
+    if (body.manuscript_id) {
+      const duplicate = await prisma.contract.findFirst({
+        where: {
+          manuscriptId: body.manuscript_id,
+          partnerId: body.partner_id,
+          type: body.type,
+          deletedAt: null,
+          status: { notIn: ["terminated", "expired"] },
+        },
+        include: { partner: { select: { firstName: true, lastName: true } } },
+      });
+      if (duplicate) {
+        const who = `${duplicate.partner.firstName} ${duplicate.partner.lastName}`.trim();
+        const label = CONTRACT_TYPE_LABELS[body.type] ?? body.type;
+        return reply.code(409).send({
+          code: "contract_duplicate",
+          message: `Un contrat « ${label} » existe déjà pour cet ouvrage avec ${who} (${duplicate.contractNumber}). Modifiez le contrat existant plutôt que d'en créer un doublon.`,
+          existing_contract_id: duplicate.id,
+          existing_contract_number: duplicate.contractNumber,
         });
       }
     }

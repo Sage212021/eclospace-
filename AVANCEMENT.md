@@ -13,6 +13,20 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 02/08/2026 (suite) — Anti-doublon de contrat + options de messagerie (Modifier / Transférer / Répondre / Infos)
+
+**Fait (demande opérateur du 02/08/2026) :**
+- **Contrat en double empêché** : à la création (`POST /api/v1/contracts`), le système refuse (409 `contract_duplicate`) un 2ᵉ contrat **identique** — même ouvrage + même partenaire + même type — tant qu'un tel contrat est encore actif (ni résilié, ni expiré). Message explicite : « Un contrat « édition » existe déjà pour cet ouvrage avec … (CTR-…) ». Les contrats **différents** (autre type, autre partenaire) restent autorisés — un ouvrage a légitimement plusieurs contrats. Le message d'erreur s'affiche tel quel sur la page Contrats. Test : `contract-duplicate.test.ts` (premier accepté, doublon refusé, type différent autorisé, réautorisé après résiliation).
+- **Messagerie enrichie** : les messages disposent désormais d'un menu d'actions (⋯) avec **Répondre / citer**, **Transférer**, **Modifier**, **Infos** (+ Supprimer déjà présent).
+  - *Répondre* : le message cite l'original (aperçu auteur + extrait) ; contrôle serveur que le message cité appartient bien au fil.
+  - *Modifier* : l'auteur corrige son texte ; le message est marqué « modifié » (horodaté). La pièce jointe reste immuable. Réservé à l'auteur du message.
+  - *Transférer* : recopie le texte et la pièce jointe vers un collègue (conversation créée au besoin) ; message marqué « ↪ Transféré ». La pièce jointe (immuable, adressée par empreinte) est réutilisée sans re-téléversement.
+  - *Infos* : panneau détaillant expéditeur, envoi le…, modifié le…, statut de lecture, origine (transféré), pièce jointe.
+  - Temps réel : nouvel évènement `chat:message:update` (édition/suppression répercutées en direct chez le correspondant).
+  - Schéma : `chat_messages` gagne `edited_at`, `forwarded`, `reply_to_id` (auto-référence). Test : `chat-actions.test.ts` (répondre + garde de fil, modifier + refus tiers, transférer + refus auto-transfert).
+
+**Prochaine étape :** au besoin, étendre le transfert à une sélection multiple de destinataires et ajouter une recherche dans le fil.
+
 ### 02/08/2026 — Page Contrats : contrat signé scanné, coordonnées auteur (e-mail + WhatsApp), traçabilité
 
 **Fait (demande opérateur du 02/08/2026, page Contrats) :**

@@ -13,6 +13,7 @@ const QuoteSignPage = lazy(() => import("./pages/QuoteSignPage").then((m) => ({ 
 const Dashboard = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const Manuscripts = lazy(() => import("./pages/Manuscripts").then((m) => ({ default: m.Manuscripts })));
 const ReadingCommittee = lazy(() => import("./pages/ReadingCommittee").then((m) => ({ default: m.ReadingCommittee })));
+const EditorialDecision = lazy(() => import("./pages/EditorialDecision").then((m) => ({ default: m.EditorialDecision })));
 const CatalogueReferencePage = lazy(() => import("./pages/CatalogueReferencePage").then((m) => ({ default: m.CatalogueReferencePage })));
 const ArchivesPage = lazy(() => import("./pages/ArchivesPage").then((m) => ({ default: m.ArchivesPage })));
 const RightsMatrixPage = lazy(() => import("./pages/RightsMatrixPage").then((m) => ({ default: m.RightsMatrixPage })));
@@ -67,6 +68,7 @@ type PageId =
   | "weekly-reports"
   | "manuscripts"
   | "reading-committee"
+  | "editorial-decision"
   | "my-readings"
   | "catalogue-ref"
   | "archives"
@@ -138,7 +140,7 @@ const NAV_POLES: NavPole[] = [
       { key: "ed-manuscrits", label: "Manuscrits", permission: "manuscripts:consultation" },
       { key: "ed-comite", label: "Comité de lecture", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-mes-lectures", label: "Mes lectures", permission: "comite_lecture:saisie" },
-      { key: "ed-direction", label: "Direction éditoriale", permission: "manuscripts:consultation" },
+      { key: "ed-direction", label: "Direction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-correction", label: "Correction éditoriale", permission: "manuscripts:consultation" },
       // Messagerie des auteurs : rattachée au pôle Éditorial (décision opérateur) —
       // la relation avec les auteurs est un travail éditorial. La clé reste
@@ -218,7 +220,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-manuscrits": { page: "manuscripts" },
   "ed-comite": { page: "reading-committee" },
   "ed-mes-lectures": { page: "my-readings" },
-  "ed-direction": { stage: "DECISION_EDITORIALE", heading: "Direction éditoriale" },
+  "ed-direction": { page: "editorial-decision" },
   "ed-correction": { stage: "CORRECTION", heading: "Correction éditoriale" },
   "ed-catalogue-ref": { page: "catalogue-ref" },
   "ed-archives": { page: "archives" },
@@ -710,6 +712,9 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "reading-committee" && (
           <ReadingCommittee onOpenManuscript={openManuscript} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "editorial-decision" && (
+          <EditorialDecision onOpenManuscript={openManuscript} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-readings" && <MyReadings />}
         {leaf && "page" in leaf && leaf.page === "catalogue-ref" && (

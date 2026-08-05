@@ -12,6 +12,9 @@ import {
   manuscriptCorrectedFileUrl,
   manuscriptLayoutFileUrl,
   uploadManuscriptLayoutFile,
+  getManuscriptBatMeta,
+  manuscriptBatFileUrl,
+  uploadManuscriptBatFile,
   getManuscriptTimeline,
   listReadingCandidates,
   revertManuscriptStep,
@@ -427,11 +430,19 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
       )}
 
       {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("bat:consultation") && (
-        <BatSection
-          manuscriptId={manuscript.id}
-          canManage={permissions.has("bat:saisie")}
-          canValidate={permissions.has("bat:validation")}
-        />
+        <>
+          <BatHandoffBlock
+            manuscriptId={manuscript.id}
+            canDeposit={permissions.has("bat:saisie")}
+            onMessage={setMessage}
+            onError={setError}
+          />
+          <BatSection
+            manuscriptId={manuscript.id}
+            canManage={permissions.has("bat:saisie")}
+            canValidate={permissions.has("bat:validation")}
+          />
+        </>
       )}
 
       {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("printing:consultation") && (
@@ -694,6 +705,99 @@ function MaquetteHandoffBlock({
       </div>
     </div>
   );
+}
+
+// Étape BAT : entrée = la maquette (produite par la mise en page), sortie = le
+// BAT signé (reçu par l'impression). La qualité (bat:saisie) dépose sans droit
+// « documents ».
+function BatHandoffBlock({
+  manuscriptId,
+  canDeposit,
+  onMessage,
+  onError,
+}: {
+  manuscriptId: string;
+  canDeposit: boolean;
+  onMessage: (m: string) => void;
+  onError: (m: string) => void;
+}) {
+  const [meta, setMeta] = useState<{ layout_has_file: boolean; bat_has_file: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => getManuscriptBatMeta(manuscriptId).then(setMeta).catch(() => setMeta(null));
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manuscriptId]);
+
+  async function deposit(file: File) {
+    setBusy(true);
+    try {
+      await uploadManuscriptBatFile(manuscriptId, file);
+      onMessage("BAT signé déposé — il sera reçu par l'impression.");
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Dépôt impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const row: React.CSSProperties = { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", fontSize: 13 };
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 13, fontWeight: 600 }}>BAT — bon à tirer</div>
+      <div style={row}>
+        <span style={handoffTag("in")}>À vérifier</span>
+        {meta?.layout_has_file ? (
+          <a href={manuscriptLayoutFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+            📄 Ouvrir la maquette
+          </a>
+        ) : (
+          <span style={{ color: "var(--muted)" }}>La maquette n'a pas encore été déposée par la mise en page.</span>
+        )}
+      </div>
+      <div style={row}>
+        <span style={handoffTag("out")}>À remettre</span>
+        {meta?.bat_has_file && (
+          <a href={manuscriptBatFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+            📄 Ouvrir le BAT signé
+          </a>
+        )}
+        {canDeposit && (
+          <label style={{ cursor: busy ? "default" : "pointer", fontWeight: 600, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5 }}>
+            {busy ? "Envoi…" : meta?.bat_has_file ? "Remplacer le BAT signé" : "Déposer le BAT signé (fichier)"}
+            <input
+              type="file"
+              style={{ display: "none" }}
+              disabled={busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) deposit(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        )}
+        <span style={{ color: "var(--muted)", fontSize: 11.5 }}>→ reçu par l'impression</span>
+      </div>
+    </div>
+  );
+}
+
+// Étiquette entrée/sortie réutilisée par les blocs de transmission d'étape.
+function handoffTag(dir: "in" | "out"): React.CSSProperties {
+  return {
+    fontSize: 10.5,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    color: dir === "in" ? "var(--eclosion-dark, #8A6A12)" : "#2E6B4F",
+    background: dir === "in" ? "var(--eclosion-soft)" : "#DDF0E5",
+    borderRadius: 999,
+    padding: "2px 9px",
+    whiteSpace: "nowrap",
+  };
 }
 
 // Bouton de la barre d'actions standard (haut de fiche). Trois tons : neutre,

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ManuscriptsDashboard } from "../components/ManuscriptsDashboard";
 import {
   createManuscript,
   importManuscript,
@@ -179,6 +180,11 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
       </div>
 
       <ManuscriptsGuidance statusFilter={statusFilter} heading={heading} />
+
+      {/* Tableau de bord du sous-module Manuscrits (refonte éditoriale) —
+          uniquement sur la vue principale ; réservé à l'éditorial/direction
+          (se masque de lui-même sinon). */}
+      {!isStageView && <ManuscriptsDashboard />}
 
       {error && <p style={{ color: "var(--alert)", fontSize: 13 }}>{error}</p>}
 

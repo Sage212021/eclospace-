@@ -8,6 +8,11 @@ import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
 import { previewSiteFiche, setSitePublished, optimizedCoverForSite, siteCoverThumbnail, UnsupportedImageError } from "../lib/sitePublisher.js";
 
+// Délais cibles (SLA) par étape du workflow éditorial — paramètre clé/valeur
+// (JSON { code_étape → jours }), modifiable sans redéploiement et prêt pour
+// l'écran d'administration du workflow. Refonte workflow du 02/08/2026.
+const WORKFLOW_TARGET_DAYS_KEY = "workflow.step_target_days";
+
 const authorSchema = z.union([
   z.object({ author_id: z.string().uuid() }),
   z.object({ first_name: z.string().min(1), last_name: z.string().min(1), pen_name: z.string().optional() }),
@@ -456,21 +461,77 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
       }
 
-      const allStatuses = await prisma.workflowStatus.findMany({ orderBy: { stepOrder: "asc" } });
-      const steps = await prisma.manuscriptStep.findMany({ where: { manuscriptId: id } });
+      const [allStatuses, steps, transitions, currentStatus, targetDaysSetting] = await Promise.all([
+        prisma.workflowStatus.findMany({ include: { department: true }, orderBy: { stepOrder: "asc" } }),
+        prisma.manuscriptStep.findMany({ where: { manuscriptId: id } }),
+        prisma.stepTransition.findMany({ where: { manuscriptId: id }, orderBy: { occurredAt: "asc" } }),
+        prisma.workflowStatus.findUnique({ where: { id: manuscript.statusId } }),
+        prisma.setting.findUnique({ where: { key: WORKFLOW_TARGET_DAYS_KEY } }),
+      ]);
       const stepByStatusId = new Map(steps.map((step) => [step.statusId, step]));
+      const currentOrder = currentStatus?.stepOrder ?? 0;
+      // Délais cibles par étape (SLA), stockés en paramètre clé/valeur
+      // (paramétrables). Map { code_étape → jours } ; absent = pas de délai.
+      const targetDaysByCode: Record<string, number> = (targetDaysSetting?.value as Record<string, number> | undefined) ?? {};
+
+      // Date d'ENTRÉE dans une étape = la 1re transition qui y mène (source
+      // fiable du « début », les lignes ManuscriptStep n'étant créées qu'à la
+      // validation). L'étape 1 démarre à la réception du manuscrit.
+      const entryByCode = new Map<string, Date>();
+      for (const tr of transitions) {
+        if (!entryByCode.has(tr.toStatusCode)) entryByCode.set(tr.toStatusCode, tr.occurredAt);
+      }
+
+      // Noms lisibles des responsables/valideurs.
+      const userIds = [...new Set(steps.flatMap((s) => [s.responsibleId, s.validationBy]).filter((x): x is string => Boolean(x)))];
+      const users = userIds.length
+        ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, username: true, employee: { select: { firstName: true, lastName: true } } } })
+        : [];
+      const nameById = new Map(users.map((u) => [u.id, `${u.employee?.firstName ?? ""} ${u.employee?.lastName ?? ""}`.trim() || u.username]));
+
+      const now = new Date();
+      const DAY = 24 * 60 * 60 * 1000;
 
       const timeline = allStatuses.map((status) => {
         const step = stepByStatusId.get(status.id);
+        const isCurrent = status.id === manuscript.statusId;
+        // État : fait / en cours / à venir (+ « sautée » pour une étape
+        // conditionnelle non requise déjà dépassée).
+        let state: "done" | "current" | "todo" | "skipped";
+        if (isCurrent) state = "current";
+        else if (status.stepOrder < currentOrder) state = step?.validatedAt || step?.actualEnd ? "done" : status.isConditional ? "skipped" : "done";
+        else state = "todo";
+
+        // Début : entrée dans l'étape (transition) ; pour l'étape 1, la réception.
+        const startAt = entryByCode.get(status.code) ?? (status.stepOrder === 1 ? manuscript.receivedAt : null);
+        const endAt = step?.validatedAt ?? step?.actualEnd ?? null;
+        // Temps passé (jours) : du début à la validation ; pour l'étape en cours,
+        // du début à maintenant.
+        const spanEnd = endAt ?? (isCurrent ? now : null);
+        const timeSpentDays = startAt && spanEnd ? Math.max(0, Math.round((spanEnd.getTime() - startAt.getTime()) / DAY)) : null;
+        // Échéance = début + délai cible ; retard = étape en cours dépassée.
+        const targetDays = targetDaysByCode[status.code] ?? null;
+        const dueDate = startAt && targetDays != null ? new Date(startAt.getTime() + targetDays * DAY) : null;
+        const overdue = isCurrent && dueDate != null && now > dueDate;
+
         return {
           status_code: status.code,
           label: status.label,
           step_order: status.stepOrder,
           is_conditional: status.isConditional,
+          department: status.department?.name ?? null,
+          state,
+          responsible: step?.responsibleId ? nameById.get(step.responsibleId) ?? null : null,
+          validated_by: step?.validationBy ? nameById.get(step.validationBy) ?? null : null,
+          start_at: startAt,
           validated_at: step?.validatedAt ?? null,
-          planned_end: step?.plannedEnd ?? null,
           actual_end: step?.actualEnd ?? null,
-          late: Boolean(step?.plannedEnd && step.actualEnd && step.actualEnd > step.plannedEnd),
+          time_spent_days: timeSpentDays,
+          target_days: targetDays,
+          due_date: dueDate,
+          overdue,
+          // Conservé pour compatibilité (frise Spine) : étape validée en retard.
+          late: Boolean(dueDate && endAt && endAt > dueDate),
         };
       });
 
@@ -561,7 +622,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // ── Fiche « site vitrine » (prête à publier) ────────────────────────────────
+  // ── Fiche « site vitrine » (prête à publier) ─────────────────────────────
   // Le site étant sur-mesure (sans API), l'ERP prépare une fiche prête à copier
   // (titre, auteur, genre, prix, ISBN, résumé) + l'état de publication.
   fastify.get(

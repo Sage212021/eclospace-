@@ -426,6 +426,10 @@ export interface ReadingAssignment {
   evaluation?: ReadingEvaluation | null;
   hasReportFile?: boolean;
   reportFileName?: string | null;
+  // Entrée de la mission : le fichier manuscrit confié au relecteur, s'il est
+  // déposé sur l'ouvrage (téléchargeable via readingManuscriptFileUrl).
+  manuscriptHasFile?: boolean;
+  manuscriptFileTitle?: string | null;
 }
 
 // Candidats à l'affectation d'une lecture/correction : comptes internes
@@ -629,6 +633,11 @@ export async function uploadReadingReportFile(assignmentId: string, file: File) 
 
 export function readingReportFileUrl(assignmentId: string): string {
   return `${API_BASE}/api/v1/reading-assignments/${assignmentId}/report-file`;
+}
+
+// Entrée du relecteur : téléchargement du manuscrit confié, depuis sa mission.
+export function readingManuscriptFileUrl(assignmentId: string): string {
+  return `${API_BASE}/api/v1/reading-assignments/${assignmentId}/manuscript-file`;
 }
 
 export function submitEditorialDecision(

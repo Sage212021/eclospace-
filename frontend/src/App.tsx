@@ -15,6 +15,7 @@ const Manuscripts = lazy(() => import("./pages/Manuscripts").then((m) => ({ defa
 const ReadingCommittee = lazy(() => import("./pages/ReadingCommittee").then((m) => ({ default: m.ReadingCommittee })));
 const EditorialDecision = lazy(() => import("./pages/EditorialDecision").then((m) => ({ default: m.EditorialDecision })));
 const CorrectionEditorial = lazy(() => import("./pages/CorrectionEditorial").then((m) => ({ default: m.CorrectionEditorial })));
+const MyCorrections = lazy(() => import("./pages/MyCorrections").then((m) => ({ default: m.MyCorrections })));
 const CatalogueReferencePage = lazy(() => import("./pages/CatalogueReferencePage").then((m) => ({ default: m.CatalogueReferencePage })));
 const ArchivesPage = lazy(() => import("./pages/ArchivesPage").then((m) => ({ default: m.ArchivesPage })));
 const RightsMatrixPage = lazy(() => import("./pages/RightsMatrixPage").then((m) => ({ default: m.RightsMatrixPage })));
@@ -71,6 +72,7 @@ type PageId =
   | "reading-committee"
   | "editorial-decision"
   | "correction-editorial"
+  | "my-corrections"
   | "my-readings"
   | "catalogue-ref"
   | "archives"
@@ -142,6 +144,7 @@ const NAV_POLES: NavPole[] = [
       { key: "ed-manuscrits", label: "Manuscrits", permission: "manuscripts:consultation" },
       { key: "ed-comite", label: "Comité de lecture", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-mes-lectures", label: "Mes lectures", permission: "comite_lecture:saisie" },
+      { key: "ed-mes-corrections", label: "Mes corrections", permission: "tasks:saisie" },
       { key: "ed-direction", label: "Direction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-correction", label: "Correction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       // Messagerie des auteurs : rattachée au pôle Éditorial (décision opérateur) —
@@ -222,6 +225,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-manuscrits": { page: "manuscripts" },
   "ed-comite": { page: "reading-committee" },
   "ed-mes-lectures": { page: "my-readings" },
+  "ed-mes-corrections": { page: "my-corrections" },
   "ed-direction": { page: "editorial-decision" },
   "ed-correction": { page: "correction-editorial" },
   "ed-catalogue-ref": { page: "catalogue-ref" },
@@ -722,6 +726,7 @@ export function App() {
           <CorrectionEditorial onOpenManuscript={openManuscript} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-readings" && <MyReadings />}
+        {leaf && "page" in leaf && leaf.page === "my-corrections" && <MyCorrections />}
         {leaf && "page" in leaf && leaf.page === "catalogue-ref" && (
           <CatalogueReferencePage canManage={permissions.has("manuscripts:administration")} />
         )}

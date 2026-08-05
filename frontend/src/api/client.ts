@@ -1086,6 +1086,36 @@ export function resolveTaskComment(id: string) {
   return request<TaskComment>(`/api/v1/task-comments/${id}/resolve`, { method: "PATCH" });
 }
 
+// « Mes corrections » : boîte de travail du correcteur — ses tâches de
+// correction, avec l'entrée (manuscrit à corriger) et la sortie (version
+// corrigée à déposer, reçue par la Maquette).
+export interface MyCorrectionTask {
+  id: string;
+  title: string;
+  type: string;
+  status: TaskStatus;
+  progressPct: number;
+  plannedEnd: string | null;
+  manuscript: { id: string; manuscriptNumber: string; title: string } | null;
+  manuscriptHasFile: boolean;
+  correctedHasFile: boolean;
+}
+export function listMyCorrections() {
+  return request<MyCorrectionTask[]>("/api/v1/my-corrections");
+}
+// Entrée : téléchargement du manuscrit à corriger, depuis la tâche.
+export function taskManuscriptFileUrl(taskId: string): string {
+  return `${API_BASE}/api/v1/tasks/${taskId}/manuscript-file`;
+}
+// Sortie : dépôt de la version corrigée (multipart).
+export async function uploadCorrectedFile(taskId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/tasks/${taskId}/corrected-file`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Dépôt impossible.");
+  return response.json() as Promise<{ corrected_has_file: boolean; version_number: number }>;
+}
+
 export interface DocumentSummary {
   id: string;
   title: string;

@@ -239,16 +239,61 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       },
       orderBy: { dueAt: "asc" },
     });
+
+      // Entrée du relecteur : le manuscrit qui lui est confié. On indique si un
+      // fichier « manuscrit » est déposé sur l'ouvrage (et son nom), pour offrir
+      // au relecteur un accès direct en lecture — sans lui donner le droit large
+      // « documents » (il télécharge via sa mission, cf. route dédiée ci-dessous).
+      const manuscriptIds = Array.from(new Set(assignments.map((a) => a.manuscriptId)));
+      const manuscriptDocs = manuscriptIds.length
+        ? await prisma.document.findMany({
+            where: { entityType: "manuscript", entityId: { in: manuscriptIds }, category: "manuscrit", deletedAt: null },
+            select: { entityId: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { fileSize: true } }, title: true },
+          })
+        : [];
+      const fileByManuscript = new Map<string, string>();
+      for (const d of manuscriptDocs) if (d.versions.length && !fileByManuscript.has(d.entityId)) fileByManuscript.set(d.entityId, d.title);
+
       // On expose l'existence du fichier joint (has_report_file) sans divulguer
       // le chemin de stockage interne.
       return reply.send(
         assignments.map(({ reportFilePath, reportFileMime, ...rest }) => ({
           ...rest,
           hasReportFile: Boolean(reportFilePath),
+          manuscriptHasFile: fileByManuscript.has(rest.manuscriptId),
+          manuscriptFileTitle: fileByManuscript.get(rest.manuscriptId) ?? null,
         })),
       );
     },
   );
+
+  // Entrée/sortie du relecteur (transmission de fichiers entre étapes) : le
+  // relecteur télécharge, DEPUIS SA MISSION, le manuscrit qui lui est confié —
+  // sans détenir le droit large « documents:consultation ». Réservé au relecteur
+  // affecté (les responsables passent par la fiche de l'ouvrage). Sa sortie —
+  // le rapport de lecture — est déposée via .../report-file et reçue à l'étape
+  // suivante (décision éditoriale).
+  fastify.get("/api/v1/reading-assignments/:id/manuscript-file", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const assignment = await prisma.readingAssignment.findUnique({ where: { id } });
+    if (!assignment) {
+      return reply.code(404).send({ code: "not_found", message: "Mission introuvable." });
+    }
+    if (assignment.readerId !== request.user!.id) {
+      return reply.code(403).send({ code: "forbidden", message: "Cette mission de lecture n'est pas la vôtre." });
+    }
+    const doc = await prisma.document.findFirst({
+      where: { entityType: "manuscript", entityId: assignment.manuscriptId, category: "manuscrit", deletedAt: null },
+      select: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+    });
+    const version = doc?.versions[0];
+    if (!version) {
+      return reply.code(404).send({ code: "no_manuscript_file", message: "Aucun fichier manuscrit n'a encore été déposé pour cet ouvrage." });
+    }
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
+  });
 
   // Retrait (annulation) d'une mission de lecture — pour corriger une
   // affectation erronée ou un doublon. Une mission déjà évaluée (« remise »)

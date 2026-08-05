@@ -5,6 +5,7 @@ import {
   submitEvaluation,
   uploadReadingReportFile,
   readingReportFileUrl,
+  readingManuscriptFileUrl,
   type EvaluationCriterion,
   type ReadingAssignment,
 } from "../api/client";
@@ -88,11 +89,8 @@ export function MyReadings() {
         </div>
       )}
 
-      {assignments.length === 0 ? (
-        <p style={{ color: "var(--muted)", marginTop: 16 }}>{t("myr.empty", "Aucune mission en cours — les nouvelles affectations apparaîtront ici.")}</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-          {buckets.map((b) => (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+        {buckets.map((b) => (
             <AccordionSection
               key={b.key}
               open={section === b.key}
@@ -108,8 +106,7 @@ export function MyReadings() {
               )}
             </AccordionSection>
           ))}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -162,10 +159,25 @@ function AssignmentCard({
         )}
       </div>
 
-      {/* Fichier externe de rapport de relecture : joindre le document rédigé. */}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 10, fontSize: 12.5 }}>
+      {/* ENTRÉE de la mission : le manuscrit confié, que le relecteur ouvre pour
+          le lire. Téléchargé depuis sa mission (pas besoin du droit « documents »). */}
+      <div style={handoffRow}>
+        <span style={handoffTag("in")}>{t("myr.inbox", "À lire")}</span>
+        {assignment.manuscriptHasFile ? (
+          <a href={readingManuscriptFileUrl(assignment.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+            📖 {t("myr.open_manuscript", "Ouvrir le manuscrit à lire")}
+          </a>
+        ) : (
+          <span style={{ color: "var(--muted)" }}>{t("myr.no_manuscript_file", "Le fichier du manuscrit n'a pas encore été déposé sur l'ouvrage.")}</span>
+        )}
+      </div>
+
+      {/* SORTIE de la mission : le rapport de relecture, déposé ici et reçu à
+          l'étape suivante (décision éditoriale). */}
+      <div style={handoffRow}>
+        <span style={handoffTag("out")}>{t("myr.outbox", "À remettre")}</span>
         <label style={fileBtnStyle}>
-          {assignment.hasReportFile ? t("myr.file_replace", "Remplacer le fichier joint") : t("myr.file_attach", "Joindre le rapport (fichier)")}
+          {assignment.hasReportFile ? t("myr.file_replace", "Remplacer le fichier joint") : t("myr.file_attach", "Déposer mon rapport (fichier)")}
           <input
             type="file"
             style={{ display: "none" }}
@@ -181,6 +193,7 @@ function AssignmentCard({
             📎 {assignment.reportFileName ?? t("myr.file_download", "Télécharger le fichier joint")}
           </a>
         )}
+        <span style={{ color: "var(--muted)", fontSize: 11.5 }}>{t("myr.received_by", "→ reçu par la Direction éditoriale")}</span>
       </div>
       {openAssignmentId === assignment.id && (
         <EvaluationForm
@@ -335,3 +348,26 @@ const fileBtnStyle: React.CSSProperties = {
   borderRadius: 6,
   padding: "4px 10px",
 };
+
+// Ligne « entrée / sortie » d'une mission : ce qu'on reçoit, ce qu'on remet.
+const handoffRow: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  alignItems: "center",
+  marginTop: 10,
+  fontSize: 12.5,
+};
+function handoffTag(dir: "in" | "out"): React.CSSProperties {
+  return {
+    fontSize: 10.5,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    color: dir === "in" ? "var(--eclosion-dark, #8A6A12)" : "#2E6B4F",
+    background: dir === "in" ? "var(--eclosion-soft)" : "#DDF0E5",
+    borderRadius: 999,
+    padding: "2px 9px",
+    whiteSpace: "nowrap",
+  };
+}

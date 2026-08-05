@@ -47,8 +47,35 @@ import { SitePublicationSection } from "../components/SitePublicationSection";
 interface ManuscriptDetailProps {
   manuscriptId: string;
   permissions: Set<string>;
+  // Rubrique d'où l'ouvrage a été ouvert : sert à ne montrer QUE les tâches de
+  // cette étape (le reste est masqué, avec une échappatoire « toute la fiche »).
+  originKey?: string;
   onBack: () => void;
 }
+
+// Rubrique d'origine → module de la fiche à mettre en avant. Absent (ex. depuis
+// « Manuscrits » global ou les archives) = fiche complète, comportement inchangé.
+const FOCUS_BY_ORIGIN: Record<string, string> = {
+  "ed-comite": "committee",
+  "ed-direction": "decision",
+  "ed-correction": "correction",
+  "jf-contrats": "contracts",
+  "pr-maquette": "production",
+  "pr-infographie": "production",
+  "pr-isbn": "isbn",
+  "pr-bat": "bat",
+  "pr-impression": "printing",
+};
+const FOCUS_LABELS: Record<string, string> = {
+  committee: "Comité de lecture",
+  decision: "Direction éditoriale",
+  correction: "Correction éditoriale",
+  contracts: "Contrats & droits",
+  production: "Maquette & production",
+  isbn: "ISBN & dépôt légal",
+  bat: "BAT & contrôle qualité",
+  printing: "Impression",
+};
 
 type ManuscriptWithExtras = Manuscript & {
   workContributors: { partner: { id: string; firstName: string; lastName: string; penName: string | null } }[];
@@ -59,12 +86,18 @@ const CONTRACTUALISATION_STEP_ORDER = 5;
 const PLANIFICATION_STEP_ORDER = 6;
 const MISE_EN_PAGE_STEP_ORDER = 10;
 
-export function ManuscriptDetail({ manuscriptId, permissions, onBack }: ManuscriptDetailProps) {
+export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack }: ManuscriptDetailProps) {
   const confirm = useConfirm();
   const [manuscript, setManuscript] = useState<ManuscriptWithExtras | null>(null);
   const [timeline, setTimeline] = useState<TimelineStep[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Focalisation par rubrique : on n'affiche que les sections de l'étape d'où
+  // l'ouvrage a été ouvert. « Voir toute la fiche » lève la restriction.
+  const [showAll, setShowAll] = useState(false);
+  const focus = originKey ? FOCUS_BY_ORIGIN[originKey] ?? null : null;
+  const activeFocus = showAll ? null : focus;
+  const show = (mod: string) => activeFocus === null || activeFocus === mod;
 
   const refresh = async () => {
     const [m, t] = await Promise.all([getManuscript(manuscriptId), getManuscriptTimeline(manuscriptId)]);
@@ -376,7 +409,20 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         )}
       </div>
 
-      {manuscript.status.stepOrder >= CONTRACTUALISATION_STEP_ORDER && permissions.has("contracts:consultation") && (
+      {/* Bandeau de focalisation : indique qu'on ne voit que l'étape d'origine,
+          et propose d'afficher toute la fiche. */}
+      {focus && (
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 8, padding: "8px 12px", fontSize: 12.5, marginTop: 12 }}>
+          <span style={{ color: "var(--ink)" }}>
+            {activeFocus ? <>Vue centrée sur <strong>{FOCUS_LABELS[focus]}</strong> — seules les tâches de cette étape sont affichées.</> : <>Vous voyez <strong>toute la fiche</strong>.</>}
+          </span>
+          <button onClick={() => setShowAll((v) => !v)} style={{ marginLeft: "auto", background: "#fff", border: "1px solid var(--eclosion)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 6, padding: "4px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            {showAll ? `↩ Revenir à « ${FOCUS_LABELS[focus]} »` : "Voir toute la fiche"}
+          </button>
+        </div>
+      )}
+
+      {show("contracts") && manuscript.status.stepOrder >= CONTRACTUALISATION_STEP_ORDER && permissions.has("contracts:consultation") && (
         <ContractsSection
           manuscriptId={manuscript.id}
           defaultPartnerId={manuscript.workContributors[0]?.partner.id ?? ""}
@@ -396,7 +442,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         />
       )}
 
-      {permissions.has("finance:consultation") && (
+      {show("contracts") && permissions.has("finance:consultation") && (
         <EditorialQuotesSection
           manuscriptId={manuscript.id}
           defaultPartnerId={manuscript.workContributors[0]?.partner.id ?? ""}
@@ -406,14 +452,14 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         />
       )}
 
-      {manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && permissions.has("tasks:consultation") && (
+      {show("correction") && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && permissions.has("tasks:consultation") && (
         <>
           <TasksSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
           <CorrectionSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
         </>
       )}
 
-      {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("production:consultation") && (
+      {show("production") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("production:consultation") && (
         <>
           <MaquetteHandoffBlock
             manuscriptId={manuscript.id}
@@ -425,11 +471,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         </>
       )}
 
-      {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("isbn:consultation") && (
+      {show("isbn") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("isbn:consultation") && (
         <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie")} />
       )}
 
-      {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("bat:consultation") && (
+      {show("bat") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("bat:consultation") && (
         <>
           <BatHandoffBlock
             manuscriptId={manuscript.id}
@@ -445,7 +491,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         </>
       )}
 
-      {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("printing:consultation") && (
+      {show("printing") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("printing:consultation") && (
         <>
           <ImpressionHandoffBlock manuscriptId={manuscript.id} />
           <PrintingSection
@@ -458,7 +504,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
 
       {/* Site vitrine : publication de l'ouvrage sur la boutique WordPress
           (action du maquettiste), à partir de la mise en page. */}
-      {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("manuscripts:consultation") && (
+      {show("production") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("manuscripts:consultation") && (
         <SitePublicationSection manuscriptId={manuscript.id} canPublish={permissions.has("manuscripts:saisie")} />
       )}
 

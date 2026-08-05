@@ -13,10 +13,19 @@ import { editorialIndicators, commercialIndicators, revenueByFamily, annualSumma
 // (éditorial et commercial), source unique de vérité. Les tableaux de bord
 // détaillés (Direction, Rapports) restent la vue complète — cf.
 // docs/JOURNAL_TECHNIQUE.md.
+// Confidentialité des indicateurs éditoriaux de la page d'accueil (nombre
+// d'ouvrages, pipeline « où en sont les ouvrages ») : ce sont des informations
+// de pilotage ÉDITORIAL. `manuscripts:consultation` est trop large (accès
+// catalogue, partagé par le juridique, la production, le contrôle qualité…) :
+// on réserve donc ces indicateurs à la direction et à la tête du pôle éditorial,
+// PAR RÔLE. Les autres profils gardent leurs propres indicateurs (finance,
+// stock, utilisateurs…). Correctif du 05/08/2026.
+const EDITORIAL_VIEW_ROLES = ["ADMIN_GENERAL", "DIR_GENERAL", "DIR_EDITORIAL", "ASSISTANT_EDITORIAL"];
+
 export default async function dashboardRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/dashboard/stats", { preHandler: requireAuth }, async (request, reply) => {
     const perms = request.user!.permissions;
-    const canManuscripts = perms.has("manuscripts:consultation");
+    const canEditorialView = request.user!.roles.some((r) => EDITORIAL_VIEW_ROLES.includes(r));
     const canUsers = perms.has("users:consultation");
     const canCommercial = perms.has("commercial:consultation");
     const canStock = perms.has("stock:consultation");
@@ -24,7 +33,8 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
 
     const [editorial, utilisateurs, ventes, stockSum, tachesEnRetard, commercial] = await Promise.all([
       // Éditorial : total + répartition par étape (source unique lib/kpi.ts).
-      canManuscripts ? editorialIndicators() : Promise.resolve(null),
+      // Réservé aux rôles éditorial/direction (indicateurs de pilotage).
+      canEditorialView ? editorialIndicators() : Promise.resolve(null),
       canUsers ? prisma.user.count({ where: { deletedAt: null, status: "active" } }) : Promise.resolve(null),
       canCommercial ? prisma.salesOrder.count() : Promise.resolve(null),
       canStock ? prisma.stockItem.aggregate({ _sum: { quantityPhysical: true } }) : Promise.resolve(null),

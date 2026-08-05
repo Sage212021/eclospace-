@@ -421,6 +421,24 @@ export async function uploadManuscriptSourceFile(manuscriptId: string, file: Fil
   return response.json() as Promise<{ has_file: boolean; version_number: number }>;
 }
 
+// Étape Maquette : entrée = manuscrit corrigé, sortie = maquette mise en page.
+export function getManuscriptLayoutMeta(manuscriptId: string) {
+  return request<{ corrected_has_file: boolean; layout_has_file: boolean }>(`/api/v1/manuscripts/${manuscriptId}/layout-file/meta`);
+}
+export function manuscriptCorrectedFileUrl(manuscriptId: string): string {
+  return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/corrected-file`;
+}
+export function manuscriptLayoutFileUrl(manuscriptId: string): string {
+  return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/layout-file`;
+}
+export async function uploadManuscriptLayoutFile(manuscriptId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/manuscripts/${manuscriptId}/layout-file`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Dépôt impossible.");
+  return response.json() as Promise<{ has_file: boolean; version_number: number }>;
+}
+
 export interface ReadingEvaluationScore {
   score: string | number;
   comment: string | null;

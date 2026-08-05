@@ -7,10 +7,53 @@ import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
+import type { DocumentCategory } from "@prisma/client";
 
-// Titre réservé au fichier source du manuscrit (entrée du circuit : déposé à la
-// réception, lu ensuite par le comité de lecture puis le correcteur).
-const SOURCE_DOC_TITLE = "Manuscrit (source)";
+// Documents de transmission entre étapes (chaîne entrée/sortie). Chaque étape
+// dépose son fichier sous un couple (catégorie, titre) réservé, que l'étape
+// suivante lit. Catégories distinctes → jamais de collision avec les lectures
+// « manuscrit » (source / corrigé) du comité et du correcteur.
+const SOURCE_DOC_TITLE = "Manuscrit (source)"; // réception → lecture → correction
+const CORRECTED_DOC_TITLE = "Manuscrit corrigé"; // correction → maquette
+const LAYOUT_DOC_TITLE = "Maquette (mise en page)"; // maquette → BAT / infographie
+
+// Dernière version du document (catégorie, titre) rattaché à un ouvrage.
+async function latestStageVersion(manuscriptId: string, category: DocumentCategory, title: string) {
+  const doc = await prisma.document.findFirst({
+    where: { entityType: "manuscript", entityId: manuscriptId, category, title, deletedAt: null },
+    select: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+  });
+  return doc?.versions[0] ?? null;
+}
+
+// Dépôt d'une nouvelle version d'un document d'étape (versionnage conservé).
+async function depositStageDoc(
+  manuscriptId: string,
+  category: DocumentCategory,
+  title: string,
+  changeSummary: string,
+  userId: string,
+  file: { filePath: string; fileSize: number; sha256Hash: string },
+  mimeType: string,
+) {
+  let doc = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category, title, deletedAt: null } });
+  if (!doc) {
+    doc = await prisma.document.create({ data: { entityType: "manuscript", entityId: manuscriptId, category, title, createdBy: userId, updatedBy: userId } });
+  }
+  const last = await prisma.documentVersion.findFirst({ where: { documentId: doc.id }, orderBy: { versionNumber: "desc" } });
+  return prisma.documentVersion.create({
+    data: {
+      documentId: doc.id,
+      versionNumber: (last?.versionNumber ?? 0) + 1,
+      filePath: file.filePath,
+      fileSize: file.fileSize,
+      mimeType,
+      sha256Hash: file.sha256Hash,
+      changeSummary,
+      uploadedBy: userId,
+    },
+  });
+}
 import { previewSiteFiche, setSitePublished, optimizedCoverForSite, siteCoverThumbnail, UnsupportedImageError } from "../lib/sitePublisher.js";
 
 const authorSchema = z.union([
@@ -536,6 +579,50 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       ipAddress: request.ip,
     });
     return reply.send({ deleted: true });
+  });
+
+  // ── Étape MAQUETTE (mise en page) ──────────────────────────────────────────
+  // ENTRÉE : le manuscrit corrigé (produit par la correction). Le maquettiste
+  // (production:consultation) le télécharge pour le mettre en page.
+  fastify.get("/api/v1/manuscripts/:id/corrected-file", { preHandler: requirePermission("production", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const version = await latestStageVersion(id, "manuscrit", CORRECTED_DOC_TITLE);
+    if (!version) return reply.code(404).send({ code: "no_corrected_file", message: "Aucun manuscrit corrigé n'a été déposé pour cet ouvrage." });
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
+  });
+
+  // Présence des fichiers d'entrée (manuscrit corrigé) et de sortie (maquette).
+  fastify.get("/api/v1/manuscripts/:id/layout-file/meta", { preHandler: requirePermission("production", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const corrected = await latestStageVersion(id, "manuscrit", CORRECTED_DOC_TITLE);
+    const layout = await latestStageVersion(id, "livre_monte", LAYOUT_DOC_TITLE);
+    return reply.send({ corrected_has_file: Boolean(corrected), layout_has_file: Boolean(layout) });
+  });
+
+  // SORTIE : la maquette mise en page (reçue ensuite par le BAT et l'infographie).
+  fastify.get("/api/v1/manuscripts/:id/layout-file", { preHandler: requirePermission("production", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const version = await latestStageVersion(id, "livre_monte", LAYOUT_DOC_TITLE);
+    if (!version) return reply.code(404).send({ code: "no_layout_file", message: "Aucune maquette n'a été déposée pour cet ouvrage." });
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
+  });
+
+  fastify.post("/api/v1/manuscripts/:id/layout-file", { preHandler: requirePermission("production", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+    const buffer = await file.toBuffer();
+    if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+    const stored = await storeFile(buffer, `maquette-${id}-${file.filename}`);
+    const version = await depositStageDoc(id, "livre_monte", LAYOUT_DOC_TITLE, "Maquette déposée (mise en page)", request.user!.id, stored, file.mimetype);
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { layout: true, versionNumber: version.versionNumber }, ipAddress: request.ip });
+    return reply.code(201).send({ has_file: true, version_number: version.versionNumber });
   });
 
   // Frise chronologique (Ch. 4 §4.4).

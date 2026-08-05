@@ -171,8 +171,12 @@ export default async function contractRoutes(fastify: FastifyInstance) {
     // type, tant qu'un tel contrat est encore en vie (ni résilié, ni expiré). Les
     // contrats différents (autre type, autre partenaire) restent autorisés — un
     // ouvrage a légitimement plusieurs contrats (édition, traduction, illustration…).
+    // Nuance format (Ch. 9 §9.5) : un même ouvrage peut avoir un contrat papier ET
+    // un contrat numérique séparés (formats disjoints, chacun son taux). Ce ne sont
+    // donc des doublons que si leurs formats SE CHEVAUCHENT — un contrat sans
+    // restriction de format (formats: []) couvre tout et chevauche n'importe lequel.
     if (body.manuscript_id) {
-      const duplicate = await prisma.contract.findFirst({
+      const sameKey = await prisma.contract.findMany({
         where: {
           manuscriptId: body.manuscript_id,
           partnerId: body.partner_id,
@@ -182,6 +186,10 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         },
         include: { partner: { select: { firstName: true, lastName: true } } },
       });
+      const newFormats = body.formats;
+      const overlaps = (existing: string[]) =>
+        newFormats.length === 0 || existing.length === 0 || existing.some((f) => newFormats.includes(f));
+      const duplicate = sameKey.find((c) => overlaps(c.formats));
       if (duplicate) {
         const who = `${duplicate.partner.firstName} ${duplicate.partner.lastName}`.trim();
         const label = CONTRACT_TYPE_LABELS[body.type] ?? body.type;

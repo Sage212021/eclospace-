@@ -84,4 +84,27 @@ describe("Contrat — pas de doublon sur un même ouvrage", () => {
     expect(res.statusCode).toBe(201);
     contractIds.push(res.json().id);
   });
+
+  // Nuance format (Ch. 9 §9.5) : papier et numérique sont deux contrats
+  // légitimes sur le même ouvrage, même partenaire, même type — leurs formats
+  // étant disjoints, ce ne sont pas des doublons. Formats qui se chevauchent = doublon.
+  it("autorise des contrats de formats disjoints (papier puis numérique)", async () => {
+    const partnerC = (await prisma.partner.create({ data: { firstName: "Cora", lastName: `Eto-${rnd()}`, category: "auteur" } })).id;
+    const withFormats = (formats: string[]) =>
+      app.inject({
+        method: "POST",
+        url: "/api/v1/contracts",
+        headers: { cookie },
+        payload: { type: "edition", manuscript_id: manuscriptId, partner_id: partnerC, formats, financial_terms: { base: "prix_public_ht", tiers: [{ up_to: null, rate: 0.1 }] } },
+      });
+
+    const print = await withFormats(["print"]);
+    expect(print.statusCode).toBe(201);
+    const epub = await withFormats(["epub"]);
+    expect(epub.statusCode).toBe(201); // formats disjoints : autorisé
+
+    const printAgain = await withFormats(["print", "audio"]);
+    expect(printAgain.statusCode).toBe(409); // « print » chevauche : doublon
+    expect(printAgain.json().code).toBe("contract_duplicate");
+  });
 });

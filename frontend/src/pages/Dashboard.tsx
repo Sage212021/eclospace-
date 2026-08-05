@@ -10,6 +10,11 @@ interface DashboardProps {
   onOpenCalendar?: () => void;
 }
 
+// Tableau de bord éditorial (pilotage) : réservé à la direction et à la tête
+// du pôle éditorial. Miroir de EDITORIAL_DASHBOARD_ROLES côté serveur
+// (backend/src/routes/dashboard.ts) — la restriction serveur fait foi.
+const EDITORIAL_DASHBOARD_ROLES = ["ADMIN_GENERAL", "DIR_GENERAL", "DIR_EDITORIAL", "ASSISTANT_EDITORIAL"];
+
 // Grands indicateurs affichés en tête du tableau de bord. Chacun n'apparaît que
 // si le serveur en renvoie la valeur (permission de consultation accordée).
 // `tone` colore le grand chiffre en cas de signal (retard/rupture) ; `money`
@@ -116,8 +121,10 @@ export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar }: Dashboar
       )}
 
       {/* Tableau de bord éditorial (retard, bloqués, taux, temps moyen…) —
-          réservé au pôle éditorial et à la direction (se masque sinon). */}
-      {user.permissions.includes("manuscripts:consultation") && <EditorialDashboardSection />}
+          réservé à la direction et à la tête du pôle éditorial. Contrôlé par
+          RÔLE (et non par manuscripts:consultation, trop large) ; le serveur
+          applique la même restriction. */}
+      {user.roles.some((r) => EDITORIAL_DASHBOARD_ROLES.includes(r)) && <EditorialDashboardSection />}
 
       <h2 style={{ fontFamily: "var(--font-title)", fontSize: 15, margin: "24px 0 0" }}>{t("dash.session", "Ma session")}</h2>
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: 20, marginTop: 10, maxWidth: 640 }}>

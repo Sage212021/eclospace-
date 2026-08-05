@@ -401,6 +401,11 @@ export function revertManuscriptStep(manuscriptId: string, reason?: string) {
   );
 }
 
+// Suppression logique d'un manuscrit (réservée au niveau administration).
+export function deleteManuscript(manuscriptId: string) {
+  return request<{ deleted: boolean }>(`/api/v1/manuscripts/${manuscriptId}/delete`, { method: "POST" });
+}
+
 export interface ReadingEvaluationScore {
   score: string | number;
   comment: string | null;

@@ -19,7 +19,6 @@ import {
 } from "../api/client";
 import { useConfirm } from "../components/ConfirmProvider";
 import { Spine } from "../components/Spine";
-import { ManuscriptTimelineDetail } from "../components/ManuscriptTimelineDetail";
 import { ContractsSection } from "../components/ContractsSection";
 import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
 import { TasksSection } from "../components/TasksSection";
@@ -142,7 +141,6 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
       )}
 
       <Spine steps={timeline} currentStatusCode={manuscript.status.code} />
-      <ManuscriptTimelineDetail steps={timeline} />
 
       {message && (
         <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>

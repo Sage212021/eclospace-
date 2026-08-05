@@ -310,16 +310,6 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
 
       const nextStatus = await findNextApplicableStatus(targetStatus.stepOrder, manuscriptForNextStep);
 
-      // Notifications à l'entrée de l'étape suivante : activables/désactivables
-      // par l'administration du workflow (paramètre « step_notify_on_entry »).
-      // Activées par défaut (comportement historique).
-      let notifyNext = true;
-      if (nextStatus) {
-        const notifySetting = await prisma.setting.findUnique({ where: { key: "workflow.step_notify_on_entry" } });
-        const notifyMap = (notifySetting?.value as Record<string, unknown> | undefined) ?? {};
-        notifyNext = notifyMap[nextStatus.code] !== false;
-      }
-
       await prisma.$transaction(async (tx) => {
         await tx.manuscriptStep.upsert({
           where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
@@ -349,7 +339,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
             },
           });
 
-          if (nextStatus.departmentId && notifyNext) {
+          if (nextStatus.departmentId) {
             const departmentUsers = await tx.user.findMany({
               where: { userRoles: { some: { revokedAt: null, role: { departmentId: nextStatus.departmentId } } }, status: "active" },
             });

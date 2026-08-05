@@ -22,27 +22,6 @@ const patchSettingSchema = z.object({
   value: z.unknown(),
 });
 
-// Administration du workflow éditorial (refonte — Lot C). Paramétrage SANS
-// code des étapes : libellé, département responsable, délai cible et
-// notifications. L'ordre des étapes et les règles métier profondes (contrat
-// signé, BAT signé…) restent gérés par le moteur (elles sont liées au CODE de
-// l'étape) : cet écran ne les modifie pas, il ajuste ce qui est sûr à régler.
-const TARGET_DAYS_KEY = "workflow.step_target_days";
-const NOTIFY_ON_ENTRY_KEY = "workflow.step_notify_on_entry";
-
-const patchWorkflowStepSchema = z.object({
-  label: z.string().min(1).max(120).optional(),
-  department_id: z.string().uuid().nullable().optional(),
-  target_days: z.number().int().min(0).max(3650).nullable().optional(),
-  notify_on_entry: z.boolean().optional(),
-});
-
-// Lit un paramètre « map { code → valeur } » (délais, notifications).
-async function readStepMap(key: string): Promise<Record<string, unknown>> {
-  const s = await prisma.setting.findUnique({ where: { key } });
-  return (s?.value as Record<string, unknown> | undefined) ?? {};
-}
-
 export default async function settingsRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/api/v1/settings",
@@ -105,101 +84,6 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
         updatedAt: updated.updatedAt,
         updatedBy: updated.updatedBy,
       });
-    },
-  );
-
-  // Configuration du workflow éditorial : les étapes dans l'ordre, avec leur
-  // libellé, département responsable, délai cible et notifications — plus la
-  // liste des départements (pour le choix du responsable).
-  fastify.get(
-    "/api/v1/workflow/config",
-    { preHandler: requirePermission("settings", "consultation") },
-    async (_request, reply) => {
-      const [statuses, departments, targetMap, notifyMap] = await Promise.all([
-        prisma.workflowStatus.findMany({ orderBy: { stepOrder: "asc" }, include: { department: { select: { id: true, name: true } } } }),
-        prisma.department.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-        readStepMap(TARGET_DAYS_KEY),
-        readStepMap(NOTIFY_ON_ENTRY_KEY),
-      ]);
-      return reply.send({
-        steps: statuses.map((s) => ({
-          code: s.code,
-          label: s.label,
-          step_order: s.stepOrder,
-          is_conditional: s.isConditional,
-          department_id: s.departmentId,
-          department_name: s.department?.name ?? null,
-          target_days: typeof targetMap[s.code] === "number" ? (targetMap[s.code] as number) : null,
-          // Notifications à l'entrée de l'étape : activées par défaut (comportement
-          // historique) tant qu'elles ne sont pas explicitement désactivées.
-          notify_on_entry: notifyMap[s.code] !== false,
-        })),
-        departments,
-      });
-    },
-  );
-
-  // Modification d'une étape (paramétrage sans code). Réservé à l'administration.
-  fastify.patch(
-    "/api/v1/workflow/steps/:code",
-    { preHandler: requirePermission("settings", "administration") },
-    async (request, reply) => {
-      const { code } = request.params as { code: string };
-      const parsed = patchWorkflowStepSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
-      }
-      const status = await prisma.workflowStatus.findUnique({ where: { code } });
-      if (!status) return reply.code(404).send({ code: "not_found", message: `Étape « ${code} » inconnue.` });
-
-      const body = parsed.data;
-      // Libellé et département : colonnes de l'étape (sûres à modifier).
-      const statusData: { label?: string; departmentId?: string | null } = {};
-      if (body.label !== undefined) statusData.label = body.label;
-      if (body.department_id !== undefined) {
-        if (body.department_id) {
-          const dept = await prisma.department.findUnique({ where: { id: body.department_id } });
-          if (!dept) return reply.code(400).send({ code: "invalid_department", message: "Département inconnu." });
-        }
-        statusData.departmentId = body.department_id;
-      }
-      if (Object.keys(statusData).length > 0) {
-        await prisma.workflowStatus.update({ where: { code }, data: statusData });
-      }
-
-      // Délai cible et notifications : paramètres « map { code → valeur } ».
-      if (body.target_days !== undefined) {
-        const map = await readStepMap(TARGET_DAYS_KEY);
-        if (body.target_days === null) delete map[code];
-        else map[code] = body.target_days;
-        await prisma.setting.upsert({
-          where: { key: TARGET_DAYS_KEY },
-          update: { value: map as never, version: { increment: 1 }, updatedBy: request.user!.id },
-          create: { key: TARGET_DAYS_KEY, value: map as never, updatedBy: request.user!.id },
-        });
-      }
-      if (body.notify_on_entry !== undefined) {
-        const map = await readStepMap(NOTIFY_ON_ENTRY_KEY);
-        // On ne stocke que les désactivations (false) ; true = valeur par défaut.
-        if (body.notify_on_entry) delete map[code];
-        else map[code] = false;
-        await prisma.setting.upsert({
-          where: { key: NOTIFY_ON_ENTRY_KEY },
-          update: { value: map as never, version: { increment: 1 }, updatedBy: request.user!.id },
-          create: { key: NOTIFY_ON_ENTRY_KEY, value: map as never, updatedBy: request.user!.id },
-        });
-      }
-
-      await writeAuditLog({
-        userId: request.user!.id,
-        action: "update",
-        entityType: "workflow_step",
-        entityId: code,
-        newValues: body as never,
-        ipAddress: request.ip,
-      });
-
-      return reply.send({ ok: true });
     },
   );
 

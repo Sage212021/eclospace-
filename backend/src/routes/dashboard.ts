@@ -1,31 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireAnyRole } from "../lib/permissions.js";
+import { requireAuth } from "../lib/permissions.js";
 import { editorialIndicators, commercialIndicators, revenueByFamily, annualSummary } from "../lib/kpi.js";
-import { editorialDashboard } from "../lib/editorialDashboard.js";
-
-// Confidentialité des vues de suivi éditorial (correctif RBAC du 05/08/2026) :
-// `manuscripts:consultation` est volontairement large (accès catalogue, partagé
-// par le juridique, la production, la communication…). Le SUIVI éditorial —
-// pilotage, retards, dossiers bloqués, titres en cours — ne doit PAS s'appuyer
-// dessus. On restreint donc par RÔLE, comme « Suivi des ouvrages » (reference.ts).
-//
-// Tableau de bord éditorial (pilotage) : direction + tête du pôle éditorial.
-const EDITORIAL_DASHBOARD_ROLES = ["ADMIN_GENERAL", "DIR_GENERAL", "DIR_EDITORIAL", "ASSISTANT_EDITORIAL"];
-// Frise « pipeline » de la page d'accueil (répartition par étape) : mêmes rôles
-// que « Suivi des ouvrages » — pôles éditorial et production + direction.
-const PIPELINE_ROLES = [
-  "ADMIN_GENERAL",
-  "DIR_GENERAL",
-  "DIR_EDITORIAL",
-  "ASSISTANT_EDITORIAL",
-  "MEMBRE_COMITE_LECTURE",
-  "CORRECTEUR",
-  "MAQUETTISTE",
-  "RESP_INFOGRAPHIE",
-  "RESP_QUALITE",
-  "RESP_IMPRESSION",
-];
 
 // Indicateurs de synthèse du tableau de bord (grands KPI de la page d'accueil).
 // Chaque indicateur n'est calculé et renvoyé que si l'utilisateur a la
@@ -41,9 +17,6 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/dashboard/stats", { preHandler: requireAuth }, async (request, reply) => {
     const perms = request.user!.permissions;
     const canManuscripts = perms.has("manuscripts:consultation");
-    // Frise pipeline (suivi éditorial) : réservée aux pôles éditorial/production
-    // et à la direction — pas à tous les détenteurs de manuscripts:consultation.
-    const canPipeline = request.user!.roles.some((r) => PIPELINE_ROLES.includes(r));
     const canUsers = perms.has("users:consultation");
     const canCommercial = perms.has("commercial:consultation");
     const canStock = perms.has("stock:consultation");
@@ -80,27 +53,13 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       ruptures: commercial && canStock ? commercial.stock_outs : null,
       taches_en_retard: tachesEnRetard,
       // Frise « pipeline éditorial » : uniquement les étapes qui portent des
-      // ouvrages, dans l'ordre du workflow. Réservée aux rôles éditorial/
-      // production/direction (suivi éditorial confidentiel), même si d'autres
-      // rôles ont manuscripts:consultation pour le catalogue.
-      pipeline: editorial && canPipeline ? editorial.by_status.filter((s) => s.count > 0) : null,
+      // ouvrages, dans l'ordre du workflow (lisible sur la page d'accueil).
+      pipeline: editorial ? editorial.by_status.filter((s) => s.count > 0) : null,
       // Nombre total d'étapes du circuit — permet d'afficher l'avancement RÉEL
       // de chaque étape (position dans le circuit), et non un simple comptage.
-      pipeline_steps_total: editorial && canPipeline ? Math.max(...editorial.by_status.map((s) => s.step_order), 1) : null,
+      pipeline_steps_total: editorial ? Math.max(...editorial.by_status.map((s) => s.step_order), 1) : null,
     });
   });
-
-  // Tableau de bord éditorial (refonte workflow — Lot B) : manuscrits par
-  // étape, dossiers en retard / bloqués, taux d'acceptation, temps moyen,
-  // contrats signés, ouvrages en fabrication / commercialisation. Réservé au
-  // pôle éditorial et à la direction (consultation des manuscrits).
-  fastify.get(
-    "/api/v1/dashboard/editorial",
-    { preHandler: requireAnyRole(EDITORIAL_DASHBOARD_ROLES) },
-    async (_request, reply) => {
-      return reply.send(await editorialDashboard());
-    },
-  );
 
   // Chiffre d'affaires ventilé par famille (facturé / encaissé / créances +
   // total). Donnée financière : réservée à la Finance et à la Direction.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   listEvaluationCriteria,
   listMyReadingAssignments,
@@ -6,14 +6,19 @@ import {
   uploadReadingReportFile,
   readingReportFileUrl,
   readingManuscriptFileUrl,
+  attachReadingReport,
+  getChatDirectory,
+  startConversation,
+  sendChatMessage,
+  sendChatMessageWithFile,
+  type ChatDirectoryEntry,
   type EvaluationCriterion,
   type ReadingAssignment,
 } from "../api/client";
 import { Button } from "../components/Button";
-import { DocPrintMenu } from "../components/DocPrintMenu";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Field } from "../components/Modal";
-import { printReadingReport } from "../lib/print";
+import { printReadingReport, type PrintOpts } from "../lib/print";
 import { buildReadingReport } from "../lib/readingReport";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -151,12 +156,7 @@ function AssignmentCard({
             {openAssignmentId === assignment.id ? t("myr.close", "Fermer") : t("myr.evaluate", "Évaluer")}
           </Button>
         )}
-        {assignment.evaluation && (
-          <DocPrintMenu
-            label={t("myr.download_report", "Télécharger mon rapport")}
-            onPrint={(opts) => printReadingReport(buildReadingReport(assignment), opts)}
-          />
-        )}
+        {assignment.evaluation && <ReportMenu assignment={assignment} onMessage={setMessage} />}
       </div>
 
       {/* ENTRÉE de la mission : le manuscrit confié, que le relecteur ouvre pour
@@ -305,6 +305,157 @@ function StatusChip({ label }: { label: string }) {
     </span>
   );
 }
+
+// Libellés des recommandations, pour le résumé texte (copie / transfert).
+const RECO_LABELS: Record<string, string> = {
+  accept: "Acceptation sans modification",
+  accept_minor: "Acceptation sous réserve de corrections mineures",
+  accept_major: "Acceptation sous réserve de corrections majeures",
+  rewrite: "Demande de réécriture",
+  new_expertise: "Nouvelle expertise",
+  reject: "Refus motivé",
+};
+
+function reportSummary(a: ReadingAssignment): string {
+  const e = a.evaluation;
+  const lines = [`Rapport de lecture — « ${a.manuscript?.title ?? ""} »`];
+  if (e) {
+    lines.push(`Recommandation : ${RECO_LABELS[e.recommendation] ?? e.recommendation}`);
+    lines.push(`Score global : ${Number(e.globalScore).toFixed(2)}/10`);
+    if (e.overallComment) lines.push(`Appréciation : ${e.overallComment}`);
+    for (const s of e.scores) lines.push(`• ${s.criterion.label} : ${s.score}/10`);
+  }
+  return lines.join("\n");
+}
+
+// Menu « Mon rapport … » sur une mission remise : télécharger (PDF, 3 formats),
+// extraire le fichier joint, joindre à l'ouvrage (reçu par la Direction),
+// transférer par messagerie à un collègue, ou copier le résumé.
+function ReportMenu({ assignment, onMessage }: { assignment: ReadingAssignment; onMessage: (m: string) => void }) {
+  const [transferOpen, setTransferOpen] = useState(false);
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const close = () => {
+    if (detailsRef.current) detailsRef.current.open = false;
+  };
+  const print = (opts: PrintOpts) => {
+    printReadingReport(buildReadingReport(assignment), opts);
+    close();
+  };
+  async function joindre() {
+    close();
+    try {
+      await attachReadingReport(assignment.id);
+      onMessage("Rapport joint à l'ouvrage — reçu par la Direction éditoriale.");
+    } catch (e) {
+      onMessage(e instanceof Error ? e.message : "Impossible de joindre le rapport.");
+    }
+  }
+  async function copier() {
+    close();
+    try {
+      await navigator.clipboard.writeText(reportSummary(assignment));
+      onMessage("Résumé du rapport copié.");
+    } catch {
+      onMessage("Copie impossible sur cet appareil.");
+    }
+  }
+
+  return (
+    <>
+      <details ref={detailsRef} style={{ position: "relative", display: "inline-block" }}>
+        <summary style={menuSummaryStyle}>Mon rapport ▾</summary>
+        <div style={menuBoxStyle}>
+          <div style={menuHeadStyle}>Télécharger (PDF)</div>
+          <button style={menuItemStyle} onClick={() => print({})}>Numérique / PDF</button>
+          <button style={menuItemStyle} onClick={() => print({ embed: true })}>Avec papier à en-tête intégré</button>
+          <button style={menuItemStyle} onClick={() => print({ letterhead: true })}>Sur papier à en-tête vierge</button>
+          <div style={menuSepStyle} />
+          {assignment.hasReportFile && (
+            <a href={readingReportFileUrl(assignment.id)} target="_blank" rel="noreferrer" style={menuItemStyle} onClick={close}>
+              📎 Extraire le fichier joint
+            </a>
+          )}
+          <button style={menuItemStyle} onClick={joindre}>📌 Joindre à l'ouvrage</button>
+          <button style={menuItemStyle} onClick={() => { close(); setTransferOpen(true); }}>✉️ Transférer par messagerie</button>
+          <button style={menuItemStyle} onClick={copier}>📋 Copier le résumé</button>
+        </div>
+      </details>
+      {transferOpen && <TransferDialog assignment={assignment} onClose={() => setTransferOpen(false)} onMessage={onMessage} />}
+    </>
+  );
+}
+
+// Transfert du rapport à un collègue via la messagerie interne (avec le fichier
+// joint s'il existe, sinon le résumé texte).
+function TransferDialog({ assignment, onClose, onMessage }: { assignment: ReadingAssignment; onClose: () => void; onMessage: (m: string) => void }) {
+  const [dir, setDir] = useState<ChatDirectoryEntry[]>([]);
+  const [recipient, setRecipient] = useState("");
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    getChatDirectory().then((d) => {
+      setDir(d);
+      if (d[0]) setRecipient(d[0].id);
+    }).catch(() => setDir([]));
+  }, []);
+
+  async function send() {
+    if (!recipient) return;
+    setSending(true);
+    try {
+      const conv = await startConversation(recipient);
+      const body = (note.trim() ? note.trim() + "\n\n" : "") + reportSummary(assignment);
+      if (assignment.hasReportFile) {
+        const resp = await fetch(readingReportFileUrl(assignment.id), { credentials: "include" });
+        const blob = await resp.blob();
+        const file = new File([blob], assignment.reportFileName ?? "rapport-de-lecture", { type: blob.type || "application/octet-stream" });
+        await sendChatMessageWithFile(conv.id, body, file);
+      } else {
+        await sendChatMessage(conv.id, body);
+      }
+      onMessage(`Rapport transféré à ${conv.other_name}.`);
+      onClose();
+    } catch (e) {
+      onMessage(e instanceof Error ? e.message : "Transfert impossible.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 420, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 10 }}>Transférer mon rapport</div>
+        <Field label="Destinataire">
+          <select value={recipient} onChange={(e) => setRecipient(e.target.value)}>
+            {dir.map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        </Field>
+        <div style={{ marginTop: 10 }}>
+          <Field label="Note (facultative)">
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Un mot d'accompagnement…" />
+          </Field>
+        </div>
+        <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "8px 0 0" }}>
+          {assignment.hasReportFile ? "Le fichier de votre rapport sera joint au message." : "Le résumé de votre rapport sera envoyé (aucun fichier joint)."}
+        </p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+          <button onClick={onClose} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "7px 13px", fontSize: 13, cursor: "pointer" }}>Annuler</button>
+          <Button variant="add" size="sm" onClick={send} disabled={sending || !recipient}>{sending ? "Envoi…" : "Transférer"}</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const menuSummaryStyle: React.CSSProperties = { listStyle: "none", background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer", userSelect: "none" };
+const menuBoxStyle: React.CSSProperties = { position: "absolute", right: 0, zIndex: 20, marginTop: 4, background: "#fff", border: "1px solid var(--line)", borderRadius: 8, boxShadow: "0 8px 24px rgba(22,35,61,.14)", minWidth: 240, overflow: "hidden" };
+const menuHeadStyle: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", padding: "8px 12px 2px" };
+const menuItemStyle: React.CSSProperties = { display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "8px 12px", fontSize: 13, color: "var(--ink)", cursor: "pointer", textDecoration: "none" };
+const menuSepStyle: React.CSSProperties = { height: 1, background: "var(--line)", margin: "4px 0" };
 
 // Section d'accordéon du menu local (même patron que le pôle éditorial).
 function AccordionSection({

@@ -693,6 +693,12 @@ export function readingManuscriptFileUrl(assignmentId: string): string {
   return `${API_BASE}/api/v1/reading-assignments/${assignmentId}/manuscript-file`;
 }
 
+// « Joindre à l'ouvrage » : verse le rapport (fichier déposé) comme pièce
+// officielle de l'ouvrage (reçue par la Direction éditoriale).
+export function attachReadingReport(assignmentId: string) {
+  return request<{ attached: boolean; document_id: string }>(`/api/v1/reading-assignments/${assignmentId}/attach-report`, { method: "POST" });
+}
+
 export function submitEditorialDecision(
   manuscriptId: string,
   decision: "acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus",

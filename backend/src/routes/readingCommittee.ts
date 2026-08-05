@@ -7,6 +7,7 @@ import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
+import { createHash } from "node:crypto";
 
 const DEFAULT_RATING_THRESHOLDS = { excellent: 8.5, very_good: 7, good: 5, to_rework: 3 };
 const DEFAULT_SCORE_GAP_THRESHOLD = 3;
@@ -426,6 +427,44 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       return reply.send(buffer);
     },
   );
+
+  // « Joindre à l'ouvrage » : le relecteur verse SON rapport (le fichier déposé)
+  // comme pièce officielle de l'ouvrage (catégorie rapport_lecture), reçue par
+  // la Direction éditoriale à l'étape suivante. Réservé au relecteur de la mission.
+  fastify.post("/api/v1/reading-assignments/:id/attach-report", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const assignment = await prisma.readingAssignment.findUnique({ where: { id } });
+    if (!assignment) return reply.code(404).send({ code: "not_found", message: "Mission de lecture introuvable." });
+    if (assignment.readerId !== request.user!.id) {
+      return reply.code(403).send({ code: "forbidden", message: "Seul le relecteur peut joindre son rapport." });
+    }
+    if (!assignment.reportFilePath) {
+      return reply.code(409).send({ code: "no_report_file", message: "Joignez d'abord le fichier de votre rapport (« Déposer mon rapport »)." });
+    }
+    const reader = await prisma.user.findUnique({ where: { id: assignment.readerId }, select: { username: true } });
+    const buffer = await readStoredFile(assignment.reportFilePath);
+    const sha256Hash = createHash("sha256").update(buffer).digest("hex");
+    const title = `Rapport de lecture — ${reader?.username ?? "relecteur"}`;
+    let doc = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: assignment.manuscriptId, category: "rapport_lecture", title, deletedAt: null } });
+    if (!doc) {
+      doc = await prisma.document.create({ data: { entityType: "manuscript", entityId: assignment.manuscriptId, category: "rapport_lecture", title, createdBy: request.user!.id, updatedBy: request.user!.id } });
+    }
+    const last = await prisma.documentVersion.findFirst({ where: { documentId: doc.id }, orderBy: { versionNumber: "desc" } });
+    const version = await prisma.documentVersion.create({
+      data: {
+        documentId: doc.id,
+        versionNumber: (last?.versionNumber ?? 0) + 1,
+        filePath: assignment.reportFilePath,
+        fileSize: assignment.reportFileSize ?? buffer.length,
+        mimeType: assignment.reportFileMime ?? "application/octet-stream",
+        sha256Hash,
+        changeSummary: "Rapport de lecture joint à l'ouvrage",
+        uploadedBy: request.user!.id,
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { reading_report_attached: true, manuscriptId: assignment.manuscriptId }, ipAddress: request.ip });
+    return reply.code(201).send({ attached: true, document_id: doc.id });
+  });
 
   fastify.post(
     "/api/v1/reading-assignments/:id/evaluation",

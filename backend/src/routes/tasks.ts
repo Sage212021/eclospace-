@@ -2,8 +2,23 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { TaskType, TaskPriority, TaskStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { storeFile, readStoredFile } from "../lib/storage.js";
+
+// Tâches relevant de la correction éditoriale (Ch. 10 §10.3) et titre réservé
+// au dépôt de la version corrigée (sortie du correcteur → entrée de la Maquette).
+const CORRECTION_TASK_TYPES: TaskType[] = [
+  "correction_ortho",
+  "correction_gramm",
+  "correction_typo",
+  "correction_syntaxe",
+  "correction_style",
+  "harmonisation",
+  "verif_biblio",
+  "coherence",
+];
+const CORRECTED_DOC_TITLE = "Manuscrit corrigé";
 
 const createTaskSchema = z.object({
   title: z.string().min(1),
@@ -125,6 +140,110 @@ export default async function taskRoutes(fastify: FastifyInstance) {
       orderBy: { plannedStart: "asc" },
     });
     return reply.send(tasks);
+  });
+
+  // « Mes corrections » : boîte de travail personnelle du correcteur — ses
+  // tâches de correction, avec l'ENTRÉE (le manuscrit à corriger) et la SORTIE
+  // (la version corrigée à déposer, reçue par la Maquette). On indique si le
+  // fichier source et la version corrigée existent, pour afficher les bons accès.
+  fastify.get("/api/v1/my-corrections", { preHandler: requirePermission("tasks", "consultation") }, async (request, reply) => {
+    const tasks = await prisma.task.findMany({
+      where: { deletedAt: null, assigneeId: request.user!.id, type: { in: CORRECTION_TASK_TYPES } },
+      include: { manuscript: { select: { id: true, manuscriptNumber: true, title: true } } },
+      orderBy: { plannedEnd: "asc" },
+    });
+    const manuscriptIds = Array.from(new Set(tasks.map((t) => t.manuscriptId)));
+    const docs = manuscriptIds.length
+      ? await prisma.document.findMany({
+          where: { entityType: "manuscript", entityId: { in: manuscriptIds }, category: "manuscrit", deletedAt: null },
+          select: { entityId: true, title: true, versions: { take: 1, select: { id: true } } },
+        })
+      : [];
+    const hasSource = new Set<string>();
+    const hasCorrected = new Set<string>();
+    for (const d of docs) {
+      if (!d.versions.length) continue;
+      if (d.title === CORRECTED_DOC_TITLE) hasCorrected.add(d.entityId);
+      else hasSource.add(d.entityId);
+    }
+    return reply.send(
+      tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        type: t.type,
+        status: t.status,
+        progressPct: t.progressPct,
+        plannedEnd: t.plannedEnd,
+        manuscript: t.manuscript,
+        manuscriptHasFile: hasSource.has(t.manuscriptId),
+        correctedHasFile: hasCorrected.has(t.manuscriptId),
+      })),
+    );
+  });
+
+  // ENTRÉE de la tâche : le correcteur télécharge le manuscrit à corriger,
+  // DEPUIS sa tâche, sans détenir le droit large « documents ». Réservé au
+  // correcteur affecté (les responsables passent par la fiche de l'ouvrage).
+  fastify.get("/api/v1/tasks/:id/manuscript-file", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const task = await prisma.task.findFirst({ where: { id, deletedAt: null } });
+    if (!task) return reply.code(404).send({ code: "not_found", message: "Tâche introuvable." });
+    if (task.assigneeId !== request.user!.id) {
+      return reply.code(403).send({ code: "forbidden", message: "Cette tâche de correction ne vous est pas affectée." });
+    }
+    const doc = await prisma.document.findFirst({
+      where: { entityType: "manuscript", entityId: task.manuscriptId, category: "manuscrit", deletedAt: null, NOT: { title: CORRECTED_DOC_TITLE } },
+      orderBy: { createdAt: "asc" },
+      select: { versions: { take: 1, orderBy: { versionNumber: "desc" } } },
+    });
+    const version = doc?.versions[0];
+    if (!version) {
+      return reply.code(404).send({ code: "no_manuscript_file", message: "Aucun fichier manuscrit n'a encore été déposé pour cet ouvrage." });
+    }
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
+  });
+
+  // SORTIE de la tâche : le correcteur dépose la version corrigée. Enregistrée
+  // comme une nouvelle version du document « Manuscrit corrigé » (versionnage
+  // conservé, Ch. 10) et reçue par la Maquette. Réservé au correcteur affecté.
+  fastify.post("/api/v1/tasks/:id/corrected-file", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const task = await prisma.task.findFirst({ where: { id, deletedAt: null } });
+    if (!task) return reply.code(404).send({ code: "not_found", message: "Tâche introuvable." });
+    if (task.assigneeId !== request.user!.id) {
+      return reply.code(403).send({ code: "forbidden", message: "Seul le correcteur affecté peut déposer la version corrigée." });
+    }
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+    const buffer = await file.toBuffer();
+    if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+    const stored = await storeFile(buffer, `manuscrit-corrige-${task.manuscriptId}-${file.filename}`);
+
+    let doc = await prisma.document.findFirst({
+      where: { entityType: "manuscript", entityId: task.manuscriptId, category: "manuscrit", title: CORRECTED_DOC_TITLE, deletedAt: null },
+    });
+    if (!doc) {
+      doc = await prisma.document.create({
+        data: { entityType: "manuscript", entityId: task.manuscriptId, category: "manuscrit", title: CORRECTED_DOC_TITLE, createdBy: request.user!.id, updatedBy: request.user!.id },
+      });
+    }
+    const last = await prisma.documentVersion.findFirst({ where: { documentId: doc.id }, orderBy: { versionNumber: "desc" } });
+    const version = await prisma.documentVersion.create({
+      data: {
+        documentId: doc.id,
+        versionNumber: (last?.versionNumber ?? 0) + 1,
+        filePath: stored.filePath,
+        fileSize: stored.fileSize,
+        mimeType: file.mimetype,
+        sha256Hash: stored.sha256Hash,
+        changeSummary: "Version corrigée déposée par le correcteur",
+        uploadedBy: request.user!.id,
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { corrected_manuscript: true, versionNumber: version.versionNumber }, ipAddress: request.ip });
+    return reply.code(201).send({ corrected_has_file: true, version_number: version.versionNumber });
   });
 
   fastify.patch("/api/v1/tasks/:id", { preHandler: requirePermission("tasks", "saisie") }, async (request, reply) => {

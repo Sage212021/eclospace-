@@ -328,7 +328,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           </div>
         )}
 
-        {permissions.has("comite_lecture:consultation") && (
+        {show("committee") && permissions.has("comite_lecture:consultation") && (
           <ReadingEvaluationsSection
             manuscriptId={manuscript.id}
             canManage={canAssignReader}
@@ -336,7 +336,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           />
         )}
 
-        {permissions.has("manuscripts:consultation") && (
+        {activeFocus === null && permissions.has("manuscripts:consultation") && (
           <AuthorFilesSection manuscriptId={manuscript.id} canManage={permissions.has("manuscripts:saisie")} />
         )}
 
@@ -431,7 +431,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         />
       )}
 
-      {permissions.has("manuscripts:consultation") && (
+      {show("contracts") && permissions.has("manuscripts:consultation") && (
         <FundingCheckpoint
           manuscriptId={manuscript.id}
           fundingMode={manuscript.fundingMode ?? "publisher"}
@@ -510,7 +510,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
 
       {/* Pièces jointes : disponibles à toutes les étapes, pour tous les pôles
           autorisés (couvertures, contrats scannés, pièces finance, archivage…). */}
-      {permissions.has("documents:consultation") && (
+      {activeFocus === null && permissions.has("documents:consultation") && (
         <AttachmentsSection manuscriptId={manuscript.id} canManage={permissions.has("documents:saisie")} />
       )}
     </div>

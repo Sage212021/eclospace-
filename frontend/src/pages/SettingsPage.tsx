@@ -4,7 +4,6 @@ import { AccountSecurity } from "../components/AccountSecurity";
 import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { SettingCard } from "../components/SettingCard";
-import { WorkflowAdminSection } from "../components/WorkflowAdminSection";
 
 interface SettingsPageProps {
   canAdminister: boolean;
@@ -100,10 +99,6 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
       </GuidanceNote>
 
       <AccountSecurity user={user} />
-
-      {/* Administration du workflow éditorial (étapes : libellé, département,
-          délai, notifications) — refonte workflow. */}
-      <WorkflowAdminSection canAdminister={canAdminister} />
 
       {/* Diagnostic de persistance : vérifier que les données sont bien conservées en base. */}
       <SystemDiagnosticCard />

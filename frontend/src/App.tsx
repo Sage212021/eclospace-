@@ -12,6 +12,7 @@ import { Login } from "./pages/Login";
 const QuoteSignPage = lazy(() => import("./pages/QuoteSignPage").then((m) => ({ default: m.QuoteSignPage })));
 const Dashboard = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const Manuscripts = lazy(() => import("./pages/Manuscripts").then((m) => ({ default: m.Manuscripts })));
+const ReadingCommittee = lazy(() => import("./pages/ReadingCommittee").then((m) => ({ default: m.ReadingCommittee })));
 const CatalogueReferencePage = lazy(() => import("./pages/CatalogueReferencePage").then((m) => ({ default: m.CatalogueReferencePage })));
 const ArchivesPage = lazy(() => import("./pages/ArchivesPage").then((m) => ({ default: m.ArchivesPage })));
 const RightsMatrixPage = lazy(() => import("./pages/RightsMatrixPage").then((m) => ({ default: m.RightsMatrixPage })));
@@ -65,6 +66,7 @@ type PageId =
   | "annual-events"
   | "weekly-reports"
   | "manuscripts"
+  | "reading-committee"
   | "my-readings"
   | "catalogue-ref"
   | "archives"
@@ -98,6 +100,12 @@ type LeafView = { page: PageId } | { stage: string; heading: string };
 // le statut de workflow correspondant, d'où la permission manuscripts:consultation.
 // Rôles autorisés à ouvrir « Suivi des ouvrages » : direction générale, tout le
 // pôle éditorial et tout le pôle production — et eux seuls. Miroir exact de
+// Pilotage éditorial confidentiel : sous-modules de coordination du pôle
+// (comité de lecture…). Doit correspondre à EDITORIAL_ROLES côté serveur
+// (backend/src/routes/editorialDashboards.ts) — `manuscripts:consultation`
+// est trop large (catalogue, partagé avec juridique/qualité/production).
+const EDITORIAL_PILOTAGE_ROLES = ["ADMIN_GENERAL", "DIR_GENERAL", "DIR_EDITORIAL", "ASSISTANT_EDITORIAL"];
+
 // TRACKING_ROLES côté serveur (backend/src/routes/reference.ts).
 const TRACKING_ROLES = [
   "ADMIN_GENERAL",
@@ -128,7 +136,7 @@ const NAV_POLES: NavPole[] = [
     label: "Éditorial",
     items: [
       { key: "ed-manuscrits", label: "Manuscrits", permission: "manuscripts:consultation" },
-      { key: "ed-comite", label: "Comité de lecture", permission: "manuscripts:consultation" },
+      { key: "ed-comite", label: "Comité de lecture", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-mes-lectures", label: "Mes lectures", permission: "comite_lecture:saisie" },
       { key: "ed-direction", label: "Direction éditoriale", permission: "manuscripts:consultation" },
       { key: "ed-correction", label: "Correction éditoriale", permission: "manuscripts:consultation" },
@@ -208,7 +216,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   suivi: { page: "production-tracking" },
   "mes-rapports": { page: "weekly-reports" },
   "ed-manuscrits": { page: "manuscripts" },
-  "ed-comite": { stage: "COMITE_LECTURE", heading: "Comité de lecture" },
+  "ed-comite": { page: "reading-committee" },
   "ed-mes-lectures": { page: "my-readings" },
   "ed-direction": { stage: "DECISION_EDITORIALE", heading: "Direction éditoriale" },
   "ed-correction": { stage: "CORRECTION", heading: "Correction éditoriale" },
@@ -699,6 +707,9 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "manuscripts" && (
           <Manuscripts canCreate={permissions.has("manuscripts:saisie")} onOpenManuscript={openManuscript} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "reading-committee" && (
+          <ReadingCommittee onOpenManuscript={openManuscript} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-readings" && <MyReadings />}
         {leaf && "page" in leaf && leaf.page === "catalogue-ref" && (

@@ -446,11 +446,14 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
       )}
 
       {manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("printing:consultation") && (
-        <PrintingSection
-          manuscriptId={manuscript.id}
-          canManage={permissions.has("printing:saisie")}
-          canValidate={permissions.has("printing:validation")}
-        />
+        <>
+          <ImpressionHandoffBlock manuscriptId={manuscript.id} />
+          <PrintingSection
+            manuscriptId={manuscript.id}
+            canManage={permissions.has("printing:saisie")}
+            canValidate={permissions.has("printing:validation")}
+          />
+        </>
       )}
 
       {/* Site vitrine : publication de l'ouvrage sur la boutique WordPress
@@ -780,6 +783,39 @@ function BatHandoffBlock({
           </label>
         )}
         <span style={{ color: "var(--muted)", fontSize: 11.5 }}>→ reçu par l'impression</span>
+      </div>
+    </div>
+  );
+}
+
+// Étape Impression : entrée = le BAT signé (à transmettre à l'imprimeur). La
+// sortie est physique — les exemplaires imprimés entrent en stock (gérée par la
+// section Impression / le stock). Bloc d'entrée seul, pour ouvrir le fichier reçu.
+function ImpressionHandoffBlock({ manuscriptId }: { manuscriptId: string }) {
+  const [hasBat, setHasBat] = useState<boolean | null>(null);
+  useEffect(() => {
+    getManuscriptBatMeta(manuscriptId)
+      .then((m) => setHasBat(m.bat_has_file))
+      .catch(() => setHasBat(false));
+  }, [manuscriptId]);
+  const row: React.CSSProperties = { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", fontSize: 13 };
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 13, fontWeight: 600 }}>Impression</div>
+      <div style={row}>
+        <span style={handoffTag("in")}>À imprimer</span>
+        {hasBat ? (
+          <a href={manuscriptBatFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+            📄 Ouvrir le BAT signé
+          </a>
+        ) : (
+          <span style={{ color: "var(--muted)" }}>Le BAT signé n'a pas encore été déposé par le contrôle qualité.</span>
+        )}
+        <span style={{ color: "var(--muted)", fontSize: 11.5 }}>à transmettre à l'imprimeur</span>
+      </div>
+      <div style={row}>
+        <span style={handoffTag("out")}>En sortie</span>
+        <span style={{ color: "var(--muted)" }}>Les exemplaires imprimés entrent en stock (bon de commande et réception ci-dessous).</span>
       </div>
     </div>
   );

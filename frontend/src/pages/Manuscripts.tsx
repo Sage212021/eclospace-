@@ -122,6 +122,10 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
   const [showImport, setShowImport] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isStageView = Boolean(statusFilter);
+  // Menu local (accordéon) de la vue principale : liste complète (pour les
+  // compteurs et les regroupements par étape) + section ouverte.
+  const [allManuscripts, setAllManuscripts] = useState<Manuscript[]>([]);
+  const [section, setSection] = useState<string>("recus");
 
   // Mémorisation du dernier tri/filtre (spéc. fonctionnelle §6) : on restaure
   // les préférences de l'opérateur d'une session à l'autre, sur la vue globale.
@@ -150,125 +154,157 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, filtersKey]);
 
+  // Vue principale : liste complète pour alimenter le menu local (compteurs +
+  // regroupements par étape), rechargée après création/import.
+  const loadAll = () => listManuscripts({}).then(setAllManuscripts).catch(() => {});
+  useEffect(() => {
+    if (!isStageView) loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStageView]);
+
+  // Regroupements du menu local (accordéon) de la vue principale.
+  const codeOf = (m: Manuscript) => m.status?.code ?? "";
+  const orderOf = (m: Manuscript) => m.status?.stepOrder ?? 0;
+  const buckets: { key: string; label: string; icon: string; match: (m: Manuscript) => boolean }[] = [
+    { key: "recus", label: "Manuscrits reçus", icon: "📥", match: (m) => ["RECEPTION", "VERIF_ADMIN"].includes(codeOf(m)) },
+    { key: "evaluation", label: "En évaluation (comité de lecture)", icon: "👓", match: (m) => codeOf(m) === "COMITE_LECTURE" },
+    { key: "attente", label: "En attente de décision", icon: "⚖️", match: (m) => codeOf(m) === "DECISION_EDITORIALE" },
+    { key: "acceptes", label: "Acceptés & en production", icon: "✅", match: (m) => orderOf(m) >= 5 && orderOf(m) <= 19 },
+    { key: "archives", label: "Archivés / refusés", icon: "🗄", match: (m) => codeOf(m) === "ARCHIVAGE" },
+  ];
+
   return (
     <div style={{ padding: "clamp(16px, 4vw, 32px)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>{heading ?? "Manuscrits"}</h1>
-        {canCreate && !isStageView && (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Button
-              variant={showForm ? "view" : "add"}
-              onClick={() => {
-                setShowImport(false);
-                setShowForm((v) => !v);
-              }}
-            >
-              {showForm ? "Annuler" : "+ Nouveau manuscrit"}
-            </Button>
-            <Button
-              variant="view"
-              onClick={() => {
-                setShowForm(false);
-                setShowImport((v) => !v);
-              }}
-              title="Enregistrer un ouvrage déjà publié, avec sa date de parution réelle"
-            >
-              {showImport ? "Annuler" : "+ Importer un ouvrage déjà paru"}
-            </Button>
-          </div>
-        )}
-      </div>
+      <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: "0 0 12px" }}>{heading ?? "Manuscrits"}</h1>
 
       <ManuscriptsGuidance statusFilter={statusFilter} heading={heading} />
-
-      {/* Tableau de bord du sous-module Manuscrits (refonte éditoriale) —
-          uniquement sur la vue principale ; réservé à l'éditorial/direction
-          (se masque de lui-même sinon). */}
-      {!isStageView && <ManuscriptsDashboard />}
-
       {error && <p style={{ color: "var(--alert)", fontSize: 13 }}>{error}</p>}
 
-      {showForm && (
-        <NewManuscriptForm
-          onCreated={(m) => {
-            setShowForm(false);
-            refresh();
-            onOpenManuscript(m.id);
-          }}
-          onError={setError}
-        />
-      )}
-
-      {showImport && (
-        <ImportBookForm
-          onImported={(m) => {
-            setShowImport(false);
-            refresh();
-            onOpenManuscript(m.id);
-          }}
-          onError={setError}
-        />
-      )}
-
-      {!isStageView && <CatalogueFilterBar filters={filters} onChange={setFilters} />}
-
-      {manuscripts.length === 0 ? (
-        !isStageView && hasActiveFilters(filters) ? (
-          <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 24, marginTop: 16, maxWidth: 720 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Aucun ouvrage ne correspond à ces critères.</div>
-            <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 0 12px" }}>
-              Élargissez la période ou retirez un filtre pour voir davantage d'ouvrages.
-            </p>
-            <Button variant="view" size="sm" onClick={() => setFilters({})}>
-              Réinitialiser les filtres
-            </Button>
-          </div>
-        ) : (
+      {isStageView ? (
+        // Vue par étape (ouverte depuis le menu latéral) : liste directe, inchangée.
+        manuscripts.length === 0 ? (
           <EmptyState isStageView={isStageView} heading={heading} onGoToManuscripts={onGoToManuscripts} />
+        ) : (
+          <ManuscriptTable items={manuscripts} onOpen={onOpenManuscript} />
         )
       ) : (
-      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden", marginTop: 16 }}>
-        <div style={{ overflowX: "auto" }}>
-        <table className="ecl-table">
-          <thead>
-            <tr>
-              <th>N°</th>
-              <th>Titre</th>
-              <th>Genre</th>
-              <th>Étape</th>
-              <th>Reçu le</th>
-              <th>Paru le</th>
-            </tr>
-          </thead>
-          <tbody>
-            {manuscripts.map((m) => (
-              <tr key={m.id} onClick={() => onOpenManuscript(m.id)} style={{ cursor: "pointer" }}>
-                <td className="mono">{m.manuscriptNumber}</td>
-                <td className="linklike">{m.title}</td>
-                <td>{m.genre?.label ?? "—"}</td>
-                <td>
-                  <span
-                    style={{
-                      background: "var(--eclosion-soft)",
-                      color: "var(--eclosion-dark)",
-                      borderRadius: 999,
-                      padding: "2px 10px",
-                      fontSize: 11,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {m.status.label}
-                  </span>
-                </td>
-                <td className="mono">{new Date(m.receivedAt).toLocaleDateString("fr-FR")}</td>
-                <td className="mono">{m.publicationDate ? new Date(m.publicationDate).toLocaleDateString("fr-FR") : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        // Vue principale : MENU LOCAL en accordéon — chaque entrée se déplie sur
+        // le travail correspondant (liste filtrée, saisie, recherche, stats).
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+          {canCreate && (
+            <AccordionSection open={section === "nouveau"} onToggle={() => setSection(section === "nouveau" ? "" : "nouveau")} icon="➕" label="Nouveau manuscrit">
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: showForm || showImport ? 12 : 0 }}>
+                <Button variant={showForm ? "view" : "add"} onClick={() => { setShowImport(false); setShowForm((v) => !v); }}>{showForm ? "Fermer" : "Saisir un nouveau manuscrit"}</Button>
+                <Button variant="view" onClick={() => { setShowForm(false); setShowImport((v) => !v); }} title="Enregistrer un ouvrage déjà publié, avec sa date de parution réelle">{showImport ? "Fermer" : "Importer un ouvrage déjà paru"}</Button>
+              </div>
+              {showForm && <NewManuscriptForm onCreated={(m) => { setShowForm(false); loadAll(); onOpenManuscript(m.id); }} onError={setError} />}
+              {showImport && <ImportBookForm onImported={(m) => { setShowImport(false); loadAll(); onOpenManuscript(m.id); }} onError={setError} />}
+            </AccordionSection>
+          )}
+
+          {buckets.map((b) => {
+            const items = allManuscripts.filter(b.match);
+            return (
+              <AccordionSection key={b.key} open={section === b.key} onToggle={() => setSection(section === b.key ? "" : b.key)} icon={b.icon} label={b.label} count={items.length}>
+                {items.length === 0 ? (
+                  <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>Aucun manuscrit à cette étape.</p>
+                ) : (
+                  <ManuscriptTable items={items} onOpen={onOpenManuscript} />
+                )}
+              </AccordionSection>
+            );
+          })}
+
+          <AccordionSection open={section === "recherche"} onToggle={() => setSection(section === "recherche" ? "" : "recherche")} icon="🔎" label="Recherche multicritère">
+            <CatalogueFilterBar filters={filters} onChange={setFilters} />
+            {hasActiveFilters(filters) && (
+              <div style={{ marginTop: 8 }}>
+                <Button variant="view" size="sm" onClick={() => setFilters({})}>Réinitialiser les filtres</Button>
+              </div>
+            )}
+            <div style={{ marginTop: 12 }}>
+              {manuscripts.length === 0 ? (
+                <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>Aucun ouvrage ne correspond à ces critères.</p>
+              ) : (
+                <ManuscriptTable items={manuscripts} onOpen={onOpenManuscript} />
+              )}
+            </div>
+          </AccordionSection>
+
+          <AccordionSection open={section === "stats"} onToggle={() => setSection(section === "stats" ? "" : "stats")} icon="📊" label="Statistiques & indicateurs">
+            <ManuscriptsDashboard />
+          </AccordionSection>
         </div>
-      </div>
       )}
+    </div>
+  );
+}
+
+// Section d'accordéon du menu local : en-tête cliquable (icône + libellé +
+// compteur) qui déroule son contenu. Une seule ouverte à la fois.
+function AccordionSection({
+  open,
+  onToggle,
+  icon,
+  label,
+  count,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  icon: string;
+  label: string;
+  count?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 10, background: "var(--card)", overflow: "hidden" }}>
+      <button
+        onClick={onToggle}
+        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: open ? "var(--eclosion-soft)" : "#fff", border: "none", padding: "12px 14px", cursor: "pointer", fontSize: 14, fontWeight: 600, color: "var(--ink)" }}
+      >
+        <span style={{ fontSize: 16 }}>{icon}</span>
+        <span style={{ flex: 1 }}>{label}</span>
+        {count !== undefined && (
+          <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontFamily: "var(--font-mono)" }}>{count}</span>
+        )}
+        <span style={{ color: "var(--muted)", display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
+      </button>
+      {open && <div style={{ padding: 14, borderTop: "1px solid var(--line)" }}>{children}</div>}
+    </div>
+  );
+}
+
+// Tableau de manuscrits réutilisable (une ligne cliquable par ouvrage).
+function ManuscriptTable({ items, onOpen }: { items: Manuscript[]; onOpen: (id: string) => void }) {
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table className="ecl-table">
+        <thead>
+          <tr>
+            <th>N°</th>
+            <th>Titre</th>
+            <th>Genre</th>
+            <th>Étape</th>
+            <th>Reçu le</th>
+            <th>Paru le</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((m) => (
+            <tr key={m.id} onClick={() => onOpen(m.id)} style={{ cursor: "pointer" }}>
+              <td className="mono">{m.manuscriptNumber}</td>
+              <td className="linklike">{m.title}</td>
+              <td>{m.genre?.label ?? "—"}</td>
+              <td>
+                <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark)", borderRadius: 999, padding: "2px 10px", fontSize: 11, whiteSpace: "nowrap" }}>{m.status.label}</span>
+              </td>
+              <td className="mono">{new Date(m.receivedAt).toLocaleDateString("fr-FR")}</td>
+              <td className="mono">{m.publicationDate ? new Date(m.publicationDate).toLocaleDateString("fr-FR") : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

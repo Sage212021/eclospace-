@@ -546,6 +546,41 @@ export function getReadingCommitteeDashboard() {
   return request<ReadingCommitteeDashboard>("/api/v1/editorial/reading-committee/dashboard");
 }
 
+// Tableau de bord du sous-module « Direction éditoriale » (refonte éditoriale) :
+// file « à décider » (avec synthèse des avis), historique des décisions +
+// indicateurs. Réservé côté serveur aux rôles éditorial/direction (403 sinon).
+export interface PendingDecision {
+  id: string;
+  manuscript_number: string;
+  title: string;
+  received_at: string;
+  jours_attente: number;
+  evaluations: number;
+  score_moyen: number | null;
+  ecart_avis: boolean;
+  en_retard: boolean;
+}
+export interface DecisionHistoryItem {
+  id: string;
+  manuscript_number: string;
+  title: string;
+  decision: string;
+  decided_at: string;
+  motivation: string;
+}
+export interface EditorialDecisionDashboard {
+  en_attente: number;
+  avis_divergents: number;
+  en_retard: number;
+  taux_acceptation: number | null;
+  delai_moyen_decision_jours: number | null;
+  pending: PendingDecision[];
+  historique: DecisionHistoryItem[];
+}
+export function getEditorialDecisionDashboard() {
+  return request<EditorialDecisionDashboard>("/api/v1/editorial/decisions/dashboard");
+}
+
 // Fichier externe de rapport de relecture : dépôt (relecteur) et téléchargement.
 export async function uploadReadingReportFile(assignmentId: string, file: File) {
   const form = new FormData();

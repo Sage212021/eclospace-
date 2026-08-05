@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { getDashboardStats, getTodayBirthdays, getUpcomingEvents, type CalendarEvent, type DashboardStats, type EffectiveUser } from "../api/client";
 import { useI18n } from "../i18n";
 import { AnnouncementBanner } from "../components/AnnouncementBanner";
-import { EditorialDashboardSection } from "../components/EditorialDashboardSection";
 
 interface DashboardProps {
   user: EffectiveUser;
@@ -114,10 +113,6 @@ export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar }: Dashboar
       {stats?.pipeline && stats.pipeline.length > 0 && (
         <Pipeline stages={stats.pipeline} totalSteps={stats.pipeline_steps_total ?? 20} />
       )}
-
-      {/* Tableau de bord éditorial (retard, bloqués, taux, temps moyen…) —
-          réservé au pôle éditorial et à la direction (se masque sinon). */}
-      {user.permissions.includes("manuscripts:consultation") && <EditorialDashboardSection />}
 
       <h2 style={{ fontFamily: "var(--font-title)", fontSize: 15, margin: "24px 0 0" }}>{t("dash.session", "Ma session")}</h2>
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: 20, marginTop: 10, maxWidth: 640 }}>

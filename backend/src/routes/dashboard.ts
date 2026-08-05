@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../lib/permissions.js";
 import { editorialIndicators, commercialIndicators, revenueByFamily, annualSummary } from "../lib/kpi.js";
-import { editorialDashboard } from "../lib/editorialDashboard.js";
 
 // Indicateurs de synthèse du tableau de bord (grands KPI de la page d'accueil).
 // Chaque indicateur n'est calculé et renvoyé que si l'utilisateur a la
@@ -60,17 +59,6 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       // de chaque étape (position dans le circuit), et non un simple comptage.
       pipeline_steps_total: editorial ? Math.max(...editorial.by_status.map((s) => s.step_order), 1) : null,
     });
-  });
-
-  // Tableau de bord éditorial (refonte workflow — Lot B) : manuscrits par
-  // étape, dossiers en retard / bloqués, taux d'acceptation, temps moyen,
-  // contrats signés, ouvrages en fabrication / commercialisation. Réservé au
-  // pôle éditorial et à la direction (consultation des manuscrits).
-  fastify.get("/api/v1/dashboard/editorial", { preHandler: requireAuth }, async (request, reply) => {
-    if (!request.user!.permissions.has("manuscripts:consultation")) {
-      return reply.code(403).send({ code: "forbidden", message: "Accès réservé au pôle éditorial et à la direction." });
-    }
-    return reply.send(await editorialDashboard());
   });
 
   // Chiffre d'affaires ventilé par famille (facturé / encaissé / créances +

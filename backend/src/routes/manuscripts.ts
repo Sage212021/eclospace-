@@ -6,6 +6,11 @@ import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
+import { storeFile, readStoredFile } from "../lib/storage.js";
+
+// Titre réservé au fichier source du manuscrit (entrée du circuit : déposé à la
+// réception, lu ensuite par le comité de lecture puis le correcteur).
+const SOURCE_DOC_TITLE = "Manuscrit (source)";
 import { previewSiteFiche, setSitePublished, optimizedCoverForSite, siteCoverThumbnail, UnsupportedImageError } from "../lib/sitePublisher.js";
 
 const authorSchema = z.union([
@@ -397,6 +402,71 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
     }
     return reply.send(manuscript);
+  });
+
+  // Dépôt à la RÉCEPTION : le fichier source du manuscrit. C'est l'entrée du
+  // circuit — une fois déposé ici, il est lu par le comité de lecture (« À lire »)
+  // puis par le correcteur (« À corriger »). Le déposant (secrétariat éditorial,
+  // manuscripts:saisie) n'a pas besoin du droit large « documents » : le fichier
+  // est enregistré comme document « Manuscrit (source) » (versionnage conservé).
+  fastify.get("/api/v1/manuscripts/:id/source-file/meta", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const doc = await prisma.document.findFirst({
+      where: { entityType: "manuscript", entityId: id, category: "manuscrit", title: SOURCE_DOC_TITLE, deletedAt: null },
+      select: { versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { mimeType: true } } },
+    });
+    const v = doc?.versions[0];
+    return reply.send({ has_file: Boolean(v), mime_type: v?.mimeType ?? null });
+  });
+
+  fastify.get("/api/v1/manuscripts/:id/source-file", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const doc = await prisma.document.findFirst({
+      where: { entityType: "manuscript", entityId: id, category: "manuscrit", title: SOURCE_DOC_TITLE, deletedAt: null },
+      select: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+    });
+    const version = doc?.versions[0];
+    if (!version) {
+      return reply.code(404).send({ code: "no_source_file", message: "Aucun fichier manuscrit n'a été déposé pour cet ouvrage." });
+    }
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
+  });
+
+  fastify.post("/api/v1/manuscripts/:id/source-file", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+    const buffer = await file.toBuffer();
+    if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+    const stored = await storeFile(buffer, `manuscrit-source-${id}-${file.filename}`);
+
+    let doc = await prisma.document.findFirst({
+      where: { entityType: "manuscript", entityId: id, category: "manuscrit", title: SOURCE_DOC_TITLE, deletedAt: null },
+    });
+    if (!doc) {
+      doc = await prisma.document.create({
+        data: { entityType: "manuscript", entityId: id, category: "manuscrit", title: SOURCE_DOC_TITLE, createdBy: request.user!.id, updatedBy: request.user!.id },
+      });
+    }
+    const last = await prisma.documentVersion.findFirst({ where: { documentId: doc.id }, orderBy: { versionNumber: "desc" } });
+    const version = await prisma.documentVersion.create({
+      data: {
+        documentId: doc.id,
+        versionNumber: (last?.versionNumber ?? 0) + 1,
+        filePath: stored.filePath,
+        fileSize: stored.fileSize,
+        mimeType: file.mimetype,
+        sha256Hash: stored.sha256Hash,
+        changeSummary: "Fichier source déposé à la réception",
+        uploadedBy: request.user!.id,
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { source_manuscript: true, versionNumber: version.versionNumber }, ipAddress: request.ip });
+    return reply.code(201).send({ has_file: true, version_number: version.versionNumber });
   });
 
   fastify.patch("/api/v1/manuscripts/:id", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {

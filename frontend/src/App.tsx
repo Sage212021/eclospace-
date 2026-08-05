@@ -691,6 +691,7 @@ export function App() {
           <ManuscriptDetail
             manuscriptId={view.id}
             permissions={permissions}
+            originKey={view.originKey}
             onBack={() => setView({ kind: "leaf", key: activeKey })}
           />
         )}

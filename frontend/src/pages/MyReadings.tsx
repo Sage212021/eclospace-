@@ -18,18 +18,28 @@ import { buildReadingReport } from "../lib/readingReport";
 const STATUS_LABELS: Record<string, string> = {
   pending: "À évaluer",
   submitted: "Remise",
+  late: "En retard",
   cancelled: "Annulée",
 };
 
 // Vue lecteur du comité de lecture (Ch. 7 §7.3) : missions attribuées et
-// formulaire de notation pondérée (Ch. 7 §7.4-7.5).
+// formulaire de notation pondérée (Ch. 7 §7.4-7.5). Menu local en accordéon
+// (même logique que le pôle éditorial) : missions regroupées par état — à
+// évaluer, en retard, remises — pour retrouver d'un clic ce qu'il reste à faire.
 import { useI18n } from "../i18n";
 
+// Une mission est « en retard » si le serveur l'a marquée late, ou si elle est
+// encore à évaluer alors que l'échéance est passée.
+function isLate(a: ReadingAssignment): boolean {
+  return a.status === "late" || (a.status === "pending" && new Date(a.dueAt).getTime() < Date.now());
+}
+
 export function MyReadings() {
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const [assignments, setAssignments] = useState<ReadingAssignment[]>([]);
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [section, setSection] = useState<string>("a_evaluer");
 
   const refresh = () => listMyReadingAssignments().then(setAssignments);
 
@@ -47,8 +57,21 @@ export function MyReadings() {
     }
   }
 
+  const cardProps = { openAssignmentId, setOpenAssignmentId, attachFile, refresh, setMessage };
+
+  // Groupes du menu local : à évaluer (en cours, à l'heure), en retard, remises.
+  const aEvaluer = assignments.filter((a) => a.status === "pending" && !isLate(a));
+  const enRetard = assignments.filter((a) => isLate(a));
+  const remises = assignments.filter((a) => a.status === "submitted");
+
+  const buckets: { key: string; label: string; icon: string; items: ReadingAssignment[]; empty: string }[] = [
+    { key: "a_evaluer", label: t("myr.bucket.pending", "À évaluer"), icon: "📖", items: aEvaluer, empty: t("myr.bucket.pending_empty", "Aucune mission à évaluer.") },
+    { key: "en_retard", label: t("myr.bucket.late", "En retard"), icon: "⏰", items: enRetard, empty: t("myr.bucket.late_empty", "Aucune mission en retard.") },
+    { key: "remises", label: t("myr.bucket.submitted", "Remises"), icon: "✅", items: remises, empty: t("myr.bucket.submitted_empty", "Aucune évaluation remise pour l'instant.") },
+  ];
+
   return (
-    <div className="ecl-page" style={{ maxWidth: 680 }}>
+    <div className="ecl-page" style={{ maxWidth: 720 }}>
       <h1 className="ecl-page__title">{t("page.myreadings.title", "Mes lectures")}</h1>
       <p className="ecl-page__lead">{t("page.myreadings.lead", "Vos missions de lecture et la remise de vos évaluations.")}</p>
 
@@ -64,69 +87,112 @@ export function MyReadings() {
           {message}
         </div>
       )}
-      {assignments.length === 0 && (
-        <p style={{ color: "var(--muted)", marginTop: 16 }}>{t("myr.empty", "Aucune mission en cours — les nouvelles affectations apparaîtront ici.")}</p>
-      )}
-      {assignments.map((assignment) => (
-        <section key={assignment.id} className="ecl-card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 14.5, color: "var(--ink)" }}>{assignment.manuscript?.title}</div>
-              <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <span>{t("myr.deadline", "Échéance")} : {new Date(assignment.dueAt).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR")}</span>
-                <StatusChip label={t(`myr.status.${assignment.status}`, STATUS_LABELS[assignment.status] ?? assignment.status)} />
-              </div>
-            </div>
-            {assignment.status === "pending" && (
-              <Button
-                variant={openAssignmentId === assignment.id ? "view" : "add"}
-                size="sm"
-                onClick={() => setOpenAssignmentId(openAssignmentId === assignment.id ? null : assignment.id)}
-              >
-                {openAssignmentId === assignment.id ? t("myr.close", "Fermer") : t("myr.evaluate", "Évaluer")}
-              </Button>
-            )}
-            {assignment.evaluation && (
-              <DocPrintMenu
-                label={t("myr.download_report", "Télécharger mon rapport")}
-                onPrint={(opts) => printReadingReport(buildReadingReport(assignment), opts)}
-              />
-            )}
-          </div>
 
-          {/* Fichier externe de rapport de relecture : joindre le document rédigé. */}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 10, fontSize: 12.5 }}>
-            <label style={fileBtnStyle}>
-              {assignment.hasReportFile ? t("myr.file_replace", "Remplacer le fichier joint") : t("myr.file_attach", "Joindre le rapport (fichier)")}
-              <input
-                type="file"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) attachFile(assignment.id, f);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            {assignment.hasReportFile && (
-              <a href={readingReportFileUrl(assignment.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
-                📎 {assignment.reportFileName ?? t("myr.file_download", "Télécharger le fichier joint")}
-              </a>
-            )}
-          </div>
-          {openAssignmentId === assignment.id && (
-            <EvaluationForm
-              assignmentId={assignment.id}
-              onSubmitted={() => {
-                setOpenAssignmentId(null);
-                setMessage(t("myr.submitted_ok", "Évaluation remise avec succès."));
-                refresh();
-              }}
-            />
-          )}
-        </section>
-      ))}
+      {assignments.length === 0 ? (
+        <p style={{ color: "var(--muted)", marginTop: 16 }}>{t("myr.empty", "Aucune mission en cours — les nouvelles affectations apparaîtront ici.")}</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+          {buckets.map((b) => (
+            <AccordionSection
+              key={b.key}
+              open={section === b.key}
+              onToggle={() => setSection(section === b.key ? "" : b.key)}
+              icon={b.icon}
+              label={b.label}
+              count={b.items.length}
+            >
+              {b.items.length === 0 ? (
+                <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>{b.empty}</p>
+              ) : (
+                b.items.map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} {...cardProps} />)
+              )}
+            </AccordionSection>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+// Carte d'une mission de lecture : échéance, statut, dépôt de fichier de
+// rapport et formulaire d'évaluation (inchangé). Extrait pour être réutilisé
+// dans chaque section du menu local.
+function AssignmentCard({
+  assignment,
+  openAssignmentId,
+  setOpenAssignmentId,
+  attachFile,
+  refresh,
+  setMessage,
+}: {
+  assignment: ReadingAssignment;
+  openAssignmentId: string | null;
+  setOpenAssignmentId: (id: string | null) => void;
+  attachFile: (assignmentId: string, file: File) => void;
+  refresh: () => void;
+  setMessage: (m: string) => void;
+}) {
+  const { t, lang } = useI18n();
+  return (
+    <section className="ecl-card">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 14.5, color: "var(--ink)" }}>{assignment.manuscript?.title}</div>
+          <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <span>
+              {t("myr.deadline", "Échéance")} : {new Date(assignment.dueAt).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR")}
+            </span>
+            <StatusChip label={t(`myr.status.${assignment.status}`, STATUS_LABELS[assignment.status] ?? assignment.status)} />
+          </div>
+        </div>
+        {(assignment.status === "pending" || assignment.status === "late") && (
+          <Button
+            variant={openAssignmentId === assignment.id ? "view" : "add"}
+            size="sm"
+            onClick={() => setOpenAssignmentId(openAssignmentId === assignment.id ? null : assignment.id)}
+          >
+            {openAssignmentId === assignment.id ? t("myr.close", "Fermer") : t("myr.evaluate", "Évaluer")}
+          </Button>
+        )}
+        {assignment.evaluation && (
+          <DocPrintMenu
+            label={t("myr.download_report", "Télécharger mon rapport")}
+            onPrint={(opts) => printReadingReport(buildReadingReport(assignment), opts)}
+          />
+        )}
+      </div>
+
+      {/* Fichier externe de rapport de relecture : joindre le document rédigé. */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 10, fontSize: 12.5 }}>
+        <label style={fileBtnStyle}>
+          {assignment.hasReportFile ? t("myr.file_replace", "Remplacer le fichier joint") : t("myr.file_attach", "Joindre le rapport (fichier)")}
+          <input
+            type="file"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) attachFile(assignment.id, f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {assignment.hasReportFile && (
+          <a href={readingReportFileUrl(assignment.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+            📎 {assignment.reportFileName ?? t("myr.file_download", "Télécharger le fichier joint")}
+          </a>
+        )}
+      </div>
+      {openAssignmentId === assignment.id && (
+        <EvaluationForm
+          assignmentId={assignment.id}
+          onSubmitted={() => {
+            setOpenAssignmentId(null);
+            setMessage(t("myr.submitted_ok", "Évaluation remise avec succès."));
+            refresh();
+          }}
+        />
+      )}
+    </section>
   );
 }
 
@@ -224,6 +290,40 @@ function StatusChip({ label }: { label: string }) {
     <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>
       {label}
     </span>
+  );
+}
+
+// Section d'accordéon du menu local (même patron que le pôle éditorial).
+function AccordionSection({
+  open,
+  onToggle,
+  icon,
+  label,
+  count,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  icon: string;
+  label: string;
+  count?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 10, background: "var(--card)", overflow: "hidden" }}>
+      <button
+        onClick={onToggle}
+        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: open ? "var(--eclosion-soft)" : "#fff", border: "none", padding: "12px 14px", cursor: "pointer", fontSize: 14, fontWeight: 600, color: "var(--ink)" }}
+      >
+        <span style={{ fontSize: 16 }}>{icon}</span>
+        <span style={{ flex: 1 }}>{label}</span>
+        {count !== undefined && (
+          <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontFamily: "var(--font-mono)" }}>{count}</span>
+        )}
+        <span style={{ color: "var(--muted)", display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
+      </button>
+      {open && <div style={{ padding: 14, borderTop: "1px solid var(--line)" }}>{children}</div>}
+    </div>
   );
 }
 

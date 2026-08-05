@@ -3,6 +3,7 @@ import { requireAnyRole } from "../lib/permissions.js";
 import { manuscriptsDashboard } from "../lib/manuscriptsDashboard.js";
 import { readingCommitteeDashboard } from "../lib/readingCommitteeDashboard.js";
 import { editorialDecisionDashboard } from "../lib/editorialDecisionDashboard.js";
+import { correctionDashboard } from "../lib/correctionDashboard.js";
 
 // Tableaux de bord des sous-modules du pôle éditorial (refonte éditoriale).
 // Additif : n'affecte aucun autre module de l'ERP. Réservés à la direction et
@@ -41,6 +42,17 @@ export default async function editorialDashboardRoutes(fastify: FastifyInstance)
     { preHandler: requireAnyRole(EDITORIAL_ROLES) },
     async (_request, reply) => {
       return reply.send(await editorialDecisionDashboard());
+    },
+  );
+
+  // Sous-module « Correction éditoriale » : manuscrits à l'étape correction
+  // regroupés par sous-état (à démarrer, en cours, points bloquants, prêts à
+  // valider) + indicateurs (points bloquants, en retard).
+  fastify.get(
+    "/api/v1/editorial/correction/dashboard",
+    { preHandler: requireAnyRole(EDITORIAL_ROLES) },
+    async (_request, reply) => {
+      return reply.send(await correctionDashboard());
     },
   );
 }

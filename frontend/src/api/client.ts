@@ -581,6 +581,36 @@ export function getEditorialDecisionDashboard() {
   return request<EditorialDecisionDashboard>("/api/v1/editorial/decisions/dashboard");
 }
 
+// Tableau de bord du sous-module « Correction éditoriale » (refonte éditoriale) :
+// manuscrits en correction regroupés par sous-état + indicateurs. Réservé côté
+// serveur aux rôles éditorial/direction (403 sinon).
+export type CorrectionSubState = "points_bloquants" | "a_demarrer" | "en_cours" | "prets_a_valider";
+export interface CorrectionManuscript {
+  id: string;
+  manuscript_number: string;
+  title: string;
+  received_at: string;
+  sub_state: CorrectionSubState;
+  tasks_total: number;
+  tasks_done: number;
+  blocking: number;
+  progress_pct: number;
+  en_retard: boolean;
+}
+export interface CorrectionDashboard {
+  en_correction: number;
+  a_demarrer: number;
+  en_cours: number;
+  points_bloquants: number;
+  prets_a_valider: number;
+  points_bloquants_total: number;
+  en_retard: number;
+  manuscripts: CorrectionManuscript[];
+}
+export function getCorrectionDashboard() {
+  return request<CorrectionDashboard>("/api/v1/editorial/correction/dashboard");
+}
+
 // Fichier externe de rapport de relecture : dépôt (relecteur) et téléchargement.
 export async function uploadReadingReportFile(assignmentId: string, file: File) {
   const form = new FormData();

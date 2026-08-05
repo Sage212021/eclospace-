@@ -517,6 +517,35 @@ export function closeReadingCommittee(manuscriptId: string) {
   return request<{ ok: boolean; advanced: boolean }>(`/api/v1/manuscripts/${manuscriptId}/close-reading-committee`, { method: "POST" });
 }
 
+// Tableau de bord du sous-module « Comité de lecture » (refonte éditoriale) :
+// manuscrits au comité regroupés par sous-état + indicateurs. Réservé côté
+// serveur aux rôles éditorial/direction (403 sinon).
+export type CommitteeSubState = "a_affecter" | "en_lecture" | "rapports_remis";
+export interface CommitteeManuscript {
+  id: string;
+  manuscript_number: string;
+  title: string;
+  received_at: string;
+  sub_state: CommitteeSubState;
+  assigned: number;
+  submitted: number;
+  pending: number;
+  late: number;
+}
+export interface ReadingCommitteeDashboard {
+  en_comite: number;
+  a_affecter: number;
+  en_lecture: number;
+  rapports_remis: number;
+  en_retard: number;
+  rapports_en_attente: number;
+  relecteurs_actifs: number;
+  manuscripts: CommitteeManuscript[];
+}
+export function getReadingCommitteeDashboard() {
+  return request<ReadingCommitteeDashboard>("/api/v1/editorial/reading-committee/dashboard");
+}
+
 // Fichier externe de rapport de relecture : dépôt (relecteur) et téléchargement.
 export async function uploadReadingReportFile(assignmentId: string, file: File) {
   const form = new FormData();

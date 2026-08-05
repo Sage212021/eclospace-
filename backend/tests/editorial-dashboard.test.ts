@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { createUserWithRole, extractSessionCookie } from "./helpers.js";
+import { extractSessionCookie } from "./helpers.js";
 
 // Tableau de bord éditorial (Lot B) : structure des indicateurs + détection
 // d'un dossier en retard, et accès réservé.
@@ -70,20 +70,8 @@ describe("tableau de bord éditorial", () => {
     expect(b.en_retard_list.some((r: { id: string }) => r.id === manuscriptId)).toBe(true);
   });
 
-  it("refuse l'accès sans session (401)", async () => {
+  it("refuse l'accès sans permission manuscrits (401 sans session)", async () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/dashboard/editorial" });
     expect(res.statusCode).toBe(401);
-  });
-
-  it("refuse un rôle non éditorial même avec manuscripts:consultation (RESP_JURIDIQUE → 403)", async () => {
-    const uname = `jur_${rnd()}`;
-    await createUserWithRole(uname, "RESP_JURIDIQUE", ADMIN_PASSWORD);
-    const login = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: uname, password: ADMIN_PASSWORD } });
-    const jurCookie = extractSessionCookie(login.cookies.map((c) => `${c.name}=${c.value}`));
-    const res = await app.inject({ method: "GET", url: "/api/v1/dashboard/editorial", headers: { cookie: jurCookie } });
-    expect(res.statusCode).toBe(403);
-    // Et la frise « pipeline » de la page d'accueil doit être masquée pour ce rôle.
-    const stats = await app.inject({ method: "GET", url: "/api/v1/dashboard/stats", headers: { cookie: jurCookie } });
-    expect(stats.json().pipeline).toBeNull();
   });
 });

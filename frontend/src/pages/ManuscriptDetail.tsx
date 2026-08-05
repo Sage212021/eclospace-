@@ -3,6 +3,7 @@ import {
   assignReader,
   closeReadingCommittee,
   createExternalReviewer,
+  deleteManuscript,
   getManuscript,
   getManuscriptTimeline,
   listReadingCandidates,
@@ -96,9 +97,61 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
 
   return (
     <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 760 }}>
-      <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 12 }}>
-        ← Manuscrits
-      </button>
+      {/* Barre d'actions standard — toujours visible en haut de la fiche, pour
+          ne pas avoir à chercher : Retour · Imprimer · (Valider l'étape) ·
+          Supprimer. La validation détaillée reste dans « Étape courante » ; ce
+          bouton y amène directement. La suppression est logique et réservée au
+          niveau administration. */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 5,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          alignItems: "center",
+          background: "var(--paper, #F8F9FB)",
+          borderBottom: "1px solid var(--line)",
+          padding: "8px 0",
+          marginBottom: 12,
+        }}
+      >
+        <button onClick={onBack} style={barBtn()}>← Retour</button>
+        <button onClick={() => window.print()} style={barBtn()}>🖨 Imprimer</button>
+        {canValidate && (
+          <button
+            onClick={() => document.getElementById("fiche-actions")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            style={barBtn("primary")}
+          >
+            ✓ Valider → étape suivante
+          </button>
+        )}
+        <span style={{ flex: 1 }} />
+        {permissions.has("manuscripts:administration") && (
+          <button
+            onClick={async () => {
+              const ok = await confirm({
+                title: "Supprimer le manuscrit",
+                message: `Supprimer « ${manuscript.title} » ?`,
+                detail: "Suppression logique : le dossier disparaît des listes mais reste conservé en base et l'action est tracée au journal. À n'utiliser que pour un dossier créé par erreur.",
+                tone: "danger",
+                confirmLabel: "Supprimer",
+              });
+              if (!ok) return;
+              try {
+                await deleteManuscript(manuscript.id);
+                onBack();
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Suppression impossible.");
+              }
+            }}
+            style={barBtn("danger")}
+          >
+            🗑 Supprimer
+          </button>
+        )}
+      </div>
 
       <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>{manuscript.title}</h1>
       <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 12 }}>{manuscript.manuscriptNumber}</p>
@@ -153,7 +206,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         </div>
       )}
 
-      <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
+      <div id="fiche-actions" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20, scrollMarginTop: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Étape courante : {manuscript.status.label}</div>
 
         {manuscript.status.code === "VERIF_ADMIN" && canValidate && (
@@ -456,6 +509,25 @@ function PublicationDateBlock({
       )}
     </div>
   );
+}
+
+// Bouton de la barre d'actions standard (haut de fiche). Trois tons : neutre,
+// primaire (validation), danger (suppression).
+function barBtn(tone: "neutral" | "primary" | "danger" = "neutral"): React.CSSProperties {
+  const base: React.CSSProperties = {
+    border: "1px solid var(--line)",
+    borderRadius: 8,
+    padding: "7px 13px",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    background: "#fff",
+    color: "var(--ink)",
+    whiteSpace: "nowrap",
+  };
+  if (tone === "primary") return { ...base, background: "var(--eclosion)", borderColor: "var(--eclosion)", color: "#fff" };
+  if (tone === "danger") return { ...base, color: "var(--alert)", borderColor: "var(--alert)" };
+  return base;
 }
 
 function ActionButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {

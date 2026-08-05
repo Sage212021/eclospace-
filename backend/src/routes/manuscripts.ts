@@ -445,6 +445,29 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     return reply.send(updated);
   });
 
+  // Suppression LOGIQUE d'un manuscrit (contrainte d'intégrité §13 : jamais de
+  // suppression physique). Réservée au niveau administration éditoriale. Le
+  // dossier disparaît des listes mais reste en base (deletedAt/deletedBy) et
+  // l'action est tracée au journal d'audit.
+  fastify.post("/api/v1/manuscripts/:id/delete", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const existing = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+    if (!existing) {
+      return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable ou déjà supprimé." });
+    }
+    await prisma.manuscript.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "manuscript",
+      entityId: id,
+      oldValues: { title: existing.title, manuscriptNumber: existing.manuscriptNumber, deleted: false },
+      newValues: { deleted: true },
+      ipAddress: request.ip,
+    });
+    return reply.send({ deleted: true });
+  });
+
   // Frise chronologique (Ch. 4 §4.4).
   fastify.get(
     "/api/v1/manuscripts/:id/timeline",

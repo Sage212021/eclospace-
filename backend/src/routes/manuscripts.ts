@@ -16,6 +16,7 @@ import type { DocumentCategory } from "@prisma/client";
 const SOURCE_DOC_TITLE = "Manuscrit (source)"; // réception → lecture → correction
 const CORRECTED_DOC_TITLE = "Manuscrit corrigé"; // correction → maquette
 const LAYOUT_DOC_TITLE = "Maquette (mise en page)"; // maquette → BAT / infographie
+const BAT_DOC_TITLE = "BAT signé"; // BAT → impression
 
 // Dernière version du document (catégorie, titre) rattaché à un ouvrage.
 async function latestStageVersion(manuscriptId: string, category: DocumentCategory, title: string) {
@@ -584,7 +585,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
   // ── Étape MAQUETTE (mise en page) ──────────────────────────────────────────
   // ENTRÉE : le manuscrit corrigé (produit par la correction). Le maquettiste
   // (production:consultation) le télécharge pour le mettre en page.
-  fastify.get("/api/v1/manuscripts/:id/corrected-file", { preHandler: requirePermission("production", "consultation") }, async (request, reply) => {
+  fastify.get("/api/v1/manuscripts/:id/corrected-file", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const version = await latestStageVersion(id, "manuscrit", CORRECTED_DOC_TITLE);
     if (!version) return reply.code(404).send({ code: "no_corrected_file", message: "Aucun manuscrit corrigé n'a été déposé pour cet ouvrage." });
@@ -602,7 +603,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
   });
 
   // SORTIE : la maquette mise en page (reçue ensuite par le BAT et l'infographie).
-  fastify.get("/api/v1/manuscripts/:id/layout-file", { preHandler: requirePermission("production", "consultation") }, async (request, reply) => {
+  fastify.get("/api/v1/manuscripts/:id/layout-file", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const version = await latestStageVersion(id, "livre_monte", LAYOUT_DOC_TITLE);
     if (!version) return reply.code(404).send({ code: "no_layout_file", message: "Aucune maquette n'a été déposée pour cet ouvrage." });
@@ -622,6 +623,39 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     const stored = await storeFile(buffer, `maquette-${id}-${file.filename}`);
     const version = await depositStageDoc(id, "livre_monte", LAYOUT_DOC_TITLE, "Maquette déposée (mise en page)", request.user!.id, stored, file.mimetype);
     await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { layout: true, versionNumber: version.versionNumber }, ipAddress: request.ip });
+    return reply.code(201).send({ has_file: true, version_number: version.versionNumber });
+  });
+
+  // ── Étape BAT (bon à tirer) ─────────────────────────────────────────────────
+  // ENTRÉE : la maquette (via layout-file). SORTIE : le BAT signé, reçu par
+  // l'impression. Présence des deux fichiers pour la fiche.
+  fastify.get("/api/v1/manuscripts/:id/bat-file/meta", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const layout = await latestStageVersion(id, "livre_monte", LAYOUT_DOC_TITLE);
+    const bat = await latestStageVersion(id, "bat", BAT_DOC_TITLE);
+    return reply.send({ layout_has_file: Boolean(layout), bat_has_file: Boolean(bat) });
+  });
+
+  fastify.get("/api/v1/manuscripts/:id/bat-file", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const version = await latestStageVersion(id, "bat", BAT_DOC_TITLE);
+    if (!version) return reply.code(404).send({ code: "no_bat_file", message: "Aucun BAT signé n'a été déposé pour cet ouvrage." });
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
+  });
+
+  fastify.post("/api/v1/manuscripts/:id/bat-file", { preHandler: requirePermission("bat", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+    const buffer = await file.toBuffer();
+    if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+    const stored = await storeFile(buffer, `bat-signe-${id}-${file.filename}`);
+    const version = await depositStageDoc(id, "bat", BAT_DOC_TITLE, "BAT signé déposé", request.user!.id, stored, file.mimetype);
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { bat_signed: true, versionNumber: version.versionNumber }, ipAddress: request.ip });
     return reply.code(201).send({ has_file: true, version_number: version.versionNumber });
   });
 

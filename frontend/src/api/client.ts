@@ -439,6 +439,21 @@ export async function uploadManuscriptLayoutFile(manuscriptId: string, file: Fil
   return response.json() as Promise<{ has_file: boolean; version_number: number }>;
 }
 
+// Étape BAT : entrée = maquette, sortie = BAT signé (reçu par l'impression).
+export function getManuscriptBatMeta(manuscriptId: string) {
+  return request<{ layout_has_file: boolean; bat_has_file: boolean }>(`/api/v1/manuscripts/${manuscriptId}/bat-file/meta`);
+}
+export function manuscriptBatFileUrl(manuscriptId: string): string {
+  return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/bat-file`;
+}
+export async function uploadManuscriptBatFile(manuscriptId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/manuscripts/${manuscriptId}/bat-file`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Dépôt impossible.");
+  return response.json() as Promise<{ has_file: boolean; version_number: number }>;
+}
+
 export interface ReadingEvaluationScore {
   score: string | number;
   comment: string | null;

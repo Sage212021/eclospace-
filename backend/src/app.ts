@@ -39,6 +39,7 @@ import reportsRoutes from "./routes/reports.js";
 import settingsRoutes from "./routes/settings.js";
 import auditRoutes from "./routes/audit.js";
 import dashboardRoutes from "./routes/dashboard.js";
+import editorialDashboardRoutes from "./routes/editorialDashboards.js";
 import searchRoutes from "./routes/search.js";
 import presenceRoutes from "./routes/presence.js";
 import attendanceRoutes from "./routes/attendance.js";
@@ -172,6 +173,7 @@ export async function buildApp() {
   await app.register(settingsRoutes);
   await app.register(auditRoutes);
   await app.register(dashboardRoutes);
+  await app.register(editorialDashboardRoutes);
   await app.register(searchRoutes);
   await app.register(presenceRoutes);
   await app.register(attendanceRoutes);

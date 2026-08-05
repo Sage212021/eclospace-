@@ -5,6 +5,9 @@ import {
   createExternalReviewer,
   deleteManuscript,
   getManuscript,
+  getManuscriptSourceFileMeta,
+  manuscriptSourceFileUrl,
+  uploadManuscriptSourceFile,
   getManuscriptTimeline,
   listReadingCandidates,
   revertManuscriptStep,
@@ -159,6 +162,13 @@ export function ManuscriptDetail({ manuscriptId, permissions, onBack }: Manuscri
         Auteur : {manuscript.workContributors.map((c) => `${c.partner.firstName} ${c.partner.lastName}`).join(", ")} · Genre :{" "}
         {manuscript.genre?.label ?? "—"} · Responsable : {manuscript.owner.username}
       </p>
+
+      <SourceFileBlock
+        manuscriptId={manuscript.id}
+        canDeposit={permissions.has("manuscripts:saisie")}
+        onMessage={setMessage}
+        onError={setError}
+      />
 
       <PublicationDateBlock
         manuscript={manuscript}
@@ -507,6 +517,77 @@ function PublicationDateBlock({
           </button>
         </span>
       )}
+    </div>
+  );
+}
+
+// Fichier source du manuscrit : le dépôt à la réception (entrée du circuit).
+// Une fois déposé, il est lu par le comité de lecture puis par le correcteur.
+// Le secrétariat éditorial (manuscripts:saisie) le dépose sans droit « documents ».
+function SourceFileBlock({
+  manuscriptId,
+  canDeposit,
+  onMessage,
+  onError,
+}: {
+  manuscriptId: string;
+  canDeposit: boolean;
+  onMessage: (m: string) => void;
+  onError: (m: string) => void;
+}) {
+  const [hasFile, setHasFile] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = () =>
+    getManuscriptSourceFileMeta(manuscriptId)
+      .then((m) => setHasFile(m.has_file))
+      .catch(() => setHasFile(false));
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manuscriptId]);
+
+  async function deposit(file: File) {
+    setBusy(true);
+    try {
+      await uploadManuscriptSourceFile(manuscriptId, file);
+      onMessage("Fichier du manuscrit déposé — il sera lu par le comité de lecture et le correcteur.");
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Dépôt impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+      <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--eclosion-dark, #8A6A12)", background: "var(--eclosion-soft)", borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>
+        Manuscrit (source)
+      </span>
+      {hasFile ? (
+        <a href={manuscriptSourceFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600, fontSize: 13 }}>
+          📄 Ouvrir le manuscrit déposé
+        </a>
+      ) : (
+        <span style={{ color: "var(--muted)", fontSize: 13 }}>Aucun fichier manuscrit déposé pour le moment.</span>
+      )}
+      {canDeposit && (
+        <label style={{ cursor: busy ? "default" : "pointer", fontWeight: 600, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5 }}>
+          {busy ? "Envoi…" : hasFile ? "Remplacer le fichier" : "Déposer le fichier du manuscrit"}
+          <input
+            type="file"
+            style={{ display: "none" }}
+            disabled={busy}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) deposit(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      )}
+      <span style={{ color: "var(--muted)", fontSize: 11.5 }}>→ lu par le comité de lecture, puis le correcteur</span>
     </div>
   );
 }

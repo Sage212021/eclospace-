@@ -150,6 +150,11 @@ const NAV_POLES: NavPole[] = [
       { key: "ed-direction", label: "Direction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-correction", label: "Correction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-expertise", label: "Expertise scientifique", permission: "tasks:consultation" },
+      // Contrats & droits d'auteur : rattachés au pôle Éditorial (décision
+      // opérateur du 06/08/2026) — la contractualisation prolonge la relation
+      // éditoriale avec l'auteur. Clé interne inchangée (« jf-contrats ») pour
+      // préserver le rattachement au stade CONTRACTUALISATION et les droits.
+      { key: "jf-contrats", label: "Contrats & droits d'auteur", permission: "manuscripts:consultation" },
       // Messagerie des auteurs : rattachée au pôle Éditorial (décision opérateur) —
       // la relation avec les auteurs est un travail éditorial. La clé reste
       // « cm-messages-auteurs » (identifiant interne inchangé, vue service-desk).
@@ -185,7 +190,6 @@ const NAV_POLES: NavPole[] = [
   {
     label: "Juridique & Finance",
     items: [
-      { key: "jf-contrats", label: "Contrats & droits d'auteur", permission: "manuscripts:consultation" },
       { key: "jf-finance", label: "Finance & comptabilité", permission: "finance:consultation" },
       { key: "co-commissions", label: "Commissions commerciales", anyPermission: ["finance:consultation", "commercial:consultation"] },
       { key: "jf-droits-annuels", label: "États annuels de droits d'auteur", permission: "royalties:consultation" },

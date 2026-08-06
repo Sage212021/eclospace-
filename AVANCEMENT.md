@@ -13,6 +13,14 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 06/08/2026 (suite) — Chantier contrat & manuscrit (1/…) : rubrique Contrats au pôle Éditorial + téléchargement source « Mes lectures »
+
+**Fait (2 premiers points du chantier, à faible risque, sans schéma) :**
+- **Rubrique « Contrats & droits d'auteur » déplacée au pôle Éditorial** (demande opérateur) — la contractualisation prolonge la relation éditoriale avec l'auteur. La clé interne (`jf-contrats`) et les droits (`manuscripts:consultation`) sont **inchangés** : mêmes personnes, même page, même rattachement au stade CONTRACTUALISATION ; seul l'emplacement dans le menu change. Retirée de « Juridique & Finance » (réversible en une ligne). *Nota : ceci ajuste la décision d'audit antérieure qui la plaçait en Juridique & Finance.*
+- **« Mes lectures » : téléchargement du fichier source** — en plus du lien « 📖 Ouvrir le manuscrit à lire » (ouverture dans un onglet), ajout d'un lien **« ⬇️ Télécharger le fichier source »** qui enregistre le fichier sur le poste (nom d'origine servi par le serveur). Bilingue FR/EN.
+
+**Reste du chantier (points structurants — en attente d'arbitrage opérateur) :** transfert du contrat vers messagerie interne / WhatsApp ; contrat à termes variables par auteur ; renseignements auteur collectés à l'enregistrement du manuscrit et repris en tête de contrat ; boutons « Demande devis » / « Demande facture frais de dépôt » sur le manuscrit → réception automatique côté Finance.
+
 ### 06/08/2026 (suite) — RH module amont : Formation (demandes, sessions & participation)
 
 **Fait (suite de l'audit RH, module 2/2 demandé « on continue 1 et 2 ») :**

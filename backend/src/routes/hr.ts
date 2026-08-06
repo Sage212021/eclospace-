@@ -380,6 +380,31 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     return reply.code(201).send(amendment);
   });
 
+  // Évaluations annuelles d'un collaborateur (note + objectifs individuels).
+  fastify.get("/api/v1/employees/:id/evaluations", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const rows = await prisma.employeeEvaluation.findMany({ where: { employeeId: id }, orderBy: { year: "desc" } });
+    return reply.send(rows);
+  });
+
+  fastify.put("/api/v1/employees/:id/evaluations", { preHandler: requirePermission("rh", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z
+      .object({ year: z.number().int().min(2000).max(2100), rating: z.number().int().min(1).max(5), strengths: z.string().max(4000).optional(), areas_to_improve: z.string().max(4000).optional(), objectives: z.string().max(4000).optional() })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const employee = await prisma.employee.findFirst({ where: { id, deletedAt: null } });
+    if (!employee) return reply.code(404).send({ code: "not_found", message: "Collaborateur introuvable." });
+    const b = parsed.data;
+    const saved = await prisma.employeeEvaluation.upsert({
+      where: { employeeId_year: { employeeId: id, year: b.year } },
+      create: { employeeId: id, year: b.year, rating: b.rating, strengths: b.strengths, areasToImprove: b.areas_to_improve, objectives: b.objectives, createdBy: request.user!.id },
+      update: { rating: b.rating, strengths: b.strengths, areasToImprove: b.areas_to_improve, objectives: b.objectives },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "employee_evaluation", entityId: saved.id, newValues: { year: b.year, rating: b.rating }, ipAddress: request.ip });
+    return reply.send(saved);
+  });
+
   // Alertes d'expiration des contrats de travail (refonte RH — Étape 3) :
   // contrats à échéance dans l'horizon (défaut 60 jours) ou déjà échus, pour les
   // collaborateurs en poste. Permet d'anticiper renouvellements et fins de CDD.

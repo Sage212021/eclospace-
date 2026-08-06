@@ -182,6 +182,9 @@ export async function createInvoiceFromConsignmentStatement(tx: Tx, statementId:
 // facture est émise et rapprochée d'un encaissement dans le même mouvement.
 export async function createInvoiceFromPosSale(tx: Tx, posSaleId: string) {
   const posSale = await tx.posSale.findUniqueOrThrow({ where: { id: posSaleId }, include: { isbn: true } });
+  // Une vente hors catalogue (provisoire, sans ISBN) ne génère pas de facture ni
+  // de droits d'auteur tant qu'elle n'est pas rattachée à un ouvrage officiel.
+  if (!posSale.isbnId || !posSale.isbn) throw new Error("pos_sale_off_catalogue_no_invoice");
   const taxRate = await lookupTaxRatePct(tx);
 
   const invoice = await createInvoiceRecord(tx, {

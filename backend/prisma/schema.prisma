@@ -2633,6 +2633,7 @@ model Customer {
   billingOrders   BillingOrder[]
   dunnings        Dunning[]
   serviceQuotes   EditorialQuote[]   @relation("QuoteCustomer")
+  posSales        PosSale[]
 
   @@map("customers")
 }
@@ -2820,12 +2821,21 @@ enum PosPaymentMethod {
 // transmis au module Finance (Lot 5, non encore implémenté).
 model PosSale {
   id            String           @id @default(uuid())
-  isbnId        String           @map("isbn_id")
-  isbn          Isbn             @relation(fields: [isbnId], references: [id])
+  // isbnId null = vente « hors catalogue » (livre non encore référencé) : les
+  // infos du livre sont alors saisies en texte libre ci-dessous, et la vente ne
+  // touche pas au stock ni aux droits d'auteur tant qu'elle n'est pas rattachée.
+  isbnId        String?          @map("isbn_id")
+  isbn          Isbn?            @relation(fields: [isbnId], references: [id])
+  offCatalogueTitle  String?     @map("off_catalogue_title")
+  offCatalogueAuthor String?     @map("off_catalogue_author")
+  offCatalogueIsbn   String?     @map("off_catalogue_isbn")
   quantity      Int
   unitPrice     Decimal          @map("unit_price") @db.Decimal(10, 2)
   paymentMethod PosPaymentMethod @map("payment_method")
   eventLabel    String?          @map("event_label")
+  // Client optionnel (au choix du commercial, selon la qualité du client).
+  customerId    String?          @map("customer_id")
+  customer      Customer?        @relation(fields: [customerId], references: [id])
   // Point de vente (dimension structurée, pour les rapports par point de vente).
   pointOfSaleId String?          @map("point_of_sale_id")
   pointOfSale   PointOfSale?     @relation(fields: [pointOfSaleId], references: [id])

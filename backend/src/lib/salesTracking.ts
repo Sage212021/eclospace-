@@ -114,6 +114,7 @@ export async function salesByBook(opts: { from?: Date; to?: Date; granularity: G
     periodOf(m.movedAt).unitsOut += m.quantity;
   }
   for (const s of posSales) {
+    if (!s.isbnId) continue; // vente hors catalogue provisoire : hors ventilation par ouvrage
     const amt = s.quantity * Number(s.unitPrice);
     const b = bookOf(s.isbnId, title(s.isbn));
     b.unitsSold += s.quantity;

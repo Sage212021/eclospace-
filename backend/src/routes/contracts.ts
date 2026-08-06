@@ -371,6 +371,41 @@ export default async function contractRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Suppression (logique) d'un contrat NON SIGNÉ — ex. un contrat de test.
+  // Interdite dès qu'il porte une signature ou qu'il est actif/terminé/expiré :
+  // un engagement signé ne se supprime pas (contrainte d'intégrité). Réservée à
+  // la validation juridique, tracée au journal.
+  fastify.delete(
+    "/api/v1/contracts/:id",
+    { preHandler: requirePermission("contracts", "validation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const contract = await prisma.contract.findFirst({
+        where: { id, deletedAt: null },
+        include: { _count: { select: { signatures: true } } },
+      });
+      if (!contract) return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
+      const locked = ["active", "terminated", "expired"].includes(contract.status);
+      if (locked || contract._count.signatures > 0) {
+        return reply.code(409).send({
+          code: "contract_signed",
+          message: "Un contrat signé ou actif ne peut être supprimé. Utilisez la résiliation le cas échéant.",
+        });
+      }
+      await prisma.contract.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: request.user!.id } });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "contract",
+        entityId: id,
+        oldValues: { status: contract.status, contractNumber: contract.contractNumber, deletedAt: null },
+        newValues: { deletedAt: new Date().toISOString() },
+        ipAddress: request.ip,
+      });
+      return reply.send({ deleted: true });
+    },
+  );
+
   // Signature « simple / interne » d'un contrat (Phase B, décision opérateur du
   // 10/07/2026). L'accord d'une partie (auteur/prestataire ou maison) est
   // enregistré, horodaté et lié à une empreinte des clauses signées — puis

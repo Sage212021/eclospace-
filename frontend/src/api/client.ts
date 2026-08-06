@@ -886,6 +886,12 @@ export function deleteContractDocument(contractId: string, docId: string) {
   return request<{ ok: true }>(`/api/v1/contracts/${contractId}/documents/${docId}`, { method: "DELETE" });
 }
 
+// Suppression logique d'un contrat non signé (contrat de test, brouillon…).
+// Refusée côté serveur dès qu'une signature existe (409 contract_signed).
+export function deleteContract(id: string) {
+  return request<{ deleted: true }>(`/api/v1/contracts/${id}`, { method: "DELETE" });
+}
+
 // --- Devis de prestation (éditoriale / impression / communication) --------
 export type EditorialQuoteStatus = "draft" | "sent" | "accepted" | "refused" | "expired" | "invoiced";
 export type QuoteAcceptanceMethod = "online_link" | "internal" | "paper";

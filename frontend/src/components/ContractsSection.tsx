@@ -5,6 +5,7 @@ import {
   updatePartner,
   getContract,
   getPublisherIdentity,
+  deleteContract,
   listContracts,
   listPartners,
   signContract,
@@ -97,6 +98,17 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
     }
   }
 
+  async function removeContract(contract: Contract) {
+    if (!window.confirm(`Supprimer le contrat ${contract.contractNumber} ? Il n'est pas signé (suppression logique, conservée au journal).`)) return;
+    try {
+      await deleteContract(contract.id);
+      setError(null);
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Suppression impossible.");
+    }
+  }
+
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -149,6 +161,15 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
                   Faire avancer →
                 </button>
               )}
+            {canValidate && !["active", "terminated", "expired"].includes(contract.status) && (
+              <button
+                onClick={() => removeContract(contract)}
+                title="Supprimer ce contrat non signé"
+                style={{ ...secondaryButtonStyle, borderColor: "var(--alert)", color: "var(--alert)" }}
+              >
+                🗑 Supprimer
+              </button>
+            )}
           </div>
 
           {/* Coordonnées de la contrepartie — e-mail et WhatsApp pour les notifications. */}

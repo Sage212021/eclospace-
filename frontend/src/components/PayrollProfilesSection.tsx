@@ -5,6 +5,8 @@ import {
   previewPayslipEmail,
   savePayrollProfile,
   sendPayslipEmail,
+  createDocument,
+  uploadDocumentVersion,
   type Employee,
   type PayrollProfileInput,
   type PayslipResult,
@@ -61,17 +63,31 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [slip, setSlip] = useState<PayslipResult | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
+  // Verrou après enregistrement : une fiche enregistrée n'est plus modifiable
+  // sans passer par « Modifier », qui exige un motif (justificatif facultatif).
+  const [locked, setLocked] = useState(false);
+  const [modifyOpen, setModifyOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [justifFile, setJustifFile] = useState<File | null>(null);
 
   useEffect(() => {
     setSlip(null);
-    if (!employeeId) return;
+    setModifyOpen(false);
+    setReason("");
+    setJustifFile(null);
+    if (!employeeId) {
+      setLocked(false);
+      return;
+    }
     getPayrollProfile(employeeId)
       .then((r) => {
         if (r.profile) {
           const { base_salary: _b, complements: _c, ...rest } = r.profile;
           setForm(rest);
+          setLocked(true); // fiche déjà enregistrée → verrouillée
         } else {
           setForm(EMPTY);
+          setLocked(false); // nouvelle fiche → éditable
         }
         setMessage(null);
         setError(null);
@@ -82,17 +98,34 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
   async function save() {
     if (!employeeId) return;
     try {
-      await savePayrollProfile(employeeId, {
-        ...form,
-        matricule: form.matricule || null,
-        cnps_number: form.cnps_number || null,
-        niu: form.niu || null,
-        category: form.category || null,
-        payment_mode: form.payment_mode || null,
-        account_number: form.account_number || null,
-      });
+      await savePayrollProfile(
+        employeeId,
+        {
+          ...form,
+          matricule: form.matricule || null,
+          cnps_number: form.cnps_number || null,
+          niu: form.niu || null,
+          category: form.category || null,
+          payment_mode: form.payment_mode || null,
+          account_number: form.account_number || null,
+        },
+        reason || undefined,
+      );
+      // Justificatif facultatif : versé aux pièces de l'employé (au mieux ; en
+      // cas de droit « documents » manquant, la fiche reste enregistrée).
+      if (justifFile) {
+        try {
+          const doc = await createDocument({ entity_type: "employee", entity_id: employeeId, category: "justificatif_paie", title: `Justificatif modification paie — ${new Date().toLocaleDateString("fr-FR")}` });
+          await uploadDocumentVersion(doc.id, justifFile, reason || "Justificatif de modification");
+        } catch {
+          setError("Fiche enregistrée, mais le justificatif n'a pu être joint (droit « documents » requis).");
+        }
+      }
       setMessage(t("pay.msg.profile_saved", "Fiche paie enregistrée."));
-      setError(null);
+      if (!justifFile) setError(null);
+      setLocked(true);
+      setReason("");
+      setJustifFile(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Enregistrement impossible.");
     }
@@ -111,17 +144,18 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
 
   const base = Math.round(form.gross_contractual * form.base_pct);
 
+  const readOnly = !canManage || locked;
   function txt(label: string, key: keyof PayrollProfileInput) {
     return (
       <Field label={label}>
-        <input value={(form[key] as string) ?? ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })} disabled={!canManage} />
+        <input value={(form[key] as string) ?? ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })} disabled={readOnly} />
       </Field>
     );
   }
   function n(label: string, key: keyof PayrollProfileInput, step = "any") {
     return (
       <Field label={label}>
-        <input type="number" step={step} value={(form[key] as number) ?? 0} onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })} disabled={!canManage} style={{ fontFamily: "var(--font-mono, monospace)" }} />
+        <input type="number" step={step} value={(form[key] as number) ?? 0} onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })} disabled={readOnly} style={{ fontFamily: "var(--font-mono, monospace)" }} />
       </Field>
     );
   }
@@ -152,18 +186,52 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 10, fontSize: 13 }}>
             <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <input type="checkbox" checked={form.apply_fiscal_parts} disabled={!canManage} onChange={(e) => setForm({ ...form, apply_fiscal_parts: e.target.checked })} /> {t("pay.apply_fiscal_parts", "Appliquer les parts fiscales")}
+              <input type="checkbox" checked={form.apply_fiscal_parts} disabled={readOnly} onChange={(e) => setForm({ ...form, apply_fiscal_parts: e.target.checked })} /> {t("pay.apply_fiscal_parts", "Appliquer les parts fiscales")}
             </label>
             <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <input type="checkbox" checked={form.apply_seniority} disabled={!canManage} onChange={(e) => setForm({ ...form, apply_seniority: e.target.checked })} /> {t("pay.apply_seniority", "Appliquer la prime d'ancienneté")}
+              <input type="checkbox" checked={form.apply_seniority} disabled={readOnly} onChange={(e) => setForm({ ...form, apply_seniority: e.target.checked })} /> {t("pay.apply_seniority", "Appliquer la prime d'ancienneté")}
             </label>
           </div>
           <div style={{ marginTop: 10, fontSize: 13, color: "var(--muted)" }}>
             {t("pay.base_computed", "Salaire de base calculé :")} <strong style={{ fontFamily: "var(--font-mono, monospace)", color: "var(--ink)" }}>{fcfa(base)}</strong> · {t("pay.complements", "Compléments :")} <strong style={{ fontFamily: "var(--font-mono, monospace)", color: "var(--ink)" }}>{fcfa(form.gross_contractual - base)}</strong>
           </div>
           {canManage && (
-            <div style={{ marginTop: 10 }}>
-              <Button variant="add" size="sm" type="button" onClick={save}>{t("pay.save_profile", "Enregistrer la fiche paie")}</Button>
+            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              {locked ? (
+                <>
+                  <Button variant="edit" size="sm" type="button" onClick={() => setModifyOpen(true)}>{t("pay.modify_profile", "Modifier")}</Button>
+                  <Button variant="view" size="sm" type="button" onClick={() => setEmployeeId("")}>{t("pay.back", "Retour")}</Button>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{t("pay.locked_hint", "Fiche enregistrée — verrouillée.")}</span>
+                </>
+              ) : (
+                <>
+                  <Button variant="add" size="sm" type="button" onClick={save}>{t("pay.save_profile", "Enregistrer la fiche paie")}</Button>
+                  {reason && <span style={{ fontSize: 12, color: "var(--muted)" }}>{t("pay.modifying", "Modification en cours (motif enregistré).")}</span>}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Fenêtre « Modifier » : motif obligatoire, justificatif facultatif. */}
+          {modifyOpen && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }} onClick={() => setModifyOpen(false)}>
+              <div style={{ background: "var(--card, #fff)", borderRadius: 12, padding: 18, maxWidth: 460, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>{t("pay.modify_title", "Modifier la fiche paie")}</div>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 12px" }}>{t("pay.modify_sub", "Indiquez le motif de la modification. Vous pouvez joindre un justificatif (facultatif).")}</p>
+                <Field label={t("pay.reason", "Motif de la modification (obligatoire)")}>
+                  <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder={t("pay.reason_ph", "Ex. : correction du brut contractuel après avenant.")} />
+                </Field>
+                <div style={{ marginTop: 10 }}>
+                  <Field label={t("pay.justif", "Justificatif (facultatif)")}>
+                    <input type="file" onChange={(e) => setJustifFile(e.target.files?.[0] ?? null)} />
+                  </Field>
+                  {justifFile && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>📎 {justifFile.name}</div>}
+                </div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+                  <Button variant="view" size="sm" type="button" onClick={() => { setModifyOpen(false); setReason(""); setJustifFile(null); }}>{t("pay.cancel", "Annuler")}</Button>
+                  <Button variant="add" size="sm" type="button" disabled={!reason.trim()} onClick={() => { setModifyOpen(false); setLocked(false); }}>{t("pay.unlock", "Déverrouiller pour modifier")}</Button>
+                </div>
+              </div>
             </div>
           )}
 

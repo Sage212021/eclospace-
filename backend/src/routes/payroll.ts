@@ -161,7 +161,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         update: { ...data, updatedBy: request.user!.id },
         create: { employeeId, ...data, createdBy: request.user!.id },
       });
-      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payroll_employee_profile", entityId: employeeId, newValues: { gross_contractual: b.gross_contractual, base_pct: b.base_pct }, ipAddress: request.ip });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payroll_employee_profile", entityId: employeeId, newValues: { gross_contractual: b.gross_contractual, base_pct: b.base_pct, ...(b.modification_reason ? { modification_reason: b.modification_reason } : {}) }, ipAddress: request.ip });
       return reply.send(profileView(saved));
     },
   );
@@ -418,6 +418,9 @@ const profileSchema = z.object({
   seniority_rate: z.number().min(0).max(1).nullable().optional(),
   seniority_threshold: z.number().int().min(0).nullable().optional(),
   apply_seniority: z.boolean(),
+  // Motif de modification d'une fiche déjà enregistrée (tracé au journal). Vide
+  // à la première saisie ; renseigné quand on rouvre une fiche pour la corriger.
+  modification_reason: z.string().max(2000).optional(),
 });
 
 function profileView(p: {

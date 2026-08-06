@@ -13,6 +13,17 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 06/08/2026 (suite) — RH module amont : Recrutement (postes à pourvoir & candidatures)
+
+**Fait (suite de l'audit RH, module 1/2 demandé « on continue 1 et 2 ») :**
+- **Recrutement** : nouveau domaine « postes à pourvoir » + « candidatures ». Un poste (intitulé, département, type de contrat, description) s'ouvre, reçoit des candidatures, puis se clôt (**pourvu** / **annulé**, réouverture possible). Chaque candidature suit le circuit tracé **reçue → entretien → retenue / refusée** (date de décision horodatée à la retenue/au refus).
+- Modèles `JobOpening` (statut `ouvert/pourvu/annule`) et `JobApplication` (statut `recue/entretien/retenue/refusee`), migration additive `20260806170000_recruitment`.
+- Backend : `POST/GET /job-openings`, `PATCH /job-openings/:id/status` (rh:validation), `POST/GET /job-openings/:id/applications`, `PATCH /job-applications/:id/status`. Liste des postes enrichie du **décompte des candidatures par état**. Toutes les écritures journalisées (create / status_change).
+- Frontend : carte **« Recrutement »** dans le pôle RH — ouverture d'un poste (formulaire), liste avec pastilles de statut et compteurs, panneau dépliable des candidatures avec ajout et boutons d'avancement (Entretien / Retenir / Refuser). Réservé aux profils RH.
+- **Tests** : `recruitment.test.ts` (3 cas) — cycle complet poste + candidature + avancement + clôture avec décompte ; statut inconnu refusé (400) ; création sans droit RH refusée (403). Verts. Typecheck back+front + build OK.
+
+**Prochaine étape :** module **Formation** (plan, demandes, sessions, suivi de participation), puis chantier « contrat & manuscrit ».
+
 ### 02/08/2026 (suite) — Anti-doublon de contrat + options de messagerie (Modifier / Transférer / Répondre / Infos)
 
 **Fait (demande opérateur du 02/08/2026) :**

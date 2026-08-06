@@ -2382,6 +2382,53 @@ export function saveEmployeeEvaluation(employeeId: string, input: { year: number
   return request<EmployeeEvaluation>(`/api/v1/employees/${employeeId}/evaluations`, { method: "PUT", body: JSON.stringify(input) });
 }
 
+// Recrutement — postes à pourvoir & candidatures.
+export type JobOpeningStatus = "ouvert" | "pourvu" | "annule";
+export type JobApplicationStatus = "recue" | "entretien" | "retenue" | "refusee";
+export interface JobOpening {
+  id: string;
+  title: string;
+  department: string | null;
+  contract_type: string | null;
+  description: string | null;
+  status: JobOpeningStatus;
+  opened_at: string;
+  closed_at: string | null;
+  applications_total: number;
+  applications_by_status: Record<JobApplicationStatus, number>;
+}
+export interface JobApplication {
+  id: string;
+  jobOpeningId: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  source: string | null;
+  status: JobApplicationStatus;
+  notes: string | null;
+  appliedAt: string;
+  decidedAt: string | null;
+}
+export function getJobOpenings(status?: JobOpeningStatus) {
+  return request<JobOpening[]>(`/api/v1/job-openings${status ? `?status=${status}` : ""}`);
+}
+export function createJobOpening(input: { title: string; department_id?: string; contract_type?: string; description?: string }) {
+  return request<JobOpening>(`/api/v1/job-openings`, { method: "POST", body: JSON.stringify(input) });
+}
+export function setJobOpeningStatus(id: string, status: JobOpeningStatus) {
+  return request<JobOpening>(`/api/v1/job-openings/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+export function getJobApplications(openingId: string) {
+  return request<JobApplication[]>(`/api/v1/job-openings/${openingId}/applications`);
+}
+export function createJobApplication(openingId: string, input: { first_name: string; last_name: string; email?: string; phone?: string; source?: string; notes?: string }) {
+  return request<JobApplication>(`/api/v1/job-openings/${openingId}/applications`, { method: "POST", body: JSON.stringify(input) });
+}
+export function setJobApplicationStatus(id: string, status: JobApplicationStatus, notes?: string) {
+  return request<JobApplication>(`/api/v1/job-applications/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, notes }) });
+}
+
 export function getEmployee(id: string) {
   return request<Employee & { hrContracts: unknown[]; reports: Employee[]; employeeSkills: unknown[] }>(`/api/v1/employees/${id}`);
 }

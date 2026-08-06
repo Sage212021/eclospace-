@@ -32,6 +32,7 @@ model Department {
   workflowStatuses WorkflowStatus[]
   budgets          Budget[]
   workSchedules    WorkSchedule[]
+  jobOpenings      JobOpening[]
 
   @@map("departments")
 }
@@ -155,6 +156,67 @@ model EmployeeEvaluation {
 
   @@unique([employeeId, year])
   @@map("employee_evaluations")
+}
+
+// Poste à pourvoir (refonte RH — module Recrutement) : une offre ouverte reçoit
+// des candidatures, se clôt une fois pourvue ou annulée.
+enum JobOpeningStatus {
+  ouvert
+  pourvu
+  annule
+}
+
+model JobOpening {
+  id           String           @id @default(uuid())
+  title        String
+  departmentId String?          @map("department_id")
+  department   Department?      @relation(fields: [departmentId], references: [id])
+  contractType HrContractType?  @map("contract_type")
+  description  String?
+  status       JobOpeningStatus @default(ouvert)
+  openedAt     DateTime         @default(now()) @map("opened_at")
+  closedAt     DateTime?        @map("closed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  applications JobApplication[]
+
+  @@map("job_openings")
+}
+
+// Candidature reçue sur un poste (refonte RH — module Recrutement) : circuit
+// reçue → entretien → retenue / refusée. Traçabilité des décisions.
+enum JobApplicationStatus {
+  recue
+  entretien
+  retenue
+  refusee
+}
+
+model JobApplication {
+  id             String               @id @default(uuid())
+  jobOpeningId   String               @map("job_opening_id")
+  jobOpening     JobOpening           @relation(fields: [jobOpeningId], references: [id])
+  firstName      String               @map("first_name")
+  lastName       String               @map("last_name")
+  email          String?
+  phone          String?
+  source         String?
+  status         JobApplicationStatus @default(recue)
+  notes          String?
+  appliedAt      DateTime             @default(now()) @map("applied_at")
+  decidedAt      DateTime?            @map("decided_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@index([jobOpeningId])
+  @@map("job_applications")
 }
 
 // Données confidentielles (rémunération) — accès restreint, consultation

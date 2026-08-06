@@ -35,6 +35,7 @@ import {
 import { Card } from "../components/Card";
 import { StandardActionBar } from "../components/StandardActionBar";
 import { OrgChart } from "../components/OrgChart";
+import { RecruitmentSection } from "../components/RecruitmentSection";
 import { ContractsModal } from "../components/ContractsModal";
 import { EvaluationsModal } from "../components/EvaluationsModal";
 import { printEmployeeFiche } from "../lib/print";
@@ -415,6 +416,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
           </div>
         </Card>
       )}
+
+      {/* Recrutement (module amont RH) — postes à pourvoir & candidatures. */}
+      {canManage && <RecruitmentSection canManage={canManage} canValidate={canValidateAbsence || canAdminister} departments={departments} />}
 
       {/* Organigramme — hiérarchie reconstruite depuis le lien manager ↔ subordonnés. */}
       {employees.length > 0 && (

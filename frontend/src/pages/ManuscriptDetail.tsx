@@ -59,6 +59,7 @@ const FOCUS_BY_ORIGIN: Record<string, string> = {
   "ed-comite": "committee",
   "ed-direction": "decision",
   "ed-correction": "correction",
+  "ed-expertise": "expertise",
   "jf-contrats": "contracts",
   "pr-maquette": "production",
   "pr-infographie": "production",
@@ -71,6 +72,7 @@ const FOCUS_LABELS: Record<string, string> = {
   committee: "Comité de lecture",
   decision: "Direction éditoriale",
   correction: "Correction éditoriale",
+  expertise: "Expertise scientifique",
   contracts: "Contrats & droits",
   production: "Maquette & production",
   isbn: "ISBN & dépôt légal",
@@ -454,7 +456,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         />
       )}
 
-      {show("correction") && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && permissions.has("tasks:consultation") && (
+      {(show("correction") || show("expertise")) && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && permissions.has("tasks:consultation") && (
         <>
           <TasksSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
           <CorrectionSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />

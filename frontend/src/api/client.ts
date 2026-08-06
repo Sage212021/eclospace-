@@ -351,12 +351,30 @@ export function getManuscriptTimeline(id: string) {
   return request<TimelineStep[]>(`/api/v1/manuscripts/${id}/timeline`);
 }
 
+// Identité de l'auteur saisie à l'enregistrement du manuscrit (facultative,
+// hors nom/prénom) : reprise en tête du contrat d'édition.
+export interface NewAuthorInput {
+  first_name: string;
+  last_name: string;
+  pen_name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  birth_date?: string;
+  birth_place?: string;
+  nationality?: string;
+  profession?: string;
+  id_number?: string;
+  id_issued_date?: string;
+  id_issued_place?: string;
+}
+
 export function createManuscript(input: {
   title: string;
   genre_id: string;
   language: string;
   owner_id: string;
-  author: { first_name: string; last_name: string };
+  author: NewAuthorInput;
 }) {
   return request<Manuscript>("/api/v1/manuscripts", { method: "POST", body: JSON.stringify(input) });
 }
@@ -728,7 +746,19 @@ export type PartnerCategory =
   | "consultant"
   | "autre";
 
-export interface Partner {
+// Identité civile de l'auteur reprise en tête du contrat d'édition (facultative).
+export interface AuthorIdentity {
+  address?: string | null;
+  birthDate?: string | null;
+  birthPlace?: string | null;
+  nationality?: string | null;
+  profession?: string | null;
+  idNumber?: string | null;
+  idIssuedDate?: string | null;
+  idIssuedPlace?: string | null;
+}
+
+export interface Partner extends AuthorIdentity {
   id: string;
   category: PartnerCategory;
   firstName: string;
@@ -737,7 +767,6 @@ export interface Partner {
   email?: string | null;
   phone?: string | null;
   whatsapp?: string | null;
-  address?: string | null;
 }
 
 export function listPartners(category?: PartnerCategory) {
@@ -760,7 +789,20 @@ export function createPartner(input: {
 // Modification des coordonnées d'un partenaire (e-mail, téléphone, WhatsApp…).
 export function updatePartner(
   id: string,
-  input: { pen_name?: string; email?: string; phone?: string; whatsapp?: string; address?: string },
+  input: {
+    pen_name?: string;
+    email?: string;
+    phone?: string;
+    whatsapp?: string;
+    address?: string;
+    birth_date?: string;
+    birth_place?: string;
+    nationality?: string;
+    profession?: string;
+    id_number?: string;
+    id_issued_date?: string;
+    id_issued_place?: string;
+  },
 ) {
   return request<Partner>(`/api/v1/partners/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
@@ -771,7 +813,7 @@ export interface Contract {
   type: string;
   status: ContractStatus;
   signedAt: string | null;
-  partner: { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; whatsapp?: string | null };
+  partner: { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; whatsapp?: string | null } & AuthorIdentity;
   manuscript: { id: string; manuscriptNumber: string; title: string } | null;
   // Traçabilité : noms lisibles du saisisseur et du dernier modificateur.
   createdByName?: string | null;
@@ -835,6 +877,7 @@ export function createContract(input: {
   type: string;
   manuscript_id?: string;
   partner_id: string;
+  duration_months?: number;
   financial_terms: Record<string, unknown>;
 }) {
   return request<Contract>("/api/v1/contracts", { method: "POST", body: JSON.stringify(input) });

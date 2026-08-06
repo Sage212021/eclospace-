@@ -491,6 +491,10 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Renseignements d'identité de l'auteur (facultatifs) repris en tête du
+  // contrat d'édition — collectés dès l'enregistrement du manuscrit.
+  const [showAuthorId, setShowAuthorId] = useState(false);
+  const [authorId, setAuthorId] = useState({ email: "", phone: "", address: "", birth_date: "", birth_place: "", nationality: "", profession: "", id_number: "", id_issued_date: "", id_issued_place: "" });
 
   useEffect(() => {
     listGenres().then((g) => {
@@ -507,12 +511,19 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
     event.preventDefault();
     setSubmitting(true);
     try {
+      // Champs d'identité non vides uniquement ; dates converties en ISO.
+      const idFields: Record<string, string> = {};
+      for (const [k, v] of Object.entries(authorId)) {
+        const val = v.trim();
+        if (!val) continue;
+        idFields[k] = k === "birth_date" || k === "id_issued_date" ? new Date(val).toISOString() : val;
+      }
       const manuscript = await createManuscript({
         title,
         genre_id: genreId,
         language,
         owner_id: ownerId,
-        author: { first_name: firstName, last_name: lastName },
+        author: { first_name: firstName, last_name: lastName, ...idFields },
       });
       onCreated(manuscript);
     } catch (err) {
@@ -559,6 +570,31 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
           <input value={lastName} onChange={(e) => setLastName(e.target.value)} required />
         </LabeledInput>
       </div>
+
+      {/* Renseignements d'identité repris en tête du contrat d'édition —
+          facultatifs à l'enregistrement, complétables ensuite sur le contrat. */}
+      <button
+        type="button"
+        onClick={() => setShowAuthorId((v) => !v)}
+        style={{ marginTop: 12, background: "none", border: "none", color: "var(--eclosion-dark, #8A6A12)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}
+      >
+        {showAuthorId ? "▾" : "▸"} Renseignements de l'auteur pour le contrat (facultatif)
+      </button>
+      {showAuthorId && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 10, border: "1px solid var(--line)", borderRadius: 8, padding: 12 }}>
+          <LabeledInput label="E-mail"><input type="email" value={authorId.email} onChange={(e) => setAuthorId({ ...authorId, email: e.target.value })} /></LabeledInput>
+          <LabeledInput label="Téléphone"><input value={authorId.phone} onChange={(e) => setAuthorId({ ...authorId, phone: e.target.value })} /></LabeledInput>
+          <LabeledInput label="Adresse / BP"><input value={authorId.address} onChange={(e) => setAuthorId({ ...authorId, address: e.target.value })} /></LabeledInput>
+          <LabeledInput label="Nationalité"><input value={authorId.nationality} onChange={(e) => setAuthorId({ ...authorId, nationality: e.target.value })} /></LabeledInput>
+          <LabeledInput label="Date de naissance"><input type="date" value={authorId.birth_date} onChange={(e) => setAuthorId({ ...authorId, birth_date: e.target.value })} /></LabeledInput>
+          <LabeledInput label="Lieu de naissance"><input value={authorId.birth_place} onChange={(e) => setAuthorId({ ...authorId, birth_place: e.target.value })} /></LabeledInput>
+          <LabeledInput label="Profession"><input value={authorId.profession} onChange={(e) => setAuthorId({ ...authorId, profession: e.target.value })} /></LabeledInput>
+          <LabeledInput label="N° pièce d'identité (CNI)"><input value={authorId.id_number} onChange={(e) => setAuthorId({ ...authorId, id_number: e.target.value })} /></LabeledInput>
+          <LabeledInput label="CNI délivrée le"><input type="date" value={authorId.id_issued_date} onChange={(e) => setAuthorId({ ...authorId, id_issued_date: e.target.value })} /></LabeledInput>
+          <LabeledInput label="CNI délivrée à"><input value={authorId.id_issued_place} onChange={(e) => setAuthorId({ ...authorId, id_issued_place: e.target.value })} /></LabeledInput>
+        </div>
+      )}
+
       <div style={{ marginTop: 14 }}>
         <Button variant="add" type="submit" disabled={submitting}>
           Enregistrer le dossier

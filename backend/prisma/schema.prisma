@@ -1420,6 +1420,16 @@ model Partner {
   address   String?
   bio       String?
   taxStatus Json?           @map("tax_status")
+  // Identité civile de l'auteur (reprise en tête du contrat d'édition) —
+  // collectée à l'enregistrement du manuscrit, complétable ensuite. Champs
+  // facultatifs : le contrat imprime des pointillés tant qu'ils sont vides.
+  birthDate     DateTime? @map("birth_date")
+  birthPlace    String?   @map("birth_place")
+  nationality   String?
+  profession    String?
+  idNumber      String?   @map("id_number")
+  idIssuedDate  DateTime? @map("id_issued_date")
+  idIssuedPlace String?   @map("id_issued_place")
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")

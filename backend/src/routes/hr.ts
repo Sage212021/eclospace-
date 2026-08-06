@@ -362,6 +362,31 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     return reply.send(contracts);
   });
 
+  // Alertes d'expiration des contrats de travail (refonte RH — Étape 3) :
+  // contrats à échéance dans l'horizon (défaut 60 jours) ou déjà échus, pour les
+  // collaborateurs en poste. Permet d'anticiper renouvellements et fins de CDD.
+  fastify.get("/api/v1/hr/contract-alerts", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const days = Math.max(1, Math.min(365, Number((request.query as { days?: string }).days) || 60));
+    const now = new Date();
+    const limit = new Date(now.getTime() + days * 864e5);
+    const rows = await prisma.hrContract.findMany({
+      where: { endDate: { not: null, lte: limit }, employee: { deletedAt: null, departureDate: null } },
+      include: { employee: { select: { id: true, firstName: true, lastName: true, position: true } } },
+      orderBy: { endDate: "asc" },
+      take: 100,
+    });
+    const alerts = rows.map((c) => ({
+      contract_id: c.id,
+      employee: `${c.employee.firstName} ${c.employee.lastName}`,
+      position: c.employee.position,
+      type: c.type,
+      end_date: c.endDate,
+      status: c.endDate && c.endDate < now ? "expired" : "expiring",
+      days_left: c.endDate ? Math.ceil((c.endDate.getTime() - now.getTime()) / 864e5) : null,
+    }));
+    return reply.send({ horizon_days: days, alerts });
+  });
+
   // Données confidentielles (Ch. 19 §19.2) : accès restreint, consultation
   // journalisée comme le juridique (Ch. 9 §9.11).
   fastify.get(

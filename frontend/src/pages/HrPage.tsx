@@ -13,6 +13,8 @@ import {
   listAccessReviews,
   listDepartments,
   listEmployees,
+  getContractAlerts,
+  type ContractAlert,
   listRoles,
   reinstateEmployee,
   setEmployeeDeparture,
@@ -137,11 +139,13 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [modal, setModal] = useState<HrModal | null>(null);
+  const [contractAlerts, setContractAlerts] = useState<ContractAlert[]>([]);
 
   const refresh = async () => {
     const [employeeList, absenceList] = await Promise.all([listEmployees(), listAbsences()]);
     setEmployees(employeeList);
     setAbsences(absenceList);
+    getContractAlerts().then((r) => setContractAlerts(r.alerts)).catch(() => setContractAlerts([]));
     if (canManage) {
       const [anomalyList, reviewList] = await Promise.all([listAccessAnomalies(), listAccessReviews()]);
       setAnomalies(anomalyList);
@@ -384,6 +388,27 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
           </div>
         )}
       </Card>
+
+      {/* Alertes d'expiration des contrats de travail. */}
+      {contractAlerts.length > 0 && (
+        <Card title={t("hr.contract_alerts", "Alertes — contrats de travail")} icon={<IconAdmin />} subtitle={t("hr.contract_alerts_sub", "Contrats échus ou arrivant à échéance (60 jours).")}>
+          <div className="ecl-list">
+            {contractAlerts.map((a) => (
+              <div key={a.contract_id} className="ecl-row" style={{ flexWrap: "wrap", gap: 8 }}>
+                <div className="ecl-row__main">
+                  <div className="ecl-row__title">{a.employee}{a.position ? ` · ${a.position}` : ""}</div>
+                  <div className="ecl-row__desc">
+                    {a.type.toUpperCase()} · {t("hr.ends_on", "échéance")} <span style={{ fontFamily: "var(--font-mono)" }}>{a.end_date.slice(0, 10)}</span>
+                  </div>
+                </div>
+                <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 6, padding: "3px 9px", whiteSpace: "nowrap", background: a.status === "expired" ? "#f8e3df" : "#F7E7DA", color: a.status === "expired" ? "var(--danger, #C24B3A)" : "#C4661F" }}>
+                  {a.status === "expired" ? t("hr.expired", "Échu") : `${t("hr.in", "dans")} ${a.days_left} j`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Organigramme — hiérarchie reconstruite depuis le lien manager ↔ subordonnés. */}
       {employees.length > 0 && (

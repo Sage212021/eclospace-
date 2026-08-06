@@ -13,6 +13,17 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 06/08/2026 (suite) — Chantier contrat & manuscrit (3/…) : boutons « Demande devis » / « Demande facture frais de dépôt » → Finance
+
+**Fait (point 6 du chantier) :**
+- **Deux boutons sur la fiche manuscrit** (rubrique Contrats & droits d'auteur) : **« Demande de devis »** et **« Demande facture frais de dépôt »**. L'éditorial clique ; la Finance **reçoit automatiquement** la demande dans sa file.
+- **File Finance** : nouvelle carte **« Demandes reçues (devis / frais de dépôt) »** sur la page Finance & comptabilité — chaque demande affiche l'ouvrage (numéro, titre, auteur), le type, la date, la prise en charge (compte d'auteur le cas échéant). Le financier établit le document (dans « Devis de prestation » / la facturation existante) puis **marque la demande « traité »** (ou la rejette). La fiche manuscrit affiche l'état de ses demandes (En attente / Traité / Rejeté).
+- **Anti-doublon** : une seule demande ouverte par type et par ouvrage (message explicite « Une demande de … est déjà en attente pour cet ouvrage. »). Traçabilité complète (demandeur, décideur, dates).
+- Modèle `ManuscriptFinanceRequest` (type devis / frais_depot ; statut requested / processed / rejected), migration `20260806200000_manuscript_finance_requests`. Endpoints : `POST/GET /manuscripts/:id/finance-requests` (manuscrits), `GET /finance-requests` + `PATCH /finance-requests/:id` (finance). Écritures journalisées.
+- **Tests** : `finance-requests.test.ts` (3 cas) — émission + réception Finance (titre/auteur) + traitement + anti-doublon (409) ; refus sans droit de saisie manuscrit (403) ; type inconnu (400). Verts. Typecheck back+front + build OK.
+
+**Reste du chantier :** transfert du contrat vers messagerie interne / WhatsApp (point 2).
+
 ### 06/08/2026 (suite) — Chantier contrat & manuscrit (2/…) : identité auteur (enregistrement → contrat) + durée variable du contrat
 
 **Fait (points 4 et 5 du chantier — contrat d'édition qui reflète les données réelles de chaque auteur) :**

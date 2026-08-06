@@ -206,7 +206,9 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
               ) : (
                 <>
                   <Button variant="add" size="sm" type="button" onClick={save}>{t("pay.save_profile", "Enregistrer la fiche paie")}</Button>
-                  {reason && <span style={{ fontSize: 12, color: "var(--muted)" }}>{t("pay.modifying", "Modification en cours (motif enregistré).")}</span>}
+                  {reason
+                    ? <span style={{ fontSize: 12, color: "var(--muted)" }}>{t("pay.modifying", "Modification en cours (motif enregistré).")}</span>
+                    : <span style={{ fontSize: 12, color: "var(--muted)" }}>{t("pay.save_hint", "Après enregistrement, la fiche se verrouille : « Modifier » (avec motif) et « Retour » apparaîtront.")}</span>}
                 </>
               )}
             </div>

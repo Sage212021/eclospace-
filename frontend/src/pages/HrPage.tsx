@@ -31,6 +31,8 @@ import {
   type RoleSummary,
 } from "../api/client";
 import { Card } from "../components/Card";
+import { StandardActionBar } from "../components/StandardActionBar";
+import { printEmployeeFiche } from "../lib/print";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
@@ -365,6 +367,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {/* Barre d'actions standard (refonte, Étape 1) : action générique
+                      « Imprimer la fiche » ; les boutons métier restent à côté. */}
+                  <StandardActionBar onPrint={() => printEmployeeFiche(employee)} />
                   {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, position: employee.position ?? "", birthDate: employee.birthDate ? employee.birthDate.slice(0, 10) : "" })}>{t("hr.mobility", "Mobilité")}</Button>}
                   {canAdminister && !employee.departureDate && <Button variant="view" size="sm" onClick={() => setModal({ kind: "departure", employee, date: new Date().toISOString().slice(0, 10) })}>{t("hr.departure_btn", "Départ")}</Button>}
                   {canAdminister && employee.user?.status === "active" && <Button variant="danger" size="sm" onClick={() => handleSuspend(employee)}>{t("hr.suspend", "Suspendre")}</Button>}

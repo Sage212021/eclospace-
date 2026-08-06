@@ -898,6 +898,40 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publish
   openPrintWindow(`Contrat d'édition ${c.contractNumber}`, body, opts);
 }
 
+// Fiche collaborateur prête à imprimer / PDF (refonte RH — barre d'actions
+// standard). Récapitule l'état civil professionnel, le poste, le cycle de vie et
+// le solde de congés, sur l'en-tête maison. Données non confidentielles.
+export interface EmployeeFichePrint {
+  firstName: string; lastName: string; position: string | null;
+  status: string; hireDate: string | null; birthDate: string | null;
+  departureDate: string | null; leaveBalanceDays: string;
+  department: { name: string } | null;
+  manager: { firstName: string; lastName: string } | null;
+  user?: { username: string } | null;
+}
+const EMP_STATUS_LABELS: Record<string, [string, string]> = {
+  salarie: ["Salarié", "Employee"], stagiaire: ["Stagiaire", "Intern"],
+  prestataire: ["Prestataire", "Contractor"], suspendu: ["Suspendu", "Suspended"],
+  parti: ["Parti", "Departed"],
+};
+export function printEmployeeFiche(e: EmployeeFichePrint, opts?: PrintOpts): void {
+  const row = (l: string, v: string) => v ? `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid #eef1f6;font-size:13px"><div style="width:200px;color:#6b7280">${escapeHtml(l)}</div><div style="font-weight:600">${escapeHtml(v)}</div></div>` : "";
+  const body = `
+    <div class="doc__title">${tr("Fiche collaborateur", "Employee record")}</div>
+    <div class="meta"><span>${escapeHtml(`${e.firstName} ${e.lastName}`)}</span><span><span class="badge">${escapeHtml(label(EMP_STATUS_LABELS, e.status))}</span></span></div>
+    <div style="margin-top:8px">
+      ${row(tr("Poste", "Position"), e.position ?? "")}
+      ${row(tr("Service", "Department"), e.department?.name ?? "")}
+      ${row(tr("Responsable", "Manager"), e.manager ? `${e.manager.firstName} ${e.manager.lastName}` : "")}
+      ${row(tr("Date d'embauche", "Hire date"), e.hireDate ? fdate(e.hireDate) : "")}
+      ${row(tr("Date de naissance", "Birth date"), e.birthDate ? fdate(e.birthDate) : "")}
+      ${row(tr("Solde de congés (jours)", "Leave balance (days)"), String(e.leaveBalanceDays))}
+      ${e.departureDate ? row(tr("Date de départ", "Departure date"), fdate(e.departureDate)) : ""}
+      ${row(tr("Compte utilisateur", "User account"), e.user?.username ?? "—")}
+    </div>`;
+  openPrintWindow(tr("Fiche collaborateur", "Employee record"), body, opts);
+}
+
 // Bulletin de paie prêt à imprimer / PDF (D-007, incrément 4). En-tête maison
 // commun (documentShell) ; ventilation reprise du moteur de calcul, sans
 // recalcul côté impression. Mentions légales du Code du travail camerounais.

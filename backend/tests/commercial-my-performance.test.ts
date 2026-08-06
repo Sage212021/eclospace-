@@ -39,7 +39,7 @@ describe("commercial — mes performances", () => {
     expect(res.statusCode).toBe(200);
     const b = res.json();
     expect(b.scope).toBe("individual");
-    for (const k of ["revenue", "sales_count", "orders_count", "avg_sale", "transformation_rate", "new_customers", "top_customers", "top_books", "by_period"]) {
+    for (const k of ["revenue", "sales_count", "orders_count", "avg_sale", "transformation_rate", "new_customers", "top_customers", "top_books", "by_period", "series", "payments"]) {
       expect(b).toHaveProperty(k);
     }
     expect(Array.isArray(b.top_customers)).toBe(true);

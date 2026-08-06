@@ -331,8 +331,8 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     const orderWhere = { ...(repId ? { createdBy: repId } : {}), ...(soldAt ? { createdAt: soldAt } : {}) };
 
     const [posSales, orders, newCustomers] = await Promise.all([
-      prisma.posSale.findMany({ where: posWhere, select: { quantity: true, unitPrice: true, isbnId: true, customerId: true, soldAt: true, isbn: { select: { manuscript: { select: { title: true } } } } } }),
-      prisma.salesOrder.findMany({ where: orderWhere, select: { status: true, customerId: true, createdAt: true, lines: { select: { quantity: true, unitPrice: true, discountPct: true, isbnId: true, isbn: { select: { manuscript: { select: { title: true } } } } } } } }),
+      prisma.posSale.findMany({ where: posWhere, select: { id: true, quantity: true, unitPrice: true, isbnId: true, customerId: true, soldAt: true, isbn: { select: { manuscript: { select: { title: true } } } } } }),
+      prisma.salesOrder.findMany({ where: orderWhere, select: { id: true, status: true, customerId: true, createdAt: true, lines: { select: { quantity: true, unitPrice: true, discountPct: true, isbnId: true, isbn: { select: { manuscript: { select: { title: true } } } } } } } }),
       prisma.customer.count({ where: { ...(repId ? { createdBy: repId } : {}), deletedAt: null, ...(soldAt ? { createdAt: soldAt } : {}) } }),
     ]);
 
@@ -391,6 +391,30 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       year: sumSince(since(365)),
     };
 
+    // Paiements : factures rattachées aux opérations du commercial (ventes
+    // comptoir + commandes). Reçus = payées ; en attente = émises non réglées ;
+    // impayés = en attente et échues.
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        type: "invoice",
+        status: { not: "cancelled" },
+        OR: [
+          { sourceType: "pos_sale", sourceId: { in: posSales.map((p) => p.id) } },
+          { sourceType: "sales_order", sourceId: { in: orders.map((o) => o.id) } },
+        ],
+      },
+      select: { totalTtc: true, status: true, dueDate: true },
+    });
+    const paidInv = invoices.filter((i) => i.status === "paid");
+    const pendingInv = invoices.filter((i) => i.status === "issued" || i.status === "pending_validation");
+    const nowD = new Date();
+    const payments = {
+      received: Math.round(paidInv.reduce((s, i) => s + Number(i.totalTtc), 0)),
+      pending: Math.round(pendingInv.reduce((s, i) => s + Number(i.totalTtc), 0)),
+      overdue: Math.round(pendingInv.filter((i) => i.dueDate && i.dueDate < nowD).reduce((s, i) => s + Number(i.totalTtc), 0)),
+      unpaid_count: pendingInv.length,
+    };
+
     // Objectif annuel du commercial + taux de réalisation (cumul de l'année civile).
     let objective: { year: number; target_revenue: number; ytd_revenue: number; realization_pct: number } | null = null;
     if (repId) {
@@ -419,7 +443,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       transformation_rate: transformationRate,
       orders_delivered: delivered, orders_cancelled: cancelled, orders_pending: pending,
       new_customers: newCustomers, active_customers: activeCust.size,
-      top_customers: topCustomers, top_books: topBooks, by_period: byPeriod, series,
+      top_customers: topCustomers, top_books: topBooks, by_period: byPeriod, series, payments,
     });
   });
 

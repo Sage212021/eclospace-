@@ -1787,6 +1787,7 @@ export interface MyPerformance {
   top_books: { title: string; units: number }[];
   by_period: { today: number; week: number; month: number; year: number };
   series: { month: string; revenue: number }[];
+  payments: { received: number; pending: number; overdue: number; unpaid_count: number };
 }
 export interface SalesTargetRow { user_id: string; username: string; year: number; target_revenue: number }
 export function getSalesTargets(year?: number) {

@@ -111,6 +111,14 @@ export function CommercialPerformancePage({ canManage }: { canManage: boolean })
             <Kpi label="Commandes annulées" value={String(data.orders_cancelled)} tone={data.orders_cancelled > 0 ? "red" : undefined} />
           </div>
 
+          {/* Paiements */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginTop: 12 }}>
+            <Kpi label="Paiements reçus" value={fcfa(data.payments.received)} tone="green" />
+            <Kpi label="En attente de paiement" value={fcfa(data.payments.pending)} tone={data.payments.pending > 0 ? "gold" : undefined} />
+            <Kpi label="Impayés (échus)" value={fcfa(data.payments.overdue)} tone={data.payments.overdue > 0 ? "red" : undefined} />
+            <Kpi label="Factures non réglées" value={String(data.payments.unpaid_count)} />
+          </div>
+
           {/* Ventes par horizon */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginTop: 12 }}>
             <Kpi label="Ventes du jour" value={fcfa(data.by_period.today)} small />

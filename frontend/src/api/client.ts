@@ -2326,6 +2326,20 @@ export function listEmployees(filters?: { department_id?: string; status?: strin
   return request<Employee[]>(`/api/v1/employees${query}`);
 }
 
+// Alertes d'expiration des contrats de travail (refonte RH — Étape 3).
+export interface ContractAlert {
+  contract_id: string;
+  employee: string;
+  position: string | null;
+  type: string;
+  end_date: string;
+  status: "expiring" | "expired";
+  days_left: number | null;
+}
+export function getContractAlerts(days?: number) {
+  return request<{ horizon_days: number; alerts: ContractAlert[] }>(`/api/v1/hr/contract-alerts${days ? `?days=${days}` : ""}`);
+}
+
 export function getEmployee(id: string) {
   return request<Employee & { hrContracts: unknown[]; reports: Employee[]; employeeSkills: unknown[] }>(`/api/v1/employees/${id}`);
 }

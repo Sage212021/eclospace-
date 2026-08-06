@@ -1754,6 +1754,23 @@ export function createPosSale(input: {
   return request(`/api/v1/pos-sales`, { method: "POST", body: JSON.stringify(input) });
 }
 
+// Ventes provisoires « hors catalogue » à rattacher à un ouvrage officiel.
+export interface ProvisionalPosSale {
+  id: string;
+  offCatalogueTitle: string | null;
+  offCatalogueAuthor: string | null;
+  offCatalogueIsbn: string | null;
+  quantity: number;
+  unitPrice: string;
+  soldAt: string;
+}
+export function listProvisionalPosSales() {
+  return request<ProvisionalPosSale[]>("/api/v1/pos-sales?provisional=true");
+}
+export function reconcilePosSale(id: string, isbnId: string) {
+  return request<{ reconciled: true; invoice_id: string }>(`/api/v1/pos-sales/${id}/reconcile`, { method: "POST", body: JSON.stringify({ isbn_id: isbnId }) });
+}
+
 // Points de vente (librairie, salon, boutique en ligne…) — dimension des rapports.
 export type PointOfSaleType = "librairie" | "salon" | "en_ligne" | "autre";
 export interface PointOfSale {

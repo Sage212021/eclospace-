@@ -66,4 +66,27 @@ describe("vente au comptoir hors catalogue", () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it("liste les ventes provisoires (à rattacher) via provisional=true", async () => {
+    const create = await app.inject({ method: "POST", url: "/api/v1/pos-sales", headers: { cookie }, payload: { off_catalogue_title: `Prov ${rnd()}`, quantity: 1, unit_price: 4000, payment_method: "cash" } });
+    const id = create.json().id as string;
+    const list = await app.inject({ method: "GET", url: "/api/v1/pos-sales?provisional=true", headers: { cookie } });
+    expect(list.statusCode).toBe(200);
+    const ids = (list.json() as { id: string; isbnId: string | null }[]).map((s) => s.id);
+    expect(ids).toContain(id);
+    expect((list.json() as { isbnId: string | null }[]).every((s) => s.isbnId === null)).toBe(true);
+  });
+
+  it("réconciliation : 404 sur une vente inexistante", async () => {
+    const res = await app.inject({ method: "POST", url: "/api/v1/pos-sales/00000000-0000-0000-0000-000000000000/reconcile", headers: { cookie }, payload: { isbn_id: "00000000-0000-0000-0000-000000000001" } });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("réconciliation : 404 si l'ISBN cible n'existe pas", async () => {
+    const create = await app.inject({ method: "POST", url: "/api/v1/pos-sales", headers: { cookie }, payload: { off_catalogue_title: `Prov ${rnd()}`, quantity: 1, unit_price: 4000, payment_method: "cash" } });
+    const id = create.json().id as string;
+    const res = await app.inject({ method: "POST", url: `/api/v1/pos-sales/${id}/reconcile`, headers: { cookie }, payload: { isbn_id: "00000000-0000-0000-0000-000000000002" } });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().code).toBe("isbn_not_found");
+  });
 });

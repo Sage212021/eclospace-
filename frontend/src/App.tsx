@@ -796,7 +796,7 @@ export function App() {
           <CalendarPage canPublish={permissions.has("communication:saisie")} />
         )}
         {leaf && "page" in leaf && leaf.page === "chat" && <ChatPage />}
-        {leaf && "page" in leaf && leaf.page === "service-desk" && <ServiceDeskPage canReply={permissions.has("service_auteurs:saisie")} />}
+        {leaf && "page" in leaf && leaf.page === "service-desk" && <ServiceDeskPage canReply={permissions.has("service_auteurs:saisie")} canBrowseWorks={permissions.has("manuscripts:consultation")} onOpenManuscript={openManuscript} />}
         {leaf && "page" in leaf && leaf.page === "newsfeed" && (
           <NewsFeedPage
             onOpenAnnouncement={openAnnouncement}

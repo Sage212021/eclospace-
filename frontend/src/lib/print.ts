@@ -769,9 +769,14 @@ export function printContract(c: ContractDetail, opts?: PrintOpts): void {
   openPrintWindow(`${tr("Contrat", "Contract")} ${c.contractNumber}`, body, opts);
 }
 
-// Identité légale de la maison (parties fixes du contrat). À terme, à déplacer
-// dans les Paramètres ; ici en constante pour être versionné avec le modèle.
-const EDITEUR_LEGAL = {
+// Identité légale de la maison (parties fixes du contrat). Désormais paramétrable
+// dans les Paramètres (clé publisher_identity) ; ces valeurs servent de repli si
+// l'identité n'est pas fournie à l'impression.
+export interface PublisherLegal {
+  name: string; desc: string; rc: string; niu: string; siege: string;
+  tel: string; email: string; web: string; rep: string; ville: string;
+}
+const EDITEUR_LEGAL: PublisherLegal = {
   name: "EDITIONS ECLOSION",
   desc: "entreprise de prestation de services en édition, communication, imprimerie…",
   rc: "N°RC /YAO/2019/B/1441",
@@ -789,7 +794,8 @@ const EDITEUR_LEGAL = {
 // la fiche ; ce que le système ne stocke pas (BP, CNI, tirage, PPHT, date de
 // parution) reste en pointillés à compléter. Aucune donnée d'auteur n'est codée
 // en dur : tout provient de l'enregistrement du partenaire/ouvrage.
-export function printAuthorContract(c: ContractDetail, opts?: PrintOpts): void {
+export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null): void {
+  const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
   const p = c.partner;
   const BL = (w = 26) => `<span style="color:#9aa1ad">${"…".repeat(w)}</span>`;
   const esc = (v?: string | null) => (v && v.trim() ? escapeHtml(v) : null);
@@ -824,7 +830,7 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts): void {
       <i>Ci-après dénommé « l'Auteur », d'une part ;</i>
     </p>
     <p style="margin:6px 0;font-size:12px;line-height:1.55">
-      Et : <b>${EDITEUR_LEGAL.name}</b>, ${EDITEUR_LEGAL.desc} ${EDITEUR_LEGAL.rc}, N° Contribuable ${EDITEUR_LEGAL.niu}. Siège social : ${EDITEUR_LEGAL.siege} ; Tél : ${EDITEUR_LEGAL.tel}, Email : ${EDITEUR_LEGAL.email} Site web : ${EDITEUR_LEGAL.web} Représentée par ${EDITEUR_LEGAL.rep},<br>
+      Et : <b>${ED.name}</b>, ${ED.desc} ${ED.rc}, N° Contribuable ${ED.niu}. Siège social : ${ED.siege} ; Tél : ${ED.tel}, Email : ${ED.email} Site web : ${ED.web} Représentée par ${ED.rep},<br>
       <i>Ci-après dénommée « l'Éditeur », d'autre part ;</i>
     </p>
     <p style="margin:6px 0;font-size:12px"><b>Il a été convenu ce qui suit :</b></p>
@@ -882,7 +888,7 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts): void {
 
     ${art(15, "LITIGES", par("Le présent contrat est soumis à la loi camerounaise. Tout différend fera l'objet d'une tentative d'arrangement amiable ; à défaut, seuls les tribunaux de Yaoundé sont compétents."))}
 
-    <p style="margin:22px 0 4px;font-size:12px">Fait à ${EDITEUR_LEGAL.ville}, le ${BL(14)}</p>
+    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
     <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap">
       <div style="flex:1; min-width:200px"><div class="party__label">L'auteur</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>

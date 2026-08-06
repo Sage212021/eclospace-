@@ -4,6 +4,7 @@ import {
   createPartner,
   updatePartner,
   getContract,
+  getPublisherIdentity,
   listContracts,
   listPartners,
   signContract,
@@ -134,7 +135,7 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
               {STATUS_LABELS[contract.status]}
             </span>
             <DocPrintMenu label="Fiche (résumé)" onPrint={(o) => getContract(contract.id).then((c) => printContract(c, o)).catch((e) => setError(e.message))} />
-            <DocPrintMenu label="Contrat d'édition" onPrint={(o) => getContract(contract.id).then((c) => printAuthorContract(c, o)).catch((e) => setError(e.message))} />
+            <DocPrintMenu label="Contrat d'édition" onPrint={(o) => Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null)]).then(([c, pub]) => printAuthorContract(c, o, pub)).catch((e) => setError(e.message))} />
             {canValidate && contract.status === "awaiting_signature" && (
               <button onClick={() => setSigning(contract)} style={{ ...secondaryButtonStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)", fontWeight: 600 }}>
                 ✍️ Signer

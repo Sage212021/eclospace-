@@ -2,8 +2,38 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+
+// Identité légale de l'éditeur, imprimée sur les contrats d'édition. Stockée
+// dans `settings` (clé publisher_identity) pour être modifiable sans
+// redéploiement. Valeurs par défaut = identité de la maison (reprises du modèle
+// de contrat) ; servent tant qu'aucune saisie n'a été faite.
+const PUBLISHER_KEY = "publisher_identity";
+const PUBLISHER_DEFAULTS = {
+  name: "EDITIONS ECLOSION",
+  desc: "entreprise de prestation de services en édition, communication, imprimerie…",
+  rc: "N°RC /YAO/2019/B/1441",
+  niu: "M021912751174Y",
+  siege: "Yaoundé, Hippodrome, BP. 33071, Yaoundé",
+  tel: "677 157 326",
+  email: "editioneclosion@gmail.com",
+  web: "www.eclosioneditions.cm",
+  rep: "Mme Christelle NOAH, Directeur Général",
+  ville: "Yaoundé",
+};
+const publisherSchema = z.object({
+  name: z.string().max(200),
+  desc: z.string().max(400),
+  rc: z.string().max(120),
+  niu: z.string().max(120),
+  siege: z.string().max(300),
+  tel: z.string().max(120),
+  email: z.string().max(200),
+  web: z.string().max(200),
+  rep: z.string().max(200),
+  ville: z.string().max(120),
+});
 
 // Identifiant d'instance (par processus) et heure de démarrage : servent au
 // diagnostic de persistance. Si l'identifiant change d'un rafraîchissement à
@@ -86,6 +116,38 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
       });
     },
   );
+
+  // Identité de l'éditeur pour les contrats. Lecture ouverte à tout utilisateur
+  // authentifié (le service juridique imprime les contrats sans habilitation
+  // « settings ») ; modification réservée à l'administration des paramètres.
+  fastify.get("/api/v1/publisher-identity", { preHandler: requireAuth }, async (_request, reply) => {
+    const row = await prisma.setting.findUnique({ where: { key: PUBLISHER_KEY } });
+    const stored = (row?.value ?? {}) as Record<string, unknown>;
+    return reply.send({ ...PUBLISHER_DEFAULTS, ...stored });
+  });
+
+  fastify.put("/api/v1/publisher-identity", { preHandler: requirePermission("settings", "administration") }, async (request, reply) => {
+    const parsed = publisherSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Identité de l'éditeur invalide.", details: parsed.error.issues });
+    }
+    const existing = await prisma.setting.findUnique({ where: { key: PUBLISHER_KEY } });
+    const updated = await prisma.setting.upsert({
+      where: { key: PUBLISHER_KEY },
+      create: { key: PUBLISHER_KEY, value: parsed.data as never, updatedBy: request.user!.id },
+      update: { value: parsed.data as never, version: { increment: 1 }, updatedBy: request.user!.id },
+    });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: existing ? "update" : "create",
+      entityType: "setting",
+      entityId: PUBLISHER_KEY,
+      oldValues: (existing?.value ?? null) as never,
+      newValues: updated.value as never,
+      ipAddress: request.ip,
+    });
+    return reply.send({ ...PUBLISHER_DEFAULTS, ...(updated.value as Record<string, unknown>) });
+  });
 
   // Diagnostic de persistance : vérifie, DEPUIS L'INTERFACE, que la base de
   // données est joignable, à jour (migrations appliquées) et DURABLE — en

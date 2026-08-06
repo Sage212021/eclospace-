@@ -2758,6 +2758,27 @@ export function updateSetting(key: string, value: unknown) {
   });
 }
 
+// Identité légale de l'éditeur (imprimée sur les contrats), modifiable dans les
+// Paramètres. Lecture ouverte à tout utilisateur authentifié.
+export interface PublisherIdentity {
+  name: string;
+  desc: string;
+  rc: string;
+  niu: string;
+  siege: string;
+  tel: string;
+  email: string;
+  web: string;
+  rep: string;
+  ville: string;
+}
+export function getPublisherIdentity() {
+  return request<PublisherIdentity>("/api/v1/publisher-identity");
+}
+export function updatePublisherIdentity(identity: PublisherIdentity) {
+  return request<PublisherIdentity>("/api/v1/publisher-identity", { method: "PUT", body: JSON.stringify(identity) });
+}
+
 // --- Module « Présences & Temps de travail » (évolution, incrément 1) --------
 export type WorkScheduleScope = "company" | "department" | "employee";
 

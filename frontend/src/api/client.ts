@@ -1685,6 +1685,16 @@ export interface Customer {
   category: CustomerCategory;
   name: string;
   creditLimit: string | null;
+  // Coordonnées déjà renvoyées par l'API (fiche client) — optionnelles ici pour
+  // ne pas casser les usages qui n'en ont pas besoin.
+  contactName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  relationMode?: string | null;
+  paymentTerms?: string | null;
+  taxId?: string | null;
+  shippingZone?: string | null;
 }
 
 export function listCustomers(category?: CustomerCategory) {

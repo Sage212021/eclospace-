@@ -932,6 +932,38 @@ export function printEmployeeFiche(e: EmployeeFichePrint, opts?: PrintOpts): voi
   openPrintWindow(tr("Fiche collaborateur", "Employee record"), body, opts);
 }
 
+// Fiche client prête à imprimer / PDF (refonte Commercial). Coordonnées,
+// catégorie, conditions et encours. Base de la future « fiche client 360° ».
+export interface CustomerFichePrint {
+  name: string; category: string; creditLimit: string | null;
+  contactName?: string | null; email?: string | null; phone?: string | null;
+  address?: string | null; paymentTerms?: string | null; taxId?: string | null;
+  shippingZone?: string | null; outstandingBalance?: number;
+}
+const CUSTOMER_CAT_LABELS: Record<string, [string, string]> = {
+  librairie: ["Librairie", "Bookshop"], distributeur: ["Distributeur", "Distributor"],
+  institution: ["Institution", "Institution"], particulier: ["Particulier", "Individual"],
+  plateforme: ["Plateforme", "Platform"], auteur: ["Auteur", "Author"],
+};
+export function printCustomerFiche(c: CustomerFichePrint, opts?: PrintOpts): void {
+  const row = (l: string, v: string) => v ? `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid #eef1f6;font-size:13px"><div style="width:200px;color:#6b7280">${escapeHtml(l)}</div><div style="font-weight:600">${escapeHtml(v)}</div></div>` : "";
+  const body = `
+    <div class="doc__title">${tr("Fiche client", "Customer record")}</div>
+    <div class="meta"><span>${escapeHtml(c.name)}</span><span><span class="badge">${escapeHtml(label(CUSTOMER_CAT_LABELS, c.category))}</span></span></div>
+    <div style="margin-top:8px">
+      ${row(tr("Contact", "Contact"), c.contactName ?? "")}
+      ${row(tr("Téléphone", "Phone"), c.phone ?? "")}
+      ${row(tr("E-mail", "Email"), c.email ?? "")}
+      ${row(tr("Adresse", "Address"), c.address ?? "")}
+      ${row(tr("Conditions de paiement", "Payment terms"), c.paymentTerms ?? "")}
+      ${row(tr("Zone de livraison", "Shipping zone"), c.shippingZone ?? "")}
+      ${row(tr("N° fiscal", "Tax ID"), c.taxId ?? "")}
+      ${row(tr("Plafond de crédit", "Credit limit"), c.creditLimit ? money(c.creditLimit, "XAF") : "")}
+      ${c.outstandingBalance != null ? row(tr("Encours", "Outstanding"), money(c.outstandingBalance, "XAF")) : ""}
+    </div>`;
+  openPrintWindow(tr("Fiche client", "Customer record"), body, opts);
+}
+
 // Bulletin de paie prêt à imprimer / PDF (D-007, incrément 4). En-tête maison
 // commun (documentShell) ; ventilation reprise du moteur de calcul, sans
 // recalcul côté impression. Mentions légales du Code du travail camerounais.

@@ -1767,6 +1767,33 @@ export interface ProvisionalPosSale {
 export function listProvisionalPosSales() {
   return request<ProvisionalPosSale[]>("/api/v1/pos-sales?provisional=true");
 }
+
+// Tableau de bord individuel de performance commerciale (« Mes performances »).
+export interface MyPerformance {
+  scope: "individual" | "consolidated";
+  can_see_others: boolean;
+  revenue: number;
+  sales_count: number;
+  orders_count: number;
+  avg_sale: number;
+  transformation_rate: number;
+  orders_delivered: number;
+  orders_cancelled: number;
+  orders_pending: number;
+  new_customers: number;
+  active_customers: number;
+  top_customers: { name: string; revenue: number }[];
+  top_books: { title: string; units: number }[];
+  by_period: { today: number; week: number; month: number; year: number };
+}
+export function getMyPerformance(params?: { from?: string; to?: string; rep?: string }) {
+  const p = new URLSearchParams();
+  if (params?.from) p.set("from", params.from);
+  if (params?.to) p.set("to", params.to);
+  if (params?.rep) p.set("rep", params.rep);
+  const qs = p.toString();
+  return request<MyPerformance>(`/api/v1/commercial/my-performance${qs ? "?" + qs : ""}`);
+}
 export function reconcilePosSale(id: string, isbnId: string) {
   return request<{ reconciled: true; invoice_id: string }>(`/api/v1/pos-sales/${id}/reconcile`, { method: "POST", body: JSON.stringify({ isbn_id: isbnId }) });
 }

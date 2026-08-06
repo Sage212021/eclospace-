@@ -5,6 +5,7 @@ import {
   createPosSale,
   createSalesOrder,
   listCustomers,
+  getCustomer,
   listIsbnRefs,
   listSalesOrders,
   listStockLocations,
@@ -19,6 +20,8 @@ import {
   type StockLocation,
 } from "../api/client";
 import { Card } from "../components/Card";
+import { StandardActionBar } from "../components/StandardActionBar";
+import { printCustomerFiche } from "../lib/print";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { useConfirm } from "../components/ConfirmProvider";
@@ -138,12 +141,14 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
         ) : (
           <div className="ecl-list">
             {customers.map((customer) => (
-              <div key={customer.id} className="ecl-row">
+              <div key={customer.id} className="ecl-row" style={{ flexWrap: "wrap", gap: 8 }}>
                 <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span className="ecl-row__title">{customer.name}</span>
                   <StatusChip label={t(`com.cat.${customer.category}`, CATEGORY_LABELS[customer.category])} />
                 </div>
                 {customer.creditLimit && <span className="ecl-row__desc" style={{ margin: 0 }}>{t("com.limit", "plafond")} <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{customer.creditLimit}</strong></span>}
+                {/* Barre d'actions standard (refonte, Étape 1) : impression de la fiche client. */}
+                <StandardActionBar onPrint={() => getCustomer(customer.id).then((c) => printCustomerFiche(c)).catch((e) => setError(e instanceof Error ? e.message : "Impression impossible."))} />
               </div>
             ))}
           </div>

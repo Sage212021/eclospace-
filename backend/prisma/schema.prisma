@@ -1594,8 +1594,42 @@ model Manuscript {
   sitePublication    SitePublication?
   authorFiles        AuthorFile[]
   schoolRoyaltyEntries SchoolRoyaltyEntry[]
+  financeRequests    ManuscriptFinanceRequest[]
 
   @@map("manuscripts")
+}
+
+// Demande adressée à la Finance depuis la fiche manuscrit (point 6 du chantier) :
+// « Demande de devis » ou « Demande de facture — frais de dépôt ». L'éditorial
+// clique, le financier reçoit la demande dans sa file et établit le devis / la
+// facture, puis la marque traitée. Traçabilité complète (demandeur, décideur).
+enum ManuscriptFinanceRequestType {
+  devis
+  frais_depot
+}
+
+enum ManuscriptFinanceRequestStatus {
+  requested
+  processed
+  rejected
+}
+
+model ManuscriptFinanceRequest {
+  id           String                         @id @default(uuid())
+  manuscriptId String                         @map("manuscript_id")
+  manuscript   Manuscript                     @relation(fields: [manuscriptId], references: [id])
+  type         ManuscriptFinanceRequestType
+  status       ManuscriptFinanceRequestStatus @default(requested)
+  note         String?
+  requestedBy  String?                        @map("requested_by")
+  requestedAt  DateTime                       @default(now()) @map("requested_at")
+  processedBy  String?                        @map("processed_by")
+  processedAt  DateTime?                      @map("processed_at")
+  resolution   String?
+
+  @@index([status])
+  @@index([manuscriptId])
+  @@map("manuscript_finance_requests")
 }
 
 enum ContributorRole {

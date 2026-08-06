@@ -60,6 +60,7 @@ import {
 } from "../api/client";
 import { Card } from "../components/Card";
 import { PendingQuotesCard } from "../components/PendingQuotesCard";
+import { FinanceRequestsInbox } from "../components/FinanceRequestsInbox";
 import { RevenueByFamilyCard } from "../components/RevenueByFamilyCard";
 import { AnnualSummarySection } from "../components/AnnualSummarySection";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
@@ -479,6 +480,9 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
       <AnnualSummarySection />
 
       <PendingQuotesCard />
+
+      {/* Demandes reçues depuis les fiches manuscrit : devis / frais de dépôt. */}
+      <FinanceRequestsInbox canManage={canManage} />
 
       <BillingOrdersSection canCreate={canInitiateOrder} canInvoice={canManage} canValidateThreshold={canValidateCancellation} />
 

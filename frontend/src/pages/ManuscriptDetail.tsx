@@ -42,6 +42,7 @@ import { AttachmentsSection } from "../components/AttachmentsSection";
 import { ReadingEvaluationsSection } from "../components/ReadingEvaluationsSection";
 import { AuthorFilesSection } from "../components/AuthorFilesSection";
 import { FundingCheckpoint } from "../components/FundingCheckpoint";
+import { FinanceRequestCard } from "../components/FinanceRequestCard";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 
 interface ManuscriptDetailProps {
@@ -444,6 +445,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           canManage={permissions.has("manuscripts:saisie")}
           onChanged={() => refresh().catch((e) => setError(e.message))}
         />
+      )}
+
+      {/* Demandes à la Finance depuis la fiche : devis / facture frais de dépôt. */}
+      {show("contracts") && permissions.has("manuscripts:consultation") && (
+        <FinanceRequestCard manuscriptId={manuscript.id} canRequest={permissions.has("manuscripts:saisie")} />
       )}
 
       {show("finance") && permissions.has("finance:consultation") && (

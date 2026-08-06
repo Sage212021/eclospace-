@@ -2425,6 +2425,43 @@ export function saveEmployeeEvaluation(employeeId: string, input: { year: number
   return request<EmployeeEvaluation>(`/api/v1/employees/${employeeId}/evaluations`, { method: "PUT", body: JSON.stringify(input) });
 }
 
+// Demandes Finance depuis la fiche manuscrit : devis / facture frais de dépôt.
+export type FinanceRequestType = "devis" | "frais_depot";
+export type FinanceRequestStatus = "requested" | "processed" | "rejected";
+export interface ManuscriptFinanceRequest {
+  id: string;
+  type: FinanceRequestType;
+  status: FinanceRequestStatus;
+  note: string | null;
+  requestedAt: string;
+  processedAt: string | null;
+  resolution: string | null;
+}
+export interface FinanceRequestQueueRow {
+  id: string;
+  type: FinanceRequestType;
+  status: FinanceRequestStatus;
+  note: string | null;
+  requested_at: string;
+  manuscript_id: string;
+  manuscript_number: string;
+  title: string;
+  funding_mode: string;
+  author: string | null;
+}
+export function getManuscriptFinanceRequests(manuscriptId: string) {
+  return request<ManuscriptFinanceRequest[]>(`/api/v1/manuscripts/${manuscriptId}/finance-requests`);
+}
+export function createFinanceRequest(manuscriptId: string, type: FinanceRequestType, note?: string) {
+  return request<ManuscriptFinanceRequest>(`/api/v1/manuscripts/${manuscriptId}/finance-requests`, { method: "POST", body: JSON.stringify({ type, note }) });
+}
+export function getFinanceRequests(status?: FinanceRequestStatus) {
+  return request<FinanceRequestQueueRow[]>(`/api/v1/finance-requests${status ? `?status=${status}` : ""}`);
+}
+export function resolveFinanceRequest(id: string, status: "processed" | "rejected", resolution?: string) {
+  return request<ManuscriptFinanceRequest>(`/api/v1/finance-requests/${id}`, { method: "PATCH", body: JSON.stringify({ status, resolution }) });
+}
+
 // Recrutement — postes à pourvoir & candidatures.
 export type JobOpeningStatus = "ouvert" | "pourvu" | "annule";
 export type JobApplicationStatus = "recue" | "entretien" | "retenue" | "refusee";

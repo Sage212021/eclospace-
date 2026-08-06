@@ -3,6 +3,9 @@ import {
   approveSalesOrder,
   createCustomer,
   createPosSale,
+  listProvisionalPosSales,
+  reconcilePosSale,
+  type ProvisionalPosSale,
   createSalesOrder,
   listCustomers,
   getCustomer,
@@ -197,6 +200,7 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
         <>
           <NewOrderForm customers={customers} isbns={isbns} locations={locations} onCreated={(msg) => { setMessage(msg); refresh(); }} onError={setError} />
           <PosSaleForm customers={customers} isbns={isbns} locations={locations} onCreated={() => { setMessage(t("com.pos_recorded", "Vente au comptoir enregistrée.")); refresh(); }} onError={setError} />
+          {canValidate && <ProvisionalSalesSection isbns={isbns} onDone={(msg) => { setMessage(msg); refresh(); }} onError={setError} />}
         </>
       )}
 
@@ -571,6 +575,74 @@ function PosSaleForm({
           <Button variant="add" size="md" type="submit">{t("com.checkout", "Encaisser")}</Button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+// Réconciliation : rattacher les ventes « hors catalogue » (provisoires) à un
+// ouvrage désormais référencé. À ce moment, la facture et les droits d'auteur
+// sont générés. Réservé à la validation commerciale.
+function ProvisionalSalesSection({
+  isbns,
+  onDone,
+  onError,
+}: {
+  isbns: IsbnRef[];
+  onDone: (message: string) => void;
+  onError: (m: string) => void;
+}) {
+  const { t } = useI18n();
+  const [sales, setSales] = useState<ProvisionalPosSale[]>([]);
+  const [picks, setPicks] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = () => listProvisionalPosSales().then(setSales).catch(() => setSales([]));
+  useEffect(() => { load(); }, []);
+
+  async function reconcile(id: string) {
+    const isbnId = picks[id] || isbns[0]?.id;
+    if (!isbnId) { onError(t("com.recon_no_isbn", "Aucun ouvrage disponible pour le rattachement.")); return; }
+    setBusy(id);
+    try {
+      await reconcilePosSale(id, isbnId);
+      onDone(t("com.recon_done", "Vente rattachée : facture et droits d'auteur générés."));
+      await load();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : t("com.recon_err", "Rattachement impossible."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card title={t("com.recon_title", "Ventes à rattacher (hors catalogue)")} icon={<IconCommercial />} subtitle={t("com.recon_sub", "Ventes provisoires : rattachez-les à l'ouvrage une fois créé au catalogue.")}>
+      {sales.length === 0 ? (
+        <Empty>{t("com.recon_none", "Aucune vente provisoire à rattacher.")}</Empty>
+      ) : (
+        <div className="ecl-list">
+          {sales.map((s) => (
+            <div key={s.id} className="ecl-row" style={{ flexWrap: "wrap", gap: 8 }}>
+              <div className="ecl-row__main">
+                <div className="ecl-row__title">{s.offCatalogueTitle ?? "—"}</div>
+                <div className="ecl-row__desc">
+                  {[s.offCatalogueAuthor, s.offCatalogueIsbn].filter(Boolean).join(" · ")}
+                  {s.offCatalogueAuthor || s.offCatalogueIsbn ? " · " : ""}
+                  {t("com.recon_qty", "qté")} <span style={{ fontFamily: "var(--font-mono)" }}>{s.quantity}</span> · <span style={{ fontFamily: "var(--font-mono)" }}>{s.unitPrice}</span> FCFA
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <select value={picks[s.id] ?? ""} onChange={(e) => setPicks({ ...picks, [s.id]: e.target.value })}>
+                  <option value="">{t("com.recon_choose", "— Ouvrage cible —")}</option>
+                  {isbns.map((i) => <option key={i.id} value={i.id}>{i.isbn13} — {i.manuscript?.title}</option>)}
+                </select>
+                <Button variant="add" size="sm" type="button" disabled={busy === s.id} onClick={() => reconcile(s.id)}>
+                  {busy === s.id ? t("com.recon_busy", "…") : t("com.recon_btn", "Rattacher")}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }

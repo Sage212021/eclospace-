@@ -823,8 +823,49 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get("/api/v1/pos-sales", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
-    const sales = await prisma.posSale.findMany({ orderBy: { soldAt: "desc" }, take: 200 });
+    const q = request.query as { provisional?: string };
+    // provisional=true → uniquement les ventes hors catalogue à rattacher.
+    const where = q.provisional === "true" ? { isbnId: null } : {};
+    const sales = await prisma.posSale.findMany({ where, orderBy: { soldAt: "desc" }, take: 200 });
     return reply.send(sales);
+  });
+
+  // Réconciliation d'une vente HORS CATALOGUE : la rattacher à un ouvrage
+  // désormais référencé. À ce moment seulement, la facture et les droits d'auteur
+  // sont générés (reconnaissance du chiffre d'affaires). Le stock physique reste
+  // géré par le magasin (aucun mouvement automatique, pour éviter un stock négatif
+  // rétroactif). Réservé à la validation commerciale.
+  fastify.post("/api/v1/pos-sales/:id/reconcile", { preHandler: requirePermission("commercial", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = z.object({ isbn_id: z.string().uuid() }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ code: "validation_error", message: "ISBN cible requis.", details: body.error.issues });
+    const sale = await prisma.posSale.findUnique({ where: { id } });
+    if (!sale) return reply.code(404).send({ code: "not_found", message: "Vente introuvable." });
+    if (sale.isbnId) return reply.code(409).send({ code: "already_catalogued", message: "Cette vente est déjà rattachée à un ouvrage." });
+    const isbn = await prisma.isbn.findUnique({ where: { id: body.data.isbn_id } });
+    if (!isbn) return reply.code(404).send({ code: "isbn_not_found", message: "ISBN cible introuvable." });
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        await tx.posSale.update({ where: { id }, data: { isbnId: body.data.isbn_id } });
+        const invoice = await createInvoiceFromPosSale(tx, id);
+        return invoice;
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "pos_sale",
+        entityId: id,
+        oldValues: { isbnId: null, offCatalogueTitle: sale.offCatalogueTitle },
+        newValues: { isbnId: body.data.isbn_id, invoiceId: result.id },
+        ipAddress: request.ip,
+      });
+      return reply.send({ reconciled: true, invoice_id: result.id });
+    } catch (err) {
+      if (err instanceof PeriodClosedError) {
+        return reply.code(409).send({ code: "accounting_period_closed", message: err.message });
+      }
+      throw err;
+    }
   });
 
   // --- Points de vente (librairie, salon, boutique en ligne…) ---------------

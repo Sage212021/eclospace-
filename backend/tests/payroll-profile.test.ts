@@ -77,4 +77,20 @@ describe("fiche paie employé", () => {
     const res = await app.inject({ method: "GET", url: `/api/v1/payroll/employees/00000000-0000-0000-0000-000000000000/profile`, headers: { cookie: adminCookie } });
     expect(res.statusCode).toBe(404);
   });
+
+  it("accepte un motif de modification et le trace au journal", async () => {
+    const res = await app.inject({
+      method: "PUT",
+      url: `/api/v1/payroll/employees/${employeeId}/profile`,
+      headers: { cookie: adminCookie },
+      payload: { ...PROFILE, modification_reason: "Correction du brut après avenant" },
+    });
+    expect(res.statusCode).toBe(200);
+    const audit = await prisma.auditLog.findFirst({
+      where: { entityType: "payroll_employee_profile", entityId: employeeId, action: "update" },
+      orderBy: { occurredAt: "desc" },
+    });
+    expect(audit).not.toBeNull();
+    expect(JSON.stringify(audit?.newValues)).toContain("Correction du brut après avenant");
+  });
 });

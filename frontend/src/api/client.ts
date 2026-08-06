@@ -3178,8 +3178,11 @@ export type PayrollProfileInput = Omit<PayrollProfile, "base_salary" | "compleme
 export function getPayrollProfile(employeeId: string) {
   return request<{ employee: { id: string; name: string }; profile: PayrollProfile | null }>(`/api/v1/payroll/employees/${employeeId}/profile`);
 }
-export function savePayrollProfile(employeeId: string, input: PayrollProfileInput) {
-  return request<PayrollProfile>(`/api/v1/payroll/employees/${employeeId}/profile`, { method: "PUT", body: JSON.stringify(input) });
+export function savePayrollProfile(employeeId: string, input: PayrollProfileInput, modificationReason?: string) {
+  return request<PayrollProfile>(`/api/v1/payroll/employees/${employeeId}/profile`, {
+    method: "PUT",
+    body: JSON.stringify({ ...input, modification_reason: modificationReason || undefined }),
+  });
 }
 
 // Calcul du bulletin (D-007, incrément 3).

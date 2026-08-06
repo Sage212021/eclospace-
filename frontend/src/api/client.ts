@@ -1785,6 +1785,7 @@ export interface MyPerformance {
   top_customers: { name: string; revenue: number }[];
   top_books: { title: string; units: number }[];
   by_period: { today: number; week: number; month: number; year: number };
+  series: { month: string; revenue: number }[];
 }
 export function getMyPerformance(params?: { from?: string; to?: string; rep?: string }) {
   const p = new URLSearchParams();

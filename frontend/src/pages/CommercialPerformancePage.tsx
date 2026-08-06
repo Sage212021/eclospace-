@@ -104,6 +104,12 @@ export function CommercialPerformancePage({ canManage }: { canManage: boolean })
             <Kpi label="12 derniers mois" value={fcfa(data.by_period.year)} small />
           </div>
 
+          {/* Évolution des ventes (graphique) */}
+          <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 20 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>Évolution des ventes (par mois)</div>
+            <SalesChart series={data.series} />
+          </div>
+
           {/* Classements */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginTop: 20 }}>
             <RankTable title="Meilleurs clients (CA)" rows={data.top_customers.map((c) => [c.name, fcfa(c.revenue)])} empty="Aucune vente sur la période." />
@@ -111,6 +117,42 @@ export function CommercialPerformancePage({ canManage }: { canManage: boolean })
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Graphique d'évolution du CA par mois — barres SVG légères (sans dépendance),
+// libellés de mois abrégés, valeur au survol.
+function SalesChart({ series }: { series: { month: string; revenue: number }[] }) {
+  if (series.length === 0) return <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucune vente sur la période sélectionnée.</p>;
+  const max = Math.max(...series.map((s) => s.revenue), 1);
+  const W = Math.max(series.length * 56, 220);
+  const H = 160;
+  const pad = { top: 12, bottom: 26, left: 6, right: 6 };
+  const chartH = H - pad.top - pad.bottom;
+  const bw = (W - pad.left - pad.right) / series.length;
+  const monthLabel = (m: string) => {
+    const [y, mo] = m.split("-");
+    return `${["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"][Number(mo) - 1] ?? mo} ${y.slice(2)}`;
+  };
+  const fmt = (n: number) => `${Math.round(n).toLocaleString("fr-FR")} FCFA`;
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg width={W} height={H} role="img" aria-label="Évolution du chiffre d'affaires par mois" style={{ maxWidth: "100%" }}>
+        {series.map((s, i) => {
+          const h = Math.round((s.revenue / max) * chartH);
+          const x = pad.left + i * bw + bw * 0.18;
+          const y = pad.top + (chartH - h);
+          return (
+            <g key={s.month}>
+              <rect x={x} y={y} width={bw * 0.64} height={h} rx={3} fill="var(--eclosion, #C89A1B)">
+                <title>{`${monthLabel(s.month)} : ${fmt(s.revenue)}`}</title>
+              </rect>
+              <text x={pad.left + i * bw + bw / 2} y={H - 9} textAnchor="middle" fontSize="10" fill="var(--muted, #5A6478)">{monthLabel(s.month)}</text>
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }

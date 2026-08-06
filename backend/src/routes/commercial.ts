@@ -325,6 +325,17 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     for (const o of orders) for (const l of o.lines) bump(l.isbn?.manuscript?.title, l.quantity);
     const topBooks = [...bookQty.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([title, units]) => ({ title, units }));
 
+    // Série mensuelle du chiffre d'affaires (comptoir + commandes) sur la période
+    // — pour le graphique d'évolution des ventes.
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const monthRev = new Map<string, number>();
+    for (const p of posSales) monthRev.set(monthKey(p.soldAt), (monthRev.get(monthKey(p.soldAt)) ?? 0) + p.quantity * Number(p.unitPrice));
+    for (const o of orders) {
+      const amt = o.lines.reduce((ls, l) => ls + l.quantity * Number(l.unitPrice) * (1 - Number(l.discountPct) / 100), 0);
+      monthRev.set(monthKey(o.createdAt), (monthRev.get(monthKey(o.createdAt)) ?? 0) + amt);
+    }
+    const series = [...monthRev.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, revenue]) => ({ month, revenue: Math.round(revenue) }));
+
     // Ventes par horizon (CA comptoir).
     const now = Date.now();
     const since = (days: number) => new Date(now - days * 864e5);
@@ -343,7 +354,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       transformation_rate: transformationRate,
       orders_delivered: delivered, orders_cancelled: cancelled, orders_pending: pending,
       new_customers: newCustomers, active_customers: activeCust.size,
-      top_customers: topCustomers, top_books: topBooks, by_period: byPeriod,
+      top_customers: topCustomers, top_books: topBooks, by_period: byPeriod, series,
     });
   });
 

@@ -147,7 +147,8 @@ export async function commissions(opts: { from?: Date; to?: Date; granularity: C
     p.amount += amount;
   };
 
-  for (const s of posSales) add(s.soldBy, s.isbnId, titleOf(s.isbn), s.soldAt, s.quantity, s.quantity * Number(s.unitPrice));
+  // Ventes hors catalogue (isbnId null, provisoires) exclues tant qu'elles ne sont pas rattachées.
+  for (const s of posSales) { if (s.isbnId) add(s.soldBy, s.isbnId, titleOf(s.isbn), s.soldAt, s.quantity, s.quantity * Number(s.unitPrice)); }
   for (const o of orders) {
     for (const l of o.lines) {
       add(o.createdBy, l.isbnId, titleOf(l.isbn), o.createdAt, l.quantity, l.quantity * Number(l.unitPrice) * (1 - Number(l.discountPct) / 100));

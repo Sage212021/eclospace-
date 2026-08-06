@@ -76,15 +76,25 @@ const consignmentStatementSchema = z.object({
   quantity_sold: z.number().int().nonnegative(),
 });
 
-const posSaleSchema = z.object({
-  isbn_id: z.string().uuid(),
-  location_id: z.string().uuid(),
-  quantity: z.number().int().positive(),
-  unit_price: z.number().positive(),
-  payment_method: z.nativeEnum(PosPaymentMethod),
-  event_label: z.string().optional(),
-  point_of_sale_id: z.string().uuid().optional(),
-});
+const posSaleSchema = z
+  .object({
+    isbn_id: z.string().uuid().optional(),
+    location_id: z.string().uuid().optional(),
+    // Livre hors catalogue (provisoire) : au moins le titre.
+    off_catalogue_title: z.string().max(300).optional(),
+    off_catalogue_author: z.string().max(200).optional(),
+    off_catalogue_isbn: z.string().max(40).optional(),
+    quantity: z.number().int().positive(),
+    unit_price: z.number().positive(),
+    payment_method: z.nativeEnum(PosPaymentMethod),
+    event_label: z.string().optional(),
+    // Client optionnel (au choix du commercial).
+    customer_id: z.string().uuid().optional(),
+    point_of_sale_id: z.string().uuid().optional(),
+  })
+  .refine((d) => (d.isbn_id && d.location_id) || (d.off_catalogue_title && d.off_catalogue_title.trim().length > 0), {
+    message: "Indiquez un ouvrage du catalogue (ISBN + lieu) ou un livre hors catalogue (titre).",
+  });
 
 const pointOfSaleSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -720,7 +730,41 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     if (!parsed.success) {
       return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
     }
-    const stockItems = await prisma.stockItem.findMany({ where: { isbnId: parsed.data.isbn_id, locationId: parsed.data.location_id } });
+
+    // Vente HORS CATALOGUE (livre non encore référencé) : enregistrée comme
+    // provisoire — pas de mouvement de stock, pas de facture/droits d'auteur tant
+    // qu'elle n'est pas rattachée à un ouvrage officiel. Préserve l'intégrité.
+    if (!parsed.data.isbn_id) {
+      const sale = await prisma.posSale.create({
+        data: {
+          isbnId: null,
+          offCatalogueTitle: parsed.data.off_catalogue_title,
+          offCatalogueAuthor: parsed.data.off_catalogue_author,
+          offCatalogueIsbn: parsed.data.off_catalogue_isbn,
+          quantity: parsed.data.quantity,
+          unitPrice: parsed.data.unit_price,
+          paymentMethod: parsed.data.payment_method,
+          eventLabel: parsed.data.event_label,
+          customerId: parsed.data.customer_id ?? null,
+          pointOfSaleId: parsed.data.point_of_sale_id,
+          soldBy: request.user!.id,
+        },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "pos_sale",
+        entityId: sale.id,
+        newValues: { off_catalogue: true, title: parsed.data.off_catalogue_title, quantity: parsed.data.quantity },
+        ipAddress: request.ip,
+      });
+      return reply.code(201).send(sale);
+    }
+
+    // Vente au CATALOGUE : ISBN + lieu garantis par le schéma (refine).
+    const isbnId = parsed.data.isbn_id;
+    const locationId = parsed.data.location_id!;
+    const stockItems = await prisma.stockItem.findMany({ where: { isbnId, locationId } });
     const available = stockItems.reduce((sum, item) => sum + availableQuantity(item), 0);
     if (available < parsed.data.quantity) {
       return reply.code(409).send({ code: "insufficient_stock", message: "Stock disponible insuffisant pour cette vente." });
@@ -730,11 +774,12 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       const sale = await prisma.$transaction(async (tx) => {
         const created = await tx.posSale.create({
           data: {
-            isbnId: parsed.data.isbn_id,
+            isbnId,
             quantity: parsed.data.quantity,
             unitPrice: parsed.data.unit_price,
             paymentMethod: parsed.data.payment_method,
             eventLabel: parsed.data.event_label,
+            customerId: parsed.data.customer_id ?? null,
             pointOfSaleId: parsed.data.point_of_sale_id,
             soldBy: request.user!.id,
           },
@@ -742,9 +787,9 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
         await tx.stockMovement.create({
           data: {
             type: "sale_out",
-            isbnId: parsed.data.isbn_id,
+            isbnId,
             printRun: 0,
-            fromLocationId: parsed.data.location_id,
+            fromLocationId: locationId,
             quantity: parsed.data.quantity,
             reason: "Vente au comptoir",
             referenceType: "pos_sale",
@@ -753,7 +798,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
             movedBy: request.user!.id,
           },
         });
-        await adjustStockItem(tx, parsed.data.isbn_id, parsed.data.location_id, 0, -parsed.data.quantity);
+        await adjustStockItem(tx, isbnId, locationId, 0, -parsed.data.quantity);
         // Ch. 18 §18.2, §18.7 : facture immédiate + encaissement + droits d'auteur.
         const invoice = await createInvoiceFromPosSale(tx, created.id);
         return { sale: created, invoice };

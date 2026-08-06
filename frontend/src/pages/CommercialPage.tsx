@@ -196,7 +196,7 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
       {canManage && (
         <>
           <NewOrderForm customers={customers} isbns={isbns} locations={locations} onCreated={(msg) => { setMessage(msg); refresh(); }} onError={setError} />
-          <PosSaleForm isbns={isbns} locations={locations} onCreated={() => { setMessage(t("com.pos_recorded", "Vente au comptoir enregistrée.")); refresh(); }} onError={setError} />
+          <PosSaleForm customers={customers} isbns={isbns} locations={locations} onCreated={() => { setMessage(t("com.pos_recorded", "Vente au comptoir enregistrée.")); refresh(); }} onError={setError} />
         </>
       )}
 
@@ -362,17 +362,20 @@ function NewOrderForm({
 }
 
 function PosSaleForm({
+  customers,
   isbns,
   locations,
   onCreated,
   onError,
 }: {
+  customers: Customer[];
   isbns: IsbnRef[];
   locations: StockLocation[];
   onCreated: () => void;
   onError: (m: string) => void;
 }) {
   const { t } = useI18n();
+  const NEW = "__new__";
   const [isbnId, setIsbnId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -380,6 +383,14 @@ function PosSaleForm({
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "mobile_money">("cash");
   const [points, setPoints] = useState<PointOfSale[]>([]);
   const [pointId, setPointId] = useState("");
+  // Livre : catalogue (ISBN) ou hors catalogue (provisoire, saisie libre).
+  const [bookMode, setBookMode] = useState<"catalogue" | "off">("catalogue");
+  const [offTitle, setOffTitle] = useState("");
+  const [offAuthor, setOffAuthor] = useState("");
+  const [offIsbn, setOffIsbn] = useState("");
+  // Client optionnel (au choix du commercial) : "" = aucun, NEW = saisie manuelle.
+  const [customerId, setCustomerId] = useState("");
+  const [newCust, setNewCust] = useState({ name: "", category: "particulier" as CustomerCategory, phone: "", email: "", address: "" });
   // Ajout rapide d'un point de vente (nom + type).
   const [addingPoint, setAddingPoint] = useState(false);
   const [newPointName, setNewPointName] = useState("");
@@ -411,8 +422,31 @@ function PosSaleForm({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     try {
-      await createPosSale({ isbn_id: isbnId, location_id: locationId, quantity, unit_price: unitPrice, payment_method: paymentMethod, point_of_sale_id: pointId || undefined });
+      // Client optionnel : nouveau client auto-créé si saisie manuelle.
+      let customer_id: string | undefined;
+      if (customerId === NEW) {
+        if (!newCust.name.trim()) {
+          onError(t("com.err_new_customer_name", "Nom ou raison sociale du nouveau client requis."));
+          return;
+        }
+        const created = await createCustomer({ category: newCust.category, name: newCust.name.trim(), phone: newCust.phone.trim() || undefined, email: newCust.email.trim() || undefined, address: newCust.address.trim() || undefined });
+        customer_id = created.id;
+      } else if (customerId) {
+        customer_id = customerId;
+      }
+
+      if (bookMode === "off") {
+        if (!offTitle.trim()) {
+          onError(t("com.err_off_title", "Titre du livre non catalogué requis."));
+          return;
+        }
+        await createPosSale({ off_catalogue_title: offTitle.trim(), off_catalogue_author: offAuthor.trim() || undefined, off_catalogue_isbn: offIsbn.trim() || undefined, quantity, unit_price: unitPrice, payment_method: paymentMethod, customer_id, point_of_sale_id: pointId || undefined });
+      } else {
+        await createPosSale({ isbn_id: isbnId, location_id: locationId, quantity, unit_price: unitPrice, payment_method: paymentMethod, customer_id, point_of_sale_id: pointId || undefined });
+      }
       onCreated();
+      setOffTitle(""); setOffAuthor(""); setOffIsbn("");
+      if (customerId === NEW) { setNewCust({ name: "", category: "particulier", phone: "", email: "", address: "" }); setCustomerId(""); }
     } catch (err) {
       onError(err instanceof Error ? err.message : t("com.err_pos", "Échec de la vente au comptoir."));
     }
@@ -422,16 +456,38 @@ function PosSaleForm({
     <Card title={t("com.pos_title", "Vente au comptoir / salon")} icon={<IconCommercial />} subtitle={t("com.pos_sub", "Encaisser une vente directe.")}>
       <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-          <Field label={t("com.ref_isbn", "Référence (ISBN)")}>
-            <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)}>
-              {isbns.map((isbn) => <option key={isbn.id} value={isbn.id}>{isbn.isbn13} — {isbn.manuscript?.title}</option>)}
+          <Field label={t("com.book_mode", "Livre")}>
+            <select value={bookMode} onChange={(e) => setBookMode(e.target.value as "catalogue" | "off")}>
+              <option value="catalogue">{t("com.book_catalogue", "Du catalogue (ISBN)")}</option>
+              <option value="off">{t("com.book_off", "Non encore catalogué")}</option>
             </select>
           </Field>
-          <Field label={t("com.location", "Lieu")}>
-            <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-              {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
-            </select>
-          </Field>
+          {bookMode === "catalogue" ? (
+            <>
+              <Field label={t("com.ref_isbn", "Référence (ISBN)")}>
+                <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)}>
+                  {isbns.map((isbn) => <option key={isbn.id} value={isbn.id}>{isbn.isbn13} — {isbn.manuscript?.title}</option>)}
+                </select>
+              </Field>
+              <Field label={t("com.location", "Lieu")}>
+                <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+                  {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
+                </select>
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label={t("com.off_title", "Titre du livre *")}>
+                <input value={offTitle} onChange={(e) => setOffTitle(e.target.value)} />
+              </Field>
+              <Field label={t("com.off_author", "Auteur (facultatif)")}>
+                <input value={offAuthor} onChange={(e) => setOffAuthor(e.target.value)} />
+              </Field>
+              <Field label={t("com.off_isbn", "ISBN (facultatif)")}>
+                <input value={offIsbn} onChange={(e) => setOffIsbn(e.target.value)} />
+              </Field>
+            </>
+          )}
           <Field label={t("com.quantity", "Quantité")}>
             <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} />
           </Field>
@@ -451,7 +507,45 @@ function PosSaleForm({
               {points.filter((p) => p.active).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
+          <Field label={t("com.pos_customer", "Client (facultatif)")}>
+            <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+              <option value="">{t("com.pos_customer_none", "— Aucun (vente anonyme) —")}</option>
+              <option value={NEW}>➕ {t("com.new_customer_opt", "Nouveau client (saisie manuelle)")}</option>
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
         </div>
+
+        {bookMode === "off" && (
+          <div style={{ marginTop: 10, fontSize: 12, color: "var(--muted)" }}>
+            {t("com.off_hint", "Vente « hors catalogue » : enregistrée comme provisoire (sans mouvement de stock), à rattacher à l'ouvrage une fois créé au catalogue.")}
+          </div>
+        )}
+
+        {/* Nouveau client (saisie manuelle, auto-créé au catalogue). */}
+        {customerId === NEW && (
+          <div style={{ marginTop: 12, padding: 12, border: "1px dashed var(--eclosion)", borderRadius: 8, background: "var(--eclosion-soft)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+              <Field label={t("com.nc_name", "Nom / raison sociale *")}>
+                <input value={newCust.name} onChange={(e) => setNewCust({ ...newCust, name: e.target.value })} />
+              </Field>
+              <Field label={t("com.nc_category", "Catégorie")}>
+                <select value={newCust.category} onChange={(e) => setNewCust({ ...newCust, category: e.target.value as CustomerCategory })}>
+                  {(Object.keys(CATEGORY_LABELS) as CustomerCategory[]).map((c) => <option key={c} value={c}>{t(`com.cat.${c}`, CATEGORY_LABELS[c])}</option>)}
+                </select>
+              </Field>
+              <Field label={t("com.nc_phone", "Téléphone")}>
+                <input value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} />
+              </Field>
+              <Field label={t("com.nc_email", "E-mail (facultatif)")}>
+                <input type="email" value={newCust.email} onChange={(e) => setNewCust({ ...newCust, email: e.target.value })} />
+              </Field>
+              <Field label={t("com.nc_address", "Adresse (facultatif)")}>
+                <input value={newCust.address} onChange={(e) => setNewCust({ ...newCust, address: e.target.value })} />
+              </Field>
+            </div>
+          </div>
+        )}
         {addingPoint ? (
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8, marginTop: 12 }}>
             <Field label={t("com.point_name", "Nom du point de vente")}>

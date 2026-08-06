@@ -1739,12 +1739,16 @@ export function approveSalesOrder(id: string) {
 }
 
 export function createPosSale(input: {
-  isbn_id: string;
-  location_id: string;
+  isbn_id?: string;
+  location_id?: string;
+  off_catalogue_title?: string;
+  off_catalogue_author?: string;
+  off_catalogue_isbn?: string;
   quantity: number;
   unit_price: number;
   payment_method: "cash" | "card" | "mobile_money";
   event_label?: string;
+  customer_id?: string;
   point_of_sale_id?: string;
 }) {
   return request(`/api/v1/pos-sales`, { method: "POST", body: JSON.stringify(input) });

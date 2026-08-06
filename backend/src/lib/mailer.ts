@@ -41,6 +41,8 @@ export interface MailInput {
   replyTo?: string;
   // Nom affiché de l'expéditeur (ex. « Éclosion Édition — Service Éditorial »).
   fromName?: string;
+  // Pièces jointes (ex. bulletin de paie PDF). Contenu binaire + nom de fichier.
+  attachments?: { filename: string; content: Buffer; contentType?: string }[];
 }
 
 // Renvoie true si l'e-mail a réellement été envoyé, false s'il a seulement été
@@ -86,6 +88,7 @@ export async function sendMail(input: MailInput): Promise<boolean> {
     subject: input.subject,
     text: input.text,
     html: input.html,
+    attachments: input.attachments,
   });
   return true;
 }

@@ -191,7 +191,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     { preHandler: requirePermission("paie", "consultation") },
     async (request, reply) => {
       const { employeeId } = request.params as { employeeId: string };
-      const parsed = z.object({ period: z.string().optional(), message: z.string().max(2000).optional(), to: z.string().email().optional(), preview: z.boolean().optional() }).safeParse(request.body ?? {});
+      const parsed = z.object({ period: z.string().optional(), message: z.string().max(2000).optional(), to: z.string().email().optional(), preview: z.boolean().optional(), pdf_base64: z.string().optional() }).safeParse(request.body ?? {});
       if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
       const period = normalizePeriod(parsed.data.period);
       const resolved = await resolvePayslip(employeeId, period);
@@ -220,18 +220,47 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const to = (parsed.data.to ?? defaultTo)?.trim();
       if (!to) return reply.code(400).send({ code: "missing_recipient", message: "Renseignez l'adresse e-mail du salarié (fiche paie ou champ destinataire)." });
 
+      // Bulletin PDF (généré côté navigateur) joint à l'e-mail, s'il est fourni.
+      const hasPdf = Boolean(parsed.data.pdf_base64);
+      const attachments = parsed.data.pdf_base64
+        ? [{ filename: `bulletin-${period}.pdf`, content: Buffer.from(parsed.data.pdf_base64, "base64"), contentType: "application/pdf" }]
+        : undefined;
+
       let sent: boolean;
+      let error: string | null = null;
       try {
         const sender = senderIdentity(request.user!);
-        sent = await sendMail({ to, subject: built.subject, text: built.text, html: built.html, ...sender });
+        sent = await sendMail({ to, subject: built.subject, text: built.text, html: built.html, attachments, ...sender });
       } catch (err) {
         if (err instanceof Error && err.message === "mail_not_configured") {
           return reply.code(503).send({ code: "mail_not_configured", message: "L'envoi d'e-mails n'est pas encore configuré (paramètres SMTP à renseigner sur l'hébergement)." });
         }
-        throw err;
+        // Échec d'envoi : tracé comme « failed », pour permettre une relance.
+        error = err instanceof Error ? err.message : "Échec d'envoi inconnu.";
+        const failed = await prisma.payslipDispatch.create({ data: { employeeId, period, recipient: to, status: "failed", error, hasPdf, sentBy: request.user!.id } });
+        await writeAuditLog({ userId: request.user!.id, action: "export", entityType: "payslip_email", entityId: `${employeeId}:${period}`, newValues: { to, sent: false, error, dispatch_id: failed.id }, ipAddress: request.ip });
+        return reply.code(502).send({ code: "send_failed", message: `Échec de l'envoi : ${error}`, dispatch_id: failed.id });
       }
-      await writeAuditLog({ userId: request.user!.id, action: "export", entityType: "payslip_email", entityId: `${employeeId}:${period}`, newValues: { to, sent }, ipAddress: request.ip });
-      return reply.send({ sent, to });
+      // sendMail renvoie false hors configuration SMTP (dev/test) → « en attente ».
+      const dispatch = await prisma.payslipDispatch.create({ data: { employeeId, period, recipient: to, status: sent ? "sent" : "pending", hasPdf, sentBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "export", entityType: "payslip_email", entityId: `${employeeId}:${period}`, newValues: { to, sent, has_pdf: hasPdf, dispatch_id: dispatch.id }, ipAddress: request.ip });
+      return reply.send({ sent, to, dispatch_id: dispatch.id, status: dispatch.status });
+    },
+  );
+
+  // Journal des envois de bulletins d'un employé (statut + relance possible).
+  fastify.get(
+    "/api/v1/payroll/employees/:employeeId/payslip/dispatches",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const { employeeId } = request.params as { employeeId: string };
+      const q = request.query as { period?: string };
+      const rows = await prisma.payslipDispatch.findMany({
+        where: { employeeId, ...(q.period ? { period: q.period } : {}) },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      });
+      return reply.send(rows.map((r) => ({ id: r.id, period: r.period, recipient: r.recipient, status: r.status, error: r.error, has_pdf: r.hasPdf, created_at: r.createdAt })));
     },
   );
 

@@ -13,6 +13,17 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 06/08/2026 (suite) — RH module amont : Formation (demandes, sessions & participation)
+
+**Fait (suite de l'audit RH, module 2/2 demandé « on continue 1 et 2 ») :**
+- **Formation** : trois volets couplés — **demandes** de formation (sujet + motivation, circuit demandée → approuvée / refusée), **sessions** planifiées (intitulé, organisme, thème, mode présentiel/distanciel, date, coût ; statut planifiée → réalisée / annulée) et **suivi de participation** (inscription d'un collaborateur, émargement présent / absent, une inscription unique par session + collaborateur).
+- Modèles `TrainingRequest`, `TrainingSession`, `TrainingParticipation` (contrainte d'unicité session+collaborateur), migration additive `20260806180000_training`.
+- Backend : `POST/GET /training-requests`, `PATCH /training-requests/:id/status` (rh:validation) ; `POST/GET /training-sessions`, `PATCH /training-sessions/:id/status` (rh:validation) ; `GET/POST /training-sessions/:id/participants`, `PATCH /training-participations/:id`. Listes enrichies des décomptes par état ; double inscription refusée (409). Écritures journalisées.
+- Frontend : carte **« Formation »** dans le pôle RH — sous-blocs Demandes (approuver / refuser) et Sessions (planifier, réaliser / annuler, panneau participants avec inscription et émargement). Réservé aux profils RH.
+- **Tests** : `training.test.ts` (3 cas) — demande + décision horodatée ; session + inscription + double inscription (409) + émargement + décompte ; création sans droit RH (403). Verts. Typecheck back+front + build OK.
+
+**Prochaine étape :** chantier « contrat & manuscrit » (rubrique contrat au pôle éditorial, transfert du contrat en messagerie/WhatsApp, téléchargement source « Mes lectures », contrat à termes variables, renseignements auteur, boutons demande devis / facture frais de dépôt).
+
 ### 06/08/2026 (suite) — RH module amont : Recrutement (postes à pourvoir & candidatures)
 
 **Fait (suite de l'audit RH, module 1/2 demandé « on continue 1 et 2 ») :**

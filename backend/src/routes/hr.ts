@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import argon2 from "argon2";
 import { z } from "zod";
-import { EmployeeStatus, HrContractType, AbsenceType, AbsenceStatus, AccessReviewDecision, JobOpeningStatus, JobApplicationStatus } from "@prisma/client";
+import { EmployeeStatus, HrContractType, AbsenceType, AbsenceStatus, AccessReviewDecision, JobOpeningStatus, JobApplicationStatus, TrainingRequestStatus, TrainingSessionMode, TrainingSessionStatus, TrainingParticipationStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -555,6 +555,164 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       data: { status: parsed.data.status, notes: parsed.data.notes ?? application.notes, decidedAt: decided ? new Date() : null, updatedBy: request.user!.id },
     });
     await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "job_application", entityId: id, newValues: { status: parsed.data.status }, ipAddress: request.ip });
+    return reply.send(updated);
+  });
+
+  // ─── Formation : demandes, sessions & suivi de participation ────────────────
+
+  // Demande de formation d'un collaborateur (sujet + motivation).
+  fastify.post("/api/v1/training-requests", { preHandler: requirePermission("rh", "saisie") }, async (request, reply) => {
+    const parsed = z.object({ employee_id: z.string().uuid(), topic: z.string().min(2).max(200), motivation: z.string().max(4000).optional() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const employee = await prisma.employee.findFirst({ where: { id: parsed.data.employee_id, deletedAt: null } });
+    if (!employee) return reply.code(404).send({ code: "not_found", message: "Collaborateur introuvable." });
+    const req = await prisma.trainingRequest.create({
+      data: { employeeId: parsed.data.employee_id, topic: parsed.data.topic, motivation: parsed.data.motivation, createdBy: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "training_request", entityId: req.id, newValues: { topic: req.topic }, ipAddress: request.ip });
+    return reply.code(201).send(req);
+  });
+
+  // Liste des demandes (filtre statut) avec le nom du collaborateur.
+  fastify.get("/api/v1/training-requests", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const status = (request.query as { status?: string }).status;
+    const where = status && (Object.values(TrainingRequestStatus) as string[]).includes(status) ? { status: status as TrainingRequestStatus } : {};
+    const rows = await prisma.trainingRequest.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: { employee: { select: { firstName: true, lastName: true } } },
+    });
+    return reply.send(rows.map((r) => ({
+      id: r.id,
+      employee_id: r.employeeId,
+      employee: `${r.employee.firstName} ${r.employee.lastName}`,
+      topic: r.topic,
+      motivation: r.motivation,
+      status: r.status,
+      decided_at: r.decidedAt,
+      created_at: r.createdAt,
+    })));
+  });
+
+  // Décision sur une demande (approuvée / refusée / planifiée).
+  fastify.patch("/api/v1/training-requests/:id/status", { preHandler: requirePermission("rh", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ status: z.nativeEnum(TrainingRequestStatus) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Statut invalide.", details: parsed.error.issues });
+    const existing = await prisma.trainingRequest.findUnique({ where: { id } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Demande introuvable." });
+    const decided = parsed.data.status !== "demandee";
+    const updated = await prisma.trainingRequest.update({
+      where: { id },
+      data: { status: parsed.data.status, decidedBy: decided ? request.user!.id : null, decidedAt: decided ? new Date() : null, updatedBy: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "training_request", entityId: id, newValues: { status: parsed.data.status }, ipAddress: request.ip });
+    return reply.send(updated);
+  });
+
+  // Session de formation (organisme, thème, mode, date, coût).
+  fastify.post("/api/v1/training-sessions", { preHandler: requirePermission("rh", "saisie") }, async (request, reply) => {
+    const parsed = z
+      .object({
+        title: z.string().min(2).max(200),
+        provider: z.string().max(200).optional(),
+        theme: z.string().max(200).optional(),
+        mode: z.nativeEnum(TrainingSessionMode).optional(),
+        session_date: z.string().datetime().optional(),
+        cost: z.number().nonnegative().optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const session = await prisma.trainingSession.create({
+      data: {
+        title: parsed.data.title,
+        provider: parsed.data.provider,
+        theme: parsed.data.theme,
+        mode: parsed.data.mode ?? "presentiel",
+        sessionDate: parsed.data.session_date ? new Date(parsed.data.session_date) : undefined,
+        cost: parsed.data.cost,
+        createdBy: request.user!.id,
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "training_session", entityId: session.id, newValues: { title: session.title }, ipAddress: request.ip });
+    return reply.code(201).send(session);
+  });
+
+  // Liste des sessions avec le décompte des participants par état.
+  fastify.get("/api/v1/training-sessions", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const status = (request.query as { status?: string }).status;
+    const where = status && (Object.values(TrainingSessionStatus) as string[]).includes(status) ? { status: status as TrainingSessionStatus } : {};
+    const rows = await prisma.trainingSession.findMany({
+      where,
+      orderBy: [{ sessionDate: "desc" }, { createdAt: "desc" }],
+      include: { participations: { select: { status: true } } },
+    });
+    return reply.send(rows.map((s) => {
+      const counts = { inscrit: 0, present: 0, absent: 0 };
+      for (const p of s.participations) counts[p.status] += 1;
+      return {
+        id: s.id,
+        title: s.title,
+        provider: s.provider,
+        theme: s.theme,
+        mode: s.mode,
+        session_date: s.sessionDate,
+        status: s.status,
+        cost: s.cost,
+        participants_total: s.participations.length,
+        participants_by_status: counts,
+      };
+    }));
+  });
+
+  // Clôture d'une session (réalisée / annulée / re-planifiée).
+  fastify.patch("/api/v1/training-sessions/:id/status", { preHandler: requirePermission("rh", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ status: z.nativeEnum(TrainingSessionStatus) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Statut invalide.", details: parsed.error.issues });
+    const existing = await prisma.trainingSession.findUnique({ where: { id } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Session introuvable." });
+    const updated = await prisma.trainingSession.update({ where: { id }, data: { status: parsed.data.status, updatedBy: request.user!.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "training_session", entityId: id, newValues: { status: parsed.data.status }, ipAddress: request.ip });
+    return reply.send(updated);
+  });
+
+  // Participants d'une session.
+  fastify.get("/api/v1/training-sessions/:id/participants", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const rows = await prisma.trainingParticipation.findMany({
+      where: { sessionId: id },
+      orderBy: { createdAt: "asc" },
+      include: { employee: { select: { firstName: true, lastName: true } } },
+    });
+    return reply.send(rows.map((p) => ({ id: p.id, employee_id: p.employeeId, employee: `${p.employee.firstName} ${p.employee.lastName}`, status: p.status })));
+  });
+
+  // Inscription d'un collaborateur à une session (idempotent par session+collaborateur).
+  fastify.post("/api/v1/training-sessions/:id/participants", { preHandler: requirePermission("rh", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ employee_id: z.string().uuid() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const session = await prisma.trainingSession.findUnique({ where: { id } });
+    if (!session) return reply.code(404).send({ code: "not_found", message: "Session introuvable." });
+    const employee = await prisma.employee.findFirst({ where: { id: parsed.data.employee_id, deletedAt: null } });
+    if (!employee) return reply.code(404).send({ code: "not_found", message: "Collaborateur introuvable." });
+    const existing = await prisma.trainingParticipation.findUnique({ where: { sessionId_employeeId: { sessionId: id, employeeId: parsed.data.employee_id } } });
+    if (existing) return reply.code(409).send({ code: "already_enrolled", message: "Ce collaborateur est déjà inscrit à cette session." });
+    const p = await prisma.trainingParticipation.create({ data: { sessionId: id, employeeId: parsed.data.employee_id, createdBy: request.user!.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "training_participation", entityId: p.id, newValues: { sessionId: id, employeeId: parsed.data.employee_id }, ipAddress: request.ip });
+    return reply.code(201).send(p);
+  });
+
+  // Émargement d'un participant (présent / absent / inscrit).
+  fastify.patch("/api/v1/training-participations/:id", { preHandler: requirePermission("rh", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ status: z.nativeEnum(TrainingParticipationStatus) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Statut invalide.", details: parsed.error.issues });
+    const existing = await prisma.trainingParticipation.findUnique({ where: { id } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Participation introuvable." });
+    const updated = await prisma.trainingParticipation.update({ where: { id }, data: { status: parsed.data.status } });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "training_participation", entityId: id, newValues: { status: parsed.data.status }, ipAddress: request.ip });
     return reply.send(updated);
   });
 

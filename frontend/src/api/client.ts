@@ -2429,6 +2429,67 @@ export function setJobApplicationStatus(id: string, status: JobApplicationStatus
   return request<JobApplication>(`/api/v1/job-applications/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, notes }) });
 }
 
+// Formation — demandes, sessions & suivi de participation.
+export type TrainingRequestStatus = "demandee" | "approuvee" | "refusee" | "planifiee";
+export type TrainingSessionStatus = "planifiee" | "realisee" | "annulee";
+export type TrainingSessionMode = "presentiel" | "distanciel";
+export type TrainingParticipationStatus = "inscrit" | "present" | "absent";
+export interface TrainingRequest {
+  id: string;
+  employee_id: string;
+  employee: string;
+  topic: string;
+  motivation: string | null;
+  status: TrainingRequestStatus;
+  decided_at: string | null;
+  created_at: string;
+}
+export interface TrainingSession {
+  id: string;
+  title: string;
+  provider: string | null;
+  theme: string | null;
+  mode: TrainingSessionMode;
+  session_date: string | null;
+  status: TrainingSessionStatus;
+  cost: string | null;
+  participants_total: number;
+  participants_by_status: Record<TrainingParticipationStatus, number>;
+}
+export interface TrainingParticipant {
+  id: string;
+  employee_id: string;
+  employee: string;
+  status: TrainingParticipationStatus;
+}
+export function getTrainingRequests(status?: TrainingRequestStatus) {
+  return request<TrainingRequest[]>(`/api/v1/training-requests${status ? `?status=${status}` : ""}`);
+}
+export function createTrainingRequest(input: { employee_id: string; topic: string; motivation?: string }) {
+  return request<TrainingRequest>(`/api/v1/training-requests`, { method: "POST", body: JSON.stringify(input) });
+}
+export function setTrainingRequestStatus(id: string, status: TrainingRequestStatus) {
+  return request<TrainingRequest>(`/api/v1/training-requests/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+export function getTrainingSessions(status?: TrainingSessionStatus) {
+  return request<TrainingSession[]>(`/api/v1/training-sessions${status ? `?status=${status}` : ""}`);
+}
+export function createTrainingSession(input: { title: string; provider?: string; theme?: string; mode?: TrainingSessionMode; session_date?: string; cost?: number }) {
+  return request<TrainingSession>(`/api/v1/training-sessions`, { method: "POST", body: JSON.stringify(input) });
+}
+export function setTrainingSessionStatus(id: string, status: TrainingSessionStatus) {
+  return request<TrainingSession>(`/api/v1/training-sessions/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+export function getTrainingParticipants(sessionId: string) {
+  return request<TrainingParticipant[]>(`/api/v1/training-sessions/${sessionId}/participants`);
+}
+export function enrollTrainingParticipant(sessionId: string, employeeId: string) {
+  return request<TrainingParticipant>(`/api/v1/training-sessions/${sessionId}/participants`, { method: "POST", body: JSON.stringify({ employee_id: employeeId }) });
+}
+export function setTrainingParticipantStatus(id: string, status: TrainingParticipationStatus) {
+  return request<TrainingParticipant>(`/api/v1/training-participations/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
 export function getEmployee(id: string) {
   return request<Employee & { hrContracts: unknown[]; reports: Employee[]; employeeSkills: unknown[] }>(`/api/v1/employees/${id}`);
 }

@@ -265,6 +265,88 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
   // commercial, à la finance et à la direction.
   // Commissions : consultables par le pôle commercial ET par la direction
   // financière (qui les paie — rattachement à la finance demandé le 25/07/2026).
+  // Tableau de bord INDIVIDUEL de performance commerciale (« Mes performances »).
+  // Strictement personnel : un commercial ne voit que ses propres opérations
+  // (soldBy / createdBy = son compte). Les responsables (commercial:validation
+  // ou administration, direction) peuvent cibler un autre commercial (?rep=<id>)
+  // ou consolider l'équipe (?rep=all).
+  fastify.get("/api/v1/commercial/my-performance", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
+    const q = request.query as { from?: string; to?: string; rep?: string };
+    const from = q.from ? new Date(q.from) : undefined;
+    const to = q.to ? new Date(q.to) : undefined;
+    if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+      return reply.code(400).send({ code: "validation_error", message: "Dates invalides." });
+    }
+    const perms = request.user!.permissions;
+    const canSeeOthers = perms.has("commercial:validation") || perms.has("commercial:administration") || perms.has("direction:consultation");
+    // Périmètre : soi-même par défaut ; un responsable peut cibler un rep ou consolider (all).
+    const repId = canSeeOthers ? (q.rep === "all" ? null : q.rep ?? request.user!.id) : request.user!.id;
+
+    const soldAt = from || to ? { gte: from, lte: to } : undefined;
+    const posWhere = { ...(repId ? { soldBy: repId } : {}), ...(soldAt ? { soldAt } : {}) };
+    const orderWhere = { ...(repId ? { createdBy: repId } : {}), ...(soldAt ? { createdAt: soldAt } : {}) };
+
+    const [posSales, orders, newCustomers] = await Promise.all([
+      prisma.posSale.findMany({ where: posWhere, select: { quantity: true, unitPrice: true, isbnId: true, customerId: true, soldAt: true, isbn: { select: { manuscript: { select: { title: true } } } } } }),
+      prisma.salesOrder.findMany({ where: orderWhere, select: { status: true, customerId: true, createdAt: true, lines: { select: { quantity: true, unitPrice: true, discountPct: true, isbnId: true, isbn: { select: { manuscript: { select: { title: true } } } } } } } }),
+      prisma.customer.count({ where: { ...(repId ? { createdBy: repId } : {}), deletedAt: null, ...(soldAt ? { createdAt: soldAt } : {}) } }),
+    ]);
+
+    // Chiffre d'affaires (ventes comptoir + commandes, remise déduite).
+    const posRevenue = posSales.reduce((s, p) => s + p.quantity * Number(p.unitPrice), 0);
+    const orderRevenue = orders.reduce((s, o) => s + o.lines.reduce((ls, l) => ls + l.quantity * Number(l.unitPrice) * (1 - Number(l.discountPct) / 100), 0), 0);
+    const revenue = Math.round(posRevenue + orderRevenue);
+    const salesCount = posSales.length;
+    const ordersCount = orders.length;
+    const avgSale = salesCount ? Math.round(posRevenue / salesCount) : 0;
+
+    const delivered = orders.filter((o) => o.status === "delivered" || o.status === "shipped" || o.status === "invoiced").length;
+    const cancelled = orders.filter((o) => o.status === "cancelled").length;
+    const pending = orders.filter((o) => ["draft", "blocked_credit", "confirmed", "preparing"].includes(o.status)).length;
+    const transformationRate = ordersCount ? Math.round((delivered / ordersCount) * 100) : 0;
+
+    // Meilleurs clients (CA) — commandes ventilées par client.
+    const custRevenue = new Map<string, number>();
+    const activeCust = new Set<string>();
+    for (const o of orders) {
+      const amt = o.lines.reduce((ls, l) => ls + l.quantity * Number(l.unitPrice) * (1 - Number(l.discountPct) / 100), 0);
+      custRevenue.set(o.customerId, (custRevenue.get(o.customerId) ?? 0) + amt);
+      activeCust.add(o.customerId);
+    }
+    for (const p of posSales) if (p.customerId) { custRevenue.set(p.customerId, (custRevenue.get(p.customerId) ?? 0) + p.quantity * Number(p.unitPrice)); activeCust.add(p.customerId); }
+    const topCustIds = [...custRevenue.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const custNames = new Map((await prisma.customer.findMany({ where: { id: { in: topCustIds.map((c) => c[0]) } }, select: { id: true, name: true } })).map((c) => [c.id, c.name]));
+    const topCustomers = topCustIds.map(([id, amt]) => ({ name: custNames.get(id) ?? "—", revenue: Math.round(amt) }));
+
+    // Livres les plus vendus (quantités) — comptoir + commandes.
+    const bookQty = new Map<string, number>();
+    const bump = (title: string | undefined, qty: number) => { const t = title ?? "—"; bookQty.set(t, (bookQty.get(t) ?? 0) + qty); };
+    for (const p of posSales) bump(p.isbn?.manuscript?.title, p.quantity);
+    for (const o of orders) for (const l of o.lines) bump(l.isbn?.manuscript?.title, l.quantity);
+    const topBooks = [...bookQty.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([title, units]) => ({ title, units }));
+
+    // Ventes par horizon (CA comptoir).
+    const now = Date.now();
+    const since = (days: number) => new Date(now - days * 864e5);
+    const sumSince = (d: Date) => Math.round(posSales.filter((p) => p.soldAt >= d).reduce((s, p) => s + p.quantity * Number(p.unitPrice), 0));
+    const byPeriod = {
+      today: Math.round(posSales.filter((p) => p.soldAt.toDateString() === new Date().toDateString()).reduce((s, p) => s + p.quantity * Number(p.unitPrice), 0)),
+      week: sumSince(since(7)),
+      month: sumSince(since(30)),
+      year: sumSince(since(365)),
+    };
+
+    return reply.send({
+      scope: repId ? "individual" : "consolidated",
+      can_see_others: canSeeOthers,
+      revenue, sales_count: salesCount, orders_count: ordersCount, avg_sale: avgSale,
+      transformation_rate: transformationRate,
+      orders_delivered: delivered, orders_cancelled: cancelled, orders_pending: pending,
+      new_customers: newCustomers, active_customers: activeCust.size,
+      top_customers: topCustomers, top_books: topBooks, by_period: byPeriod,
+    });
+  });
+
   fastify.get("/api/v1/commercial/commissions", { preHandler: requireAnyPermission([{ module: "commercial", action: "consultation" }, { module: "finance", action: "consultation" }]) }, async (request, reply) => {
     const q = request.query as { from?: string; to?: string; granularity?: string };
     const allowed = ["week", "month", "semester", "year"];

@@ -1,0 +1,154 @@
+import { useEffect, useMemo, useState } from "react";
+import { getMyPerformance, type MyPerformance } from "../api/client";
+import { GuidanceNote } from "../components/GuidanceNote";
+
+// « Mes performances » — tableau de bord INDIVIDUEL du commercial connecté.
+// Strictement personnel ; les responsables peuvent consolider l'équipe.
+
+type Preset = "today" | "week" | "month" | "quarter" | "year" | "all" | "custom";
+const PRESETS: { key: Preset; label: string; days: number | null }[] = [
+  { key: "today", label: "Jour", days: 0 },
+  { key: "week", label: "Semaine", days: 7 },
+  { key: "month", label: "Mois", days: 30 },
+  { key: "quarter", label: "Trimestre", days: 90 },
+  { key: "year", label: "Année", days: 365 },
+  { key: "all", label: "Tout", days: null },
+];
+
+function fcfa(n: number): string {
+  return `${Math.round(n).toLocaleString("fr-FR")} FCFA`;
+}
+
+export function CommercialPerformancePage({ canManage }: { canManage: boolean }) {
+  const [preset, setPreset] = useState<Preset>("month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [consolidated, setConsolidated] = useState(false);
+  const [data, setData] = useState<MyPerformance | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const range = useMemo(() => {
+    if (preset === "all") return {};
+    if (preset === "custom") return { from: customFrom || undefined, to: customTo || undefined };
+    const days = PRESETS.find((p) => p.key === preset)?.days ?? 30;
+    const from = new Date();
+    if (days === 0) from.setHours(0, 0, 0, 0);
+    else from.setTime(Date.now() - days * 864e5);
+    return { from: from.toISOString() };
+  }, [preset, customFrom, customTo]);
+
+  useEffect(() => {
+    getMyPerformance({ ...range, rep: consolidated ? "all" : undefined })
+      .then((d) => { setData(d); setError(null); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
+  }, [range, consolidated]);
+
+  return (
+    <div className="ecl-page">
+      <h1 className="ecl-page__title">Mes performances</h1>
+      <p className="ecl-page__lead">Vos résultats commerciaux personnels — ventes, chiffre d'affaires, commandes et meilleurs clients.</p>
+
+      <GuidanceNote title="Tableau de bord personnel">
+        Ce tableau n'affiche que <strong>vos propres opérations</strong> (les ventes et commandes que vous avez initiées).
+        {canManage && " En tant que responsable, vous pouvez consolider l'ensemble de l'équipe."}
+      </GuidanceNote>
+
+      {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 13px", fontSize: 13, margin: "12px 0" }}>{error}</div>}
+
+      {/* Filtres de période */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", margin: "14px 0" }}>
+        {PRESETS.map((p) => (
+          <button key={p.key} onClick={() => setPreset(p.key)} style={chip(preset === p.key)}>{p.label}</button>
+        ))}
+        <button onClick={() => setPreset("custom")} style={chip(preset === "custom")}>Période personnalisée</button>
+        {preset === "custom" && (
+          <>
+            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} style={dateInput} />
+            <span style={{ color: "var(--muted)" }}>→</span>
+            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} style={dateInput} />
+          </>
+        )}
+        {canManage && data?.can_see_others && (
+          <label style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+            <input type="checkbox" checked={consolidated} onChange={(e) => setConsolidated(e.target.checked)} />
+            Équipe (consolidé)
+          </label>
+        )}
+      </div>
+
+      {!data ? (
+        <p style={{ color: "var(--muted)", fontSize: 14 }}>Chargement…</p>
+      ) : (
+        <>
+          {consolidated && <div style={{ fontSize: 12.5, color: "var(--eclosion-dark, #8A6A12)", fontWeight: 600, marginBottom: 8 }}>Vue consolidée — ensemble de l'équipe commerciale.</div>}
+
+          {/* Cartes KPI */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+            <Kpi label="Chiffre d'affaires" value={fcfa(data.revenue)} tone="gold" />
+            <Kpi label="Ventes réalisées" value={String(data.sales_count)} />
+            <Kpi label="Commandes" value={String(data.orders_count)} />
+            <Kpi label="Taux de transformation" value={`${data.transformation_rate} %`} />
+            <Kpi label="Montant moyen / vente" value={fcfa(data.avg_sale)} />
+            <Kpi label="Nouveaux clients" value={String(data.new_customers)} />
+            <Kpi label="Clients actifs" value={String(data.active_customers)} />
+            <Kpi label="Commandes en attente" value={String(data.orders_pending)} />
+            <Kpi label="Commandes livrées" value={String(data.orders_delivered)} tone="green" />
+            <Kpi label="Commandes annulées" value={String(data.orders_cancelled)} tone={data.orders_cancelled > 0 ? "red" : undefined} />
+          </div>
+
+          {/* Ventes par horizon */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginTop: 12 }}>
+            <Kpi label="Ventes du jour" value={fcfa(data.by_period.today)} small />
+            <Kpi label="7 derniers jours" value={fcfa(data.by_period.week)} small />
+            <Kpi label="30 derniers jours" value={fcfa(data.by_period.month)} small />
+            <Kpi label="12 derniers mois" value={fcfa(data.by_period.year)} small />
+          </div>
+
+          {/* Classements */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginTop: 20 }}>
+            <RankTable title="Meilleurs clients (CA)" rows={data.top_customers.map((c) => [c.name, fcfa(c.revenue)])} empty="Aucune vente sur la période." />
+            <RankTable title="Livres les plus vendus" rows={data.top_books.map((b) => [b.title, `${b.units} ex.`])} empty="Aucune vente sur la période." />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Kpi({ label, value, tone, small }: { label: string; value: string; tone?: "gold" | "green" | "red"; small?: boolean }) {
+  const color = tone === "gold" ? "var(--eclosion-dark, #8A6A12)" : tone === "green" ? "#2E6B4F" : tone === "red" ? "var(--alert)" : "var(--ink)";
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: small ? "10px 12px" : "14px 16px" }}>
+      <div style={{ fontSize: 11.5, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: small ? 16 : 22, fontWeight: 700, color, fontFamily: "var(--font-mono, monospace)", marginTop: 4 }}>{value}</div>
+    </div>
+  );
+}
+
+function RankTable({ title, rows, empty }: { title: string; rows: [string, string][]; empty: string }) {
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden" }}>
+      <div style={{ padding: "10px 14px", fontWeight: 600, fontSize: 14, borderBottom: "1px solid var(--line)" }}>{title}</div>
+      {rows.length === 0 ? (
+        <div style={{ padding: 14, color: "var(--muted)", fontSize: 13 }}>{empty}</div>
+      ) : (
+        <div>
+          {rows.map(([name, val], i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 14px", borderTop: i ? "1px solid var(--line)" : "none", fontSize: 13.5 }}>
+              <span style={{ color: "var(--muted)", minWidth: 22 }}>{i + 1}.</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+              <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 600 }}>{val}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const chip = (active: boolean): React.CSSProperties => ({
+  border: `1px solid ${active ? "var(--eclosion)" : "var(--line)"}`,
+  background: active ? "var(--eclosion-soft)" : "var(--card, #fff)",
+  color: "var(--ink)", borderRadius: 999, padding: "6px 13px", fontSize: 13, fontWeight: active ? 700 : 400, cursor: "pointer",
+});
+const dateInput: React.CSSProperties = { padding: "6px 10px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 };

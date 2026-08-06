@@ -242,11 +242,14 @@ function NewOrderForm({
   onError: (m: string) => void;
 }) {
   const { t } = useI18n();
+  const NEW = "__new__";
   const [customerId, setCustomerId] = useState("");
   const [isbnId, setIsbnId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [unitPrice, setUnitPrice] = useState(10000);
+  // Nouveau client saisi à la volée (auto-créé au catalogue à la validation).
+  const [newCust, setNewCust] = useState({ name: "", category: "particulier" as CustomerCategory, phone: "", email: "", address: "" });
 
   useEffect(() => {
     if (!customerId && customers[0]) setCustomerId(customers[0].id);
@@ -257,8 +260,25 @@ function NewOrderForm({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     try {
+      // Client non catalogué : on crée d'abord sa fiche (identifiant unique,
+      // réutilisable partout ensuite), puis la commande — jamais bloquant.
+      let resolvedCustomerId = customerId;
+      if (customerId === NEW) {
+        if (!newCust.name.trim()) {
+          onError(t("com.err_new_customer_name", "Nom ou raison sociale du nouveau client requis."));
+          return;
+        }
+        const created = await createCustomer({
+          category: newCust.category,
+          name: newCust.name.trim(),
+          phone: newCust.phone.trim() || undefined,
+          email: newCust.email.trim() || undefined,
+          address: newCust.address.trim() || undefined,
+        });
+        resolvedCustomerId = created.id;
+      }
       const order = await createSalesOrder({
-        customer_id: customerId,
+        customer_id: resolvedCustomerId,
         channel: "telephone",
         location_id: locationId,
         lines: [{ isbn_id: isbnId, quantity, unit_price: unitPrice }],
@@ -268,6 +288,10 @@ function NewOrderForm({
           ? `Commande ${order.orderNumber} créée mais bloquée (encours dépassé).`
           : `Commande ${order.orderNumber} confirmée.`,
       );
+      if (customerId === NEW) {
+        setNewCust({ name: "", category: "particulier", phone: "", email: "", address: "" });
+        setCustomerId("");
+      }
     } catch (err) {
       onError(err instanceof Error ? err.message : t("com.err_order", "Échec de la création de la commande."));
     }
@@ -279,6 +303,7 @@ function NewOrderForm({
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
           <Field label={t("com.customer", "Client")}>
             <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+              <option value={NEW}>➕ {t("com.new_customer_opt", "Nouveau client (saisie manuelle)")}</option>
               {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
             </select>
           </Field>
@@ -299,6 +324,35 @@ function NewOrderForm({
             <input type="number" min={0} value={unitPrice} onChange={(e) => setUnitPrice(Number(e.target.value))} />
           </Field>
         </div>
+
+        {/* Saisie manuelle d'un nouveau client (auto-créé au catalogue). */}
+        {customerId === NEW && (
+          <div style={{ marginTop: 12, padding: 12, border: "1px dashed var(--eclosion)", borderRadius: 8, background: "var(--eclosion-soft)" }}>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>
+              {t("com.new_customer_hint", "Ce client sera enregistré au catalogue à la validation, avec un identifiant unique — réutilisable ensuite partout.")}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+              <Field label={t("com.nc_name", "Nom / raison sociale *")}>
+                <input value={newCust.name} onChange={(e) => setNewCust({ ...newCust, name: e.target.value })} />
+              </Field>
+              <Field label={t("com.nc_category", "Catégorie")}>
+                <select value={newCust.category} onChange={(e) => setNewCust({ ...newCust, category: e.target.value as CustomerCategory })}>
+                  {(Object.keys(CATEGORY_LABELS) as CustomerCategory[]).map((c) => <option key={c} value={c}>{t(`com.cat.${c}`, CATEGORY_LABELS[c])}</option>)}
+                </select>
+              </Field>
+              <Field label={t("com.nc_phone", "Téléphone")}>
+                <input value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} />
+              </Field>
+              <Field label={t("com.nc_email", "E-mail (facultatif)")}>
+                <input type="email" value={newCust.email} onChange={(e) => setNewCust({ ...newCust, email: e.target.value })} />
+              </Field>
+              <Field label={t("com.nc_address", "Adresse (facultatif)")}>
+                <input value={newCust.address} onChange={(e) => setNewCust({ ...newCust, address: e.target.value })} />
+              </Field>
+            </div>
+          </div>
+        )}
+
         <div style={{ marginTop: 14 }}>
           <Button variant="add" size="md" type="submit">{t("com.create_order", "Créer la commande")}</Button>
         </div>

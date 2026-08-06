@@ -65,6 +65,7 @@ const FOCUS_BY_ORIGIN: Record<string, string> = {
   "pr-isbn": "isbn",
   "pr-bat": "bat",
   "pr-impression": "printing",
+  "cm-messages-auteurs": "authors",
 };
 const FOCUS_LABELS: Record<string, string> = {
   committee: "Comité de lecture",
@@ -75,6 +76,7 @@ const FOCUS_LABELS: Record<string, string> = {
   isbn: "ISBN & dépôt légal",
   bat: "BAT & contrôle qualité",
   printing: "Impression",
+  authors: "Messagerie des auteurs",
 };
 
 type ManuscriptWithExtras = Manuscript & {
@@ -336,7 +338,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           />
         )}
 
-        {activeFocus === null && permissions.has("manuscripts:consultation") && (
+        {show("authors") && permissions.has("manuscripts:consultation") && (
           <AuthorFilesSection manuscriptId={manuscript.id} canManage={permissions.has("manuscripts:saisie")} />
         )}
 
@@ -442,7 +444,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         />
       )}
 
-      {show("contracts") && permissions.has("finance:consultation") && (
+      {show("finance") && permissions.has("finance:consultation") && (
         <EditorialQuotesSection
           manuscriptId={manuscript.id}
           defaultPartnerId={manuscript.workContributors[0]?.partner.id ?? ""}

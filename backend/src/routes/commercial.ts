@@ -265,6 +265,50 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
   // commercial, à la finance et à la direction.
   // Commissions : consultables par le pôle commercial ET par la direction
   // financière (qui les paie — rattachement à la finance demandé le 25/07/2026).
+  // Objectifs commerciaux annuels. Lecture : un commercial voit le sien ; un
+  // responsable voit toute l'équipe (avec le nom des commerciaux). Écriture
+  // (définition d'un objectif) réservée aux responsables.
+  fastify.get("/api/v1/commercial/targets", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
+    const q = request.query as { year?: string };
+    const year = q.year ? Number(q.year) : new Date().getFullYear();
+    const perms = request.user!.permissions;
+    const canSeeOthers = perms.has("commercial:validation") || perms.has("commercial:administration") || perms.has("direction:consultation");
+    const targets = await prisma.salesTarget.findMany({
+      where: { year, ...(canSeeOthers ? {} : { userId: request.user!.id }) },
+      include: { user: { select: { id: true, username: true } } },
+      orderBy: { user: { username: "asc" } },
+    });
+    // Candidats (commerciaux) pour définir un objectif — sans exiger le droit
+    // « utilisateurs » : les comptes actifs disposant d'une permission commerciale.
+    const candidates = canSeeOthers
+      ? await prisma.user.findMany({
+          where: { deletedAt: null, status: "active", userRoles: { some: { role: { rolePermissions: { some: { permission: { module: "commercial" } } } } } } },
+          select: { id: true, username: true },
+          orderBy: { username: "asc" },
+        })
+      : [];
+    return reply.send({
+      year,
+      can_manage: canSeeOthers,
+      targets: targets.map((t) => ({ user_id: t.userId, username: t.user.username, year: t.year, target_revenue: Number(t.targetRevenue) })),
+      candidates,
+    });
+  });
+
+  fastify.put("/api/v1/commercial/targets", { preHandler: requireAnyPermission([{ module: "commercial", action: "validation" }, { module: "commercial", action: "administration" }]) }, async (request, reply) => {
+    const parsed = z.object({ user_id: z.string().uuid(), year: z.number().int().min(2000).max(2100), target_revenue: z.number().nonnegative() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Objectif invalide.", details: parsed.error.issues });
+    const user = await prisma.user.findFirst({ where: { id: parsed.data.user_id, deletedAt: null } });
+    if (!user) return reply.code(404).send({ code: "not_found", message: "Commercial introuvable." });
+    const saved = await prisma.salesTarget.upsert({
+      where: { userId_year: { userId: parsed.data.user_id, year: parsed.data.year } },
+      create: { userId: parsed.data.user_id, year: parsed.data.year, targetRevenue: parsed.data.target_revenue, createdBy: request.user!.id },
+      update: { targetRevenue: parsed.data.target_revenue },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "sales_target", entityId: saved.id, newValues: { user_id: parsed.data.user_id, year: parsed.data.year, target_revenue: parsed.data.target_revenue }, ipAddress: request.ip });
+    return reply.send({ user_id: saved.userId, year: saved.year, target_revenue: Number(saved.targetRevenue) });
+  });
+
   // Tableau de bord INDIVIDUEL de performance commerciale (« Mes performances »).
   // Strictement personnel : un commercial ne voit que ses propres opérations
   // (soldBy / createdBy = son compte). Les responsables (commercial:validation
@@ -347,9 +391,30 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       year: sumSince(since(365)),
     };
 
+    // Objectif annuel du commercial + taux de réalisation (cumul de l'année civile).
+    let objective: { year: number; target_revenue: number; ytd_revenue: number; realization_pct: number } | null = null;
+    if (repId) {
+      const year = new Date().getFullYear();
+      const target = await prisma.salesTarget.findUnique({ where: { userId_year: { userId: repId, year } } });
+      if (target) {
+        const yearStart = new Date(year, 0, 1);
+        const [ytdPos, ytdOrders] = await Promise.all([
+          prisma.posSale.findMany({ where: { soldBy: repId, soldAt: { gte: yearStart } }, select: { quantity: true, unitPrice: true } }),
+          prisma.salesOrder.findMany({ where: { createdBy: repId, createdAt: { gte: yearStart } }, select: { lines: { select: { quantity: true, unitPrice: true, discountPct: true } } } }),
+        ]);
+        const ytd = Math.round(
+          ytdPos.reduce((s, p) => s + p.quantity * Number(p.unitPrice), 0) +
+            ytdOrders.reduce((s, o) => s + o.lines.reduce((ls, l) => ls + l.quantity * Number(l.unitPrice) * (1 - Number(l.discountPct) / 100), 0), 0),
+        );
+        const targetVal = Number(target.targetRevenue);
+        objective = { year, target_revenue: targetVal, ytd_revenue: ytd, realization_pct: targetVal > 0 ? Math.round((ytd / targetVal) * 100) : 0 };
+      }
+    }
+
     return reply.send({
       scope: repId ? "individual" : "consolidated",
       can_see_others: canSeeOthers,
+      objective,
       revenue, sales_count: salesCount, orders_count: ordersCount, avg_sale: avgSale,
       transformation_rate: transformationRate,
       orders_delivered: delivered, orders_cancelled: cancelled, orders_pending: pending,

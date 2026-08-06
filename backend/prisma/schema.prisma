@@ -841,6 +841,7 @@ model User {
   auditEntries             AuditLog[]
   loginChallenges          LoginChallenge[]
   identifierChangeRequests IdentifierChangeRequest[]
+  salesTargets             SalesTarget[]
 
   ownedManuscripts   Manuscript[]        @relation("ManuscriptOwner")
   managedManuscripts Manuscript[]        @relation("ManuscriptProjectManager")
@@ -2843,6 +2844,22 @@ model PosSale {
   soldAt        DateTime         @default(now()) @map("sold_at")
 
   @@map("pos_sales")
+}
+
+// Objectif commercial annuel par commercial (chiffre d'affaires cible). Défini
+// par un responsable ; sert au taux de réalisation du tableau de bord individuel.
+model SalesTarget {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id])
+  year          Int
+  targetRevenue Decimal  @map("target_revenue") @db.Decimal(14, 2)
+  createdBy     String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, year])
+  @@map("sales_targets")
 }
 
 // Point de vente (décision opérateur du 11/07/2026) : librairie, salon du livre,

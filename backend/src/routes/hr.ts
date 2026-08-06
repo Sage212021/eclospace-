@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import argon2 from "argon2";
 import { z } from "zod";
-import { EmployeeStatus, HrContractType, AbsenceType, AbsenceStatus, AccessReviewDecision } from "@prisma/client";
+import { EmployeeStatus, HrContractType, AbsenceType, AbsenceStatus, AccessReviewDecision, JobOpeningStatus, JobApplicationStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -428,6 +428,134 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       days_left: c.endDate ? Math.ceil((c.endDate.getTime() - now.getTime()) / 864e5) : null,
     }));
     return reply.send({ horizon_days: days, alerts });
+  });
+
+  // ─── Recrutement : postes à pourvoir & candidatures (module amont RH) ───────
+  // Un poste ouvert reçoit des candidatures ; chaque candidature suit le circuit
+  // reçue → entretien → retenue / refusée. Le poste se clôt (pourvu / annulé).
+
+  fastify.post("/api/v1/job-openings", { preHandler: requirePermission("rh", "saisie") }, async (request, reply) => {
+    const parsed = z
+      .object({
+        title: z.string().min(2).max(200),
+        department_id: z.string().uuid().optional(),
+        contract_type: z.nativeEnum(HrContractType).optional(),
+        description: z.string().max(8000).optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const opening = await prisma.jobOpening.create({
+      data: {
+        title: parsed.data.title,
+        departmentId: parsed.data.department_id,
+        contractType: parsed.data.contract_type,
+        description: parsed.data.description,
+        createdBy: request.user!.id,
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "job_opening", entityId: opening.id, newValues: { title: opening.title }, ipAddress: request.ip });
+    return reply.code(201).send(opening);
+  });
+
+  // Liste des postes (filtre statut) avec le décompte des candidatures par état.
+  fastify.get("/api/v1/job-openings", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const status = (request.query as { status?: string }).status;
+    const where = status && (Object.values(JobOpeningStatus) as string[]).includes(status) ? { status: status as JobOpeningStatus } : {};
+    const rows = await prisma.jobOpening.findMany({
+      where,
+      orderBy: { openedAt: "desc" },
+      include: {
+        department: { select: { name: true } },
+        applications: { select: { status: true } },
+      },
+    });
+    const openings = rows.map((o) => {
+      const counts = { recue: 0, entretien: 0, retenue: 0, refusee: 0 };
+      for (const a of o.applications) counts[a.status] += 1;
+      return {
+        id: o.id,
+        title: o.title,
+        department: o.department?.name ?? null,
+        contract_type: o.contractType,
+        description: o.description,
+        status: o.status,
+        opened_at: o.openedAt,
+        closed_at: o.closedAt,
+        applications_total: o.applications.length,
+        applications_by_status: counts,
+      };
+    });
+    return reply.send(openings);
+  });
+
+  // Clôture / réouverture d'un poste (pourvu, annulé, réouvert).
+  fastify.patch("/api/v1/job-openings/:id/status", { preHandler: requirePermission("rh", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ status: z.nativeEnum(JobOpeningStatus) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Statut invalide.", details: parsed.error.issues });
+    const opening = await prisma.jobOpening.findUnique({ where: { id } });
+    if (!opening) return reply.code(404).send({ code: "not_found", message: "Poste introuvable." });
+    const updated = await prisma.jobOpening.update({
+      where: { id },
+      data: { status: parsed.data.status, closedAt: parsed.data.status === "ouvert" ? null : new Date(), updatedBy: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "job_opening", entityId: id, newValues: { status: parsed.data.status }, ipAddress: request.ip });
+    return reply.send(updated);
+  });
+
+  // Ajout d'une candidature sur un poste.
+  fastify.post("/api/v1/job-openings/:id/applications", { preHandler: requirePermission("rh", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z
+      .object({
+        first_name: z.string().min(1).max(120),
+        last_name: z.string().min(1).max(120),
+        email: z.string().email().max(200).optional(),
+        phone: z.string().max(40).optional(),
+        source: z.string().max(120).optional(),
+        notes: z.string().max(8000).optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const opening = await prisma.jobOpening.findUnique({ where: { id } });
+    if (!opening) return reply.code(404).send({ code: "not_found", message: "Poste introuvable." });
+    const app = await prisma.jobApplication.create({
+      data: {
+        jobOpeningId: id,
+        firstName: parsed.data.first_name,
+        lastName: parsed.data.last_name,
+        email: parsed.data.email,
+        phone: parsed.data.phone,
+        source: parsed.data.source,
+        notes: parsed.data.notes,
+        createdBy: request.user!.id,
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "job_application", entityId: app.id, newValues: { jobOpeningId: id }, ipAddress: request.ip });
+    return reply.code(201).send(app);
+  });
+
+  // Candidatures d'un poste (les plus récentes d'abord).
+  fastify.get("/api/v1/job-openings/:id/applications", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const rows = await prisma.jobApplication.findMany({ where: { jobOpeningId: id }, orderBy: { appliedAt: "desc" } });
+    return reply.send(rows);
+  });
+
+  // Avancement d'une candidature dans le circuit (entretien, retenue, refusée).
+  fastify.patch("/api/v1/job-applications/:id/status", { preHandler: requirePermission("rh", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ status: z.nativeEnum(JobApplicationStatus), notes: z.string().max(8000).optional() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Statut invalide.", details: parsed.error.issues });
+    const application = await prisma.jobApplication.findUnique({ where: { id } });
+    if (!application) return reply.code(404).send({ code: "not_found", message: "Candidature introuvable." });
+    const decided = parsed.data.status === "retenue" || parsed.data.status === "refusee";
+    const updated = await prisma.jobApplication.update({
+      where: { id },
+      data: { status: parsed.data.status, notes: parsed.data.notes ?? application.notes, decidedAt: decided ? new Date() : null, updatedBy: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "job_application", entityId: id, newValues: { status: parsed.data.status }, ipAddress: request.ip });
+    return reply.send(updated);
   });
 
   // Données confidentielles (Ch. 19 §19.2) : accès restreint, consultation

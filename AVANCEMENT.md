@@ -13,6 +13,18 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 06/08/2026 (suite) — Chantier contrat & manuscrit (2/…) : identité auteur (enregistrement → contrat) + durée variable du contrat
+
+**Fait (points 4 et 5 du chantier — contrat d'édition qui reflète les données réelles de chaque auteur) :**
+- **Renseignements de l'auteur collectés à l'enregistrement du manuscrit** : le formulaire « Déposer un manuscrit » gagne un volet dépliable **facultatif** « Renseignements de l'auteur pour le contrat » (e-mail, téléphone, adresse/BP, nationalité, date & lieu de naissance, profession, n° CNI + date & lieu de délivrance). Ces champs sont stockés sur la fiche auteur (partenaire).
+- **Repris automatiquement en tête du contrat d'édition** : la 1ʳᵉ partie du contrat imprimé (« Entre les soussignés ») affiche désormais l'identité réelle de l'auteur (né(e) le … à …, nationalité, profession, BP, CNI n° … délivrée le … à …, e-mail) au lieu de pointillés — pointillés conservés seulement pour les renseignements non fournis.
+- **Complétable / corrigeable ensuite** : nouveau bloc **« 🪪 Identité (contrat) »** sur chaque contrat d'édition — permet de compléter l'identité d'un auteur saisi avant cette évolution, ou de la corriger. Modification tracée au journal.
+- **Durée du contrat variable (terme)** : le formulaire de création de contrat gagne un champ **« Durée de la cession (années) »** ; la durée est enregistrée (`duration_months`, déjà supporté côté serveur) et **reprise automatiquement à l'article 5 du contrat imprimé** — chaque auteur peut ainsi avoir un terme différent. (Le taux de droits 8–15 % et l'avance étaient déjà variables et repris sur le contrat.)
+- Modèle : champs additifs sur `Partner` (birth_date, birth_place, nationality, profession, id_number, id_issued_date, id_issued_place), migration `20260806190000_partner_author_identity`. `POST /manuscripts` et `PATCH /partners/:id` acceptent ces renseignements.
+- **Tests** : `author-identity-contract.test.ts` (3 cas) — identité stockée à l'enregistrement ; durée conservée sur le contrat ; complétion après coup (PATCH). Verts (non-régression manuscrits + contrats OK). Typecheck back+front + build OK.
+
+**Reste du chantier :** transfert du contrat vers messagerie interne / WhatsApp (point 2) ; boutons « Demande devis » / « Demande facture frais de dépôt » sur le manuscrit → réception automatique côté Finance (point 6).
+
 ### 06/08/2026 (suite) — Chantier contrat & manuscrit (1/…) : rubrique Contrats au pôle Éditorial + téléchargement source « Mes lectures »
 
 **Fait (2 premiers points du chantier, à faible risque, sans schéma) :**

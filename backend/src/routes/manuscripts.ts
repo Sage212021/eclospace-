@@ -57,10 +57,42 @@ async function depositStageDoc(
 }
 import { previewSiteFiche, setSitePublished, optimizedCoverForSite, siteCoverThumbnail, UnsupportedImageError } from "../lib/sitePublisher.js";
 
+// Identité de l'auteur collectée à l'enregistrement du manuscrit : nom + tous
+// les renseignements repris en tête du contrat d'édition (facultatifs).
 const authorSchema = z.union([
   z.object({ author_id: z.string().uuid() }),
-  z.object({ first_name: z.string().min(1), last_name: z.string().min(1), pen_name: z.string().optional() }),
+  z.object({
+    first_name: z.string().min(1),
+    last_name: z.string().min(1),
+    pen_name: z.string().optional(),
+    email: z.string().email().max(200).optional(),
+    phone: z.string().max(40).optional(),
+    address: z.string().max(400).optional(),
+    birth_date: z.string().datetime().optional(),
+    birth_place: z.string().max(200).optional(),
+    nationality: z.string().max(120).optional(),
+    profession: z.string().max(200).optional(),
+    id_number: z.string().max(120).optional(),
+    id_issued_date: z.string().datetime().optional(),
+    id_issued_place: z.string().max(200).optional(),
+  }),
 ]);
+
+// Champs d'identité optionnels → data Prisma pour la création d'un partenaire.
+function authorIdentityData(a: Record<string, unknown>) {
+  return {
+    email: a.email as string | undefined,
+    phone: a.phone as string | undefined,
+    address: a.address as string | undefined,
+    birthDate: a.birth_date ? new Date(a.birth_date as string) : undefined,
+    birthPlace: a.birth_place as string | undefined,
+    nationality: a.nationality as string | undefined,
+    profession: a.profession as string | undefined,
+    idNumber: a.id_number as string | undefined,
+    idIssuedDate: a.id_issued_date ? new Date(a.id_issued_date as string) : undefined,
+    idIssuedPlace: a.id_issued_place as string | undefined,
+  };
+}
 
 const createManuscriptSchema = z.object({
   title: z.string().min(1),
@@ -182,6 +214,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
                 firstName: body.author.first_name,
                 lastName: body.author.last_name,
                 penName: body.author.pen_name,
+                ...authorIdentityData(body.author as Record<string, unknown>),
                 createdBy: request.user!.id,
                 updatedBy: request.user!.id,
               },
@@ -333,6 +366,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
                 firstName: body.author.first_name,
                 lastName: body.author.last_name,
                 penName: body.author.pen_name,
+                ...authorIdentityData(body.author as Record<string, unknown>),
                 createdBy: request.user!.id,
                 updatedBy: request.user!.id,
               },

@@ -803,6 +803,21 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publish
   const email = esc(p.email) ?? BL(30);
   const tel = esc(p.phone) ?? BL(16);
   const titre = esc(c.manuscript?.title) ?? BL(40);
+  // Identité civile de l'auteur (collectée à l'enregistrement du manuscrit) —
+  // pointillés tant qu'un renseignement n'est pas fourni.
+  const frDate = (v?: string | null, w = 10) => {
+    if (!v) return BL(w);
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? BL(w) : escapeHtml(d.toLocaleDateString("fr-FR"));
+  };
+  const bp = esc(p.address) ?? BL(14);
+  const cni = esc(p.idNumber) ?? BL(14);
+  const cniDate = frDate(p.idIssuedDate);
+  const cniLieu = esc(p.idIssuedPlace) ?? BL(10);
+  const neLe = frDate(p.birthDate);
+  const neA = esc(p.birthPlace) ?? BL(12);
+  const nationalite = esc(p.nationality) ?? BL(12);
+  const profession = esc(p.profession) ?? BL(14);
 
   const rt = c.royaltyTerms;
   const tauxTxt = rt?.tiers?.length
@@ -826,7 +841,8 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publish
 
     <p style="margin:4px 0 2px;font-size:12px"><b>Entre les soussignés</b></p>
     <p style="margin:6px 0;font-size:12px;line-height:1.55">
-      M./Mme <b>${auteur}</b>, BP : ${BL(10)} Tél. : ${tel} CNI n° ${BL(14)} délivrée le ${BL(10)} Email : ${email},<br>
+      M./Mme <b>${auteur}</b>, né(e) le ${neLe} à ${neA}, de nationalité ${nationalite}, profession ${profession},
+      BP : ${bp} Tél. : ${tel} CNI n° ${cni} délivrée le ${cniDate} à ${cniLieu} Email : ${email},<br>
       <i>Ci-après dénommé « l'Auteur », d'une part ;</i>
     </p>
     <p style="margin:6px 0;font-size:12px;line-height:1.55">

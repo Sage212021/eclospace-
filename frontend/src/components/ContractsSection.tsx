@@ -175,6 +175,9 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
           {/* Coordonnées de la contrepartie — e-mail et WhatsApp pour les notifications. */}
           <ContactBlock partner={contract.partner} canEdit={canCreate} onChanged={refresh} onError={setError} />
 
+          {/* Identité civile de l'auteur reprise en tête du contrat d'édition. */}
+          {contract.type === "edition" && <AuthorIdentityBlock partner={contract.partner} canEdit={canCreate} onChanged={refresh} onError={setError} />}
+
           {/* Contrat physique signé, numérisé (PDF ou images) + annexes. */}
           <DocumentsBlock contractId={contract.id} canManage={canCreate} onError={setError} />
 
@@ -276,6 +279,91 @@ function ContactBlock({
         <button onClick={() => setEditing(false)} disabled={busy} style={secondaryButtonStyle}>
           Annuler
         </button>
+      </div>
+    </div>
+  );
+}
+
+// Identité civile de l'auteur reprise en tête du contrat d'édition. Collectée à
+// l'enregistrement du manuscrit ; complétable / corrigeable ici (utile pour les
+// auteurs saisis avant sa collecte, et si le terme change d'un auteur à l'autre).
+function AuthorIdentityBlock({ partner, canEdit, onChanged, onError }: { partner: Contract["partner"]; canEdit: boolean; onChanged: () => void; onError: (m: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const iso = (v?: string | null) => (v ? v.slice(0, 10) : "");
+  const [f, setF] = useState({
+    address: partner.address ?? "",
+    nationality: partner.nationality ?? "",
+    profession: partner.profession ?? "",
+    birth_date: iso(partner.birthDate),
+    birth_place: partner.birthPlace ?? "",
+    id_number: partner.idNumber ?? "",
+    id_issued_date: iso(partner.idIssuedDate),
+    id_issued_place: partner.idIssuedPlace ?? "",
+  });
+
+  useEffect(() => {
+    setF({
+      address: partner.address ?? "",
+      nationality: partner.nationality ?? "",
+      profession: partner.profession ?? "",
+      birth_date: iso(partner.birthDate),
+      birth_place: partner.birthPlace ?? "",
+      id_number: partner.idNumber ?? "",
+      id_issued_date: iso(partner.idIssuedDate),
+      id_issued_place: partner.idIssuedPlace ?? "",
+    });
+  }, [partner]);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await updatePartner(partner.id, {
+        address: f.address.trim(),
+        nationality: f.nationality.trim(),
+        profession: f.profession.trim(),
+        birth_place: f.birth_place.trim(),
+        id_number: f.id_number.trim(),
+        id_issued_place: f.id_issued_place.trim(),
+        birth_date: f.birth_date ? new Date(f.birth_date).toISOString() : "",
+        id_issued_date: f.id_issued_date ? new Date(f.id_issued_date).toISOString() : "",
+      });
+      setEditing(false);
+      onChanged();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Enregistrement impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const filled = [partner.address, partner.nationality, partner.idNumber, partner.birthDate].filter(Boolean).length;
+
+  if (!editing) {
+    return (
+      <div style={{ marginTop: 6, fontSize: 12.5, color: "var(--muted)", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <span>🪪 Identité (contrat) : {filled > 0 ? `${filled} renseignement(s) fourni(s)` : <em style={{ color: "var(--alert)" }}>à compléter</em>}</span>
+        {canEdit && <button onClick={() => setEditing(true)} style={linkButtonStyle}>{filled > 0 ? "Modifier l'identité" : "Compléter l'identité"}</button>}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 8, border: "1px dashed var(--line)", borderRadius: 8, padding: 10, background: "var(--bg, #F8F9FB)" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink)", marginBottom: 6 }}>Identité de {partner.firstName} {partner.lastName} — reprise en tête du contrat</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <label style={{ fontSize: 11.5 }}>Adresse / BP<input value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} style={inputStyle} /></label>
+        <label style={{ fontSize: 11.5 }}>Nationalité<input value={f.nationality} onChange={(e) => setF({ ...f, nationality: e.target.value })} style={inputStyle} /></label>
+        <label style={{ fontSize: 11.5 }}>Date de naissance<input type="date" value={f.birth_date} onChange={(e) => setF({ ...f, birth_date: e.target.value })} style={inputStyle} /></label>
+        <label style={{ fontSize: 11.5 }}>Lieu de naissance<input value={f.birth_place} onChange={(e) => setF({ ...f, birth_place: e.target.value })} style={inputStyle} /></label>
+        <label style={{ fontSize: 11.5 }}>Profession<input value={f.profession} onChange={(e) => setF({ ...f, profession: e.target.value })} style={inputStyle} /></label>
+        <label style={{ fontSize: 11.5 }}>N° CNI<input value={f.id_number} onChange={(e) => setF({ ...f, id_number: e.target.value })} style={inputStyle} /></label>
+        <label style={{ fontSize: 11.5 }}>CNI délivrée le<input type="date" value={f.id_issued_date} onChange={(e) => setF({ ...f, id_issued_date: e.target.value })} style={inputStyle} /></label>
+        <label style={{ fontSize: 11.5 }}>CNI délivrée à<input value={f.id_issued_place} onChange={(e) => setF({ ...f, id_issued_place: e.target.value })} style={inputStyle} /></label>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <button onClick={save} disabled={busy} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        <button onClick={() => setEditing(false)} disabled={busy} style={secondaryButtonStyle}>Annuler</button>
       </div>
     </div>
   );
@@ -631,6 +719,9 @@ function NewContractForm({
   const [type, setType] = useState("edition");
   const [rate, setRate] = useState(10);
   const [advance, setAdvance] = useState(0);
+  // Durée de la cession (terme du contrat) — variable d'un auteur à l'autre,
+  // reprise automatiquement sur le contrat imprimé. 0 = non précisée.
+  const [durationYears, setDurationYears] = useState(5);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnerId, setPartnerId] = useState(defaultPartnerId);
   const [showPartnerForm, setShowPartnerForm] = useState(false);
@@ -650,6 +741,7 @@ function NewContractForm({
         type,
         manuscript_id: manuscriptId,
         partner_id: partnerId,
+        ...(durationYears > 0 ? { duration_months: durationYears * 12 } : {}),
         financial_terms: {
           base: "prix_public_ht",
           tiers: [{ up_to: null, rate: rate / 100 }],
@@ -696,6 +788,10 @@ function NewContractForm({
         <label style={{ fontSize: 12 }}>
           Avance (FCFA)
           <input type="number" value={advance} onChange={(e) => setAdvance(Number(e.target.value))} style={inputStyle} />
+        </label>
+        <label style={{ fontSize: 12 }}>
+          Durée de la cession (années)
+          <input type="number" min={0} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={inputStyle} />
         </label>
       </div>
 

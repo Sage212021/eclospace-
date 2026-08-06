@@ -27,6 +27,15 @@ const updatePartnerSchema = z
     phone: z.string().max(40).nullish(),
     whatsapp: z.string().max(40).nullish(),
     address: z.string().max(500).nullish(),
+    // Identité civile (reprise en tête du contrat d'édition) — complétable /
+    // corrigeable après coup pour les auteurs saisis avant sa collecte.
+    birth_place: z.string().max(200).nullish(),
+    nationality: z.string().max(120).nullish(),
+    profession: z.string().max(200).nullish(),
+    id_number: z.string().max(120).nullish(),
+    id_issued_place: z.string().max(200).nullish(),
+    birth_date: z.union([z.string().datetime(), z.literal("")]).nullish(),
+    id_issued_date: z.union([z.string().datetime(), z.literal("")]).nullish(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Aucun champ à modifier." });
 
@@ -110,6 +119,11 @@ export default async function partnerRoutes(fastify: FastifyInstance) {
     if ("phone" in parsed.data) data.phone = toNullable(parsed.data.phone) ?? null;
     if ("whatsapp" in parsed.data) data.whatsapp = toNullable(parsed.data.whatsapp) ?? null;
     if ("address" in parsed.data) data.address = toNullable(parsed.data.address) ?? null;
+    if ("birth_place" in parsed.data) data.birthPlace = toNullable(parsed.data.birth_place) ?? null;
+    if ("nationality" in parsed.data) data.nationality = toNullable(parsed.data.nationality) ?? null;
+    if ("profession" in parsed.data) data.profession = toNullable(parsed.data.profession) ?? null;
+    if ("id_number" in parsed.data) data.idNumber = toNullable(parsed.data.id_number) ?? null;
+    if ("id_issued_place" in parsed.data) data.idIssuedPlace = toNullable(parsed.data.id_issued_place) ?? null;
 
     // Champs réellement modifiés, pour un journal d'audit lisible.
     const before: Record<string, string | null> = {};
@@ -122,9 +136,14 @@ export default async function partnerRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // Dates d'identité (naissance, délivrance CNI) : converties séparément.
+    const dateData: Record<string, Date | null> = {};
+    if ("birth_date" in parsed.data) dateData.birthDate = parsed.data.birth_date ? new Date(parsed.data.birth_date) : null;
+    if ("id_issued_date" in parsed.data) dateData.idIssuedDate = parsed.data.id_issued_date ? new Date(parsed.data.id_issued_date) : null;
+
     const updated = await prisma.partner.update({
       where: { id },
-      data: { ...data, updatedBy: request.user!.id },
+      data: { ...data, ...dateData, updatedBy: request.user!.id },
     });
 
     if (Object.keys(after).length > 0) {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listSettings, updateSetting, type AppSetting, type EffectiveUser } from "../api/client";
+import { listSettings, updateSetting, getPublisherIdentity, updatePublisherIdentity, type AppSetting, type EffectiveUser, type PublisherIdentity } from "../api/client";
 import { AccountSecurity } from "../components/AccountSecurity";
 import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -100,6 +100,9 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
 
       <AccountSecurity user={user} />
 
+      {/* Identité de l'éditeur imprimée sur les contrats d'édition. */}
+      <PublisherIdentityCard canAdminister={canAdminister} />
+
       {/* Diagnostic de persistance : vérifier que les données sont bien conservées en base. */}
       <SystemDiagnosticCard />
 
@@ -132,6 +135,84 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
           onSave={() => handleSave(setting)}
         />
       ))}
+    </div>
+  );
+}
+
+// Identité légale de l'éditeur, imprimée en tête des contrats d'édition.
+// Formulaire à champs (plus lisible que le JSON brut) ; enregistrement réservé
+// à l'habilitation d'administration.
+const PUBLISHER_FIELDS: { key: keyof PublisherIdentity; label: string }[] = [
+  { key: "name", label: "Raison sociale" },
+  { key: "desc", label: "Activité (description)" },
+  { key: "rc", label: "Registre du commerce (RC)" },
+  { key: "niu", label: "N° contribuable (NIU)" },
+  { key: "siege", label: "Siège social" },
+  { key: "tel", label: "Téléphone" },
+  { key: "email", label: "E-mail" },
+  { key: "web", label: "Site web" },
+  { key: "rep", label: "Représentant (signataire)" },
+  { key: "ville", label: "Ville (lieu de signature)" },
+];
+
+function PublisherIdentityCard({ canAdminister }: { canAdminister: boolean }) {
+  const [identity, setIdentity] = useState<PublisherIdentity | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    getPublisherIdentity().then(setIdentity).catch(() => setErr("Chargement de l'identité de l'éditeur impossible."));
+  }, []);
+
+  async function save() {
+    if (!identity) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      const saved = await updatePublisherIdentity(identity);
+      setIdentity(saved);
+      setNote("Identité de l'éditeur enregistrée. Elle apparaîtra sur les prochains contrats imprimés.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Échec de l'enregistrement.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 14 }}>Identité de l'éditeur (contrats)</div>
+      <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "4px 0 12px" }}>
+        Ces informations figurent en tête du « Contrat d'édition » imprimé. Modifiables ici, sans développeur.
+      </p>
+      {err && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+      {note && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{note}</div>}
+      {!identity ? (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
+          {PUBLISHER_FIELDS.map((f) => (
+            <label key={f.key} style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 12 }}>
+              <span style={{ color: "var(--muted)" }}>{f.label}</span>
+              <input
+                value={identity[f.key]}
+                disabled={!canAdminister}
+                onChange={(e) => setIdentity((cur) => (cur ? { ...cur, [f.key]: e.target.value } : cur))}
+                onFocus={() => setNote(null)}
+                style={{ padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13, background: canAdminister ? "#fff" : "var(--panel, #f4f5f8)" }}
+              />
+            </label>
+          ))}
+        </div>
+      )}
+      {canAdminister && identity && (
+        <div style={{ marginTop: 12 }}>
+          <button onClick={save} disabled={saving} style={{ border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: saving ? "default" : "pointer", opacity: saving ? 0.6 : 1 }}>
+            {saving ? "Enregistrement…" : "Enregistrer l'identité de l'éditeur"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

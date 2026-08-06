@@ -1702,7 +1702,7 @@ export function listCustomers(category?: CustomerCategory) {
   return request<Customer[]>(`/api/v1/customers${query}`);
 }
 
-export function createCustomer(input: { category: CustomerCategory; name: string; credit_limit?: number; shipping_zone?: string }) {
+export function createCustomer(input: { category: CustomerCategory; name: string; contact_name?: string; email?: string; phone?: string; address?: string; credit_limit?: number; shipping_zone?: string }) {
   return request<Customer>("/api/v1/customers", { method: "POST", body: JSON.stringify(input) });
 }
 

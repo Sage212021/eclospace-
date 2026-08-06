@@ -2365,6 +2365,23 @@ export function addContractAmendment(employeeId: string, contractId: string, inp
   return request<HrContractAmendment>(`/api/v1/employees/${employeeId}/contracts/${contractId}/amendments`, { method: "POST", body: JSON.stringify(input) });
 }
 
+// Évaluation annuelle du collaborateur (note + objectifs individuels).
+export interface EmployeeEvaluation {
+  id: string;
+  year: number;
+  rating: number;
+  strengths: string | null;
+  areasToImprove: string | null;
+  objectives: string | null;
+  createdAt: string;
+}
+export function getEmployeeEvaluations(employeeId: string) {
+  return request<EmployeeEvaluation[]>(`/api/v1/employees/${employeeId}/evaluations`);
+}
+export function saveEmployeeEvaluation(employeeId: string, input: { year: number; rating: number; strengths?: string; areas_to_improve?: string; objectives?: string }) {
+  return request<EmployeeEvaluation>(`/api/v1/employees/${employeeId}/evaluations`, { method: "PUT", body: JSON.stringify(input) });
+}
+
 export function getEmployee(id: string) {
   return request<Employee & { hrContracts: unknown[]; reports: Employee[]; employeeSkills: unknown[] }>(`/api/v1/employees/${id}`);
 }

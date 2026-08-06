@@ -89,6 +89,7 @@ model Employee {
   attendanceAnomalies       AttendanceAnomaly[]
   attendancePayrollLines    AttendancePayrollLine[]
   payrollProfile            PayrollEmployeeProfile?
+  evaluations               EmployeeEvaluation[]
 
   @@map("employees")
 }
@@ -135,6 +136,25 @@ model HrContractAmendment {
 
   @@index([contractId])
   @@map("hr_contract_amendments")
+}
+
+// Évaluation annuelle d'un collaborateur (refonte RH — Étape 4) : note globale,
+// points forts, axes de progrès et objectifs individuels pour l'année à venir.
+model EmployeeEvaluation {
+  id             String   @id @default(uuid())
+  employeeId     String   @map("employee_id")
+  employee       Employee @relation(fields: [employeeId], references: [id])
+  year           Int
+  rating         Int // note globale 1..5
+  strengths      String?
+  areasToImprove String?  @map("areas_to_improve")
+  objectives     String? // objectifs individuels pour l'année suivante
+  createdBy      String?  @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([employeeId, year])
+  @@map("employee_evaluations")
 }
 
 // Données confidentielles (rémunération) — accès restreint, consultation

@@ -769,6 +769,129 @@ export function printContract(c: ContractDetail, opts?: PrintOpts): void {
   openPrintWindow(`${tr("Contrat", "Contract")} ${c.contractNumber}`, body, opts);
 }
 
+// Identité légale de la maison (parties fixes du contrat). À terme, à déplacer
+// dans les Paramètres ; ici en constante pour être versionné avec le modèle.
+const EDITEUR_LEGAL = {
+  name: "EDITIONS ECLOSION",
+  desc: "entreprise de prestation de services en édition, communication, imprimerie…",
+  rc: "N°RC /YAO/2019/B/1441",
+  niu: "M021912751174Y",
+  siege: "Yaoundé, Hippodrome, BP. 33071, Yaoundé",
+  tel: "677 157 326",
+  email: "editioneclosion@gmail.com",
+  web: "www.eclosioneditions.cm",
+  rep: "Mme Christelle NOAH, Directeur Général",
+  ville: "Yaoundé",
+};
+
+// Contrat d'édition À COMPTE D'ÉDITEUR — texte intégral (modèle maison, 15
+// articles). Les données propres à l'auteur et à l'ouvrage sont injectées depuis
+// la fiche ; ce que le système ne stocke pas (BP, CNI, tirage, PPHT, date de
+// parution) reste en pointillés à compléter. Aucune donnée d'auteur n'est codée
+// en dur : tout provient de l'enregistrement du partenaire/ouvrage.
+export function printAuthorContract(c: ContractDetail, opts?: PrintOpts): void {
+  const p = c.partner;
+  const BL = (w = 26) => `<span style="color:#9aa1ad">${"…".repeat(w)}</span>`;
+  const esc = (v?: string | null) => (v && v.trim() ? escapeHtml(v) : null);
+  const auteur = `${esc(p.firstName) ?? ""} ${esc(p.lastName) ?? ""}`.trim() || BL(20);
+  const email = esc(p.email) ?? BL(30);
+  const tel = esc(p.phone) ?? BL(16);
+  const titre = esc(c.manuscript?.title) ?? BL(40);
+
+  const rt = c.royaltyTerms;
+  const tauxTxt = rt?.tiers?.length
+    ? rt.tiers.map((t) => pct(Number(t.rate))).filter((v, i, a) => a.indexOf(v) === i).join(" / ")
+    : BL(6);
+  const dureeTxt = c.durationMonths
+    ? c.durationMonths % 12 === 0
+      ? `${c.durationMonths / 12} (0${c.durationMonths / 12}) années`
+      : `${c.durationMonths} mois`
+    : `${BL(6)} années`;
+
+  const art = (n: number, titre: string, corps: string) => `
+    <h3 style="font-family:Georgia,serif;font-size:14px;margin:20px 0 6px;color:#16233d;border-bottom:1px solid #e6e9ef;padding-bottom:3px">ARTICLE ${n} — ${titre}</h3>
+    ${corps}`;
+  const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
+  const li = (items: string[]) => `<ul style="margin:6px 0 6px 4px;padding-left:16px;font-size:12px;line-height:1.5">${items.map((i) => `<li style="margin:3px 0">${i}</li>`).join("")}</ul>`;
+
+  const body = `
+    <div class="doc__title">CONTRAT D'ÉDITION À COMPTE D'ÉDITEUR</div>
+    <div class="meta"><span>Contrat n° <b class="num">${escapeHtml(c.contractNumber)}</b></span></div>
+
+    <p style="margin:4px 0 2px;font-size:12px"><b>Entre les soussignés</b></p>
+    <p style="margin:6px 0;font-size:12px;line-height:1.55">
+      M./Mme <b>${auteur}</b>, BP : ${BL(10)} Tél. : ${tel} CNI n° ${BL(14)} délivrée le ${BL(10)} Email : ${email},<br>
+      <i>Ci-après dénommé « l'Auteur », d'une part ;</i>
+    </p>
+    <p style="margin:6px 0;font-size:12px;line-height:1.55">
+      Et : <b>${EDITEUR_LEGAL.name}</b>, ${EDITEUR_LEGAL.desc} ${EDITEUR_LEGAL.rc}, N° Contribuable ${EDITEUR_LEGAL.niu}. Siège social : ${EDITEUR_LEGAL.siege} ; Tél : ${EDITEUR_LEGAL.tel}, Email : ${EDITEUR_LEGAL.email} Site web : ${EDITEUR_LEGAL.web} Représentée par ${EDITEUR_LEGAL.rep},<br>
+      <i>Ci-après dénommée « l'Éditeur », d'autre part ;</i>
+    </p>
+    <p style="margin:6px 0;font-size:12px"><b>Il a été convenu ce qui suit :</b></p>
+
+    ${art(1, "OBJET DU CONTRAT", `
+      ${par(`L'auteur cède à titre exclusif à l'éditeur, sur l'œuvre de sa composition qui a pour titre « <b>${titre}</b> », ci-après dénommée « l'œuvre » :`)}
+      ${li(["le droit de fabriquer ou de faire fabriquer en nombre des exemplaires de l'œuvre ;", "les droits seconds et dérivés attachés à cette œuvre ;", "le droit de réaliser ou de faire réaliser l'œuvre sous une forme numérique."])}
+      ${par("Tout droit non expressément cédé aux termes du présent contrat demeure la seule propriété de l'auteur et ne pourra être exploité par l'éditeur, sauf accord formel faisant l'objet d'un nouveau contrat ou d'un avenant. La cession des droits d'adaptation audiovisuelle sur l'œuvre fera l'objet, s'il y a lieu, d'un contrat distinct.")}`)}
+
+    ${art(2, "OBLIGATIONS DE L'AUTEUR", `
+      ${par("<b>1/ Clause de garantie.</b> L'auteur garantit à l'éditeur la jouissance entière et libre de toutes servitudes des droits cédés contre tous troubles, revendications et évictions quelconques. Il déclare notamment que son œuvre est originale, ne contenant ni emprunt à une création protégée par la propriété intellectuelle, ni propos à caractère diffamatoire. L'auteur garantit également que son œuvre ne fait l'objet ni d'un autre contrat ni d'un droit de préférence consenti à un tiers.")}
+      ${par("<b>2/ Remise des éléments permettant la publication.</b> L'auteur s'engage à remettre à l'éditeur, qui a l'obligation d'en accuser réception, l'œuvre dans sa forme définitive et complète dans une période de 3 mois au plus tard. Les documents originaux fournis par l'auteur lui seront restitués sur simple demande, au plus tard 3 mois après la parution.")}`)}
+
+    ${art(3, "OBLIGATIONS DE L'ÉDITEUR", `
+      ${par("<b>1/ Publication.</b> L'éditeur s'engage à assurer personnellement et à ses frais la publication de l'ouvrage dans les délais prévus à l'article 9.")}
+      ${par("<b>2/ Exploitation permanente et suivie.</b> L'éditeur s'engage à assurer une exploitation permanente et suivie de l'œuvre et à lui procurer une diffusion auprès du public.")}
+      ${par("<b>3/ Cession à des tiers.</b> Sous réserve d'une publication préalable, l'éditeur est habilité à accorder à des tiers, au Cameroun comme à l'étranger, toutes autorisations de reproduire et de représenter tout ou partie de l'œuvre, dans la limite des droits cédés, en informant l'auteur des exploitations concédées.")}
+      ${par("<b>4/ Reddition des comptes.</b> L'éditeur est tenu de rendre compte à l'auteur du calcul de la rémunération de façon explicite et transparente. Les comptes sont arrêtés chaque année le 15 décembre ; un premier bilan des ventes est communiqué 3 mois après la mise en vente. L'état des comptes mentionne le stock initial et final, les exemplaires fabriqués, vendus, hors droits et détruits, les cessions de droits, les redevances dues et versées, ainsi que les assiettes et taux.")}
+      ${par("<b>5/ Paiement des droits.</b> Le paiement des droits d'auteur intervient au plus tard au mois de novembre de chaque année, par virement bancaire, cash ou transfert d'argent mobile (MTN, Orange Money, transfert national/international). Le virement bancaire est obligatoire pour toute somme égale ou supérieure à 150 000 FCFA.")}
+      ${par("<b>6/ Clause d'audit.</b> Une fois par an, l'auteur pourra vérifier les comptes de l'éditeur, sous réserve d'un préavis de 15 jours. En cas d'erreurs révélées, le coût de l'audit est à la charge de l'éditeur.")}
+      ${par("<b>7/ Droit moral.</b> L'éditeur exerce les droits cédés dans le strict respect du droit moral et n'apporte à l'œuvre aucune modification sans accord préalable formel de l'auteur.")}`)}
+
+    ${art(4, "GESTION COLLECTIVE", par("Certains droits cédés font ou sont susceptibles de faire l'objet d'une gestion collective dont les parties acceptent l'application. Toute disposition contraire aux règles de cette gestion collective sera réputée non écrite. L'auteur percevra notamment la rémunération lui revenant au titre du droit de reprographie."))}
+
+    ${art(5, "ÉTENDUE DE LA CESSION", `
+      ${par(`<b>1/ Durée.</b> La présente cession est consentie pour une durée de <b>${dureeTxt}</b>, tacitement reconductible pour une même durée sauf lettre recommandée avec accusé de réception adressée au plus tard 3 mois avant l'échéance. La cession engage l'auteur, ses héritiers et ayants droit.`)}
+      ${par("<b>2/ Territoire.</b> La présente cession prendra effet en tous lieux.")}
+      ${par("<b>3/ Droits cédés.</b> L'auteur cède le droit de reproduire, publier et exploiter l'œuvre sous forme imprimée, ainsi que les droits seconds et dérivés (reproduction et adaptation graphique, traduction en toutes langues, représentation et communication au public, hors adaptation audiovisuelle). Les exploitations non visées demeurent la propriété de l'auteur.")}`)}
+
+    ${art(6, "REMISE DES ÉPREUVES ET BON À TIRER", par("L'éditeur envoie les épreuves à l'auteur, qui devra les lire, les corriger et les retourner dans un délai maximum de 3 semaines dès réception, revêtues de son « bon à tirer ». À défaut de retour dans ce délai, l'éditeur pourra confier les fichiers à un correcteur de son choix, sans conséquence financière pour l'auteur."))}
+
+    ${art(7, "PRÉROGATIVES DE L'ÉDITEUR", `
+      ${par("L'éditeur détermine, sous réserve du droit moral de l'auteur : le format de l'ouvrage, sa présentation et son prix de vente. Les éléments promotionnels relèvent de l'éditeur et sont soumis à l'auteur pour approbation.")}
+      ${par("L'éditeur s'engage à faire figurer sur la couverture et les documents promotionnels le nom de l'auteur ou son pseudonyme, et à n'apporter à l'œuvre aucune modification sans autorisation écrite.")}`)}
+
+    ${art(8, "TIRAGE", par(`L'éditeur s'engage à faire imprimer <b>${BL(8)}</b> exemplaires, tirés en une seule fois et constituant le premier tirage. Lors du premier tirage, l'éditeur remet gratuitement 3 exemplaires à l'auteur pour son usage personnel, puis un exemplaire pour chaque nouveau tirage ou édition.`))}
+
+    ${art(9, "PUBLICATION SOUS FORME IMPRIMÉE", par(`L'éditeur s'engage à publier l'œuvre au plus tard le <b>${BL(12)}</b>. Si l'ouvrage n'est pas publié dans les 6 mois suivant la remise des éléments, le contrat est résilié aux torts exclusifs de l'éditeur, après mise en demeure restée sans effet pendant 1 mois.`))}
+
+    ${art(10, "EXPLOITATION PERMANENTE ET SUIVIE", par("À compter de la publication, l'éditeur assure une diffusion active : présentation aux catalogues papier et numérique, disponibilité dans au moins une base interprofessionnelle, qualité conforme aux règles de l'art, satisfaction des commandes dans les meilleurs délais. À défaut, la cession est résiliée de plein droit après mise en demeure restée sans effet pendant 6 mois."))}
+
+    ${art(11, "RÉMUNÉRATION DE L'AUTEUR", `
+      ${par(`<b>1/ Exploitation principale.</b> En contrepartie de la cession, l'éditeur verse à l'auteur des droits d'auteur de <b>${tauxTxt}</b> sur chaque exemplaire vendu, calculés sur le prix de vente public hors taxes (PPHT) de l'ouvrage, fixé à <b>${BL(8)} FCFA</b>.`)}
+      ${par(`<b>2/ Droits seconds et dérivés.</b> En cas de cessions à des tiers, l'éditeur verse à l'auteur <b>${tauxTxt}</b> des sommes brutes encaissées ou comptabilisées. Aucune commission annexe ne peut être déduite de l'assiette de calcul.`)}
+      ${par("<b>3/ Exemplaires sans droit.</b> La rémunération ne porte pas sur : les 5 exemplaires du dépôt légal, au plus 3 exemplaires de service de presse/promotion, 2 exemplaires de justificatifs, 3 exemplaires remis gratuitement à l'auteur.")}`)}
+
+    ${art(12, "MISE AU PILON", par("Si, dans les 2 ans suivant la mise en vente, l'éditeur a en stock plus d'exemplaires que nécessaire, il peut proposer à l'auteur de racheter tout ou partie du stock, ou à défaut le pilonner, en conservant un stock suffisant à l'exploitation. L'auteur est informé du pilonnage lors de la reddition annuelle des comptes."))}
+
+    ${art(13, "FORCE MAJEURE", par("En cas de force majeure entraînant la détérioration ou la destruction du stock, l'éditeur n'est pas tenu pour responsable. Toutefois, s'il perçoit une indemnité d'assurance sur les exemplaires détruits, l'auteur percevra la part de droits prévue au contrat, au prorata du montant alloué."))}
+
+    ${art(14, "RÉSILIATION DE PLEIN DROIT", `
+      ${par("<b>Manquement au paiement des droits.</b> À défaut de paiement dans les délais, l'auteur dispose de 12 mois pour mettre l'éditeur en demeure ; sans effet dans les 6 mois, le contrat est résilié de plein droit.")}
+      ${par("<b>Redressement ou liquidation.</b> La procédure de sauvegarde ou de redressement n'entraîne pas la résiliation ; en cas de cessation d'activité de plus de 3 mois ou de liquidation, l'auteur peut demander la résiliation et dispose d'un droit de préemption sur les exemplaires (rachat plafonné à 15 % du PPHT).")}
+      ${par("<b>Fin d'exploitation.</b> Le contrat est résilié lorsque, 5 ans après la publication et pendant 2 années consécutives, les redditions ne font apparaître aucun droit versé ou crédité.")}`)}
+
+    ${art(15, "LITIGES", par("Le présent contrat est soumis à la loi camerounaise. Tout différend fera l'objet d'une tentative d'arrangement amiable ; à défaut, seuls les tribunaux de Yaoundé sont compétents."))}
+
+    <p style="margin:22px 0 4px;font-size:12px">Fait à ${EDITEUR_LEGAL.ville}, le ${BL(14)}</p>
+    <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
+    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap">
+      <div style="flex:1; min-width:200px"><div class="party__label">L'auteur</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">L'éditeur</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature &amp; cachet</div></div>
+    </div>`;
+
+  openPrintWindow(`Contrat d'édition ${c.contractNumber}`, body, opts);
+}
+
 // Bulletin de paie prêt à imprimer / PDF (D-007, incrément 4). En-tête maison
 // commun (documentShell) ; ventilation reprise du moteur de calcul, sans
 // recalcul côté impression. Mentions légales du Code du travail camerounais.

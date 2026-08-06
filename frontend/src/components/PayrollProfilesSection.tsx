@@ -5,9 +5,11 @@ import {
   previewPayslipEmail,
   savePayrollProfile,
   sendPayslipEmail,
+  getPayslipDispatches,
   createDocument,
   uploadDocumentVersion,
   type Employee,
+  type PayslipDispatch,
   type PayrollProfileInput,
   type PayslipResult,
 } from "../api/client";
@@ -16,6 +18,7 @@ import { Field } from "./Modal";
 import { Button } from "./Button";
 import { EmailModal } from "./EmailModal";
 import { printPayslip } from "../lib/print";
+import { buildPayslipPdfBase64 } from "../lib/payslipPdf";
 import { IconAdmin } from "./icons";
 import { useI18n } from "../i18n";
 
@@ -41,6 +44,13 @@ const EMPTY: PayrollProfileInput = {
   apply_seniority: false,
 };
 
+const DISPATCH_LABEL: Record<string, string> = { sent: "Envoyé", failed: "Échec", pending: "En attente" };
+function dispatchChip(status: string): React.CSSProperties {
+  const map: Record<string, [string, string]> = { sent: ["#DDF0E5", "#2E6B4F"], failed: ["#F7E2DE", "#C24B3A"], pending: ["#F7E7DA", "#C4661F"] };
+  const [bg, fg] = map[status] ?? ["#eee", "#555"];
+  return { background: bg, color: fg, fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", whiteSpace: "nowrap" };
+}
+
 function fcfa(n: number): string {
   return `${Math.round(n).toLocaleString("fr-FR")} FCFA`;
 }
@@ -63,6 +73,8 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [slip, setSlip] = useState<PayslipResult | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [dispatches, setDispatches] = useState<PayslipDispatch[]>([]);
+  const loadDispatches = () => getPayslipDispatches(employeeId, period).then(setDispatches).catch(() => setDispatches([]));
   // Verrou après enregistrement : une fiche enregistrée n'est plus modifiable
   // sans passer par « Modifier », qui exige un motif (justificatif facultatif).
   const [locked, setLocked] = useState(false);
@@ -136,6 +148,7 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
     try {
       setSlip(await getPayslip(employeeId, period));
       setError(null);
+      loadDispatches();
     } catch (err) {
       setSlip(null);
       setError(err instanceof Error ? err.message : "Calcul impossible.");
@@ -283,6 +296,28 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
               </div>
             )}
             {slip && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>{t("pay.scale_since", "Barème en vigueur depuis le")} {slip.rate_set_effective_from}.</p>}
+
+            {/* Journal des envois du bulletin (statut + relance = renvoyer). */}
+            {slip && dispatches.length > 0 && (
+              <div style={{ marginTop: 12, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>{t("pay.dispatch_log", "Journal des envois")}</div>
+                {dispatches.map((d) => (
+                  <div key={d.id} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontSize: 12.5, padding: "3px 0" }}>
+                    <span style={dispatchChip(d.status)}>{DISPATCH_LABEL[d.status]}</span>
+                    <span style={{ fontFamily: "var(--font-mono)" }}>{d.period}</span>
+                    <span style={{ color: "var(--muted)" }}>{d.recipient}</span>
+                    {d.has_pdf && <span style={{ color: "var(--muted)" }}>📎 PDF</span>}
+                    <span style={{ color: "var(--muted)" }}>{new Date(d.created_at).toLocaleString("fr-FR")}</span>
+                    {d.status === "failed" && (
+                      <button type="button" onClick={() => setEmailOpen(true)} style={{ marginLeft: "auto", border: "1px solid var(--alert)", color: "var(--alert)", background: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11.5, cursor: "pointer" }}>
+                        {t("pay.retry", "Relancer")}
+                      </button>
+                    )}
+                    {d.error && <span style={{ color: "var(--alert)", width: "100%" }}>{d.error}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {emailOpen && slip && (
@@ -292,7 +327,21 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
                 ? `Hello ${slip.employee.name},\n\nPlease find your payslip for the period ${slip.period}.\n\nKind regards,\nÉditions Éclosion`
                 : `Bonjour ${slip.employee.name},\n\nVeuillez trouver votre bulletin de paie pour la période ${slip.period}.\n\nCordialement,\nÉditions Éclosion`}
               loadPreview={(message) => previewPayslipEmail(employeeId, slip.period, message)}
-              onSend={(to, message) => sendPayslipEmail(employeeId, slip.period, message, to)}
+              onSend={async (to, message) => {
+                // Bulletin PDF généré ici (navigateur), joint automatiquement à l'e-mail.
+                const pdf = buildPayslipPdfBase64({
+                  employee_name: slip.employee.name,
+                  period: slip.period,
+                  matricule: form.matricule || null,
+                  cnps_number: form.cnps_number || null,
+                  niu: form.niu || null,
+                  fiscal_parts: form.fiscal_parts,
+                  payslip: slip.payslip,
+                });
+                const r = await sendPayslipEmail(employeeId, slip.period, message, to, pdf);
+                loadDispatches();
+                return r;
+              }}
               onClose={() => setEmailOpen(false)}
             />
           )}

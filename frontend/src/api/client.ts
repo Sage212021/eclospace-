@@ -3265,8 +3265,20 @@ export function getPayslip(employeeId: string, period: string) {
 export function previewPayslipEmail(employeeId: string, period: string, message: string) {
   return request<{ subject: string; html: string; default_to: string | null }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, preview: true }) });
 }
-export function sendPayslipEmail(employeeId: string, period: string, message: string, to: string) {
-  return request<{ sent: boolean; to: string }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, to }) });
+export function sendPayslipEmail(employeeId: string, period: string, message: string, to: string, pdfBase64?: string) {
+  return request<{ sent: boolean; to: string; dispatch_id?: string; status?: string }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, to, pdf_base64: pdfBase64 }) });
+}
+export interface PayslipDispatch {
+  id: string;
+  period: string;
+  recipient: string;
+  status: "pending" | "sent" | "failed";
+  error: string | null;
+  has_pdf: boolean;
+  created_at: string;
+}
+export function getPayslipDispatches(employeeId: string, period?: string) {
+  return request<PayslipDispatch[]>(`/api/v1/payroll/employees/${employeeId}/payslip/dispatches${period ? `?period=${period}` : ""}`);
 }
 
 // Livre de paie & clôture (D-007, incrément 5).

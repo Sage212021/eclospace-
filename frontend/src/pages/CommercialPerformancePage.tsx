@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getMyPerformance, type MyPerformance } from "../api/client";
+import { getMyPerformance, getSalesTargets, setSalesTarget, type MyPerformance, type SalesTargetRow } from "../api/client";
 import { GuidanceNote } from "../components/GuidanceNote";
 
 // « Mes performances » — tableau de bord INDIVIDUEL du commercial connecté.
@@ -82,6 +82,21 @@ export function CommercialPerformancePage({ canManage }: { canManage: boolean })
         <>
           {consolidated && <div style={{ fontSize: 12.5, color: "var(--eclosion-dark, #8A6A12)", fontWeight: 600, marginBottom: 8 }}>Vue consolidée — ensemble de l'équipe commerciale.</div>}
 
+          {/* Objectif annuel + taux de réalisation */}
+          {data.objective && (
+            <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, fontSize: 13.5 }}>
+                <span style={{ fontWeight: 600 }}>Objectif {data.objective.year}</span>
+                <span style={{ fontFamily: "var(--font-mono)" }}>
+                  {fcfa(data.objective.ytd_revenue)} / {fcfa(data.objective.target_revenue)} · <strong style={{ color: data.objective.realization_pct >= 100 ? "#2E6B4F" : "var(--eclosion-dark, #8A6A12)" }}>{data.objective.realization_pct} %</strong>
+                </span>
+              </div>
+              <div style={{ height: 10, background: "var(--paper)", borderRadius: 999, overflow: "hidden", marginTop: 8, border: "1px solid var(--line)" }}>
+                <div style={{ width: `${Math.min(100, data.objective.realization_pct)}%`, height: "100%", background: data.objective.realization_pct >= 100 ? "#2E6B4F" : "var(--eclosion)", borderRadius: 999 }} />
+              </div>
+            </div>
+          )}
+
           {/* Cartes KPI */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
             <Kpi label="Chiffre d'affaires" value={fcfa(data.revenue)} tone="gold" />
@@ -115,8 +130,65 @@ export function CommercialPerformancePage({ canManage }: { canManage: boolean })
             <RankTable title="Meilleurs clients (CA)" rows={data.top_customers.map((c) => [c.name, fcfa(c.revenue)])} empty="Aucune vente sur la période." />
             <RankTable title="Livres les plus vendus" rows={data.top_books.map((b) => [b.title, `${b.units} ex.`])} empty="Aucune vente sur la période." />
           </div>
+
+          {canManage && <TeamTargets onError={setError} />}
         </>
       )}
+    </div>
+  );
+}
+
+// Gestion des objectifs annuels de l'équipe (responsables). Liste et modifie les
+// objectifs de l'année en cours.
+function TeamTargets({ onError }: { onError: (m: string) => void }) {
+  const year = new Date().getFullYear();
+  const [targets, setTargets] = useState<SalesTargetRow[]>([]);
+  const [candidates, setCandidates] = useState<{ id: string; username: string }[]>([]);
+  const [userId, setUserId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = () => getSalesTargets(year).then((r) => { setTargets(r.targets); setCandidates(r.candidates); }).catch(() => {});
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  async function save() {
+    if (!userId || !amount) return;
+    setSaving(true);
+    try {
+      await setSalesTarget({ user_id: userId, year, target_revenue: Number(amount) });
+      setUserId(""); setAmount("");
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Enregistrement impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 20 }}>
+      <div style={{ fontWeight: 600, fontSize: 14 }}>Objectifs de l'équipe — {year}</div>
+      <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "4px 0 12px" }}>Définissez l'objectif annuel de chiffre d'affaires par commercial.</p>
+      {targets.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          {targets.map((tg) => (
+            <div key={tg.user_id} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "6px 0", borderTop: "1px solid var(--line)", fontSize: 13.5 }}>
+              <span>{tg.username}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{fcfa(tg.target_revenue)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <select value={userId} onChange={(e) => setUserId(e.target.value)} style={dateInput}>
+          <option value="">— Commercial —</option>
+          {candidates.map((c) => <option key={c.id} value={c.id}>{c.username}</option>)}
+        </select>
+        <input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Objectif annuel (FCFA)" style={{ ...dateInput, fontFamily: "var(--font-mono)" }} />
+        <button onClick={save} disabled={saving || !userId || !amount} style={{ border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 14px", fontWeight: 700, fontSize: 13, cursor: saving ? "default" : "pointer", opacity: saving || !userId || !amount ? 0.6 : 1 }}>
+          {saving ? "…" : "Définir l'objectif"}
+        </button>
+      </div>
     </div>
   );
 }

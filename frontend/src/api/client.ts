@@ -1772,6 +1772,7 @@ export function listProvisionalPosSales() {
 export interface MyPerformance {
   scope: "individual" | "consolidated";
   can_see_others: boolean;
+  objective: { year: number; target_revenue: number; ytd_revenue: number; realization_pct: number } | null;
   revenue: number;
   sales_count: number;
   orders_count: number;
@@ -1786,6 +1787,13 @@ export interface MyPerformance {
   top_books: { title: string; units: number }[];
   by_period: { today: number; week: number; month: number; year: number };
   series: { month: string; revenue: number }[];
+}
+export interface SalesTargetRow { user_id: string; username: string; year: number; target_revenue: number }
+export function getSalesTargets(year?: number) {
+  return request<{ year: number; can_manage: boolean; targets: SalesTargetRow[]; candidates: { id: string; username: string }[] }>(`/api/v1/commercial/targets${year ? `?year=${year}` : ""}`);
+}
+export function setSalesTarget(input: { user_id: string; year: number; target_revenue: number }) {
+  return request<{ user_id: string; year: number; target_revenue: number }>("/api/v1/commercial/targets", { method: "PUT", body: JSON.stringify(input) });
 }
 export function getMyPerformance(params?: { from?: string; to?: string; rep?: string }) {
   const p = new URLSearchParams();

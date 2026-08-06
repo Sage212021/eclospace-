@@ -67,4 +67,28 @@ describe("commercial — mes performances", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().scope).toBe("individual");
   });
+
+  it("objectif : définition (responsable) puis taux de réalisation dans le tableau de bord", async () => {
+    const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+    const year = new Date().getFullYear();
+    const put = await app.inject({ method: "PUT", url: "/api/v1/commercial/targets", headers: { cookie: adminCookie }, payload: { user_id: admin.id, year, target_revenue: 1000000 } });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().target_revenue).toBe(1000000);
+
+    const perf = await app.inject({ method: "GET", url: "/api/v1/commercial/my-performance", headers: { cookie: adminCookie } });
+    expect(perf.json().objective).not.toBeNull();
+    expect(perf.json().objective.target_revenue).toBe(1000000);
+    expect(perf.json().objective).toHaveProperty("realization_pct");
+  });
+
+  it("objectif : un commercial simple ne peut pas en définir (403)", async () => {
+    const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+    // RESP_COMMERCIAL a la validation → autorisé ; on vérifie plutôt qu'un rôle
+    // sans validation est refusé via un correcteur.
+    const corr = `corr_${rnd()}`;
+    await createUserWithRole(corr, "CORRECTEUR", PWD);
+    const corrCookie = await login(app, corr, PWD);
+    const res = await app.inject({ method: "PUT", url: "/api/v1/commercial/targets", headers: { cookie: corrCookie }, payload: { user_id: admin.id, year: 2026, target_revenue: 500000 } });
+    expect(res.statusCode).toBe(403);
+  });
 });

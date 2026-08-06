@@ -164,9 +164,16 @@ function AssignmentCard({
       <div style={handoffRow}>
         <span style={handoffTag("in")}>{t("myr.inbox", "À lire")}</span>
         {assignment.manuscriptHasFile ? (
-          <a href={readingManuscriptFileUrl(assignment.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
-            📖 {t("myr.open_manuscript", "Ouvrir le manuscrit à lire")}
-          </a>
+          <>
+            <a href={readingManuscriptFileUrl(assignment.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+              📖 {t("myr.open_manuscript", "Ouvrir le manuscrit à lire")}
+            </a>
+            {/* Téléchargement explicite du fichier source (enregistré sur le poste,
+                nom d'origine servi par le serveur) — en plus de l'ouverture. */}
+            <a href={readingManuscriptFileUrl(assignment.id)} download style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+              ⬇️ {t("myr.download_manuscript", "Télécharger le fichier source")}
+            </a>
+          </>
         ) : (
           <span style={{ color: "var(--muted)" }}>{t("myr.no_manuscript_file", "Le fichier du manuscrit n'a pas encore été déposé sur l'ouvrage.")}</span>
         )}

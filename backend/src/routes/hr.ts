@@ -358,8 +358,26 @@ export default async function hrRoutes(fastify: FastifyInstance) {
 
   fastify.get("/api/v1/employees/:id/contracts", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const contracts = await prisma.hrContract.findMany({ where: { employeeId: id }, orderBy: { startDate: "desc" } });
+    const contracts = await prisma.hrContract.findMany({
+      where: { employeeId: id },
+      orderBy: { startDate: "desc" },
+      include: { amendments: { orderBy: { effectiveDate: "desc" } } },
+    });
     return reply.send(contracts);
+  });
+
+  // Avenant à un contrat de travail (modification tracée, date d'effet).
+  fastify.post("/api/v1/employees/:id/contracts/:contractId/amendments", { preHandler: requirePermission("rh", "saisie") }, async (request, reply) => {
+    const { id, contractId } = request.params as { id: string; contractId: string };
+    const parsed = z.object({ effective_date: z.string().datetime(), subject: z.string().min(2).max(200), description: z.string().max(4000).optional() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const contract = await prisma.hrContract.findFirst({ where: { id: contractId, employeeId: id } });
+    if (!contract) return reply.code(404).send({ code: "not_found", message: "Contrat de travail introuvable." });
+    const amendment = await prisma.hrContractAmendment.create({
+      data: { contractId, effectiveDate: new Date(parsed.data.effective_date), subject: parsed.data.subject, description: parsed.data.description, createdBy: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "hr_contract_amendment", entityId: amendment.id, newValues: { contractId, subject: parsed.data.subject }, ipAddress: request.ip });
+    return reply.code(201).send(amendment);
   });
 
   // Alertes d'expiration des contrats de travail (refonte RH — Étape 3) :

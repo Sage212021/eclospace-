@@ -2340,6 +2340,31 @@ export function getContractAlerts(days?: number) {
   return request<{ horizon_days: number; alerts: ContractAlert[] }>(`/api/v1/hr/contract-alerts${days ? `?days=${days}` : ""}`);
 }
 
+// Contrats de travail & avenants (refonte RH — Étape 3).
+export interface HrContractAmendment {
+  id: string;
+  effectiveDate: string;
+  subject: string;
+  description: string | null;
+  createdAt: string;
+}
+export interface HrContractRow {
+  id: string;
+  type: "cdi" | "cdd" | "stage" | "prestation";
+  startDate: string;
+  endDate: string | null;
+  amendments: HrContractAmendment[];
+}
+export function getEmployeeContracts(employeeId: string) {
+  return request<HrContractRow[]>(`/api/v1/employees/${employeeId}/contracts`);
+}
+export function createEmployeeContract(employeeId: string, input: { type: string; start_date: string; end_date?: string }) {
+  return request<HrContractRow>(`/api/v1/employees/${employeeId}/contracts`, { method: "POST", body: JSON.stringify(input) });
+}
+export function addContractAmendment(employeeId: string, contractId: string, input: { effective_date: string; subject: string; description?: string }) {
+  return request<HrContractAmendment>(`/api/v1/employees/${employeeId}/contracts/${contractId}/amendments`, { method: "POST", body: JSON.stringify(input) });
+}
+
 export function getEmployee(id: string) {
   return request<Employee & { hrContracts: unknown[]; reports: Employee[]; employeeSkills: unknown[] }>(`/api/v1/employees/${id}`);
 }

@@ -116,7 +116,25 @@ model HrContract {
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
 
+  amendments HrContractAmendment[]
+
   @@map("hr_contracts")
+}
+
+// Avenant à un contrat de travail (refonte RH — Étape 3) : modification tracée
+// (salaire, poste, durée…) avec date d'effet, sans altérer le contrat d'origine.
+model HrContractAmendment {
+  id            String     @id @default(uuid())
+  contractId    String     @map("contract_id")
+  contract      HrContract @relation(fields: [contractId], references: [id])
+  effectiveDate DateTime   @map("effective_date")
+  subject       String
+  description   String?
+  createdBy     String?    @map("created_by")
+  createdAt     DateTime   @default(now()) @map("created_at")
+
+  @@index([contractId])
+  @@map("hr_contract_amendments")
 }
 
 // Données confidentielles (rémunération) — accès restreint, consultation

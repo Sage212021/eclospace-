@@ -53,4 +53,32 @@ describe("alertes d'expiration de contrats", () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/hr/contract-alerts" });
     expect(res.statusCode).toBe(401);
   });
+
+  it("avenant : ajouté à un contrat puis retrouvé dans la fiche du contrat", async () => {
+    const emp = await prisma.employee.create({ data: { firstName: "Ave", lastName: "Nant" } });
+    const c = await prisma.hrContract.create({ data: { employeeId: emp.id, type: "cdi", startDate: new Date() } });
+    const add = await app.inject({
+      method: "POST",
+      url: `/api/v1/employees/${emp.id}/contracts/${c.id}/amendments`,
+      headers: { cookie },
+      payload: { effective_date: new Date().toISOString(), subject: "Augmentation du salaire de base", description: "Passage à l'échelon supérieur." },
+    });
+    expect(add.statusCode).toBe(201);
+
+    const list = await app.inject({ method: "GET", url: `/api/v1/employees/${emp.id}/contracts`, headers: { cookie } });
+    const contract = (list.json() as { id: string; amendments: { subject: string }[] }[]).find((x) => x.id === c.id)!;
+    expect(contract.amendments.length).toBe(1);
+    expect(contract.amendments[0].subject).toContain("Augmentation");
+  });
+
+  it("avenant : 404 si le contrat n'appartient pas à l'employé", async () => {
+    const emp = await prisma.employee.create({ data: { firstName: "X", lastName: "Y" } });
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/v1/employees/${emp.id}/contracts/00000000-0000-0000-0000-000000000000/amendments`,
+      headers: { cookie },
+      payload: { effective_date: new Date().toISOString(), subject: "Test" },
+    });
+    expect(res.statusCode).toBe(404);
+  });
 });

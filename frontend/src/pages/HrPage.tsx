@@ -35,6 +35,7 @@ import {
 import { Card } from "../components/Card";
 import { StandardActionBar } from "../components/StandardActionBar";
 import { OrgChart } from "../components/OrgChart";
+import { ContractsModal } from "../components/ContractsModal";
 import { printEmployeeFiche } from "../lib/print";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
@@ -140,6 +141,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   const [message, setMessage] = useState<string | null>(null);
   const [modal, setModal] = useState<HrModal | null>(null);
   const [contractAlerts, setContractAlerts] = useState<ContractAlert[]>([]);
+  const [contractsFor, setContractsFor] = useState<Employee | null>(null);
 
   const refresh = async () => {
     const [employeeList, absenceList] = await Promise.all([listEmployees(), listAbsences()]);
@@ -375,6 +377,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                   {/* Barre d'actions standard (refonte, Étape 1) : action générique
                       « Imprimer la fiche » ; les boutons métier restent à côté. */}
                   <StandardActionBar onPrint={() => printEmployeeFiche(employee)} />
+                  <Button variant="view" size="sm" onClick={() => setContractsFor(employee)}>{t("hr.contracts", "Contrats")}</Button>
                   {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, position: employee.position ?? "", birthDate: employee.birthDate ? employee.birthDate.slice(0, 10) : "" })}>{t("hr.mobility", "Mobilité")}</Button>}
                   {canAdminister && !employee.departureDate && <Button variant="view" size="sm" onClick={() => setModal({ kind: "departure", employee, date: new Date().toISOString().slice(0, 10) })}>{t("hr.departure_btn", "Départ")}</Button>}
                   {canAdminister && employee.user?.status === "active" && <Button variant="danger" size="sm" onClick={() => handleSuspend(employee)}>{t("hr.suspend", "Suspendre")}</Button>}
@@ -415,6 +418,15 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
         <Card title={t("hr.orgchart", "Organigramme")} icon={<IconAdmin />} subtitle={t("hr.orgchart_sub", "Hiérarchie des collaborateurs (d'après le responsable de chaque fiche).")}>
           <OrgChart employees={employees} />
         </Card>
+      )}
+
+      {contractsFor && (
+        <ContractsModal
+          employeeId={contractsFor.id}
+          employeeName={`${contractsFor.firstName} ${contractsFor.lastName}`}
+          canManage={canManage}
+          onClose={() => { setContractsFor(null); refresh().catch(() => {}); }}
+        />
       )}
 
       {/* Ch. 19 §19.5 — Absences */}

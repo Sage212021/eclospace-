@@ -147,6 +147,7 @@ const NAV_POLES: NavPole[] = [
       { key: "ed-mes-corrections", label: "Mes corrections", permission: "tasks:saisie" },
       { key: "ed-direction", label: "Direction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-correction", label: "Correction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
+      { key: "ed-expertise", label: "Expertise scientifique", permission: "tasks:consultation" },
       // Messagerie des auteurs : rattachée au pôle Éditorial (décision opérateur) —
       // la relation avec les auteurs est un travail éditorial. La clé reste
       // « cm-messages-auteurs » (identifiant interne inchangé, vue service-desk).
@@ -228,6 +229,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-mes-corrections": { page: "my-corrections" },
   "ed-direction": { page: "editorial-decision" },
   "ed-correction": { page: "correction-editorial" },
+  "ed-expertise": { stage: "EXPERTISE", heading: "Expertise scientifique (si nécessaire)" },
   "ed-catalogue-ref": { page: "catalogue-ref" },
   "ed-archives": { page: "archives" },
   "pr-maquette": { stage: "MISE_EN_PAGE", heading: "Maquette & mise en page" },

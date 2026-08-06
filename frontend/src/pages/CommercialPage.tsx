@@ -61,6 +61,7 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
   const { t } = useI18n();
   const confirm = useConfirm();
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerQuery, setCustomerQuery] = useState("");
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [isbns, setIsbns] = useState<IsbnRef[]>([]);
   const [locations, setLocations] = useState<StockLocation[]>([]);
@@ -136,11 +137,26 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
         subtitle={t("com.customers_sub", "Librairies, distributeurs, institutions…")}
         action={canManage ? <Button variant="add" size="sm" onClick={() => setNewCustomer({ name: "", category: "librairie", zone: "" })}>+ Client</Button> : undefined}
       >
+        {customers.length > 0 && (
+          <input
+            value={customerQuery}
+            onChange={(e) => setCustomerQuery(e.target.value)}
+            placeholder={t("com.search_customer", "Rechercher un client (nom, catégorie, contact, tél, e-mail)…")}
+            style={{ width: "100%", maxWidth: 460, padding: "8px 12px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13.5, marginBottom: 12 }}
+          />
+        )}
         {customers.length === 0 ? (
           <Empty>{t("com.no_customer", "Aucun client.")}</Empty>
         ) : (
           <div className="ecl-list">
-            {customers.map((customer) => (
+            {customers
+              .filter((c) => {
+                const q = customerQuery.trim().toLowerCase();
+                if (!q) return true;
+                return [c.name, CATEGORY_LABELS[c.category], c.contactName, c.phone, c.email]
+                  .some((v) => (v ?? "").toLowerCase().includes(q));
+              })
+              .map((customer) => (
               <div key={customer.id} className="ecl-row" style={{ flexWrap: "wrap", gap: 8 }}>
                 <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span className="ecl-row__title">{customer.name}</span>

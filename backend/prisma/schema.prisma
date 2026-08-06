@@ -2862,6 +2862,29 @@ model SalesTarget {
   @@map("sales_targets")
 }
 
+// Suivi des envois de bulletins de paie par e-mail : statut (envoyé / échec /
+// en attente), destinataire, erreur éventuelle, pour tracer et relancer.
+enum PayslipDispatchStatus {
+  pending
+  sent
+  failed
+}
+
+model PayslipDispatch {
+  id         String                @id @default(uuid())
+  employeeId String                @map("employee_id")
+  period     String // AAAA-MM
+  recipient  String
+  status     PayslipDispatchStatus @default(pending)
+  error      String?
+  hasPdf     Boolean               @default(false) @map("has_pdf")
+  sentBy     String?               @map("sent_by")
+  createdAt  DateTime              @default(now()) @map("created_at")
+
+  @@index([employeeId, period])
+  @@map("payslip_dispatches")
+}
+
 // Point de vente (décision opérateur du 11/07/2026) : librairie, salon du livre,
 // boutique en ligne… Liste configurable, sert de dimension aux rapports.
 enum PointOfSaleType {

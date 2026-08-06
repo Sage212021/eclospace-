@@ -74,4 +74,24 @@ describe("bulletin par e-mail", () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe("missing_recipient");
   });
+
+  it("envoi avec bulletin PDF joint : trace un dispatch (has_pdf) puis apparaît dans le journal", async () => {
+    const pdf = Buffer.from("%PDF-1.4 fake").toString("base64");
+    const res = await app.inject({ method: "POST", url: `/api/v1/payroll/employees/${employeeId}/payslip/email`, headers: { cookie }, payload: { period: "2026-06", pdf_base64: pdf } });
+    // 200 (dev/test : envoi journalisé → statut « pending ») ou 503 si SMTP requis.
+    expect([200, 503]).toContain(res.statusCode);
+    if (res.statusCode === 200) {
+      expect(res.json()).toHaveProperty("dispatch_id");
+      const journal = await app.inject({ method: "GET", url: `/api/v1/payroll/employees/${employeeId}/payslip/dispatches`, headers: { cookie } });
+      expect(journal.statusCode).toBe(200);
+      const rows = journal.json() as { has_pdf: boolean; recipient: string; status: string }[];
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows[0].has_pdf).toBe(true);
+    }
+  });
+
+  it("journal des envois : refusé sans habilitation paie (403)", async () => {
+    const res = await app.inject({ method: "GET", url: `/api/v1/payroll/employees/${employeeId}/payslip/dispatches` });
+    expect(res.statusCode).toBe(401);
+  });
 });

@@ -32,6 +32,7 @@ import {
 } from "../api/client";
 import { Card } from "../components/Card";
 import { StandardActionBar } from "../components/StandardActionBar";
+import { OrgChart } from "../components/OrgChart";
 import { printEmployeeFiche } from "../lib/print";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
@@ -383,6 +384,13 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
           </div>
         )}
       </Card>
+
+      {/* Organigramme — hiérarchie reconstruite depuis le lien manager ↔ subordonnés. */}
+      {employees.length > 0 && (
+        <Card title={t("hr.orgchart", "Organigramme")} icon={<IconAdmin />} subtitle={t("hr.orgchart_sub", "Hiérarchie des collaborateurs (d'après le responsable de chaque fiche).")}>
+          <OrgChart employees={employees} />
+        </Card>
+      )}
 
       {/* Ch. 19 §19.5 — Absences */}
       <Card

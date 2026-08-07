@@ -769,3 +769,12 @@ Le moteur d'envoi du bulletin par e-mail existait déjà (aperçu, destinataire 
 Choix technique : **jsPDF** (dépendance frontend, chargée paresseusement avec la page RH). Le bulletin PDF est construit à partir des **mêmes données de calcul** que le bulletin imprimé (`buildPayslipPdfBase64`, `frontend/src/lib/payslipPdf.ts`), encodé en **base64** et transmis dans le corps JSON de `POST /payslip/email` (champ optionnel `pdf_base64`, rétrocompatible). Le serveur l'attache via `nodemailer` (`sendMail.attachments`). Aucun Chromium serveur.
 
 Suivi d'envoi : table **`PayslipDispatch`** (statut `sent`/`failed`/`pending`, destinataire, erreur, présence PDF, auteur RH) — chaque envoi est tracé ; un échec (502) crée un dispatch `failed`, la **relance = renvoyer**. `GET /payslip/dispatches` alimente le journal affiché sous le bulletin.
+
+## 07/08/2026 — Rapport de lecture « version finale » : fusion PDF côté navigateur (pdf-lib)
+
+Demande opérateur : le **rapport déposé** par le relecteur doit être **fusionné en un seul PDF** avec le **rapport officiel à en-tête Éclosion** (« Mon rapport »), car c'est cette version finale qui est transmise au client/auteur ; prévoir des **options de transmission** (télécharger, transférer, e-mail…).
+
+Choix technique :
+- **Génération** du rapport officiel (en-tête logo + coordonnées `HOUSE`, tableau des critères, score, recommandation, appréciation) en PDF **côté navigateur** avec **jsPDF** (déjà présent) — `frontend/src/lib/readingReportPdf.ts`. Cohérent avec le choix bulletin de paie (06/08) : pas de Chromium serveur.
+- **Fusion** du PDF officiel avec le fichier déposé : nouvelle dépendance **`pdf-lib`** (frontend) — `frontend/src/lib/finalReport.ts` (`buildFinalReadingReport`). `pdf-lib` est une bibliothèque JS pure, standard et sans natif, adaptée à une connexion modeste (chargée avec la page « Mes lectures »). Si le dépôt est un **PDF** → ses pages sont ajoutées à la suite ; une **image** (PNG/JPG) → ajoutée en pleine page ; **autre format** (ex. .docx) → non fusionnable, repli sur le rapport officiel seul + avertissement à l'écran (le relecteur joint alors le fichier séparément).
+- **Transmission** : télécharger le PDF final, transférer par messagerie interne (pièce jointe réelle), envoyer par e-mail (`POST /reading-assignments/:id/email-report`, PDF en base64 → `nodemailer`, réservé au relecteur ou au comité/direction), ou WhatsApp (téléchargement + message pré-rempli).

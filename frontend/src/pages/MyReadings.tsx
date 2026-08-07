@@ -11,6 +11,7 @@ import {
   startConversation,
   sendChatMessage,
   sendChatMessageWithFile,
+  emailReadingReport,
   type ChatDirectoryEntry,
   type EvaluationCriterion,
   type ReadingAssignment,
@@ -20,6 +21,7 @@ import { GuidanceNote } from "../components/GuidanceNote";
 import { Field } from "../components/Modal";
 import { printReadingReport, type PrintOpts } from "../lib/print";
 import { buildReadingReport } from "../lib/readingReport";
+import { buildFinalReadingReport, type FinalReportResult } from "../lib/finalReport";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "À évaluer",
@@ -340,6 +342,7 @@ function reportSummary(a: ReadingAssignment): string {
 // transférer par messagerie à un collègue, ou copier le résumé.
 function ReportMenu({ assignment, onMessage }: { assignment: ReadingAssignment; onMessage: (m: string) => void }) {
   const [transferOpen, setTransferOpen] = useState(false);
+  const [finalOpen, setFinalOpen] = useState(false);
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
   const close = () => {
     if (detailsRef.current) detailsRef.current.open = false;
@@ -385,10 +388,150 @@ function ReportMenu({ assignment, onMessage }: { assignment: ReadingAssignment; 
           <button style={menuItemStyle} onClick={joindre}>📌 Joindre à l'ouvrage</button>
           <button style={menuItemStyle} onClick={() => { close(); setTransferOpen(true); }}>✉️ Transférer par messagerie</button>
           <button style={menuItemStyle} onClick={copier}>📋 Copier le résumé</button>
+          <div style={menuSepStyle} />
+          <div style={menuHeadStyle}>Version finale (en-tête + rapport déposé)</div>
+          <button style={{ ...menuItemStyle, fontWeight: 600, color: "var(--eclosion-dark, #8A6A12)" }} onClick={() => { close(); setFinalOpen(true); }}>📄 Préparer &amp; transmettre…</button>
         </div>
       </details>
       {transferOpen && <TransferDialog assignment={assignment} onClose={() => setTransferOpen(false)} onMessage={onMessage} />}
+      {finalOpen && <FinalReportDialog assignment={assignment} onClose={() => setFinalOpen(false)} onMessage={onMessage} />}
     </>
+  );
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onloadend = () => resolve(String(r.result).split(",")[1] ?? "");
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+// Version FINALE du rapport (rapport officiel à en-tête Éclosion + rapport
+// déposé, fusionnés en un seul PDF) et ses options de transmission : télécharger,
+// transférer par messagerie interne, envoyer par e-mail (au client/auteur ou en
+// interne), ou WhatsApp. C'est cette version qui est destinée à être envoyée.
+function FinalReportDialog({ assignment, onClose, onMessage }: { assignment: ReadingAssignment; onClose: () => void; onMessage: (m: string) => void }) {
+  const [result, setResult] = useState<FinalReportResult | null>(null);
+  const [building, setBuilding] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [dir, setDir] = useState<ChatDirectoryEntry[]>([]);
+  const [recipient, setRecipient] = useState("");
+  const [email, setEmail] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    buildFinalReadingReport(assignment)
+      .then(setResult)
+      .catch((e) => setError(e instanceof Error ? e.message : "Préparation du document impossible."))
+      .finally(() => setBuilding(false));
+    getChatDirectory().then((d) => { setDir(d); if (d[0]) setRecipient(d[0].id); }).catch(() => setDir([]));
+  }, [assignment]);
+
+  function download() {
+    if (!result) return;
+    const url = URL.createObjectURL(result.blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = result.fileName;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  async function transferInternal() {
+    if (!result || !recipient) return;
+    setBusy(true);
+    try {
+      const conv = await startConversation(recipient);
+      const file = new File([result.blob], result.fileName, { type: "application/pdf" });
+      await sendChatMessageWithFile(conv.id, (note.trim() ? note.trim() + "\n\n" : "") + `Rapport de lecture (version finale) — ${assignment.manuscript?.title ?? ""}`, file);
+      onMessage(`Version finale transférée à ${conv.other_name}.`);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Transfert impossible.");
+    } finally { setBusy(false); }
+  }
+
+  async function sendEmail() {
+    if (!result || !email.trim()) { setError("Indiquez l'adresse e-mail du destinataire."); return; }
+    setBusy(true);
+    try {
+      const pdf_base64 = await blobToBase64(result.blob);
+      await emailReadingReport(assignment.id, { to: email.trim(), message: note.trim() || undefined, pdf_base64, file_name: result.fileName });
+      onMessage(`Version finale envoyée par e-mail à ${email.trim()}.`);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Envoi impossible.");
+    } finally { setBusy(false); }
+  }
+
+  function shareWhatsApp() {
+    download();
+    const text = encodeURIComponent(`${note.trim() ? note.trim() + " — " : ""}Rapport de lecture (version finale) : ${assignment.manuscript?.title ?? ""} — PDF téléchargé, à joindre au message.`);
+    window.open(`https://wa.me/?text=${text}`, "_blank", "noopener");
+    onClose();
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 460, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Version finale du rapport</div>
+        <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 10 }}>Rapport officiel à en-tête Éclosion + rapport déposé, réunis en un seul PDF.</div>
+
+        {building && <p style={{ fontSize: 13, color: "var(--muted)" }}>Préparation du document…</p>}
+        {error && <div style={{ background: "#f8e3df", color: "var(--danger, #C24B3A)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{error}</div>}
+        {result && (
+          <>
+            <div style={{ fontSize: 12, color: result.depositExcluded ? "#C4661F" : "#3B7A34", background: result.depositExcluded ? "#F7E7DA" : "#e6efe4", borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>
+              {result.merged
+                ? "✓ Le rapport déposé a été fusionné avec l'en-tête officiel."
+                : result.depositExcluded
+                ? "⚠ Le fichier déposé n'est pas fusionnable (ni PDF ni image) : le document contient l'en-tête officiel seul. Joignez le fichier déposé séparément si besoin."
+                : "Document officiel à en-tête (aucun fichier n'a été déposé par le relecteur)."}
+            </div>
+
+            <label style={{ fontSize: 11.5, display: "block", marginBottom: 10 }}>
+              Message d'accompagnement (facultatif)
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} style={{ display: "block", width: "100%", marginTop: 4, padding: 8, border: "1px solid var(--line)", borderRadius: 6, fontSize: 13, resize: "vertical" }} />
+            </label>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+              <Button variant="add" size="sm" onClick={download}>⬇️ Télécharger</Button>
+              <Button variant="view" size="sm" onClick={shareWhatsApp}>💬 WhatsApp</Button>
+            </div>
+
+            <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Transférer par messagerie interne</div>
+              {dir.length === 0 ? <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>Aucun destinataire disponible.</p> : (
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+                  <label style={{ fontSize: 11.5, flex: 1, minWidth: 150 }}>Destinataire
+                    <select value={recipient} onChange={(e) => setRecipient(e.target.value)} style={{ display: "block", width: "100%", marginTop: 4, padding: 6, border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 }}>
+                      {dir.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
+                  </label>
+                  <Button variant="edit" size="sm" disabled={busy || !recipient} onClick={transferInternal}>Envoyer</Button>
+                </div>
+              )}
+            </div>
+
+            <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Envoyer par e-mail (client / auteur ou interne)</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+                <label style={{ fontSize: 11.5, flex: 1, minWidth: 170 }}>Adresse e-mail
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="destinataire@exemple.com" style={{ display: "block", width: "100%", marginTop: 4, padding: 6, border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 }} />
+                </label>
+                <Button variant="edit" size="sm" disabled={busy || !email.trim()} onClick={sendEmail}>Envoyer</Button>
+              </div>
+            </div>
+          </>
+        )}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+          <button onClick={onClose} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>Fermer</button>
+        </div>
+      </div>
+    </div>
   );
 }
 

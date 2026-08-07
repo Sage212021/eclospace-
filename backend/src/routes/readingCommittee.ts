@@ -7,6 +7,7 @@ import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
+import { isMailConfigured, sendMail } from "../lib/mailer.js";
 import { createHash } from "node:crypto";
 
 const DEFAULT_RATING_THRESHOLDS = { excellent: 8.5, very_good: 7, good: 5, to_rework: 3 };
@@ -427,6 +428,53 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       return reply.send(buffer);
     },
   );
+
+  // Envoi par e-mail de la version FINALE du rapport (rapport officiel à en-tête
+  // + rapport déposé, fusionnés côté navigateur en PDF). Le PDF arrive en base64
+  // et part en pièce jointe. Accessible au relecteur de la mission OU au comité /
+  // direction (consultation). L'expédition externe n'est jamais silencieuse.
+  fastify.post("/api/v1/reading-assignments/:id/email-report", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z
+      .object({
+        to: z.string().email(),
+        subject: z.string().max(300).optional(),
+        message: z.string().max(8000).optional(),
+        pdf_base64: z.string().min(10),
+        file_name: z.string().max(200).optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+
+    const assignment = await prisma.readingAssignment.findUnique({ where: { id }, include: { manuscript: { select: { title: true, manuscriptNumber: true } } } });
+    if (!assignment) return reply.code(404).send({ code: "not_found", message: "Mission de lecture introuvable." });
+    const isReader = assignment.readerId === request.user!.id;
+    const canOversee = request.user!.permissions.has("comite_lecture:consultation");
+    if (!isReader && !canOversee) return reply.code(403).send({ code: "forbidden", message: "Vous n'êtes pas autorisé à transmettre ce rapport." });
+
+    if (!isMailConfigured()) {
+      return reply.code(503).send({ code: "email_not_configured", message: "L'envoi d'e-mail n'est pas configuré sur ce serveur. Téléchargez le rapport et transmettez-le manuellement." });
+    }
+
+    const buffer = Buffer.from(parsed.data.pdf_base64, "base64");
+    const title = assignment.manuscript?.title ?? "l'ouvrage";
+    const subject = parsed.data.subject?.trim() || `Rapport de lecture — ${title}`;
+    const text = (parsed.data.message?.trim() || `Bonjour,\n\nVeuillez trouver ci-joint le rapport de lecture concernant « ${title} ».\n\nCordialement,\nÉclosion Édition`);
+    try {
+      const ok = await sendMail({
+        to: parsed.data.to.trim(),
+        subject,
+        text,
+        replyTo: request.user!.email,
+        attachments: [{ filename: parsed.data.file_name?.trim() || `Rapport-lecture-${assignment.manuscript?.manuscriptNumber ?? id}.pdf`, content: buffer, contentType: "application/pdf" }],
+      });
+      if (!ok) return reply.code(502).send({ code: "email_failed", message: "L'e-mail n'a pas pu être envoyé (serveur de messagerie indisponible). Réessayez ou transmettez le fichier manuellement." });
+    } catch {
+      return reply.code(502).send({ code: "email_failed", message: "L'e-mail n'a pas pu être envoyé." });
+    }
+    await writeAuditLog({ userId: request.user!.id, action: "export", entityType: "reading_assignment", entityId: id, newValues: { emailed_to: parsed.data.to.trim() }, ipAddress: request.ip });
+    return reply.send({ sent: true });
+  });
 
   // « Joindre à l'ouvrage » : le relecteur verse SON rapport (le fichier déposé)
   // comme pièce officielle de l'ouvrage (catégorie rapport_lecture), reçue par

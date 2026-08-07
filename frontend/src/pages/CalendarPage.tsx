@@ -16,6 +16,7 @@ import { Modal, Field } from "../components/Modal";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Button } from "../components/Button";
 import { useI18n } from "../i18n";
+import { useConfirm } from "../components/ConfirmProvider";
 
 const TYPE_COLORS: Record<CalendarEventType, string> = {
   reunion: "var(--eclosion)",
@@ -63,6 +64,7 @@ function startOfGrid(year: number, month: number): Date {
 
 export function CalendarPage({ canPublish }: CalendarPageProps) {
   const { t, lang } = useI18n();
+  const confirm = useConfirm();
   const locale = lang === "en" ? "en-GB" : "fr-FR";
   const today = new Date();
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() });
@@ -197,6 +199,13 @@ export function CalendarPage({ canPublish }: CalendarPageProps) {
   }
 
   async function doDelete(id: string) {
+    const ok = await confirm({
+      title: t("cal.delete_title", "Supprimer l'événement"),
+      message: t("cal.delete_confirm", "Supprimer cet événement du calendrier ?"),
+      tone: "danger",
+      confirmLabel: t("cal.delete", "Supprimer"),
+    });
+    if (!ok) return;
     try {
       await deleteCalendarEvent(id);
       setMessage(t("cal.msg_deleted", "Événement supprimé."));

@@ -13,6 +13,14 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Sécurité des suppressions + libellé + téléchargement des fichiers d'étape
+
+**Fait (3 demandes opérateur, captures à l'appui) :**
+- **Bouton « Supprimer » de la fiche manuscrit renommé « Supprimer le manuscrit »** (choix opérateur) : le libellé dit désormais clairement qu'il supprime le **dossier** entier (comportement inchangé : suppression logique tracée, réservée à l'administration, avec confirmation).
+- **Confirmation avant toute suppression** : audit de tous les boutons de suppression *réelle*. **Quatre** suppressions se faisaient **sans confirmation** — elles en ont désormais une (fenêtre stylée « Êtes-vous sûr ? ») : **événement du calendrier**, **message de la messagerie**, **annonce du babillard**, **fichier du portail auteur**. Les autres (contrats, pièces de contrat, devis, comptes, rôles, bulletins, manuscrit…) demandaient déjà confirmation — inchangées. Objectif : éviter les suppressions accidentelles.
+- **Téléchargement du fichier reçu de l'étape précédente** : sur la fiche manuscrit, à côté de chaque lien « Ouvrir » du fichier entrant d'une étape (manuscrit source, manuscrit corrigé → maquette, maquette → BAT, BAT signé → impression), ajout d'un lien **« ⬇️ Télécharger »** qui enregistre le fichier sur le poste (nom d'origine servi par le serveur). Chaque étape peut ainsi récupérer le document de l'étape amont.
+- 100 % frontend, appuyé sur l'infrastructure existante (dialogue de confirmation `ConfirmProvider`, URLs de fichiers d'étape). Typecheck + build OK.
+
 ### 07/08/2026 (suite) — Contrat d'édition : menu enrichi (Transférer, Modifier/Enregistrer, Avenant, Article)
 
 **Fait (demande opérateur, captures à l'appui) :** le menu déroulant « Contrat d'édition » (à côté des présentations Numérique/PDF, papier à en-tête…) gagne quatre actions :

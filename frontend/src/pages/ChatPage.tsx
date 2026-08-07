@@ -17,6 +17,7 @@ import {
 } from "../api/client";
 import { useChatSocket } from "../hooks/useChatSocket";
 import { useI18n } from "../i18n";
+import { useConfirm } from "../components/ConfirmProvider";
 
 // Messagerie interne 1-à-1 (pôle Communication interne). Liste des conversations
 // à gauche, fil à droite, envoi texte et/ou pièce jointe. Réception en direct via
@@ -31,6 +32,7 @@ function humanSize(n: number | null | undefined): string {
 
 export function ChatPage() {
   const { t, lang } = useI18n();
+  const confirm = useConfirm();
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeName, setActiveName] = useState<string>("");
@@ -207,6 +209,13 @@ export function ChatPage() {
 
   async function removeMessage(id: string) {
     setMenuFor(null);
+    const ok = await confirm({
+      title: t("chat.delete_title", "Supprimer le message"),
+      message: t("chat.delete_confirm", "Supprimer ce message ? Il ne sera plus visible par votre correspondant."),
+      tone: "danger",
+      confirmLabel: t("chat.delete", "Supprimer"),
+    });
+    if (!ok) return;
     try {
       await deleteChatMessage(id);
       setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, deleted: true, body: "", file: null } : m)));

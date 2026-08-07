@@ -31,6 +31,7 @@ import { Button } from "../components/Button";
 import { RichTextEditor } from "../components/RichTextEditor";
 import { IconPilotage } from "../components/icons";
 import { useI18n } from "../i18n";
+import { useConfirm } from "../components/ConfirmProvider";
 
 const PRIORITY_COLORS: Record<AnnouncementPriority, string> = {
   normale: "var(--muted)",
@@ -81,6 +82,7 @@ const EMPTY_FORM: FormState = {
 // Centre de Communication Interne — Babillard d'annonces (module « communication »).
 export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementId, onOpened, prefs, onPrefsChange }: AnnouncementsPageProps) {
   const { t, lang } = useI18n();
+  const confirm = useConfirm();
   const [categories, setCategories] = useState<AnnouncementCategory[]>([]);
   const [feed, setFeed] = useState<AnnouncementFeedItem[]>([]);
   const [manage, setManage] = useState<AnnouncementManageItem[]>([]);
@@ -233,6 +235,13 @@ export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementI
   }
 
   async function doDelete(id: string) {
+    const ok = await confirm({
+      title: t("cm.delete_title", "Supprimer l'annonce"),
+      message: t("cm.delete_confirm", "Supprimer cette annonce du babillard ?"),
+      tone: "danger",
+      confirmLabel: t("cm.delete", "Supprimer"),
+    });
+    if (!ok) return;
     try {
       await deleteAnnouncement(id);
       setMessage(t("cm.msg.deleted", "Annonce supprimée."));

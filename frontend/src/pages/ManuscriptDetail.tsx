@@ -196,7 +196,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             }}
             style={barBtn("danger")}
           >
-            🗑 Supprimer
+            🗑 Supprimer le manuscrit
           </button>
         )}
       </div>
@@ -648,9 +648,14 @@ function SourceFileBlock({
         Manuscrit (source)
       </span>
       {hasFile ? (
-        <a href={manuscriptSourceFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600, fontSize: 13 }}>
-          📄 Ouvrir le manuscrit déposé
-        </a>
+        <>
+          <a href={manuscriptSourceFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600, fontSize: 13 }}>
+            📄 Ouvrir le manuscrit déposé
+          </a>
+          <a href={manuscriptSourceFileUrl(manuscriptId)} download style={{ color: "var(--eclosion-dark)", fontWeight: 600, fontSize: 13 }}>
+            ⬇️ Télécharger
+          </a>
+        </>
       ) : (
         <span style={{ color: "var(--muted)", fontSize: 13 }}>Aucun fichier manuscrit déposé pour le moment.</span>
       )}
@@ -730,9 +735,14 @@ function MaquetteHandoffBlock({
       <div style={row}>
         <span style={tag("in")}>À mettre en page</span>
         {meta?.corrected_has_file ? (
-          <a href={manuscriptCorrectedFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
-            📖 Ouvrir le manuscrit corrigé
-          </a>
+          <>
+            <a href={manuscriptCorrectedFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+              📖 Ouvrir le manuscrit corrigé
+            </a>
+            <a href={manuscriptCorrectedFileUrl(manuscriptId)} download style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+              ⬇️ Télécharger
+            </a>
+          </>
         ) : (
           <span style={{ color: "var(--muted)" }}>Le manuscrit corrigé n'a pas encore été déposé par la correction.</span>
         )}
@@ -809,9 +819,14 @@ function BatHandoffBlock({
       <div style={row}>
         <span style={handoffTag("in")}>À vérifier</span>
         {meta?.layout_has_file ? (
-          <a href={manuscriptLayoutFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
-            📄 Ouvrir la maquette
-          </a>
+          <>
+            <a href={manuscriptLayoutFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+              📄 Ouvrir la maquette
+            </a>
+            <a href={manuscriptLayoutFileUrl(manuscriptId)} download style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+              ⬇️ Télécharger
+            </a>
+          </>
         ) : (
           <span style={{ color: "var(--muted)" }}>La maquette n'a pas encore été déposée par la mise en page.</span>
         )}
@@ -861,9 +876,14 @@ function ImpressionHandoffBlock({ manuscriptId }: { manuscriptId: string }) {
       <div style={row}>
         <span style={handoffTag("in")}>À imprimer</span>
         {hasBat ? (
-          <a href={manuscriptBatFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
-            📄 Ouvrir le BAT signé
-          </a>
+          <>
+            <a href={manuscriptBatFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+              📄 Ouvrir le BAT signé
+            </a>
+            <a href={manuscriptBatFileUrl(manuscriptId)} download style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
+              ⬇️ Télécharger
+            </a>
+          </>
         ) : (
           <span style={{ color: "var(--muted)" }}>Le BAT signé n'a pas encore été déposé par le contrôle qualité.</span>
         )}

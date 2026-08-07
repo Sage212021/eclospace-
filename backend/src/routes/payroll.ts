@@ -403,7 +403,15 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
 
       const lines = await prisma.payrollMonthlyLine.findMany({
         where: { runId: run.id },
-        include: { employee: { select: { id: true, firstName: true, lastName: true, payrollProfile: true } } },
+        include: {
+          employee: {
+            select: {
+              id: true, firstName: true, lastName: true, position: true, hireDate: true, leaveBalanceDays: true,
+              department: { select: { name: true } },
+              payrollProfile: true,
+            },
+          },
+        },
         orderBy: { employee: { lastName: "asc" } },
       });
 
@@ -416,6 +424,18 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
             employee_id: l.employeeId,
             employee_name: `${l.employee.firstName} ${l.employee.lastName}`,
             matricule: p.matricule,
+            cnps_number: p.cnpsNumber,
+            niu: p.niu,
+            fiscal_parts: num(p.fiscalParts),
+            // Informations salarié pour le bulletin (modèle du classeur).
+            department: l.employee.department?.name ?? null,
+            position: l.employee.position ?? null,
+            hire_date: l.employee.hireDate ? l.employee.hireDate.toISOString().slice(0, 10) : null,
+            category: p.category,
+            email: p.email,
+            payment_mode: p.paymentMode,
+            account_number: p.accountNumber,
+            leave_balance: num(l.employee.leaveBalanceDays),
             elements: monthlyElements(l),
             note: l.note,
             net_a_payer: slip.net_a_payer,
@@ -423,6 +443,8 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
             total_retenues_salariales: slip.total_retenues_salariales,
             total_charges_patronales: slip.total_charges_patronales,
             cout_employeur: slip.cout_employeur,
+            // Bulletin complet, pour l'impression groupée des bulletins PDF.
+            payslip: slip,
           };
         });
       const totals = rows.reduce(
@@ -457,6 +479,47 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         },
       });
       return reply.send({ ok: true });
+    },
+  );
+
+  // Validation du mois par le DIRECTEUR GÉNÉRAL (obligatoire avant impression) :
+  // fige le mois. Le droit `paie:validation` est partagé (RH/Finance/DG) ; ici la
+  // validation DÉFINITIVE est réservée au DG (ou à l'administrateur général).
+  fastify.post(
+    "/api/v1/payroll/monthly/:period/validate",
+    { preHandler: requirePermission("paie", "validation") },
+    async (request, reply) => {
+      if (!request.user!.roles.some((r) => r === "DIR_GENERAL" || r === "ADMIN_GENERAL")) {
+        return reply.code(403).send({ code: "dg_only", message: "Validation réservée au Directeur général : seule la Direction générale peut valider la paie du mois avant impression." });
+      }
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period }, include: { _count: { select: { lines: true } } } });
+      if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
+      if (run.status === "valide") return reply.code(409).send({ code: "already_validated", message: "Ce mois est déjà validé." });
+      if (run._count.lines === 0) return reply.code(409).send({ code: "empty_run", message: "Aucun salarié dans ce mois : rien à valider." });
+      await prisma.payrollMonthlyRun.update({ where: { id: run.id }, data: { status: "valide", validatedBy: request.user!.id, validatedAt: new Date() } });
+      await writeAuditLog({ userId: request.user!.id, action: "validate", entityType: "payroll_monthly_run", entityId: period, ipAddress: request.ip });
+      return reply.send({ period, status: "valide" });
+    },
+  );
+
+  // Réouverture du mois (DG) : repasse en brouillon pour corriger. Refusée si le
+  // livre de paie de la période est déjà clôturé (journal figé, définitif).
+  fastify.post(
+    "/api/v1/payroll/monthly/:period/reopen",
+    { preHandler: requirePermission("paie", "validation") },
+    async (request, reply) => {
+      if (!request.user!.roles.some((r) => r === "DIR_GENERAL" || r === "ADMIN_GENERAL")) {
+        return reply.code(403).send({ code: "dg_only", message: "Réouverture réservée au Directeur général." });
+      }
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+      if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
+      const closure = await prisma.payrollClosure.findUnique({ where: { periodKey: period }, select: { id: true } });
+      if (closure) return reply.code(409).send({ code: "already_closed", message: "Livre de paie clôturé : le mois est définitif et ne peut plus être rouvert." });
+      await prisma.payrollMonthlyRun.update({ where: { id: run.id }, data: { status: "brouillon", validatedBy: null, validatedAt: null } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payroll_monthly_run", entityId: period, newValues: { reopened: true }, ipAddress: request.ip });
+      return reply.send({ period, status: "brouillon" });
     },
   );
 

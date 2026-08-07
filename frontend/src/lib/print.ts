@@ -992,6 +992,15 @@ export interface PayslipPrintData {
   cnps_number?: string | null;
   niu?: string | null;
   fiscal_parts?: number | null;
+  // Informations salarié complémentaires (modèle du classeur), toutes facultatives.
+  department?: string | null;
+  position?: string | null;
+  hire_date?: string | null;
+  category?: string | null;
+  email?: string | null;
+  payment_mode?: string | null;
+  account_number?: string | null;
+  leave_balance?: number | null;
   payslip: {
     base: number; complements: number; prime_anciennete: number; retenue_absence: number;
     salaire_brut: number; assiette_cnps: number;

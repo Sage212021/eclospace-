@@ -3612,6 +3612,17 @@ export interface PayrollMonthLine {
   employee_id: string;
   employee_name: string;
   matricule: string | null;
+  cnps_number: string | null;
+  niu: string | null;
+  fiscal_parts: number;
+  department: string | null;
+  position: string | null;
+  hire_date: string | null;
+  category: string | null;
+  email: string | null;
+  payment_mode: string | null;
+  account_number: string | null;
+  leave_balance: number;
   elements: PayrollMonthElements;
   note: string | null;
   net_a_payer: number;
@@ -3619,6 +3630,7 @@ export interface PayrollMonthLine {
   total_retenues_salariales: number;
   total_charges_patronales: number;
   cout_employeur: number;
+  payslip: Payslip;
 }
 export interface PayrollMonth {
   exists: boolean;
@@ -3637,6 +3649,13 @@ export function getPayrollMonth(period: string) {
 }
 export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null) {
   return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...elements, note: note ?? null }) });
+}
+// Validation définitive du mois par le Directeur général (obligatoire avant impression).
+export function validatePayrollMonth(period: string) {
+  return request<{ period: string; status: "valide" }>(`/api/v1/payroll/monthly/${period}/validate`, { method: "POST" });
+}
+export function reopenPayrollMonth(period: string) {
+  return request<{ period: string; status: "brouillon" }>(`/api/v1/payroll/monthly/${period}/reopen`, { method: "POST" });
 }
 export function previewPayslipEmail(employeeId: string, period: string, message: string, retenueAbsence = 0) {
   return request<{ subject: string; html: string; default_to: string | null }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, preview: true, retenue_absence: retenueAbsence }) });

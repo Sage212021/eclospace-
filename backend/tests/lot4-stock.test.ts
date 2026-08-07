@@ -522,4 +522,24 @@ describe("Stock et magasin (Lot 4)", () => {
     expect(row.total).toBe(50);
     expect(row.by_location.length).toBe(2);
   });
+
+  it("stock par manuscrit : agrégation par ISBN et par zone + saisie du stock initial", async () => {
+    const zone = (await app.inject({ method: "POST", url: "/api/v1/stock-locations", headers: { cookie: adminCookie }, payload: { type: "entrepot", label: "Zone stock ouvrage" } })).json();
+    const created = await createIsbnForNewManuscript("Manuscrit Stock Ouvrage");
+    const manuscriptId = created.manuscript.id;
+
+    // Aucune quantité au départ.
+    let stock = (await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/stock`, headers: { cookie: adminCookie } })).json();
+    expect(stock.has_isbn).toBe(true);
+    expect(stock.isbns[0].total).toBe(0);
+
+    // Saisie du stock initial via régularisation (comme le panneau de la fiche).
+    await app.inject({ method: "POST", url: "/api/v1/stock-movements", headers: { cookie: adminCookie }, payload: { type: "inventory_adjustment", isbn_id: created.isbnId, to_location_id: zone.id, quantity: 120, reason: "Stock initial" } });
+
+    stock = (await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/stock`, headers: { cookie: adminCookie } })).json();
+    expect(stock.isbns[0].total).toBe(120);
+    expect(stock.isbns[0].vendable).toBe(120);
+    const loc = stock.isbns[0].by_location.find((l: { location_id: string }) => l.location_id === zone.id);
+    expect(loc.vendable).toBe(120);
+  });
 });

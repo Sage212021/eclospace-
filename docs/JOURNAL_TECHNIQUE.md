@@ -859,3 +859,13 @@ Le rapport d'inventaire distingue des exemplaires « touchés » (abîmés) parm
 - **Zones du rapport pré-créées** (seed idempotent) : Magasin — cartons, Étagères DAF, Salon / exposition, Bureau DAF, Direction générale, Stock commerciaux. Prêtes à inventorier dès la mise en service.
 - **Stock réel consolidé** : `GET /api/v1/stock-consolidated` — total par ouvrage tous lieux confondus (vendable vs déclassé) + détail par lieu + totaux généraux. Frontend : `StockConsolidatedSection` (tableau repliable par zone, ligne de total général) en tête de la page Stock. Répond au « stock réel total » du rapport final.
 - **Test** : stock réparti sur 2 zones + 5 déclassés → vendable 45 / déclassé 5 / total 50, 2 lieux.
+
+## 07/08/2026 (suite) — Stock par ouvrage : panneau sur la fiche + chargement de l'inventaire initial
+
+Réponse à « intégrer les stocks par manuscrit » : rendre le stock visible et saisissable ouvrage par ouvrage, et permettre de charger les quantités du rapport d'inventaire.
+
+- **Backend** (`routes/stock.ts`) : `GET /api/v1/manuscripts/:id/stock` — stock de l'ouvrage agrégé par ISBN et par lieu (vendable/déclassé) + totaux. La saisie du stock initial réutilise le mouvement `inventory_adjustment` (crédit immédiat, tracé), sans nouveau type.
+- **Frontend** :
+  - `ManuscriptStockSection` sur la fiche manuscrit : stock par ISBN/zone + saisie du stock initial (zone + quantité).
+  - `StockInitialImportSection` sur la page Stock : chargement en lot — zone + quantités par ouvrage (recherche par titre/ISBN) → une régularisation par ligne. Permet d'intégrer les ~30 titres du rapport rapidement.
+- **Test** : `lot4-stock.test.ts` — stock par manuscrit (0 → 120 après saisie initiale, ventilé par zone).

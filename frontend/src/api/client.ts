@@ -1813,6 +1813,24 @@ export function getStockConsolidated() {
   return request<StockConsolidated>("/api/v1/stock-consolidated");
 }
 
+// Stock d'un ouvrage (par manuscrit) — agrégé par ISBN et par lieu.
+export interface ManuscriptStockIsbn {
+  isbn_id: string;
+  isbn13: string;
+  format: string;
+  vendable: number;
+  declasse: number;
+  total: number;
+  by_location: { location_id: string; location_label: string; vendable: number; declasse: number }[];
+}
+export interface ManuscriptStock {
+  has_isbn: boolean;
+  isbns: ManuscriptStockIsbn[];
+}
+export function getManuscriptStock(manuscriptId: string) {
+  return request<ManuscriptStock>(`/api/v1/manuscripts/${manuscriptId}/stock`);
+}
+
 // ── Inventaire physique (Ch. 16 §16.8) — campagnes, comptage, écarts ──────────
 export type InventoryType = "full" | "rotating";
 export type InventoryStatus = "open" | "closed";

@@ -178,6 +178,40 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     return reply.send({ rows, totals });
   });
 
+  // Stock d'un ouvrage (par manuscrit) : agrégé par ISBN et par lieu
+  // (vendable / déclassé). Alimente le panneau « Stock » de la fiche manuscrit.
+  fastify.get("/api/v1/manuscripts/:id/stock", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const isbns = await prisma.isbn.findMany({ where: { manuscriptId: id }, select: { id: true, isbn13: true, format: true }, orderBy: { createdAt: "asc" } });
+    const isbnIds = isbns.map((i) => i.id);
+    const items = isbnIds.length
+      ? await prisma.stockItem.findMany({ where: { isbnId: { in: isbnIds } }, include: { location: { select: { id: true, label: true } } } })
+      : [];
+    const result = isbns.map((isbn) => {
+      const its = items.filter((it) => it.isbnId === isbn.id);
+      const locMap = new Map<string, { location_id: string; location_label: string; vendable: number; declasse: number }>();
+      let vendable = 0;
+      let declasse = 0;
+      for (const it of its) {
+        const l = locMap.get(it.locationId) ?? { location_id: it.locationId, location_label: it.location.label, vendable: 0, declasse: 0 };
+        if (it.condition === "declasse") {
+          l.declasse += it.quantityPhysical;
+          declasse += it.quantityPhysical;
+        } else {
+          l.vendable += it.quantityPhysical;
+          vendable += it.quantityPhysical;
+        }
+        locMap.set(it.locationId, l);
+      }
+      return {
+        isbn_id: isbn.id, isbn13: isbn.isbn13, format: isbn.format,
+        vendable, declasse, total: vendable + declasse,
+        by_location: [...locMap.values()].sort((a, b) => a.location_label.localeCompare(b.location_label, "fr")),
+      };
+    });
+    return reply.send({ has_isbn: isbns.length > 0, isbns: result });
+  });
+
   // Ch. 16 §16.4 : aucun mouvement sans type, motif et responsable. Chaque
   // mouvement met à jour le stock en temps réel (transactionnel).
   fastify.post("/api/v1/stock-movements", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {

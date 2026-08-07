@@ -9,10 +9,15 @@ import { getOrCreateThumbnail } from "../src/lib/imageOptimize.js";
 
 describe("miniatures d'images (aperçus légers)", () => {
   it("génère une miniature ≤ 360 px en JPEG, plus légère que l'original, et la met en cache", async () => {
-    // Image source volumineuse (1200 × 900).
-    const src = new Jimp({ width: 1200, height: 900, color: 0xff8800ff });
+    // Image source volumineuse (1200 × 900). Le stockage est adressé par contenu
+    // (hash SHA-256) : on rend l'image unique à chaque exécution (couleur
+    // aléatoire) pour que le chemin — et donc le cache de miniature — soit neuf,
+    // sinon un .thumb.jpg laissé par une exécution précédente ferait échouer
+    // l'assertion « aucune miniature au départ ».
+    const color = ((Math.floor(Math.random() * 0xffffff) << 8) | 0xff) >>> 0;
+    const src = new Jimp({ width: 1200, height: 900, color });
     const buf = await src.getBuffer("image/png");
-    const stored = await storeFile(buf, "test-thumb-source.png");
+    const stored = await storeFile(buf, `test-thumb-source-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`);
 
     // Aucune miniature en cache au départ.
     expect(await readStoredFileOrNull(stored.filePath + ".thumb.jpg")).toBeNull();

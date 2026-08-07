@@ -13,6 +13,18 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Fiche manuscrit corrigeable après enregistrement (jusqu'au contrat signé)
+
+**Problème signalé :** après enregistrement, la fiche du manuscrit ne pouvait plus être corrigée (erreur ou oubli) — elle paraissait verrouillée.
+
+**Fait :**
+- Nouveau bouton **« ✎ Modifier la fiche »** dans l'écran du manuscrit : on peut corriger l'**ouvrage** (titre, sous-titre, langue, domaine, responsable), l'**identité complète de l'auteur** (état civil, pièce d'identité, coordonnées), les **frais de dépôt** et le **délai de réponse**.
+- **Motif obligatoire** à chaque correction, **tracé au journal**.
+- La fiche reste corrigeable **tant que le contrat n'est pas signé** ; après signature elle se **verrouille** (l'état civil sert au contrat) — le bouton se grise avec l'explication.
+- **Tests** : correction OK (ouvrage + auteur, tracée), refus sans motif, verrou après contrat signé.
+
+**Prochaine étape (à la demande) :** suppression du manuscrit soumise à **validation du DG** — le directeur éditorial demande, le DG valide ou refuse.
+
 ### 07/08/2026 (suite) — Règle métier : retenue d'absence = saisie RH, pas un lien automatique
 
 **Précision opérateur :** les retenues d'absence de l'ERP **ne doivent pas alimenter automatiquement le calcul de la paie**. Le cahier de présence (pointeur indépendant de l'entreprise) est un **simple témoin** ; le **RH saisit lui-même** la retenue au moment d'intégrer la paie du mois / de l'employé.

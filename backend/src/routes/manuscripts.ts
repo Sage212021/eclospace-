@@ -145,6 +145,60 @@ const patchManuscriptSchema = z.object({
   requires_rewrite: z.boolean().optional(),
 });
 
+// Correction de la fiche d'enregistrement après coup (ouvrage + identité auteur
+// + frais/délai), avec motif obligatoire. Tous les champs sont facultatifs :
+// on ne met à jour que ce qui est transmis. Une chaîne vide EFFACE la valeur
+// (l'opérateur doit pouvoir retirer une info saisie par erreur).
+const editAuthorSchema = z.object({
+  first_name: z.string().min(1),
+  last_name: z.string().min(1),
+  pen_name: z.string().max(160).optional(),
+  email: z.string().email().max(200).or(z.literal("")).optional(),
+  phone: z.string().max(40).optional(),
+  whatsapp: z.string().max(60).optional(),
+  address: z.string().max(400).optional(),
+  birth_date: z.string().datetime().or(z.literal("")).optional(),
+  birth_place: z.string().max(200).optional(),
+  nationality: z.string().max(120).optional(),
+  profession: z.string().max(200).optional(),
+  id_type: z.string().max(80).optional(),
+  id_number: z.string().max(120).optional(),
+  id_issued_date: z.string().datetime().or(z.literal("")).optional(),
+  id_issued_place: z.string().max(200).optional(),
+  country: z.string().max(120).optional(),
+  city: z.string().max(120).optional(),
+  quartier: z.string().max(160).optional(),
+  postal_box: z.string().max(120).optional(),
+  other_contact: z.string().max(200).optional(),
+  niu: z.string().max(120).optional(),
+});
+const editRegistrationSchema = z.object({
+  modification_reason: z.string().trim().min(3).max(500),
+  title: z.string().min(1).optional(),
+  subtitle: z.string().max(300).optional(),
+  language: z.string().min(2).optional(),
+  genre_id: z.string().uuid().optional(),
+  owner_id: z.string().uuid().optional(),
+  evaluation_fee_choice: z.enum(["non_defini", "a_payer", "sans_frais"]).optional(),
+  author_response_delay_days: z.number().int().min(0).max(365).nullable().optional(),
+  author: editAuthorSchema.optional(),
+});
+
+// Identité auteur (édition) → data Prisma : chaîne vide → null (efface), sinon la
+// valeur ; dates vides → null. Ne touche qu'aux clés transmises.
+function authorIdentityUpdate(a: Record<string, unknown>) {
+  const str = (v: unknown) => (v === undefined ? undefined : v === "" ? null : (v as string));
+  const date = (v: unknown) => (v === undefined ? undefined : v === "" ? null : new Date(v as string));
+  return {
+    email: str(a.email), phone: str(a.phone), whatsapp: str(a.whatsapp), address: str(a.address),
+    birthDate: date(a.birth_date), birthPlace: str(a.birth_place), nationality: str(a.nationality),
+    profession: str(a.profession), idNumber: str(a.id_number), idIssuedDate: date(a.id_issued_date),
+    idIssuedPlace: str(a.id_issued_place), idType: str(a.id_type), country: str(a.country),
+    city: str(a.city), quartier: str(a.quartier), postalBox: str(a.postal_box),
+    otherContact: str(a.other_contact), niu: str(a.niu),
+  };
+}
+
 const priorityOverrideSchema = z.object({
   score: z.number(),
   justification: z.string().min(1),
@@ -510,7 +564,9 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     if (!manuscript) {
       return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
     }
-    return reply.send(manuscript);
+    // Verrou de la fiche : figée dès qu'un contrat est signé (voir édition fiche).
+    const signed = await prisma.contract.findFirst({ where: { manuscriptId: id, deletedAt: null, OR: [{ signedAt: { not: null } }, { status: "active" }] }, select: { id: true } });
+    return reply.send({ ...manuscript, registrationLocked: Boolean(signed) });
   });
 
   // Dépôt à la RÉCEPTION : le fichier source du manuscrit. C'est l'entrée du
@@ -618,6 +674,71 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       entityId: id,
       oldValues: JSON.parse(JSON.stringify(existing)),
       newValues: body,
+      ipAddress: request.ip,
+    });
+
+    return reply.send(updated);
+  });
+
+  // Correction de la fiche d'enregistrement après coup (décision opérateur du
+  // 07/08/2026) : on peut réparer une erreur ou un oubli TANT QUE le contrat
+  // n'est pas signé. Ensuite la fiche est figée (l'état civil sert au contrat).
+  // Motif obligatoire, tout est tracé au journal d'audit.
+  fastify.patch("/api/v1/manuscripts/:id/registration", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = editRegistrationSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const body = parsed.data;
+
+    const existing = await prisma.manuscript.findFirst({
+      where: { id, deletedAt: null },
+      include: { workContributors: { where: { role: "author" }, include: { partner: true }, orderBy: { displayOrder: "asc" }, take: 1 } },
+    });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+
+    // Verrou : un contrat signé (signedAt) ou actif fige la fiche.
+    const signed = await prisma.contract.findFirst({ where: { manuscriptId: id, deletedAt: null, OR: [{ signedAt: { not: null } }, { status: "active" }] }, select: { id: true } });
+    if (signed) {
+      return reply.code(409).send({ code: "registration_locked", message: "Fiche verrouillée : le contrat est signé. L'identité de l'auteur et l'ouvrage servent au contrat et ne peuvent plus être modifiés ici." });
+    }
+
+    const authorContributor = existing.workContributors[0];
+    const updated = await prisma.$transaction(async (tx) => {
+      const m = await tx.manuscript.update({
+        where: { id },
+        data: {
+          title: body.title,
+          subtitle: body.subtitle,
+          language: body.language,
+          genreId: body.genre_id,
+          ownerId: body.owner_id,
+          evaluationFeeChoice: body.evaluation_fee_choice,
+          authorResponseDelayDays: body.author_response_delay_days === undefined ? undefined : body.author_response_delay_days,
+          updatedBy: request.user!.id,
+        },
+      });
+      if (body.author && authorContributor) {
+        await tx.partner.update({
+          where: { id: authorContributor.partnerId },
+          data: {
+            firstName: body.author.first_name,
+            lastName: body.author.last_name,
+            penName: body.author.pen_name === undefined ? undefined : body.author.pen_name === "" ? null : body.author.pen_name,
+            ...authorIdentityUpdate(body.author as Record<string, unknown>),
+            updatedBy: request.user!.id,
+          },
+        });
+      }
+      return m;
+    });
+
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "manuscript",
+      entityId: id,
+      oldValues: { title: existing.title, author: authorContributor ? { firstName: authorContributor.partner.firstName, lastName: authorContributor.partner.lastName } : null },
+      newValues: { reason: body.modification_reason, ...body },
       ipAddress: request.ip,
     });
 

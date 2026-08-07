@@ -338,13 +338,51 @@ export function deleteCollection(id: string) {
   return request<{ ok: true }>(`/api/v1/collections/${id}`, { method: "DELETE" });
 }
 
+// Auteur complet (partenaire) tel que renvoyé sur la fiche détaillée, pour
+// pré-remplir l'édition de la fiche d'enregistrement.
+export interface ManuscriptAuthorPartner extends AuthorIdentity {
+  id: string;
+  firstName: string;
+  lastName: string;
+  penName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+  idType?: string | null;
+  country?: string | null;
+  city?: string | null;
+  quartier?: string | null;
+  postalBox?: string | null;
+  otherContact?: string | null;
+  niu?: string | null;
+}
+export type ManuscriptDetail = Manuscript & {
+  genreId?: string | null;
+  evaluationFeeChoice?: "non_defini" | "a_payer" | "sans_frais";
+  authorResponseDelayDays?: number | null;
+  registrationLocked?: boolean;
+  workContributors: { role?: string; partner: ManuscriptAuthorPartner }[];
+  owner: UserSummary;
+};
 export function getManuscript(id: string) {
-  return request<
-    Manuscript & {
-      workContributors: { partner: { id: string; firstName: string; lastName: string; penName: string | null } }[];
-      owner: UserSummary;
-    }
-  >(`/api/v1/manuscripts/${id}`);
+  return request<ManuscriptDetail>(`/api/v1/manuscripts/${id}`);
+}
+
+// Correction de la fiche d'enregistrement (ouvrage + auteur + frais/délai) tant
+// que le contrat n'est pas signé. Motif obligatoire ; tout est tracé au journal.
+export interface EditRegistrationInput {
+  modification_reason: string;
+  title?: string;
+  subtitle?: string;
+  language?: string;
+  genre_id?: string;
+  owner_id?: string;
+  evaluation_fee_choice?: "non_defini" | "a_payer" | "sans_frais";
+  author_response_delay_days?: number | null;
+  author?: NewAuthorInput;
+}
+export function updateManuscriptRegistration(id: string, input: EditRegistrationInput) {
+  return request<Manuscript>(`/api/v1/manuscripts/${id}/registration`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
 export function getManuscriptTimeline(id: string) {

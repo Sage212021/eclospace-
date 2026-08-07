@@ -795,3 +795,13 @@ Précision opérateur : les retenues d'absence de l'ERP **ne doivent pas être r
 - **Backend** (`routes/payroll.ts`) : `resolvePayslip` n'applique plus la retenue issue de la consolidation Présences ; elle est renvoyée séparément comme `attendance_witness` (indicatif). La retenue appliquée provient d'une saisie RH transmise en paramètre (`retenue_absence` en query sur `GET …/payslip`, ou dans le corps de `POST …/payslip/email`). Le livre de paie (`computeRegister`) n'applique plus non plus la retenue des présences.
 - **Frontend** : champ « Retenue d'absence (saisie RH) » dans le bulletin ; le témoin du cahier de présence est affiché avec un bouton « Reporter dans la retenue » (report volontaire), et la mention « Indicatif : non relié au calcul ». Aperçu en direct et impression/e-mail utilisent la valeur saisie.
 - **Test** : `payroll-attendance-decoupling.test.ts` — une consolidation avec retenue proposée de 60 000 n'impacte pas le net (retenue = 0, `attendance_witness` = 60 000) ; une saisie RH de 50 000 est bien appliquée (net en baisse).
+
+## 07/08/2026 (suite) — Fiche manuscrit corrigeable après enregistrement (jusqu'au contrat signé)
+
+Demande opérateur : la fiche se verrouillait après l'enregistrement (impossible de corriger une erreur/oubli). Décision : rendre la fiche corrigeable **tant que le contrat n'est pas signé**.
+
+- **Backend** (`routes/manuscripts.ts`) : `PATCH /api/v1/manuscripts/:id/registration` (permission `manuscripts:saisie`) met à jour l'ouvrage (titre, sous-titre, langue, domaine, responsable), l'**identité complète de l'auteur** (état civil, pièce, coordonnées — sur le partenaire lié), les **frais de dépôt** et le **délai de réponse**. Motif obligatoire (`modification_reason`), tracé au journal d'audit. **Verrou** : si un contrat `signedAt`/`status=active` existe → 409 `registration_locked`. `GET /manuscripts/:id` renvoie désormais `registrationLocked` pour l'UI.
+- **Frontend** : bouton « ✎ Modifier la fiche » (barre d'actions de la fiche), désactivé si verrouillée. Ouvre une fenêtre reprenant tous les champs pré-remplis (ouvrage + auteur + frais/délai) + champ motif. Une chaîne vide efface la valeur correspondante.
+- **Test** : `manuscript-registration-edit.test.ts` — correction OK (ouvrage + auteur, tracé), refus sans motif (400), verrou après contrat signé (409 + `registrationLocked` au GET).
+
+Reste demandé (incrément suivant) : suppression du manuscrit soumise à validation du DG (le directeur éditorial demande → le DG valide/refuse).

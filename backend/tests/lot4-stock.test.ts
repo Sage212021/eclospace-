@@ -422,4 +422,50 @@ describe("Stock et magasin (Lot 4)", () => {
     const stockItem = await prisma.stockItem.findFirstOrThrow({ where: { isbnId, locationId: warehouseId } });
     expect(stockItem.quantityPhysical).toBe(500);
   });
+
+  it("inventaire : campagne, comptage avec écart, régularisation et clôture", async () => {
+    // Lieu dédié pour isoler les lignes d'inventaire.
+    const loc = (await app.inject({ method: "POST", url: "/api/v1/stock-locations", headers: { cookie: adminCookie }, payload: { type: "emplacement", label: "Cartons — inventaire" } })).json();
+    const { isbnId } = await createIsbnForNewManuscript("Manuscrit Inventaire");
+    await app.inject({ method: "POST", url: "/api/v1/stock-movements", headers: { cookie: adminCookie }, payload: { type: "production_in", isbn_id: isbnId, to_location_id: loc.id, quantity: 100, reason: "Réception" } });
+
+    // Campagne (comptage visible pour la simplicité du test).
+    const inv = (await app.inject({ method: "POST", url: "/api/v1/inventories", headers: { cookie: adminCookie }, payload: { type: "full", location_id: loc.id, blind: false } })).json();
+    expect(inv.lines.length).toBe(1);
+
+    // Liste + avancement.
+    const list = (await app.inject({ method: "GET", url: "/api/v1/inventories", headers: { cookie: adminCookie } })).json();
+    const row = list.find((r: { id: string }) => r.id === inv.id);
+    expect(row.total_lines).toBe(1);
+    expect(row.counted_lines).toBe(0);
+
+    // Détail enrichi (titre + ISBN).
+    const detail = (await app.inject({ method: "GET", url: `/api/v1/inventories/${inv.id}`, headers: { cookie: adminCookie } })).json();
+    const lineId = detail.lines[0].id;
+    expect(detail.lines[0].title).toBe("Manuscrit Inventaire");
+    expect(detail.lines[0].theoreticalQty).toBe(100);
+
+    // Premier comptage avec écart → recomptage demandé.
+    const c1 = (await app.inject({ method: "PATCH", url: `/api/v1/inventory-lines/${lineId}`, headers: { cookie: adminCookie }, payload: { counted_qty: 95 } })).json();
+    expect(c1.variance).toBe(-5);
+    expect(c1.recountRequired).toBe(true);
+    // Second comptage confirme l'écart.
+    const c2 = (await app.inject({ method: "PATCH", url: `/api/v1/inventory-lines/${lineId}`, headers: { cookie: adminCookie }, payload: { counted_qty: 95 } })).json();
+    expect(c2.recountRequired).toBe(false);
+
+    // Clôture refusée tant que l'écart n'est pas régularisé.
+    const early = await app.inject({ method: "PATCH", url: `/api/v1/inventories/${inv.id}/close`, headers: { cookie: adminCookie } });
+    expect(early.statusCode).toBe(409);
+
+    // Régularisation → mouvement d'ajustement, stock ramené à 95.
+    const adj = await app.inject({ method: "POST", url: `/api/v1/inventory-lines/${lineId}/adjust`, headers: { cookie: adminCookie } });
+    expect(adj.statusCode).toBe(200);
+    const item = await prisma.stockItem.findFirstOrThrow({ where: { isbnId, locationId: loc.id } });
+    expect(item.quantityPhysical).toBe(95);
+
+    // Clôture désormais possible.
+    const close = await app.inject({ method: "PATCH", url: `/api/v1/inventories/${inv.id}/close`, headers: { cookie: adminCookie } });
+    expect(close.statusCode).toBe(200);
+    expect(close.json().status).toBe("closed");
+  });
 });

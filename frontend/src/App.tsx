@@ -190,6 +190,11 @@ const NAV_POLES: NavPole[] = [
   {
     label: "Juridique & Finance",
     items: [
+      // « Contrats & droits d'auteur » apparaît AUSSI ici (accès du pôle
+      // juridique, décision opérateur du 07/08/2026) tout en restant au pôle
+      // Éditorial. Même clé interne (« jf-contrats ») : c'est la même rubrique,
+      // affichée à deux endroits — le juridique la retrouve comme auparavant.
+      { key: "jf-contrats", label: "Contrats & droits d'auteur", permission: "manuscripts:consultation" },
       { key: "jf-finance", label: "Finance & comptabilité", permission: "finance:consultation" },
       { key: "co-commissions", label: "Commissions commerciales", anyPermission: ["finance:consultation", "commercial:consultation"] },
       { key: "jf-droits-annuels", label: "États annuels de droits d'auteur", permission: "royalties:consultation" },

@@ -830,3 +830,7 @@ Reste (étape 2b) : livre de paie + états CNPS/fiscaux dérivés du mois valid�
 ## 07/08/2026 (suite) — Chantier paie, étape 2b : livre de paie & états depuis le mois
 
 `computeRegister` (livre de paie + exports CNPS/fiscaux + clôture) reprend désormais les **éléments variables du mois** quand le mois a été préparé (grille mensuelle) : chaque salarié est calculé par `computeMonthlyLine` (primes, heures sup, absences, retards, avances, prêts, sanctions) — donc le livre, les états CNPS/fiscaux (CSV) et le journal figé à la clôture reflètent exactement les bulletins. Sans mois préparé, calcul depuis les seules fiches (rétrocompatible). La réponse du livre expose `monthly_status` (brouillon|valide|null) ; le frontend affiche la source des montants (mois validé / brouillon à valider / fiches).
+
+## 07/08/2026 (suite) — Compléments bulletin : bloc « Informations complémentaires & congés »
+
+Le bulletin PDF (modèle classeur) reçoit un dernier bloc : **type de contrat** (HrContract le plus récent), **date de naissance** et **date d'entrée** (Employee), **solde de congés** (leaveBalanceDays). Le GET du mois (`routes/payroll.ts`) renvoie `contract_type` et `birth_date` par ligne ; `payslipPdf.ts` ajoute la section. Note : le modèle du classeur mentionne « situation familiale » et « contact d'urgence », mais ces champs n'existent pas dans le modèle de données (`EmployeeConfidential` ne stocke que des notes) — non ajoutés, pas de donnée confidentielle exposée sur le bulletin.

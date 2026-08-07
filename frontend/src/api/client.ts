@@ -3618,6 +3618,8 @@ export interface PayrollMonthLine {
   department: string | null;
   position: string | null;
   hire_date: string | null;
+  birth_date: string | null;
+  contract_type: string | null;
   category: string | null;
   email: string | null;
   payment_mode: string | null;

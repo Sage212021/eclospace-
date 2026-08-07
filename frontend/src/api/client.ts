@@ -727,6 +727,11 @@ export function attachReadingReport(assignmentId: string) {
   return request<{ attached: boolean; document_id: string }>(`/api/v1/reading-assignments/${assignmentId}/attach-report`, { method: "POST" });
 }
 
+// Envoi par e-mail de la version finale du rapport (PDF fusionné, en base64).
+export function emailReadingReport(assignmentId: string, input: { to: string; subject?: string; message?: string; pdf_base64: string; file_name?: string }) {
+  return request<{ sent: boolean }>(`/api/v1/reading-assignments/${assignmentId}/email-report`, { method: "POST", body: JSON.stringify(input) });
+}
+
 export function submitEditorialDecision(
   manuscriptId: string,
   decision: "acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus",

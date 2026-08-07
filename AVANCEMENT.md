@@ -13,6 +13,15 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Rapport de lecture : version finale fusionnée (en-tête + rapport déposé) + transmission
+
+**Fait (demande opérateur) :** le **rapport déposé** par le relecteur est désormais **fusionné en un seul PDF** avec le **rapport officiel à en-tête Éclosion** — c'est cette **version finale** qui peut être transmise au client/auteur.
+- Nouveau menu « Mon rapport » → **« Version finale (en-tête + rapport déposé) → Préparer & transmettre… »**.
+- **Fusion** : le rapport officiel (logo + coordonnées + évaluation notée + recommandation + appréciation) est généré en PDF (jsPDF) ; les pages du **fichier déposé** sont ajoutées à la suite (PDF → pages ; image → pleine page ; format non fusionnable → rapport officiel seul + avertissement). Librairie **pdf-lib** (frontend, pure JS) — documentée dans `docs/JOURNAL_TECHNIQUE.md`.
+- **Options de transmission** de la version finale : **Télécharger**, **Transférer** (messagerie interne, pièce jointe réelle), **Envoyer par e-mail** (client/auteur ou interne), **WhatsApp** (téléchargement + message pré-rempli). Message d'accompagnement facultatif.
+- Backend : `POST /reading-assignments/:id/email-report` (PDF base64 → pièce jointe `nodemailer`), réservé au relecteur de la mission ou au comité/direction ; 503 explicite si SMTP non configuré ; export tracé au journal.
+- **Tests** : `reading-report-email.test.ts` (403 pour un tiers ; flux d'expédition atteint pour le relecteur ; 400 e-mail invalide). Verts. Typecheck back+front + build OK.
+
 ### 07/08/2026 (suite) — Blocage d'étape si la fiche de l'auteur est incomplète (message clair)
 
 **Fait (4/4, demande terminée) :** la **Vérification administrative** ne se valide plus tant que la fiche de l'auteur est incomplète — le système **dit précisément ce qui manque** et l'étape suivante (comité de lecture) reste inaccessible.

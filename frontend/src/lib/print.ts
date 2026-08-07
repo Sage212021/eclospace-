@@ -12,7 +12,7 @@ import type { ContractDetail, EditorialQuote, InvoiceDetail, PurchaseOrder, Roya
 // Modifier ici met à jour l'en-tête et le pied de TOUS les documents.
 // Coordonnées officielles de la maison — les données des documents numériques
 // font foi (décision opérateur du 11/07/2026). Source unique pour tous les docs.
-const HOUSE = {
+export const HOUSE = {
   legalName: "ECLOSION EDITION SARL",
   brand: "Éclosion",
   brandSuffix: "Édition",

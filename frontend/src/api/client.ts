@@ -844,9 +844,15 @@ export interface ContractSignature {
   note: string | null;
 }
 
+export interface ContractClause {
+  title: string;
+  body: string;
+}
+
 export interface ContractDetail extends Contract {
   effectiveAt?: string | null;
   durationMonths?: number | null;
+  customClauses?: ContractClause[] | null;
   territories: string[];
   languages: string[];
   formats: string[];
@@ -873,10 +879,21 @@ export function signContract(
   return request<ContractDetail>(`/api/v1/contracts/${id}/sign`, { method: "POST", body: JSON.stringify(input) });
 }
 
+// Modifier les termes d'un contrat non signé (type, taux, avance, durée).
+export function updateContractTerms(id: string, input: { type?: string; duration_months?: number | null; rate?: number; advance_amount?: number }) {
+  return request<ContractDetail>(`/api/v1/contracts/${id}/terms`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+// Ajouter un article (clause) à un contrat non signé.
+export function addContractClause(id: string, input: { title: string; body: string }) {
+  return request<ContractDetail>(`/api/v1/contracts/${id}/clauses`, { method: "POST", body: JSON.stringify(input) });
+}
+
 export function createContract(input: {
   type: string;
   manuscript_id?: string;
   partner_id: string;
+  parent_contract_id?: string;
   duration_months?: number;
   financial_terms: Record<string, unknown>;
 }) {

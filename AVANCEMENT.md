@@ -13,6 +13,16 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Contrat d'édition : menu enrichi (Transférer, Modifier/Enregistrer, Avenant, Article)
+
+**Fait (demande opérateur, captures à l'appui) :** le menu déroulant « Contrat d'édition » (à côté des présentations Numérique/PDF, papier à en-tête…) gagne quatre actions :
+- **Transférer (messagerie / WhatsApp)** : le contrat d'édition **généré** est produit en **PDF côté navigateur** (jsPDF, comme le bulletin de paie — pas de dépendance serveur ni html2canvas) et transféré en pièce jointe, vers la messagerie interne (fichier réellement joint) ou WhatsApp (téléchargement + message pré-rempli). L'en-tête reprend l'identité réelle de l'auteur et les termes ; les 15 articles du modèle sont repris fidèlement.
+- **Modifier / enregistrer** : édition des **termes** d'un contrat **non signé** (type, taux de droits, avance, durée). Enregistrée côté serveur et **persistée** (`PATCH /contracts/:id/terms`), tracée au journal. Refusée dès que le contrat est signé/actif (409) — un engagement signé est immuable.
+- **Ajouter un avenant** : crée un **contrat rattaché** (avenant, `parent_contract_id`) au contrat d'origine, avec les termes révisés (même auteur, même ouvrage).
+- **Ajouter un article** : ajoute une **clause propre** au contrat (`POST /contracts/:id/clauses`, champ `custom_clauses`), reprise en fin de contrat imprimé **et** PDF (numérotée 16, 17…). Possible tant que le contrat n'est pas signé.
+- Modèle : champ additif `custom_clauses` (JSONB) sur `contracts`, migration `20260807090000_contract_custom_clauses`.
+- **Tests** : `contract-terms-clauses.test.ts` (4 cas) — modification taux/avance/durée ; ajout d'article ; refus sur contrat actif (409) ; refus sans droit de saisie (403). 22 tests contrats verts au total. Typecheck back+front + build OK.
+
 ### 07/08/2026 — Chantier contrat & manuscrit (4/4, terminé) : transfert du document du contrat vers messagerie interne / WhatsApp
 
 **Fait (point 2 du chantier — dernier point) :**

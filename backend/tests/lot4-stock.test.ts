@@ -500,4 +500,26 @@ describe("Stock et magasin (Lot 4)", () => {
     const close = await app.inject({ method: "PATCH", url: `/api/v1/inventories/${inv.id}/close`, headers: { cookie: adminCookie } });
     expect(close.statusCode).toBe(200);
   });
+
+  it("stock consolidé : total réel par ouvrage, toutes zones, vendable vs déclassé", async () => {
+    const zoneA = (await app.inject({ method: "POST", url: "/api/v1/stock-locations", headers: { cookie: adminCookie }, payload: { type: "entrepot", label: "Zone A consolidée" } })).json();
+    const zoneB = (await app.inject({ method: "POST", url: "/api/v1/stock-locations", headers: { cookie: adminCookie }, payload: { type: "emplacement", label: "Zone B consolidée" } })).json();
+    const { isbnId } = await createIsbnForNewManuscript("Manuscrit Consolidé");
+    await app.inject({ method: "POST", url: "/api/v1/stock-movements", headers: { cookie: adminCookie }, payload: { type: "production_in", isbn_id: isbnId, to_location_id: zoneA.id, quantity: 30, reason: "Réception A" } });
+    await app.inject({ method: "POST", url: "/api/v1/stock-movements", headers: { cookie: adminCookie }, payload: { type: "production_in", isbn_id: isbnId, to_location_id: zoneB.id, quantity: 20, reason: "Réception B" } });
+    // 5 exemplaires déclassés en zone A (via inventaire abîmés) pour vérifier la ventilation.
+    const inv = (await app.inject({ method: "POST", url: "/api/v1/inventories", headers: { cookie: adminCookie }, payload: { type: "full", location_id: zoneA.id, blind: false } })).json();
+    const line = inv.lines.find((l: { isbnId: string }) => l.isbnId === isbnId);
+    await app.inject({ method: "PATCH", url: `/api/v1/inventory-lines/${line.id}`, headers: { cookie: adminCookie }, payload: { counted_qty: 30, counted_damaged: 5 } });
+    await app.inject({ method: "POST", url: `/api/v1/inventory-lines/${line.id}/adjust`, headers: { cookie: adminCookie } });
+
+    const res = await app.inject({ method: "GET", url: "/api/v1/stock-consolidated", headers: { cookie: adminCookie } });
+    expect(res.statusCode).toBe(200);
+    const row = res.json().rows.find((r: { isbn_id: string }) => r.isbn_id === isbnId);
+    expect(row.title).toBe("Manuscrit Consolidé");
+    expect(row.vendable).toBe(45); // 25 (A) + 20 (B)
+    expect(row.declasse).toBe(5); // A
+    expect(row.total).toBe(50);
+    expect(row.by_location.length).toBe(2);
+  });
 });

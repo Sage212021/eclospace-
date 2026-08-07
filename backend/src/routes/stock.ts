@@ -132,6 +132,52 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     return reply.send(alerts);
   });
 
+  // Stock consolidé « toutes zones » (rapport d'inventaire opérateur) : total réel
+  // par ouvrage, tous lieux confondus, vendable vs déclassé, avec le détail par
+  // zone. Répond au « stock réel total » visé par le rapport final.
+  fastify.get("/api/v1/stock-consolidated", { preHandler: requirePermission("stock", "consultation") }, async (_request, reply) => {
+    const items = await prisma.stockItem.findMany({
+      include: {
+        isbn: { select: { isbn13: true, manuscript: { select: { title: true } } } },
+        location: { select: { label: true } },
+      },
+    });
+    const byIsbn = new Map<string, {
+      isbn_id: string; isbn13: string; title: string | null;
+      vendable: number; declasse: number;
+      locations: Map<string, { location_label: string; vendable: number; declasse: number }>;
+    }>();
+    for (const it of items) {
+      let row = byIsbn.get(it.isbnId);
+      if (!row) {
+        row = { isbn_id: it.isbnId, isbn13: it.isbn.isbn13, title: it.isbn.manuscript?.title ?? null, vendable: 0, declasse: 0, locations: new Map() };
+        byIsbn.set(it.isbnId, row);
+      }
+      const label = it.location.label;
+      let loc = row.locations.get(label);
+      if (!loc) {
+        loc = { location_label: label, vendable: 0, declasse: 0 };
+        row.locations.set(label, loc);
+      }
+      if (it.condition === "declasse") {
+        row.declasse += it.quantityPhysical;
+        loc.declasse += it.quantityPhysical;
+      } else {
+        row.vendable += it.quantityPhysical;
+        loc.vendable += it.quantityPhysical;
+      }
+    }
+    const rows = [...byIsbn.values()]
+      .map((r) => ({
+        isbn_id: r.isbn_id, isbn13: r.isbn13, title: r.title,
+        vendable: r.vendable, declasse: r.declasse, total: r.vendable + r.declasse,
+        by_location: [...r.locations.values()].sort((a, b) => a.location_label.localeCompare(b.location_label, "fr")),
+      }))
+      .sort((a, b) => (a.title ?? a.isbn13).localeCompare(b.title ?? b.isbn13, "fr"));
+    const totals = rows.reduce((acc, r) => ({ vendable: acc.vendable + r.vendable, declasse: acc.declasse + r.declasse, total: acc.total + r.total }), { vendable: 0, declasse: 0, total: 0 });
+    return reply.send({ rows, totals });
+  });
+
   // Ch. 16 §16.4 : aucun mouvement sans type, motif et responsable. Chaque
   // mouvement met à jour le stock en temps réel (transactionnel).
   fastify.post("/api/v1/stock-movements", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {

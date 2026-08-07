@@ -14,6 +14,7 @@ import {
 } from "../api/client";
 import { Card } from "../components/Card";
 import { StockInventorySection } from "../components/StockInventorySection";
+import { StockConsolidatedSection } from "../components/StockConsolidatedSection";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
@@ -99,6 +100,8 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
+
+      <StockConsolidatedSection collapsible defaultOpen />
 
       <StockInventorySection locations={locations} canManage={canManage} canValidate={!!canValidate} collapsible defaultOpen />
 

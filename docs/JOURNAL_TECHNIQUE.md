@@ -853,3 +853,9 @@ Le rapport d'inventaire distingue des exemplaires « touchés » (abîmés) parm
 - **Backend** (`routes/stock.ts`) : `PATCH /inventory-lines/:id` accepte `counted_damaged` (≤ `counted_qty`, sinon 400). La **régularisation** crée, en plus de l'ajustement d'écart, un mouvement de **déclassement** (vendable −abîmés / déclassé +abîmés). La **clôture** est refusée tant que des abîmés ne sont pas déclassés. Liste : `damaged_lines` + `pending_adjust` intègrent les abîmés.
 - **Frontend** : colonne « dont abîmés » dans la grille de comptage ; indicateur ⚠ dans l'avancement ; bouton « Régulariser » actif dès qu'il y a un écart OU des abîmés.
 - **Test** : refus abîmés>comptés, comptage 50 dont 8 abîmés (écart 0), clôture bloquée, régularisation → vendable 42 / déclassé 8, clôture OK.
+
+## 07/08/2026 (suite) — Stock : zones pré-créées + stock réel consolidé toutes zones
+
+- **Zones du rapport pré-créées** (seed idempotent) : Magasin — cartons, Étagères DAF, Salon / exposition, Bureau DAF, Direction générale, Stock commerciaux. Prêtes à inventorier dès la mise en service.
+- **Stock réel consolidé** : `GET /api/v1/stock-consolidated` — total par ouvrage tous lieux confondus (vendable vs déclassé) + détail par lieu + totaux généraux. Frontend : `StockConsolidatedSection` (tableau repliable par zone, ligne de total général) en tête de la page Stock. Répond au « stock réel total » du rapport final.
+- **Test** : stock réparti sur 2 zones + 5 déclassés → vendable 45 / déclassé 5 / total 50, 2 lieux.

@@ -29,13 +29,15 @@ export interface AnnouncementPush {
   require_ack: boolean;
 }
 
-export function usePresence(enabled: boolean, onAnnouncement?: (a: AnnouncementPush) => void) {
+export function usePresence(enabled: boolean, onAnnouncement?: (a: AnnouncementPush) => void, onNotification?: (n: AnnouncementPush) => void) {
   const [presence, setPresence] = useState<PresenceState>(EMPTY);
   const socketRef = useRef<Socket | null>(null);
-  // Le gestionnaire d'annonce est stocké dans une ref pour rester à jour sans
+  // Les gestionnaires sont stockés dans des refs pour rester à jour sans
   // reconnecter la socket à chaque rendu.
   const annHandler = useRef(onAnnouncement);
   annHandler.current = onAnnouncement;
+  const notifHandler = useRef(onNotification);
+  notifHandler.current = onNotification;
 
   useEffect(() => {
     if (!enabled) {
@@ -48,6 +50,8 @@ export function usePresence(enabled: boolean, onAnnouncement?: (a: AnnouncementP
     socketRef.current = socket;
     socket.on("presence:update", (p: PresenceState) => setPresence(p));
     socket.on("announcement:new", (a: AnnouncementPush) => annHandler.current?.(a));
+    // Alerte temps réel générale (info renvoyée par un autre pôle) : son + pop-up.
+    socket.on("notification:new", (n: AnnouncementPush) => notifHandler.current?.(n));
     return () => {
       socket.disconnect();
       socketRef.current = null;

@@ -2,16 +2,28 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ManuscriptFinanceRequestType, ManuscriptFinanceRequestStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+
+// Nom lisible d'un initiateur (employé si fiche RH, sinon identifiant).
+async function actorNames(ids: (string | null | undefined)[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter((x): x is string => Boolean(x)))];
+  if (unique.length === 0) return new Map();
+  const users = await prisma.user.findMany({ where: { id: { in: unique } }, select: { id: true, username: true, employee: { select: { firstName: true, lastName: true } } } });
+  const map = new Map<string, string>();
+  for (const u of users) map.set(u.id, `${u.employee?.firstName ?? ""} ${u.employee?.lastName ?? ""}`.trim() || u.username);
+  return map;
+}
 
 // Demandes Finance émises depuis la fiche manuscrit (point 6 du chantier
 // « contrat & manuscrit ») : « Demande de devis » et « Demande de facture —
 // frais de dépôt ». L'éditorial clique, le financier reçoit la demande dans sa
 // file et établit le devis / la facture, puis la marque traitée.
 export default async function financeRequestRoutes(fastify: FastifyInstance) {
-  // Émettre une demande depuis un manuscrit (éditorial / saisie manuscrits).
-  fastify.post("/api/v1/manuscripts/:id/finance-requests", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
+  // Émettre une demande depuis un manuscrit. Une demande de devis peut être
+  // initiée par la Finance, le Commercial, l'Éditorial ou la Direction générale
+  // (décision opérateur) ; la traçabilité (requestedBy) enregistre l'initiateur.
+  fastify.post("/api/v1/manuscripts/:id/finance-requests", { preHandler: requireAnyPermission([{ module: "manuscripts", action: "saisie" }, { module: "manuscripts", action: "validation" }, { module: "commercial", action: "saisie" }, { module: "finance", action: "saisie" }, { module: "direction", action: "consultation" }]) }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const parsed = z.object({ type: z.nativeEnum(ManuscriptFinanceRequestType), note: z.string().max(2000).optional() }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
@@ -60,6 +72,7 @@ export default async function financeRequestRoutes(fastify: FastifyInstance) {
         },
       },
     });
+    const names = await actorNames(rows.map((r) => r.requestedBy));
     return reply.send(rows.map((r) => {
       const author = r.manuscript.workContributors[0]?.partner;
       return {
@@ -68,6 +81,7 @@ export default async function financeRequestRoutes(fastify: FastifyInstance) {
         status: r.status,
         note: r.note,
         requested_at: r.requestedAt,
+        initiated_by: r.requestedBy ? names.get(r.requestedBy) ?? null : null,
         manuscript_id: r.manuscript.id,
         manuscript_number: r.manuscript.manuscriptNumber,
         title: r.manuscript.title,

@@ -13,6 +13,14 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Traçabilité des initiateurs (devis & demandes de facture)
+
+**Fait (2/4) :** on sait désormais **qui a initié** chaque devis et chaque demande de facture.
+- **Demande de devis** initiable par la **Finance, le Commercial, l'Éditorial ou la Direction générale** (élargissement des droits, décision opérateur) ; l'initiateur est enregistré (`requestedBy`).
+- La file Finance **« Demandes reçues »** affiche désormais **« initié par … »** (nom de l'employé) sur chaque demande.
+- La vue Éditorial **« Devis (compte d'auteur) »** affiche **« initié par … »** (créateur du devis).
+- Backend : gate du `POST /manuscripts/:id/finance-requests` élargi ; résolution des noms d'initiateurs dans `GET /finance-requests` et `GET /editorial/quotes`. Tests existants verts (dont le refus 403 pour un rôle non habilité). Typecheck back+front + build OK.
+
 ### 07/08/2026 (suite) — Fiche d'enregistrement du manuscrit enrichie (grande maison d'édition)
 
 **Fait (1/4 de la demande opérateur) :** refonte du formulaire « Déposer un manuscrit » en fiche professionnelle par sections :

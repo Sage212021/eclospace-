@@ -43,6 +43,7 @@ export function FinanceRequestsInbox({ canManage, onOpenManuscript }: { canManag
                   <span style={{ fontFamily: "var(--font-mono)" }}>{r.manuscript_number}</span>
                   {r.author ? ` · ${r.author}` : ""}
                   {" · demandé le "}<span style={{ fontFamily: "var(--font-mono)" }}>{r.requested_at.slice(0, 10)}</span>
+                  {r.initiated_by ? <> · <b>initié par {r.initiated_by}</b></> : null}
                   {r.funding_mode === "author" ? " · à compte d'auteur" : ""}
                 </div>
                 {r.note ? <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>{r.note}</div> : null}

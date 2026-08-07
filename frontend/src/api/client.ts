@@ -1803,6 +1803,7 @@ export interface InventorySummary {
   total_lines: number;
   counted_lines: number;
   variance_lines: number;
+  damaged_lines: number;
   recount_lines: number;
   pending_adjust: number;
 }
@@ -1813,6 +1814,7 @@ export interface InventoryLine {
   isbn13: string;
   theoreticalQty?: number; // masqué à l'aveugle tant que non compté
   countedQty: number | null;
+  countedDamaged: number | null;
   variance: number | null;
   recountRequired: boolean;
   adjustmentMovementId: string | null;
@@ -1836,8 +1838,8 @@ export function getInventory(id: string) {
 export function createInventory(input: { location_id: string; type: InventoryType; blind: boolean }) {
   return request<InventoryDetail>("/api/v1/inventories", { method: "POST", body: JSON.stringify(input) });
 }
-export function countInventoryLine(lineId: string, countedQty: number) {
-  return request<InventoryLine>(`/api/v1/inventory-lines/${lineId}`, { method: "PATCH", body: JSON.stringify({ counted_qty: countedQty }) });
+export function countInventoryLine(lineId: string, countedQty: number, countedDamaged = 0) {
+  return request<InventoryLine>(`/api/v1/inventory-lines/${lineId}`, { method: "PATCH", body: JSON.stringify({ counted_qty: countedQty, counted_damaged: countedDamaged }) });
 }
 export function adjustInventoryLine(lineId: string) {
   return request<InventoryLine>(`/api/v1/inventory-lines/${lineId}/adjust`, { method: "POST" });

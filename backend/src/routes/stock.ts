@@ -305,7 +305,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       take: 100,
       include: {
         location: { select: { label: true } },
-        lines: { select: { countedQty: true, variance: true, recountRequired: true, adjustmentMovementId: true } },
+        lines: { select: { countedQty: true, countedDamaged: true, variance: true, recountRequired: true, adjustmentMovementId: true } },
       },
     });
     return reply.send(
@@ -313,12 +313,13 @@ export default async function stockRoutes(fastify: FastifyInstance) {
         const total = inv.lines.length;
         const counted = inv.lines.filter((l) => l.countedQty !== null).length;
         const variance = inv.lines.filter((l) => l.variance !== null && l.variance !== 0).length;
+        const damaged = inv.lines.filter((l) => (l.countedDamaged ?? 0) > 0).length;
         const recount = inv.lines.filter((l) => l.recountRequired).length;
-        const pendingAdjust = inv.lines.filter((l) => l.variance !== null && l.variance !== 0 && !l.adjustmentMovementId).length;
+        const pendingAdjust = inv.lines.filter((l) => !l.adjustmentMovementId && ((l.variance !== null && l.variance !== 0) || (l.countedDamaged ?? 0) > 0)).length;
         return {
           id: inv.id, type: inv.type, blind: inv.blind, status: inv.status,
           location_label: inv.location?.label ?? null, opened_at: inv.openedAt, closed_at: inv.closedAt,
-          total_lines: total, counted_lines: counted, variance_lines: variance, recount_lines: recount, pending_adjust: pendingAdjust,
+          total_lines: total, counted_lines: counted, variance_lines: variance, damaged_lines: damaged, recount_lines: recount, pending_adjust: pendingAdjust,
         };
       }),
     );
@@ -383,10 +384,14 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     { preHandler: requirePermission("stock", "saisie") },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const schema = z.object({ counted_qty: z.number().int().nonnegative() });
+      const schema = z.object({ counted_qty: z.number().int().nonnegative(), counted_damaged: z.number().int().nonnegative().optional() });
       const parsed = schema.safeParse(request.body);
       if (!parsed.success) {
         return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const damaged = parsed.data.counted_damaged ?? 0;
+      if (damaged > parsed.data.counted_qty) {
+        return reply.code(400).send({ code: "damaged_exceeds", message: "Le nombre d'exemplaires abîmés ne peut pas dépasser la quantité comptée." });
       }
       const line = await prisma.inventoryLine.findUnique({ where: { id } });
       if (!line) {
@@ -397,7 +402,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       const recountRequired = variance !== 0 && !line.recountRequired;
       const updated = await prisma.inventoryLine.update({
         where: { id },
-        data: { countedQty: parsed.data.counted_qty, variance, recountRequired },
+        data: { countedQty: parsed.data.counted_qty, countedDamaged: damaged, variance, recountRequired },
       });
       return reply.send(updated);
     },
@@ -414,37 +419,53 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       if (!line) {
         return reply.code(404).send({ code: "not_found", message: "Ligne d'inventaire introuvable." });
       }
-      if (line.countedQty === null || line.variance === null || line.variance === 0) {
-        return reply.code(409).send({ code: "no_variance", message: "Aucun écart à régulariser sur cette ligne." });
+      const damaged = line.countedDamaged ?? 0;
+      if (line.countedQty === null || line.variance === null || (line.variance === 0 && damaged === 0)) {
+        return reply.code(409).send({ code: "no_variance", message: "Aucun écart ni exemplaire abîmé à régulariser sur cette ligne." });
       }
       if (line.adjustmentMovementId) {
-        return reply.code(409).send({ code: "already_adjusted", message: "Cet écart a déjà été régularisé." });
+        return reply.code(409).send({ code: "already_adjusted", message: "Cette ligne a déjà été régularisée." });
       }
       if (!line.inventory.locationId) {
         return reply.code(409).send({ code: "location_missing", message: "L'inventaire n'a pas de lieu associé." });
       }
 
       const variance = line.variance;
+      const locationId = line.inventory.locationId;
       const updated = await prisma.$transaction(async (tx) => {
-        const movement = await tx.stockMovement.create({
-          data: {
-            type: "inventory_adjustment",
-            isbnId: line.isbnId,
-            printRun: 0,
-            fromLocationId: variance < 0 ? line.inventory.locationId : undefined,
-            toLocationId: variance > 0 ? line.inventory.locationId : undefined,
-            quantity: Math.abs(variance),
-            reason: `Régularisation d'inventaire (écart ${variance})`,
-            referenceType: "inventory_line",
-            referenceId: line.id,
-            status: "completed",
-            movedBy: request.user!.id,
-          },
-        });
-        await adjustStockItem(tx, line.isbnId, line.inventory.locationId!, 0, variance);
+        let primaryMovementId: string | null = null;
+        // 1) Régularisation de l'écart quantitatif (stock vendable).
+        if (variance !== 0) {
+          const movement = await tx.stockMovement.create({
+            data: {
+              type: "inventory_adjustment", isbnId: line.isbnId, printRun: 0,
+              fromLocationId: variance < 0 ? locationId : undefined,
+              toLocationId: variance > 0 ? locationId : undefined,
+              quantity: Math.abs(variance),
+              reason: `Régularisation d'inventaire (écart ${variance})`,
+              referenceType: "inventory_line", referenceId: line.id, status: "completed", movedBy: request.user!.id,
+            },
+          });
+          await adjustStockItem(tx, line.isbnId, locationId, 0, variance);
+          primaryMovementId = movement.id;
+        }
+        // 2) Déclassement des exemplaires abîmés : vendable → déclassé (même lieu).
+        if (damaged > 0) {
+          const dmov = await tx.stockMovement.create({
+            data: {
+              type: "inventory_adjustment", isbnId: line.isbnId, printRun: 0,
+              fromLocationId: locationId, toLocationId: locationId, quantity: damaged,
+              reason: `Déclassement de ${damaged} exemplaire(s) abîmé(s) (inventaire)`,
+              referenceType: "inventory_line", referenceId: line.id, status: "completed", movedBy: request.user!.id,
+            },
+          });
+          await adjustStockItem(tx, line.isbnId, locationId, 0, -damaged, 0, "vendable");
+          await adjustStockItem(tx, line.isbnId, locationId, 0, damaged, 0, "declasse");
+          if (!primaryMovementId) primaryMovementId = dmov.id;
+        }
         return tx.inventoryLine.update({
           where: { id },
-          data: { adjustmentMovementId: movement.id, recountRequired: false },
+          data: { adjustmentMovementId: primaryMovementId, recountRequired: false },
         });
       });
 
@@ -453,7 +474,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
         action: "update",
         entityType: "inventory_line",
         entityId: id,
-        newValues: { variance },
+        newValues: { variance, damaged },
         ipAddress: request.ip,
       });
 
@@ -469,7 +490,9 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     }
     const pendingRecount = inventory.lines.some((line) => line.recountRequired);
     const unadjustedVariance = inventory.lines.some(
-      (line) => line.variance !== null && line.variance !== 0 && !line.adjustmentMovementId,
+      (line) =>
+        !line.adjustmentMovementId &&
+        ((line.variance !== null && line.variance !== 0) || (line.countedDamaged ?? 0) > 0),
     );
     if (pendingRecount || unadjustedVariance) {
       return reply.code(409).send({

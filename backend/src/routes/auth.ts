@@ -2,6 +2,12 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import argon2 from "argon2";
 import { authenticator } from "otplib";
+
+// Tolérance de vérification TOTP : ±1 pas de 30 s. Un code reste valable sur la
+// fenêtre précédente et suivante — indispensable contre le léger décalage
+// d'horloge des téléphones (et contre les bascules de fenêtre à la limite des
+// 30 s, source d'échecs intermittents à la saisie comme en tests).
+authenticator.options = { window: 1 };
 import { prisma } from "../lib/prisma.js";
 import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "../lib/session.js";
 import { randomBytes } from "node:crypto";

@@ -1058,6 +1058,7 @@ export interface EditorialQuoteInboxRow {
   client: string | null;
   client_email: string | null;
   client_whatsapp: string | null;
+  initiated_by: string | null;
   handed_at: string | null;
   accepted_at: string | null;
 }
@@ -2491,6 +2492,7 @@ export interface FinanceRequestQueueRow {
   status: FinanceRequestStatus;
   note: string | null;
   requested_at: string;
+  initiated_by: string | null;
   manuscript_id: string;
   manuscript_number: string;
   title: string;

@@ -87,6 +87,7 @@ export function EditorialQuotesInbox({ heading = true, manuscriptId }: { heading
                   <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>
                     {r.manuscript?.title ?? "—"}{r.client ? ` · ${r.client}` : ""}
                     {r.client_email ? ` · ✉️ ${r.client_email}` : ""}{r.client_whatsapp ? ` · 💬 ${r.client_whatsapp}` : ""}
+                    {r.initiated_by ? ` · initié par ${r.initiated_by}` : ""}
                   </div>
                 </div>
               </div>

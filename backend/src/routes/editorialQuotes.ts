@@ -345,6 +345,10 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
       orderBy: { editorialHandoffAt: "desc" },
       include: quoteInclude,
     });
+    // Initiateur du devis (traçabilité) : employé si fiche RH, sinon identifiant.
+    const ids = [...new Set(rows.map((q) => q.createdBy).filter((x): x is string => Boolean(x)))];
+    const users = ids.length ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, username: true, employee: { select: { firstName: true, lastName: true } } } }) : [];
+    const names = new Map(users.map((u) => [u.id, `${u.employee?.firstName ?? ""} ${u.employee?.lastName ?? ""}`.trim() || u.username]));
     return reply.send(rows.map((q) => ({
       id: q.id,
       quote_number: q.quoteNumber,
@@ -355,6 +359,7 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
       client: q.partner ? `${q.partner.firstName} ${q.partner.lastName}` : q.customer?.name ?? null,
       client_email: q.partner?.email ?? q.customer?.email ?? null,
       client_whatsapp: q.partner?.whatsapp ?? null,
+      initiated_by: q.createdBy ? names.get(q.createdBy) ?? null : null,
       handed_at: q.editorialHandoffAt,
       accepted_at: q.acceptedAt,
     })));

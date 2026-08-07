@@ -13,6 +13,15 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Notifications inter-pôles : son + alerte visible (pas en sourdine)
+
+**Fait (3/4) :** quand un pôle renvoie une information à un autre (devis transmis, demande de facture reçue, BAT déposé → impression, échéance, etc.), le pôle concerné est **alerté immédiatement à son poste** : **sonnerie + pop-up** + rafraîchissement de la cloche. Plus de notification en sourdine.
+- Backend : `notifyUsers` **et** `notifyRole` émettent désormais un évènement temps réel `notification:new` (via la socket) à chaque destinataire, en plus de la persistance et de l'e-mail éventuel. Priorité interne mappée en priorité d'affichage (normale/importante/urgente/critique).
+- Frontend : la socket écoute `notification:new` et déclenche le **même pipeline que les annonces** (son via `playNotificationSound`, toast, cloche), sans filtrage par catégories. Respecte les préférences (son/visuel) de l'utilisateur.
+- Sûr en tests : l'émission est un no-op tant que la socket n'est pas initialisée. Typecheck back+front + build OK ; tests notifications verts.
+
+**Reste :** blocage d'étape si renseignements manquants (message clair) — dernier volet.
+
 ### 07/08/2026 (suite) — Traçabilité des initiateurs (devis & demandes de facture)
 
 **Fait (2/4) :** on sait désormais **qui a initié** chaque devis et chaque demande de facture.

@@ -2,6 +2,29 @@ import { prisma } from "./prisma.js";
 import type { NotificationPriority, NotificationType } from "@prisma/client";
 import { isMailConfigured, sendMail } from "./mailer.js";
 import { buildNotificationEmail } from "./documentEmail.js";
+import { emitToUsers } from "./realtime.js";
+
+// Priorité interne → priorité d'affichage (toast/sonnerie côté frontend).
+const PUSH_PRIORITY: Record<NotificationPriority, "normale" | "importante" | "urgente" | "critique"> = {
+  low: "normale",
+  medium: "importante",
+  high: "urgente",
+  critical: "critique",
+};
+
+// Pousse la notification en temps réel aux destinataires (son + alerte visible),
+// pour qu'un pôle qui reçoit une information d'un autre pôle soit alerté
+// immédiatement à son poste — jamais en sourdine (décision opérateur 07/08/2026).
+function pushRealtime(userIds: string[], input: { type: NotificationType; priority: NotificationPriority; title: string; body: string; entityType?: string | null; entityId?: string | null }): void {
+  emitToUsers(userIds, "notification:new", {
+    id: `ntf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    title: input.title,
+    preview: input.body,
+    priority: PUSH_PRIORITY[input.priority],
+    category: input.type,
+    require_ack: false,
+  });
+}
 
 interface RoleNotificationInput {
   roleCode: string;
@@ -83,6 +106,9 @@ export async function notifyRole(input: RoleNotificationInput): Promise<void> {
     })),
   });
 
+  // Alerte temps réel (son + pop-up) aux titulaires du rôle — pas en sourdine.
+  pushRealtime(userRoles.map((ur) => ur.userId), input);
+
   // N'envoie qu'aux comptes actifs, non supprimés (on ne notifie pas par e-mail
   // un compte désactivé ou clos).
   const recipients = userRoles
@@ -120,6 +146,9 @@ export async function notifyUsers(input: UsersNotificationInput): Promise<void> 
       ...(sendByEmail ? { channel: "email" as const, sentAt: new Date() } : {}),
     })),
   });
+
+  // Alerte temps réel (son + pop-up) à chaque destinataire — pas en sourdine.
+  pushRealtime(ids, input);
 
   if (!sendByEmail) return;
 

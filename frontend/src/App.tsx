@@ -380,7 +380,21 @@ export function App() {
     }
   }, []);
 
-  const { presence, join, disconnect } = usePresence(Boolean(user), handleAnnouncementPush);
+  // Alerte temps réel générale : une info renvoyée par un autre pôle déclenche
+  // son + pop-up + rafraîchissement de la cloche — jamais en sourdine (décision
+  // opérateur). Contrairement aux annonces, pas de filtrage par catégories.
+  const handleNotificationPush = useCallback((n: AnnouncementPush) => {
+    const prefs = notifPrefsRef.current;
+    setNotifTick((v) => v + 1);
+    if (prefs?.sound_enabled !== false) playNotificationSound(prefs?.sound_volume ?? 70);
+    if (prefs?.visual_enabled !== false) {
+      const id = toastId.current++;
+      setToasts((list) => [...list, { ...n, toastId: id }]);
+      window.setTimeout(() => setToasts((list) => list.filter((x) => x.toastId !== id)), 7000);
+    }
+  }, []);
+
+  const { presence, join, disconnect } = usePresence(Boolean(user), handleAnnouncementPush, handleNotificationPush);
   const { applyLang } = useI18n();
 
   const refreshUser = () =>

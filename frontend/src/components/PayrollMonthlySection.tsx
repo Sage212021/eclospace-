@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements } from "../api/client";
+import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements } from "../api/client";
+import { downloadPayslipsPdf } from "../lib/payslipPdf";
+import type { PayslipPrintData } from "../lib/print";
 import { Card } from "./Card";
 import { Field } from "./Modal";
 import { Button } from "./Button";
@@ -29,7 +31,7 @@ const COLS: { key: keyof PayrollMonthElements; label: string; hint: string }[] =
   { key: "autres", label: "Autres", hint: "Autres retenues internes (net)" },
 ];
 
-export function PayrollMonthlySection({ canManage, collapsible, defaultOpen }: { canManage: boolean; collapsible?: boolean; defaultOpen?: boolean }) {
+export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, defaultOpen }: { canManage: boolean; canValidateDg?: boolean; collapsible?: boolean; defaultOpen?: boolean }) {
   const [period, setPeriod] = useState(currentPeriod());
   const [month, setMonth] = useState<PayrollMonth | null>(null);
   const [busy, setBusy] = useState(false);
@@ -91,6 +93,55 @@ export function PayrollMonthlySection({ canManage, collapsible, defaultOpen }: {
     setDraft((cur) => ({ ...cur, [employeeId]: { ...cur[employeeId], [key]: Math.max(Number(value) || 0, 0) } }));
   }
 
+  async function validate() {
+    if (!window.confirm(`Valider définitivement la paie de ${period} ?\n\nLe mois sera figé et les bulletins pourront être imprimés. Vous pourrez le rouvrir si besoin.`)) return;
+    setBusy(true);
+    try {
+      await validatePayrollMonth(period);
+      setMessage(`Paie de ${period} validée par la Direction. Impression des bulletins possible.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Validation impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reopen() {
+    if (!window.confirm(`Rouvrir la paie de ${period} pour correction ?`)) return;
+    setBusy(true);
+    try {
+      await reopenPayrollMonth(period);
+      setMessage(`Paie de ${period} rouverte (brouillon).`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Réouverture impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Génération de TOUS les bulletins du mois en un seul PDF (modèle du classeur).
+  function printAll() {
+    const list: PayslipPrintData[] = (month?.lines ?? []).map((l) => ({
+      employee_name: l.employee_name,
+      period,
+      matricule: l.matricule,
+      cnps_number: l.cnps_number,
+      niu: l.niu,
+      fiscal_parts: l.fiscal_parts,
+      department: l.department,
+      position: l.position,
+      hire_date: l.hire_date,
+      category: l.category,
+      payment_mode: l.payment_mode,
+      account_number: l.account_number,
+      leave_balance: l.leave_balance,
+      payslip: l.payslip,
+    }));
+    if (list.length > 0) downloadPayslipsPdf(list, `bulletins-${period}.pdf`);
+  }
+
   return (
     <Card
       title="Génération mensuelle (tous les salariés)"
@@ -108,6 +159,15 @@ export function PayrollMonthlySection({ canManage, collapsible, defaultOpen }: {
           <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 10px", ...(locked ? { background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)" } : { background: "#eef1f6", color: "var(--muted)" }) }}>
             {locked ? `✓ Validé${month.validated_at ? ` le ${month.validated_at.slice(0, 10)}` : ""}` : "● Brouillon (modifiable)"}
           </span>
+        )}
+        {month?.exists && !locked && canValidateDg && (month.lines?.length ?? 0) > 0 && (
+          <Button variant="add" size="sm" type="button" disabled={busy} onClick={validate}>✓ Valider le mois (DG)</Button>
+        )}
+        {month?.exists && locked && (
+          <Button variant="view" size="sm" type="button" onClick={printAll}>🖨 Imprimer tous les bulletins</Button>
+        )}
+        {month?.exists && locked && canValidateDg && (
+          <Button variant="edit" size="sm" type="button" disabled={busy} onClick={reopen}>↩ Rouvrir (DG)</Button>
         )}
       </div>
 
@@ -157,7 +217,9 @@ export function PayrollMonthlySection({ canManage, collapsible, defaultOpen }: {
             </table>
           </div>
           <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>
-            Prochaine étape (à venir) : validation par le Directeur général, puis impression des bulletins PDF, livre de paie et états CNPS/fiscaux.
+            {locked
+              ? "Mois validé : imprimez les bulletins (un PDF, un bulletin par page). Le DG peut rouvrir le mois pour corriger."
+              : "Quand la saisie est terminée, le Directeur général valide le mois (obligatoire avant impression des bulletins)."}
           </p>
         </>
       )}

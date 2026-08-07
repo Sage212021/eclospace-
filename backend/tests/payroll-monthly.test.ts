@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie } from "./helpers.js";
 
 // Cycle mensuel de paie (chantier 07/08/2026) — Étape 1 : préparation du mois
 // pour tous les salariés, grille éditable, net recalculé, brouillon verrouillé
@@ -100,13 +100,42 @@ describe("génération mensuelle de la paie (grille éditable)", () => {
     expect(l2.net_a_payer).toBe(l2net0 - 25000);
   });
 
-  it("refuse la saisie une fois le mois validé (409)", async () => {
-    await prisma.payrollMonthlyRun.update({ where: { periodKey: PERIOD }, data: { status: "valide", validatedAt: new Date() } });
-    const res = await app.inject({
+  it("validation réservée au Directeur général : refus d'un rôle non-DG (403)", async () => {
+    await createUserWithRole("rh_paie_test", "RESP_RH", ADMIN_PASSWORD);
+    const rhLogin = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: "rh_paie_test", password: ADMIN_PASSWORD } });
+    const rhCookie = extractSessionCookie(rhLogin.cookies.map((c) => `${c.name}=${c.value}`));
+    const res = await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/validate`, headers: { cookie: rhCookie } });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe("dg_only");
+  });
+
+  it("le DG valide le mois, la saisie est alors verrouillée (409), et il peut rouvrir", async () => {
+    // admin porte le rôle ADMIN_GENERAL → autorisé à valider.
+    const val = await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/validate`, headers: { cookie } });
+    expect(val.statusCode).toBe(200);
+    expect(val.json().status).toBe("valide");
+
+    const patch = await app.inject({
       method: "PATCH", url: `/api/v1/payroll/monthly/${PERIOD}/lines/${emp1}`, headers: { cookie },
       payload: { primes: 1, heures_sup: 0, retenue_absence: 0, retard: 0, avance: 0, pret: 0, sanction: 0, autres: 0 },
     });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().code).toBe("run_locked");
+    expect(patch.statusCode).toBe(409);
+    expect(patch.json().code).toBe("run_locked");
+
+    // Le GET expose le bulletin complet (pour l'impression groupée).
+    const detail = (await app.inject({ method: "GET", url: `/api/v1/payroll/monthly/${PERIOD}`, headers: { cookie } })).json();
+    expect(detail.status).toBe("valide");
+    expect(detail.lines[0].payslip).toBeTruthy();
+    expect(detail.lines[0].payslip.net_a_payer).toBeGreaterThan(0);
+
+    const reopen = await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/reopen`, headers: { cookie } });
+    expect(reopen.statusCode).toBe(200);
+    expect(reopen.json().status).toBe("brouillon");
+
+    const patch2 = await app.inject({
+      method: "PATCH", url: `/api/v1/payroll/monthly/${PERIOD}/lines/${emp1}`, headers: { cookie },
+      payload: { primes: 0, heures_sup: 0, retenue_absence: 0, retard: 0, avance: 0, pret: 0, sanction: 0, autres: 0 },
+    });
+    expect(patch2.statusCode).toBe(200);
   });
 });

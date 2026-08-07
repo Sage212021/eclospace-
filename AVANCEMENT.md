@@ -13,6 +13,16 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Chantier paie, étape 2a : validation DG + impression des bulletins (modèle classeur)
+
+**Fait :**
+- **Validation obligatoire par le Directeur général** avant impression : bouton **« Valider le mois (DG) »** (visible au seul DG). La validation **fige le mois** (la saisie est verrouillée) ; le DG peut **« Rouvrir »** pour corriger.
+- **Impression de tous les bulletins** en un seul PDF (un bulletin par page), **uniquement après validation**.
+- **Bulletin PDF au modèle du classeur** : bloc « Informations salarié », éléments de rémunération, **cotisations en deux colonnes (part salariale ET patronale)**, éléments internes, bandeau **NET À PAYER**, coût employeur, mode de paiement.
+- **Tests** : refus de validation par un rôle non-DG, validation par le DG (verrouillage), bulletin complet exposé, réouverture.
+
+**Reste (étape 2b) :** livre de paie et états CNPS/fiscaux dérivés du **mois validé** (aujourd'hui calculés depuis les fiches), et enrichissements bulletin (congés, contrat, contact d'urgence) au besoin.
+
 ### 07/08/2026 (suite) — Chantier paie : cycle mensuel (étape 1) — grille éditable + net automatique
 
 **Demande opérateur :** générer la paie du mois **pour tous les salariés**, modifier individuellement chaque employé (primes, retenues, avances, sanctions, heures sup, absences, retards), net calculé automatiquement ; le mois **reste modifiable tant qu'il n'est pas validé**.

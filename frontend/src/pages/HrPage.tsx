@@ -97,6 +97,8 @@ interface HrPageProps {
   canEditPayroll: boolean;
   // Clôture d'une période de paie (paie:validation).
   canClosePayroll: boolean;
+  // Validation définitive du mois de paie — réservée au Directeur général.
+  canValidatePayrollDg: boolean;
 }
 
 type HrModal =
@@ -131,7 +133,7 @@ type HrModal =
 
 // Ch. 19 : Ressources humaines — dossier collaborateur, cycle de vie du
 // compte, absences, revue des accès (couche transverse du Lot 6).
-export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence, canOverseePresence, canViewPayroll, canManagePayroll, canEditPayroll, canClosePayroll }: HrPageProps) {
+export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence, canOverseePresence, canViewPayroll, canManagePayroll, canEditPayroll, canClosePayroll, canValidatePayrollDg }: HrPageProps) {
   const { t } = useI18n();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [absences, setAbsences] = useState<Absence[]>([]);
@@ -358,7 +360,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
             )}
           </GuidanceNote>
           <div style={{ display: "grid", gap: 10 }}>
-            <PayrollMonthlySection canManage={canEditPayroll} collapsible defaultOpen />
+            <PayrollMonthlySection canManage={canEditPayroll} canValidateDg={canValidatePayrollDg} collapsible defaultOpen />
             <PayrollProfilesSection employees={employees} canManage={canEditPayroll} collapsible />
             <PayrollSettingsSection canManage={canManagePayroll} collapsible />
             <PayrollRegisterSection canClose={canClosePayroll} collapsible />

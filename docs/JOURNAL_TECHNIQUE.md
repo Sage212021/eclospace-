@@ -816,3 +816,13 @@ Demande opérateur : générer la paie du mois pour tous les salariés, avec sai
 - **Test** : `payroll-monthly.test.ts` — préparation idempotente, net recalculé (prime ↑ net ; avance −25 000 exact), verrou après validation.
 
 Étape 2 (à venir) : validation obligatoire par le DG (fige le mois) → impression des bulletins PDF au modèle du classeur, livre de paie et états CNPS/fiscaux depuis le mois validé.
+
+## 07/08/2026 (suite) — Chantier paie, étape 2a : validation DG + bulletins PDF au modèle
+
+- **Validation DG** (`routes/payroll.ts`) : `POST /payroll/monthly/:period/validate` et `.../reopen`, réservés au **Directeur général** (`DIR_GENERAL` ou `ADMIN_GENERAL` — le droit `paie:validation` étant partagé RH/Finance/DG, un contrôle de rôle explicite renvoie 403 `dg_only` sinon). Valider fige le mois (la saisie renvoie 409 `run_locked`) ; rouvrir repasse en brouillon, refusé si le livre de paie est clôturé.
+- **GET mois enrichi** : chaque ligne renvoie désormais les infos salarié (département, poste, date d'entrée, catégorie, mode de paiement, N° compte, congés) et le **bulletin complet** (`payslip`), pour l'impression groupée.
+- **Bulletin PDF au modèle du classeur** (`lib/payslipPdf.ts`, refonte) : bloc « Informations salarié », éléments de rémunération, **cotisations en deux colonnes (part salariale ET patronale)** — CNPS PVID/PF/AT, CFC, FNE, TC, RAV, IRPP+CAC —, éléments internes, bandeau **NET À PAYER**, coût employeur, mode de paiement. `downloadPayslipsPdf` génère **tous les bulletins du mois** (un par page) une fois le mois validé.
+- **Frontend** : boutons « Valider le mois (DG) » / « Rouvrir (DG) » (visibles au DG) et « Imprimer tous les bulletins » (après validation). Prop `canValidatePayrollDg` = rôle DIR_GENERAL/ADMIN_GENERAL.
+- **Test** : `payroll-monthly.test.ts` — refus non-DG (403), validation DG (verrou 409), bulletin complet exposé, réouverture puis saisie de nouveau possible.
+
+Reste (étape 2b) : livre de paie + états CNPS/fiscaux dérivés du mois validé (aujourd'hui calculés depuis les fiches) ; enrichissements bulletin (congés, contrat, contact d'urgence) si souhaité.

@@ -299,6 +299,22 @@ async function main() {
   await grant("RESP_COMMERCIAL", ["stock:consultation"]);
   await grant("DIR_GENERAL", ["stock:consultation", "stock:validation"]);
 
+  // Zones de stockage réelles (rapport d'inventaire opérateur du 06/07/2026),
+  // pré-créées pour permettre l'inventaire par zone dès la mise en service.
+  // Idempotent : créées seulement si absentes (repérées par leur libellé).
+  const stockZones: { label: string; type: "entrepot" | "depot" | "depot_vente" | "emplacement" }[] = [
+    { label: "Magasin — cartons", type: "entrepot" },
+    { label: "Étagères DAF", type: "emplacement" },
+    { label: "Salon / exposition", type: "emplacement" },
+    { label: "Bureau DAF", type: "emplacement" },
+    { label: "Direction générale", type: "emplacement" },
+    { label: "Stock commerciaux", type: "depot_vente" },
+  ];
+  for (const zone of stockZones) {
+    const existing = await prisma.stockLocation.findFirst({ where: { label: zone.label } });
+    if (!existing) await prisma.stockLocation.create({ data: { type: zone.type, label: zone.label } });
+  }
+
   // Commercial, distribution et ventes (Ch. 17) — la validation d'une
   // remise hors grille ou du déblocage d'un encours dépassé reste réservée
   // à la Direction générale (commercial:administration), même schéma que

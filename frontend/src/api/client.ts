@@ -1789,6 +1789,30 @@ export function listStockAlerts() {
   return request<(StockItem & { severity: "alerte" | "rupture" })[]>("/api/v1/stock-alerts");
 }
 
+// Stock consolidé « toutes zones » — stock réel total par ouvrage (vendable vs
+// déclassé), avec le détail par lieu.
+export interface StockConsolidatedLocation {
+  location_label: string;
+  vendable: number;
+  declasse: number;
+}
+export interface StockConsolidatedRow {
+  isbn_id: string;
+  isbn13: string;
+  title: string | null;
+  vendable: number;
+  declasse: number;
+  total: number;
+  by_location: StockConsolidatedLocation[];
+}
+export interface StockConsolidated {
+  rows: StockConsolidatedRow[];
+  totals: { vendable: number; declasse: number; total: number };
+}
+export function getStockConsolidated() {
+  return request<StockConsolidated>("/api/v1/stock-consolidated");
+}
+
 // ── Inventaire physique (Ch. 16 §16.8) — campagnes, comptage, écarts ──────────
 export type InventoryType = "full" | "rotating";
 export type InventoryStatus = "open" | "closed";

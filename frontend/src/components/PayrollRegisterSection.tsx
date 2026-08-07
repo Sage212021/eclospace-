@@ -28,7 +28,7 @@ function downloadCsv(name: string, header: string[], rows: (string | number)[][]
   URL.revokeObjectURL(url);
 }
 
-export function PayrollRegisterSection({ canClose }: { canClose: boolean }) {
+export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: { canClose: boolean; collapsible?: boolean; defaultOpen?: boolean }) {
   const { t, lang } = useI18n();
   const [period, setPeriod] = useState(currentPeriod());
   const [reg, setReg] = useState<PayrollRegister | null>(null);
@@ -93,6 +93,8 @@ export function PayrollRegisterSection({ canClose }: { canClose: boolean }) {
       title={t("pay.register", "Livre de paie & clôture")}
       icon={<IconAdmin />}
       subtitle={t("pay.register_sub", "Livre mensuel de tous les salariés, clôture (journal figé) et déclarations CNPS / fiscales.")}
+      collapsible={collapsible}
+      defaultOpen={defaultOpen}
     >
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
         <Field label={t("pay.period_field", "Période (AAAA-MM)")}><input value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>

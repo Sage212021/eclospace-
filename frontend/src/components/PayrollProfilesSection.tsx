@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getPayrollProfile,
   getPayslip,
+  getPayrollRateSet,
   previewPayslipEmail,
   savePayrollProfile,
   sendPayslipEmail,
@@ -12,7 +13,10 @@ import {
   type PayslipDispatch,
   type PayrollProfileInput,
   type PayslipResult,
+  type PayrollRateSet,
+  type Payslip,
 } from "../api/client";
+import { computePayslip, ratesFromRateSet } from "../lib/payrollEngine";
 import { Card } from "./Card";
 import { Field } from "./Modal";
 import { Button } from "./Button";
@@ -64,7 +68,7 @@ function SlipRow({ label, value, strong, tone }: { label: string; value: number;
   );
 }
 
-export function PayrollProfilesSection({ employees, canManage }: { employees: Employee[]; canManage: boolean }) {
+export function PayrollProfilesSection({ employees, canManage, collapsible, defaultOpen }: { employees: Employee[]; canManage: boolean; collapsible?: boolean; defaultOpen?: boolean }) {
   const { t, lang } = useI18n();
   const [employeeId, setEmployeeId] = useState("");
   const [form, setForm] = useState<PayrollProfileInput>(EMPTY);
@@ -72,6 +76,10 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
   const [message, setMessage] = useState<string | null>(null);
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [slip, setSlip] = useState<PayslipResult | null>(null);
+  // Barème en vigueur pour la période + retenue d'absence (Présences), servant à
+  // l'aperçu EN DIRECT du bulletin (le net se recalcule dès qu'un champ change).
+  const [rateSet, setRateSet] = useState<PayrollRateSet | null>(null);
+  const [retenueAbsence, setRetenueAbsence] = useState(0);
   const [emailOpen, setEmailOpen] = useState(false);
   const [dispatches, setDispatches] = useState<PayslipDispatch[]>([]);
   const loadDispatches = () => getPayslipDispatches(employeeId, period).then(setDispatches).catch(() => setDispatches([]));
@@ -143,19 +151,73 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
     }
   }
 
+  // Chargement silencieux du barème (pour la période) et de la retenue d'absence,
+  // à chaque changement d'employé ou de période : alimente l'aperçu en direct.
+  useEffect(() => {
+    getPayrollRateSet(`${period}-01`).then(setRateSet).catch(() => setRateSet(null));
+    if (!employeeId) {
+      setSlip(null);
+      setRetenueAbsence(0);
+      return;
+    }
+    getPayslip(employeeId, period)
+      .then((r) => {
+        setSlip(r);
+        setRetenueAbsence(r.payslip.retenue_absence);
+      })
+      .catch(() => {
+        // Attendu tant que la fiche n'est pas enregistrée : aperçu sans retenue.
+        setSlip(null);
+        setRetenueAbsence(0);
+      });
+  }, [employeeId, period]);
+
+  // Bouton « Calculer » : recalcul serveur (référence), journal des envois, erreurs.
   async function computeSlip() {
     if (!employeeId) return;
     try {
-      setSlip(await getPayslip(employeeId, period));
+      const r = await getPayslip(employeeId, period);
+      setSlip(r);
+      setRetenueAbsence(r.payslip.retenue_absence);
       setError(null);
       loadDispatches();
     } catch (err) {
-      setSlip(null);
       setError(err instanceof Error ? err.message : "Calcul impossible.");
     }
   }
 
   const base = Math.round(form.gross_contractual * form.base_pct);
+
+  // Aperçu du bulletin EN DIRECT : recalculé à chaque frappe (moteur porté côté
+  // navigateur). Supprime l'effet « net figé » : le net à payer suit les %/montants.
+  const liveSlip = useMemo<Payslip | null>(() => {
+    if (!rateSet) return null;
+    const gross = form.gross_contractual;
+    const b = Math.round(gross * form.base_pct);
+    return computePayslip(
+      {
+        base: b,
+        complements: Math.round(gross - b),
+        fiscalBase: form.fiscal_base != null ? form.fiscal_base : gross,
+        fiscalParts: form.fiscal_parts,
+        applyFiscalParts: form.apply_fiscal_parts,
+        seniorityYears: form.seniority_years,
+        seniorityRate: form.seniority_rate,
+        seniorityThreshold: form.seniority_threshold ?? 0,
+        applySeniority: form.apply_seniority,
+        retenueAbsence,
+        internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
+      },
+      ratesFromRateSet(rateSet),
+    );
+  }, [form, rateSet, retenueAbsence]);
+
+  // Valeurs affichées / imprimées / envoyées : l'aperçu en direct s'il existe,
+  // sinon le calcul serveur.
+  const displaySlip: Payslip | null = liveSlip ?? slip?.payslip ?? null;
+  const employee = employees.find((e) => e.id === employeeId);
+  const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : slip?.employee.name ?? "";
+  const rateEffective = slip?.rate_set_effective_from ?? rateSet?.effective_from ?? null;
 
   const readOnly = !canManage || locked;
   function txt(label: string, key: keyof PayrollProfileInput) {
@@ -174,7 +236,7 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
   }
 
   return (
-    <Card title={t("pay.profiles", "Fiches paie (par employé)")} icon={<IconAdmin />} subtitle={t("pay.profiles_sub", "Données de rémunération servant au calcul du bulletin.")}>
+    <Card title={t("pay.profiles", "Fiches paie & bulletin (par employé)")} icon={<IconAdmin />} subtitle={t("pay.profiles_sub", "Données de rémunération, aperçu du bulletin en direct, impression et envoi.")} collapsible={collapsible} defaultOpen={defaultOpen}>
       <Field label={t("pay.employee", "Employé")}>
         <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
           <option value="">{t("pay.choose_employee", "— Choisir un employé —")}</option>
@@ -250,29 +312,37 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
             </div>
           )}
 
-          {/* Aperçu du bulletin calculé (moteur brut → net) */}
+          {/* Aperçu du bulletin EN DIRECT (moteur brut → net). Le net à payer suit
+              chaque modification de %/montant — plus d'effet « figé ». */}
           <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
-              <Field label={t("pay.period_field", "Période (AAAA-MM)")}><input value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
-              <Button variant="edit" size="sm" type="button" onClick={computeSlip}>{t("pay.compute_slip", "Calculer le bulletin")}</Button>
+              <Field label={t("pay.period_field", "Mois du bulletin (AAAA-MM)")}><input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
+              <Button variant="edit" size="sm" type="button" onClick={computeSlip}>{t("pay.compute_slip", "Actualiser (présences + barème)")}</Button>
+              {liveSlip && (
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", background: "var(--eclosion-soft)", borderRadius: 999, padding: "3px 10px" }}>
+                  ● {t("pay.live", "Aperçu en direct")}
+                </span>
+              )}
             </div>
-            {slip && (
+            {!rateSet && <p style={{ fontSize: 12, color: "var(--alert, #C4661F)", marginTop: 8 }}>{t("pay.no_scale_period", "Aucun barème en vigueur pour ce mois : renseignez le barème dans « Paramètres de paie ».")}</p>}
+            {displaySlip && (
               <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8, fontSize: 13 }}>
-                <SlipRow label={t("pay.slip.gross", "Salaire brut")} value={slip.payslip.salaire_brut} strong />
-                <SlipRow label={t("pay.slip.cnps_base", "Assiette CNPS")} value={slip.payslip.assiette_cnps} />
-                <SlipRow label={t("pay.slip.pvid_emp", "PVID salarié")} value={slip.payslip.pvid_salarie} />
-                <SlipRow label={t("pay.slip.cfc_emp", "CFC salarié")} value={slip.payslip.cfc_salarie} />
-                <SlipRow label={t("pay.slip.communal_tax", "Taxe communale")} value={slip.payslip.taxe_communale} />
-                <SlipRow label={t("pay.slip.rav", "RAV")} value={slip.payslip.rav} />
-                <SlipRow label={t("pay.slip.irpp_cac", "IRPP + CAC")} value={slip.payslip.irpp_cac} />
-                <SlipRow label={t("pay.slip.absence_deduction", "Retenue absence (Présences)")} value={slip.payslip.retenue_absence} />
-                <SlipRow label={t("pay.slip.total_emp_deductions", "Total retenues salariales")} value={slip.payslip.total_retenues_salariales} />
-                <SlipRow label={t("pay.slip.net", "NET À PAYER")} value={slip.payslip.net_a_payer} strong tone="gold" />
-                <SlipRow label={t("pay.slip.total_emp_charges", "Total charges patronales")} value={slip.payslip.total_charges_patronales} />
-                <SlipRow label={t("pay.slip.employer_cost", "Coût employeur")} value={slip.payslip.cout_employeur} strong />
+                <SlipRow label={t("pay.slip.gross", "Salaire brut")} value={displaySlip.salaire_brut} strong />
+                <SlipRow label={t("pay.slip.seniority", "Prime d'ancienneté")} value={displaySlip.prime_anciennete} />
+                <SlipRow label={t("pay.slip.cnps_base", "Assiette CNPS")} value={displaySlip.assiette_cnps} />
+                <SlipRow label={t("pay.slip.pvid_emp", "PVID salarié")} value={displaySlip.pvid_salarie} />
+                <SlipRow label={t("pay.slip.cfc_emp", "CFC salarié")} value={displaySlip.cfc_salarie} />
+                <SlipRow label={t("pay.slip.communal_tax", "Taxe communale")} value={displaySlip.taxe_communale} />
+                <SlipRow label={t("pay.slip.rav", "RAV")} value={displaySlip.rav} />
+                <SlipRow label={t("pay.slip.irpp_cac", "IRPP + CAC")} value={displaySlip.irpp_cac} />
+                <SlipRow label={t("pay.slip.absence_deduction", "Retenue absence (Présences)")} value={displaySlip.retenue_absence} />
+                <SlipRow label={t("pay.slip.total_emp_deductions", "Total retenues salariales")} value={displaySlip.total_retenues_salariales} />
+                <SlipRow label={t("pay.slip.net", "NET À PAYER")} value={displaySlip.net_a_payer} strong tone="gold" />
+                <SlipRow label={t("pay.slip.total_emp_charges", "Total charges patronales")} value={displaySlip.total_charges_patronales} />
+                <SlipRow label={t("pay.slip.employer_cost", "Coût employeur")} value={displaySlip.cout_employeur} strong />
               </div>
             )}
-            {slip && (
+            {displaySlip && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
                 <Button
                   variant="view"
@@ -280,22 +350,23 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
                   type="button"
                   onClick={() =>
                     printPayslip({
-                      employee_name: slip.employee.name,
-                      period: slip.period,
+                      employee_name: employeeName,
+                      period,
                       matricule: form.matricule || null,
                       cnps_number: form.cnps_number || null,
                       niu: form.niu || null,
                       fiscal_parts: form.fiscal_parts,
-                      payslip: slip.payslip,
+                      payslip: displaySlip,
                     })
                   }
                 >
                   {t("pay.print_slip", "Imprimer le bulletin / PDF")}
                 </Button>
-                <Button variant="export" size="sm" type="button" onClick={() => setEmailOpen(true)}>{t("pay.send_email", "Envoyer par e-mail")}</Button>
+                <Button variant="export" size="sm" type="button" disabled={!locked} title={locked ? undefined : t("pay.save_before_email", "Enregistrez la fiche avant l'envoi.")} onClick={() => setEmailOpen(true)}>{t("pay.send_email", "Envoyer par e-mail")}</Button>
               </div>
             )}
-            {slip && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>{t("pay.scale_since", "Barème en vigueur depuis le")} {slip.rate_set_effective_from}.</p>}
+            {displaySlip && !locked && <p style={{ fontSize: 12, color: "var(--alert, #C4661F)", marginTop: 6 }}>{t("pay.live_hint", "Aperçu en direct de vos saisies. Enregistrez la fiche pour figer les valeurs officielles et activer l'envoi par e-mail.")}</p>}
+            {rateEffective && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>{t("pay.scale_since", "Barème en vigueur depuis le")} {rateEffective}.</p>}
 
             {/* Journal des envois du bulletin (statut + relance = renvoyer). */}
             {slip && dispatches.length > 0 && (
@@ -320,25 +391,25 @@ export function PayrollProfilesSection({ employees, canManage }: { employees: Em
             )}
           </div>
 
-          {emailOpen && slip && (
+          {emailOpen && displaySlip && (
             <EmailModal
-              title={`${t("pay.email_title", "Envoyer le bulletin —")} ${slip.employee.name} (${slip.period})`}
+              title={`${t("pay.email_title", "Envoyer le bulletin —")} ${employeeName} (${period})`}
               initialMessage={lang === "en"
-                ? `Hello ${slip.employee.name},\n\nPlease find your payslip for the period ${slip.period}.\n\nKind regards,\nÉditions Éclosion`
-                : `Bonjour ${slip.employee.name},\n\nVeuillez trouver votre bulletin de paie pour la période ${slip.period}.\n\nCordialement,\nÉditions Éclosion`}
-              loadPreview={(message) => previewPayslipEmail(employeeId, slip.period, message)}
+                ? `Hello ${employeeName},\n\nPlease find your payslip for the period ${period}.\n\nKind regards,\nÉditions Éclosion`
+                : `Bonjour ${employeeName},\n\nVeuillez trouver votre bulletin de paie pour la période ${period}.\n\nCordialement,\nÉditions Éclosion`}
+              loadPreview={(message) => previewPayslipEmail(employeeId, period, message)}
               onSend={async (to, message) => {
                 // Bulletin PDF généré ici (navigateur), joint automatiquement à l'e-mail.
                 const pdf = buildPayslipPdfBase64({
-                  employee_name: slip.employee.name,
-                  period: slip.period,
+                  employee_name: employeeName,
+                  period,
                   matricule: form.matricule || null,
                   cnps_number: form.cnps_number || null,
                   niu: form.niu || null,
                   fiscal_parts: form.fiscal_parts,
-                  payslip: slip.payslip,
+                  payslip: displaySlip,
                 });
-                const r = await sendPayslipEmail(employeeId, slip.period, message, to, pdf);
+                const r = await sendPayslipEmail(employeeId, period, message, to, pdf);
                 loadDispatches();
                 return r;
               }}

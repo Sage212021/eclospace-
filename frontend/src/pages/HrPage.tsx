@@ -343,14 +343,26 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       {/* Évolution — Consolidation vers la paie (§28-31) */}
       {canOverseePresence && <PayrollConsolidationSection canAdminister={canAdministerPresence} />}
 
-      {/* Module Paie natif (D-007) — paramètres du barème légal */}
-      {canViewPayroll && <PayrollSettingsSection canManage={canManagePayroll} />}
-
-      {/* Module Paie natif (D-007) — fiche paie par employé */}
-      {canViewPayroll && <PayrollProfilesSection employees={employees} canManage={canEditPayroll} />}
-
-      {/* Module Paie natif (D-007) — livre de paie, clôture, déclarations */}
-      {canViewPayroll && <PayrollRegisterSection canClose={canClosePayroll} />}
+      {/* Module Paie natif (D-007) — « Moteur de paie » : toutes les rubriques
+          regroupées en accordéon (chaque rubrique s'ouvre d'un clic). */}
+      {canViewPayroll && (
+        <section style={{ marginTop: 8 }}>
+          <h3 style={{ fontFamily: "var(--font-title)", fontSize: 18, margin: "0 0 8px", display: "flex", alignItems: "center", gap: 8 }}>
+            <span aria-hidden>💶</span> {t("pay.engine", "Moteur de paie")}
+          </h3>
+          <GuidanceNote title={t("pay.engine", "Moteur de paie")}>
+            {t(
+              "pay.engine_help",
+              "Chaque rubrique ci-dessous s'ouvre d'un clic. Pour modifier un bulletin : ouvrez « Fiches paie & bulletin », choisissez l'employé puis le mois, et modifiez les valeurs — le NET À PAYER se recalcule instantanément. Changer de mois ou d'employé n'affecte aucun autre bulletin. Les pourcentages du barème (CNPS, IRPP, CFC…) se règlent dans « Paramètres de paie ». Le « Livre de paie » réunit tous les salariés d'un même mois et gère la clôture.",
+            )}
+          </GuidanceNote>
+          <div style={{ display: "grid", gap: 10 }}>
+            <PayrollProfilesSection employees={employees} canManage={canEditPayroll} collapsible defaultOpen />
+            <PayrollSettingsSection canManage={canManagePayroll} collapsible />
+            <PayrollRegisterSection canClose={canClosePayroll} collapsible />
+          </div>
+        </section>
+      )}
 
       {/* Ch. 19 §19.2 — Dossiers collaborateurs */}
       <Card

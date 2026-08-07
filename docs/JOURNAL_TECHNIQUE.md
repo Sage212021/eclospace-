@@ -787,3 +787,11 @@ Demande opérateur (RH) : dans la rubrique paie, modifier un pourcentage ne mett
 - **Garde-fou de parité** : `backend/tests/payroll-frontend-parity.test.ts` importe les **deux** moteurs (l'unique import du port navigateur est un `import type` effacé à l'exécution) et vérifie qu'ils produisent des bulletins **identiques** sur 6 cas. Toute divergence future casse le test.
 - **Envoi e-mail** : n'est activé que **fiche enregistrée** (valeurs officielles figées) ; l'aperçu non enregistré affiche un avertissement.
 - **Accordéon** : le composant `Card` accepte `collapsible` / `defaultOpen` ; les rubriques du « Moteur de paie » (Fiches paie & bulletin, Paramètres/barème, Livre de paie) sont regroupées sous un titre + une note d'aide RH, chacune repliable.
+
+## 07/08/2026 (suite) — Règle métier : retenue d'absence découplée du calcul de paie
+
+Précision opérateur : les retenues d'absence de l'ERP **ne doivent pas être reliées directement au calcul de la paie**. Le cahier de présence (pointeur indépendant) est un **témoin** ; la retenue effective est **saisie par le RH** au moment d'intégrer la paie du mois / de l'employé.
+
+- **Backend** (`routes/payroll.ts`) : `resolvePayslip` n'applique plus la retenue issue de la consolidation Présences ; elle est renvoyée séparément comme `attendance_witness` (indicatif). La retenue appliquée provient d'une saisie RH transmise en paramètre (`retenue_absence` en query sur `GET …/payslip`, ou dans le corps de `POST …/payslip/email`). Le livre de paie (`computeRegister`) n'applique plus non plus la retenue des présences.
+- **Frontend** : champ « Retenue d'absence (saisie RH) » dans le bulletin ; le témoin du cahier de présence est affiché avec un bouton « Reporter dans la retenue » (report volontaire), et la mention « Indicatif : non relié au calcul ». Aperçu en direct et impression/e-mail utilisent la valeur saisie.
+- **Test** : `payroll-attendance-decoupling.test.ts` — une consolidation avec retenue proposée de 60 000 n'impacte pas le net (retenue = 0, `attendance_witness` = 60 000) ; une saisie RH de 50 000 est bien appliquée (net en baisse).

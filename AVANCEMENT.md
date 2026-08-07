@@ -13,6 +13,16 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Règle métier : retenue d'absence = saisie RH, pas un lien automatique
+
+**Précision opérateur :** les retenues d'absence de l'ERP **ne doivent pas alimenter automatiquement le calcul de la paie**. Le cahier de présence (pointeur indépendant de l'entreprise) est un **simple témoin** ; le **RH saisit lui-même** la retenue au moment d'intégrer la paie du mois / de l'employé.
+
+**Fait :**
+- Le calcul du bulletin **n'applique plus** la retenue issue des présences (ni le bulletin par employé, ni le livre de paie).
+- Nouveau champ **« Retenue d'absence (saisie RH) »** sur le bulletin ; le chiffre du cahier de présence s'affiche à côté comme **témoin indicatif** (« non relié au calcul ») avec un bouton **« Reporter dans la retenue »** si le RH veut l'utiliser.
+- L'aperçu en direct, l'impression et l'e-mail utilisent la **valeur saisie par le RH**.
+- **Test** : `payroll-attendance-decoupling.test.ts` vérifie qu'une retenue de présence n'impacte pas le net (témoin exposé séparément) et qu'une saisie RH est bien appliquée.
+
 ### 07/08/2026 (suite) — Moteur de paie : bulletin recalculé « en direct » + accordéon + guide RH
 
 **Problème signalé (RH) :** en modifiant un pourcentage, le **net à payer restait figé** ; les rubriques paie n'étaient pas en accordéon et l'ensemble était difficile à prendre en main.

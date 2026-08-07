@@ -21,9 +21,13 @@ import {
   setManuscriptSegment,
   setPublicationDate,
   submitEditorialDecision,
+  updateManuscriptRegistration,
   validateStep,
+  listGenres,
+  listUsers,
   type EditorialSegment,
-  type Manuscript,
+  type Genre,
+  type ManuscriptDetail as ManuscriptDetailData,
   type ReadingCandidate,
   type TimelineStep,
   type UserSummary,
@@ -83,10 +87,7 @@ const FOCUS_LABELS: Record<string, string> = {
   authors: "Messagerie des auteurs",
 };
 
-type ManuscriptWithExtras = Manuscript & {
-  workContributors: { partner: { id: string; firstName: string; lastName: string; penName: string | null } }[];
-  owner: UserSummary;
-};
+type ManuscriptWithExtras = ManuscriptDetailData;
 
 const CONTRACTUALISATION_STEP_ORDER = 5;
 const PLANIFICATION_STEP_ORDER = 6;
@@ -101,6 +102,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   // Focalisation par rubrique : on n'affiche que les sections de l'étape d'où
   // l'ouvrage a été ouvert. « Voir toute la fiche » lève la restriction.
   const [showAll, setShowAll] = useState(false);
+  const [editFiche, setEditFiche] = useState(false);
   const focus = originKey ? FOCUS_BY_ORIGIN[originKey] ?? null : null;
   const activeFocus = showAll ? null : focus;
   const show = (mod: string) => activeFocus === null || activeFocus === mod;
@@ -118,6 +120,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   if (!manuscript) return <div style={{ padding: "clamp(16px, 4vw, 32px)" }}>Chargement…</div>;
 
   const canValidate = permissions.has("manuscripts:validation");
+  const canEditFiche = permissions.has("manuscripts:saisie");
   const canAssignReader = permissions.has("comite_lecture:saisie");
   const canCloseCommittee = permissions.has("comite_lecture:validation");
   const canDecide = permissions.has("decision_editoriale:validation");
@@ -176,6 +179,16 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             ✓ Valider → étape suivante
           </button>
         )}
+        {canEditFiche && (
+          <button
+            onClick={() => setEditFiche(true)}
+            disabled={manuscript.registrationLocked}
+            title={manuscript.registrationLocked ? "Fiche verrouillée : le contrat est signé." : "Corriger une erreur ou un oubli de la fiche"}
+            style={{ ...barBtn(), opacity: manuscript.registrationLocked ? 0.5 : 1, cursor: manuscript.registrationLocked ? "not-allowed" : "pointer" }}
+          >
+            ✎ Modifier la fiche
+          </button>
+        )}
         <span style={{ flex: 1 }} />
         {permissions.has("manuscripts:administration") && (
           <button
@@ -201,6 +214,19 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           </button>
         )}
       </div>
+
+      {editFiche && (
+        <EditFicheModal
+          manuscript={manuscript}
+          onClose={() => setEditFiche(false)}
+          onSaved={async () => {
+            setEditFiche(false);
+            setMessage("Fiche corrigée. La modification est tracée au journal.");
+            await refresh();
+          }}
+          onError={(m) => setError(m)}
+        />
+      )}
 
       <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>{manuscript.title}</h1>
       <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 12 }}>{manuscript.manuscriptNumber}</p>
@@ -1206,6 +1232,197 @@ function GenericStepValidation({
         </label>
       )}
       <ActionButton onClick={handleValidate}>{label}</ActionButton>
+    </div>
+  );
+}
+
+// Édition de la fiche d'enregistrement (correction d'erreur/oubli) — ouvrage +
+// identité complète de l'auteur + frais de dépôt + délai de réponse. Motif
+// obligatoire ; verrouillée dès contrat signé (bouton d'ouverture désactivé).
+const FICHE_INPUT: React.CSSProperties = { width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 };
+function FField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+      <span style={{ display: "block", marginBottom: 4 }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+function d10(v?: string | null): string {
+  return v ? String(v).slice(0, 10) : "";
+}
+function EditFicheModal({
+  manuscript,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  manuscript: ManuscriptDetailData;
+  onClose: () => void;
+  onSaved: () => void;
+  onError: (m: string) => void;
+}) {
+  const author = manuscript.workContributors.find((c) => c.role === "author")?.partner ?? manuscript.workContributors[0]?.partner;
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [reason, setReason] = useState("");
+  const [form, setForm] = useState({
+    title: manuscript.title ?? "",
+    subtitle: manuscript.subtitle ?? "",
+    language: manuscript.language ?? "fr",
+    genre_id: manuscript.genreId ?? manuscript.genre?.id ?? "",
+    owner_id: manuscript.owner.id,
+    evaluation_fee_choice: (manuscript.evaluationFeeChoice ?? "non_defini") as "non_defini" | "a_payer" | "sans_frais",
+    author_response_delay_days: manuscript.authorResponseDelayDays != null ? String(manuscript.authorResponseDelayDays) : "",
+  });
+  const [a, setA] = useState({
+    first_name: author?.firstName ?? "",
+    last_name: author?.lastName ?? "",
+    pen_name: author?.penName ?? "",
+    nationality: author?.nationality ?? "",
+    birth_date: d10(author?.birthDate),
+    birth_place: author?.birthPlace ?? "",
+    profession: author?.profession ?? "",
+    id_type: author?.idType ?? "",
+    id_number: author?.idNumber ?? "",
+    id_issued_date: d10(author?.idIssuedDate),
+    id_issued_place: author?.idIssuedPlace ?? "",
+    niu: author?.niu ?? "",
+    country: author?.country ?? "",
+    city: author?.city ?? "",
+    quartier: author?.quartier ?? "",
+    address: author?.address ?? "",
+    postal_box: author?.postalBox ?? "",
+    email: author?.email ?? "",
+    phone: author?.phone ?? "",
+    whatsapp: author?.whatsapp ?? "",
+    other_contact: author?.otherContact ?? "",
+  });
+  const set = (k: keyof typeof a, v: string) => setA((cur) => ({ ...cur, [k]: v }));
+  const setF = (k: keyof typeof form, v: string) => setForm((cur) => ({ ...cur, [k]: v }));
+
+  useEffect(() => {
+    listGenres().then(setGenres).catch(() => {});
+    listUsers().then(setUsers).catch(() => {});
+  }, []);
+
+  async function submit() {
+    if (reason.trim().length < 3) {
+      onError("Indiquez le motif de la correction (au moins 3 caractères).");
+      return;
+    }
+    setSaving(true);
+    try {
+      // Dates : vide → non transmis ; sinon ISO (le serveur efface avec \"\").
+      const authorPayload: Record<string, string> = { first_name: a.first_name.trim(), last_name: a.last_name.trim() };
+      for (const [k, v] of Object.entries(a)) {
+        if (k === "first_name" || k === "last_name") continue;
+        if (k === "birth_date" || k === "id_issued_date") {
+          authorPayload[k] = v ? new Date(v).toISOString() : "";
+        } else {
+          authorPayload[k] = v;
+        }
+      }
+      await updateManuscriptRegistration(manuscript.id, {
+        modification_reason: reason.trim(),
+        title: form.title.trim() || undefined,
+        subtitle: form.subtitle,
+        language: form.language.trim() || undefined,
+        genre_id: form.genre_id || undefined,
+        owner_id: form.owner_id || undefined,
+        evaluation_fee_choice: form.evaluation_fee_choice,
+        author_response_delay_days: form.author_response_delay_days.trim() ? Number(form.author_response_delay_days) : null,
+        author: authorPayload as unknown as Parameters<typeof updateManuscriptRegistration>[1]["author"],
+      });
+      onSaved();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Enregistrement impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(11,18,32,.55)", zIndex: 50, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 12px", overflowY: "auto" }}
+    >
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--card, #fff)", borderRadius: 12, padding: 20, width: "min(720px, 100%)", boxShadow: "0 12px 40px rgba(0,0,0,.25)" }}>
+        <h2 style={{ fontFamily: "var(--font-title)", fontSize: 18, margin: "0 0 4px" }}>Modifier la fiche — {manuscript.manuscriptNumber}</h2>
+        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 14px" }}>
+          Corrigez une erreur ou complétez un oubli. Chaque modification est tracée au journal avec son motif. La fiche se verrouille dès la signature du contrat.
+        </p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginTop: 2 }}>Ouvrage</div>
+          <FField label="Titre *"><input style={FICHE_INPUT} value={form.title} onChange={(e) => setF("title", e.target.value)} /></FField>
+          <FField label="Sous-titre"><input style={FICHE_INPUT} value={form.subtitle} onChange={(e) => setF("subtitle", e.target.value)} /></FField>
+          <FField label="Langue *"><input style={FICHE_INPUT} value={form.language} onChange={(e) => setF("language", e.target.value)} /></FField>
+          <FField label="Domaine"><select style={FICHE_INPUT} value={form.genre_id} onChange={(e) => setF("genre_id", e.target.value)}>{genres.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}</select></FField>
+          <FField label="Responsable du dossier"><select style={FICHE_INPUT} value={form.owner_id} onChange={(e) => setF("owner_id", e.target.value)}>{users.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}</select></FField>
+
+          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginTop: 8 }}>Auteur — état civil</div>
+          <FField label="Prénom *"><input style={FICHE_INPUT} value={a.first_name} onChange={(e) => set("first_name", e.target.value)} /></FField>
+          <FField label="Nom *"><input style={FICHE_INPUT} value={a.last_name} onChange={(e) => set("last_name", e.target.value)} /></FField>
+          <FField label="Pseudonyme"><input style={FICHE_INPUT} value={a.pen_name} onChange={(e) => set("pen_name", e.target.value)} /></FField>
+          <FField label="Nationalité"><input style={FICHE_INPUT} value={a.nationality} onChange={(e) => set("nationality", e.target.value)} /></FField>
+          <FField label="Date de naissance"><input type="date" style={FICHE_INPUT} value={a.birth_date} onChange={(e) => set("birth_date", e.target.value)} /></FField>
+          <FField label="Lieu de naissance"><input style={FICHE_INPUT} value={a.birth_place} onChange={(e) => set("birth_place", e.target.value)} /></FField>
+          <FField label="Travail / emploi"><input style={FICHE_INPUT} value={a.profession} onChange={(e) => set("profession", e.target.value)} /></FField>
+
+          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginTop: 8 }}>Auteur — pièce d'identité</div>
+          <FField label="Type de pièce">
+            <select style={FICHE_INPUT} value={a.id_type} onChange={(e) => set("id_type", e.target.value)}>
+              <option value="">—</option>
+              <option value="CNI">Carte nationale d'identité (CNI)</option>
+              <option value="Passeport">Passeport</option>
+              <option value="Carte de séjour">Carte de séjour</option>
+              <option value="Permis de conduire">Permis de conduire</option>
+              <option value="Récépissé">Récépissé</option>
+              <option value="Autre">Autre</option>
+            </select>
+          </FField>
+          <FField label="Numéro de la pièce"><input style={FICHE_INPUT} value={a.id_number} onChange={(e) => set("id_number", e.target.value)} /></FField>
+          <FField label="Délivrée le"><input type="date" style={FICHE_INPUT} value={a.id_issued_date} onChange={(e) => set("id_issued_date", e.target.value)} /></FField>
+          <FField label="Délivrée à"><input style={FICHE_INPUT} value={a.id_issued_place} onChange={(e) => set("id_issued_place", e.target.value)} /></FField>
+          <FField label="NIU (identifiant fiscal)"><input style={FICHE_INPUT} value={a.niu} onChange={(e) => set("niu", e.target.value)} /></FField>
+
+          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginTop: 8 }}>Auteur — coordonnées & résidence</div>
+          <FField label="Pays"><input style={FICHE_INPUT} value={a.country} onChange={(e) => set("country", e.target.value)} /></FField>
+          <FField label="Ville"><input style={FICHE_INPUT} value={a.city} onChange={(e) => set("city", e.target.value)} /></FField>
+          <FField label="Quartier"><input style={FICHE_INPUT} value={a.quartier} onChange={(e) => set("quartier", e.target.value)} /></FField>
+          <FField label="Résidence / adresse"><input style={FICHE_INPUT} value={a.address} onChange={(e) => set("address", e.target.value)} /></FField>
+          <FField label="Boîte postale (BP)"><input style={FICHE_INPUT} value={a.postal_box} onChange={(e) => set("postal_box", e.target.value)} /></FField>
+          <FField label="E-mail"><input type="email" style={FICHE_INPUT} value={a.email} onChange={(e) => set("email", e.target.value)} /></FField>
+          <FField label="Téléphone"><input style={FICHE_INPUT} value={a.phone} onChange={(e) => set("phone", e.target.value)} /></FField>
+          <FField label="WhatsApp"><input style={FICHE_INPUT} value={a.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} /></FField>
+          <FField label="Autre moyen de contact"><input style={FICHE_INPUT} value={a.other_contact} onChange={(e) => set("other_contact", e.target.value)} /></FField>
+
+          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginTop: 8 }}>Traitement éditorial</div>
+          <FField label="Frais de dépôt pour évaluation">
+            <select style={FICHE_INPUT} value={form.evaluation_fee_choice} onChange={(e) => setF("evaluation_fee_choice", e.target.value)}>
+              <option value="non_defini">À décider plus tard</option>
+              <option value="a_payer">À payer par l'auteur</option>
+              <option value="sans_frais">Sans frais</option>
+            </select>
+          </FField>
+          <FField label="Délai de réponse à l'auteur (jours)"><input type="number" min={0} style={FICHE_INPUT} value={form.author_response_delay_days} onChange={(e) => setF("author_response_delay_days", e.target.value)} /></FField>
+        </div>
+
+        <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+          <FField label="Motif de la correction * (tracé au journal)">
+            <input style={FICHE_INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex. Nom de l'auteur mal orthographié à la saisie." />
+          </FField>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+          <button onClick={onClose} style={barBtn()}>Annuler</button>
+          <button onClick={submit} disabled={saving || !a.first_name.trim() || !a.last_name.trim() || !form.title.trim()} style={{ ...barBtn("primary"), opacity: saving ? 0.6 : 1 }}>
+            {saving ? "Enregistrement…" : "Enregistrer les corrections"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

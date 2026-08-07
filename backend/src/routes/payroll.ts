@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { computePayslip, type Payslip, type PayrollRates } from "../lib/payrollEngine.js";
+import type { PayrollEmployeeProfile, PayrollMonthlyLine } from "@prisma/client";
 import { buildPayslipEmail } from "../lib/documentEmail.js";
 import { sendMail, senderIdentity } from "../lib/mailer.js";
 
@@ -37,6 +38,13 @@ const rateSetSchema = z.object({
   misc: z.object({ coef_assiette: pct, heures_mois: z.number().positive(), anc_def_pct: pct }),
   irpp: z.object({ t1_ceiling: money, t1_pct: pct, t2_ceiling: money, t2_pct: pct, t3_ceiling: money, t3_pct: pct, t4_pct: pct }),
   tc_rav: z.object({ seuil1: money, tc1: money, rav1: money, seuil2: money, tc2: money, rav2: money, tc3: money, rav3: money }),
+});
+
+// Éléments variables du mois pour un salarié (grille mensuelle).
+const monthlyLineSchema = z.object({
+  primes: money, heures_sup: money, retenue_absence: money,
+  retard: money, avance: money, pret: money, sanction: money, autres: money,
+  note: z.string().max(500).nullable().optional(),
 });
 
 export default async function payrollRoutes(fastify: FastifyInstance) {
@@ -347,6 +355,111 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // ===== Cycle mensuel de paie (grille éditable → validation DG) ==============
+  // Étape 1 : préparer le mois pour tous les salariés (brouillon modifiable),
+  // saisir les éléments variables par employé, recalcul du net en direct.
+
+  // Prépare (ou récupère) le mois : une ligne par salarié doté d'une fiche paie.
+  fastify.post(
+    "/api/v1/payroll/monthly/:period/prepare",
+    { preHandler: requirePermission("paie", "saisie") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const [y, m] = period.split("-").map(Number);
+      const toDate = new Date(Date.UTC(y, m, 0));
+      const rateSet = await prisma.payrollRateSet.findFirst({ where: { active: true, effectiveFrom: { lte: toDate } }, orderBy: { effectiveFrom: "desc" } });
+      if (!rateSet) return reply.code(409).send({ code: "no_rate_set", message: "Aucun barème de paie en vigueur pour la période." });
+
+      let run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+      if (!run) {
+        run = await prisma.payrollMonthlyRun.create({ data: { periodKey: period, preparedBy: request.user!.id } });
+        await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "payroll_monthly_run", entityId: period, ipAddress: request.ip });
+      }
+      // Complète les lignes manquantes (nouveaux salariés dotés d'une fiche).
+      const profiles = await prisma.payrollEmployeeProfile.findMany({ where: { employee: { deletedAt: null } }, select: { employeeId: true } });
+      const existing = new Set((await prisma.payrollMonthlyLine.findMany({ where: { runId: run.id }, select: { employeeId: true } })).map((l) => l.employeeId));
+      const toCreate = profiles.filter((p) => !existing.has(p.employeeId));
+      if (toCreate.length > 0) {
+        await prisma.payrollMonthlyLine.createMany({ data: toCreate.map((p) => ({ runId: run!.id, employeeId: p.employeeId })) });
+      }
+      return reply.send({ period, status: run.status });
+    },
+  );
+
+  // Récupère le mois : statut + lignes (éléments variables) + bulletin recalculé.
+  fastify.get(
+    "/api/v1/payroll/monthly/:period",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+      if (!run) return reply.send({ exists: false, period });
+
+      const [y, m] = period.split("-").map(Number);
+      const toDate = new Date(Date.UTC(y, m, 0));
+      const rateSet = await prisma.payrollRateSet.findFirst({ where: { active: true, effectiveFrom: { lte: toDate } }, orderBy: { effectiveFrom: "desc" } });
+      if (!rateSet) return reply.code(409).send({ code: "no_rate_set", message: "Aucun barème de paie en vigueur pour la période." });
+      const rates = ratesFrom(rateSet as unknown as Record<string, unknown>);
+
+      const lines = await prisma.payrollMonthlyLine.findMany({
+        where: { runId: run.id },
+        include: { employee: { select: { id: true, firstName: true, lastName: true, payrollProfile: true } } },
+        orderBy: { employee: { lastName: "asc" } },
+      });
+
+      const rows = lines
+        .filter((l) => l.employee.payrollProfile)
+        .map((l) => {
+          const p = l.employee.payrollProfile!;
+          const slip = computeMonthlyLine(p, rates, l);
+          return {
+            employee_id: l.employeeId,
+            employee_name: `${l.employee.firstName} ${l.employee.lastName}`,
+            matricule: p.matricule,
+            elements: monthlyElements(l),
+            note: l.note,
+            net_a_payer: slip.net_a_payer,
+            salaire_brut: slip.salaire_brut,
+            total_retenues_salariales: slip.total_retenues_salariales,
+            total_charges_patronales: slip.total_charges_patronales,
+            cout_employeur: slip.cout_employeur,
+          };
+        });
+      const totals = rows.reduce(
+        (acc, r) => ({ brut: acc.brut + r.salaire_brut, net: acc.net + r.net_a_payer, cout: acc.cout + r.cout_employeur }),
+        { brut: 0, net: 0, cout: 0 },
+      );
+      return reply.send({ exists: true, period, status: run.status, validated_at: run.validatedAt, rate_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10), lines: rows, totals });
+    },
+  );
+
+  // Saisie des éléments variables d'un salarié (brouillon uniquement).
+  fastify.patch(
+    "/api/v1/payroll/monthly/:period/lines/:employeeId",
+    { preHandler: requirePermission("paie", "saisie") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const { employeeId } = request.params as { employeeId: string };
+      const parsed = monthlyLineSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+      if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
+      if (run.status === "valide") return reply.code(409).send({ code: "run_locked", message: "Mois validé par la Direction : il n'est plus modifiable. Rouvrez-le pour corriger." });
+
+      const b = parsed.data;
+      await prisma.payrollMonthlyLine.update({
+        where: { runId_employeeId: { runId: run.id, employeeId } },
+        data: {
+          primes: b.primes, heuresSup: b.heures_sup, retenueAbsence: b.retenue_absence,
+          retard: b.retard, avance: b.avance, pret: b.pret, sanction: b.sanction, autres: b.autres,
+          note: b.note,
+        },
+      });
+      return reply.send({ ok: true });
+    },
+  );
+
   // Journal de paie archivé d'une période clôturée.
   fastify.get(
     "/api/v1/payroll/journal/:period",
@@ -440,6 +553,40 @@ function ratesFrom(r: Record<string, unknown>): PayrollRates {
     irpp: { p1: num(r.irppT1Ceiling), t1: num(r.irppT1Pct), p2: num(r.irppT2Ceiling), t2: num(r.irppT2Pct), p3: num(r.irppT3Ceiling), t3: num(r.irppT3Pct), t4: num(r.irppT4Pct) },
     tcRav: { seuil1: num(r.tcRavSeuil1), tc1: num(r.tc1), rav1: num(r.rav1), seuil2: num(r.tcRavSeuil2), tc2: num(r.tc2), rav2: num(r.rav2), tc3: num(r.tc3), rav3: num(r.rav3) },
   };
+}
+
+// Éléments variables d'une ligne mensuelle → objet plat (API).
+function monthlyElements(l: PayrollMonthlyLine) {
+  return {
+    primes: num(l.primes), heures_sup: num(l.heuresSup), retenue_absence: num(l.retenueAbsence),
+    retard: num(l.retard), avance: num(l.avance), pret: num(l.pret), sanction: num(l.sanction), autres: num(l.autres),
+  };
+}
+
+// Bulletin d'un salarié pour le mois = fiche paie (barème) + éléments variables.
+// Imposables (primes, heures sup) → ajoutés au brut ET à l'assiette. Avant impôt :
+// retenue d'absence. Retenues nettes internes : retard, avance, prêt, sanction,
+// autres. (Formules ajustables ensuite par l'opérateur.)
+function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine): Payslip {
+  const gross = num(p.grossContractual);
+  const base = Math.round(gross * num(p.basePct));
+  const extraTaxable = num(l.primes) + num(l.heuresSup);
+  return computePayslip(
+    {
+      base,
+      complements: Math.round(gross - base) + extraTaxable,
+      fiscalBase: (p.fiscalBase != null ? num(p.fiscalBase) : gross) + extraTaxable,
+      fiscalParts: num(p.fiscalParts),
+      applyFiscalParts: p.applyFiscalParts,
+      seniorityYears: p.seniorityYears,
+      seniorityRate: p.seniorityRate != null ? num(p.seniorityRate) : null,
+      seniorityThreshold: p.seniorityThreshold ?? 0,
+      applySeniority: p.applySeniority,
+      retenueAbsence: num(l.retenueAbsence),
+      internal: { avance: num(l.avance), pret: num(l.pret), retard: num(l.retard), autres: num(l.autres) + num(l.sanction) },
+    },
+    rates,
+  );
 }
 
 const profileSchema = z.object({

@@ -53,6 +53,7 @@ import { ActivityClosureSection } from "../components/ActivityClosureSection";
 import { useI18n } from "../i18n";
 import { PayrollConsolidationSection } from "../components/PayrollConsolidationSection";
 import { PayrollSettingsSection } from "../components/PayrollSettingsSection";
+import { PayrollMonthlySection } from "../components/PayrollMonthlySection";
 import { PayrollProfilesSection } from "../components/PayrollProfilesSection";
 import { PayrollRegisterSection } from "../components/PayrollRegisterSection";
 
@@ -353,11 +354,12 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
           <GuidanceNote title={t("pay.engine", "Moteur de paie")}>
             {t(
               "pay.engine_help",
-              "Chaque rubrique ci-dessous s'ouvre d'un clic. Pour modifier un bulletin : ouvrez « Fiches paie & bulletin », choisissez l'employé puis le mois, et modifiez les valeurs — le NET À PAYER se recalcule instantanément. La retenue d'absence est SAISIE PAR VOUS : le cahier de présence n'est qu'un témoin indicatif (bouton « Reporter » si vous voulez l'utiliser), jamais appliqué d'office. Changer de mois ou d'employé n'affecte aucun autre bulletin. Les pourcentages du barème (CNPS, IRPP, CFC…) se règlent dans « Paramètres de paie ». Le « Livre de paie » réunit tous les salariés d'un même mois et gère la clôture.",
+              "Chaque rubrique ci-dessous s'ouvre d'un clic. « Génération mensuelle » prépare le mois pour TOUS les salariés : saisissez les éléments variables (primes, heures sup, absences, retards, avances, prêts, sanctions) et le net se recalcule automatiquement ; le mois reste modifiable tant qu'il n'est pas validé. « Fiches paie & bulletin » sert au bulletin d'un seul salarié (net recalculé en direct). La retenue d'absence est SAISIE PAR VOUS : le cahier de présence n'est qu'un témoin indicatif, jamais appliqué d'office. Les pourcentages du barème (CNPS, IRPP, CFC…) se règlent dans « Paramètres de paie ». Le « Livre de paie » réunit tous les salariés d'un même mois et gère la clôture.",
             )}
           </GuidanceNote>
           <div style={{ display: "grid", gap: 10 }}>
-            <PayrollProfilesSection employees={employees} canManage={canEditPayroll} collapsible defaultOpen />
+            <PayrollMonthlySection canManage={canEditPayroll} collapsible defaultOpen />
+            <PayrollProfilesSection employees={employees} canManage={canEditPayroll} collapsible />
             <PayrollSettingsSection canManage={canManagePayroll} collapsible />
             <PayrollRegisterSection canClose={canClosePayroll} collapsible />
           </div>

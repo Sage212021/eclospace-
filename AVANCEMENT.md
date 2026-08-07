@@ -13,6 +13,19 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Chantier paie : cycle mensuel (étape 1) — grille éditable + net automatique
+
+**Demande opérateur :** générer la paie du mois **pour tous les salariés**, modifier individuellement chaque employé (primes, retenues, avances, sanctions, heures sup, absences, retards), net calculé automatiquement ; le mois **reste modifiable tant qu'il n'est pas validé**.
+
+**Fait (étape 1 — la fondation) :**
+- Nouvelle rubrique **« Génération mensuelle (tous les salariés) »** en tête du Moteur de paie.
+- Bouton **« Préparer le mois de paie »** : crée le mois pour **tous les salariés** dotés d'une fiche.
+- **Grille éditable** par salarié : primes · heures sup · absences · retards · avances · prêts · sanctions · autres → le **NET à payer se recalcule automatiquement** ; totaux (net, coût employeur) en bas.
+- Le mois est un **brouillon modifiable** ; il se verrouille une fois **validé** (la validation DG arrive à l'étape 2).
+- **Tests** : préparation (idempotente), net recalculé (prime augmente le net, avance le diminue), verrou après validation.
+
+**Étape 2 (à venir) :** **validation obligatoire par le Directeur général** (fige le mois), puis **impression des bulletins PDF** au modèle du classeur joint, **livre de paie** et **états CNPS/fiscaux** depuis le mois validé.
+
 ### 07/08/2026 (suite) — Fiche manuscrit corrigeable après enregistrement (jusqu'au contrat signé)
 
 **Problème signalé :** après enregistrement, la fiche du manuscrit ne pouvait plus être corrigée (erreur ou oubli) — elle paraissait verrouillée.

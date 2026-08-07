@@ -3601,6 +3601,43 @@ export interface PayslipResult {
 export function getPayslip(employeeId: string, period: string) {
   return request<PayslipResult>(`/api/v1/payroll/employees/${employeeId}/payslip?period=${period}`);
 }
+
+// Cycle mensuel de paie (grille éditable → validation DG). Étape 1 : préparer le
+// mois, saisir les éléments variables par salarié, net recalculé automatiquement.
+export interface PayrollMonthElements {
+  primes: number; heures_sup: number; retenue_absence: number;
+  retard: number; avance: number; pret: number; sanction: number; autres: number;
+}
+export interface PayrollMonthLine {
+  employee_id: string;
+  employee_name: string;
+  matricule: string | null;
+  elements: PayrollMonthElements;
+  note: string | null;
+  net_a_payer: number;
+  salaire_brut: number;
+  total_retenues_salariales: number;
+  total_charges_patronales: number;
+  cout_employeur: number;
+}
+export interface PayrollMonth {
+  exists: boolean;
+  period: string;
+  status?: "brouillon" | "valide";
+  validated_at?: string | null;
+  rate_effective_from?: string;
+  lines?: PayrollMonthLine[];
+  totals?: { brut: number; net: number; cout: number };
+}
+export function preparePayrollMonth(period: string) {
+  return request<{ period: string; status: "brouillon" | "valide" }>(`/api/v1/payroll/monthly/${period}/prepare`, { method: "POST" });
+}
+export function getPayrollMonth(period: string) {
+  return request<PayrollMonth>(`/api/v1/payroll/monthly/${period}`);
+}
+export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null) {
+  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...elements, note: note ?? null }) });
+}
 export function previewPayslipEmail(employeeId: string, period: string, message: string, retenueAbsence = 0) {
   return request<{ subject: string; html: string; default_to: string | null }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, preview: true, retenue_absence: retenueAbsence }) });
 }

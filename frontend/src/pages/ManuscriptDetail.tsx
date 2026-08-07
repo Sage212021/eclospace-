@@ -43,6 +43,7 @@ import { ReadingEvaluationsSection } from "../components/ReadingEvaluationsSecti
 import { AuthorFilesSection } from "../components/AuthorFilesSection";
 import { FundingCheckpoint } from "../components/FundingCheckpoint";
 import { FinanceRequestCard } from "../components/FinanceRequestCard";
+import { EditorialQuotesInbox } from "../components/EditorialQuotesInbox";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 
 interface ManuscriptDetailProps {
@@ -460,6 +461,12 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           canValidate={permissions.has("finance:validation")}
           canAdmin={permissions.has("finance:administration")}
         />
+      )}
+
+      {/* Circuit devis : côté Éditorial (devis transmis par la Finance pour cet
+          ouvrage). Visible sur les rubriques Contrats/Finance pour l'éditorial. */}
+      {(show("finance") || show("contracts")) && (permissions.has("manuscripts:saisie") || permissions.has("manuscripts:validation")) && (
+        <EditorialQuotesInbox manuscriptId={manuscript.id} />
       )}
 
       {(show("correction") || show("expertise")) && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && permissions.has("tasks:consultation") && (

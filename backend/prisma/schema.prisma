@@ -3501,6 +3501,13 @@ model EditorialQuote {
   invoiceId String?  @unique @map("invoice_id")
   invoice   Invoice? @relation(fields: [invoiceId], references: [id])
 
+  // Circuit devis → Éditorial → client → facture (décision opérateur 07/08/2026) :
+  // la Finance établit le devis puis le TRANSMET à l'Éditorial, qui l'envoie au
+  // client et remonte sa validation. La facture reste conditionnée à
+  // l'acceptation (acceptedAt). Ces champs tracent le passage par l'Éditorial.
+  editorialHandoffAt DateTime? @map("editorial_handoff_at")
+  editorialHandoffBy String?   @map("editorial_handoff_by")
+
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
   updatedAt DateTime  @updatedAt @map("updated_at")

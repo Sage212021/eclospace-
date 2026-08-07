@@ -1034,6 +1034,27 @@ export function invoiceEditorialQuote(id: string) {
   return request<InvoiceDetail>(`/api/v1/editorial-quotes/${id}/invoice`, { method: "POST" });
 }
 
+// Circuit devis → Éditorial → client → facture.
+export function handQuoteToEditorial(id: string) {
+  return request<EditorialQuote>(`/api/v1/editorial-quotes/${id}/hand-to-editorial`, { method: "POST" });
+}
+export interface EditorialQuoteInboxRow {
+  id: string;
+  quote_number: string;
+  status: string;
+  total_ttc: string;
+  currency: string;
+  manuscript: { id: string; title: string } | null;
+  client: string | null;
+  client_email: string | null;
+  client_whatsapp: string | null;
+  handed_at: string | null;
+  accepted_at: string | null;
+}
+export function getEditorialQuotesInbox(manuscriptId?: string) {
+  return request<EditorialQuoteInboxRow[]>(`/api/v1/editorial/quotes${manuscriptId ? `?manuscript=${manuscriptId}` : ""}`);
+}
+
 // --- Signature en ligne par l'auteur (page publique, sans compte) ----------
 export interface PublicQuote {
   quote_number: string;

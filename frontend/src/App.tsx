@@ -17,6 +17,7 @@ const EditorialDecision = lazy(() => import("./pages/EditorialDecision").then((m
 const CorrectionEditorial = lazy(() => import("./pages/CorrectionEditorial").then((m) => ({ default: m.CorrectionEditorial })));
 const MyCorrections = lazy(() => import("./pages/MyCorrections").then((m) => ({ default: m.MyCorrections })));
 const CatalogueReferencePage = lazy(() => import("./pages/CatalogueReferencePage").then((m) => ({ default: m.CatalogueReferencePage })));
+const EditorialQuotesInbox = lazy(() => import("./components/EditorialQuotesInbox").then((m) => ({ default: m.EditorialQuotesInbox })));
 const ArchivesPage = lazy(() => import("./pages/ArchivesPage").then((m) => ({ default: m.ArchivesPage })));
 const RightsMatrixPage = lazy(() => import("./pages/RightsMatrixPage").then((m) => ({ default: m.RightsMatrixPage })));
 const ManuscriptDetail = lazy(() => import("./pages/ManuscriptDetail").then((m) => ({ default: m.ManuscriptDetail })));
@@ -75,6 +76,7 @@ type PageId =
   | "correction-editorial"
   | "my-corrections"
   | "my-readings"
+  | "editorial-quotes-inbox"
   | "catalogue-ref"
   | "archives"
   | "rights-matrix"
@@ -150,6 +152,9 @@ const NAV_POLES: NavPole[] = [
       { key: "ed-direction", label: "Direction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-correction", label: "Correction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-expertise", label: "Expertise scientifique", permission: "tasks:consultation" },
+      // Devis (compte d'auteur) transmis par la Finance : l'éditorial les envoie
+      // au client et remonte la validation (circuit devis→éditorial→facture).
+      { key: "ed-devis-editorial", label: "Devis (compte d'auteur)", anyPermission: ["manuscripts:saisie", "manuscripts:validation"] },
       // Contrats & droits d'auteur : rattachés au pôle Éditorial (décision
       // opérateur du 06/08/2026) — la contractualisation prolonge la relation
       // éditoriale avec l'auteur. Clé interne inchangée (« jf-contrats ») pour
@@ -242,6 +247,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-direction": { page: "editorial-decision" },
   "ed-correction": { page: "correction-editorial" },
   "ed-expertise": { stage: "EXPERTISE", heading: "Expertise scientifique (si nécessaire)" },
+  "ed-devis-editorial": { page: "editorial-quotes-inbox" },
   "ed-catalogue-ref": { page: "catalogue-ref" },
   "ed-archives": { page: "archives" },
   "pr-maquette": { stage: "MISE_EN_PAGE", heading: "Maquette & mise en page" },
@@ -743,6 +749,7 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "my-readings" && <MyReadings />}
         {leaf && "page" in leaf && leaf.page === "my-corrections" && <MyCorrections />}
+        {leaf && "page" in leaf && leaf.page === "editorial-quotes-inbox" && <EditorialQuotesInbox />}
         {leaf && "page" in leaf && leaf.page === "catalogue-ref" && (
           <CatalogueReferencePage canManage={permissions.has("manuscripts:administration")} />
         )}

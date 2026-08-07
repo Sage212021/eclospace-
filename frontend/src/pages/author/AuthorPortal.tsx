@@ -18,6 +18,7 @@ import {
   type Notification,
 } from "../../api/client";
 import { useI18n } from "../../i18n";
+import { useConfirm } from "../../components/ConfirmProvider";
 import { AuthorMessages } from "./AuthorMessages";
 
 function humanSize(n: number | null | undefined): string {
@@ -64,6 +65,7 @@ function stageColor(published: boolean, current: boolean): { bg: string; fg: str
 
 export function AuthorPortal({ userName, onLogout }: { userName: string; onLogout: () => void }) {
   const { t, lang } = useI18n();
+  const confirm = useConfirm();
   const [profile, setProfile] = useState<AuthorProfile | null>(null);
   const [works, setWorks] = useState<AuthorWork[]>([]);
   const [notifs, setNotifs] = useState<Notification[]>([]);
@@ -118,6 +120,13 @@ export function AuthorPortal({ userName, onLogout }: { userName: string; onLogou
   }
 
   async function removeFile(id: string) {
+    const ok = await confirm({
+      title: t("ap.delete_file_title", "Supprimer le fichier"),
+      message: t("ap.delete_file_confirm", "Supprimer ce fichier ? Cette action est définitive de votre côté."),
+      tone: "danger",
+      confirmLabel: t("ap.delete", "Supprimer"),
+    });
+    if (!ok) return;
     try {
       await deleteAuthorFile(id);
       setFiles((prev) => prev.filter((f) => f.id !== id));

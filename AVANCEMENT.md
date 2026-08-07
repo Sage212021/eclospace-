@@ -13,6 +13,15 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Blocage d'étape si la fiche de l'auteur est incomplète (message clair)
+
+**Fait (4/4, demande terminée) :** la **Vérification administrative** ne se valide plus tant que la fiche de l'auteur est incomplète — le système **dit précisément ce qui manque** et l'étape suivante (comité de lecture) reste inaccessible.
+- Éléments requis pour passer de « Vérification administrative » à « Comité de lecture » : **un moyen de contact** de l'auteur (e-mail, téléphone ou WhatsApp) ; **la pièce d'identité** (type et numéro) ; **le choix des frais de dépôt** pour évaluation (à payer / sans frais).
+- À défaut, refus **409** avec message explicite : « Vérification administrative incomplète — … Il manque : … ». Le message s'affiche tel quel sur la fiche (bandeau d'erreur existant).
+- Backend : garde ajoutée dans `POST /manuscripts/:id/steps/VERIF_ADMIN/validate`. Tests d'intégration mis à jour pour fournir une fiche complète ; nouveau `manuscript-step-gate.test.ts` (409 avec liste des manques ; 200 quand complet). Typecheck OK.
+
+**Les 4 volets de la demande sont livrés** : fiche d'enregistrement enrichie · traçabilité des initiateurs · notifications son + alerte · blocage d'étape si incomplet.
+
 ### 07/08/2026 (suite) — Notifications inter-pôles : son + alerte visible (pas en sourdine)
 
 **Fait (3/4) :** quand un pôle renvoie une information à un autre (devis transmis, demande de facture reçue, BAT déposé → impression, échéance, etc.), le pôle concerné est **alerté immédiatement à son poste** : **sonnerie + pop-up** + rafraîchissement de la cloche. Plus de notification en sourdine.

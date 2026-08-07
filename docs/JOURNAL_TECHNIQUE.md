@@ -805,3 +805,14 @@ Demande opérateur : la fiche se verrouillait après l'enregistrement (impossibl
 - **Test** : `manuscript-registration-edit.test.ts` — correction OK (ouvrage + auteur, tracé), refus sans motif (400), verrou après contrat signé (409 + `registrationLocked` au GET).
 
 Reste demandé (incrément suivant) : suppression du manuscrit soumise à validation du DG (le directeur éditorial demande → le DG valide/refuse).
+
+## 07/08/2026 (suite) — Chantier paie : cycle mensuel, étape 1 (grille éditable + net auto)
+
+Demande opérateur : générer la paie du mois pour tous les salariés, avec saisie individuelle des éléments variables et net automatique ; le mois reste modifiable tant qu'il n'est pas validé (validation DG à venir).
+
+- **Modèle** (migration `payroll_monthly_run`) : `PayrollMonthlyRun` (periodKey unique, `status` brouillon|valide, validatedBy/At) + `PayrollMonthlyLine` (par salarié : primes, heures sup, retenue d'absence, retard, avance, prêt, sanction, autres). Migration écrite à la main (le `migrate diff` remontait de la dérive DB non liée : conservé uniquement mes objets).
+- **Backend** (`routes/payroll.ts`) : `POST /payroll/monthly/:period/prepare` (seed une ligne par fiche paie, idempotent, exige un barème en vigueur), `GET /payroll/monthly/:period` (statut + lignes + **bulletin recalculé** par le moteur), `PATCH /payroll/monthly/:period/lines/:employeeId` (saisie, **refusée si validé** → 409 `run_locked`). Mapping éléments→moteur : primes+heures sup imposables (brut & assiette), absences avant impôt, retard/avance/prêt/sanction/autres en retenues nettes internes.
+- **Frontend** : `PayrollMonthlySection` — sélecteur de mois, « Préparer le mois », grille par salarié (8 colonnes éditables + NET), totaux, badge Brouillon/Validé. Enregistrement à la sortie de case, net rafraîchi. Placée en tête du « Moteur de paie » (accordéon RH).
+- **Test** : `payroll-monthly.test.ts` — préparation idempotente, net recalculé (prime ↑ net ; avance −25 000 exact), verrou après validation.
+
+Étape 2 (à venir) : validation obligatoire par le DG (fige le mois) → impression des bulletins PDF au modèle du classeur, livre de paie et états CNPS/fiscaux depuis le mois validé.

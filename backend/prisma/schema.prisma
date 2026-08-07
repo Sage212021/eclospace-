@@ -89,6 +89,7 @@ model Employee {
   attendanceEvents          AttendanceEvent[]
   attendanceAnomalies       AttendanceAnomaly[]
   attendancePayrollLines    AttendancePayrollLine[]
+  payrollMonthlyLines       PayrollMonthlyLine[]
   payrollProfile            PayrollEmployeeProfile?
   evaluations               EmployeeEvaluation[]
   trainingRequests          TrainingRequest[]
@@ -754,6 +755,59 @@ model PayrollEmployeeProfile {
   updatedBy String?  @map("updated_by")
 
   @@map("payroll_employee_profiles")
+}
+
+// Cycle mensuel de paie (chantier 07/08/2026) : un mois est PRÉPARÉ pour tous
+// les salariés (une ligne par employé, éléments variables du mois), reste
+// MODIFIABLE (brouillon) jusqu'à la VALIDATION du Directeur général — après quoi
+// il est figé pour l'impression des bulletins, le livre de paie et les états.
+enum PayrollMonthlyStatus {
+  brouillon
+  valide
+}
+
+model PayrollMonthlyRun {
+  id          String               @id @default(uuid())
+  periodKey   String               @unique @map("period_key") // AAAA-MM
+  status      PayrollMonthlyStatus @default(brouillon)
+  preparedBy  String?              @map("prepared_by")
+  validatedBy String?              @map("validated_by") // Directeur général
+  validatedAt DateTime?            @map("validated_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lines PayrollMonthlyLine[]
+
+  @@map("payroll_monthly_runs")
+}
+
+// Éléments variables du mois pour un salarié (saisis par le RH). Imposables :
+// primes, heures sup. Avant impôt : retenue d'absence. Retenues nettes internes :
+// retard, avance, prêt, sanction, autres. Le net est recalculé par le moteur.
+model PayrollMonthlyLine {
+  id         String            @id @default(uuid())
+  runId      String            @map("run_id")
+  run        PayrollMonthlyRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employeeId String            @map("employee_id")
+  employee   Employee          @relation(fields: [employeeId], references: [id])
+
+  primes         Decimal @default(0) @db.Decimal(12, 2)
+  heuresSup      Decimal @default(0) @map("heures_sup") @db.Decimal(12, 2)
+  retenueAbsence Decimal @default(0) @map("retenue_absence") @db.Decimal(12, 2)
+  retard         Decimal @default(0) @db.Decimal(12, 2)
+  avance         Decimal @default(0) @db.Decimal(12, 2)
+  pret           Decimal @default(0) @db.Decimal(12, 2)
+  sanction       Decimal @default(0) @db.Decimal(12, 2)
+  autres         Decimal @default(0) @db.Decimal(12, 2)
+  note           String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([runId, employeeId])
+  @@index([employeeId])
+  @@map("payroll_monthly_lines")
 }
 
 // Clôture mensuelle de la paie (D-007, incrément 5) — équivalent de la

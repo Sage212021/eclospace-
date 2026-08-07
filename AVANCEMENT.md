@@ -13,6 +13,19 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Circuit devis → Éditorial → client → facture (Finance ↔ Éditorial)
+
+**Fait (3ᵉ demande, après arbitrage opérateur) :** le devis reste **distinct** de la facture, et la facture n'est possible qu'après le retour de validation via l'Éditorial. Circuit professionnel :
+1. **Finance** établit le devis (brouillon).
+2. **Finance** « → Transmettre à l'éditorial » (bouton sur le devis) → le devis part côté Éditorial (`editorial_handoff_at`).
+3. **Éditorial** (Responsable + Direction éditoriale) : nouvelle rubrique **« Devis (compte d'auteur) »** dans le pôle Éditorial (carte centralisée) **et** panneau sur la fiche de l'ouvrage. Actions : **Imprimer**, **Envoyer par e-mail**, **Envoyer par WhatsApp** (message pré-rempli avec le lien de signature), **Marquer validé par le client** (nom du signataire).
+4. **Client** valide (lien en ligne existant, ou l'éditorial enregistre le retour).
+5. **Finance** établit la **facture** (inchangé — déjà conditionné à l'acceptation ; refus 409 tant que non validé).
+- Décisions opérateur : Responsable **+** Direction éditoriale pilotent ; l'envoi au client possible **par l'Éditorial et par la Finance** ; affichage **carte dédiée + fiche**.
+- RBAC : envoi & validation ouverts à `finance` **ou** `manuscripts:saisie`/`:validation` (Assistant éditorial **et** Directeur éditorial). La transmission Finance→Éditorial reste `finance:saisie`.
+- Modèle : champs additifs `editorial_handoff_at` / `_by` sur `editorial_quotes`, migration `20260807100000_quote_editorial_handoff`. Endpoints : `POST /editorial-quotes/:id/hand-to-editorial`, `GET /editorial/quotes` (filtre `?manuscript=`), ouverture de `/send` et `/accept` à l'éditorial.
+- **Tests** : `quote-editorial-handoff.test.ts` (3 cas) — transmission + apparition dans la vue éditoriale ; envoi + validation par l'éditorial + facture ensuite (facture refusée 409 avant validation) ; refus sans droit (403). Verts. Typecheck back+front + build OK.
+
 ### 07/08/2026 (suite) — Contrats : accès pôle Juridique + pièce signée rattachée par n° de contrat
 
 **Fait (2 des 3 demandes ; le circuit devis→facture est présenté à l'opérateur avant construction) :**

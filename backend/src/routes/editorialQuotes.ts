@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { QuoteAcceptanceMethod } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { nextQuoteNumber } from "../lib/quoteNumber.js";
 import { createInvoiceFromEditorialQuote } from "../lib/invoicing.js";
@@ -95,7 +95,7 @@ function computeTotals(lines: { quantity: number; unit_price: number; tax_rate: 
 }
 
 const quoteInclude = {
-  partner: { select: { id: true, firstName: true, lastName: true, email: true } },
+  partner: { select: { id: true, firstName: true, lastName: true, email: true, whatsapp: true } },
   customer: { select: { id: true, name: true, email: true } },
   manuscript: { select: { id: true, manuscriptNumber: true, title: true } },
   lines: true,
@@ -316,7 +316,53 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
 
   // Prépare l'envoi pour signature en ligne (③) : génère un jeton unique et
   // marque le devis « envoyé ». Le jeton alimente le lien public de signature.
-  fastify.post("/api/v1/editorial-quotes/:id/send", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
+  // Transmettre le devis au responsable éditorial (Finance → Éditorial) : la
+  // Finance a établi le devis, elle le remet à l'Éditorial qui l'enverra au
+  // client. Marque le passage ; le devis reste « brouillon » jusqu'à l'envoi.
+  fastify.post("/api/v1/editorial-quotes/:id/hand-to-editorial", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const quote = await prisma.editorialQuote.findFirst({ where: { id, deletedAt: null } });
+    if (!quote) return reply.code(404).send({ code: "not_found", message: "Devis introuvable." });
+    if (quote.status !== "draft") {
+      return reply.code(409).send({ code: "invalid_status", message: "Seul un devis en brouillon se transmet à l'éditorial (celui-ci est déjà envoyé, accepté ou facturé)." });
+    }
+    const updated = await prisma.editorialQuote.update({
+      where: { id },
+      data: { editorialHandoffAt: new Date(), editorialHandoffBy: request.user!.id, updatedBy: request.user!.id },
+      include: quoteInclude,
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "editorial_quote", entityId: id, newValues: { handedToEditorial: true }, ipAddress: request.ip });
+    return reply.send(updated);
+  });
+
+  // Vue Éditorial : les devis transmis par la Finance (à envoyer au client, en
+  // attente de validation, validés). Le pôle éditorial pilote l'envoi au client
+  // et remonte la validation. Accessible à l'éditorial et à la finance.
+  fastify.get("/api/v1/editorial/quotes", { preHandler: requireAnyPermission([{ module: "manuscripts", action: "saisie" }, { module: "manuscripts", action: "validation" }, { module: "finance", action: "consultation" }]) }, async (request, reply) => {
+    const manuscriptId = (request.query as { manuscript?: string }).manuscript;
+    const rows = await prisma.editorialQuote.findMany({
+      where: { deletedAt: null, editorialHandoffAt: { not: null }, status: { in: ["draft", "sent", "accepted", "refused"] }, ...(manuscriptId ? { manuscriptId } : {}) },
+      orderBy: { editorialHandoffAt: "desc" },
+      include: quoteInclude,
+    });
+    return reply.send(rows.map((q) => ({
+      id: q.id,
+      quote_number: q.quoteNumber,
+      status: q.status,
+      total_ttc: q.totalTtc,
+      currency: q.currency,
+      manuscript: q.manuscript ? { id: q.manuscript.id, title: q.manuscript.title } : null,
+      client: q.partner ? `${q.partner.firstName} ${q.partner.lastName}` : q.customer?.name ?? null,
+      client_email: q.partner?.email ?? q.customer?.email ?? null,
+      client_whatsapp: q.partner?.whatsapp ?? null,
+      handed_at: q.editorialHandoffAt,
+      accepted_at: q.acceptedAt,
+    })));
+  });
+
+  // Envoi au client : réalisable par la Finance OU par l'Éditorial (circuit
+  // devis→éditorial→client). L'Éditorial imprime / transfère (WhatsApp, e-mail).
+  fastify.post("/api/v1/editorial-quotes/:id/send", { preHandler: requireAnyPermission([{ module: "finance", action: "saisie" }, { module: "manuscripts", action: "saisie" }, { module: "manuscripts", action: "validation" }]) }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const quote = await prisma.editorialQuote.findFirst({ where: { id, deletedAt: null } });
     if (!quote) return reply.code(404).send({ code: "not_found", message: "Devis introuvable." });
@@ -374,7 +420,9 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
   // Acceptation « interne » (① agent) ou « papier » (② scan renvoyé) — enregistrée
   // par un utilisateur habilité. La partie contractante étant l'auteur, cela
   // accepte le devis et le verrouille.
-  fastify.post("/api/v1/editorial-quotes/:id/accept", { preHandler: requirePermission("finance", "validation") }, async (request, reply) => {
+  // Retour de validation du client : enregistré par la Finance OU par
+  // l'Éditorial (qui remonte l'accord du client). Débloque la facture côté Finance.
+  fastify.post("/api/v1/editorial-quotes/:id/accept", { preHandler: requireAnyPermission([{ module: "finance", action: "validation" }, { module: "manuscripts", action: "saisie" }, { module: "manuscripts", action: "validation" }]) }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const parsed = acceptInternalSchema.safeParse(request.body ?? {});
     if (!parsed.success) {

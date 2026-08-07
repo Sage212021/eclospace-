@@ -6,6 +6,7 @@ import {
   deleteEditorialQuote,
   resetEditorialQuoteChain,
   invoiceEditorialQuote,
+  handQuoteToEditorial,
   listCustomers,
   listEditorialQuotes,
   sendEditorialQuote,
@@ -88,6 +89,18 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
   useEffect(() => {
     refresh();
   }, [manuscriptId]);
+
+  async function handleHandToEditorial(q: EditorialQuote) {
+    setError(null);
+    setInfo(null);
+    try {
+      await handQuoteToEditorial(q.id);
+      setInfo(`Devis ${q.quoteNumber} transmis au responsable éditorial : il l'enverra au client pour validation.`);
+      refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Transmission impossible.");
+    }
+  }
 
   async function handleSend(q: EditorialQuote) {
     setError(null);
@@ -212,6 +225,11 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
               {STATUS_LABELS[q.status]}
             </span>
             <DocPrintMenu onPrint={(o) => getEditorialQuote(q.id).then((quote) => printEditorialQuote(quote, o)).catch((e) => setError(e.message))} />
+            {canCreate && q.status === "draft" && (
+              <button onClick={() => handleHandToEditorial(q)} style={{ ...secondaryButtonStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)", fontWeight: 600 }} title="Remettre le devis au responsable éditorial, qui l'enverra au client">
+                → Transmettre à l'éditorial
+              </button>
+            )}
             {canCreate && (q.status === "draft" || q.status === "sent") && (
               <button onClick={() => handleSend(q)} style={secondaryButtonStyle}>
                 {q.status === "sent" ? "Renvoyer le lien" : "✉️ Envoyer pour signature"}

@@ -481,6 +481,22 @@ function EmptyState({
   );
 }
 
+const EMPTY_AUTHOR = {
+  first_name: "", last_name: "", pen_name: "",
+  birth_date: "", birth_place: "", nationality: "", profession: "",
+  id_type: "", id_number: "", id_issued_date: "", id_issued_place: "", niu: "",
+  country: "", city: "", quartier: "", address: "", postal_box: "",
+  email: "", phone: "", whatsapp: "", other_contact: "",
+};
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <div style={{ gridColumn: "1 / -1", fontSize: 12.5, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", textTransform: "uppercase", letterSpacing: 0.4, marginTop: 6, borderBottom: "1px solid var(--line)", paddingBottom: 4 }}>{children}</div>;
+}
+
+// Fiche d'enregistrement du manuscrit — digne d'une grande maison d'édition :
+// ouvrage + identité complète de l'auteur (état civil, pièce d'identité,
+// coordonnées) + traitement éditorial (frais de dépôt d'évaluation, délai de
+// réponse). Nom/prénom et champs ouvrage obligatoires ; le reste, recommandé.
 function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) => void; onError: (m: string) => void }) {
   const [genres, setGenres] = useState<Genre[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
@@ -488,42 +504,34 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
   const [genreId, setGenreId] = useState("");
   const [language, setLanguage] = useState("fr");
   const [ownerId, setOwnerId] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  const [a, setA] = useState({ ...EMPTY_AUTHOR });
+  const [evalFee, setEvalFee] = useState<"non_defini" | "a_payer" | "sans_frais">("non_defini");
+  const [responseDelay, setResponseDelay] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  // Renseignements d'identité de l'auteur (facultatifs) repris en tête du
-  // contrat d'édition — collectés dès l'enregistrement du manuscrit.
-  const [showAuthorId, setShowAuthorId] = useState(false);
-  const [authorId, setAuthorId] = useState({ email: "", phone: "", address: "", birth_date: "", birth_place: "", nationality: "", profession: "", id_number: "", id_issued_date: "", id_issued_place: "" });
+  const set = (k: keyof typeof EMPTY_AUTHOR, v: string) => setA((cur) => ({ ...cur, [k]: v }));
 
   useEffect(() => {
-    listGenres().then((g) => {
-      setGenres(g);
-      if (g[0]) setGenreId(g[0].id);
-    });
-    listUsers().then((u) => {
-      setUsers(u);
-      if (u[0]) setOwnerId(u[0].id);
-    });
+    listGenres().then((g) => { setGenres(g); if (g[0]) setGenreId(g[0].id); });
+    listUsers().then((u) => { setUsers(u); if (u[0]) setOwnerId(u[0].id); });
   }, []);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     try {
-      // Champs d'identité non vides uniquement ; dates converties en ISO.
-      const idFields: Record<string, string> = {};
-      for (const [k, v] of Object.entries(authorId)) {
+      // Ne transmet que les champs auteur renseignés ; dates → ISO.
+      const author: Record<string, string> = { first_name: a.first_name.trim(), last_name: a.last_name.trim() };
+      for (const [k, v] of Object.entries(a)) {
+        if (k === "first_name" || k === "last_name") continue;
         const val = v.trim();
         if (!val) continue;
-        idFields[k] = k === "birth_date" || k === "id_issued_date" ? new Date(val).toISOString() : val;
+        author[k] = k === "birth_date" || k === "id_issued_date" ? new Date(val).toISOString() : val;
       }
       const manuscript = await createManuscript({
-        title,
-        genre_id: genreId,
-        language,
-        owner_id: ownerId,
-        author: { first_name: firstName, last_name: lastName, ...idFields },
+        title, genre_id: genreId, language, owner_id: ownerId,
+        evaluation_fee_choice: evalFee,
+        ...(responseDelay.trim() ? { author_response_delay_days: Number(responseDelay) } : {}),
+        author: author as unknown as Parameters<typeof createManuscript>[0]["author"],
       });
       onCreated(manuscript);
     } catch (err) {
@@ -534,71 +542,71 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginBottom: 8 }}
-    >
+    <form onSubmit={handleSubmit} style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginBottom: 8 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <LabeledInput label="Titre de l'ouvrage">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+        <SectionTitle>Ouvrage</SectionTitle>
+        <LabeledInput label="Titre de l'ouvrage *"><input value={title} onChange={(e) => setTitle(e.target.value)} required /></LabeledInput>
+        <LabeledInput label="Langue *"><input value={language} onChange={(e) => setLanguage(e.target.value)} required /></LabeledInput>
+        <LabeledInput label="Domaine *">
+          <select value={genreId} onChange={(e) => setGenreId(e.target.value)} required>{genres.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}</select>
         </LabeledInput>
-        <LabeledInput label="Langue">
-          <input value={language} onChange={(e) => setLanguage(e.target.value)} required />
+        <LabeledInput label="Responsable du dossier *">
+          <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} required>{users.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}</select>
         </LabeledInput>
-        <LabeledInput label="Domaine">
-          <select value={genreId} onChange={(e) => setGenreId(e.target.value)} required>
-            {genres.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.label}
-              </option>
-            ))}
+
+        <SectionTitle>Auteur — état civil</SectionTitle>
+        <LabeledInput label="Prénom *"><input value={a.first_name} onChange={(e) => set("first_name", e.target.value)} required /></LabeledInput>
+        <LabeledInput label="Nom *"><input value={a.last_name} onChange={(e) => set("last_name", e.target.value)} required /></LabeledInput>
+        <LabeledInput label="Pseudonyme (nom de plume)"><input value={a.pen_name} onChange={(e) => set("pen_name", e.target.value)} /></LabeledInput>
+        <LabeledInput label="Nationalité"><input value={a.nationality} onChange={(e) => set("nationality", e.target.value)} /></LabeledInput>
+        <LabeledInput label="Date de naissance"><input type="date" value={a.birth_date} onChange={(e) => set("birth_date", e.target.value)} /></LabeledInput>
+        <LabeledInput label="Lieu de naissance"><input value={a.birth_place} onChange={(e) => set("birth_place", e.target.value)} /></LabeledInput>
+        <LabeledInput label="Travail / emploi"><input value={a.profession} onChange={(e) => set("profession", e.target.value)} placeholder="Profession" /></LabeledInput>
+
+        <SectionTitle>Auteur — pièce d'identité</SectionTitle>
+        <LabeledInput label="Type de pièce d'identité">
+          <select value={a.id_type} onChange={(e) => set("id_type", e.target.value)}>
+            <option value="">—</option>
+            <option value="CNI">Carte nationale d'identité (CNI)</option>
+            <option value="Passeport">Passeport</option>
+            <option value="Carte de séjour">Carte de séjour</option>
+            <option value="Permis de conduire">Permis de conduire</option>
+            <option value="Récépissé">Récépissé</option>
+            <option value="Autre">Autre</option>
           </select>
         </LabeledInput>
-        <LabeledInput label="Responsable du dossier">
-          <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} required>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.username}
-              </option>
-            ))}
-          </select>
-        </LabeledInput>
-        <LabeledInput label="Prénom de l'auteur">
-          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-        </LabeledInput>
-        <LabeledInput label="Nom de l'auteur">
-          <input value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-        </LabeledInput>
+        <LabeledInput label="Numéro de la pièce"><input value={a.id_number} onChange={(e) => set("id_number", e.target.value)} /></LabeledInput>
+        <LabeledInput label="Délivrée le"><input type="date" value={a.id_issued_date} onChange={(e) => set("id_issued_date", e.target.value)} /></LabeledInput>
+        <LabeledInput label="Délivrée à"><input value={a.id_issued_place} onChange={(e) => set("id_issued_place", e.target.value)} /></LabeledInput>
+        <LabeledInput label="NIU (identifiant fiscal, si disponible)"><input value={a.niu} onChange={(e) => set("niu", e.target.value)} /></LabeledInput>
+
+        <SectionTitle>Auteur — coordonnées & résidence</SectionTitle>
+        <LabeledInput label="Pays"><input value={a.country} onChange={(e) => set("country", e.target.value)} /></LabeledInput>
+        <LabeledInput label="Ville"><input value={a.city} onChange={(e) => set("city", e.target.value)} /></LabeledInput>
+        <LabeledInput label="Quartier"><input value={a.quartier} onChange={(e) => set("quartier", e.target.value)} /></LabeledInput>
+        <LabeledInput label="Résidence / adresse"><input value={a.address} onChange={(e) => set("address", e.target.value)} /></LabeledInput>
+        <LabeledInput label="Boîte postale (BP)"><input value={a.postal_box} onChange={(e) => set("postal_box", e.target.value)} /></LabeledInput>
+        <LabeledInput label="E-mail"><input type="email" value={a.email} onChange={(e) => set("email", e.target.value)} /></LabeledInput>
+        <LabeledInput label="Téléphone"><input value={a.phone} onChange={(e) => set("phone", e.target.value)} /></LabeledInput>
+        <LabeledInput label="WhatsApp"><input value={a.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} placeholder="+237 6 XX XX XX XX" /></LabeledInput>
+        <LabeledInput label="Autre moyen de contact"><input value={a.other_contact} onChange={(e) => set("other_contact", e.target.value)} placeholder="Réseau, personne à contacter…" /></LabeledInput>
+
+        <SectionTitle>Traitement éditorial</SectionTitle>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>Frais de dépôt pour évaluation du manuscrit</div>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}><input type="radio" name="evalfee" checked={evalFee === "a_payer"} onChange={() => setEvalFee("a_payer")} style={{ width: "auto" }} /> À payer par l'auteur</label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}><input type="radio" name="evalfee" checked={evalFee === "sans_frais"} onChange={() => setEvalFee("sans_frais")} style={{ width: "auto" }} /> Sans frais</label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}><input type="radio" name="evalfee" checked={evalFee === "non_defini"} onChange={() => setEvalFee("non_defini")} style={{ width: "auto" }} /> À décider plus tard</label>
+          </div>
+          {evalFee === "a_payer" && <div style={{ fontSize: 11.5, color: "var(--eclosion-dark, #8A6A12)", marginTop: 6 }}>→ Une demande de facture de frais de dépôt sera transmise automatiquement à la Finance à l'enregistrement.</div>}
+        </div>
+        <LabeledInput label="Délai de réponse à l'auteur (jours)"><input type="number" min={0} value={responseDelay} onChange={(e) => setResponseDelay(e.target.value)} placeholder="Ex. 60" /></LabeledInput>
       </div>
 
-      {/* Renseignements d'identité repris en tête du contrat d'édition —
-          facultatifs à l'enregistrement, complétables ensuite sur le contrat. */}
-      <button
-        type="button"
-        onClick={() => setShowAuthorId((v) => !v)}
-        style={{ marginTop: 12, background: "none", border: "none", color: "var(--eclosion-dark, #8A6A12)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}
-      >
-        {showAuthorId ? "▾" : "▸"} Renseignements de l'auteur pour le contrat (facultatif)
-      </button>
-      {showAuthorId && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 10, border: "1px solid var(--line)", borderRadius: 8, padding: 12 }}>
-          <LabeledInput label="E-mail"><input type="email" value={authorId.email} onChange={(e) => setAuthorId({ ...authorId, email: e.target.value })} /></LabeledInput>
-          <LabeledInput label="Téléphone"><input value={authorId.phone} onChange={(e) => setAuthorId({ ...authorId, phone: e.target.value })} /></LabeledInput>
-          <LabeledInput label="Adresse / BP"><input value={authorId.address} onChange={(e) => setAuthorId({ ...authorId, address: e.target.value })} /></LabeledInput>
-          <LabeledInput label="Nationalité"><input value={authorId.nationality} onChange={(e) => setAuthorId({ ...authorId, nationality: e.target.value })} /></LabeledInput>
-          <LabeledInput label="Date de naissance"><input type="date" value={authorId.birth_date} onChange={(e) => setAuthorId({ ...authorId, birth_date: e.target.value })} /></LabeledInput>
-          <LabeledInput label="Lieu de naissance"><input value={authorId.birth_place} onChange={(e) => setAuthorId({ ...authorId, birth_place: e.target.value })} /></LabeledInput>
-          <LabeledInput label="Profession"><input value={authorId.profession} onChange={(e) => setAuthorId({ ...authorId, profession: e.target.value })} /></LabeledInput>
-          <LabeledInput label="N° pièce d'identité (CNI)"><input value={authorId.id_number} onChange={(e) => setAuthorId({ ...authorId, id_number: e.target.value })} /></LabeledInput>
-          <LabeledInput label="CNI délivrée le"><input type="date" value={authorId.id_issued_date} onChange={(e) => setAuthorId({ ...authorId, id_issued_date: e.target.value })} /></LabeledInput>
-          <LabeledInput label="CNI délivrée à"><input value={authorId.id_issued_place} onChange={(e) => setAuthorId({ ...authorId, id_issued_place: e.target.value })} /></LabeledInput>
-        </div>
-      )}
-
       <div style={{ marginTop: 14 }}>
-        <Button variant="add" type="submit" disabled={submitting}>
-          Enregistrer le dossier
-        </Button>
+        <Button variant="add" type="submit" disabled={submitting}>{submitting ? "Enregistrement…" : "Enregistrer le dossier"}</Button>
+        <span style={{ fontSize: 11.5, color: "var(--muted)", marginLeft: 10 }}>Les champs marqués * sont obligatoires ; les autres renseignements sont vivement recommandés.</span>
       </div>
       <style>{`
         label input, label select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }

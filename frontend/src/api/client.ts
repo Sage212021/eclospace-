@@ -359,14 +359,22 @@ export interface NewAuthorInput {
   pen_name?: string;
   email?: string;
   phone?: string;
+  whatsapp?: string;
   address?: string;
   birth_date?: string;
   birth_place?: string;
   nationality?: string;
   profession?: string;
+  id_type?: string;
   id_number?: string;
   id_issued_date?: string;
   id_issued_place?: string;
+  country?: string;
+  city?: string;
+  quartier?: string;
+  postal_box?: string;
+  other_contact?: string;
+  niu?: string;
 }
 
 export function createManuscript(input: {
@@ -374,6 +382,8 @@ export function createManuscript(input: {
   genre_id: string;
   language: string;
   owner_id: string;
+  evaluation_fee_choice?: "non_defini" | "a_payer" | "sans_frais";
+  author_response_delay_days?: number;
   author: NewAuthorInput;
 }) {
   return request<Manuscript>("/api/v1/manuscripts", { method: "POST", body: JSON.stringify(input) });

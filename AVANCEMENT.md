@@ -13,6 +13,20 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Fiche d'enregistrement du manuscrit enrichie (grande maison d'édition)
+
+**Fait (1/4 de la demande opérateur) :** refonte du formulaire « Déposer un manuscrit » en fiche professionnelle par sections :
+- **Ouvrage** : titre, langue, domaine, responsable.
+- **Auteur — état civil** : prénom, nom, pseudonyme, nationalité, date & lieu de naissance, travail/emploi.
+- **Auteur — pièce d'identité** : type de pièce (CNI, passeport, carte de séjour, permis, récépissé, autre), numéro, délivrée le/à, NIU.
+- **Auteur — coordonnées & résidence** : pays, ville, quartier, résidence/adresse, boîte postale, e-mail, téléphone, WhatsApp, autre moyen de contact.
+- **Traitement éditorial** : **frais de dépôt pour évaluation** (options à cocher : à payer / sans frais / à décider), **délai de réponse à l'auteur** (jours).
+- **Frais de dépôt à l'enregistrement** : si l'éditorial coche « à payer », une **demande de facture de frais de dépôt est initiée automatiquement** vers la Finance, **tracée** (on sait qui l'a initiée = requestedBy).
+- Modèle : champs additifs sur `Partner` (id_type, country, city, quartier, postal_box, other_contact, niu) et `Manuscript` (evaluation_fee_choice, author_response_delay_days), migration `20260807110000_registration_enrichment`.
+- **Tests** : `registration-enrichment.test.ts` (3 cas) — identité complète + délai enregistrés ; demande frais de dépôt auto si « à payer » (avec initiateur) ; aucune si « sans frais ». Verts. Typecheck back+front + build OK.
+
+**Reste de la demande (à suivre) :** traçabilité/initiateurs des devis (finance/commercial/éditorial/DG) ; blocage d'étape si renseignements manquants (message clair) ; notifications inter-pôles avec **son + alerte visible**.
+
 ### 07/08/2026 (suite) — Circuit devis → Éditorial → client → facture (Finance ↔ Éditorial)
 
 **Fait (3ᵉ demande, après arbitrage opérateur) :** le devis reste **distinct** de la facture, et la facture n'est possible qu'après le retour de validation via l'Éditorial. Circuit professionnel :

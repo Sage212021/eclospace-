@@ -844,3 +844,12 @@ Le backend gérait déjà les campagnes d'inventaire (comptage à l'aveugle, éc
 - **Test** : `lot4-stock.test.ts` — campagne, comptage avec écart, recomptage, refus de clôture, régularisation (stock ajusté), clôture.
 
 Note : le rapport mentionne des exemplaires « touchés » (abîmés). L'état `declasse` existe déjà sur `StockItem` ; un comptage distinguant vendable/abîmé pourra être ajouté ultérieurement (schéma inventaire à étendre).
+
+## 07/08/2026 (suite) — Inventaire : comptage des exemplaires abîmés (« touchés »)
+
+Le rapport d'inventaire distingue des exemplaires « touchés » (abîmés) parmi les comptés (ex. « 15 dont 08 touchés »). Ajout d'un comptage « dont abîmés » par ligne d'inventaire, reclassé du stock **vendable** vers **déclassé** à la régularisation.
+
+- **Schéma** : `InventoryLine.countedDamaged Int?` (migration `inventory_line_damaged`).
+- **Backend** (`routes/stock.ts`) : `PATCH /inventory-lines/:id` accepte `counted_damaged` (≤ `counted_qty`, sinon 400). La **régularisation** crée, en plus de l'ajustement d'écart, un mouvement de **déclassement** (vendable −abîmés / déclassé +abîmés). La **clôture** est refusée tant que des abîmés ne sont pas déclassés. Liste : `damaged_lines` + `pending_adjust` intègrent les abîmés.
+- **Frontend** : colonne « dont abîmés » dans la grille de comptage ; indicateur ⚠ dans l'avancement ; bouton « Régulariser » actif dès qu'il y a un écart OU des abîmés.
+- **Test** : refus abîmés>comptés, comptage 50 dont 8 abîmés (écart 0), clôture bloquée, régularisation → vendable 42 / déclassé 8, clôture OK.

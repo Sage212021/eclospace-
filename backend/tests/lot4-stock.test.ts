@@ -468,4 +468,36 @@ describe("Stock et magasin (Lot 4)", () => {
     expect(close.statusCode).toBe(200);
     expect(close.json().status).toBe("closed");
   });
+
+  it("inventaire : exemplaires abîmés déclassés à la régularisation", async () => {
+    const loc = (await app.inject({ method: "POST", url: "/api/v1/stock-locations", headers: { cookie: adminCookie }, payload: { type: "emplacement", label: "Étagères — abîmés" } })).json();
+    const { isbnId } = await createIsbnForNewManuscript("Manuscrit Abîmés");
+    await app.inject({ method: "POST", url: "/api/v1/stock-movements", headers: { cookie: adminCookie }, payload: { type: "production_in", isbn_id: isbnId, to_location_id: loc.id, quantity: 50, reason: "Réception" } });
+    const inv = (await app.inject({ method: "POST", url: "/api/v1/inventories", headers: { cookie: adminCookie }, payload: { type: "full", location_id: loc.id, blind: false } })).json();
+    const lineId = inv.lines[0].id;
+
+    // Refus si abîmés > comptés.
+    const bad = await app.inject({ method: "PATCH", url: `/api/v1/inventory-lines/${lineId}`, headers: { cookie: adminCookie }, payload: { counted_qty: 50, counted_damaged: 60 } });
+    expect(bad.statusCode).toBe(400);
+
+    // Comptage sans écart mais 8 abîmés.
+    const c = (await app.inject({ method: "PATCH", url: `/api/v1/inventory-lines/${lineId}`, headers: { cookie: adminCookie }, payload: { counted_qty: 50, counted_damaged: 8 } })).json();
+    expect(c.variance).toBe(0);
+    expect(c.countedDamaged).toBe(8);
+
+    // Clôture bloquée tant que les abîmés ne sont pas déclassés.
+    const early = await app.inject({ method: "PATCH", url: `/api/v1/inventories/${inv.id}/close`, headers: { cookie: adminCookie } });
+    expect(early.statusCode).toBe(409);
+
+    // Régularisation : 8 exemplaires passent de vendable à déclassé.
+    const adj = await app.inject({ method: "POST", url: `/api/v1/inventory-lines/${lineId}/adjust`, headers: { cookie: adminCookie } });
+    expect(adj.statusCode).toBe(200);
+    const vendable = await prisma.stockItem.findFirstOrThrow({ where: { isbnId, locationId: loc.id, condition: "vendable" } });
+    const declasse = await prisma.stockItem.findFirstOrThrow({ where: { isbnId, locationId: loc.id, condition: "declasse" } });
+    expect(vendable.quantityPhysical).toBe(42);
+    expect(declasse.quantityPhysical).toBe(8);
+
+    const close = await app.inject({ method: "PATCH", url: `/api/v1/inventories/${inv.id}/close`, headers: { cookie: adminCookie } });
+    expect(close.statusCode).toBe(200);
+  });
 });

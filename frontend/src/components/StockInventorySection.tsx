@@ -42,8 +42,9 @@ export function StockInventorySection({
   const [message, setMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<{ location_id: string; type: InventoryType; blind: boolean }>({ location_id: "", type: "full", blind: true });
-  // Saisie locale des quantités comptées (par ligne).
+  // Saisie locale des quantités comptées + exemplaires abîmés (par ligne).
   const [counts, setCounts] = useState<Record<string, string>>({});
+  const [damaged, setDamaged] = useState<Record<string, string>>({});
 
   async function loadList() {
     try {
@@ -63,8 +64,13 @@ export function StockInventorySection({
       const inv = await getInventory(id);
       setCurrent(inv);
       const c: Record<string, string> = {};
-      for (const l of inv.lines) c[l.id] = l.countedQty != null ? String(l.countedQty) : "";
+      const dmg: Record<string, string> = {};
+      for (const l of inv.lines) {
+        c[l.id] = l.countedQty != null ? String(l.countedQty) : "";
+        dmg[l.id] = l.countedDamaged != null ? String(l.countedDamaged) : "";
+      }
       setCounts(c);
+      setDamaged(dmg);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ouverture impossible.");
@@ -96,8 +102,9 @@ export function StockInventorySection({
     if (!current) return;
     const raw = counts[lineId];
     if (raw === "" || raw == null) return;
+    const dmg = Math.max(Number(damaged[lineId]) || 0, 0);
     try {
-      await countInventoryLine(lineId, Math.max(Number(raw) || 0, 0));
+      await countInventoryLine(lineId, Math.max(Number(raw) || 0, 0), dmg);
       await openInventory(current.id);
       await loadList();
       setError(null);
@@ -202,6 +209,7 @@ export function StockInventorySection({
                     </td>
                     <td style={{ padding: "5px 8px", fontFamily: "var(--font-mono)" }}>
                       {inv.variance_lines > 0 ? <span style={{ color: "var(--alert, #C4661F)" }}>{inv.variance_lines}</span> : "0"}
+                      {inv.damaged_lines > 0 && <span title="Lignes avec exemplaires abîmés" style={{ color: "var(--alert, #C4661F)", marginLeft: 6 }}>⚠{inv.damaged_lines}</span>}
                       {inv.recount_lines > 0 && <span style={{ color: "var(--danger, #C24B3A)", marginLeft: 6 }}>↻{inv.recount_lines}</span>}
                     </td>
                     <td style={{ padding: "5px 8px" }}>{inv.status === "closed" ? <span style={{ color: "var(--muted)" }}>Clôturé</span> : <span style={{ color: "var(--eclosion-dark, #8A6A12)", fontWeight: 600 }}>Ouvert</span>}</td>
@@ -235,6 +243,7 @@ export function StockInventorySection({
                   <th style={{ padding: "5px 8px" }}>ISBN</th>
                   <th style={{ padding: "5px 8px", textAlign: "right" }}>Théorique</th>
                   <th style={{ padding: "5px 8px", textAlign: "right" }}>Compté</th>
+                  <th style={{ padding: "5px 8px", textAlign: "right" }} title="Parmi les comptés, exemplaires abîmés (déclassés à la régularisation)">dont abîmés</th>
                   <th style={{ padding: "5px 8px", textAlign: "right" }}>Écart</th>
                   <th style={{ padding: "5px 8px" }}></th>
                 </tr>
@@ -257,12 +266,25 @@ export function StockInventorySection({
                         />
                       )}
                     </td>
+                    <td style={{ padding: "4px 8px", textAlign: "right" }}>
+                      {closed ? (l.countedDamaged ?? "—") : (
+                        <input
+                          type="number"
+                          min={0}
+                          value={damaged[l.id] ?? ""}
+                          onChange={(e) => setDamaged((d) => ({ ...d, [l.id]: e.target.value }))}
+                          onBlur={() => saveCount(l.id)}
+                          disabled={!counts[l.id]}
+                          style={{ width: 64, padding: "3px 6px", textAlign: "right", fontFamily: "var(--font-mono)", border: "1px solid var(--line)", borderRadius: 5, color: "var(--alert, #C4661F)" }}
+                        />
+                      )}
+                    </td>
                     <td style={{ padding: "4px 8px", textAlign: "right", color: l.variance ? "var(--alert, #C4661F)" : undefined }}>
                       {l.variance != null ? (l.variance > 0 ? `+${l.variance}` : l.variance) : "—"}
                       {l.recountRequired && <span title="À recompter" style={{ color: "var(--danger, #C24B3A)", marginLeft: 4 }}>↻</span>}
                     </td>
                     <td style={{ padding: "4px 8px" }}>
-                      {!closed && l.variance != null && l.variance !== 0 && !l.adjustmentMovementId && !l.recountRequired && canValidate && (
+                      {!closed && !l.adjustmentMovementId && !l.recountRequired && canValidate && ((l.variance != null && l.variance !== 0) || (l.countedDamaged ?? 0) > 0) && (
                         <Button variant="edit" size="sm" type="button" onClick={() => adjust(l.id)}>Régulariser</Button>
                       )}
                       {l.adjustmentMovementId && <span style={{ color: "var(--eclosion-dark, #8A6A12)", fontSize: 11.5 }}>✓ régularisé</span>}
@@ -274,7 +296,7 @@ export function StockInventorySection({
           </div>
           {!closed && (
             <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>
-              Saisissez la quantité comptée (enregistrée en quittant la case). En cas d'écart, un second comptage (↻) est demandé, puis la Direction régularise. La clôture exige que tous les écarts soient recomptés et régularisés.
+              Saisissez la quantité comptée et, le cas échéant, le nombre d'exemplaires « abîmés » (déclassés à la régularisation). En cas d'écart, un second comptage (↻) est demandé, puis la Direction régularise. La clôture exige que tous les écarts et exemplaires abîmés soient régularisés.
             </p>
           )}
         </div>

@@ -2854,6 +2854,9 @@ model InventoryLine {
   isbn                 Isbn           @relation(fields: [isbnId], references: [id])
   theoreticalQty       Int            @map("theoretical_qty")
   countedQty           Int?           @map("counted_qty")
+  // Parmi les exemplaires comptés, ceux « touchés » / abîmés (rapport d'inventaire
+  // opérateur). Reclassés en stock déclassé lors de la régularisation.
+  countedDamaged       Int?           @map("counted_damaged")
   variance             Int?
   recountRequired      Boolean        @default(false) @map("recount_required")
   adjustmentMovementId String?        @unique @map("adjustment_movement_id")

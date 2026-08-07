@@ -56,7 +56,7 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
       method: "POST",
       url: "/api/v1/manuscripts",
       headers: { cookie: adminCookie },
-      payload: { title, genre_id: genreId, language: "fr", owner_id: adminId, author: { first_name: "Auteur", last_name: title } },
+      payload: { title, genre_id: genreId, language: "fr", owner_id: adminId, evaluation_fee_choice: "sans_frais", author: { first_name: "Auteur", last_name: title, email: "auteur@example.com", id_type: "CNI", id_number: "100200300" } },
     });
     const manuscript = createResponse.json();
 

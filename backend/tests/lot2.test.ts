@@ -44,7 +44,8 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
         genre_id: genreId,
         language: "fr",
         owner_id: adminId,
-        author: { first_name: "Auteur", last_name: title },
+        evaluation_fee_choice: "sans_frais",
+        author: { first_name: "Auteur", last_name: title, email: "auteur@example.com", id_type: "CNI", id_number: "100200300" },
       },
     });
     const manuscript = createResponse.json();
@@ -218,7 +219,8 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
         genre_id: genreId,
         language: "fr",
         owner_id: adminId,
-        author: { first_name: "Sans", last_name: "Contrat" },
+        evaluation_fee_choice: "sans_frais",
+        author: { first_name: "Sans", last_name: "Contrat", email: "auteur@example.com", id_type: "CNI", id_number: "100200300" },
       },
     });
     const manuscript = createResponse.json();

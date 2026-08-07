@@ -104,6 +104,25 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       const { observations, outcome, override_justification, requires_rewrite } = parsed.data;
       const now = new Date();
 
+      // Vérification administrative : la fiche de l'auteur doit être suffisamment
+      // renseignée avant de transmettre au comité de lecture. Si des éléments
+      // manquent, on refuse (409) en disant précisément lesquels — l'étape
+      // suivante reste inaccessible tant que le dossier n'est pas complété.
+      if (targetStatus.code === "VERIF_ADMIN") {
+        const contributor = await prisma.workContributor.findFirst({ where: { manuscriptId: id, role: "author" }, include: { partner: true } });
+        const p = contributor?.partner;
+        const missing: string[] = [];
+        if (!p || !(p.email || p.phone || p.whatsapp)) missing.push("un moyen de contact de l'auteur (e-mail, téléphone ou WhatsApp)");
+        if (!p?.idType || !p?.idNumber) missing.push("la pièce d'identité de l'auteur (type et numéro)");
+        if (manuscript.evaluationFeeChoice === "non_defini") missing.push("le choix des frais de dépôt pour évaluation (à payer / sans frais)");
+        if (missing.length > 0) {
+          return reply.code(409).send({
+            code: "dossier_incomplete",
+            message: `Vérification administrative incomplète — complétez la fiche de l'auteur avant de passer au comité de lecture. Il manque : ${missing.join(" ; ")}.`,
+          });
+        }
+      }
+
       // Ch. 9 §9.12 : un ouvrage ne passe en production (planification) que
       // si son contrat d'édition est actif, sauf dérogation motivée de la
       // Direction générale.

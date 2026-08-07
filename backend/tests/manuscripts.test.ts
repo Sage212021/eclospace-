@@ -41,7 +41,8 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
         genre_id: genreId,
         language: "fr",
         owner_id: adminId,
-        author: { first_name: "Auteur", last_name: "Test" },
+        evaluation_fee_choice: "sans_frais",
+        author: { first_name: "Auteur", last_name: "Test", email: "auteur@example.com", id_type: "CNI", id_number: "100200300" },
       },
     });
     expect(response.statusCode).toBe(201);

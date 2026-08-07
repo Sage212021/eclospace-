@@ -133,6 +133,8 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       department: l.department,
       position: l.position,
       hire_date: l.hire_date,
+      birth_date: l.birth_date,
+      contract_type: l.contract_type,
       category: l.category,
       payment_mode: l.payment_mode,
       account_number: l.account_number,

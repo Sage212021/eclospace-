@@ -163,6 +163,13 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
     y += 6;
   }
 
+  // ---- Informations complémentaires & congés ------------------------------
+  const CONTRACT_LABEL: Record<string, string> = { cdi: "CDI", cdd: "CDD", stage: "Stage", prestation: "Prestation" };
+  y += 1;
+  sectionBar("Informations complémentaires & congés");
+  infoRow("Type de contrat", d.contract_type ? CONTRACT_LABEL[d.contract_type] ?? d.contract_type : "—", "Date de naissance", d.birth_date ?? "—");
+  infoRow("Date d'entrée", d.hire_date ?? "—", "Solde de congés (jours)", d.leave_balance != null ? String(d.leave_balance) : "—");
+
   // ---- Pied ----------------------------------------------------------------
   doc.setFontSize(7.5);
   doc.setTextColor(...MUTED);

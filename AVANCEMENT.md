@@ -13,6 +13,15 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Contrats : accès pôle Juridique + pièce signée rattachée par n° de contrat
+
+**Fait (2 des 3 demandes ; le circuit devis→facture est présenté à l'opérateur avant construction) :**
+- **« Contrats & droits d'auteur » de nouveau accessible au pôle Juridique** : la rubrique apparaît désormais **à la fois** dans « Juridique & Finance » (comme auparavant) **et** dans « Éditorial ». Même clé interne (`jf-contrats`), même page, mêmes droits (`manuscripts:consultation`) — c'est la même rubrique affichée à deux endroits.
+- **Joindre un contrat signé en nommant le n° de contrat** : sur la rubrique Contrats, nouveau bouton « 📎 Joindre un contrat signé (par n° de contrat) ». L'utilisateur **saisit le numéro auto-généré** (ex. `CT-2026-0003`) puis choisit le fichier scanné : le système **rattache la pièce au contrat portant ce numéro** (message de confirmation nommant le contrat et l'auteur ; erreur explicite si le numéro ne correspond à aucun contrat de l'ouvrage). Sécurité contre les pièces mal rattachées. Réutilise le téléversement de pièces existant (kind « contrat signé (scan) »), sans changement serveur.
+- Typecheck + build OK.
+
+**En attente d'arbitrage (3ᵉ demande) :** circuit professionnel **devis → validation → facture** entre Finance et Éditorial (le financier établit le devis, l'éditorial le transmet au client et confirme la validation, puis le financier établit la facture) — proposition soumise à l'opérateur avant codage.
+
 ### 07/08/2026 (suite) — Sécurité des suppressions + libellé + téléchargement des fichiers d'étape
 
 **Fait (3 demandes opérateur, captures à l'appui) :**

@@ -133,6 +133,12 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
 
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
 
+      {/* Joindre un contrat signé en indiquant explicitement le n° de contrat :
+          le fichier est attribué au contrat portant ce numéro (sécurité). */}
+      {canCreate && contracts.length > 0 && (
+        <SignedScanByNumber contracts={contracts} onDone={refresh} onError={setError} />
+      )}
+
       {showForm && (
         <NewContractForm
           manuscriptId={manuscriptId}
@@ -262,6 +268,64 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
           onError={setError}
         />
       )}
+    </div>
+  );
+}
+
+// Joindre un contrat signé (scan) en NOMMANT le numéro de contrat auto-généré :
+// l'utilisateur saisit le n° (CT-…) pour attribuer explicitement le fichier au
+// bon contrat. Sécurité contre les pièces jointes mal rattachées.
+function SignedScanByNumber({ contracts, onDone, onError }: { contracts: Contract[]; onDone: () => void; onError: (m: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [number, setNumber] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function upload(file: File) {
+    setMessage(null);
+    const wanted = number.trim().toUpperCase();
+    if (!wanted) { onError("Indiquez le numéro du contrat (ex. CT-2026-0003) avant de joindre le fichier."); return; }
+    const match = contracts.find((c) => c.contractNumber.toUpperCase() === wanted);
+    if (!match) {
+      onError(`Aucun contrat « ${wanted} » sur cet ouvrage. Vérifiez le numéro (il est affiché sur chaque contrat ci-dessous).`);
+      return;
+    }
+    setBusy(true);
+    try {
+      await uploadContractDocument(match.id, { label: "Contrat signé (scan)", kind: "signed_scan", file });
+      setMessage(`Contrat signé joint au contrat ${match.contractNumber} (${match.partner.firstName} ${match.partner.lastName}).`);
+      setNumber("");
+      if (fileRef.current) fileRef.current.value = "";
+      onDone();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Téléversement impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div style={{ marginBottom: 10 }}>
+        <button onClick={() => setOpen(true)} style={secondaryButtonStyle}>📎 Joindre un contrat signé (par n° de contrat)</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ border: "1px dashed var(--line)", borderRadius: 8, padding: 12, marginBottom: 12, background: "var(--bg, #F8F9FB)" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Joindre un contrat signé par l'auteur</div>
+      <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>Indiquez le numéro du contrat auto-généré (affiché sur chaque contrat, ex. <span style={{ fontFamily: "var(--font-mono)" }}>CT-2026-0003</span>) : le fichier scanné sera rattaché à ce contrat.</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="N° de contrat (CT-…)" style={{ ...inputStyle, width: 190, fontFamily: "var(--font-mono)" }} />
+        <label style={{ ...secondaryButtonStyle, cursor: busy ? "default" : "pointer" }}>
+          {busy ? "Envoi…" : "Choisir le fichier signé (PDF/images)"}
+          <input ref={fileRef} type="file" accept="application/pdf,image/*" style={{ display: "none" }} disabled={busy || !number.trim()} onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); }} />
+        </label>
+        <button onClick={() => { setOpen(false); setMessage(null); }} style={{ ...linkButtonStyle }}>Fermer</button>
+      </div>
+      {message && <div style={{ marginTop: 8, fontSize: 12, color: "var(--eclosion)", background: "var(--eclosion-soft)", borderRadius: 6, padding: "6px 10px" }}>{message}</div>}
     </div>
   );
 }

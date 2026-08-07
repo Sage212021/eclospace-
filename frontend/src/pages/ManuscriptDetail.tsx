@@ -49,6 +49,7 @@ import { FundingCheckpoint } from "../components/FundingCheckpoint";
 import { FinanceRequestCard } from "../components/FinanceRequestCard";
 import { EditorialQuotesInbox } from "../components/EditorialQuotesInbox";
 import { SitePublicationSection } from "../components/SitePublicationSection";
+import { ManuscriptStockSection } from "../components/ManuscriptStockSection";
 
 interface ManuscriptDetailProps {
   manuscriptId: string;
@@ -234,6 +235,10 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         Auteur : {manuscript.workContributors.map((c) => `${c.partner.firstName} ${c.partner.lastName}`).join(", ")} · Genre :{" "}
         {manuscript.genre?.label ?? "—"} · Responsable : {manuscript.owner.username}
       </p>
+
+      {permissions.has("stock:consultation") && show("stock") && (
+        <ManuscriptStockSection manuscriptId={manuscript.id} canManage={permissions.has("stock:saisie")} />
+      )}
 
       <SourceFileBlock
         manuscriptId={manuscript.id}

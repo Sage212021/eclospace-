@@ -39,7 +39,7 @@ const STATUS_LABELS: Record<string, string> = {
   transmis: "Transmise à la paie",
 };
 
-export function PayrollConsolidationSection({ canAdminister }: { canAdminister: boolean }) {
+export function PayrollConsolidationSection({ canAdminister, collapsible, defaultOpen }: { canAdminister: boolean; collapsible?: boolean; defaultOpen?: boolean }) {
   const { t } = useI18n();
   const [rubrics, setRubrics] = useState<PayrollRubric[]>([]);
   const [mode, setMode] = useState("manuel");
@@ -108,6 +108,8 @@ export function PayrollConsolidationSection({ canAdminister }: { canAdminister: 
       title={t("pay.consolidation", "Consolidation vers la paie")}
       icon={<IconAdmin />}
       subtitle={t("pay.consolidation_sub", "Le module fournit les données ; il ne modifie jamais un bulletin. La paie reste externe.")}
+      collapsible={collapsible}
+      defaultOpen={defaultOpen}
     >
       {/* Mode + rubriques */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", marginBottom: 12 }}>

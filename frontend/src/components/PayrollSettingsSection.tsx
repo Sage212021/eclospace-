@@ -30,7 +30,7 @@ function toDraft(r: PayrollRateSet): Draft {
   return JSON.parse(JSON.stringify(rest));
 }
 
-export function PayrollSettingsSection({ canManage }: { canManage: boolean }) {
+export function PayrollSettingsSection({ canManage, collapsible, defaultOpen }: { canManage: boolean; collapsible?: boolean; defaultOpen?: boolean }) {
   const { t } = useI18n();
   const [internal, setInternal] = useState<boolean | null>(null);
   const [current, setCurrent] = useState<PayrollRateSet | null>(null);
@@ -90,6 +90,8 @@ export function PayrollSettingsSection({ canManage }: { canManage: boolean }) {
       title={t("pay.settings", "Paramètres de paie (barème légal)")}
       icon={<IconAdmin />}
       subtitle={t("pay.settings_sub", "Barème camerounais paramétrable et versionné. La paie interne est activable/désactivable (D-007).")}
+      collapsible={collapsible}
+      defaultOpen={defaultOpen}
     >
       {/* Interrupteur d'internalisation */}
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid var(--line)" }}>

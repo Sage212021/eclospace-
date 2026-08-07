@@ -13,6 +13,19 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Moteur de paie : bulletin recalculé « en direct » + accordéon + guide RH
+
+**Problème signalé (RH) :** en modifiant un pourcentage, le **net à payer restait figé** ; les rubriques paie n'étaient pas en accordéon et l'ensemble était difficile à prendre en main.
+
+**Fait :**
+- **Net à payer EN DIRECT** : dans « Fiches paie & bulletin », le bulletin (brut → net, cotisations, IRPP…) se **recalcule instantanément** dès qu'un pourcentage ou un montant change. Le moteur de calcul serveur a été porté à l'identique côté navigateur ; le serveur reste la référence à l'enregistrement. Badge « ● Aperçu en direct ».
+- **Mois clairement sélectionnable** (sélecteur de mois) : changer d'employé ou de mois **n'affecte aucun autre bulletin**.
+- **Rubriques en accordéon** : le « Moteur de paie » regroupe ses rubriques (Fiches paie & bulletin · Paramètres/barème · Livre de paie), chacune **repliable d'un clic**, sous une **note d'aide RH** expliquant le mode d'emploi.
+- **Garde-fous** : l'envoi par e-mail n'est actif qu'une fois la **fiche enregistrée** (valeurs officielles figées) ; message si aucun barème n'est en vigueur pour le mois.
+- **Tests** : `payroll-frontend-parity.test.ts` vérifie que le moteur navigateur et le moteur serveur donnent des bulletins **identiques** (6 cas). Moteur serveur : 16 tests verts. Typecheck back+front + build OK.
+
+**À venir (à la demande) :** génération multi-employés d'un même mois ; puis retravail du classeur Excel `.xlsm` (édition d'un mois sans impacter les autres). L'opérateur ajustera ensuite les formules précises.
+
 ### 07/08/2026 (suite) — Rapport de lecture : version finale fusionnée (en-tête + rapport déposé) + transmission
 
 **Fait (demande opérateur) :** le **rapport déposé** par le relecteur est désormais **fusionné en un seul PDF** avec le **rapport officiel à en-tête Éclosion** — c'est cette **version finale** qui peut être transmise au client/auteur.

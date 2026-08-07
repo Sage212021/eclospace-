@@ -172,8 +172,11 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     { preHandler: requirePermission("paie", "consultation") },
     async (request, reply) => {
       const { employeeId } = request.params as { employeeId: string };
-      const period = normalizePeriod((request.query as { period?: string }).period);
-      const resolved = await resolvePayslip(employeeId, period);
+      const q = request.query as { period?: string; retenue_absence?: string };
+      const period = normalizePeriod(q.period);
+      // Retenue d'absence saisie par le RH (0 par défaut) — jamais issue des présences.
+      const manualRetenue = q.retenue_absence != null ? Math.max(Number(q.retenue_absence) || 0, 0) : 0;
+      const resolved = await resolvePayslip(employeeId, period, manualRetenue);
       if ("error" in resolved) return reply.code(resolved.status).send(resolved.error);
       await writeAuditLog({ userId: request.user!.id, action: "view_sensitive", entityType: "payslip", entityId: `${employeeId}:${period}`, ipAddress: request.ip });
       return reply.send({
@@ -181,6 +184,8 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         period,
         rate_set_effective_from: resolved.rateEffectiveFrom,
         payslip: resolved.payslip,
+        // Témoin indicatif du cahier de présence (n'est pas appliqué au net).
+        attendance_witness: resolved.attendanceWitness,
       });
     },
   );
@@ -191,10 +196,11 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     { preHandler: requirePermission("paie", "consultation") },
     async (request, reply) => {
       const { employeeId } = request.params as { employeeId: string };
-      const parsed = z.object({ period: z.string().optional(), message: z.string().max(2000).optional(), to: z.string().email().optional(), preview: z.boolean().optional(), pdf_base64: z.string().optional() }).safeParse(request.body ?? {});
+      const parsed = z.object({ period: z.string().optional(), message: z.string().max(2000).optional(), to: z.string().email().optional(), preview: z.boolean().optional(), pdf_base64: z.string().optional(), retenue_absence: z.number().optional() }).safeParse(request.body ?? {});
       if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
       const period = normalizePeriod(parsed.data.period);
-      const resolved = await resolvePayslip(employeeId, period);
+      // Retenue d'absence saisie par le RH (transmise depuis le bulletin), 0 sinon.
+      const resolved = await resolvePayslip(employeeId, period, Math.max(parsed.data.retenue_absence ?? 0, 0));
       if ("error" in resolved) return reply.code(resolved.status).send(resolved.error);
 
       const built = buildPayslipEmail(
@@ -372,8 +378,12 @@ function normalizePeriod(p?: string): string {
 async function resolvePayslip(
   employeeId: string,
   period: string,
+  // Retenue d'absence SAISIE PAR LE RH lors de l'intégration de la paie.
+  // Le cahier de présence (module Présences) n'est qu'un TÉMOIN indicatif : il
+  // n'alimente jamais automatiquement le calcul (règle métier, 07/08/2026).
+  manualRetenue = 0,
 ): Promise<
-  | { employee: { id: string }; employeeName: string; profile: { matricule: string | null; email: string | null }; rateEffectiveFrom: string; payslip: Payslip }
+  | { employee: { id: string }; employeeName: string; profile: { matricule: string | null; email: string | null }; rateEffectiveFrom: string; payslip: Payslip; attendanceWitness: number }
   | { error: { code: string; message: string }; status: number }
 > {
   const [y, m] = period.split("-").map(Number);
@@ -385,11 +395,12 @@ async function resolvePayslip(
   const rateSet = await prisma.payrollRateSet.findFirst({ where: { active: true, effectiveFrom: { lte: toDate } }, orderBy: { effectiveFrom: "desc" } });
   if (!rateSet) return { error: { code: "no_rate_set", message: "Aucun barème de paie en vigueur pour la période." }, status: 409 };
 
-  let retenueAbsence = 0;
+  // Témoin indicatif du cahier de présence (affiché au RH, JAMAIS appliqué au calcul).
+  let attendanceWitness = 0;
   const consolidation = await prisma.attendancePayrollPeriod.findUnique({ where: { periodKey: period }, select: { id: true } });
   if (consolidation) {
     const line = await prisma.attendancePayrollLine.findUnique({ where: { periodId_employeeId: { periodId: consolidation.id, employeeId } }, select: { deductionProposed: true } });
-    if (line) retenueAbsence = num(line.deductionProposed);
+    if (line) attendanceWitness = num(line.deductionProposed);
   }
 
   const gross = num(profile.grossContractual);
@@ -405,7 +416,7 @@ async function resolvePayslip(
       seniorityRate: profile.seniorityRate != null ? num(profile.seniorityRate) : null,
       seniorityThreshold: profile.seniorityThreshold ?? 0,
       applySeniority: profile.applySeniority,
-      retenueAbsence,
+      retenueAbsence: Math.max(manualRetenue, 0),
       internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
     },
     ratesFrom(rateSet),
@@ -416,6 +427,7 @@ async function resolvePayslip(
     profile: { matricule: profile.matricule, email: profile.email },
     rateEffectiveFrom: rateSet.effectiveFrom.toISOString().slice(0, 10),
     payslip,
+    attendanceWitness,
   };
 }
 
@@ -513,14 +525,9 @@ async function computeRegister(period: string): Promise<
     include: { employee: { select: { id: true, firstName: true, lastName: true } } },
   });
 
-  // Retenues d'absence (module Présences) de la période, chargées en une fois.
-  const consolidation = await prisma.attendancePayrollPeriod.findUnique({ where: { periodKey: period }, select: { id: true } });
-  const retenueByEmp = new Map<string, number>();
-  if (consolidation) {
-    const lines = await prisma.attendancePayrollLine.findMany({ where: { periodId: consolidation.id }, select: { employeeId: true, deductionProposed: true } });
-    for (const l of lines) retenueByEmp.set(l.employeeId, num(l.deductionProposed));
-  }
-
+  // Règle métier (07/08/2026) : les retenues d'absence NE SONT PAS reliées au calcul
+  // de la paie. Le cahier de présence reste un témoin (module Présences) ; toute
+  // retenue est saisie par le RH sur le bulletin. Le livre de paie ne l'applique pas.
   const lines: RegisterLine[] = [];
   const totals = { brut: 0, net: 0, charges_pat: 0 };
   for (const p of profiles) {
@@ -537,7 +544,7 @@ async function computeRegister(period: string): Promise<
         seniorityRate: p.seniorityRate != null ? num(p.seniorityRate) : null,
         seniorityThreshold: p.seniorityThreshold ?? 0,
         applySeniority: p.applySeniority,
-        retenueAbsence: retenueByEmp.get(p.employeeId) ?? 0,
+        retenueAbsence: 0,
         internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
       },
       rates,

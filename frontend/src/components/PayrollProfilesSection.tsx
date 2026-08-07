@@ -76,10 +76,13 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   const [message, setMessage] = useState<string | null>(null);
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [slip, setSlip] = useState<PayslipResult | null>(null);
-  // Barème en vigueur pour la période + retenue d'absence (Présences), servant à
-  // l'aperçu EN DIRECT du bulletin (le net se recalcule dès qu'un champ change).
+  // Barème en vigueur pour la période, servant à l'aperçu EN DIRECT du bulletin.
   const [rateSet, setRateSet] = useState<PayrollRateSet | null>(null);
-  const [retenueAbsence, setRetenueAbsence] = useState(0);
+  // Retenue d'absence SAISIE PAR LE RH (règle métier 07/08/2026 : le cahier de
+  // présence est un simple témoin, jamais relié automatiquement au calcul).
+  const [manualRetenue, setManualRetenue] = useState(0);
+  // Témoin indicatif issu du cahier de présence (affiché, non appliqué).
+  const [attendanceWitness, setAttendanceWitness] = useState(0);
   const [emailOpen, setEmailOpen] = useState(false);
   const [dispatches, setDispatches] = useState<PayslipDispatch[]>([]);
   const loadDispatches = () => getPayslipDispatches(employeeId, period).then(setDispatches).catch(() => setDispatches([]));
@@ -155,30 +158,32 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   // à chaque changement d'employé ou de période : alimente l'aperçu en direct.
   useEffect(() => {
     getPayrollRateSet(`${period}-01`).then(setRateSet).catch(() => setRateSet(null));
+    // La retenue est une saisie RH délibérée : on repart de 0 à chaque employé/mois.
+    setManualRetenue(0);
     if (!employeeId) {
       setSlip(null);
-      setRetenueAbsence(0);
+      setAttendanceWitness(0);
       return;
     }
     getPayslip(employeeId, period)
       .then((r) => {
         setSlip(r);
-        setRetenueAbsence(r.payslip.retenue_absence);
+        setAttendanceWitness(r.attendance_witness);
       })
       .catch(() => {
-        // Attendu tant que la fiche n'est pas enregistrée : aperçu sans retenue.
+        // Attendu tant que la fiche n'est pas enregistrée : aperçu sans témoin.
         setSlip(null);
-        setRetenueAbsence(0);
+        setAttendanceWitness(0);
       });
   }, [employeeId, period]);
 
-  // Bouton « Calculer » : recalcul serveur (référence), journal des envois, erreurs.
+  // Bouton « Actualiser » : rafraîchit le barème et le témoin de présence (serveur).
   async function computeSlip() {
     if (!employeeId) return;
     try {
       const r = await getPayslip(employeeId, period);
       setSlip(r);
-      setRetenueAbsence(r.payslip.retenue_absence);
+      setAttendanceWitness(r.attendance_witness);
       setError(null);
       loadDispatches();
     } catch (err) {
@@ -205,12 +210,12 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
         seniorityRate: form.seniority_rate,
         seniorityThreshold: form.seniority_threshold ?? 0,
         applySeniority: form.apply_seniority,
-        retenueAbsence,
+        retenueAbsence: manualRetenue,
         internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
       },
       ratesFromRateSet(rateSet),
     );
-  }, [form, rateSet, retenueAbsence]);
+  }, [form, rateSet, manualRetenue]);
 
   // Valeurs affichées / imprimées / envoyées : l'aperçu en direct s'il existe,
   // sinon le calcul serveur.
@@ -317,13 +322,28 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
           <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
               <Field label={t("pay.period_field", "Mois du bulletin (AAAA-MM)")}><input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
-              <Button variant="edit" size="sm" type="button" onClick={computeSlip}>{t("pay.compute_slip", "Actualiser (présences + barème)")}</Button>
+              <Field label={t("pay.manual_deduction", "Retenue d'absence (saisie RH)")}>
+                <input type="number" min={0} step={100} value={manualRetenue} onChange={(e) => setManualRetenue(Math.max(Number(e.target.value) || 0, 0))} style={{ fontFamily: "var(--font-mono, monospace)", width: 130 }} />
+              </Field>
+              <Button variant="edit" size="sm" type="button" onClick={computeSlip}>{t("pay.compute_slip", "Actualiser (barème + témoin)")}</Button>
               {liveSlip && (
                 <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", background: "var(--eclosion-soft)", borderRadius: 999, padding: "3px 10px" }}>
                   ● {t("pay.live", "Aperçu en direct")}
                 </span>
               )}
             </div>
+            {/* Témoin indicatif du cahier de présence : jamais appliqué d'office ;
+                le RH décide de le reporter (ou non) dans la retenue ci-dessus. */}
+            <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
+              {t("pay.witness_label", "Témoin cahier de présence")} :{" "}
+              <span style={{ fontFamily: "var(--font-mono)" }}>{fcfa(attendanceWitness)}</span>
+              {attendanceWitness > 0 && (
+                <button type="button" onClick={() => setManualRetenue(attendanceWitness)} style={{ marginLeft: 8, border: "1px solid var(--eclosion)", background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 6, padding: "1px 8px", fontSize: 11.5, cursor: "pointer" }}>
+                  {t("pay.witness_apply", "Reporter dans la retenue")}
+                </button>
+              )}
+              <span style={{ display: "block", marginTop: 2 }}>{t("pay.witness_hint", "Indicatif : non relié au calcul. La retenue appliquée est celle que vous saisissez.")}</span>
+            </p>
             {!rateSet && <p style={{ fontSize: 12, color: "var(--alert, #C4661F)", marginTop: 8 }}>{t("pay.no_scale_period", "Aucun barème en vigueur pour ce mois : renseignez le barème dans « Paramètres de paie ».")}</p>}
             {displaySlip && (
               <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8, fontSize: 13 }}>
@@ -335,7 +355,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
                 <SlipRow label={t("pay.slip.communal_tax", "Taxe communale")} value={displaySlip.taxe_communale} />
                 <SlipRow label={t("pay.slip.rav", "RAV")} value={displaySlip.rav} />
                 <SlipRow label={t("pay.slip.irpp_cac", "IRPP + CAC")} value={displaySlip.irpp_cac} />
-                <SlipRow label={t("pay.slip.absence_deduction", "Retenue absence (Présences)")} value={displaySlip.retenue_absence} />
+                <SlipRow label={t("pay.slip.absence_deduction", "Retenue absence (saisie RH)")} value={displaySlip.retenue_absence} />
                 <SlipRow label={t("pay.slip.total_emp_deductions", "Total retenues salariales")} value={displaySlip.total_retenues_salariales} />
                 <SlipRow label={t("pay.slip.net", "NET À PAYER")} value={displaySlip.net_a_payer} strong tone="gold" />
                 <SlipRow label={t("pay.slip.total_emp_charges", "Total charges patronales")} value={displaySlip.total_charges_patronales} />
@@ -397,7 +417,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
               initialMessage={lang === "en"
                 ? `Hello ${employeeName},\n\nPlease find your payslip for the period ${period}.\n\nKind regards,\nÉditions Éclosion`
                 : `Bonjour ${employeeName},\n\nVeuillez trouver votre bulletin de paie pour la période ${period}.\n\nCordialement,\nÉditions Éclosion`}
-              loadPreview={(message) => previewPayslipEmail(employeeId, period, message)}
+              loadPreview={(message) => previewPayslipEmail(employeeId, period, message, manualRetenue)}
               onSend={async (to, message) => {
                 // Bulletin PDF généré ici (navigateur), joint automatiquement à l'e-mail.
                 const pdf = buildPayslipPdfBase64({
@@ -409,7 +429,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
                   fiscal_parts: form.fiscal_parts,
                   payslip: displaySlip,
                 });
-                const r = await sendPayslipEmail(employeeId, period, message, to, pdf);
+                const r = await sendPayslipEmail(employeeId, period, message, to, pdf, manualRetenue);
                 loadDispatches();
                 return r;
               }}

@@ -3557,15 +3557,17 @@ export interface PayslipResult {
   period: string;
   rate_set_effective_from: string;
   payslip: Payslip;
+  // Témoin indicatif du cahier de présence — n'est PAS appliqué au net.
+  attendance_witness: number;
 }
 export function getPayslip(employeeId: string, period: string) {
   return request<PayslipResult>(`/api/v1/payroll/employees/${employeeId}/payslip?period=${period}`);
 }
-export function previewPayslipEmail(employeeId: string, period: string, message: string) {
-  return request<{ subject: string; html: string; default_to: string | null }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, preview: true }) });
+export function previewPayslipEmail(employeeId: string, period: string, message: string, retenueAbsence = 0) {
+  return request<{ subject: string; html: string; default_to: string | null }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, preview: true, retenue_absence: retenueAbsence }) });
 }
-export function sendPayslipEmail(employeeId: string, period: string, message: string, to: string, pdfBase64?: string) {
-  return request<{ sent: boolean; to: string; dispatch_id?: string; status?: string }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, to, pdf_base64: pdfBase64 }) });
+export function sendPayslipEmail(employeeId: string, period: string, message: string, to: string, pdfBase64?: string, retenueAbsence = 0) {
+  return request<{ sent: boolean; to: string; dispatch_id?: string; status?: string }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, to, pdf_base64: pdfBase64, retenue_absence: retenueAbsence }) });
 }
 export interface PayslipDispatch {
   id: string;

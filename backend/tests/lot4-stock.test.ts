@@ -542,4 +542,18 @@ describe("Stock et magasin (Lot 4)", () => {
     const loc = stock.isbns[0].by_location.find((l: { location_id: string }) => l.location_id === zone.id);
     expect(loc.vendable).toBe(120);
   });
+
+  it("rapprochement titres → ouvrages : apparie malgré accents/casse, signale les non-trouvés", async () => {
+    await createIsbnForNewManuscript("Rhapsodies");
+    const res = await app.inject({
+      method: "POST", url: "/api/v1/stock-initial/match", headers: { cookie: adminCookie },
+      payload: { lines: [{ label: "RHAPSODIES", quantity: 30 }, { label: "Titre totalement inexistant zzz", quantity: 5 }] },
+    });
+    expect(res.statusCode).toBe(200);
+    const results = res.json().results;
+    expect(results[0].isbn_id).not.toBeNull();
+    expect(results[0].matched_title).toBe("Rhapsodies");
+    expect(results[0].score).toBeGreaterThanOrEqual(90);
+    expect(results[1].isbn_id).toBeNull();
+  });
 });

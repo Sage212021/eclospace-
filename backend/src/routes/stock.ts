@@ -7,6 +7,42 @@ import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { adjustStockItem, availableQuantity } from "../lib/stock.js";
 
+// Rapprochement de titres (chargement de l'inventaire) : normalisation tolérante
+// aux accents/casse/ponctuation + score de Dice sur bigrammes de caractères.
+function normalizeTitle(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function bigrams(s: string): Map<string, number> {
+  const m = new Map<string, number>();
+  const t = s.replace(/ /g, "");
+  for (let i = 0; i < t.length - 1; i++) {
+    const bg = t.slice(i, i + 2);
+    m.set(bg, (m.get(bg) ?? 0) + 1);
+  }
+  return m;
+}
+function diceScore(a: string, b: string): number {
+  if (a === b) return 1;
+  if (a.length < 2 || b.length < 2) return 0;
+  const ba = bigrams(a);
+  const bb = bigrams(b);
+  let inter = 0;
+  let total = 0;
+  for (const v of ba.values()) total += v;
+  for (const [k, v] of bb) {
+    total += v;
+    const av = ba.get(k) ?? 0;
+    inter += Math.min(av, v);
+  }
+  return total === 0 ? 0 : (2 * inter) / total;
+}
+
 // Ch. 16 §16.4 : chaque type de mouvement a un effet déterminé sur le
 // physique/réservé aux lieux source/destination. "transfer" est traité à
 // part (statut en_transit jusqu'à confirmation, §16.4).
@@ -210,6 +246,44 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       };
     });
     return reply.send({ has_isbn: isbns.length > 0, isbns: result });
+  });
+
+  // Rapprochement automatique de lignes « titre + quantité » (rapport d'inventaire)
+  // avec les ouvrages existants (ISBN imprimés). Renvoie le meilleur ouvrage
+  // apparié + un score ; les non-trouvés sont signalés pour saisie manuelle.
+  fastify.post("/api/v1/stock-initial/match", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const parsed = z
+      .object({ lines: z.array(z.object({ label: z.string().min(1), quantity: z.number().int().nonnegative() })).max(500) })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+
+    const isbns = await prisma.isbn.findMany({ where: { format: "print" }, select: { id: true, isbn13: true, manuscript: { select: { title: true } } } });
+    const candidates = isbns
+      .filter((i) => i.manuscript?.title)
+      .map((i) => ({ isbn_id: i.id, isbn13: i.isbn13, title: i.manuscript!.title, norm: normalizeTitle(i.manuscript!.title) }));
+
+    const results = parsed.data.lines.map((line) => {
+      const n = normalizeTitle(line.label);
+      let best: (typeof candidates)[number] | null = null;
+      let bestScore = 0;
+      for (const c of candidates) {
+        const s = diceScore(n, c.norm);
+        if (s > bestScore) {
+          bestScore = s;
+          best = c;
+        }
+      }
+      const matched = bestScore >= 0.5 ? best : null;
+      return {
+        label: line.label,
+        quantity: line.quantity,
+        isbn_id: matched?.isbn_id ?? null,
+        isbn13: matched?.isbn13 ?? null,
+        matched_title: matched?.title ?? null,
+        score: Math.round(bestScore * 100),
+      };
+    });
+    return reply.send({ results });
   });
 
   // Ch. 16 §16.4 : aucun mouvement sans type, motif et responsable. Chaque

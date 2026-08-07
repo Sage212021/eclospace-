@@ -1831,6 +1831,19 @@ export function getManuscriptStock(manuscriptId: string) {
   return request<ManuscriptStock>(`/api/v1/manuscripts/${manuscriptId}/stock`);
 }
 
+// Rapprochement automatique « titre + quantité » ↔ ouvrages existants.
+export interface StockMatchResult {
+  label: string;
+  quantity: number;
+  isbn_id: string | null;
+  isbn13: string | null;
+  matched_title: string | null;
+  score: number;
+}
+export function matchStockInitial(lines: { label: string; quantity: number }[]) {
+  return request<{ results: StockMatchResult[] }>("/api/v1/stock-initial/match", { method: "POST", body: JSON.stringify({ lines }) });
+}
+
 // ── Inventaire physique (Ch. 16 §16.8) — campagnes, comptage, écarts ──────────
 export type InventoryType = "full" | "rotating";
 export type InventoryStatus = "open" | "closed";

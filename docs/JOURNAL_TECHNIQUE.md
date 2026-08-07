@@ -869,3 +869,7 @@ Réponse à « intégrer les stocks par manuscrit » : rendre le stock visible e
   - `ManuscriptStockSection` sur la fiche manuscrit : stock par ISBN/zone + saisie du stock initial (zone + quantité).
   - `StockInitialImportSection` sur la page Stock : chargement en lot — zone + quantités par ouvrage (recherche par titre/ISBN) → une régularisation par ligne. Permet d'intégrer les ~30 titres du rapport rapidement.
 - **Test** : `lot4-stock.test.ts` — stock par manuscrit (0 → 120 après saisie initiale, ventilé par zone).
+
+## 07/08/2026 (suite) — Chargement inventaire : rapprochement automatique titres → ouvrages
+
+Pour gagner du temps sur l'intégration du rapport de stock : `POST /api/v1/stock-initial/match` rapproche des lignes « titre + quantité » des ouvrages existants (ISBN imprimés) par normalisation (accents/casse/ponctuation) + score de Dice sur bigrammes (seuil 0,5). Frontend (`StockInitialImportSection`) : zone de collage pré-remplie avec le rapport d'inventaire, bouton « Rapprocher automatiquement » → les quantités se placent sur les ouvrages reconnus (cumul si doublon), les non-trouvés sont listés (à saisir par le magasinier). L'opérateur choisit la zone puis « Charger le stock ». Test : « RHAPSODIES » apparié à « Rhapsodies » (score ≥ 90), titre inexistant → non trouvé.

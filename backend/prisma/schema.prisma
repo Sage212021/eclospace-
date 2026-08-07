@@ -1430,6 +1430,16 @@ model Partner {
   idNumber      String?   @map("id_number")
   idIssuedDate  DateTime? @map("id_issued_date")
   idIssuedPlace String?   @map("id_issued_place")
+  // Fiche d'enregistrement enrichie (grande maison d'édition) : type de pièce
+  // d'identité, coordonnées de résidence structurées, autre moyen de contact,
+  // NIU (identifiant fiscal). Tous facultatifs.
+  idType       String? @map("id_type")
+  country      String?
+  city         String?
+  quartier     String?
+  postalBox    String? @map("postal_box")
+  otherContact String? @map("other_contact")
+  niu          String?
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -1500,6 +1510,15 @@ enum FundingMode {
   author
 }
 
+// Choix « frais de dépôt pour évaluation du manuscrit » (à cocher à
+// l'enregistrement) : à payer par l'auteur, ou sans frais. non_defini tant que
+// l'éditorial n'a pas tranché.
+enum EvaluationFeeChoice {
+  non_defini
+  a_payer
+  sans_frais
+}
+
 // Décision de l'utilisateur sur le jalon « devis » — VOLONTAIREMENT NON
 // BLOQUANTE : l'utilisateur n'est jamais coincé. Il peut demander l'établissement
 // du devis (Finance en est notifiée), le remettre à plus tard, ou passer l'étape
@@ -1537,6 +1556,12 @@ model Manuscript {
   quoteDecisionNote String?       @map("quote_decision_note")
   quoteDecisionAt   DateTime?     @map("quote_decision_at")
   quoteDecisionBy   String?       @map("quote_decision_by")
+
+  // Fiche d'enregistrement enrichie : choix « frais de dépôt pour évaluation »
+  // (à payer / sans frais), coché par l'éditorial à l'enregistrement ; et délai
+  // de réponse promis à l'auteur (accepté ou refusé), en jours.
+  evaluationFeeChoice     EvaluationFeeChoice @default(non_defini) @map("evaluation_fee_choice")
+  authorResponseDelayDays Int?                @map("author_response_delay_days")
 
   statusId                      String         @map("status_id")
   status                        WorkflowStatus @relation(fields: [statusId], references: [id])

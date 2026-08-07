@@ -75,6 +75,15 @@ const authorSchema = z.union([
     id_number: z.string().max(120).optional(),
     id_issued_date: z.string().datetime().optional(),
     id_issued_place: z.string().max(200).optional(),
+    // Fiche enrichie (grande maison d'édition).
+    whatsapp: z.string().max(60).optional(),
+    id_type: z.string().max(80).optional(),
+    country: z.string().max(120).optional(),
+    city: z.string().max(120).optional(),
+    quartier: z.string().max(160).optional(),
+    postal_box: z.string().max(120).optional(),
+    other_contact: z.string().max(200).optional(),
+    niu: z.string().max(120).optional(),
   }),
 ]);
 
@@ -83,6 +92,7 @@ function authorIdentityData(a: Record<string, unknown>) {
   return {
     email: a.email as string | undefined,
     phone: a.phone as string | undefined,
+    whatsapp: a.whatsapp as string | undefined,
     address: a.address as string | undefined,
     birthDate: a.birth_date ? new Date(a.birth_date as string) : undefined,
     birthPlace: a.birth_place as string | undefined,
@@ -91,6 +101,13 @@ function authorIdentityData(a: Record<string, unknown>) {
     idNumber: a.id_number as string | undefined,
     idIssuedDate: a.id_issued_date ? new Date(a.id_issued_date as string) : undefined,
     idIssuedPlace: a.id_issued_place as string | undefined,
+    idType: a.id_type as string | undefined,
+    country: a.country as string | undefined,
+    city: a.city as string | undefined,
+    quartier: a.quartier as string | undefined,
+    postalBox: a.postal_box as string | undefined,
+    otherContact: a.other_contact as string | undefined,
+    niu: a.niu as string | undefined,
   };
 }
 
@@ -106,6 +123,9 @@ const createManuscriptSchema = z.object({
   origin: z.nativeEnum(ManuscriptOrigin).default("soumission"),
   editorial_segment: z.nativeEnum(EditorialSegment).optional(),
   owner_id: z.string().uuid(),
+  // Fiche enrichie : choix des frais de dépôt d'évaluation + délai de réponse.
+  evaluation_fee_choice: z.enum(["non_defini", "a_payer", "sans_frais"]).optional(),
+  author_response_delay_days: z.number().int().min(0).max(365).optional(),
   author: authorSchema,
 });
 
@@ -236,6 +256,8 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           statusId: verificationStatus.id,
           ownerId: body.owner_id,
           receivedAt: now,
+          evaluationFeeChoice: body.evaluation_fee_choice ?? "non_defini",
+          authorResponseDelayDays: body.author_response_delay_days,
           createdBy: request.user!.id,
           updatedBy: request.user!.id,
           workContributors: {
@@ -243,6 +265,15 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           },
         },
       });
+
+      // Frais de dépôt pour évaluation : si l'éditorial coche « à payer » à
+      // l'enregistrement, une demande de facture est initiée automatiquement à
+      // destination de la Finance (traçabilité : requestedBy = l'utilisateur).
+      if (body.evaluation_fee_choice === "a_payer") {
+        await tx.manuscriptFinanceRequest.create({
+          data: { manuscriptId: created.id, type: "frais_depot", note: "Frais de dépôt pour évaluation du manuscrit (à l'enregistrement).", requestedBy: request.user!.id },
+        });
+      }
 
       // Étape 1 — Réception (Ch. 4 §4.3) : l'enregistrement du dossier
       // constitue lui-même la validation de cette première étape.

@@ -114,6 +114,13 @@ export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: {
             )}
             {" · "}{t("pay.net_total", "Net total :")} <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 700 }}>{fcfa(reg.totals.net)}</span> ·
             {" "}{t("pay.employer_cost", "Coût employeur :")} <span style={{ fontFamily: "var(--font-mono, monospace)" }}>{fcfa(reg.totals.brut + reg.totals.charges_pat)}</span>
+            {reg.monthly_status && (
+              <span style={{ display: "block", marginTop: 4, fontSize: 12, color: reg.monthly_status === "valide" ? "var(--eclosion-dark, #8A6A12)" : "var(--muted)" }}>
+                {reg.monthly_status === "valide"
+                  ? t("pay.reg_from_validated", "Montants issus du mois de paie validé (éléments variables inclus).")
+                  : t("pay.reg_from_draft", "Montants issus du mois de paie préparé (brouillon — à valider par la Direction avant clôture).")}
+              </span>
+            )}
           </div>
           {reg.lines.length === 0 ? (
             <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>{t("pay.no_employee_period", "Aucun salarié avec fiche paie sur cette période.")}</p>

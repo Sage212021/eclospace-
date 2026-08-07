@@ -721,7 +721,7 @@ function profileView(p: {
 // Livre de paie d'une période : calcul par lot (barème + consolidation Présences
 // chargés une seule fois) de tous les salariés dotés d'une fiche paie.
 async function computeRegister(period: string): Promise<
-  | { period: string; rate_effective_from: string; lines: RegisterLine[]; totals: { brut: number; net: number; charges_pat: number } }
+  | { period: string; rate_effective_from: string; lines: RegisterLine[]; totals: { brut: number; net: number; charges_pat: number }; monthly_status: "brouillon" | "valide" | null }
   | { error: { code: string; message: string }; status: number }
 > {
   const [y, m] = period.split("-").map(Number);
@@ -735,30 +735,41 @@ async function computeRegister(period: string): Promise<
     include: { employee: { select: { id: true, firstName: true, lastName: true } } },
   });
 
-  // Règle métier (07/08/2026) : les retenues d'absence NE SONT PAS reliées au calcul
-  // de la paie. Le cahier de présence reste un témoin (module Présences) ; toute
-  // retenue est saisie par le RH sur le bulletin. Le livre de paie ne l'applique pas.
+  // Si le mois a été PRÉPARÉ (grille mensuelle), le livre de paie reprend les
+  // éléments variables saisis (primes, heures sup, absences, retards, avances,
+  // prêts, sanctions) — les mêmes valeurs que les bulletins. Sinon (mois non
+  // préparé), calcul depuis les seules fiches paie. La retenue d'absence n'est
+  // jamais issue des présences (règle 07/08/2026) : elle est saisie sur la grille.
+  const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+  const lineByEmp = new Map<string, PayrollMonthlyLine>();
+  if (run) {
+    for (const l of await prisma.payrollMonthlyLine.findMany({ where: { runId: run.id } })) lineByEmp.set(l.employeeId, l);
+  }
+
   const lines: RegisterLine[] = [];
   const totals = { brut: 0, net: 0, charges_pat: 0 };
   for (const p of profiles) {
     const gross = num(p.grossContractual);
     const base = Math.round(gross * num(p.basePct));
-    const ps = computePayslip(
-      {
-        base,
-        complements: Math.round(gross - base),
-        fiscalBase: p.fiscalBase != null ? num(p.fiscalBase) : gross,
-        fiscalParts: num(p.fiscalParts),
-        applyFiscalParts: p.applyFiscalParts,
-        seniorityYears: p.seniorityYears,
-        seniorityRate: p.seniorityRate != null ? num(p.seniorityRate) : null,
-        seniorityThreshold: p.seniorityThreshold ?? 0,
-        applySeniority: p.applySeniority,
-        retenueAbsence: 0,
-        internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
-      },
-      rates,
-    );
+    const monthLine = lineByEmp.get(p.employeeId);
+    const ps = monthLine
+      ? computeMonthlyLine(p, rates, monthLine)
+      : computePayslip(
+          {
+            base,
+            complements: Math.round(gross - base),
+            fiscalBase: p.fiscalBase != null ? num(p.fiscalBase) : gross,
+            fiscalParts: num(p.fiscalParts),
+            applyFiscalParts: p.applyFiscalParts,
+            seniorityYears: p.seniorityYears,
+            seniorityRate: p.seniorityRate != null ? num(p.seniorityRate) : null,
+            seniorityThreshold: p.seniorityThreshold ?? 0,
+            applySeniority: p.applySeniority,
+            retenueAbsence: 0,
+            internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
+          },
+          rates,
+        );
     lines.push({
       employee_id: p.employeeId,
       employee_name: `${p.employee.firstName} ${p.employee.lastName}`,
@@ -787,7 +798,7 @@ async function computeRegister(period: string): Promise<
     totals.charges_pat += ps.total_charges_patronales;
   }
   lines.sort((a, b) => a.employee_name.localeCompare(b.employee_name, "fr"));
-  return { period, rate_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10), lines, totals };
+  return { period, rate_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10), lines, totals, monthly_status: run?.status ?? null };
 }
 
 interface RegisterLine {

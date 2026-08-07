@@ -13,6 +13,12 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 (suite) — Chantier paie, étape 2b : livre de paie & états CNPS/fiscaux depuis le mois
+
+**Fait :** le **livre de paie**, les **états CNPS/fiscaux** (exports CSV) et le **journal figé à la clôture** reprennent maintenant les **éléments variables du mois** (primes, heures sup, absences, retards, avances, prêts, sanctions) dès que le mois a été préparé — mêmes montants que les bulletins. Sans mois préparé : calcul depuis les fiches (inchangé). Le livre indique la **source des montants** (mois validé / brouillon à valider / fiches). Test : le livre reprend une prime saisie sur la grille.
+
+**Le chantier paie couvre désormais tout le cycle demandé :** génération du mois pour tous · saisie individuelle des éléments variables · net automatique · validation obligatoire du DG · bulletins PDF (modèle classeur) · livre de paie · états CNPS/fiscaux · mois modifiable tant que non validé.
+
 ### 07/08/2026 (suite) — Chantier paie, étape 2a : validation DG + impression des bulletins (modèle classeur)
 
 **Fait :**

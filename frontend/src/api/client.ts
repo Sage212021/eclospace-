@@ -3687,6 +3687,8 @@ export interface RegisterLine {
 export interface PayrollRegister {
   period: string; rate_effective_from: string; closed: boolean; closed_at: string | null;
   lines: RegisterLine[]; totals: { brut: number; net: number; charges_pat: number };
+  // Source des montants : le mois préparé (grille) s'il existe, sinon les fiches.
+  monthly_status: "brouillon" | "valide" | null;
 }
 export function getPayrollRegister(period: string) {
   return request<PayrollRegister>(`/api/v1/payroll/register?period=${period}`);

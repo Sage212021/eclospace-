@@ -10,6 +10,8 @@ import {
   listPartners,
   signContract,
   updateContractStatus,
+  updateContractTerms,
+  addContractClause,
   listContractDocuments,
   uploadContractDocument,
   contractDocumentDownloadUrl,
@@ -28,6 +30,7 @@ import {
   type ChatDirectoryEntry,
 } from "../api/client";
 import { printContract, printAuthorContract } from "../lib/print";
+import { buildAuthorContractPdf } from "../lib/contractPdf";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
@@ -83,6 +86,10 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signing, setSigning] = useState<Contract | null>(null);
+  const [transferContract, setTransferContract] = useState<Contract | null>(null);
+  const [editContract, setEditContract] = useState<Contract | null>(null);
+  const [amendContract, setAmendContract] = useState<Contract | null>(null);
+  const [articleContract, setArticleContract] = useState<Contract | null>(null);
 
   const refresh = () => listContracts(manuscriptId).then(setContracts).catch((e) => setError(e.message));
 
@@ -151,7 +158,16 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
               {STATUS_LABELS[contract.status]}
             </span>
             <DocPrintMenu label="Fiche (résumé)" onPrint={(o) => getContract(contract.id).then((c) => printContract(c, o)).catch((e) => setError(e.message))} />
-            <DocPrintMenu label="Contrat d'édition" onPrint={(o) => Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null)]).then(([c, pub]) => printAuthorContract(c, o, pub)).catch((e) => setError(e.message))} />
+            <DocPrintMenu
+              label="Contrat d'édition"
+              onPrint={(o) => Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null)]).then(([c, pub]) => printAuthorContract(c, o, pub)).catch((e) => setError(e.message))}
+              extras={[
+                { label: "Transférer (messagerie / WhatsApp)", onSelect: () => setTransferContract(contract) },
+                ...(canCreate && !["active", "terminated", "expired"].includes(contract.status) ? [{ label: "Modifier / enregistrer", onSelect: () => setEditContract(contract) }] : []),
+                ...(canCreate ? [{ label: "Ajouter un avenant", onSelect: () => setAmendContract(contract) }] : []),
+                ...(canCreate && !["active", "terminated", "expired"].includes(contract.status) ? [{ label: "Ajouter un article", onSelect: () => setArticleContract(contract) }] : []),
+              ]}
+            />
             {canValidate && contract.status === "awaiting_signature" && (
               <button onClick={() => setSigning(contract)} style={{ ...secondaryButtonStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)", fontWeight: 600 }}>
                 ✍️ Signer
@@ -198,6 +214,52 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
             setSigning(null);
             refresh();
           }}
+        />
+      )}
+
+      {/* Transfert du contrat d'édition généré (PDF construit côté navigateur). */}
+      {transferContract && (
+        <TransferDocDialog
+          title={`Contrat d'édition ${transferContract.contractNumber}`}
+          fileName={`Contrat-${transferContract.contractNumber}.pdf`}
+          getFile={async () => {
+            const [c, pub] = await Promise.all([getContract(transferContract.id), getPublisherIdentity().catch(() => null)]);
+            return new File([buildAuthorContractPdf(c, pub)], `Contrat-${transferContract.contractNumber}.pdf`, { type: "application/pdf" });
+          }}
+          partnerWhatsapp={transferContract.partner.whatsapp}
+          onClose={() => setTransferContract(null)}
+          onError={setError}
+        />
+      )}
+
+      {/* Modifier les termes du contrat (tant qu'il n'est pas signé/actif). */}
+      {editContract && (
+        <EditContractModal
+          contract={editContract}
+          onClose={() => setEditContract(null)}
+          onSaved={() => { setEditContract(null); refresh(); }}
+          onError={setError}
+        />
+      )}
+
+      {/* Ajouter un avenant : nouveau contrat lié au contrat d'origine. */}
+      {amendContract && (
+        <AmendmentModal
+          parent={amendContract}
+          manuscriptId={manuscriptId}
+          onClose={() => setAmendContract(null)}
+          onCreated={() => { setAmendContract(null); refresh(); }}
+          onError={setError}
+        />
+      )}
+
+      {/* Ajouter un article : clause propre au contrat, reprise en fin de contrat. */}
+      {articleContract && (
+        <ArticleModal
+          contract={articleContract}
+          onClose={() => setArticleContract(null)}
+          onSaved={() => { setArticleContract(null); refresh(); }}
+          onError={setError}
         />
       )}
     </div>
@@ -484,8 +546,13 @@ function DocumentsBlock({ contractId, canManage, partnerWhatsapp, onError }: { c
 
       {transferDoc && (
         <TransferDocDialog
-          contractId={contractId}
-          doc={transferDoc}
+          title={transferDoc.label || transferDoc.name}
+          fileName={transferDoc.name || transferDoc.label || "document"}
+          getFile={async () => {
+            const resp = await fetch(contractDocumentDownloadUrl(contractId, transferDoc.id), { credentials: "include" });
+            const blob = await resp.blob();
+            return new File([blob], transferDoc.name || transferDoc.label || "document", { type: blob.type || "application/octet-stream" });
+          }}
           partnerWhatsapp={partnerWhatsapp}
           onClose={() => setTransferDoc(null)}
           onError={onError}
@@ -495,16 +562,17 @@ function DocumentsBlock({ contractId, canManage, partnerWhatsapp, onError }: { c
   );
 }
 
-// Transfert d'une pièce du contrat (contrat signé, annexe) vers la messagerie
-// interne (fichier joint réellement envoyé) ou WhatsApp (ouverture d'un message
-// pré-rempli ; la pièce est téléchargée pour être jointe à la main, faute de
-// passerelle WhatsApp automatique côté serveur — cf. AVANCEMENT).
-function TransferDocDialog({ contractId, doc, partnerWhatsapp, onClose, onError }: { contractId: string; doc: ContractDocument; partnerWhatsapp?: string | null; onClose: () => void; onError: (m: string) => void }) {
+// Transfert d'un document du contrat (pièce numérisée OU contrat d'édition
+// généré en PDF) vers la messagerie interne (fichier réellement joint) ou
+// WhatsApp (message pré-rempli ; la pièce est téléchargée pour être jointe à la
+// main, faute de passerelle WhatsApp automatique côté serveur — cf. AVANCEMENT).
+// Générique : `getFile` fournit le fichier à transférer (fetch d'une pièce ou
+// génération d'un PDF côté navigateur).
+function TransferDocDialog({ title, fileName, getFile, partnerWhatsapp, onClose, onError }: { title: string; fileName: string; getFile: () => Promise<File> | File; partnerWhatsapp?: string | null; onClose: () => void; onError: (m: string) => void }) {
   const [dir, setDir] = useState<ChatDirectoryEntry[]>([]);
   const [recipient, setRecipient] = useState("");
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
-  const docLabel = doc.label || doc.name;
 
   useEffect(() => {
     getChatDirectory().then((d) => { setDir(d); if (d[0]) setRecipient(d[0].id); }).catch(() => setDir([]));
@@ -515,10 +583,8 @@ function TransferDocDialog({ contractId, doc, partnerWhatsapp, onClose, onError 
     setSending(true);
     try {
       const conv = await startConversation(recipient);
-      const body = (note.trim() ? note.trim() + "\n\n" : "") + `Document du contrat : ${docLabel}`;
-      const resp = await fetch(contractDocumentDownloadUrl(contractId, doc.id), { credentials: "include" });
-      const blob = await resp.blob();
-      const file = new File([blob], doc.name || docLabel, { type: blob.type || "application/octet-stream" });
+      const body = (note.trim() ? note.trim() + "\n\n" : "") + `Document du contrat : ${title}`;
+      const file = await getFile();
       await sendChatMessageWithFile(conv.id, body, file);
       onClose();
     } catch (e) {
@@ -528,28 +594,35 @@ function TransferDocDialog({ contractId, doc, partnerWhatsapp, onClose, onError 
     }
   }
 
-  function shareWhatsApp() {
-    // Déclenche le téléchargement de la pièce (à joindre dans WhatsApp), puis
-    // ouvre WhatsApp avec un message pré-rempli — vers le numéro de l'auteur
-    // s'il est renseigné, sinon le sélecteur de contact WhatsApp.
-    const a = document.createElement("a");
-    a.href = contractDocumentDownloadUrl(contractId, doc.id);
-    a.download = doc.name || docLabel;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    const text = encodeURIComponent(`${note.trim() ? note.trim() + " — " : ""}Document du contrat : ${docLabel} (pièce jointe téléchargée à joindre au message).`);
-    const num = (partnerWhatsapp ?? "").replace(/[^\d]/g, "");
-    const url = num ? `https://wa.me/${num}?text=${text}` : `https://wa.me/?text=${text}`;
-    window.open(url, "_blank", "noopener");
-    onClose();
+  async function shareWhatsApp() {
+    // Télécharge la pièce (à joindre dans WhatsApp), puis ouvre WhatsApp avec un
+    // message pré-rempli — vers le numéro de l'auteur s'il est renseigné, sinon
+    // le sélecteur de contact WhatsApp.
+    try {
+      const file = await getFile();
+      const objUrl = URL.createObjectURL(file);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
+      const text = encodeURIComponent(`${note.trim() ? note.trim() + " — " : ""}Document du contrat : ${title} (pièce jointe téléchargée à joindre au message).`);
+      const num = (partnerWhatsapp ?? "").replace(/[^\d]/g, "");
+      const url = num ? `https://wa.me/${num}?text=${text}` : `https://wa.me/?text=${text}`;
+      window.open(url, "_blank", "noopener");
+      onClose();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Préparation du fichier impossible.");
+    }
   }
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
       <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 440, width: "100%" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Transférer le document</div>
-        <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>{docLabel}</div>
+        <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>{title}</div>
 
         <label style={{ fontSize: 11.5, display: "block", marginBottom: 10 }}>
           Message (facultatif)
@@ -587,6 +660,166 @@ function TransferDocDialog({ contractId, doc, partnerWhatsapp, onClose, onError 
 
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
           <button onClick={onClose} style={secondaryButtonStyle}>Fermer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const CONTRACT_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "edition", label: "Édition" },
+  { value: "coedition", label: "Coédition" },
+  { value: "cession", label: "Cession de droits" },
+  { value: "traduction", label: "Traduction" },
+  { value: "correction", label: "Correction" },
+  { value: "illustration", label: "Illustration" },
+  { value: "prestation", label: "Prestation de services" },
+];
+
+// Modifier les termes d'un contrat NON SIGNÉ : type, taux de droits, avance,
+// durée. Enregistré côté serveur (PATCH /contracts/:id/terms) — la modification
+// est persistée et tracée. Interdite une fois le contrat signé/actif (409).
+function EditContractModal({ contract, onClose, onSaved, onError }: { contract: Contract; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
+  const [type, setType] = useState(contract.type);
+  const [rate, setRate] = useState<number>(10);
+  const [advance, setAdvance] = useState<number>(0);
+  const [durationYears, setDurationYears] = useState<number>(0);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getContract(contract.id).then((c) => {
+      const firstRate = c.royaltyTerms?.tiers?.[0]?.rate;
+      if (typeof firstRate === "number") setRate(Math.round(firstRate * 100));
+      const adv = c.royaltyTerms?.advanceAmount;
+      if (adv != null) setAdvance(Number(adv));
+      if (c.durationMonths) setDurationYears(Math.round(c.durationMonths / 12));
+      setLoaded(true);
+    }).catch((e) => onError(e instanceof Error ? e.message : "Chargement impossible."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contract.id]);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await updateContractTerms(contract.id, {
+        type,
+        rate: rate / 100,
+        advance_amount: advance,
+        duration_months: durationYears > 0 ? durationYears * 12 : null,
+      });
+      onSaved();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Enregistrement impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 460, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Modifier le contrat {contract.contractNumber}</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Modification possible tant que le contrat n'est pas signé. Enregistrée et tracée.</div>
+        {!loaded ? (
+          <p style={{ fontSize: 13, color: "var(--muted)" }}>Chargement…</p>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <label style={{ fontSize: 12 }}>Type<select value={type} onChange={(e) => setType(e.target.value)} style={inputStyle}>{CONTRACT_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+              <label style={{ fontSize: 12 }}>Taux de droits (%)<input type="number" min={0} max={100} value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} /></label>
+              <label style={{ fontSize: 12 }}>Avance (FCFA)<input type="number" min={0} value={advance} onChange={(e) => setAdvance(Number(e.target.value))} style={inputStyle} /></label>
+              <label style={{ fontSize: 12 }}>Durée de la cession (années)<input type="number" min={0} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={inputStyle} /></label>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+              <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Annuler</button>
+              <button onClick={save} disabled={busy} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Ajouter un avenant : crée un nouveau contrat LIÉ au contrat d'origine
+// (parent_contract_id), avec les termes révisés. L'avenant apparaît comme un
+// contrat rattaché — le contrat d'origine, une fois signé, reste inchangé.
+function AmendmentModal({ parent, manuscriptId, onClose, onCreated, onError }: { parent: Contract; manuscriptId: string; onClose: () => void; onCreated: () => void; onError: (m: string) => void }) {
+  const [type, setType] = useState(parent.type);
+  const [rate, setRate] = useState<number>(10);
+  const [advance, setAdvance] = useState<number>(0);
+  const [durationYears, setDurationYears] = useState<number>(5);
+  const [busy, setBusy] = useState(false);
+
+  async function create() {
+    setBusy(true);
+    try {
+      await createContract({
+        type,
+        manuscript_id: manuscriptId,
+        partner_id: parent.partner.id,
+        parent_contract_id: parent.id,
+        ...(durationYears > 0 ? { duration_months: durationYears * 12 } : {}),
+        financial_terms: { base: "prix_public_ht", tiers: [{ up_to: null, rate: rate / 100 }], advance_amount: advance, payment_schedule: "semestriel" },
+      });
+      onCreated();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Création de l'avenant impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 460, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Avenant au contrat {parent.contractNumber}</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Nouveau contrat rattaché au contrat d'origine, avec les termes révisés (même auteur, même ouvrage).</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <label style={{ fontSize: 12 }}>Type<select value={type} onChange={(e) => setType(e.target.value)} style={inputStyle}>{CONTRACT_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+          <label style={{ fontSize: 12 }}>Taux de droits (%)<input type="number" min={0} max={100} value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} /></label>
+          <label style={{ fontSize: 12 }}>Avance (FCFA)<input type="number" min={0} value={advance} onChange={(e) => setAdvance(Number(e.target.value))} style={inputStyle} /></label>
+          <label style={{ fontSize: 12 }}>Durée de la cession (années)<input type="number" min={0} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={inputStyle} /></label>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+          <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Annuler</button>
+          <button onClick={create} disabled={busy} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>{busy ? "Création…" : "Créer l'avenant"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Ajouter un article (clause propre au contrat) : titre + corps, repris en fin
+// de contrat imprimé / PDF (numéroté 16, 17…). Possible tant qu'il n'est pas signé.
+function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contract; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await addContractClause(contract.id, { title: title.trim(), body: body.trim() });
+      onSaved();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Ajout de l'article impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 480, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Ajouter un article — contrat {contract.contractNumber}</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Clause additionnelle reprise à la fin du contrat imprimé / PDF (numérotée après l'article 15).</div>
+        <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>Intitulé de l'article<input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Clause de confidentialité" style={inputStyle} /></label>
+        <label style={{ fontSize: 12, display: "block" }}>Texte de l'article<textarea value={body} onChange={(e) => setBody(e.target.value)} rows={5} style={{ ...inputStyle, resize: "vertical" }} /></label>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+          <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Annuler</button>
+          <button onClick={save} disabled={busy || title.trim().length < 2 || body.trim().length < 2} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>{busy ? "Enregistrement…" : "Ajouter l'article"}</button>
         </div>
       </div>
     </div>

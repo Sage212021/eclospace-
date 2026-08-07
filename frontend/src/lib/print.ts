@@ -776,7 +776,7 @@ export interface PublisherLegal {
   name: string; desc: string; rc: string; niu: string; siege: string;
   tel: string; email: string; web: string; rep: string; ville: string;
 }
-const EDITEUR_LEGAL: PublisherLegal = {
+export const EDITEUR_LEGAL: PublisherLegal = {
   name: "EDITIONS ECLOSION",
   desc: "entreprise de prestation de services en édition, communication, imprimerie…",
   rc: "N°RC /YAO/2019/B/1441",
@@ -903,6 +903,8 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publish
       ${par("<b>Fin d'exploitation.</b> Le contrat est résilié lorsque, 5 ans après la publication et pendant 2 années consécutives, les redditions ne font apparaître aucun droit versé ou crédité.")}`)}
 
     ${art(15, "LITIGES", par("Le présent contrat est soumis à la loi camerounaise. Tout différend fera l'objet d'une tentative d'arrangement amiable ; à défaut, seuls les tribunaux de Yaoundé sont compétents."))}
+
+    ${(c.customClauses ?? []).map((cl, i) => art(16 + i, (esc(cl.title) ?? "").toUpperCase(), par(escapeHtml(cl.body)))).join("")}
 
     <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>

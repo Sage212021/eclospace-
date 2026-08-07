@@ -5,12 +5,13 @@ import type { PrintOpts } from "../lib/print";
 // présentations : numérique (logo + mentions), avec le papier à en-tête
 // numérique intégré (fond A4 officiel), ou version neutre pour le papier à
 // en-tête physique. `<details>` natif : léger, accessible, sans dépendance.
-export function DocPrintMenu({ onPrint, label = "Imprimer / PDF" }: { onPrint: (opts: PrintOpts) => void; label?: string }) {
+// `extras` : actions supplémentaires propres au document (ex. contrat d'édition :
+// « Transférer », « Modifier / enregistrer »), affichées sous les présentations
+// d'impression, après un séparateur.
+export function DocPrintMenu({ onPrint, label = "Imprimer / PDF", extras }: { onPrint: (opts: PrintOpts) => void; label?: string; extras?: { label: string; onSelect: () => void }[] }) {
   const ref = useRef<HTMLDetailsElement>(null);
-  const choose = (opts: PrintOpts) => {
-    onPrint(opts);
-    if (ref.current) ref.current.open = false;
-  };
+  const close = () => { if (ref.current) ref.current.open = false; };
+  const choose = (opts: PrintOpts) => { onPrint(opts); close(); };
   return (
     <details ref={ref} style={{ position: "relative", display: "inline-block" }}>
       <summary style={summaryStyle}>{label} ▾</summary>
@@ -18,6 +19,13 @@ export function DocPrintMenu({ onPrint, label = "Imprimer / PDF" }: { onPrint: (
         <button style={itemStyle} onClick={() => choose({})}>Numérique / PDF</button>
         <button style={itemStyle} onClick={() => choose({ embed: true })}>Avec papier à en-tête intégré</button>
         <button style={itemStyle} onClick={() => choose({ letterhead: true })}>Sur papier à en-tête vierge</button>
+        {extras && extras.length > 0 && (
+          <div style={{ borderTop: "2px solid var(--line)" }}>
+            {extras.map((e) => (
+              <button key={e.label} style={{ ...itemStyle, fontWeight: 600, color: "var(--eclosion-dark, #8A6A12)" }} onClick={() => { e.onSelect(); close(); }}>{e.label}</button>
+            ))}
+          </div>
+        )}
       </div>
     </details>
   );

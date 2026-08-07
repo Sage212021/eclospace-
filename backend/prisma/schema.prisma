@@ -1903,6 +1903,10 @@ model Contract {
   languages      String[]       @default([])
   formats        String[]       @default([])
   financialTerms Json           @map("financial_terms")
+  // Articles additionnels propres à ce contrat (clauses ajoutées après les 15
+  // articles du modèle) : tableau JSON [{ title, body }]. Repris en fin de
+  // contrat imprimé / PDF. Modifiables tant que le contrat n'est pas signé.
+  customClauses  Json?          @map("custom_clauses")
   status         ContractStatus @default(preparation)
 
   createdAt DateTime  @default(now()) @map("created_at")

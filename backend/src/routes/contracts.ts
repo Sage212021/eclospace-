@@ -371,6 +371,106 @@ export default async function contractRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Modification des TERMES d'un contrat NON SIGNÉ (type, taux de droits, avance,
+  // durée). Interdite dès qu'il porte une signature ou qu'il est actif / terminé
+  // / expiré : un engagement signé est immuable (contrainte d'intégrité §13).
+  // Réservée à la saisie contrats, tracée au journal.
+  fastify.patch(
+    "/api/v1/contracts/:id/terms",
+    { preHandler: requirePermission("contracts", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z
+        .object({
+          type: z.nativeEnum(ContractType).optional(),
+          duration_months: z.number().int().positive().max(1200).nullish(),
+          rate: z.number().min(0).max(1).optional(),
+          advance_amount: z.number().min(0).optional(),
+        })
+        .safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+
+      const contract = await prisma.contract.findFirst({
+        where: { id, deletedAt: null },
+        include: { _count: { select: { signatures: true } }, royaltyTerms: true },
+      });
+      if (!contract) return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
+      const locked = ["active", "terminated", "expired"].includes(contract.status);
+      if (locked || contract._count.signatures > 0) {
+        return reply.code(409).send({
+          code: "contract_signed",
+          message: "Un contrat signé ou actif ne peut plus être modifié. Utilisez un avenant ou la résiliation le cas échéant.",
+        });
+      }
+
+      const b = parsed.data;
+      const before = { type: contract.type, durationMonths: contract.durationMonths, rate: contract.royaltyTerms?.tiers, advance: contract.royaltyTerms?.advanceAmount };
+
+      await prisma.$transaction(async (tx) => {
+        await tx.contract.update({
+          where: { id },
+          data: {
+            type: b.type ?? contract.type,
+            durationMonths: b.duration_months === undefined ? contract.durationMonths : b.duration_months,
+            updatedBy: request.user!.id,
+          },
+        });
+        // Taux / avance : portés par royaltyTerms (créés à la volée si absents).
+        if (b.rate !== undefined || b.advance_amount !== undefined) {
+          const tiers = b.rate !== undefined ? [{ up_to: null, rate: b.rate }] : (contract.royaltyTerms?.tiers ?? [{ up_to: null, rate: 0.1 }]);
+          const advance = b.advance_amount !== undefined ? b.advance_amount : contract.royaltyTerms?.advanceAmount ?? 0;
+          await tx.royaltyTerms.upsert({
+            where: { contractId: id },
+            create: { contractId: id, base: "prix_public_ht", tiers: tiers as object, advanceAmount: advance, paymentSchedule: "semestriel" },
+            update: { tiers: tiers as object, advanceAmount: advance },
+          });
+          const fin = (contract.financialTerms as Record<string, unknown> | null) ?? { base: "prix_public_ht", payment_schedule: "semestriel" };
+          fin.tiers = tiers;
+          fin.advance_amount = advance;
+          await tx.contract.update({ where: { id }, data: { financialTerms: JSON.parse(JSON.stringify(fin)) } });
+        }
+      });
+
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "contract",
+        entityId: id,
+        oldValues: before,
+        newValues: { type: b.type, durationMonths: b.duration_months, rate: b.rate, advance: b.advance_amount },
+        ipAddress: request.ip,
+      });
+
+      const fresh = await prisma.contract.findUnique({ where: { id }, include: { royaltyTerms: true } });
+      return reply.send(fresh);
+    },
+  );
+
+  // Ajouter un ARTICLE additionnel (clause propre à ce contrat), repris en fin
+  // de contrat imprimé / PDF. Possible tant que le contrat n'est pas signé.
+  fastify.post(
+    "/api/v1/contracts/:id/clauses",
+    { preHandler: requirePermission("contracts", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z.object({ title: z.string().min(2).max(200), body: z.string().min(2).max(8000) }).safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+
+      const contract = await prisma.contract.findFirst({ where: { id, deletedAt: null }, include: { _count: { select: { signatures: true } } } });
+      if (!contract) return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
+      const locked = ["active", "terminated", "expired"].includes(contract.status);
+      if (locked || contract._count.signatures > 0) {
+        return reply.code(409).send({ code: "contract_signed", message: "Un contrat signé ou actif ne peut plus être modifié. Utilisez un avenant le cas échéant." });
+      }
+
+      const existing = Array.isArray(contract.customClauses) ? (contract.customClauses as { title: string; body: string }[]) : [];
+      const clauses = [...existing, { title: parsed.data.title.trim(), body: parsed.data.body.trim() }];
+      const updated = await prisma.contract.update({ where: { id }, data: { customClauses: clauses as object, updatedBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "contract", entityId: id, newValues: { addedClause: parsed.data.title }, ipAddress: request.ip });
+      return reply.code(201).send(updated);
+    },
+  );
+
   // Suppression (logique) d'un contrat NON SIGNÉ — ex. un contrat de test.
   // Interdite dès qu'il porte une signature ou qu'il est actif/terminé/expiré :
   // un engagement signé ne se supprime pas (contrainte d'intégrité). Réservée à

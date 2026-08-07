@@ -13,6 +13,7 @@ import {
   type StockMovementType,
 } from "../api/client";
 import { Card } from "../components/Card";
+import { StockInventorySection } from "../components/StockInventorySection";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
@@ -41,13 +42,14 @@ const LOCATION_TYPE_LABELS: Record<StockLocationType, string> = {
 interface StockPageProps {
   canManage: boolean;
   canAdminister: boolean;
+  canValidate?: boolean;
 }
 
 // Stock et magasin (Ch. 16) : lieux, mouvements typés, alertes. Écran
 // transverse (un article de stock ne se rattache pas à un seul manuscrit).
 import { useI18n } from "../i18n";
 
-export function StockPage({ canManage, canAdminister }: StockPageProps) {
+export function StockPage({ canManage, canAdminister, canValidate }: StockPageProps) {
   const { t } = useI18n();
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [items, setItems] = useState<StockItem[]>([]);
@@ -97,6 +99,8 @@ export function StockPage({ canManage, canAdminister }: StockPageProps) {
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
+
+      <StockInventorySection locations={locations} canManage={canManage} canValidate={!!canValidate} collapsible defaultOpen />
 
       {alerts.length > 0 && (
         <Card title={t("stock.alerts_title", "Alertes de stock")} icon={<IconCommercial />} subtitle={t("stock.alerts_sub", "Ruptures et seuils d'alerte atteints.")}>

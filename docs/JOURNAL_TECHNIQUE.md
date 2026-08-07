@@ -834,3 +834,13 @@ Reste (étape 2b) : livre de paie + états CNPS/fiscaux dérivés du mois valid�
 ## 07/08/2026 (suite) — Compléments bulletin : bloc « Informations complémentaires & congés »
 
 Le bulletin PDF (modèle classeur) reçoit un dernier bloc : **type de contrat** (HrContract le plus récent), **date de naissance** et **date d'entrée** (Employee), **solde de congés** (leaveBalanceDays). Le GET du mois (`routes/payroll.ts`) renvoie `contract_type` et `birth_date` par ligne ; `payslipPdf.ts` ajoute la section. Note : le modèle du classeur mentionne « situation familiale » et « contact d'urgence », mais ces champs n'existent pas dans le modèle de données (`EmployeeConfidential` ne stocke que des notes) — non ajoutés, pas de donnée confidentielle exposée sur le bulletin.
+
+## 07/08/2026 (suite) — Stock : interface d'inventaire physique (Ch. 16 §16.8)
+
+Le backend gérait déjà les campagnes d'inventaire (comptage à l'aveugle, écart, recomptage, régularisation, clôture) mais aucune interface ne les exposait. Ajout d'une UI dédiée, en réponse au rapport d'inventaire de l'opérateur.
+
+- **Backend** (`routes/stock.ts`) : `GET /api/v1/inventories` (liste + avancement : comptées/total, écarts, à recompter, ajustements en attente) ; `GET /inventories/:id` enrichi (titre de l'ouvrage + ISBN par ligne, masquage à l'aveugle conservé).
+- **Frontend** : `StockInventorySection` dans la page Stock — liste des campagnes avec **barre d'avancement**, création (lieu + type complet/tournant + à l'aveugle), **grille de comptage** (saisie à la sortie de case), écarts + recomptage (↻), **régularisation** (droit validation) et **clôture** (refusée tant que des écarts subsistent).
+- **Test** : `lot4-stock.test.ts` — campagne, comptage avec écart, recomptage, refus de clôture, régularisation (stock ajusté), clôture.
+
+Note : le rapport mentionne des exemplaires « touchés » (abîmés). L'état `declasse` existe déjà sur `StockItem` ; un comptage distinguant vendable/abîmé pourra être ajouté ultérieurement (schéma inventaire à étendre).

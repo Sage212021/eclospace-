@@ -297,6 +297,33 @@ export default async function stockRoutes(fastify: FastifyInstance) {
 
   // Ch. 16 §16.8 : campagne d'inventaire — comptage à l'aveugle par défaut,
   // quantités théoriques figées au lancement.
+  // Liste des campagnes d'inventaire avec avancement (comptées / écarts / à
+  // recompter) — pour le suivi façon rapport d'inventaire.
+  fastify.get("/api/v1/inventories", { preHandler: requirePermission("stock", "consultation") }, async (_request, reply) => {
+    const invs = await prisma.inventory.findMany({
+      orderBy: { openedAt: "desc" },
+      take: 100,
+      include: {
+        location: { select: { label: true } },
+        lines: { select: { countedQty: true, variance: true, recountRequired: true, adjustmentMovementId: true } },
+      },
+    });
+    return reply.send(
+      invs.map((inv) => {
+        const total = inv.lines.length;
+        const counted = inv.lines.filter((l) => l.countedQty !== null).length;
+        const variance = inv.lines.filter((l) => l.variance !== null && l.variance !== 0).length;
+        const recount = inv.lines.filter((l) => l.recountRequired).length;
+        const pendingAdjust = inv.lines.filter((l) => l.variance !== null && l.variance !== 0 && !l.adjustmentMovementId).length;
+        return {
+          id: inv.id, type: inv.type, blind: inv.blind, status: inv.status,
+          location_label: inv.location?.label ?? null, opened_at: inv.openedAt, closed_at: inv.closedAt,
+          total_lines: total, counted_lines: counted, variance_lines: variance, recount_lines: recount, pending_adjust: pendingAdjust,
+        };
+      }),
+    );
+  });
+
   fastify.post("/api/v1/inventories", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
     const parsed = inventorySchema.safeParse(request.body);
     if (!parsed.success) {
@@ -332,11 +359,23 @@ export default async function stockRoutes(fastify: FastifyInstance) {
 
   fastify.get("/api/v1/inventories/:id", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const inventory = await prisma.inventory.findUnique({ where: { id }, include: { lines: true } });
+    const inventory = await prisma.inventory.findUnique({
+      where: { id },
+      include: {
+        location: { select: { label: true } },
+        lines: { include: { isbn: { select: { isbn13: true, manuscript: { select: { title: true } } } } }, orderBy: { id: "asc" } },
+      },
+    });
     if (!inventory) {
       return reply.code(404).send({ code: "not_found", message: "Inventaire introuvable." });
     }
-    return reply.send({ ...inventory, lines: inventory.lines.map((line) => maskBlindLine(line, inventory)) });
+    // Titre + ISBN pour l'affichage ; masquage à l'aveugle du théorique conservé.
+    const lines = inventory.lines.map(({ isbn, ...line }) => ({
+      ...maskBlindLine(line, inventory),
+      title: isbn.manuscript?.title ?? null,
+      isbn13: isbn.isbn13,
+    }));
+    return reply.send({ ...inventory, location_label: inventory.location?.label ?? null, lines });
   });
 
   fastify.patch(

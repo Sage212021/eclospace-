@@ -1789,6 +1789,63 @@ export function listStockAlerts() {
   return request<(StockItem & { severity: "alerte" | "rupture" })[]>("/api/v1/stock-alerts");
 }
 
+// ── Inventaire physique (Ch. 16 §16.8) — campagnes, comptage, écarts ──────────
+export type InventoryType = "full" | "rotating";
+export type InventoryStatus = "open" | "closed";
+export interface InventorySummary {
+  id: string;
+  type: InventoryType;
+  blind: boolean;
+  status: InventoryStatus;
+  location_label: string | null;
+  opened_at: string;
+  closed_at: string | null;
+  total_lines: number;
+  counted_lines: number;
+  variance_lines: number;
+  recount_lines: number;
+  pending_adjust: number;
+}
+export interface InventoryLine {
+  id: string;
+  isbnId: string;
+  title: string | null;
+  isbn13: string;
+  theoreticalQty?: number; // masqué à l'aveugle tant que non compté
+  countedQty: number | null;
+  variance: number | null;
+  recountRequired: boolean;
+  adjustmentMovementId: string | null;
+}
+export interface InventoryDetail {
+  id: string;
+  type: InventoryType;
+  blind: boolean;
+  status: InventoryStatus;
+  location_label: string | null;
+  opened_at: string;
+  closed_at: string | null;
+  lines: InventoryLine[];
+}
+export function listInventories() {
+  return request<InventorySummary[]>("/api/v1/inventories");
+}
+export function getInventory(id: string) {
+  return request<InventoryDetail>(`/api/v1/inventories/${id}`);
+}
+export function createInventory(input: { location_id: string; type: InventoryType; blind: boolean }) {
+  return request<InventoryDetail>("/api/v1/inventories", { method: "POST", body: JSON.stringify(input) });
+}
+export function countInventoryLine(lineId: string, countedQty: number) {
+  return request<InventoryLine>(`/api/v1/inventory-lines/${lineId}`, { method: "PATCH", body: JSON.stringify({ counted_qty: countedQty }) });
+}
+export function adjustInventoryLine(lineId: string) {
+  return request<InventoryLine>(`/api/v1/inventory-lines/${lineId}/adjust`, { method: "POST" });
+}
+export function closeInventory(id: string) {
+  return request<{ id: string; status: InventoryStatus; closed_at: string | null }>(`/api/v1/inventories/${id}/close`, { method: "PATCH" });
+}
+
 export type StockMovementType =
   | "production_in"
   | "sale_out"

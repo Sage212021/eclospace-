@@ -826,3 +826,7 @@ Demande opérateur : générer la paie du mois pour tous les salariés, avec sai
 - **Test** : `payroll-monthly.test.ts` — refus non-DG (403), validation DG (verrou 409), bulletin complet exposé, réouverture puis saisie de nouveau possible.
 
 Reste (étape 2b) : livre de paie + états CNPS/fiscaux dérivés du mois validé (aujourd'hui calculés depuis les fiches) ; enrichissements bulletin (congés, contrat, contact d'urgence) si souhaité.
+
+## 07/08/2026 (suite) — Chantier paie, étape 2b : livre de paie & états depuis le mois
+
+`computeRegister` (livre de paie + exports CNPS/fiscaux + clôture) reprend désormais les **éléments variables du mois** quand le mois a été préparé (grille mensuelle) : chaque salarié est calculé par `computeMonthlyLine` (primes, heures sup, absences, retards, avances, prêts, sanctions) — donc le livre, les états CNPS/fiscaux (CSV) et le journal figé à la clôture reflètent exactement les bulletins. Sans mois préparé, calcul depuis les seules fiches (rétrocompatible). La réponse du livre expose `monthly_status` (brouillon|valide|null) ; le frontend affiche la source des montants (mois validé / brouillon à valider / fiches).

@@ -138,4 +138,16 @@ describe("génération mensuelle de la paie (grille éditable)", () => {
     });
     expect(patch2.statusCode).toBe(200);
   });
+
+  it("le livre de paie reprend les éléments variables du mois", async () => {
+    // Prime de 50 000 → brut = base(240 000) + compléments(160 000+50 000) = 450 000.
+    await app.inject({
+      method: "PATCH", url: `/api/v1/payroll/monthly/${PERIOD}/lines/${emp1}`, headers: { cookie },
+      payload: { primes: 50000, heures_sup: 0, retenue_absence: 0, retard: 0, avance: 0, pret: 0, sanction: 0, autres: 0 },
+    });
+    const reg = (await app.inject({ method: "GET", url: `/api/v1/payroll/register?period=${PERIOD}`, headers: { cookie } })).json();
+    expect(reg.monthly_status).toBe("brouillon");
+    const line = reg.lines.find((l: { employee_id: string }) => l.employee_id === emp1);
+    expect(line.salaire_brut).toBe(450000);
+  });
 });

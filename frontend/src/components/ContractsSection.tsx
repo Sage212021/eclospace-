@@ -14,6 +14,9 @@ import {
   uploadContractDocument,
   contractDocumentDownloadUrl,
   deleteContractDocument,
+  getChatDirectory,
+  startConversation,
+  sendChatMessageWithFile,
   type Contract,
   type ContractDocument,
   type ContractDocumentKind,
@@ -22,6 +25,7 @@ import {
   type Partner,
   type PartnerCategory,
   type SignatureParty,
+  type ChatDirectoryEntry,
 } from "../api/client";
 import { printContract, printAuthorContract } from "../lib/print";
 import { Modal, Field } from "./Modal";
@@ -179,7 +183,7 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
           {contract.type === "edition" && <AuthorIdentityBlock partner={contract.partner} canEdit={canCreate} onChanged={refresh} onError={setError} />}
 
           {/* Contrat physique signé, numérisé (PDF ou images) + annexes. */}
-          <DocumentsBlock contractId={contract.id} canManage={canCreate} onError={setError} />
+          <DocumentsBlock contractId={contract.id} canManage={canCreate} partnerWhatsapp={contract.partner.whatsapp} onError={setError} />
 
           {/* Traçabilité : qui a saisi / modifié en dernier. */}
           <TraceabilityLine contract={contract} />
@@ -377,11 +381,12 @@ const DOC_KIND_LABELS: Record<ContractDocumentKind, string> = {
 // Pièces numérisées du contrat : le contrat physique signé de l'auteur, scanné
 // en PDF ou en images, et d'éventuelles annexes. Téléversement, téléchargement,
 // retrait (suppression logique côté serveur).
-function DocumentsBlock({ contractId, canManage, onError }: { contractId: string; canManage: boolean; onError: (m: string) => void }) {
+function DocumentsBlock({ contractId, canManage, partnerWhatsapp, onError }: { contractId: string; canManage: boolean; partnerWhatsapp?: string | null; onError: (m: string) => void }) {
   const [docs, setDocs] = useState<ContractDocument[]>([]);
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<ContractDocumentKind>("signed_scan");
   const [busy, setBusy] = useState(false);
+  const [transferDoc, setTransferDoc] = useState<ContractDocument | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = () => listContractDocuments(contractId).then(setDocs).catch(() => {});
@@ -438,6 +443,9 @@ function DocumentsBlock({ contractId, canManage, onError }: { contractId: string
               <a href={contractDocumentDownloadUrl(contractId, d.id)} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: "var(--eclosion)", fontWeight: 600 }}>
                 Télécharger
               </a>
+              <button onClick={() => setTransferDoc(d)} style={{ ...linkButtonStyle, color: "var(--eclosion)" }}>
+                Transférer
+              </button>
               {canManage && (
                 <button onClick={() => remove(d.id)} style={{ ...linkButtonStyle, color: "var(--alert)" }}>
                   Retirer
@@ -473,6 +481,114 @@ function DocumentsBlock({ contractId, canManage, onError }: { contractId: string
           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>PDF ou images (JPG, PNG…). Jusqu'à 200 Mo par fichier.</div>
         </div>
       )}
+
+      {transferDoc && (
+        <TransferDocDialog
+          contractId={contractId}
+          doc={transferDoc}
+          partnerWhatsapp={partnerWhatsapp}
+          onClose={() => setTransferDoc(null)}
+          onError={onError}
+        />
+      )}
+    </div>
+  );
+}
+
+// Transfert d'une pièce du contrat (contrat signé, annexe) vers la messagerie
+// interne (fichier joint réellement envoyé) ou WhatsApp (ouverture d'un message
+// pré-rempli ; la pièce est téléchargée pour être jointe à la main, faute de
+// passerelle WhatsApp automatique côté serveur — cf. AVANCEMENT).
+function TransferDocDialog({ contractId, doc, partnerWhatsapp, onClose, onError }: { contractId: string; doc: ContractDocument; partnerWhatsapp?: string | null; onClose: () => void; onError: (m: string) => void }) {
+  const [dir, setDir] = useState<ChatDirectoryEntry[]>([]);
+  const [recipient, setRecipient] = useState("");
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+  const docLabel = doc.label || doc.name;
+
+  useEffect(() => {
+    getChatDirectory().then((d) => { setDir(d); if (d[0]) setRecipient(d[0].id); }).catch(() => setDir([]));
+  }, []);
+
+  async function sendInternal() {
+    if (!recipient) return;
+    setSending(true);
+    try {
+      const conv = await startConversation(recipient);
+      const body = (note.trim() ? note.trim() + "\n\n" : "") + `Document du contrat : ${docLabel}`;
+      const resp = await fetch(contractDocumentDownloadUrl(contractId, doc.id), { credentials: "include" });
+      const blob = await resp.blob();
+      const file = new File([blob], doc.name || docLabel, { type: blob.type || "application/octet-stream" });
+      await sendChatMessageWithFile(conv.id, body, file);
+      onClose();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Transfert impossible.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function shareWhatsApp() {
+    // Déclenche le téléchargement de la pièce (à joindre dans WhatsApp), puis
+    // ouvre WhatsApp avec un message pré-rempli — vers le numéro de l'auteur
+    // s'il est renseigné, sinon le sélecteur de contact WhatsApp.
+    const a = document.createElement("a");
+    a.href = contractDocumentDownloadUrl(contractId, doc.id);
+    a.download = doc.name || docLabel;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    const text = encodeURIComponent(`${note.trim() ? note.trim() + " — " : ""}Document du contrat : ${docLabel} (pièce jointe téléchargée à joindre au message).`);
+    const num = (partnerWhatsapp ?? "").replace(/[^\d]/g, "");
+    const url = num ? `https://wa.me/${num}?text=${text}` : `https://wa.me/?text=${text}`;
+    window.open(url, "_blank", "noopener");
+    onClose();
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 440, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Transférer le document</div>
+        <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>{docLabel}</div>
+
+        <label style={{ fontSize: 11.5, display: "block", marginBottom: 10 }}>
+          Message (facultatif)
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} placeholder="Un mot d'accompagnement…" />
+        </label>
+
+        <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, marginBottom: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Messagerie interne</div>
+          {dir.length === 0 ? (
+            <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>Aucun destinataire disponible.</p>
+          ) : (
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <label style={{ fontSize: 11.5, flex: 1, minWidth: 160 }}>
+                Destinataire
+                <select value={recipient} onChange={(e) => setRecipient(e.target.value)} style={inputStyle}>
+                  {dir.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </label>
+              <button onClick={sendInternal} disabled={sending || !recipient} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>
+                {sending ? "Envoi…" : "Envoyer"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>WhatsApp</div>
+          <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>
+            {partnerWhatsapp ? <>Vers le numéro de l'auteur : <span style={{ fontFamily: "var(--font-mono)" }}>{partnerWhatsapp}</span>.</> : "Vous choisirez le contact dans WhatsApp."} La pièce sera téléchargée pour être jointe au message.
+          </div>
+          <button onClick={shareWhatsApp} style={{ ...secondaryButtonStyle, borderColor: "#25D366", color: "#128C3E", fontWeight: 600 }}>
+            💬 Ouvrir WhatsApp
+          </button>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+          <button onClick={onClose} style={secondaryButtonStyle}>Fermer</button>
+        </div>
+      </div>
     </div>
   );
 }

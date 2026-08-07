@@ -13,6 +13,17 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 07/08/2026 — Chantier contrat & manuscrit (4/4, terminé) : transfert du document du contrat vers messagerie interne / WhatsApp
+
+**Fait (point 2 du chantier — dernier point) :**
+- Sur chaque pièce du contrat (contrat signé scanné, annexe), nouveau lien **« Transférer »** ouvrant un choix :
+  - **Messagerie interne** : sélection d'un collègue → le **fichier est réellement joint** au message (téléchargé puis envoyé via la messagerie interne, comme le transfert d'un rapport de lecture).
+  - **WhatsApp** : la pièce est téléchargée (pour être jointe à la main) et **WhatsApp s'ouvre avec un message pré-rempli** — vers le numéro de l'auteur s'il est renseigné, sinon le sélecteur de contact WhatsApp. (Pas de passerelle WhatsApp automatique côté serveur ; l'expédition reste manuelle — cohérent avec la note du 02/08/2026.)
+- Un message d'accompagnement facultatif peut être ajouté.
+- 100 % frontend, appuyé sur les endpoints existants (annuaire messagerie, conversation, envoi de message avec fichier, téléchargement de pièce de contrat). Typecheck + build OK.
+
+**Chantier « contrat & manuscrit » : les 6 points sont livrés** (rubrique Contrats au pôle Éditorial ; téléchargement source « Mes lectures » ; identité auteur enregistrement→contrat ; durée variable ; boutons devis / frais de dépôt → Finance ; transfert du document messagerie/WhatsApp).
+
 ### 06/08/2026 (suite) — Chantier contrat & manuscrit (3/…) : boutons « Demande devis » / « Demande facture frais de dépôt » → Finance
 
 **Fait (point 6 du chantier) :**

@@ -880,3 +880,11 @@ Peaufinage du chargement : les exemplaires « touchés » (abîmés) du rapport 
 - **Backend** : le mouvement de stock accepte désormais un champ `condition` (vendable/declasse) appliqué à l'ajustement ; l'endpoint de rapprochement transmet `damaged` par ligne.
 - **Frontend** (`StockInitialImportSection`) : le parseur extrait « (NN touchés) » (colonne « dont touchés » pré-remplie) ; au chargement, chaque ouvrage crée un mouvement **vendable** (quantité − touchés) et, si besoin, un mouvement **déclassé** (touchés) avec un motif explicite.
 - **Test** : `damaged` transmis par le rapprochement ; chargement 7 vendable / 8 déclassé (« 15 dont 08 touchés »).
+
+## 07/08/2026 (suite) — Refonte Contrats, phase 1a : tableau de bord + cycle de vie
+
+Après audit du module Contrats & droits (déjà mûr : workflow, signature+empreinte, avenants, bénéficiaires, relevés), démarrage de la refonte CLM par le tableau de bord.
+- **Schéma** : `Contract.validatedAt` (migration `contract_validated_at`), posé au passage en « attente de signature ».
+- **Backend** (`routes/contracts.ts`) : `GET /api/v1/contracts/dashboard` (répartition par statut, avenants, avances contractuelles, échéances à 90 j + retards, contrats supprimés restaurables) ; `POST /api/v1/contracts/:id/restore` (droit validation).
+- **Frontend** : `ContractsDashboard` affiché en tête de « Contrats & droits d'auteur » (compteurs par statut, échéances/retards, avances, restauration).
+- **Test** : `contract-dashboard.test.ts` — compteurs + date de validation, retard signalé, suppression → restauration.

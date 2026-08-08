@@ -888,3 +888,11 @@ Après audit du module Contrats & droits (déjà mûr : workflow, signature+empr
 - **Backend** (`routes/contracts.ts`) : `GET /api/v1/contracts/dashboard` (répartition par statut, avenants, avances contractuelles, échéances à 90 j + retards, contrats supprimés restaurables) ; `POST /api/v1/contracts/:id/restore` (droit validation).
 - **Frontend** : `ContractsDashboard` affiché en tête de « Contrats & droits d'auteur » (compteurs par statut, échéances/retards, avances, restauration).
 - **Test** : `contract-dashboard.test.ts` — compteurs + date de validation, retard signalé, suppression → restauration.
+
+## 07/08/2026 (suite) — Nettoyage des ouvrages : fiches catalogue à compléter + épuration des essais
+
+Demande opérateur : des ~100 ouvrages importés au catalogue ont des fiches incomplètes (à compléter, chemin A), et des manuscrits d'essai sont coincés au milieu du parcours (à épurer), sans toucher au catalogue/financier/RH.
+- **Backend** (`routes/manuscripts.ts`) : `GET /manuscripts/catalogue-incomplete` (ouvrages parus dont la fiche manque d'ISBN, prix, domaine, date, identité auteur) ; `GET /manuscripts/purge-candidates` (manuscrits sans empreinte catalogue/financière = sûrs ; les autres listés avec leurs bloqueurs) ; `POST /manuscripts/purge` (archivage logique réversible, RE-VÉRIFIÉ côté serveur — refuse tout ouvrage avec empreinte). Réservé administration.
+- **Frontend** : `ManuscriptCleanupSection` en accordéon « 🧹 Nettoyage » sur la vue Manuscrits (admin) — fiches à compléter (bouton « Compléter » → fiche) + épuration (cases pour les essais sûrs uniquement, ouvrages protégés non cochables).
+- **Garde-fous** : le catalogue (publié, ISBN, site), les contrats et toute donnée financière protègent l'ouvrage ; la RH n'est pas concernée ; l'archivage est réversible (restaurable).
+- **Test** : essai sûr → archivé ; manuscrit sous contrat → protégé (purge le saute) ; import sans ISBN → fiche à compléter.

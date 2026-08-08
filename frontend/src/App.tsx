@@ -55,6 +55,7 @@ function PageLoading() {
   return <div style={{ padding: "40px 24px", color: "var(--muted)", fontSize: 13 }}>{t("common.loading", "Chargement…")}</div>;
 }
 import { RubricHelp } from "./components/RubricHelp";
+import { ContractsDashboard } from "./components/ContractsDashboard";
 import { GuidanceNote } from "./components/GuidanceNote";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
@@ -732,14 +733,21 @@ export function App() {
         )}
 
         {leaf && "stage" in leaf && (
-          <Manuscripts
-            key={leaf.stage}
-            statusFilter={leaf.stage}
-            heading={leaf.heading}
-            canCreate={permissions.has("manuscripts:saisie")}
-            onOpenManuscript={openManuscript}
-            onGoToManuscripts={() => setView({ kind: "leaf", key: "ed-manuscrits" })}
-          />
+          <>
+            {leaf.stage === "CONTRACTUALISATION" && permissions.has("contracts:consultation") && (
+              <div className="ecl-page" style={{ paddingBottom: 0 }}>
+                <ContractsDashboard canRestore={permissions.has("contracts:validation")} />
+              </div>
+            )}
+            <Manuscripts
+              key={leaf.stage}
+              statusFilter={leaf.stage}
+              heading={leaf.heading}
+              canCreate={permissions.has("manuscripts:saisie")}
+              onOpenManuscript={openManuscript}
+              onGoToManuscripts={() => setView({ kind: "leaf", key: "ed-manuscrits" })}
+            />
+          </>
         )}
 
         {leaf && "page" in leaf && leaf.page === "dashboard" && (

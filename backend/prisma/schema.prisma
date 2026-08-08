@@ -1976,6 +1976,9 @@ model Contract {
   amendments       Contract[] @relation("ContractAmendments")
 
   signedAt       DateTime?
+  // Date à laquelle le contrat a passé la validation (entrée en « attente de
+  // signature ») — distincte de la signature. Alimente la fiche et le PDF.
+  validatedAt    DateTime?      @map("validated_at")
   effectiveAt    DateTime?      @map("effective_at")
   durationMonths Int?           @map("duration_months")
   territories    String[]       @default([])

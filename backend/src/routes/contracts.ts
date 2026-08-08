@@ -290,6 +290,80 @@ export default async function contractRoutes(fastify: FastifyInstance) {
     return reply.send(withTrace);
   });
 
+  // Tableau de bord des contrats (chap. XII de la refonte) : répartition par
+  // statut, avenants, avances contractuelles, échéances à venir + retards, et
+  // contrats récemment supprimés (restaurables).
+  fastify.get("/api/v1/contracts/dashboard", { preHandler: requirePermission("contracts", "consultation") }, async (_request, reply) => {
+    const contracts = await prisma.contract.findMany({
+      where: { deletedAt: null },
+      include: {
+        partner: { select: { firstName: true, lastName: true } },
+        manuscript: { select: { title: true } },
+        royaltyTerms: { select: { advanceAmount: true } },
+        _count: { select: { amendments: true } },
+      },
+    });
+
+    const byStatus: Record<string, number> = { preparation: 0, legal_review: 0, direction_approval: 0, awaiting_signature: 0, active: 0, expired: 0, terminated: 0 };
+    let withAmendments = 0;
+    let advancesTotal = 0;
+    const now = new Date();
+    const soon = new Date();
+    soon.setDate(soon.getDate() + 90);
+    const expiring: { id: string; contract_number: string; title: string | null; partner_name: string; status: string; expiry: string; days_left: number; overdue: boolean }[] = [];
+
+    for (const c of contracts) {
+      byStatus[c.status] = (byStatus[c.status] ?? 0) + 1;
+      if (c._count.amendments > 0) withAmendments += 1;
+      if (c.royaltyTerms?.advanceAmount) advancesTotal += Number(c.royaltyTerms.advanceAmount);
+      // Échéance = date d'effet + durée. Signalée si active et proche/dépassée.
+      if (c.status === "active" && c.effectiveAt && c.durationMonths) {
+        const expiry = new Date(c.effectiveAt);
+        expiry.setMonth(expiry.getMonth() + c.durationMonths);
+        const daysLeft = Math.round((expiry.getTime() - now.getTime()) / 86400000);
+        if (expiry <= soon) {
+          expiring.push({
+            id: c.id, contract_number: c.contractNumber, title: c.manuscript?.title ?? null,
+            partner_name: `${c.partner.firstName} ${c.partner.lastName}`.trim(),
+            status: c.status, expiry: expiry.toISOString().slice(0, 10), days_left: daysLeft, overdue: expiry < now,
+          });
+        }
+      }
+    }
+    expiring.sort((a, b) => a.days_left - b.days_left);
+
+    const deletedRows = await prisma.contract.findMany({
+      where: { deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+      take: 20,
+      include: { partner: { select: { firstName: true, lastName: true } }, manuscript: { select: { title: true } } },
+    });
+    const deleted = deletedRows.map((c) => ({
+      id: c.id, contract_number: c.contractNumber, title: c.manuscript?.title ?? null,
+      partner_name: `${c.partner.firstName} ${c.partner.lastName}`.trim(), deleted_at: c.deletedAt?.toISOString() ?? null,
+    }));
+
+    return reply.send({
+      total: contracts.length,
+      by_status: byStatus,
+      with_amendments: withAmendments,
+      advances_total: advancesTotal,
+      expiring,
+      deleted,
+    });
+  });
+
+  // Restauration d'un contrat supprimé logiquement (chap. VIII/IX) — réservée à
+  // la validation juridique, tracée au journal.
+  fastify.post("/api/v1/contracts/:id/restore", { preHandler: requirePermission("contracts", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const contract = await prisma.contract.findFirst({ where: { id, deletedAt: { not: null } } });
+    if (!contract) return reply.code(404).send({ code: "not_found", message: "Contrat supprimé introuvable." });
+    await prisma.contract.update({ where: { id }, data: { deletedAt: null, updatedBy: request.user!.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "contract", entityId: id, oldValues: { deleted: true }, newValues: { restored: true }, ipAddress: request.ip });
+    return reply.send({ restored: true });
+  });
+
   fastify.get("/api/v1/contracts/:id", { preHandler: requirePermission("contracts", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     // Consultation journalisée (Ch. 9 §9.11) : la sensibilité juridique
@@ -354,7 +428,14 @@ export default async function contractRoutes(fastify: FastifyInstance) {
 
       const updated = await prisma.contract.update({
         where: { id },
-        data: { status: nextStatus, signedAt: signed_at ?? contract.signedAt, updatedBy: request.user!.id },
+        data: {
+          status: nextStatus,
+          signedAt: signed_at ?? contract.signedAt,
+          // La date de validation est posée au passage en « attente de signature »
+          // (le circuit de validation est terminé), une seule fois.
+          validatedAt: nextStatus === "awaiting_signature" && !contract.validatedAt ? new Date() : contract.validatedAt,
+          updatedBy: request.user!.id,
+        },
       });
 
       await writeAuditLog({

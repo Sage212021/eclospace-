@@ -957,6 +957,23 @@ export function updateContractStatus(id: string, status: ContractStatus) {
   return request<Contract>(`/api/v1/contracts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
 }
 
+// Tableau de bord des contrats (refonte CLM, phase 1) : répartition par statut,
+// avenants, avances, échéances à venir + retards, contrats restaurables.
+export interface ContractsDashboard {
+  total: number;
+  by_status: Record<ContractStatus, number>;
+  with_amendments: number;
+  advances_total: number;
+  expiring: { id: string; contract_number: string; title: string | null; partner_name: string; status: ContractStatus; expiry: string; days_left: number; overdue: boolean }[];
+  deleted: { id: string; contract_number: string; title: string | null; partner_name: string; deleted_at: string | null }[];
+}
+export function getContractsDashboard() {
+  return request<ContractsDashboard>("/api/v1/contracts/dashboard");
+}
+export function restoreContract(id: string) {
+  return request<{ restored: boolean }>(`/api/v1/contracts/${id}/restore`, { method: "POST" });
+}
+
 // --- Pièces numérisées d'un contrat (contrat signé scanné, annexes) --------
 export type ContractDocumentKind = "signed_scan" | "annexe";
 export interface ContractDocument {

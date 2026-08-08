@@ -873,3 +873,10 @@ Réponse à « intégrer les stocks par manuscrit » : rendre le stock visible e
 ## 07/08/2026 (suite) — Chargement inventaire : rapprochement automatique titres → ouvrages
 
 Pour gagner du temps sur l'intégration du rapport de stock : `POST /api/v1/stock-initial/match` rapproche des lignes « titre + quantité » des ouvrages existants (ISBN imprimés) par normalisation (accents/casse/ponctuation) + score de Dice sur bigrammes (seuil 0,5). Frontend (`StockInitialImportSection`) : zone de collage pré-remplie avec le rapport d'inventaire, bouton « Rapprocher automatiquement » → les quantités se placent sur les ouvrages reconnus (cumul si doublon), les non-trouvés sont listés (à saisir par le magasinier). L'opérateur choisit la zone puis « Charger le stock ». Test : « RHAPSODIES » apparié à « Rhapsodies » (score ≥ 90), titre inexistant → non trouvé.
+
+## 07/08/2026 (suite) — Chargement inventaire : exemplaires « touchés » → déclassé
+
+Peaufinage du chargement : les exemplaires « touchés » (abîmés) du rapport entrent en stock **déclassé**, avec la précision.
+- **Backend** : le mouvement de stock accepte désormais un champ `condition` (vendable/declasse) appliqué à l'ajustement ; l'endpoint de rapprochement transmet `damaged` par ligne.
+- **Frontend** (`StockInitialImportSection`) : le parseur extrait « (NN touchés) » (colonne « dont touchés » pré-remplie) ; au chargement, chaque ouvrage crée un mouvement **vendable** (quantité − touchés) et, si besoin, un mouvement **déclassé** (touchés) avec un motif explicite.
+- **Test** : `damaged` transmis par le rapprochement ; chargement 7 vendable / 8 déclassé (« 15 dont 08 touchés »).

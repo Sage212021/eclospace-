@@ -1835,12 +1835,13 @@ export function getManuscriptStock(manuscriptId: string) {
 export interface StockMatchResult {
   label: string;
   quantity: number;
+  damaged: number;
   isbn_id: string | null;
   isbn13: string | null;
   matched_title: string | null;
   score: number;
 }
-export function matchStockInitial(lines: { label: string; quantity: number }[]) {
+export function matchStockInitial(lines: { label: string; quantity: number; damaged?: number }[]) {
   return request<{ results: StockMatchResult[] }>("/api/v1/stock-initial/match", { method: "POST", body: JSON.stringify({ lines }) });
 }
 
@@ -1923,6 +1924,7 @@ export function createStockMovement(input: {
   to_location_id?: string;
   quantity: number;
   reason: string;
+  condition?: "vendable" | "declasse";
 }) {
   return request(`/api/v1/stock-movements`, { method: "POST", body: JSON.stringify(input) });
 }

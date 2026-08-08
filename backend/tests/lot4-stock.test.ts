@@ -547,13 +547,27 @@ describe("Stock et magasin (Lot 4)", () => {
     await createIsbnForNewManuscript("Rhapsodies");
     const res = await app.inject({
       method: "POST", url: "/api/v1/stock-initial/match", headers: { cookie: adminCookie },
-      payload: { lines: [{ label: "RHAPSODIES", quantity: 30 }, { label: "Titre totalement inexistant zzz", quantity: 5 }] },
+      payload: { lines: [{ label: "RHAPSODIES", quantity: 30, damaged: 4 }, { label: "Titre totalement inexistant zzz", quantity: 5 }] },
     });
     expect(res.statusCode).toBe(200);
     const results = res.json().results;
     expect(results[0].isbn_id).not.toBeNull();
     expect(results[0].matched_title).toBe("Rhapsodies");
     expect(results[0].score).toBeGreaterThanOrEqual(90);
+    expect(results[0].damaged).toBe(4); // « touchés » transmis
     expect(results[1].isbn_id).toBeNull();
+  });
+
+  it("chargement initial : exemplaires « touchés » chargés en déclassé", async () => {
+    const zone = (await app.inject({ method: "POST", url: "/api/v1/stock-locations", headers: { cookie: adminCookie }, payload: { type: "entrepot", label: "Zone touchés" } })).json();
+    const { isbnId } = await createIsbnForNewManuscript("Manuscrit Touchés");
+    // 7 vendable + 8 déclassés (comme « 15 dont 08 touchés »).
+    await app.inject({ method: "POST", url: "/api/v1/stock-movements", headers: { cookie: adminCookie }, payload: { type: "inventory_adjustment", isbn_id: isbnId, to_location_id: zone.id, quantity: 7, reason: "Chargement initial", condition: "vendable" } });
+    await app.inject({ method: "POST", url: "/api/v1/stock-movements", headers: { cookie: adminCookie }, payload: { type: "inventory_adjustment", isbn_id: isbnId, to_location_id: zone.id, quantity: 8, reason: "Chargement initial — touchés", condition: "declasse" } });
+
+    const vendable = await prisma.stockItem.findFirstOrThrow({ where: { isbnId, locationId: zone.id, condition: "vendable" } });
+    const declasse = await prisma.stockItem.findFirstOrThrow({ where: { isbnId, locationId: zone.id, condition: "declasse" } });
+    expect(vendable.quantityPhysical).toBe(7);
+    expect(declasse.quantityPhysical).toBe(8);
   });
 });

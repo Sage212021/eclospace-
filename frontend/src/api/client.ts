@@ -472,6 +472,32 @@ export function deleteManuscript(manuscriptId: string) {
   return request<{ deleted: boolean }>(`/api/v1/manuscripts/${manuscriptId}/delete`, { method: "POST" });
 }
 
+// Nettoyage : fiches catalogue incomplètes (à compléter) et essais à épurer.
+export interface CatalogueIncompleteRow {
+  id: string;
+  manuscript_number: string;
+  title: string;
+  missing: string[];
+}
+export function getCatalogueIncomplete() {
+  return request<CatalogueIncompleteRow[]>("/api/v1/manuscripts/catalogue-incomplete");
+}
+export interface PurgeCandidateRow {
+  id: string;
+  manuscript_number: string;
+  title: string;
+  stage: string | null;
+  step_order: number | null;
+  safe: boolean;
+  blockers: string[];
+}
+export function getPurgeCandidates() {
+  return request<PurgeCandidateRow[]>("/api/v1/manuscripts/purge-candidates");
+}
+export function purgeManuscripts(ids: string[]) {
+  return request<{ archived_count: number; archived: string[]; skipped: { id: string; reason: string }[] }>("/api/v1/manuscripts/purge", { method: "POST", body: JSON.stringify({ ids }) });
+}
+
 // Fichier source du manuscrit (dépôt à la réception → entrée du circuit).
 export function getManuscriptSourceFileMeta(manuscriptId: string) {
   return request<{ has_file: boolean; mime_type: string | null }>(`/api/v1/manuscripts/${manuscriptId}/source-file/meta`);

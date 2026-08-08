@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ManuscriptsDashboard } from "../components/ManuscriptsDashboard";
+import { ManuscriptCleanupSection } from "../components/ManuscriptCleanupSection";
 import {
   createManuscript,
   importManuscript,
@@ -108,6 +109,9 @@ function periodBounds(key: string): { from?: string; to?: string } {
 interface ManuscriptsProps {
   onOpenManuscript: (id: string) => void;
   canCreate: boolean;
+  // Outils de nettoyage (fiches à compléter + épuration des essais), réservés à
+  // l'administration ; affichés seulement sur la vue « Manuscrits » globale.
+  canAdminister?: boolean;
   // Sous-module par étape : filtre la liste sur un statut de workflow et adapte
   // le titre. La création n'est proposée que sur la vue « Manuscrits » globale.
   statusFilter?: string;
@@ -116,7 +120,7 @@ interface ManuscriptsProps {
   onGoToManuscripts?: () => void;
 }
 
-export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading, onGoToManuscripts }: ManuscriptsProps) {
+export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, statusFilter, heading, onGoToManuscripts }: ManuscriptsProps) {
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -199,6 +203,12 @@ export function Manuscripts({ onOpenManuscript, canCreate, statusFilter, heading
               </div>
               {showForm && <NewManuscriptForm onCreated={(m) => { setShowForm(false); loadAll(); onOpenManuscript(m.id); }} onError={setError} />}
               {showImport && <ImportBookForm onImported={(m) => { setShowImport(false); loadAll(); onOpenManuscript(m.id); }} onError={setError} />}
+            </AccordionSection>
+          )}
+
+          {canAdminister && (
+            <AccordionSection open={section === "nettoyage"} onToggle={() => setSection(section === "nettoyage" ? "" : "nettoyage")} icon="🧹" label="Nettoyage (fiches à compléter · essais)">
+              <ManuscriptCleanupSection canAdminister onOpenManuscript={onOpenManuscript} />
             </AccordionSection>
           )}
 

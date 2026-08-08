@@ -547,6 +547,101 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     return reply.send(manuscripts);
   });
 
+  // Fiches du CATALOGUE incomplètes (chemin A) : ouvrages déjà parus dont la
+  // fiche manque d'informations clés (ISBN, prix, domaine, identité auteur).
+  // Objectif : les compléter sur place, sans rien effacer.
+  fastify.get("/api/v1/manuscripts/catalogue-incomplete", { preHandler: requirePermission("manuscripts", "consultation") }, async (_request, reply) => {
+    const rows = await prisma.manuscript.findMany({
+      where: { deletedAt: null, OR: [{ isBackCatalogue: true }, { publicationDate: { not: null } }] },
+      include: {
+        genre: { select: { id: true } },
+        isbns: { select: { id: true, priceList: { select: { id: true }, take: 1 } } },
+        workContributors: { where: { role: "author" }, include: { partner: { select: { email: true, phone: true, nationality: true, idNumber: true } } }, take: 1 },
+      },
+      orderBy: { publicationDate: "desc" },
+      take: 500,
+    });
+    const list = rows
+      .map((m) => {
+        const author = m.workContributors[0]?.partner;
+        const authorThin = !author || (!author.email && !author.phone && !author.nationality && !author.idNumber);
+        const missing: string[] = [];
+        if (m.isbns.length === 0) missing.push("ISBN");
+        else if (!m.isbns.some((i) => i.priceList.length > 0)) missing.push("prix");
+        if (!m.genreId) missing.push("domaine");
+        if (!m.publicationDate) missing.push("date de parution");
+        if (authorThin) missing.push("identité auteur");
+        return { id: m.id, manuscript_number: m.manuscriptNumber, title: m.title, missing };
+      })
+      .filter((m) => m.missing.length > 0);
+    return reply.send(list);
+  });
+
+  // Essais à ÉPURER : manuscrits SANS aucune empreinte catalogue ni financière,
+  // donc sûrs à archiver. Les ouvrages publiés ou porteurs de données financières
+  // sont exclus (protégés). Réservé à l'administration (DG).
+  fastify.get("/api/v1/manuscripts/purge-candidates", { preHandler: requirePermission("manuscripts", "administration") }, async (_request, reply) => {
+    const rows = await prisma.manuscript.findMany({
+      where: { deletedAt: null },
+      include: {
+        status: { select: { label: true, stepOrder: true } },
+        sitePublication: { select: { id: true } },
+        _count: { select: { isbns: true, contracts: true, financeRequests: true, editorialQuotes: true, expenses: true, costEntries: true, budgets: true, printQuotes: true, schoolRoyaltyEntries: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 1000,
+    });
+    const list = rows.map((m) => {
+      const blockers: string[] = [];
+      if (m.publicationDate || m.isBackCatalogue) blockers.push("au catalogue");
+      if (m.sitePublication) blockers.push("publié sur le site");
+      if (m._count.isbns > 0) blockers.push("ISBN attribué");
+      if (m._count.contracts > 0) blockers.push("contrat");
+      if (m._count.financeRequests > 0 || m._count.editorialQuotes > 0) blockers.push("devis/facture");
+      if (m._count.expenses > 0 || m._count.costEntries > 0 || m._count.budgets > 0) blockers.push("dépenses/coûts");
+      if (m._count.printQuotes > 0) blockers.push("devis impression");
+      if (m._count.schoolRoyaltyEntries > 0) blockers.push("droits scolaires");
+      return {
+        id: m.id, manuscript_number: m.manuscriptNumber, title: m.title,
+        stage: m.status?.label ?? null, step_order: m.status?.stepOrder ?? null,
+        safe: blockers.length === 0, blockers,
+      };
+    });
+    return reply.send(list);
+  });
+
+  // Archivage (suppression LOGIQUE, réversible) des essais sélectionnés. Chaque
+  // ouvrage est RE-VÉRIFIÉ côté serveur : tout ouvrage avec empreinte
+  // catalogue/financière est refusé. Réservé à l'administration, tracé au journal.
+  fastify.post("/api/v1/manuscripts/purge", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const parsed = z.object({ ids: z.array(z.string().uuid()).min(1).max(1000) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+
+    const rows = await prisma.manuscript.findMany({
+      where: { id: { in: parsed.data.ids }, deletedAt: null },
+      include: {
+        sitePublication: { select: { id: true } },
+        _count: { select: { isbns: true, contracts: true, financeRequests: true, editorialQuotes: true, expenses: true, costEntries: true, budgets: true, printQuotes: true, schoolRoyaltyEntries: true } },
+      },
+    });
+    const archived: string[] = [];
+    const skipped: { id: string; reason: string }[] = [];
+    for (const m of rows) {
+      const hasFootprint =
+        m.publicationDate || m.isBackCatalogue || m.sitePublication ||
+        m._count.isbns > 0 || m._count.contracts > 0 || m._count.financeRequests > 0 || m._count.editorialQuotes > 0 ||
+        m._count.expenses > 0 || m._count.costEntries > 0 || m._count.budgets > 0 || m._count.printQuotes > 0 || m._count.schoolRoyaltyEntries > 0;
+      if (hasFootprint) {
+        skipped.push({ id: m.id, reason: "empreinte catalogue/financière — protégé" });
+        continue;
+      }
+      await prisma.manuscript.update({ where: { id: m.id }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "manuscript", entityId: m.id, oldValues: { deleted: false }, newValues: { deleted: true, reason: "épuration essais" }, ipAddress: request.ip });
+      archived.push(m.id);
+    }
+    return reply.send({ archived_count: archived.length, archived, skipped });
+  });
+
   fastify.get("/api/v1/manuscripts/:id", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const manuscript = await prisma.manuscript.findFirst({

@@ -758,7 +758,7 @@ export function App() {
           />
         )}
         {leaf && "page" in leaf && leaf.page === "manuscripts" && (
-          <Manuscripts canCreate={permissions.has("manuscripts:saisie")} onOpenManuscript={openManuscript} />
+          <Manuscripts canCreate={permissions.has("manuscripts:saisie")} canAdminister={permissions.has("manuscripts:administration")} onOpenManuscript={openManuscript} />
         )}
         {leaf && "page" in leaf && leaf.page === "reading-committee" && (
           <ReadingCommittee onOpenManuscript={openManuscript} />

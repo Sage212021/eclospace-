@@ -76,6 +76,9 @@ const stockMovementSchema = z.object({
   reason: z.string().min(1),
   reference_type: z.string().optional(),
   reference_id: z.string().optional(),
+  // État du compartiment (§16.7) : « declasse » pour les exemplaires abîmés
+  // (« touchés »). Par défaut « vendable ».
+  condition: z.enum(["vendable", "declasse"]).optional(),
 });
 
 const inventorySchema = z.object({
@@ -253,7 +256,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
   // apparié + un score ; les non-trouvés sont signalés pour saisie manuelle.
   fastify.post("/api/v1/stock-initial/match", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
     const parsed = z
-      .object({ lines: z.array(z.object({ label: z.string().min(1), quantity: z.number().int().nonnegative() })).max(500) })
+      .object({ lines: z.array(z.object({ label: z.string().min(1), quantity: z.number().int().nonnegative(), damaged: z.number().int().nonnegative().optional() })).max(500) })
       .safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
 
@@ -277,6 +280,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       return {
         label: line.label,
         quantity: line.quantity,
+        damaged: line.damaged ?? 0,
         isbn_id: matched?.isbn_id ?? null,
         isbn13: matched?.isbn13 ?? null,
         matched_title: matched?.title ?? null,
@@ -331,13 +335,14 @@ export default async function stockRoutes(fastify: FastifyInstance) {
         },
       });
 
+      const condition = body.condition ?? "vendable";
       if (fromLocationId) {
-        await adjustStockItem(tx, body.isbn_id, fromLocationId, body.print_run, -body.quantity);
+        await adjustStockItem(tx, body.isbn_id, fromLocationId, body.print_run, -body.quantity, 0, condition);
       }
       // Un transfert ne crédite le lieu de destination qu'à la confirmation
       // de réception (§16.4) ; les autres types créditent immédiatement.
       if (toLocationId && !isTransfer) {
-        await adjustStockItem(tx, body.isbn_id, toLocationId, body.print_run, body.quantity);
+        await adjustStockItem(tx, body.isbn_id, toLocationId, body.print_run, body.quantity, 0, condition);
       }
 
       return created;

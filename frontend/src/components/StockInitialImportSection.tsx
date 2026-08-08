@@ -25,7 +25,7 @@ L'ailleurs 16
 Stances et poèmes 119
 Marketing & communication politique et électorale 13
 Libre 34
-Les comptes du Cameroun 15
+Les comptes du Cameroun 15 (08 touchés)
 Vicky Edimo à voix basse 62
 L'éveil démocratique 45
 Afrique en larme 20
@@ -37,22 +37,30 @@ J'apprends ma langue Bulu 230
 J'apprends ma langue Fufulbe 214
 J'apprends ma langue Douala 187`;
 
-// Parse une ligne « Titre … quantité » : quantité = dernier nombre, hors
-// parenthèses (« 15 (08 touchés) » → 15).
-function parseReport(text: string): { label: string; quantity: number }[] {
+// Parse une ligne « Titre … quantité (NN touchés) » : quantité = dernier nombre
+// hors parenthèses ; abîmés = nombre dans une parenthèse mentionnant « touché ».
+function parseReport(text: string): { label: string; quantity: number; damaged: number }[] {
   return text
     .split("\n")
-    .map((raw) => raw.replace(/\(.*?\)/g, " ").trim())
+    .map((raw) => raw.trim())
     .filter(Boolean)
-    .map((line) => {
+    .map((raw) => {
+      // Abîmés : parenthèse contenant « touché » (ex. « (08 touchés) »).
+      let damaged = 0;
+      const dmg = raw.match(/\(([^)]*touch[^)]*)\)/i);
+      if (dmg) {
+        const d = dmg[1].match(/\d+/);
+        if (d) damaged = parseInt(d[0], 10);
+      }
+      const line = raw.replace(/\(.*?\)/g, " ").trim();
       const m = line.match(/^(.*?)[\s.:;=–-]*?(\d[\d\s]*)$/);
       if (!m) return null;
       const label = m[1].trim();
       const quantity = parseInt(m[2].replace(/\s/g, ""), 10);
       if (!label || !Number.isFinite(quantity)) return null;
-      return { label, quantity };
+      return { label, quantity, damaged: Math.min(damaged, quantity) };
     })
-    .filter((x): x is { label: string; quantity: number } => x !== null);
+    .filter((x): x is { label: string; quantity: number; damaged: number } => x !== null);
 }
 
 // Chargement de l'inventaire initial (rapport de stock) : on choisit une zone,
@@ -65,6 +73,7 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
   const [locationId, setLocationId] = useState("");
   const [filter, setFilter] = useState("");
   const [qty, setQty] = useState<Record<string, string>>({});
+  const [dmg, setDmg] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -109,6 +118,13 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
         }
         return next;
       });
+      setDmg((cur) => {
+        const next = { ...cur };
+        for (const r of results) {
+          if (r.isbn_id && r.damaged > 0) next[r.isbn_id] = String((Number(next[r.isbn_id]) || 0) + r.damaged);
+        }
+        return next;
+      });
       const matched = results.filter((r) => r.isbn_id).length;
       setMessage(`Rapprochement : ${matched}/${results.length} ligne(s) appariée(s). Vérifiez, puis choisissez la zone et « Charger ».`);
     } catch (e) {
@@ -131,10 +147,20 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
     setBusy(true);
     setError(null);
     let ok = 0;
+    let damagedTotal = 0;
     const failed: string[] = [];
     for (const [isbnId, v] of entries) {
+      const total = Math.round(Number(v));
+      const damaged = Math.min(Math.max(Math.round(Number(dmg[isbnId]) || 0), 0), total);
+      const sound = total - damaged;
       try {
-        await createStockMovement({ type: "inventory_adjustment", isbn_id: isbnId, to_location_id: locationId, quantity: Math.round(Number(v)), reason: "Chargement inventaire initial" });
+        if (sound > 0) {
+          await createStockMovement({ type: "inventory_adjustment", isbn_id: isbnId, to_location_id: locationId, quantity: sound, reason: "Chargement inventaire initial", condition: "vendable" });
+        }
+        if (damaged > 0) {
+          await createStockMovement({ type: "inventory_adjustment", isbn_id: isbnId, to_location_id: locationId, quantity: damaged, reason: `Chargement inventaire initial — ${damaged} exemplaire(s) touché(s) (abîmés)`, condition: "declasse" });
+          damagedTotal += damaged;
+        }
         ok += 1;
       } catch {
         failed.push(isbns.find((i) => i.id === isbnId)?.isbn13 ?? isbnId);
@@ -142,7 +168,8 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
     }
     setBusy(false);
     setQty({});
-    setMessage(`${ok} ouvrage(s) chargé(s).${failed.length ? ` Échecs : ${failed.join(", ")}.` : ""}`);
+    setDmg({});
+    setMessage(`${ok} ouvrage(s) chargé(s)${damagedTotal ? `, dont ${damagedTotal} exemplaire(s) « touché(s) » en déclassé` : ""}.${failed.length ? ` Échecs : ${failed.join(", ")}.` : ""}`);
     if (failed.length) setError(`Certaines lignes ont échoué : ${failed.join(", ")}.`);
   }
 
@@ -177,7 +204,7 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
               <div style={{ marginTop: 8, maxHeight: 200, overflowY: "auto", fontSize: 12.5 }}>
                 {matchResults.map((r, i) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "2px 0", borderTop: i ? "1px solid var(--line)" : undefined }}>
-                    <span style={{ color: "var(--muted)" }}>{r.label} <strong style={{ fontFamily: "var(--font-mono)" }}>({r.quantity})</strong></span>
+                    <span style={{ color: "var(--muted)" }}>{r.label} <strong style={{ fontFamily: "var(--font-mono)" }}>({r.quantity})</strong>{r.damaged > 0 && <span style={{ color: "var(--alert, #C4661F)" }}> · {r.damaged} touché(s)</span>}</span>
                     {r.isbn_id ? (
                       <span style={{ color: r.score >= 75 ? "var(--eclosion-dark, #8A6A12)" : "var(--alert, #C4661F)", textAlign: "right" }}>→ {r.matched_title} <span style={{ fontFamily: "var(--font-mono)" }}>({r.score}%)</span></span>
                     ) : (
@@ -215,6 +242,7 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
                 <th style={{ padding: "5px 8px" }}>Ouvrage</th>
                 <th style={{ padding: "5px 8px" }}>ISBN</th>
                 <th style={{ padding: "5px 8px", textAlign: "right" }}>Quantité</th>
+                <th style={{ padding: "5px 8px", textAlign: "right" }} title="Exemplaires touchés / abîmés → chargés en déclassé">dont touchés</th>
               </tr>
             </thead>
             <tbody>
@@ -229,6 +257,17 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
                       value={qty[i.id] ?? ""}
                       onChange={(e) => setQty((q) => ({ ...q, [i.id]: e.target.value }))}
                       style={{ width: 90, padding: "3px 6px", textAlign: "right", fontFamily: "var(--font-mono)", border: "1px solid var(--line)", borderRadius: 5 }}
+                    />
+                  </td>
+                  <td style={{ padding: "4px 8px", textAlign: "right" }}>
+                    <input
+                      type="number"
+                      min={0}
+                      value={dmg[i.id] ?? ""}
+                      onChange={(e) => setDmg((d) => ({ ...d, [i.id]: e.target.value }))}
+                      disabled={!qty[i.id]}
+                      title="Exemplaires touchés / abîmés (chargés en déclassé)"
+                      style={{ width: 72, padding: "3px 6px", textAlign: "right", fontFamily: "var(--font-mono)", border: "1px solid var(--line)", borderRadius: 5, color: "var(--alert, #C4661F)" }}
                     />
                   </td>
                 </tr>

@@ -407,7 +407,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         include: {
           employee: {
             select: {
-              id: true, firstName: true, lastName: true, position: true, hireDate: true, birthDate: true, leaveBalanceDays: true,
+              id: true, firstName: true, lastName: true, position: true, hireDate: true, birthDate: true, leaveBalanceDays: true, maritalStatus: true, childrenCount: true,
               department: { select: { name: true } },
               hrContracts: { orderBy: { startDate: "desc" }, take: 1, select: { type: true } },
               payrollProfile: true,
@@ -434,6 +434,8 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
             position: l.employee.position ?? null,
             hire_date: l.employee.hireDate ? l.employee.hireDate.toISOString().slice(0, 10) : null,
             birth_date: l.employee.birthDate ? l.employee.birthDate.toISOString().slice(0, 10) : null,
+            marital_status: l.employee.maritalStatus,
+            children_count: l.employee.childrenCount,
             contract_type: l.employee.hrContracts[0]?.type ?? null,
             category: p.category,
             email: p.email,

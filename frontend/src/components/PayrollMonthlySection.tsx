@@ -175,6 +175,8 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       payment_mode: l.payment_mode,
       account_number: l.account_number,
       leave_balance: l.leave_balance,
+      situation_familiale: l.marital_status,
+      children_count: l.children_count,
       rates: month?.rates ?? null,
       // Détail des retenues internes (la sanction est comptée avec « autres »,
       // comme dans le moteur : cf. computeMonthlyLine).

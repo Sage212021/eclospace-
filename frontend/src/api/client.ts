@@ -2605,6 +2605,8 @@ export interface Employee {
   position: string | null;
   hireDate: string | null;
   birthDate: string | null;
+  maritalStatus: string | null;
+  childrenCount: number | null;
   departureDate: string | null;
   leaveBalanceDays: string;
   department: { id: string; name: string } | null;
@@ -2835,6 +2837,8 @@ export function createEmployee(input: {
   manager_id?: string;
   hire_date?: string;
   birth_date?: string;
+  marital_status?: string;
+  children_count?: number;
   account?: { username: string; email: string; password: string; role_code: string };
   // Rattachement à un compte déjà ouvert par l'administrateur (exclusif avec account).
   link_user_id?: string;
@@ -2842,7 +2846,7 @@ export function createEmployee(input: {
   return request<Employee>("/api/v1/employees", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateEmployee(id: string, input: Partial<{ first_name: string; last_name: string; hire_date: string | null; department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null }>) {
+export function updateEmployee(id: string, input: Partial<{ first_name: string; last_name: string; hire_date: string | null; department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null; marital_status: string | null; children_count: number | null }>) {
   return request<Employee>(`/api/v1/employees/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
@@ -3784,6 +3788,8 @@ export interface PayrollMonthLine {
   position: string | null;
   hire_date: string | null;
   birth_date: string | null;
+  marital_status: string | null;
+  children_count: number | null;
   contract_type: string | null;
   category: string | null;
   email: string | null;

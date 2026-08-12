@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import type { PayslipPrintData } from "./print";
+import { ECLOSION_LOGO_PNG, ECLOSION_LOGO_RATIO, ECLOSION_FILIGRANE_PNG, ECLOSION_FILIGRANE_RATIO } from "./payslipAssets";
 
 // BULLETIN DE PAIE — modèle UNIQUE, reproduction fidèle de l'onglet « Bulletin »
 // du classeur moteur (docs/paie/Moteur_Paie_Eclosion_V26_MAJ10.xlsm) :
@@ -44,20 +45,26 @@ const CONTRACT_LABEL: Record<string, string> = { cdi: "CDI", cdd: "CDD", stage: 
 function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   const p = d.payslip;
   const r = d.rates ?? null;
-  let y = 15;
 
-  // ---- En-tête : marque + titre ------------------------------------------
+  // ---- Filigrane : ampoule Éclosion au centre, très pâle (authenticité) ----
+  // Dessiné EN PREMIER, derrière tout le contenu.
+  const filH = 150, filW = filH * ECLOSION_FILIGRANE_RATIO;
+  doc.saveGraphicsState();
+  // @ts-expect-error — GState est fourni par jsPDF à l'exécution.
+  doc.setGState(new doc.GState({ opacity: 0.05 }));
+  doc.addImage(ECLOSION_FILIGRANE_PNG, "PNG", (210 - filW) / 2, (297 - filH) / 2, filW, filH, "eclFil", "FAST");
+  doc.restoreGraphicsState();
+
+  let y = 12;
+
+  // ---- En-tête : logo réel Éclosion + titre -------------------------------
+  const logoW = 40, logoH = logoW / ECLOSION_LOGO_RATIO;
+  doc.addImage(ECLOSION_LOGO_PNG, "PNG", LEFT, y, logoW, logoH, "eclLogo", "FAST");
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...NAVY);
-  doc.setFontSize(17);
-  doc.text("Éclosion", LEFT, y);
-  doc.setTextColor(...GOLD);
-  doc.setFontSize(8);
-  doc.text("L'AVENIR DU LIVRE", LEFT, y + 4);
-  doc.setTextColor(...NAVY);
   doc.setFontSize(13);
-  doc.text("BULLETIN DE PAIE", RIGHT, y, { align: "right" });
-  y += 8;
+  doc.text("BULLETIN DE PAIE", RIGHT, y + 6, { align: "right" });
+  y += logoH + 1;
 
   // Identité légale de l'employeur (bloc gauche) + période/date (bloc droit).
   doc.setFont("helvetica", "bold");
@@ -285,7 +292,8 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   sectionBar("Informations complémentaires & congés");
   infoRow("Type de contrat", d.contract_type ? CONTRACT_LABEL[d.contract_type] ?? d.contract_type : dash, "Fonction / Poste", d.position ?? dash);
   infoRow("Date de naissance", d.birth_date ?? dash, "Situation familiale", d.situation_familiale ?? dash);
-  infoRow("Contact urgence", d.emergency_contact ?? dash, "Solde congés (jours)", d.leave_balance != null ? String(d.leave_balance) : dash);
+  infoRow("Nombre d'enfants", d.children_count != null ? String(d.children_count) : dash, "Solde congés (jours)", d.leave_balance != null ? String(d.leave_balance) : dash);
+  infoRow("Contact urgence", d.emergency_contact ?? dash, "", "");
 }
 
 // AAAA-MM → « MM/AAAA ».
@@ -296,7 +304,7 @@ function frPeriod(period: string): string {
 
 // Bulletin unique → base64 (pièce jointe e-mail).
 export function buildPayslipPdfBase64(d: PayslipPrintData): string {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   renderPayslip(doc, d);
   const uri = doc.output("datauristring");
   return uri.split("base64,")[1] ?? "";
@@ -306,7 +314,7 @@ export function buildPayslipPdfBase64(d: PayslipPrintData): string {
 // visionneuse PDF du navigateur permet d'imprimer et d'enregistrer). Garantit
 // « aperçu = PDF = impression » : un seul document, aucune divergence.
 export function printPayslipPdf(d: PayslipPrintData): void {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   renderPayslip(doc, d);
   const url = doc.output("bloburl");
   window.open(url, "_blank");
@@ -314,7 +322,7 @@ export function printPayslipPdf(d: PayslipPrintData): void {
 
 // Génération MENSUELLE GROUPÉE : un seul PDF, un bulletin par page.
 export function downloadPayslipsPdf(list: PayslipPrintData[], filename: string): void {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   list.forEach((d, i) => {
     if (i > 0) doc.addPage();
     renderPayslip(doc, d);

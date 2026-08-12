@@ -74,6 +74,22 @@ describe("persistance de la fiche employé (nom / date d'embauche)", () => {
     expect(String(body.hireDate).slice(0, 10)).toBe("2025-03-01");
   });
 
+  it("situation familiale et nombre d'enfants (bulletin) sont persistés", async () => {
+    const id = await createEmployee();
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/employees/${id}`,
+      headers: { cookie },
+      payload: { marital_status: "Marié(e)", children_count: 3 },
+    });
+    expect(patch.statusCode).toBe(200);
+
+    const got = await app.inject({ method: "GET", url: `/api/v1/employees/${id}`, headers: { cookie } });
+    const body = got.json();
+    expect(body.maritalStatus).toBe("Marié(e)");
+    expect(body.childrenCount).toBe(3);
+  });
+
   it("une mise à jour partielle (poste seul) ne remet pas le nom à zéro", async () => {
     const id = await createEmployee();
 

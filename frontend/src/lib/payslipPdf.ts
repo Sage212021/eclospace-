@@ -51,7 +51,7 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   const filH = 150, filW = filH * ECLOSION_FILIGRANE_RATIO;
   doc.saveGraphicsState();
   // @ts-expect-error — GState est fourni par jsPDF à l'exécution.
-  doc.setGState(new doc.GState({ opacity: 0.05 }));
+  doc.setGState(new doc.GState({ opacity: 0.55 }));
   doc.addImage(ECLOSION_FILIGRANE_PNG, "PNG", (210 - filW) / 2, (297 - filH) / 2, filW, filH, "eclFil", "FAST");
   doc.restoreGraphicsState();
 

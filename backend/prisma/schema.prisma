@@ -835,6 +835,35 @@ model PayrollMonthlyLine {
   @@map("payroll_monthly_lines")
 }
 
+// Demande de RÉOUVERTURE EXCEPTIONNELLE d'une paie validée/verrouillée (ch. 23) :
+// le RH ne peut plus modifier directement ; il DEMANDE la réouverture (élément
+// concerné, ancienne valeur, correction, motif). Le DG autorise ou refuse.
+// L'autorisation repasse le mois en brouillon (il refait ensuite le circuit).
+enum PayrollReopenStatus {
+  en_attente
+  autorisee
+  refusee
+}
+
+model PayrollReopenRequest {
+  id                  String              @id @default(uuid())
+  periodKey           String              @map("period_key")
+  employeeId          String?             @map("employee_id")
+  element             String // élément concerné (ex. « Salaire de base »)
+  oldValue            String?             @map("old_value")
+  requestedCorrection String              @map("requested_correction")
+  reason              String
+  status              PayrollReopenStatus @default(en_attente)
+  requestedBy         String?             @map("requested_by")
+  requestedAt         DateTime            @default(now()) @map("requested_at")
+  decidedBy           String?             @map("decided_by")
+  decidedAt           DateTime?           @map("decided_at")
+  decisionReason      String?             @map("decision_reason")
+
+  @@index([periodKey])
+  @@map("payroll_reopen_requests")
+}
+
 // Clôture mensuelle de la paie (D-007, incrément 5) — équivalent de la
 // « clôture du mois » du classeur (Livre de paie → Journal de paie). Une fois
 // clôturée, la période est FIGÉE : les lignes archivées sont immuables et la

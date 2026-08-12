@@ -3859,6 +3859,32 @@ export function validatePayrollMonth(period: string) {
 export function reopenPayrollMonth(period: string) {
   return request<{ period: string; status: "brouillon" }>(`/api/v1/payroll/monthly/${period}/reopen`, { method: "POST" });
 }
+
+// Réouverture EXCEPTIONNELLE d'une paie verrouillée (ch. 23) : demande RH → décision DG.
+export interface ReopenRequest {
+  id: string;
+  status: "en_attente" | "autorisee" | "refusee";
+  element: string;
+  old_value: string | null;
+  requested_correction: string;
+  reason: string;
+  employee_id: string | null;
+  employee_name: string | null;
+  requested_by: string | null;
+  requested_at: string;
+  decided_by: string | null;
+  decided_at: string | null;
+  decision_reason: string | null;
+}
+export function requestPayrollReopen(period: string, body: { employee_id?: string | null; element: string; old_value?: string | null; requested_correction: string; reason: string }) {
+  return request<{ id: string; status: string }>(`/api/v1/payroll/monthly/${period}/reopen-request`, { method: "POST", body: JSON.stringify(body) });
+}
+export function listPayrollReopenRequests(period: string) {
+  return request<ReopenRequest[]>(`/api/v1/payroll/monthly/${period}/reopen-requests`);
+}
+export function decidePayrollReopen(id: string, decision: "autorisee" | "refusee", decisionReason?: string) {
+  return request<{ id: string; status: string }>(`/api/v1/payroll/reopen-requests/${id}/decide`, { method: "POST", body: JSON.stringify({ decision, decision_reason: decisionReason }) });
+}
 export function previewPayslipEmail(employeeId: string, period: string, message: string, retenueAbsence = 0) {
   return request<{ subject: string; html: string; default_to: string | null }>(`/api/v1/payroll/employees/${employeeId}/payslip/email`, { method: "POST", body: JSON.stringify({ period, message, preview: true, retenue_absence: retenueAbsence }) });
 }

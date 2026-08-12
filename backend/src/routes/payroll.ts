@@ -44,8 +44,25 @@ const rateSetSchema = z.object({
 const monthlyLineSchema = z.object({
   primes: money, heures_sup: money, retenue_absence: money,
   retard: money, avance: money, pret: money, sanction: money, autres: money,
+  // Lignes libres ajoutées par le RH (aucune codée en dur) : gains imposables
+  // ou retenues nettes, avec un libellé et un montant.
+  extra_lines: z.array(z.object({ label: z.string().min(1).max(80), kind: z.enum(["gain", "retenue"]), amount: money })).max(30).optional(),
   note: z.string().max(500).nullable().optional(),
 });
+
+type ExtraLine = { label: string; kind: "gain" | "retenue"; amount: number };
+function parseExtraLines(v: unknown): ExtraLine[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((x) => {
+    if (x && typeof x === "object") {
+      const o = x as Record<string, unknown>;
+      if (typeof o.label === "string" && (o.kind === "gain" || o.kind === "retenue") && typeof o.amount === "number") {
+        return [{ label: o.label, kind: o.kind, amount: Math.max(o.amount, 0) }];
+      }
+    }
+    return [];
+  });
+}
 
 export default async function payrollRoutes(fastify: FastifyInstance) {
   // Interrupteur d'internalisation de la paie (D-007). « false » = export externe.
@@ -447,6 +464,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
             account_number: p.accountNumber,
             leave_balance: num(l.employee.leaveBalanceDays),
             elements: monthlyElements(l),
+            extra_lines: parseExtraLines(l.extraLines),
             note: l.note,
             net_a_payer: slip.net_a_payer,
             salaire_brut: slip.salaire_brut,
@@ -486,6 +504,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         data: {
           primes: b.primes, heuresSup: b.heures_sup, retenueAbsence: b.retenue_absence,
           retard: b.retard, avance: b.avance, pret: b.pret, sanction: b.sanction, autres: b.autres,
+          extraLines: b.extra_lines ?? [],
           note: b.note,
         },
       });
@@ -707,7 +726,11 @@ function monthlyElements(l: PayrollMonthlyLine) {
 // autres. (Formules ajustables ensuite par l'opérateur.)
 function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine, confBase: number | null = null): Payslip {
   const { base, gross } = resolveBaseGross(p, confBase);
-  const extraTaxable = num(l.primes) + num(l.heuresSup);
+  // Lignes libres : les gains s'ajoutent au brut imposable, les retenues au net.
+  const extras = parseExtraLines(l.extraLines);
+  const extraGains = extras.filter((e) => e.kind === "gain").reduce((s, e) => s + e.amount, 0);
+  const extraRetenues = extras.filter((e) => e.kind === "retenue").reduce((s, e) => s + e.amount, 0);
+  const extraTaxable = num(l.primes) + num(l.heuresSup) + extraGains;
   return computePayslip(
     {
       base,
@@ -720,7 +743,7 @@ function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: P
       seniorityThreshold: p.seniorityThreshold ?? 0,
       applySeniority: p.applySeniority,
       retenueAbsence: num(l.retenueAbsence),
-      internal: { avance: num(l.avance), pret: num(l.pret), retard: num(l.retard), autres: num(l.autres) + num(l.sanction) },
+      internal: { avance: num(l.avance), pret: num(l.pret), retard: num(l.retard), autres: num(l.autres) + num(l.sanction) + extraRetenues },
     },
     rates,
   );

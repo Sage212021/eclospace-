@@ -3781,6 +3781,12 @@ export interface PayrollMonthElements {
   primes: number; heures_sup: number; retenue_absence: number;
   retard: number; avance: number; pret: number; sanction: number; autres: number;
 }
+// Ligne libre ajoutée par le RH au bulletin (gain imposable ou retenue nette).
+export interface PayrollExtraLine {
+  label: string;
+  kind: "gain" | "retenue";
+  amount: number;
+}
 export interface PayrollMonthLine {
   employee_id: string;
   employee_name: string;
@@ -3799,6 +3805,7 @@ export interface PayrollMonthLine {
   contract_type: string | null;
   category: string | null;
   email: string | null;
+  extra_lines?: PayrollExtraLine[];
   payment_mode: string | null;
   account_number: string | null;
   leave_balance: number;
@@ -3839,8 +3846,8 @@ export function returnPayrollMonth(period: string, reason: string) {
 export function getPayrollMonth(period: string) {
   return request<PayrollMonth>(`/api/v1/payroll/monthly/${period}`);
 }
-export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null) {
-  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...elements, note: note ?? null }) });
+export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null, extraLines?: PayrollExtraLine[]) {
+  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...elements, note: note ?? null, extra_lines: extraLines ?? [] }) });
 }
 // Validation définitive du mois par le Directeur général (obligatoire avant impression).
 export function validatePayrollMonth(period: string) {

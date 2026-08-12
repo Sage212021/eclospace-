@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, submitPayrollMonth, returnPayrollMonth, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements } from "../api/client";
+import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, submitPayrollMonth, returnPayrollMonth, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements, type PayrollExtraLine } from "../api/client";
 import { downloadPayslipsPdf } from "../lib/payslipPdf";
 import type { PayslipPrintData } from "../lib/print";
 import { Card } from "./Card";
-import { Field } from "./Modal";
+import { Field, Modal } from "./Modal";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
 
@@ -39,6 +39,9 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
   const [message, setMessage] = useState<string | null>(null);
   // Copie éditable locale des éléments par salarié (saisie fluide).
   const [draft, setDraft] = useState<Record<string, PayrollMonthElements>>({});
+  // Lignes libres par salarié + salarié dont on édite les lignes (modale).
+  const [extraDraft, setExtraDraft] = useState<Record<string, PayrollExtraLine[]>>({});
+  const [linesFor, setLinesFor] = useState<{ employeeId: string; name: string } | null>(null);
 
   async function load() {
     setBusy(true);
@@ -47,8 +50,13 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       const m = await getPayrollMonth(period);
       setMonth(m);
       const d: Record<string, PayrollMonthElements> = {};
-      for (const l of m.lines ?? []) d[l.employee_id] = { ...l.elements };
+      const ex: Record<string, PayrollExtraLine[]> = {};
+      for (const l of m.lines ?? []) {
+        d[l.employee_id] = { ...l.elements };
+        ex[l.employee_id] = (l.extra_lines ?? []).map((e) => ({ ...e }));
+      }
       setDraft(d);
+      setExtraDraft(ex);
     } catch (err) {
       setMonth(null);
       setError(err instanceof Error ? err.message : "Chargement impossible.");
@@ -117,12 +125,42 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
   async function saveRow(l: PayrollMonthLine) {
     if (!editable) return;
     try {
-      await savePayrollMonthLine(period, l.employee_id, draft[l.employee_id], l.note);
+      await savePayrollMonthLine(period, l.employee_id, draft[l.employee_id], l.note, extraDraft[l.employee_id] ?? []);
       setError(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Enregistrement impossible.");
     }
+  }
+
+  // Enregistre les lignes libres d'un salarié (depuis la modale). Nettoie les
+  // lignes vides et préserve les éléments variables et la note déjà saisis.
+  async function saveLines() {
+    if (!linesFor) return;
+    const id = linesFor.employeeId;
+    const clean = (extraDraft[id] ?? [])
+      .filter((e) => e.label.trim() !== "" && e.amount > 0)
+      .map((e) => ({ label: e.label.trim(), kind: e.kind, amount: Math.max(e.amount, 0) }));
+    const note = month?.lines?.find((l) => l.employee_id === id)?.note ?? null;
+    setBusy(true);
+    try {
+      await savePayrollMonthLine(period, id, draft[id], note, clean);
+      setLinesFor(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Enregistrement des lignes impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  function setExtra(id: string, idx: number, patch: Partial<PayrollExtraLine>) {
+    setExtraDraft((cur) => ({ ...cur, [id]: (cur[id] ?? []).map((e, i) => (i === idx ? { ...e, ...patch } : e)) }));
+  }
+  function addExtra(id: string) {
+    setExtraDraft((cur) => ({ ...cur, [id]: [...(cur[id] ?? []), { label: "", kind: "gain", amount: 0 }] }));
+  }
+  function removeExtra(id: string, idx: number) {
+    setExtraDraft((cur) => ({ ...cur, [id]: (cur[id] ?? []).filter((_, i) => i !== idx) }));
   }
 
   function setCell(employeeId: string, key: keyof PayrollMonthElements, value: string) {
@@ -179,6 +217,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       situation_familiale: l.marital_status,
       children_count: l.children_count,
       phone: l.phone,
+      extra_lines: l.extra_lines ?? [],
       rates: month?.rates ?? null,
       // Détail des retenues internes (la sanction est comptée avec « autres »,
       // comme dans le moteur : cf. computeMonthlyLine).
@@ -258,6 +297,16 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
                     <td style={{ padding: "4px 8px", whiteSpace: "nowrap", position: "sticky", left: 0, background: "var(--card, #fff)" }}>
                       {l.employee_name}
                       {l.matricule && <span style={{ color: "var(--muted)", fontFamily: "var(--font-mono)", marginLeft: 6 }}>{l.matricule}</span>}
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setLinesFor({ employeeId: l.employee_id, name: l.employee_name })}
+                          title="Ajouter des lignes libres au bulletin (gains ou retenues)"
+                          style={{ marginTop: 2, border: "1px solid var(--line)", background: "#fff", borderRadius: 6, padding: "1px 7px", fontSize: 11, cursor: "pointer", color: "var(--muted)" }}
+                        >
+                          ＋ lignes{(l.extra_lines?.length ?? 0) > 0 ? ` (${l.extra_lines!.length})` : ""}
+                        </button>
+                      </div>
                     </td>
                     {COLS.map((c) => (
                       <td key={c.key} style={{ padding: "2px 4px" }}>
@@ -291,6 +340,42 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
 
       {message && <div style={{ background: "var(--gold-soft, #f6efdc)", color: "var(--ink)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>{message}</div>}
       {error && <div style={{ background: "#f8e3df", color: "var(--danger, #C24B3A)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>{error}</div>}
+
+      {/* Éditeur de LIGNES LIBRES du bulletin : le RH ajoute autant de lignes que
+          nécessaire (gain imposable ou retenue nette), rien n'est codé en dur. */}
+      {linesFor && (
+        <Modal
+          title={`Lignes libres du bulletin — ${linesFor.name}`}
+          onClose={() => setLinesFor(null)}
+          footer={
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <Button variant="view" size="sm" type="button" onClick={() => setLinesFor(null)}>Annuler</Button>
+              <Button variant="add" size="sm" type="button" disabled={busy} onClick={saveLines}>Enregistrer</Button>
+            </div>
+          }
+        >
+          <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "var(--muted)" }}>
+            Ajoutez des lignes personnalisées (indemnité, prime exceptionnelle, retenue particulière…). Un
+            <b> gain</b> est imposable (ajouté au brut) ; une <b>retenue</b> est nette (retirée du net à payer).
+            Le net se recalcule à l'enregistrement.
+          </p>
+          {(extraDraft[linesFor.employeeId] ?? []).length === 0 && (
+            <p style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucune ligne libre. Cliquez sur « + Ajouter une ligne ».</p>
+          )}
+          {(extraDraft[linesFor.employeeId] ?? []).map((e, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 110px 120px 32px", gap: 6, alignItems: "center", marginBottom: 6 }}>
+              <input placeholder="Libellé (ex. Indemnité transport)" value={e.label} onChange={(ev) => setExtra(linesFor.employeeId, i, { label: ev.target.value })} />
+              <select value={e.kind} onChange={(ev) => setExtra(linesFor.employeeId, i, { kind: ev.target.value as "gain" | "retenue" })}>
+                <option value="gain">Gain</option>
+                <option value="retenue">Retenue</option>
+              </select>
+              <input type="number" min={0} step={100} value={e.amount} onChange={(ev) => setExtra(linesFor.employeeId, i, { amount: Math.max(Number(ev.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", textAlign: "right" }} />
+              <button type="button" onClick={() => removeExtra(linesFor.employeeId, i)} title="Supprimer la ligne" style={{ border: "1px solid var(--line)", background: "#fff", borderRadius: 6, cursor: "pointer", color: "var(--danger, #C24B3A)" }}>✕</button>
+            </div>
+          ))}
+          <Button variant="edit" size="sm" type="button" onClick={() => addExtra(linesFor.employeeId)}>+ Ajouter une ligne</Button>
+        </Modal>
+      )}
     </Card>
   );
 }

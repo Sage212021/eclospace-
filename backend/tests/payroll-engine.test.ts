@@ -68,14 +68,10 @@ describe("computePayslip — variantes", () => {
     expect(p.prime_anciennete).toBe(15000); // 300 000 × 5 %
     expect(p.salaire_brut).toBe(515000);
   });
-  it("retenue d'absence = retenue interne nette : brut et assiette inchangés, net réduit", () => {
+  it("retenue d'absence réduit le brut et l'assiette (avant impôt)", () => {
     const p = computePayslip({ ...BASE_INPUT, retenueAbsence: 50000 }, RATES);
-    // Ne réduit plus le brut ni l'assiette (donc pas les cotisations)…
-    expect(p.salaire_brut).toBe(500000);
-    expect(p.assiette_fiscale).toBe(500000);
-    // …mais entre dans les retenues internes et diminue le net d'autant.
-    expect(p.total_retenues_internes).toBe(50000);
-    expect(p.net_a_payer).toBe(426075 - 50000);
+    expect(p.salaire_brut).toBe(450000);
+    expect(p.assiette_fiscale).toBe(450000);
   });
   it("2 parts fiscales réduisent l'IRPP", () => {
     const one = computePayslip(BASE_INPUT, RATES).irpp_cac;

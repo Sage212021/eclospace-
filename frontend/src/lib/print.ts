@@ -1015,6 +1015,8 @@ export interface PayslipPrintData {
   } | null;
   // Détail des retenues internes du mois (modèle moteur). Facultatif.
   internal?: { avance: number; pret: number; retard: number; autres: number } | null;
+  // Lignes libres ajoutées par le RH (gains imposables / retenues nettes).
+  extra_lines?: { label: string; kind: "gain" | "retenue"; amount: number }[] | null;
   payslip: {
     base: number; complements: number; prime_anciennete: number; retenue_absence: number;
     salaire_brut: number; assiette_fiscale: number; assiette_cnps: number;

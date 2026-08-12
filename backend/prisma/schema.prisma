@@ -818,6 +818,10 @@ model PayrollMonthlyLine {
   pret           Decimal @default(0) @db.Decimal(12, 2)
   sanction       Decimal @default(0) @db.Decimal(12, 2)
   autres         Decimal @default(0) @db.Decimal(12, 2)
+  // Lignes LIBRES ajoutées par le RH sur le bulletin (aucune codée en dur) :
+  // tableau JSON de { label, kind: "gain" | "retenue", amount }. Un « gain » est
+  // imposable (ajouté au brut/à l'assiette) ; une « retenue » est nette.
+  extraLines     Json?   @map("extra_lines")
   note           String?
 
   createdAt DateTime @default(now()) @map("created_at")

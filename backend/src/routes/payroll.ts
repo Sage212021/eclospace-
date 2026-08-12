@@ -512,6 +512,17 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Contrôles & anomalies d'un mois (§18) : liste bloquantes + signalées.
+  fastify.get(
+    "/api/v1/payroll/monthly/:period/anomalies",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const { blocking, warnings } = await computeAnomalies(period);
+      return reply.send({ period, blocking, warnings, can_submit: blocking.length === 0 });
+    },
+  );
+
   // Soumission de la paie au DG (RH) : brouillon → soumis_dg. La grille se fige
   // (en attente de validation) ; le DG doit valider ou retourner pour correction.
   fastify.post(
@@ -524,6 +535,16 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       if (run.status === "valide") return reply.code(409).send({ code: "already_validated", message: "Ce mois est déjà validé." });
       if (run.status === "soumis_dg") return reply.code(409).send({ code: "already_submitted", message: "Ce mois est déjà soumis au Directeur général." });
       if (run._count.lines === 0) return reply.code(409).send({ code: "empty_run", message: "Aucun salarié dans ce mois : rien à soumettre." });
+      // §18 — contrôle automatique AVANT soumission : bloque s'il subsiste une
+      // anomalie bloquante (fiche/ salaire manquant, net négatif…).
+      const { blocking } = await computeAnomalies(period);
+      if (blocking.length > 0) {
+        return reply.code(409).send({
+          code: "anomalies_blocking",
+          message: `Anomalie de paie — correction requise (${blocking.length}) : ${blocking.map((a) => `${a.employee_name} — ${a.message}`).join(" ; ")}`,
+          anomalies: blocking,
+        });
+      }
       await prisma.payrollMonthlyRun.update({ where: { id: run.id }, data: { status: "soumis_dg", submittedBy: request.user!.id, submittedAt: new Date(), returnReason: null } });
       await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "payroll_monthly_run", entityId: period, newValues: { status: "soumis_dg" }, ipAddress: request.ip });
       return reply.send({ period, status: "soumis_dg" });
@@ -713,6 +734,51 @@ function ratesFrom(r: Record<string, unknown>): PayrollRates {
 }
 
 // Éléments variables d'une ligne mensuelle → objet plat (API).
+// Contrôle d'anomalies d'un mois de paie (§18) — BLOQUANTES (empêchent la
+// soumission au DG) ou signalées (n'empêchent pas). Utilise le MÊME moteur que
+// les bulletins (aucun calcul parallèle).
+type PayrollAnomaly = { employee_id: string | null; employee_name: string; message: string };
+async function computeAnomalies(period: string): Promise<{ blocking: PayrollAnomaly[]; warnings: PayrollAnomaly[] }> {
+  const blocking: PayrollAnomaly[] = [];
+  const warnings: PayrollAnomaly[] = [];
+  const [y, m] = period.split("-").map(Number);
+  const toDate = new Date(Date.UTC(y, m, 0));
+  const rateSet = await prisma.payrollRateSet.findFirst({ where: { active: true, effectiveFrom: { lte: toDate } }, orderBy: { effectiveFrom: "desc" } });
+  if (!rateSet) {
+    blocking.push({ employee_id: null, employee_name: "—", message: "Aucun barème de paie en vigueur pour la période." });
+    return { blocking, warnings };
+  }
+  const rates = ratesFrom(rateSet as unknown as Record<string, unknown>);
+
+  // Salariés actifs sans fiche paie : ils ne figureront pas dans la paie du mois.
+  const noProfile = await prisma.employee.findMany({ where: { deletedAt: null, status: "salarie", payrollProfile: { is: null } }, select: { id: true, firstName: true, lastName: true } });
+  for (const e of noProfile) warnings.push({ employee_id: e.id, employee_name: `${e.firstName} ${e.lastName}`, message: "Aucune fiche paie : ce salarié ne figure pas dans la paie du mois." });
+
+  const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+  if (!run) return { blocking, warnings };
+  const lines = await prisma.payrollMonthlyLine.findMany({
+    where: { runId: run.id },
+    include: { employee: { select: { firstName: true, lastName: true, payrollProfile: true, confidential: { select: { baseSalary: true } } } } },
+  });
+  for (const l of lines) {
+    const p = l.employee.payrollProfile;
+    const name = `${l.employee.firstName} ${l.employee.lastName}`;
+    if (!p) {
+      blocking.push({ employee_id: l.employeeId, employee_name: name, message: "Fiche paie manquante." });
+      continue;
+    }
+    const confBase = l.employee.confidential?.baseSalary != null ? num(l.employee.confidential.baseSalary) : null;
+    const { base } = resolveBaseGross(p, confBase);
+    if (base <= 0) blocking.push({ employee_id: l.employeeId, employee_name: name, message: "Salaire de base manquant ou nul : renseignez-le (bloc confidentiel ou fiche paie)." });
+    const slip = computeMonthlyLine(p, rates, l, confBase);
+    if (slip.net_a_payer < 0) blocking.push({ employee_id: l.employeeId, employee_name: name, message: `Net à payer négatif (${Math.round(slip.net_a_payer).toLocaleString("fr-FR")} FCFA) : les retenues dépassent le salaire.` });
+    if (!p.cnpsNumber) warnings.push({ employee_id: l.employeeId, employee_name: name, message: "N° CNPS non renseigné (requis pour la déclaration CNPS)." });
+    if (!p.niu) warnings.push({ employee_id: l.employeeId, employee_name: name, message: "NIU non renseigné (requis pour la déclaration fiscale)." });
+    if (!p.matricule) warnings.push({ employee_id: l.employeeId, employee_name: name, message: "Matricule non renseigné." });
+  }
+  return { blocking, warnings };
+}
+
 function monthlyElements(l: PayrollMonthlyLine) {
   return {
     primes: num(l.primes), heures_sup: num(l.heuresSup), retenue_absence: num(l.retenueAbsence),

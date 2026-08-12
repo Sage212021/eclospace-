@@ -3,11 +3,13 @@ import {
   getPayrollMonth,
   getPayrollJournal,
   getPayrollRateSet,
+  getMonthlyAnomalies,
   listAuditLog,
   type Employee,
   type PayrollMonth,
   type PayrollJournal,
   type PayrollRateSet,
+  type PayrollAnomalies,
   type AuditEntry,
 } from "../api/client";
 import { Card } from "./Card";
@@ -255,6 +257,109 @@ function HistoryCard() {
   );
 }
 
+// ── Contrôles et anomalies (§18) : bloquantes / signalées ───────────────────
+function AnomaliesCard() {
+  const [period, setPeriod] = useState(currentPeriod());
+  const [data, setData] = useState<PayrollAnomalies | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    setErr(null);
+    getMonthlyAnomalies(period).then(setData).catch((e) => { setData(null); setErr(e instanceof Error ? e.message : "Contrôle impossible."); });
+  }, [period]);
+  const list = (rows: PayrollAnomalies["blocking"], color: string) => (
+    <ul style={{ margin: "4px 0 0 18px", fontSize: 12.5, color, lineHeight: 1.5 }}>
+      {rows.map((a, i) => <li key={i}><b>{a.employee_name}</b> — {a.message}</li>)}
+    </ul>
+  );
+  return (
+    <Card title="Contrôles et anomalies" icon={<span aria-hidden>🚦</span>} subtitle="Vérification avant soumission au Directeur général" collapsible>
+      <label style={{ fontSize: 13 }}>Mois : <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono)" }} /></label>
+      {err && <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8 }}>{err}</p>}
+      {data && (
+        <div style={{ marginTop: 8 }}>
+          {data.blocking.length === 0 && data.warnings.length === 0 && (
+            <div style={{ background: "var(--eclosion-soft, #f3efdc)", color: "var(--ink)", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>✓ Aucune anomalie : la paie peut être soumise au Directeur général.</div>
+          )}
+          {data.blocking.length > 0 && (
+            <div style={{ background: "#f8e3df", border: "1px solid var(--danger, #C24B3A)", borderRadius: 8, padding: "8px 12px" }}>
+              <b style={{ color: "var(--danger, #C24B3A)" }}>⛔ {data.blocking.length} anomalie(s) bloquante(s) — la soumission est refusée :</b>
+              {list(data.blocking, "var(--danger, #C24B3A)")}
+            </div>
+          )}
+          {data.warnings.length > 0 && (
+            <div style={{ marginTop: 8, background: "#fdeede", border: "1px solid var(--alert, #C4661F)", borderRadius: 8, padding: "8px 12px" }}>
+              <b style={{ color: "var(--alert, #C4661F)" }}>⚠ {data.warnings.length} point(s) à vérifier (non bloquant) :</b>
+              {list(data.warnings, "var(--alert, #C4661F)")}
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ── Déclarations CNPS / fiscales : agrégées depuis la paie du mois ───────────
+function DeclarationsCard({ kind }: { kind: "cnps" | "fiscal" }) {
+  const [period, setPeriod] = useState(currentPeriod());
+  const [month, setMonth] = useState<PayrollMonth | null>(null);
+  const [state, setState] = useState<"loading" | "ok" | "none">("loading");
+  useEffect(() => {
+    setState("loading");
+    getPayrollMonth(period).then((m) => { setMonth(m); setState(m.exists ? "ok" : "none"); }).catch(() => { setMonth(null); setState("none"); });
+  }, [period]);
+  const cols = kind === "cnps"
+    ? [
+        { k: "assiette_cnps", label: "Assiette CNPS" },
+        { k: "pvid_salarie", label: "PVID salarié" },
+        { k: "pvid_patronal", label: "PVID patronal" },
+        { k: "prestations_familiales", label: "Prest. familiales" },
+        { k: "accidents_travail", label: "Accidents travail" },
+      ] as const
+    : [
+        { k: "irpp_cac", label: "IRPP + CAC" },
+        { k: "cfc_salarie", label: "CFC salarié" },
+        { k: "cfc_patronal", label: "CFC patronal" },
+        { k: "taxe_communale", label: "Taxe communale" },
+        { k: "rav", label: "RAV" },
+        { k: "fne", label: "FNE" },
+      ] as const;
+  const rows = month?.lines ?? [];
+  const total = (k: string) => rows.reduce((s, l) => s + ((l.payslip as unknown as Record<string, number>)[k] ?? 0), 0);
+  const title = kind === "cnps" ? "Déclarations CNPS" : "Déclarations fiscales";
+  const icon = kind === "cnps" ? "🏛️" : "🧾";
+  return (
+    <Card title={title} icon={<span aria-hidden>{icon}</span>} subtitle="Récapitulatif des cotisations du mois (même calcul que les bulletins)" collapsible>
+      <label style={{ fontSize: 13 }}>Mois : <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono)" }} /></label>
+      {state === "loading" && <p style={{ fontSize: 13, color: "var(--muted)" }}>Chargement…</p>}
+      {state === "none" && <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>Mois non préparé : préparez-le dans « Bulletins de paie ».</p>}
+      {state === "ok" && (
+        <div style={{ overflowX: "auto", marginTop: 8 }}>
+          <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 640 }}>
+            <thead>
+              <tr style={{ color: "var(--muted)", fontSize: 11, textAlign: "right" }}>
+                <th style={{ textAlign: "left", padding: "4px 8px" }}>Salarié</th>
+                {cols.map((c) => <th key={c.k} style={{ padding: "4px 8px" }}>{c.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((l) => (
+                <tr key={l.employee_id} style={{ borderTop: "1px solid var(--line)", fontFamily: "var(--font-mono)" }}>
+                  <td style={{ textAlign: "left", padding: "4px 8px", fontFamily: "inherit" }}>{l.employee_name}</td>
+                  {cols.map((c) => <td key={c.k} style={{ textAlign: "right", padding: "4px 8px" }}>{fcfa((l.payslip as unknown as Record<string, number>)[c.k] ?? 0)}</td>)}
+                </tr>
+              ))}
+              <tr style={{ borderTop: "2px solid var(--line)", fontFamily: "var(--font-mono)", fontWeight: 700 }}>
+                <td style={{ textAlign: "left", padding: "4px 8px", fontFamily: "inherit" }}>TOTAL</td>
+                {cols.map((c) => <td key={c.k} style={{ textAlign: "right", padding: "4px 8px" }}>{fcfa(total(c.k))}</td>)}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // Rubrique « en préparation » (sous-lot 5b) — honnête, pas de fausse donnée.
 function ComingCard({ title, icon, what }: { title: string; icon: string; what: string }) {
   return (
@@ -291,11 +396,11 @@ export function PayrollEngineHub({
         <PayrollRegisterSection canClose={canClosePayroll} collapsible />
         <PayrollMonthlySection canManage={canEditPayroll} canValidateDg={canValidatePayrollDg} collapsible />
         <JournalCard />
-        <ComingCard title="Déclarations CNPS" icon="🏛️" what="État récapitulatif des cotisations CNPS (PVID, prestations familiales, accidents du travail) par salarié et pour la maison, à partir du journal de paie. En préparation (sous-lot 5b)." />
-        <ComingCard title="Déclarations fiscales" icon="🧾" what="État récapitulatif IRPP + CAC, CFC, taxe communale et RAV par salarié et pour la maison, à partir du journal de paie. En préparation (sous-lot 5b)." />
+        <DeclarationsCard kind="cnps" />
+        <DeclarationsCard kind="fiscal" />
         <FormulasCard />
         <HistoryCard />
-        <ComingCard title="Contrôles et anomalies" icon="🚦" what="Contrôle automatique avant soumission au Directeur général : fiches incomplètes, salaire de base manquant, net négatif, incohérences. Bloquera la soumission tant qu'une anomalie subsiste. En préparation (sous-lot 5b)." />
+        <AnomaliesCard />
       </div>
     </section>
   );

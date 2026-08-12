@@ -1003,9 +1003,18 @@ export interface PayslipPrintData {
   payment_mode?: string | null;
   account_number?: string | null;
   leave_balance?: number | null;
+  situation_familiale?: string | null;
+  emergency_contact?: string | null;
+  // Taux du barème (colonne « Taux » du modèle moteur), fractions. Facultatif.
+  rates?: {
+    vid_sal: number; vid_pat: number; pf: number; at: number;
+    cfc_sal: number; cfc_pat: number; fne: number; cac: number;
+  } | null;
+  // Détail des retenues internes du mois (modèle moteur). Facultatif.
+  internal?: { avance: number; pret: number; retard: number; autres: number } | null;
   payslip: {
     base: number; complements: number; prime_anciennete: number; retenue_absence: number;
-    salaire_brut: number; assiette_cnps: number;
+    salaire_brut: number; assiette_fiscale: number; assiette_cnps: number;
     pvid_salarie: number; pvid_patronal: number; prestations_familiales: number; accidents_travail: number;
     cfc_salarie: number; cfc_patronal: number; fne: number; taxe_communale: number; rav: number;
     irpp_cac: number; total_retenues_internes: number; total_retenues_salariales: number;
@@ -1013,75 +1022,9 @@ export interface PayslipPrintData {
   };
 }
 
-export function printPayslip(d: PayslipPrintData, opts?: PrintOpts): void {
-  const p = d.payslip;
-  const m = (n: number) => money(n, "XAF");
-  const line = (label: string, value: number, neg = false) =>
-    `<tr><td>${escapeHtml(label)}</td><td class="r num">${neg ? "− " : ""}${m(value)}</td></tr>`;
-
-  const remuneration = `
-    <table class="lines"><thead><tr><th>${tr("Éléments de rémunération", "Pay elements")}</th><th class="r">${tr("Montant", "Amount")}</th></tr></thead><tbody>
-      ${line(tr("Salaire de base", "Base salary"), p.base)}
-      ${line(tr("Compléments de salaire", "Salary supplements"), p.complements)}
-      ${p.prime_anciennete > 0 ? line(tr("Prime d'ancienneté", "Seniority bonus"), p.prime_anciennete) : ""}
-      ${p.retenue_absence > 0 ? line(tr("Retenue absence injustifiée", "Unjustified absence deduction"), p.retenue_absence, true) : ""}
-      <tr><td><b>${tr("SALAIRE BRUT DU MOIS", "GROSS SALARY FOR THE MONTH")}</b></td><td class="r num"><b>${m(p.salaire_brut)}</b></td></tr>
-    </tbody></table>`;
-
-  const cotisations = `
-    <table class="lines" style="margin-top:14px"><thead><tr><th>${tr("Cotisations sociales &amp; fiscales — législation camerounaise", "Social &amp; tax contributions — Cameroonian law")}</th><th class="r">${tr("Salarié", "Employee")}</th></tr></thead><tbody>
-      ${line(tr("CNPS – PVID (vieillesse/invalidité/décès)", "CNPS – PVID (old age/disability/death)"), p.pvid_salarie)}
-      ${line(tr("CFC – Crédit Foncier du Cameroun", "CFC – Cameroon Housing Loan Fund"), p.cfc_salarie)}
-      ${line(tr("Taxe communale", "Council tax"), p.taxe_communale)}
-      ${line(tr("Redevance audiovisuelle (RAV)", "Audiovisual levy (RAV)"), p.rav)}
-      ${line(tr("IRPP + CAC (barème progressif)", "IRPP + CAC (progressive scale)"), p.irpp_cac)}
-      <tr><td><b>${tr("TOTAL RETENUES SALARIALES", "TOTAL EMPLOYEE DEDUCTIONS")}</b></td><td class="r num"><b>${m(p.total_retenues_salariales)}</b></td></tr>
-    </tbody></table>`;
-
-  const internes = p.total_retenues_internes > 0
-    ? `<table class="lines" style="margin-top:14px"><thead><tr><th>${tr("Retenues internes", "Internal deductions")}</th><th class="r">${tr("Montant", "Amount")}</th></tr></thead><tbody>
-        <tr><td>${tr("Total retenues internes", "Total internal deductions")}</td><td class="r num">${m(p.total_retenues_internes)}</td></tr></tbody></table>`
-    : "";
-
-  const totals = `
-    <div class="totals">
-      <div><span>${tr("Total charges patronales", "Total employer contributions")}</span><span class="num">${m(p.total_charges_patronales)}</span></div>
-      <div><span>${tr("Coût total employeur", "Total employer cost")}</span><span class="num">${m(p.cout_employeur)}</span></div>
-      <div class="ttc"><span>${tr("NET À PAYER", "NET PAY")}</span><span class="num">${m(p.net_a_payer)}</span></div>
-    </div>`;
-
-  const mentions = `
-    <div style="margin-top:26px;font-size:10px;color:#6b7280;line-height:1.6">
-      ${tr(
-        "Congés payés : acquisition 1,5 jour ouvrable par mois de service effectif (art. 89 du Code du travail camerounais).<br>Document à conserver sans limitation de durée (art. 68 du Code du travail camerounais). Moteur de paie Éclospace.",
-        "Paid leave: 1.5 working days accrued per month of effective service (art. 89 of the Cameroon Labour Code).<br>Keep this document indefinitely (art. 68 of the Cameroon Labour Code). Éclospace payroll engine.",
-      )}
-    </div>`;
-
-  const body = `
-    <div class="doc__title">${tr("Bulletin de paie", "Payslip")}</div>
-    <div class="meta">
-      <span>${tr("Matricule", "Staff ID")} : <b class="num">${escapeHtml(d.matricule ?? "—")}</b></span>
-      <span>${tr("Période", "Period")} : <b class="num">${escapeHtml(d.period)}</b></span>
-      <span>${tr("Édité le", "Issued on")} <b class="num">${fdate(new Date())}</b></span>
-    </div>
-    <div class="party">
-      <div class="party__label">${tr("Salarié", "Employee")}</div>
-      <div class="party__name">${escapeHtml(d.employee_name)}</div>
-      <div style="font-size:11px;color:#4b5563;margin-top:2px">
-        ${tr("N° CNPS", "CNPS No.")} : <span class="num">${escapeHtml(d.cnps_number ?? "—")}</span> ·
-        NIU : <span class="num">${escapeHtml(d.niu ?? "—")}</span> ·
-        ${tr("Parts fiscales", "Tax shares")} : <span class="num">${d.fiscal_parts ?? "—"}</span>
-      </div>
-    </div>
-    ${remuneration}
-    ${cotisations}
-    ${internes}
-    ${totals}
-    ${mentions}`;
-
-  openPrintWindow(`${tr("Bulletin de paie", "Payslip")} — ${d.employee_name} — ${d.period}`, body, opts);
-}
+// NB. Le bulletin de paie n'est plus rendu ici : il existe UN SEUL modèle,
+// fidèle à l'onglet « Bulletin » du moteur (classeur), rendu par
+// `lib/payslipPdf.ts` (aperçu = PDF = impression). Voir `printPayslipPdf`.
 
 export interface CommissionStatementData {
   agentName: string;

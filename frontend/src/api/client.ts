@@ -3749,10 +3749,16 @@ export interface Payslip {
   total_retenues_internes: number; total_retenues_salariales: number; total_charges_patronales: number;
   net_a_payer: number; cout_employeur: number;
 }
+// Taux d'affichage du bulletin (colonne « Taux » du modèle moteur), en fractions.
+export interface PayslipRates {
+  vid_sal: number; vid_pat: number; pf: number; at: number;
+  cfc_sal: number; cfc_pat: number; fne: number; cac: number;
+}
 export interface PayslipResult {
   employee: { id: string; name: string };
   period: string;
   rate_set_effective_from: string;
+  rates: PayslipRates;
   payslip: Payslip;
   // Témoin indicatif du cahier de présence — n'est PAS appliqué au net.
   attendance_witness: number;
@@ -3799,6 +3805,7 @@ export interface PayrollMonth {
   status?: "brouillon" | "valide";
   validated_at?: string | null;
   rate_effective_from?: string;
+  rates?: PayslipRates;
   lines?: PayrollMonthLine[];
   totals?: { brut: number; net: number; cout: number };
 }

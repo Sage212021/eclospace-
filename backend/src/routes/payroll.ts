@@ -191,6 +191,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         employee: { id: resolved.employee.id, name: resolved.employeeName },
         period,
         rate_set_effective_from: resolved.rateEffectiveFrom,
+        rates: resolved.rates,
         payslip: resolved.payslip,
         // Témoin indicatif du cahier de présence (n'est pas appliqué au net).
         attendance_witness: resolved.attendanceWitness,
@@ -454,7 +455,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         (acc, r) => ({ brut: acc.brut + r.salaire_brut, net: acc.net + r.net_a_payer, cout: acc.cout + r.cout_employeur }),
         { brut: 0, net: 0, cout: 0 },
       );
-      return reply.send({ exists: true, period, status: run.status, validated_at: run.validatedAt, rate_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10), lines: rows, totals });
+      return reply.send({ exists: true, period, status: run.status, validated_at: run.validatedAt, rate_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10), rates: rateDisplay(rateSet as unknown as Record<string, unknown>), lines: rows, totals });
     },
   );
 
@@ -562,7 +563,7 @@ async function resolvePayslip(
   // n'alimente jamais automatiquement le calcul (règle métier, 07/08/2026).
   manualRetenue = 0,
 ): Promise<
-  | { employee: { id: string }; employeeName: string; profile: { matricule: string | null; email: string | null }; rateEffectiveFrom: string; payslip: Payslip; attendanceWitness: number }
+  | { employee: { id: string }; employeeName: string; profile: { matricule: string | null; email: string | null }; rateEffectiveFrom: string; rates: ReturnType<typeof rateDisplay>; payslip: Payslip; attendanceWitness: number }
   | { error: { code: string; message: string }; status: number }
 > {
   const [y, m] = period.split("-").map(Number);
@@ -605,8 +606,18 @@ async function resolvePayslip(
     employeeName: `${employee.firstName} ${employee.lastName}`,
     profile: { matricule: profile.matricule, email: profile.email },
     rateEffectiveFrom: rateSet.effectiveFrom.toISOString().slice(0, 10),
+    rates: rateDisplay(rateSet as unknown as Record<string, unknown>),
     payslip,
     attendanceWitness,
+  };
+}
+
+// Taux d'affichage du bulletin (colonne « Taux » du modèle moteur) : fractions
+// des cotisations, pour reproduire « 4,2 % / 4,2 % », « — / 7 % », « + 10% CAC ».
+function rateDisplay(r: Record<string, unknown>) {
+  return {
+    vid_sal: num(r.vidSalPct), vid_pat: num(r.vidPatPct), pf: num(r.pfPct), at: num(r.atPct),
+    cfc_sal: num(r.cfcSalPct), cfc_pat: num(r.cfcPatPct), fne: num(r.fnePct), cac: num(r.cacPct),
   };
 }
 

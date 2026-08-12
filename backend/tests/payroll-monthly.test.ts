@@ -76,6 +76,10 @@ describe("génération mensuelle de la paie (grille éditable)", () => {
   it("calcule le net de chaque salarié et met à jour après saisie d'une prime", async () => {
     const before = (await app.inject({ method: "GET", url: `/api/v1/payroll/monthly/${PERIOD}`, headers: { cookie } })).json();
     expect(before.exists).toBe(true);
+    // Taux d'affichage du bulletin (colonne « Taux » du modèle moteur) exposés
+    // pour le rendu du bulletin — même barème que le calcul.
+    expect(before.rates.vid_sal).toBeCloseTo(0.042);
+    expect(before.rates.cac).toBeCloseTo(0.1);
     const l1 = before.lines.find((l: { employee_id: string }) => l.employee_id === emp1);
     expect(l1.net_a_payer).toBeGreaterThan(0);
 

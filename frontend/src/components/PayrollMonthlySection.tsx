@@ -139,6 +139,10 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       payment_mode: l.payment_mode,
       account_number: l.account_number,
       leave_balance: l.leave_balance,
+      rates: month?.rates ?? null,
+      // Détail des retenues internes (la sanction est comptée avec « autres »,
+      // comme dans le moteur : cf. computeMonthlyLine).
+      internal: { avance: l.elements.avance, pret: l.elements.pret, retard: l.elements.retard, autres: l.elements.autres + l.elements.sanction },
       payslip: l.payslip,
     }));
     if (list.length > 0) downloadPayslipsPdf(list, `bulletins-${period}.pdf`);

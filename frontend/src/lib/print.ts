@@ -1004,6 +1004,7 @@ export interface PayslipPrintData {
   account_number?: string | null;
   leave_balance?: number | null;
   situation_familiale?: string | null;
+  children_count?: number | null;
   emergency_contact?: string | null;
   // Taux du barème (colonne « Taux » du modèle moteur), fractions. Facultatif.
   rates?: {

@@ -69,6 +69,9 @@ model Employee {
   // projet — cf. docs/JOURNAL_TECHNIQUE.md).
   departureDate    DateTime?      @map("departure_date")
   leaveBalanceDays Decimal        @default(0) @map("leave_balance_days") @db.Decimal(5, 1)
+  // État civil (feuille « Employés » du moteur) — figurent sur le bulletin.
+  maritalStatus    String?        @map("marital_status")
+  childrenCount    Int?           @map("children_count")
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -761,8 +764,13 @@ model PayrollEmployeeProfile {
 // les salariés (une ligne par employé, éléments variables du mois), reste
 // MODIFIABLE (brouillon) jusqu'à la VALIDATION du Directeur général — après quoi
 // il est figé pour l'impression des bulletins, le livre de paie et les états.
+// États de la paie mensuelle (machine à états, chantier RH 12/08/2026) :
+// brouillon (RH saisit, corrige) → soumis_dg (transmis, RH ne modifie plus) →
+// valide (DG validé, verrouillé). Le DG peut RETOURNER un mois soumis au RH avec
+// un motif : il repasse en brouillon (redevient modifiable).
 enum PayrollMonthlyStatus {
   brouillon
+  soumis_dg
   valide
 }
 
@@ -771,8 +779,15 @@ model PayrollMonthlyRun {
   periodKey   String               @unique @map("period_key") // AAAA-MM
   status      PayrollMonthlyStatus @default(brouillon)
   preparedBy  String?              @map("prepared_by")
+  // Soumission RH → DG (traçabilité §24-25).
+  submittedBy String?              @map("submitted_by")
+  submittedAt DateTime?            @map("submitted_at")
   validatedBy String?              @map("validated_by") // Directeur général
   validatedAt DateTime?            @map("validated_at")
+  // Retour DG au RH pour correction (motif obligatoire, §11 état 4A).
+  returnReason String?             @map("return_reason")
+  returnedBy   String?             @map("returned_by")
+  returnedAt   DateTime?           @map("returned_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

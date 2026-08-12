@@ -2605,6 +2605,8 @@ export interface Employee {
   position: string | null;
   hireDate: string | null;
   birthDate: string | null;
+  maritalStatus: string | null;
+  childrenCount: number | null;
   departureDate: string | null;
   leaveBalanceDays: string;
   department: { id: string; name: string } | null;
@@ -2835,6 +2837,8 @@ export function createEmployee(input: {
   manager_id?: string;
   hire_date?: string;
   birth_date?: string;
+  marital_status?: string;
+  children_count?: number;
   account?: { username: string; email: string; password: string; role_code: string };
   // Rattachement à un compte déjà ouvert par l'administrateur (exclusif avec account).
   link_user_id?: string;
@@ -2842,7 +2846,7 @@ export function createEmployee(input: {
   return request<Employee>("/api/v1/employees", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateEmployee(id: string, input: Partial<{ first_name: string; last_name: string; hire_date: string | null; department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null }>) {
+export function updateEmployee(id: string, input: Partial<{ first_name: string; last_name: string; hire_date: string | null; department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null; marital_status: string | null; children_count: number | null }>) {
   return request<Employee>(`/api/v1/employees/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
@@ -3784,6 +3788,8 @@ export interface PayrollMonthLine {
   position: string | null;
   hire_date: string | null;
   birth_date: string | null;
+  marital_status: string | null;
+  children_count: number | null;
   contract_type: string | null;
   category: string | null;
   email: string | null;
@@ -3799,18 +3805,30 @@ export interface PayrollMonthLine {
   cout_employeur: number;
   payslip: Payslip;
 }
+export type PayrollMonthStatus = "brouillon" | "soumis_dg" | "valide";
 export interface PayrollMonth {
   exists: boolean;
   period: string;
-  status?: "brouillon" | "valide";
+  status?: PayrollMonthStatus;
   validated_at?: string | null;
+  submitted_at?: string | null;
+  return_reason?: string | null;
+  returned_at?: string | null;
   rate_effective_from?: string;
   rates?: PayslipRates;
   lines?: PayrollMonthLine[];
   totals?: { brut: number; net: number; cout: number };
 }
 export function preparePayrollMonth(period: string) {
-  return request<{ period: string; status: "brouillon" | "valide" }>(`/api/v1/payroll/monthly/${period}/prepare`, { method: "POST" });
+  return request<{ period: string; status: PayrollMonthStatus }>(`/api/v1/payroll/monthly/${period}/prepare`, { method: "POST" });
+}
+// Soumission de la paie au Directeur général (RH) : brouillon → soumis_dg.
+export function submitPayrollMonth(period: string) {
+  return request<{ period: string; status: "soumis_dg" }>(`/api/v1/payroll/monthly/${period}/submit`, { method: "POST" });
+}
+// Retour de la paie au RH pour correction (DG), motif obligatoire.
+export function returnPayrollMonth(period: string, reason: string) {
+  return request<{ period: string; status: "brouillon"; return_reason: string }>(`/api/v1/payroll/monthly/${period}/return`, { method: "POST", body: JSON.stringify({ reason }) });
 }
 export function getPayrollMonth(period: string) {
   return request<PayrollMonth>(`/api/v1/payroll/monthly/${period}`);
@@ -3856,7 +3874,7 @@ export interface PayrollRegister {
   period: string; rate_effective_from: string; closed: boolean; closed_at: string | null;
   lines: RegisterLine[]; totals: { brut: number; net: number; charges_pat: number };
   // Source des montants : le mois préparé (grille) s'il existe, sinon les fiches.
-  monthly_status: "brouillon" | "valide" | null;
+  monthly_status: PayrollMonthStatus | null;
 }
 export function getPayrollRegister(period: string) {
   return request<PayrollRegister>(`/api/v1/payroll/register?period=${period}`);

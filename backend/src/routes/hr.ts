@@ -16,6 +16,8 @@ const employeeSchema = z.object({
   manager_id: z.string().uuid().optional(),
   hire_date: z.string().datetime().optional(),
   birth_date: z.string().datetime().optional(),
+  marital_status: z.string().max(60).optional(),
+  children_count: z.number().int().min(0).max(30).optional(),
   // Arrivée (Ch. 19 §19.3) : création du compte utilisateur avec le rôle du
   // poste, dans le même mouvement que le dossier — champs optionnels, aucun
   // compte n'est créé si absents (bénévoles, dossiers sans accès système).
@@ -45,6 +47,8 @@ const employeeUpdateSchema = z.object({
   position: z.string().optional(),
   manager_id: z.string().uuid().nullable().optional(),
   birth_date: z.string().datetime().nullable().optional(),
+  marital_status: z.string().max(60).nullable().optional(),
+  children_count: z.number().int().min(0).max(30).nullable().optional(),
 });
 
 const hrContractSchema = z.object({
@@ -159,6 +163,8 @@ export default async function hrRoutes(fastify: FastifyInstance) {
           managerId: body.manager_id,
           hireDate: body.hire_date ? new Date(body.hire_date) : undefined,
           birthDate: body.birth_date ? new Date(body.birth_date) : undefined,
+          maritalStatus: body.marital_status,
+          childrenCount: body.children_count,
           createdBy: request.user!.id,
         },
       });
@@ -268,6 +274,8 @@ export default async function hrRoutes(fastify: FastifyInstance) {
         position: parsed.data.position,
         managerId: parsed.data.manager_id,
         ...(parsed.data.birth_date !== undefined ? { birthDate: parsed.data.birth_date ? new Date(parsed.data.birth_date) : null } : {}),
+        ...(parsed.data.marital_status !== undefined ? { maritalStatus: parsed.data.marital_status } : {}),
+        ...(parsed.data.children_count !== undefined ? { childrenCount: parsed.data.children_count } : {}),
         updatedBy: request.user!.id,
       },
     });

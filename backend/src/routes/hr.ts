@@ -34,6 +34,12 @@ const employeeSchema = z.object({
 });
 
 const employeeUpdateSchema = z.object({
+  // Identité éditable après création : jusqu'ici le PATCH ignorait nom / prénom /
+  // date d'embauche, ce qui donnait l'impression que la modification « ne se
+  // sauvegardait pas » (Problème A — persistance de la fiche employé).
+  first_name: z.string().min(1).optional(),
+  last_name: z.string().min(1).optional(),
+  hire_date: z.string().datetime().nullable().optional(),
   department_id: z.string().uuid().nullable().optional(),
   status: z.nativeEnum(EmployeeStatus).optional(),
   position: z.string().optional(),
@@ -251,6 +257,12 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     const employee = await prisma.employee.update({
       where: { id },
       data: {
+        // Chaque champ n'est réécrit QUE s'il est présent dans la requête
+        // (`!== undefined`) : une modification partielle ne remet jamais un autre
+        // champ à zéro. Corrige la « disparition » du nom / de la date d'embauche.
+        ...(parsed.data.first_name !== undefined ? { firstName: parsed.data.first_name.trim() } : {}),
+        ...(parsed.data.last_name !== undefined ? { lastName: parsed.data.last_name.trim() } : {}),
+        ...(parsed.data.hire_date !== undefined ? { hireDate: parsed.data.hire_date ? new Date(parsed.data.hire_date) : null } : {}),
         departmentId: parsed.data.department_id,
         status: parsed.data.status,
         position: parsed.data.position,

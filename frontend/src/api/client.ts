@@ -3896,6 +3896,23 @@ export function closePayrollPeriod(period: string) {
   return request<{ period: string; employees: number; total_net: number; closed_at: string }>(`/api/v1/payroll/register/${period}/close`, { method: "POST" });
 }
 
+// Journal de paie archivé d'une période clôturée (instantané figé par salarié).
+export interface JournalLine {
+  employee_id: string; employee_name: string; matricule: string | null; cnps_number: string | null; niu: string | null;
+  salaire_brut: number; assiette_cnps: number; pvid_salarie: number; pvid_patronal: number;
+  prestations_familiales: number; accidents_travail: number; cfc_salarie: number; cfc_patronal: number;
+  fne: number; taxe_communale: number; rav: number; irpp_cac: number;
+  total_retenues_salariales: number; total_charges_patronales: number; net_a_payer: number; cout_employeur: number;
+}
+export interface PayrollJournal {
+  period: string; closed_at: string; employees: number;
+  totals: { brut: number; net: number; charges_pat: number };
+  lines: JournalLine[];
+}
+export function getPayrollJournal(period: string) {
+  return request<PayrollJournal>(`/api/v1/payroll/journal/${period}`);
+}
+
 // ── Centre de Communication Interne — Babillard d'annonces ────────────────────
 export type AnnouncementPriority = "normale" | "importante" | "urgente" | "critique";
 export type AnnouncementStatus = "brouillon" | "publiee" | "archivee";

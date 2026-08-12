@@ -52,10 +52,7 @@ import { AttendanceReportSection } from "../components/AttendanceReportSection";
 import { ActivityClosureSection } from "../components/ActivityClosureSection";
 import { useI18n } from "../i18n";
 import { PayrollConsolidationSection } from "../components/PayrollConsolidationSection";
-import { PayrollSettingsSection } from "../components/PayrollSettingsSection";
-import { PayrollMonthlySection } from "../components/PayrollMonthlySection";
-import { PayrollProfilesSection } from "../components/PayrollProfilesSection";
-import { PayrollRegisterSection } from "../components/PayrollRegisterSection";
+import { PayrollEngineHub } from "../components/PayrollEngineHub";
 
 const STATUS_LABELS: Record<EmployeeStatus, string> = {
   salarie: "Salarié",
@@ -362,26 +359,16 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       {/* Évolution — Consolidation vers la paie (§28-31) */}
       {canOverseePresence && <PayrollConsolidationSection canAdminister={canAdministerPresence} />}
 
-      {/* Module Paie natif (D-007) — « Moteur de paie » : toutes les rubriques
-          regroupées en accordéon (chaque rubrique s'ouvre d'un clic). */}
+      {/* Lot 5 — accès UNIQUE « Moteur de Paie & Paramétrage » : toutes les
+          rubriques de la paie regroupées en accordéon (centre de contrôle). */}
       {canViewPayroll && (
-        <section style={{ marginTop: 8 }}>
-          <h3 style={{ fontFamily: "var(--font-title)", fontSize: 18, margin: "0 0 8px", display: "flex", alignItems: "center", gap: 8 }}>
-            <span aria-hidden>💶</span> {t("pay.engine", "Moteur de paie")}
-          </h3>
-          <GuidanceNote title={t("pay.engine", "Moteur de paie")}>
-            {t(
-              "pay.engine_help",
-              "Chaque rubrique ci-dessous s'ouvre d'un clic. « Génération mensuelle » prépare le mois pour TOUS les salariés : saisissez les éléments variables (primes, heures sup, absences, retards, avances, prêts, sanctions) et le net se recalcule automatiquement ; le mois reste modifiable tant qu'il n'est pas validé. « Fiches paie & bulletin » sert au bulletin d'un seul salarié (net recalculé en direct). La retenue d'absence est SAISIE PAR VOUS : le cahier de présence n'est qu'un témoin indicatif, jamais appliqué d'office. Les pourcentages du barème (CNPS, IRPP, CFC…) se règlent dans « Paramètres de paie ». Le « Livre de paie » réunit tous les salariés d'un même mois et gère la clôture.",
-            )}
-          </GuidanceNote>
-          <div style={{ display: "grid", gap: 10 }}>
-            <PayrollMonthlySection canManage={canEditPayroll} canValidateDg={canValidatePayrollDg} collapsible defaultOpen />
-            <PayrollProfilesSection employees={employees} canManage={canEditPayroll} collapsible />
-            <PayrollSettingsSection canManage={canManagePayroll} collapsible />
-            <PayrollRegisterSection canClose={canClosePayroll} collapsible />
-          </div>
-        </section>
+        <PayrollEngineHub
+          employees={employees}
+          canEditPayroll={canEditPayroll}
+          canValidatePayrollDg={canValidatePayrollDg}
+          canManagePayroll={canManagePayroll}
+          canClosePayroll={canClosePayroll}
+        />
       )}
 
       {/* Ch. 19 §19.2 — Dossiers collaborateurs */}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, submitPayrollMonth, returnPayrollMonth, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements, type PayrollExtraLine } from "../api/client";
+import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, submitPayrollMonth, returnPayrollMonth, requestPayrollReopen, listPayrollReopenRequests, decidePayrollReopen, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements, type PayrollExtraLine, type ReopenRequest } from "../api/client";
 import { downloadPayslipsPdf } from "../lib/payslipPdf";
 import type { PayslipPrintData } from "../lib/print";
 import { Card } from "./Card";
@@ -42,6 +42,11 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
   // Lignes libres par salarié + salarié dont on édite les lignes (modale).
   const [extraDraft, setExtraDraft] = useState<Record<string, PayrollExtraLine[]>>({});
   const [linesFor, setLinesFor] = useState<{ employeeId: string; name: string } | null>(null);
+  // Réouverture exceptionnelle (ch. 23) : demandes + formulaire.
+  const [reopenReqs, setReopenReqs] = useState<ReopenRequest[]>([]);
+  const [reopenOpen, setReopenOpen] = useState(false);
+  const emptyReopen = { employeeId: "", element: "", oldValue: "", correction: "", reason: "" };
+  const [reopenForm, setReopenForm] = useState(emptyReopen);
 
   async function load() {
     setBusy(true);
@@ -57,6 +62,8 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       }
       setDraft(d);
       setExtraDraft(ex);
+      if (m.exists) listPayrollReopenRequests(period).then(setReopenReqs).catch(() => setReopenReqs([]));
+      else setReopenReqs([]);
     } catch (err) {
       setMonth(null);
       setError(err instanceof Error ? err.message : "Chargement impossible.");
@@ -117,6 +124,46 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Retour impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Le RH DEMANDE une réouverture d'un mois verrouillé (ch. 23).
+  async function submitReopenRequest() {
+    if (reopenForm.element.trim().length < 2 || reopenForm.correction.trim().length < 2 || reopenForm.reason.trim().length < 3) {
+      setError("Renseignez l'élément concerné, la correction demandée et le motif.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await requestPayrollReopen(period, {
+        employee_id: reopenForm.employeeId || null,
+        element: reopenForm.element.trim(),
+        old_value: reopenForm.oldValue.trim() || null,
+        requested_correction: reopenForm.correction.trim(),
+        reason: reopenForm.reason.trim(),
+      });
+      setMessage("Demande de réouverture transmise au Directeur général.");
+      setReopenOpen(false);
+      setReopenForm(emptyReopen);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Demande impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  // Le DG décide (autorise → réouverture ; refuse → reste verrouillé).
+  async function decideReopen(id: string, decision: "autorisee" | "refusee") {
+    const reason = decision === "refusee" ? (window.prompt("Motif du refus (facultatif) :") ?? "") : "";
+    setBusy(true);
+    try {
+      await decidePayrollReopen(id, decision, reason || undefined);
+      setMessage(decision === "autorisee" ? `Réouverture autorisée : ${period} repasse en brouillon pour correction.` : "Demande de réouverture refusée.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Décision impossible.");
     } finally {
       setBusy(false);
     }
@@ -263,6 +310,10 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
         {month?.exists && locked && canValidateDg && (
           <Button variant="edit" size="sm" type="button" disabled={busy} onClick={reopen}>↩ Rouvrir (DG)</Button>
         )}
+        {/* RH : demande de réouverture exceptionnelle d'un mois verrouillé. */}
+        {month?.exists && locked && canManage && (
+          <Button variant="view" size="sm" type="button" disabled={busy} onClick={() => { setReopenForm(emptyReopen); setReopenOpen(true); }}>🔓 Demander une réouverture</Button>
+        )}
       </div>
 
       {/* Motif du dernier retour DG : visible pour le RH tant que le mois est en
@@ -270,6 +321,40 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       {month?.exists && editable && month.return_reason && (
         <div style={{ marginTop: 8, background: "#fdeede", color: "var(--alert, #C4661F)", border: "1px solid var(--alert, #C4661F)", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>
           ↩ <b>Retourné par la Direction pour correction</b>{month.returned_at ? ` (le ${month.returned_at.slice(0, 10)})` : ""} : {month.return_reason}
+        </div>
+      )}
+
+      {/* Demandes de réouverture exceptionnelle (ch. 23) : statut + décision DG. */}
+      {reopenReqs.length > 0 && (
+        <div style={{ marginTop: 10, border: "1px solid var(--line)", borderRadius: 8, padding: "8px 12px" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>🔓 Demandes de réouverture exceptionnelle</div>
+          {reopenReqs.map((r) => {
+            const chip = r.status === "en_attente"
+              ? { bg: "#fdeede", fg: "var(--alert, #C4661F)", label: "En attente DG" }
+              : r.status === "autorisee"
+                ? { bg: "var(--eclosion-soft, #f3efdc)", fg: "var(--eclosion-dark, #8A6A12)", label: "Autorisée" }
+                : { bg: "#eef1f6", fg: "var(--muted)", label: "Refusée" };
+            return (
+              <div key={r.id} style={{ borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 12.5 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                  <span style={{ borderRadius: 999, padding: "2px 9px", fontWeight: 700, background: chip.bg, color: chip.fg }}>{chip.label}</span>
+                  <b>{r.element}</b>{r.employee_name ? <span style={{ color: "var(--muted)" }}> · {r.employee_name}</span> : null}
+                  <span style={{ color: "var(--muted)" }}>· demandée par {r.requested_by ?? "—"} le {new Date(r.requested_at).toLocaleDateString("fr-FR")}</span>
+                  {r.status === "en_attente" && canValidateDg && (
+                    <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                      <Button variant="add" size="sm" type="button" disabled={busy} onClick={() => decideReopen(r.id, "autorisee")}>✅ Autoriser</Button>
+                      <Button variant="edit" size="sm" type="button" disabled={busy} onClick={() => decideReopen(r.id, "refusee")}>✕ Refuser</Button>
+                    </span>
+                  )}
+                </div>
+                <div style={{ color: "var(--muted)", marginTop: 2 }}>
+                  {r.old_value ? <>Ancienne valeur : <b>{r.old_value}</b> · </> : null}
+                  Correction : <b>{r.requested_correction}</b> · Motif : {r.reason}
+                  {r.decided_by ? <> · décidée par {r.decided_by}{r.decision_reason ? ` (${r.decision_reason})` : ""}</> : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -374,6 +459,37 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
             </div>
           ))}
           <Button variant="edit" size="sm" type="button" onClick={() => addExtra(linesFor.employeeId)}>+ Ajouter une ligne</Button>
+        </Modal>
+      )}
+
+      {/* Demande de réouverture exceptionnelle (ch. 23) — formulaire RH. */}
+      {reopenOpen && (
+        <Modal
+          title={`Demande de réouverture — ${period}`}
+          onClose={() => setReopenOpen(false)}
+          footer={
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <Button variant="view" size="sm" type="button" onClick={() => setReopenOpen(false)}>Annuler</Button>
+              <Button variant="add" size="sm" type="button" disabled={busy} onClick={submitReopenRequest}>Transmettre au DG</Button>
+            </div>
+          }
+        >
+          <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "var(--muted)" }}>
+            La paie de {period} est validée et verrouillée. Décrivez la correction nécessaire : le Directeur général
+            autorisera (ou non) la réouverture. Une fois autorisée, le mois repasse en brouillon et refait le circuit.
+          </p>
+          <Field label="Salarié concerné (facultatif)">
+            <select value={reopenForm.employeeId} onChange={(e) => setReopenForm({ ...reopenForm, employeeId: e.target.value })}>
+              <option value="">— tout le mois / non précisé —</option>
+              {(month?.lines ?? []).map((l) => <option key={l.employee_id} value={l.employee_id}>{l.employee_name}</option>)}
+            </select>
+          </Field>
+          <Field label="Élément concerné *"><input value={reopenForm.element} onChange={(e) => setReopenForm({ ...reopenForm, element: e.target.value })} placeholder="ex. Salaire de base, Prime, Retenue…" /></Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Ancienne valeur (facultatif)"><input value={reopenForm.oldValue} onChange={(e) => setReopenForm({ ...reopenForm, oldValue: e.target.value })} /></Field>
+            <Field label="Correction demandée *"><input value={reopenForm.correction} onChange={(e) => setReopenForm({ ...reopenForm, correction: e.target.value })} /></Field>
+          </div>
+          <Field label="Motif *"><input value={reopenForm.reason} onChange={(e) => setReopenForm({ ...reopenForm, reason: e.target.value })} placeholder="ex. Erreur de saisie du salaire de base" /></Field>
         </Modal>
       )}
     </Card>

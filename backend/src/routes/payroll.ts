@@ -621,6 +621,98 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // ----- Réouverture EXCEPTIONNELLE d'une paie verrouillée (ch. 23) -----------
+
+  // Le RH DEMANDE la réouverture d'un mois VALIDÉ (verrouillé) : il ne peut plus
+  // corriger directement. Élément concerné, ancienne valeur, correction, motif.
+  fastify.post(
+    "/api/v1/payroll/monthly/:period/reopen-request",
+    { preHandler: requirePermission("paie", "saisie") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const parsed = z
+        .object({
+          employee_id: z.string().uuid().nullable().optional(),
+          element: z.string().min(2).max(120),
+          old_value: z.string().max(200).nullable().optional(),
+          requested_correction: z.string().min(2).max(500),
+          reason: z.string().min(3).max(2000),
+        })
+        .safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides : élément, correction demandée et motif sont requis.", details: parsed.error.issues });
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+      if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
+      if (run.status !== "valide") return reply.code(409).send({ code: "not_locked", message: "La réouverture exceptionnelle ne concerne qu'une paie validée et verrouillée." });
+      const pending = await prisma.payrollReopenRequest.findFirst({ where: { periodKey: period, status: "en_attente" } });
+      if (pending) return reply.code(409).send({ code: "request_pending", message: "Une demande de réouverture est déjà en attente pour ce mois." });
+      const b = parsed.data;
+      const created = await prisma.payrollReopenRequest.create({
+        data: { periodKey: period, employeeId: b.employee_id ?? null, element: b.element, oldValue: b.old_value ?? null, requestedCorrection: b.requested_correction, reason: b.reason, requestedBy: request.user!.id },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "payroll_reopen_request", entityId: created.id, newValues: { period, element: b.element, reason: b.reason }, ipAddress: request.ip });
+      return reply.code(201).send({ id: created.id, status: created.status });
+    },
+  );
+
+  // Liste des demandes de réouverture d'un mois (RH + DG).
+  fastify.get(
+    "/api/v1/payroll/monthly/:period/reopen-requests",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const rows = await prisma.payrollReopenRequest.findMany({ where: { periodKey: period }, orderBy: { requestedAt: "desc" }, take: 50 });
+      const ids = [...new Set(rows.flatMap((r) => [r.requestedBy, r.decidedBy]).filter((x): x is string => Boolean(x)))];
+      const users = ids.length ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, username: true } }) : [];
+      const name = (id: string | null) => (id ? users.find((u) => u.id === id)?.username ?? null : null);
+      const empIds = [...new Set(rows.map((r) => r.employeeId).filter((x): x is string => Boolean(x)))];
+      const emps = empIds.length ? await prisma.employee.findMany({ where: { id: { in: empIds } }, select: { id: true, firstName: true, lastName: true } }) : [];
+      const empName = (id: string | null) => (id ? (() => { const e = emps.find((x) => x.id === id); return e ? `${e.firstName} ${e.lastName}` : null; })() : null);
+      return reply.send(
+        rows.map((r) => ({
+          id: r.id, status: r.status, element: r.element, old_value: r.oldValue, requested_correction: r.requestedCorrection, reason: r.reason,
+          employee_id: r.employeeId, employee_name: empName(r.employeeId),
+          requested_by: name(r.requestedBy), requested_at: r.requestedAt,
+          decided_by: name(r.decidedBy), decided_at: r.decidedAt, decision_reason: r.decisionReason,
+        })),
+      );
+    },
+  );
+
+  // Le DG AUTORISE ou REFUSE la demande. L'autorisation repasse le mois en
+  // brouillon (il refait ensuite le circuit normal de validation).
+  fastify.post(
+    "/api/v1/payroll/reopen-requests/:id/decide",
+    { preHandler: requirePermission("paie", "validation") },
+    async (request, reply) => {
+      if (!request.user!.roles.some((r) => r === "DIR_GENERAL" || r === "ADMIN_GENERAL")) {
+        return reply.code(403).send({ code: "dg_only", message: "Décision réservée au Directeur général." });
+      }
+      const { id } = request.params as { id: string };
+      const parsed = z.object({ decision: z.enum(["autorisee", "refusee"]), decision_reason: z.string().max(2000).optional() }).safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Décision invalide." });
+      const req = await prisma.payrollReopenRequest.findUnique({ where: { id } });
+      if (!req) return reply.code(404).send({ code: "not_found", message: "Demande introuvable." });
+      if (req.status !== "en_attente") return reply.code(409).send({ code: "already_decided", message: "Cette demande a déjà été traitée." });
+
+      if (parsed.data.decision === "autorisee") {
+        const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: req.periodKey } });
+        if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
+        const closure = await prisma.payrollClosure.findUnique({ where: { periodKey: req.periodKey }, select: { id: true } });
+        if (closure) return reply.code(409).send({ code: "already_closed", message: "Livre de paie clôturé : le mois est définitif et ne peut plus être rouvert." });
+        await prisma.$transaction([
+          prisma.payrollReopenRequest.update({ where: { id }, data: { status: "autorisee", decidedBy: request.user!.id, decidedAt: new Date(), decisionReason: parsed.data.decision_reason ?? null } }),
+          prisma.payrollMonthlyRun.update({ where: { id: run.id }, data: { status: "brouillon", validatedBy: null, validatedAt: null } }),
+        ]);
+        await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "payroll_reopen_request", entityId: id, newValues: { decision: "autorisee", period: req.periodKey, reopened: true }, ipAddress: request.ip });
+        return reply.send({ id, status: "autorisee", period: req.periodKey, run_status: "brouillon" });
+      }
+
+      await prisma.payrollReopenRequest.update({ where: { id }, data: { status: "refusee", decidedBy: request.user!.id, decidedAt: new Date(), decisionReason: parsed.data.decision_reason ?? null } });
+      await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "payroll_reopen_request", entityId: id, newValues: { decision: "refusee", period: req.periodKey }, ipAddress: request.ip });
+      return reply.send({ id, status: "refusee" });
+    },
+  );
+
   // Journal de paie archivé d'une période clôturée.
   fastify.get(
     "/api/v1/payroll/journal/:period",

@@ -127,10 +127,10 @@ describe("présences — horaires et pointage (incrément 1)", () => {
   });
 
   it("enregistre un jour férié et refuse un doublon (409)", async () => {
-    // Date unique par exécution : la base de test n'est pas réinitialisée entre
-    // les runs, et public_holidays.day est unique.
-    const rnd = Math.floor(Math.random() * 27) + 1;
-    const day = `21${String(Math.floor(Math.random() * 90) + 10)}-12-${String(rnd).padStart(2, "0")}`;
+    // Date fixe et lointaine, NETTOYÉE avant : déterministe et idempotent, sans
+    // collision sur la base de test partagée (public_holidays.day est unique).
+    const day = "2199-12-25";
+    await prisma.publicHoliday.deleteMany({ where: { day: new Date(`${day}T00:00:00.000Z`) } });
     const first = await app.inject({
       method: "POST",
       url: "/api/v1/attendance/holidays",

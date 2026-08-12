@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   getPayrollMonth,
   getPayrollJournal,
@@ -38,6 +38,48 @@ const STATUS_LABEL: Record<string, string> = {
   soumis_dg: "⏳ Soumis au DG",
   valide: "✓ Validé (verrouillé)",
 };
+
+// ── Guide du RH : mode d'emploi pas à pas de la paie ────────────────────────
+function GuideCard() {
+  const step = (n: number, title: string, where: string, body: ReactNode) => (
+    <li style={{ marginBottom: 10 }}>
+      <div style={{ fontWeight: 700 }}>Étape {n} — {title} <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 12 }}>· {where}</span></div>
+      <div style={{ fontSize: 13, marginTop: 2 }}>{body}</div>
+    </li>
+  );
+  return (
+    <Card title="Guide du RH — la paie pas à pas" icon={<span aria-hidden>📖</span>} subtitle="Mode d'emploi complet, du barème jusqu'à la clôture et aux corrections" collapsible>
+      <GuidanceNote title="À lire une fois">
+        Voici tout le circuit d'un mois de paie, dans l'ordre. Chaque étape indique la rubrique où la faire. Vous pouvez
+        revenir à ce guide à tout moment.
+      </GuidanceNote>
+      <ol style={{ margin: "10px 0 0", paddingLeft: 20 }}>
+        {step(0, "Vérifier le barème (une fois, ou quand la loi change)", "Paramètres",
+          <>Contrôlez les taux (CNPS, IRPP, CFC…). Pour les modifier, cliquez « Nouvelle version du barème », indiquez la <b>date d'effet</b> et un <b>motif</b> : les paies déjà faites gardent leur ancien barème, la nouvelle version s'applique aux mois suivants.</>)}
+        {step(1, "S'assurer que chaque salarié a une fiche paie", "Employés",
+          <>Un salarié <b>sans fiche paie</b> n'apparaît pas dans la paie du mois — c'est ce que signalent les avertissements « Aucune fiche paie » dans « Contrôles et anomalies ». Créez/complétez la fiche (matricule, N° CNPS, NIU, salaire de base…). Le salaire de base saisi dans le dossier confidentiel fait foi.</>)}
+        {step(2, "Préparer le mois", "Bulletins de paie",
+          <>Choisissez le mois, puis « Préparer le mois de paie » : le système crée une ligne par salarié doté d'une fiche.</>)}
+        {step(3, "Saisir les éléments variables de chacun", "Bulletins de paie",
+          <>Primes, heures sup, retenue d'absence, retards, avances, prêts, sanctions. Le bouton <b>« ＋ lignes »</b> permet d'ajouter des lignes libres (un <b>gain</b> imposable ou une <b>retenue</b> nette). Le net se recalcule tout seul. Le mois reste <b>modifiable</b> tant qu'il n'est pas soumis.</>)}
+        {step(4, "Contrôler les anomalies", "Contrôles et anomalies",
+          <>Corrigez d'abord les anomalies <b style={{ color: "var(--danger, #C24B3A)" }}>bloquantes</b> (rouge : fiche manquante, salaire de base nul, net négatif). Les <b style={{ color: "var(--alert, #C4661F)" }}>avertissements</b> (orange) ne bloquent pas mais méritent vérification.</>)}
+        {step(5, "Soumettre au Directeur général", "Bulletins de paie",
+          <>Bouton « Soumettre au DG ». La grille se fige (en attente de validation). S'il reste une anomalie bloquante, la soumission est refusée avec le détail à corriger.</>)}
+        {step(6, "Décision du DG", "Bulletins de paie",
+          <>Le DG <b>valide</b> (le mois est verrouillé) <b>ou</b> le <b>retourne</b> avec un motif : il redevient modifiable, vous corrigez puis re-soumettez.</>)}
+        {step(7, "Imprimer les bulletins", "Bulletins de paie / Employés",
+          <>Une fois validé : « Imprimer tous les bulletins » (un PDF, un bulletin par page). Pour un seul salarié : rubrique « Employés ».</>)}
+        {step(8, "Clôturer le mois", "Livre de paie",
+          <>Vérifiez le livre de paie (tous les salariés du mois), puis clôturez : la période est <b>figée définitivement</b> dans le Journal de paie.</>)}
+        {step(9, "Déclarations et journal", "Déclarations CNPS · Déclarations fiscales · Journal de paie",
+          <>Récapitulatifs CNPS et fiscaux à transmettre (mêmes montants que les bulletins). Le journal conserve l'archive figée de chaque mois clôturé.</>)}
+        {step(10, "Corriger APRÈS verrouillage (exceptionnel)", "Bulletins de paie",
+          <>Erreur découverte après validation ? « Demander une réouverture » : précisez l'élément, l'ancienne valeur, la correction et le motif. Le DG autorise → le mois repasse en brouillon et refait le circuit (étapes 3 à 6).</>)}
+      </ol>
+    </Card>
+  );
+}
 
 // ── Accueil : point d'entrée + état du mois courant ─────────────────────────
 function AccueilCard() {
@@ -396,6 +438,7 @@ export function PayrollEngineHub({
         reste la source unique des montants : bulletins, livre et journal de paie utilisent tous le même calcul.
       </GuidanceNote>
       <div style={{ display: "grid", gap: 10 }}>
+        <GuideCard />
         <AccueilCard />
         <DashboardCard />
         <PayrollSettingsSection canManage={canManagePayroll} collapsible />

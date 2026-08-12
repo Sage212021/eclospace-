@@ -3913,6 +3913,13 @@ export function getPayrollJournal(period: string) {
   return request<PayrollJournal>(`/api/v1/payroll/journal/${period}`);
 }
 
+// Contrôles & anomalies d'un mois de paie (§18).
+export interface PayrollAnomaly { employee_id: string | null; employee_name: string; message: string; }
+export interface PayrollAnomalies { period: string; blocking: PayrollAnomaly[]; warnings: PayrollAnomaly[]; can_submit: boolean; }
+export function getMonthlyAnomalies(period: string) {
+  return request<PayrollAnomalies>(`/api/v1/payroll/monthly/${period}/anomalies`);
+}
+
 // ── Centre de Communication Interne — Babillard d'annonces ────────────────────
 export type AnnouncementPriority = "normale" | "importante" | "urgente" | "critique";
 export type AnnouncementStatus = "brouillon" | "publiee" | "archivee";

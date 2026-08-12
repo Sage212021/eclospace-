@@ -44,8 +44,25 @@ const rateSetSchema = z.object({
 const monthlyLineSchema = z.object({
   primes: money, heures_sup: money, retenue_absence: money,
   retard: money, avance: money, pret: money, sanction: money, autres: money,
+  // Lignes libres ajoutées par le RH (aucune codée en dur) : gains imposables
+  // ou retenues nettes, avec un libellé et un montant.
+  extra_lines: z.array(z.object({ label: z.string().min(1).max(80), kind: z.enum(["gain", "retenue"]), amount: money })).max(30).optional(),
   note: z.string().max(500).nullable().optional(),
 });
+
+type ExtraLine = { label: string; kind: "gain" | "retenue"; amount: number };
+function parseExtraLines(v: unknown): ExtraLine[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((x) => {
+    if (x && typeof x === "object") {
+      const o = x as Record<string, unknown>;
+      if (typeof o.label === "string" && (o.kind === "gain" || o.kind === "retenue") && typeof o.amount === "number") {
+        return [{ label: o.label, kind: o.kind, amount: Math.max(o.amount, 0) }];
+      }
+    }
+    return [];
+  });
+}
 
 export default async function payrollRoutes(fastify: FastifyInstance) {
   // Interrupteur d'internalisation de la paie (D-007). « false » = export externe.
@@ -407,10 +424,11 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         include: {
           employee: {
             select: {
-              id: true, firstName: true, lastName: true, position: true, hireDate: true, birthDate: true, leaveBalanceDays: true, maritalStatus: true, childrenCount: true,
+              id: true, firstName: true, lastName: true, position: true, hireDate: true, birthDate: true, leaveBalanceDays: true, maritalStatus: true, childrenCount: true, phone: true, leaveTakenDays: true,
               department: { select: { name: true } },
               hrContracts: { orderBy: { startDate: "desc" }, take: 1, select: { type: true } },
               payrollProfile: true,
+              confidential: { select: { baseSalary: true } },
             },
           },
         },
@@ -421,7 +439,8 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         .filter((l) => l.employee.payrollProfile)
         .map((l) => {
           const p = l.employee.payrollProfile!;
-          const slip = computeMonthlyLine(p, rates, l);
+          const confBase = l.employee.confidential?.baseSalary != null ? num(l.employee.confidential.baseSalary) : null;
+          const slip = computeMonthlyLine(p, rates, l, confBase);
           return {
             employee_id: l.employeeId,
             employee_name: `${l.employee.firstName} ${l.employee.lastName}`,
@@ -436,6 +455,8 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
             birth_date: l.employee.birthDate ? l.employee.birthDate.toISOString().slice(0, 10) : null,
             marital_status: l.employee.maritalStatus,
             children_count: l.employee.childrenCount,
+            phone: l.employee.phone,
+            leave_taken: l.employee.leaveTakenDays != null ? num(l.employee.leaveTakenDays) : null,
             contract_type: l.employee.hrContracts[0]?.type ?? null,
             category: p.category,
             email: p.email,
@@ -443,6 +464,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
             account_number: p.accountNumber,
             leave_balance: num(l.employee.leaveBalanceDays),
             elements: monthlyElements(l),
+            extra_lines: parseExtraLines(l.extraLines),
             note: l.note,
             net_a_payer: slip.net_a_payer,
             salaire_brut: slip.salaire_brut,
@@ -482,6 +504,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         data: {
           primes: b.primes, heuresSup: b.heures_sup, retenueAbsence: b.retenue_absence,
           retard: b.retard, avance: b.avance, pret: b.pret, sanction: b.sanction, autres: b.autres,
+          extraLines: b.extra_lines ?? [],
           note: b.note,
         },
       });
@@ -600,6 +623,18 @@ function normalizePeriod(p?: string): string {
 
 // Calcul du bulletin réutilisable (consultation + e-mail). Renvoie une erreur
 // structurée (status + payload) plutôt qu'une exception.
+// Salaire de base de référence : le SALAIRE DE BASE CONFIDENTIEL fait foi
+// (décision opérateur 12/08/2026 : c'est lui qui « fait foi », le moteur le
+// prend en compte). À défaut (aucune valeur confidentielle), on retombe sur la
+// fiche paie (brut contractuel × % de base). Le brut retenu est le plus élevé
+// des deux, de sorte qu'un éventuel complément contractuel au-dessus de la base
+// reste préservé.
+function resolveBaseGross(p: { grossContractual: unknown; basePct: unknown }, confBase: number | null): { base: number; gross: number } {
+  const grossContract = num(p.grossContractual);
+  const base = confBase != null ? confBase : Math.round(grossContract * num(p.basePct));
+  return { base, gross: Math.max(grossContract, base) };
+}
+
 async function resolvePayslip(
   employeeId: string,
   period: string,
@@ -628,8 +663,8 @@ async function resolvePayslip(
     if (line) attendanceWitness = num(line.deductionProposed);
   }
 
-  const gross = num(profile.grossContractual);
-  const base = Math.round(gross * num(profile.basePct));
+  const confidential = await prisma.employeeConfidential.findUnique({ where: { employeeId }, select: { baseSalary: true } });
+  const { base, gross } = resolveBaseGross(profile, confidential?.baseSalary != null ? num(confidential.baseSalary) : null);
   const payslip = computePayslip(
     {
       base,
@@ -689,10 +724,13 @@ function monthlyElements(l: PayrollMonthlyLine) {
 // Imposables (primes, heures sup) → ajoutés au brut ET à l'assiette. Avant impôt :
 // retenue d'absence. Retenues nettes internes : retard, avance, prêt, sanction,
 // autres. (Formules ajustables ensuite par l'opérateur.)
-function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine): Payslip {
-  const gross = num(p.grossContractual);
-  const base = Math.round(gross * num(p.basePct));
-  const extraTaxable = num(l.primes) + num(l.heuresSup);
+function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine, confBase: number | null = null): Payslip {
+  const { base, gross } = resolveBaseGross(p, confBase);
+  // Lignes libres : les gains s'ajoutent au brut imposable, les retenues au net.
+  const extras = parseExtraLines(l.extraLines);
+  const extraGains = extras.filter((e) => e.kind === "gain").reduce((s, e) => s + e.amount, 0);
+  const extraRetenues = extras.filter((e) => e.kind === "retenue").reduce((s, e) => s + e.amount, 0);
+  const extraTaxable = num(l.primes) + num(l.heuresSup) + extraGains;
   return computePayslip(
     {
       base,
@@ -705,7 +743,7 @@ function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: P
       seniorityThreshold: p.seniorityThreshold ?? 0,
       applySeniority: p.applySeniority,
       retenueAbsence: num(l.retenueAbsence),
-      internal: { avance: num(l.avance), pret: num(l.pret), retard: num(l.retard), autres: num(l.autres) + num(l.sanction) },
+      internal: { avance: num(l.avance), pret: num(l.pret), retard: num(l.retard), autres: num(l.autres) + num(l.sanction) + extraRetenues },
     },
     rates,
   );
@@ -791,7 +829,7 @@ async function computeRegister(period: string): Promise<
 
   const profiles = await prisma.payrollEmployeeProfile.findMany({
     where: { employee: { deletedAt: null } },
-    include: { employee: { select: { id: true, firstName: true, lastName: true } } },
+    include: { employee: { select: { id: true, firstName: true, lastName: true, confidential: { select: { baseSalary: true } } } } },
   });
 
   // Si le mois a été PRÉPARÉ (grille mensuelle), le livre de paie reprend les
@@ -808,11 +846,11 @@ async function computeRegister(period: string): Promise<
   const lines: RegisterLine[] = [];
   const totals = { brut: 0, net: 0, charges_pat: 0 };
   for (const p of profiles) {
-    const gross = num(p.grossContractual);
-    const base = Math.round(gross * num(p.basePct));
+    const confBase = p.employee.confidential?.baseSalary != null ? num(p.employee.confidential.baseSalary) : null;
+    const { base, gross } = resolveBaseGross(p, confBase);
     const monthLine = lineByEmp.get(p.employeeId);
     const ps = monthLine
-      ? computeMonthlyLine(p, rates, monthLine)
+      ? computeMonthlyLine(p, rates, monthLine, confBase)
       : computePayslip(
           {
             base,

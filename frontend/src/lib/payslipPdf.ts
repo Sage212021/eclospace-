@@ -174,15 +174,23 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
     doc.setFont("helvetica", opts?.bold ? "bold" : "normal");
     doc.setFontSize(8.2);
     doc.setTextColor(...INK);
-    doc.text(`${opts?.neg ? "− " : ""}${money(value)}`, RIGHT, y, { align: "right" });
+    doc.text(`${opts?.neg && value > 0 ? "- " : ""}${money(value)}`, RIGHT, y, { align: "right" });
     hair();
     y += 5.1;
   };
+  // Lignes libres (RH) : les GAINS sont itemisés séparément et retirés du montant
+  // « Compléments » afin de ne pas les compter deux fois (le brut reste juste).
+  const extraLines = d.extra_lines ?? [];
+  const extraGains = extraLines.filter((e) => e.kind === "gain");
+  const extraGainsTotal = extraGains.reduce((s, e) => s + e.amount, 0);
   remHeader();
   remRow("Salaire mensuel de base (forfaitaire)", "Forfait mensuel", dash, p.base);
-  remRow("Compléments de salaire (primes du poste)", "Forfait", dash, p.complements);
-  if (p.prime_anciennete > 0) remRow("Prime d'ancienneté", "", "", p.prime_anciennete);
-  if (p.retenue_absence > 0) remRow("Retenue absence injustifiée (−)", "Journal retenues", dash, p.retenue_absence, { neg: true });
+  remRow("Compléments de salaire (primes du poste)", "Forfait", dash, p.complements - extraGainsTotal);
+  extraGains.forEach((e) => remRow(e.label, "Ligne libre", dash, e.amount));
+  // Prime d'ancienneté et retenue d'absence : toujours affichées (modèle moteur),
+  // même à 0. La retenue d'absence réduit le brut (avant impôt).
+  remRow("Prime d'ancienneté", "", "", p.prime_anciennete);
+  remRow("Retenue absence injustifiée", "Journal retenues", dash, p.retenue_absence, { neg: true });
   doc.setFillColor(...BEIGE);
   doc.rect(LEFT, y - 3.4, RIGHT - LEFT, 5.2, "F");
   remRow("SALAIRE BRUT DU MOIS", "", "", p.salaire_brut, { bold: true });
@@ -252,6 +260,8 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   intRow("Remboursement prêt personnel", intr.pret);
   intRow("Retenue retard non justifié", intr.retard);
   intRow("Autres retenues internes", intr.autres);
+  // Retenues libres (RH) itemisées.
+  extraLines.filter((e) => e.kind === "retenue").forEach((e) => intRow(e.label, e.amount));
   doc.setFillColor(...BEIGE);
   doc.rect(LEFT, y - 3.2, RIGHT - LEFT, 5.2, "F");
   intRow("TOTAL RETENUES INTERNES", p.total_retenues_internes, true);
@@ -292,7 +302,8 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   sectionBar("Informations complémentaires & congés");
   infoRow("Type de contrat", d.contract_type ? CONTRACT_LABEL[d.contract_type] ?? d.contract_type : dash, "Fonction / Poste", d.position ?? dash);
   infoRow("Date de naissance", d.birth_date ?? dash, "Situation familiale", d.situation_familiale ?? dash);
-  infoRow("Nombre d'enfants", d.children_count != null ? String(d.children_count) : dash, "Solde congés (jours)", d.leave_balance != null ? String(d.leave_balance) : dash);
+  infoRow("Nombre d'enfants", d.children_count != null ? String(d.children_count) : dash, "Téléphone", d.phone ?? dash);
+  infoRow("Solde congés disponible (j)", d.leave_balance != null ? String(d.leave_balance) : dash, "Jours de congés pris (cumul)", d.leave_taken != null ? String(d.leave_taken) : dash);
   infoRow("Contact urgence", d.emergency_contact ?? dash, "", "");
 }
 

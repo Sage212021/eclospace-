@@ -69,9 +69,12 @@ model Employee {
   // projet — cf. docs/JOURNAL_TECHNIQUE.md).
   departureDate    DateTime?      @map("departure_date")
   leaveBalanceDays Decimal        @default(0) @map("leave_balance_days") @db.Decimal(5, 1)
-  // État civil (feuille « Employés » du moteur) — figurent sur le bulletin.
+  // État civil et infos complémentaires (feuille « Employés » du moteur) —
+  // figurent sur le bulletin (bloc « Informations complémentaires & congés »).
   maritalStatus    String?        @map("marital_status")
   childrenCount    Int?           @map("children_count")
+  phone            String?
+  leaveTakenDays   Decimal?       @map("leave_taken_days") @db.Decimal(5, 1)
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -815,6 +818,10 @@ model PayrollMonthlyLine {
   pret           Decimal @default(0) @db.Decimal(12, 2)
   sanction       Decimal @default(0) @db.Decimal(12, 2)
   autres         Decimal @default(0) @db.Decimal(12, 2)
+  // Lignes LIBRES ajoutées par le RH sur le bulletin (aucune codée en dur) :
+  // tableau JSON de { label, kind: "gain" | "retenue", amount }. Un « gain » est
+  // imposable (ajouté au brut/à l'assiette) ; une « retenue » est nette.
+  extraLines     Json?   @map("extra_lines")
   note           String?
 
   createdAt DateTime @default(now()) @map("created_at")

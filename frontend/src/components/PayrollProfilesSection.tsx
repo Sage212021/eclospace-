@@ -240,6 +240,8 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
     birth_date: employee?.birthDate ? employee.birthDate.slice(0, 10) : null,
     situation_familiale: employee?.maritalStatus ?? null,
     children_count: employee?.childrenCount ?? null,
+    phone: employee?.phone ?? null,
+    leave_taken: employee?.leaveTakenDays != null ? Number(employee.leaveTakenDays) : null,
     category: form.category || null,
     email: form.email || null,
     payment_mode: form.payment_mode || null,

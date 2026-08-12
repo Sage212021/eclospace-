@@ -68,7 +68,7 @@ describe("computePayslip — variantes", () => {
     expect(p.prime_anciennete).toBe(15000); // 300 000 × 5 %
     expect(p.salaire_brut).toBe(515000);
   });
-  it("retenue d'absence réduit le brut et l'assiette", () => {
+  it("retenue d'absence réduit le brut et l'assiette (avant impôt)", () => {
     const p = computePayslip({ ...BASE_INPUT, retenueAbsence: 50000 }, RATES);
     expect(p.salaire_brut).toBe(450000);
     expect(p.assiette_fiscale).toBe(450000);
@@ -128,5 +128,20 @@ describe("intégration endpoint /payslip", () => {
     const p = res.json().payslip;
     expect(p.net_a_payer).toBe(426075);
     expect(p.cout_employeur).toBe(567300);
+  });
+
+  it("le SALAIRE DE BASE CONFIDENTIEL fait foi : le moteur le prend en compte", async () => {
+    // Salaire de base confidentiel (600 000) supérieur au brut contractuel de la
+    // fiche paie (500 000) → il devient le salaire de base ET le brut.
+    const conf = await app.inject({
+      method: "PATCH", url: `/api/v1/employees/${employeeId}/confidential`, headers: { cookie },
+      payload: { base_salary: 600000 },
+    });
+    expect(conf.statusCode).toBe(200);
+    const res = await app.inject({ method: "GET", url: `/api/v1/payroll/employees/${employeeId}/payslip?period=2026-06`, headers: { cookie } });
+    const p = res.json().payslip;
+    expect(p.base).toBe(600000);
+    expect(p.complements).toBe(0);
+    expect(p.salaire_brut).toBe(600000);
   });
 });

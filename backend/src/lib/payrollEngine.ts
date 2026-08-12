@@ -79,7 +79,8 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
     prime = r(input.base * rate);
   }
 
-  // H — salaire brut.
+  // H — salaire brut. La retenue d'absence injustifiée réduit le brut (avant
+  // impôt), comme dans le modèle moteur.
   const brut = Math.max(input.base + input.complements + prime - input.retenueAbsence, 0);
 
   // I — assiette fiscale (base fiscale + prime − retenue absence).

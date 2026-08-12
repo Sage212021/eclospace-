@@ -2607,6 +2607,8 @@ export interface Employee {
   birthDate: string | null;
   maritalStatus: string | null;
   childrenCount: number | null;
+  phone: string | null;
+  leaveTakenDays: string | null;
   departureDate: string | null;
   leaveBalanceDays: string;
   department: { id: string; name: string } | null;
@@ -2839,6 +2841,8 @@ export function createEmployee(input: {
   birth_date?: string;
   marital_status?: string;
   children_count?: number;
+  phone?: string;
+  leave_taken_days?: number;
   account?: { username: string; email: string; password: string; role_code: string };
   // Rattachement à un compte déjà ouvert par l'administrateur (exclusif avec account).
   link_user_id?: string;
@@ -2846,7 +2850,7 @@ export function createEmployee(input: {
   return request<Employee>("/api/v1/employees", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateEmployee(id: string, input: Partial<{ first_name: string; last_name: string; hire_date: string | null; department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null; marital_status: string | null; children_count: number | null }>) {
+export function updateEmployee(id: string, input: Partial<{ first_name: string; last_name: string; hire_date: string | null; department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null; marital_status: string | null; children_count: number | null; phone: string | null; leave_taken_days: number | null }>) {
   return request<Employee>(`/api/v1/employees/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
@@ -3777,6 +3781,12 @@ export interface PayrollMonthElements {
   primes: number; heures_sup: number; retenue_absence: number;
   retard: number; avance: number; pret: number; sanction: number; autres: number;
 }
+// Ligne libre ajoutée par le RH au bulletin (gain imposable ou retenue nette).
+export interface PayrollExtraLine {
+  label: string;
+  kind: "gain" | "retenue";
+  amount: number;
+}
 export interface PayrollMonthLine {
   employee_id: string;
   employee_name: string;
@@ -3790,9 +3800,12 @@ export interface PayrollMonthLine {
   birth_date: string | null;
   marital_status: string | null;
   children_count: number | null;
+  phone: string | null;
+  leave_taken: number | null;
   contract_type: string | null;
   category: string | null;
   email: string | null;
+  extra_lines?: PayrollExtraLine[];
   payment_mode: string | null;
   account_number: string | null;
   leave_balance: number;
@@ -3833,8 +3846,8 @@ export function returnPayrollMonth(period: string, reason: string) {
 export function getPayrollMonth(period: string) {
   return request<PayrollMonth>(`/api/v1/payroll/monthly/${period}`);
 }
-export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null) {
-  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...elements, note: note ?? null }) });
+export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null, extraLines?: PayrollExtraLine[]) {
+  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...elements, note: note ?? null, extra_lines: extraLines ?? [] }) });
 }
 // Validation définitive du mois par le Directeur général (obligatoire avant impression).
 export function validatePayrollMonth(period: string) {

@@ -1,144 +1,256 @@
 import { jsPDF } from "jspdf";
 import type { PayslipPrintData } from "./print";
 
-// Bulletin de paie PDF côté navigateur (décision opérateur : pas de dépendance
-// serveur/Chromium), calqué sur le MODÈLE DU CLASSEUR ERP : bloc salarié,
-// éléments de rémunération, cotisations en deux colonnes (part salariale ET
-// patronale), éléments internes, net à payer, coût employeur, mode de paiement.
-// Moteur de calcul inchangé. Factorisé pour le bulletin unique (base64 e-mail)
-// et la génération mensuelle groupée (un bulletin par page).
+// BULLETIN DE PAIE — modèle UNIQUE, reproduction fidèle de l'onglet « Bulletin »
+// du classeur moteur (docs/paie/Moteur_Paie_Eclosion_V26_MAJ10.xlsm) :
+//   en-tête maison + identité légale · informations salarié · éléments de
+//   rémunération (Désignation · Base de calcul · Taux/détail · Montant) ·
+//   cotisations (Nature · Assiette · Taux · Part salarié · Part patronale) ·
+//   retenues internes détaillées · NET À PAYER · coût employeur · mode de
+//   paiement · mentions légales · informations complémentaires & congés.
+// Le moteur reste la source de vérité : ce rendu N'EFFECTUE AUCUN CALCUL, il
+// met en page les montants déjà calculés (aperçu = PDF = impression).
 
-const NAVY = [22, 35, 61] as const;
-const GOLD = [200, 154, 27] as const;
+const NAVY = [27, 42, 74] as const; // #1B2A4A (bandeaux de section)
+const BEIGE = [242, 240, 234] as const; // #F2F0EA (sous-totaux, labels)
+const GOLD = [201, 168, 76] as const; // #C9A84C (bandeau NET À PAYER)
 const INK = [40, 40, 40] as const;
 const MUTED = [110, 110, 110] as const;
+const HAIR = [225, 228, 234] as const;
 const LEFT = 14;
 const RIGHT = 196;
-const money = (n: number) => `${Math.round(n).toLocaleString("fr-FR")} FCFA`;
+
+// Groupe les milliers avec une espace NORMALE : la police Helvetica de jsPDF
+// n'a pas la glyphe « espace fine insécable » (U+202F) que produit
+// toLocaleString("fr-FR") — sans ce nettoyage, « 70 715 » s'imprime « 70/715 ».
+const grp = (n: number) => Math.round(n).toLocaleString("fr-FR").replace(/\s/g, " ");
+const money = (n: number) => `${grp(n)} FCFA`;
+const pct = (f: number) => `${(f * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 }).replace(/\s/g, " ")} %`;
+const dash = "—";
+
+// Identité légale de la maison (feuille « Bulletin » du moteur, en-tête fixe).
+const EMPLOYER = {
+  name: "ECLOSION EDITION SARL",
+  lines: [
+    "Carrefour INSTIC – Nouvelle route Kondengui, Yaoundé, Cameroun",
+    "B.P. 33071 Yaoundé · Tél. : (+237) 698 03 15 02 / 678 70 40 86",
+    "eclosionedition@gmail.com · https://eclosioneditions.cm",
+    "RCCM : RC/YAO/2019/B/144 · NIU : M021912751174Y · N° Affil. CNPS : C-YAO-2019-0144",
+  ],
+};
+
+const CONTRACT_LABEL: Record<string, string> = { cdi: "CDI", cdd: "CDD", stage: "Stage", prestation: "Prestation" };
 
 function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   const p = d.payslip;
-  let y = 16;
+  const r = d.rates ?? null;
+  let y = 15;
 
-  // ---- En-tête maison ------------------------------------------------------
+  // ---- En-tête : marque + titre ------------------------------------------
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...NAVY);
-  doc.setFontSize(16);
-  doc.text("Éclosion Édition", LEFT, y);
-  doc.setFontSize(12);
+  doc.setFontSize(17);
+  doc.text("Éclosion", LEFT, y);
   doc.setTextColor(...GOLD);
+  doc.setFontSize(8);
+  doc.text("L'AVENIR DU LIVRE", LEFT, y + 4);
+  doc.setTextColor(...NAVY);
+  doc.setFontSize(13);
   doc.text("BULLETIN DE PAIE", RIGHT, y, { align: "right" });
-  y += 4;
-  doc.setDrawColor(...NAVY);
-  doc.setLineWidth(0.6);
+  y += 8;
+
+  // Identité légale de l'employeur (bloc gauche) + période/date (bloc droit).
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...INK);
+  doc.text(EMPLOYER.name, LEFT, y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...MUTED);
+  doc.text(`Période : ${frPeriod(d.period)}`, RIGHT, y, { align: "right" });
+  y += 3.6;
+  EMPLOYER.lines.forEach((l) => {
+    doc.text(l, LEFT, y);
+    y += 3.3;
+  });
+  y += 1;
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.5);
   doc.line(LEFT, y, RIGHT, y);
   y += 4;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(...MUTED);
-  doc.text("Éclosion Édition SARL — L'avenir du livre · Yaoundé, Cameroun · Contrat de travail camerounais & législation CNPS", LEFT, y);
-  y += 6;
 
-  // ---- Bloc « Informations salarié » --------------------------------------
+  // Matricule · Période · Édité le.
+  doc.setFontSize(8.5);
+  doc.setTextColor(...INK);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Matricule : `, LEFT, y);
+  doc.setFont("helvetica", "bold");
+  doc.text(d.matricule ?? dash, LEFT + 20, y);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Période : ${d.period}`, 80, y);
+  doc.text(`Édité le ${new Date().toLocaleDateString("fr-FR")}`, RIGHT, y, { align: "right" });
+  y += 5;
+
+  // ---- Helpers de mise en page --------------------------------------------
   const sectionBar = (title: string) => {
     doc.setFillColor(...NAVY);
-    doc.rect(LEFT, y, RIGHT - LEFT, 5.5, "F");
+    doc.rect(LEFT, y, RIGHT - LEFT, 5.4, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
+    doc.setFontSize(8);
     doc.setTextColor(255, 255, 255);
-    doc.text(title.toUpperCase(), LEFT + 2, y + 3.9);
-    y += 8;
+    doc.text(title.toUpperCase(), LEFT + 2, y + 3.8);
+    y += 7.6;
   };
-  // Paire d'infos (label gris + valeur) sur deux colonnes.
+  const hair = () => {
+    doc.setDrawColor(...HAIR);
+    doc.setLineWidth(0.15);
+    doc.line(LEFT, y + 1.3, RIGHT, y + 1.3);
+  };
+  // Écrit une valeur en gras à `x`, en réduisant la police (8 → 6) si nécessaire
+  // pour tenir dans `maxW` — évite qu'un libellé long (département, banque…)
+  // ne déborde de la page.
+  const valueFit = (text: string, x: number, maxW: number) => {
+    doc.setFont("helvetica", "bold");
+    let fs = 8;
+    doc.setFontSize(fs);
+    while (doc.getTextWidth(text) > maxW && fs > 6) {
+      fs -= 0.3;
+      doc.setFontSize(fs);
+    }
+    doc.setTextColor(...INK);
+    doc.text(text, x, y);
+  };
   const infoRow = (l1: string, v1: string, l2: string, v2: string) => {
-    doc.setFontSize(8.5);
+    doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...MUTED);
     doc.text(l1, LEFT, y);
     doc.text(l2, 108, y);
-    doc.setTextColor(...INK);
-    doc.setFont("helvetica", "bold");
-    doc.text(v1 || "—", 46, y);
-    doc.text(v2 || "—", 150, y);
+    valueFit(v1 || dash, 48, 108 - 48 - 1);
+    valueFit(v2 || dash, 150, RIGHT - 150);
     y += 5;
   };
 
+  // ---- Informations salarié ------------------------------------------------
   sectionBar("Informations salarié");
-  infoRow("Nom & Prénom", d.employee_name, "Matricule", d.matricule ?? "—");
-  infoRow("N° CNPS", d.cnps_number ?? "—", "NIU (fiscal)", d.niu ?? "—");
-  infoRow("Département", d.department ?? "—", "Poste / Fonction", d.position ?? "—");
-  infoRow("Catégorie / Échelon", d.category ?? "—", "Date d'entrée", d.hire_date ?? "—");
-  infoRow("Parts fiscales", d.fiscal_parts != null ? String(d.fiscal_parts) : "—", "Période", d.period);
+  infoRow("Matricule", d.matricule ?? dash, "Département", d.department ?? dash);
+  infoRow("Nom & Prénom", d.employee_name, "Date d'entrée", d.hire_date ?? dash);
+  infoRow("N° CNPS", d.cnps_number ?? dash, "Catégorie / Échelon", d.category ?? dash);
+  infoRow("Parts fiscales", d.fiscal_parts != null ? String(d.fiscal_parts) : dash, "Email", d.email ?? dash);
   y += 1;
 
-  // ---- Éléments de rémunération -------------------------------------------
-  const row = (label: string, value: number, opts?: { bold?: boolean; gold?: boolean; neg?: boolean; indent?: boolean }) => {
-    doc.setFont("helvetica", opts?.bold ? "bold" : "normal");
-    doc.setFontSize(8.7);
-    doc.setTextColor(opts?.gold ? GOLD[0] : INK[0], opts?.gold ? GOLD[1] : INK[1], opts?.gold ? GOLD[2] : INK[2]);
-    doc.text(label, LEFT + (opts?.indent ? 3 : 0), y);
-    doc.text(`${opts?.neg ? "− " : ""}${money(value)}`, RIGHT, y, { align: "right" });
-    doc.setDrawColor(230, 233, 239);
-    doc.setLineWidth(0.15);
-    doc.line(LEFT, y + 1.4, RIGHT, y + 1.4);
-    y += 5.4;
-  };
-
+  // ---- Éléments de rémunération (Désignation · Base · Taux · Montant) ------
   sectionBar("Éléments de rémunération (FCFA)");
-  row("Salaire de base", p.base);
-  if (p.complements) row("Compléments de salaire (primes du poste, heures sup.)", p.complements);
-  if (p.prime_anciennete > 0) row("Prime d'ancienneté", p.prime_anciennete);
-  if (p.retenue_absence > 0) row("Retenue d'absence", p.retenue_absence, { neg: true });
-  row("SALAIRE BRUT DU MOIS", p.salaire_brut, { bold: true });
-  y += 1;
-
-  // ---- Cotisations : part salariale ET part patronale ---------------------
-  sectionBar("Cotisations sociales & fiscales — législation camerounaise");
-  // En-têtes de colonnes.
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-  doc.setTextColor(...MUTED);
-  doc.text("Nature", LEFT, y);
-  doc.text("Part salariale", 150, y, { align: "right" });
-  doc.text("Part patronale", RIGHT, y, { align: "right" });
-  y += 4;
-  const cot = (label: string, sal: number | null, pat: number | null) => {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+  const REM_BASE = 118, REM_TAUX = 150;
+  const remHeader = () => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(...MUTED);
+    doc.text("Désignation", LEFT, y);
+    doc.text("Base de calcul", REM_BASE, y, { align: "right" });
+    doc.text("Taux / détail", REM_TAUX, y, { align: "right" });
+    doc.text("Montant", RIGHT, y, { align: "right" });
+    y += 4;
+  };
+  const remRow = (label: string, base: string, taux: string, value: number, opts?: { bold?: boolean; neg?: boolean }) => {
+    doc.setFont("helvetica", opts?.bold ? "bold" : "normal");
+    doc.setFontSize(8.2);
     doc.setTextColor(...INK);
     doc.text(label, LEFT, y);
-    doc.text(sal != null ? money(sal) : "—", 150, y, { align: "right" });
-    doc.text(pat != null ? money(pat) : "—", RIGHT, y, { align: "right" });
-    doc.setDrawColor(230, 233, 239);
-    doc.setLineWidth(0.15);
-    doc.line(LEFT, y + 1.4, RIGHT, y + 1.4);
-    y += 5.2;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.2);
+    doc.setTextColor(...MUTED);
+    if (!opts?.bold) {
+      doc.text(base, REM_BASE, y, { align: "right" });
+      doc.text(taux, REM_TAUX, y, { align: "right" });
+    }
+    doc.setFont("helvetica", opts?.bold ? "bold" : "normal");
+    doc.setFontSize(8.2);
+    doc.setTextColor(...INK);
+    doc.text(`${opts?.neg ? "− " : ""}${money(value)}`, RIGHT, y, { align: "right" });
+    hair();
+    y += 5.1;
   };
-  cot("CNPS — Vieillesse, invalidité, décès (PVID)", p.pvid_salarie, p.pvid_patronal);
-  cot("CNPS — Prestations familiales (PF)", null, p.prestations_familiales);
-  cot("CNPS — Accidents du travail (AT)", null, p.accidents_travail);
-  cot("CFC — Crédit Foncier du Cameroun", p.cfc_salarie, p.cfc_patronal);
-  cot("FNE — Fonds National de l'Emploi", null, p.fne);
-  cot("Taxe communale (TC)", p.taxe_communale, null);
-  cot("Redevance audiovisuelle (RAV)", p.rav, null);
-  cot("IRPP + CAC (barème progressif)", p.irpp_cac, null);
+  remHeader();
+  remRow("Salaire mensuel de base (forfaitaire)", "Forfait mensuel", dash, p.base);
+  remRow("Compléments de salaire (primes du poste)", "Forfait", dash, p.complements);
+  if (p.prime_anciennete > 0) remRow("Prime d'ancienneté", "", "", p.prime_anciennete);
+  if (p.retenue_absence > 0) remRow("Retenue absence injustifiée (−)", "Journal retenues", dash, p.retenue_absence, { neg: true });
+  doc.setFillColor(...BEIGE);
+  doc.rect(LEFT, y - 3.4, RIGHT - LEFT, 5.2, "F");
+  remRow("SALAIRE BRUT DU MOIS", "", "", p.salaire_brut, { bold: true });
+  y += 1;
+
+  // ---- Cotisations (Nature · Assiette · Taux · Part sal. · Part pat.) ------
+  sectionBar("Cotisations sociales & fiscales — Législation camerounaise");
+  const C_ASS = 112, C_TAUX = 142, C_SAL = 170;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.7);
+  doc.setFontSize(6.8);
+  doc.setTextColor(...MUTED);
+  doc.text("Nature", LEFT, y);
+  doc.text("Assiette", C_ASS, y, { align: "right" });
+  doc.text("Taux", C_TAUX, y, { align: "right" });
+  doc.text("Part salarié", C_SAL, y, { align: "right" });
+  doc.text("Part patronale", RIGHT, y, { align: "right" });
+  y += 4;
+  const cot = (label: string, assiette: number | null, taux: string, sal: number | null, pat: number | null) => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.6);
+    doc.setTextColor(...INK);
+    doc.text(label, LEFT, y);
+    doc.setFontSize(7);
+    doc.setTextColor(...MUTED);
+    doc.text(assiette != null ? grp(assiette) : dash, C_ASS, y, { align: "right" });
+    doc.text(taux, C_TAUX, y, { align: "right" });
+    doc.setFontSize(7.6);
+    doc.setTextColor(...INK);
+    doc.text(sal != null ? money(sal) : dash, C_SAL, y, { align: "right" });
+    doc.text(pat != null ? money(pat) : dash, RIGHT, y, { align: "right" });
+    hair();
+    y += 4.9;
+  };
+  const tx2 = (a: number | undefined, b: number | undefined) => (r ? `${a != null ? pct(a) : dash} / ${b != null ? pct(b) : dash}` : dash);
+  cot("CNPS – Vieillesse, Invalidité, Décès (PVID)", p.assiette_cnps, tx2(r?.vid_sal, r?.vid_pat), p.pvid_salarie, p.pvid_patronal);
+  cot("CNPS – Prestations familiales (PF)", null, r ? `${dash} / ${pct(r.pf)}` : dash, null, p.prestations_familiales);
+  cot("CNPS – Accidents du travail (AT)", null, r ? `${dash} / ${pct(r.at)}` : dash, null, p.accidents_travail);
+  cot("CFC – Crédit Foncier du Cameroun", p.assiette_fiscale, tx2(r?.cfc_sal, r?.cfc_pat), p.cfc_salarie, p.cfc_patronal);
+  cot("FNE – Fonds National de l'Emploi", null, r ? `${dash} / ${pct(r.fne)}` : dash, null, p.fne);
+  cot("Taxe Communale (TC) – barème", null, "barème", p.taxe_communale, null);
+  cot("Redevance Audiovisuelle (RAV) – barème", null, "barème", p.rav, null);
+  cot("IRPP + CAC (barème progressif)", null, r ? `barème + ${Math.round(r.cac * 100)}% CAC` : "barème", p.irpp_cac, null);
+  // Totaux cotisations.
+  doc.setFillColor(...BEIGE);
+  doc.rect(LEFT, y - 3.2, RIGHT - LEFT, 5.2, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.8);
   doc.setTextColor(...NAVY);
-  doc.text("TOTAL RETENUES / CHARGES", LEFT, y);
-  doc.text(money(p.total_retenues_salariales), 150, y, { align: "right" });
+  doc.text("TOTAL RETENUES LÉGALES / CHARGES", LEFT, y);
+  doc.text(money(p.total_retenues_salariales), C_SAL, y, { align: "right" });
   doc.text(money(p.total_charges_patronales), RIGHT, y, { align: "right" });
   y += 7;
 
-  // ---- Éléments internes du mois (net) ------------------------------------
-  if (p.total_retenues_internes > 0) {
-    sectionBar("Éléments internes du mois (avances, prêts, retards…)");
-    row("Total retenues internes", p.total_retenues_internes, { neg: true, bold: true });
-    y += 1;
-  }
+  // ---- Retenues internes du mois (détaillées) -----------------------------
+  sectionBar("Retenues internes du mois — prêts, avances, retards");
+  const intr = d.internal ?? { avance: 0, pret: 0, retard: 0, autres: 0 };
+  const intRow = (label: string, value: number, bold = false) => {
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(bold ? NAVY[0] : INK[0], bold ? NAVY[1] : INK[1], bold ? NAVY[2] : INK[2]);
+    doc.text(label, LEFT, y);
+    doc.text(money(value), RIGHT, y, { align: "right" });
+    hair();
+    y += 4.9;
+  };
+  intRow("Avance sur salaire", intr.avance);
+  intRow("Remboursement prêt personnel", intr.pret);
+  intRow("Retenue retard non justifié", intr.retard);
+  intRow("Autres retenues internes", intr.autres);
+  doc.setFillColor(...BEIGE);
+  doc.rect(LEFT, y - 3.2, RIGHT - LEFT, 5.2, "F");
+  intRow("TOTAL RETENUES INTERNES", p.total_retenues_internes, true);
+  y += 2;
 
-  // ---- Net à payer (bandeau or) -------------------------------------------
-  y += 1;
+  // ---- NET À PAYER (bandeau or) -------------------------------------------
   doc.setFillColor(...GOLD);
   doc.rect(LEFT, y, RIGHT - LEFT, 9, "F");
   doc.setFont("helvetica", "bold");
@@ -155,25 +267,31 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   doc.text(money(p.cout_employeur), RIGHT, y, { align: "right" });
   y += 6;
 
-  // ---- Mode de paiement ----------------------------------------------------
-  if (d.payment_mode || d.account_number) {
-    doc.setTextColor(...MUTED);
-    doc.setFontSize(8.5);
-    doc.text(`Mode de paiement : ${d.payment_mode ?? "—"}${d.account_number ? `   ·   N° compte : ${d.account_number}` : ""}`, LEFT, y);
-    y += 6;
-  }
+  // Mode de paiement.
+  doc.setTextColor(...MUTED);
+  doc.setFontSize(8);
+  doc.text(`Mode de paiement : ${d.payment_mode ?? dash}${d.account_number ? `   ·   N° compte : ${d.account_number}` : ""}`, LEFT, y);
+  y += 5;
+
+  // Mentions légales (art. 89 congés + art. 68 conservation).
+  doc.setFontSize(6.8);
+  doc.setTextColor(...MUTED);
+  doc.text("Congés payés : acquisition 1,5 jour ouvrable / mois de service effectif (art. 89 du Code du Travail camerounais).", LEFT, y);
+  y += 3.2;
+  doc.text("Document à conserver sans limitation de durée (Code du Travail camerounais, art. 68). Moteur de paie Éclosion V2.", LEFT, y);
+  y += 5;
 
   // ---- Informations complémentaires & congés ------------------------------
-  const CONTRACT_LABEL: Record<string, string> = { cdi: "CDI", cdd: "CDD", stage: "Stage", prestation: "Prestation" };
-  y += 1;
   sectionBar("Informations complémentaires & congés");
-  infoRow("Type de contrat", d.contract_type ? CONTRACT_LABEL[d.contract_type] ?? d.contract_type : "—", "Date de naissance", d.birth_date ?? "—");
-  infoRow("Date d'entrée", d.hire_date ?? "—", "Solde de congés (jours)", d.leave_balance != null ? String(d.leave_balance) : "—");
+  infoRow("Type de contrat", d.contract_type ? CONTRACT_LABEL[d.contract_type] ?? d.contract_type : dash, "Fonction / Poste", d.position ?? dash);
+  infoRow("Date de naissance", d.birth_date ?? dash, "Situation familiale", d.situation_familiale ?? dash);
+  infoRow("Contact urgence", d.emergency_contact ?? dash, "Solde congés (jours)", d.leave_balance != null ? String(d.leave_balance) : dash);
+}
 
-  // ---- Pied ----------------------------------------------------------------
-  doc.setFontSize(7.5);
-  doc.setTextColor(...MUTED);
-  doc.text("Document à conserver sans limitation de durée (art. 68 du Code du travail camerounais).", LEFT, 288);
+// AAAA-MM → « MM/AAAA ».
+function frPeriod(period: string): string {
+  const [y, m] = period.split("-");
+  return m ? `${m}/${y}` : period;
 }
 
 // Bulletin unique → base64 (pièce jointe e-mail).
@@ -182,6 +300,16 @@ export function buildPayslipPdfBase64(d: PayslipPrintData): string {
   renderPayslip(doc, d);
   const uri = doc.output("datauristring");
   return uri.split("base64,")[1] ?? "";
+}
+
+// Aperçu / impression : ouvre le MÊME bulletin PDF dans un nouvel onglet (la
+// visionneuse PDF du navigateur permet d'imprimer et d'enregistrer). Garantit
+// « aperçu = PDF = impression » : un seul document, aucune divergence.
+export function printPayslipPdf(d: PayslipPrintData): void {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  renderPayslip(doc, d);
+  const url = doc.output("bloburl");
+  window.open(url, "_blank");
 }
 
 // Génération MENSUELLE GROUPÉE : un seul PDF, un bulletin par page.

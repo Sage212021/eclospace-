@@ -21,8 +21,7 @@ import { Card } from "./Card";
 import { Field } from "./Modal";
 import { Button } from "./Button";
 import { EmailModal } from "./EmailModal";
-import { printPayslip } from "../lib/print";
-import { buildPayslipPdfBase64 } from "../lib/payslipPdf";
+import { buildPayslipPdfBase64, printPayslipPdf } from "../lib/payslipPdf";
 import { IconAdmin } from "./icons";
 import { useI18n } from "../i18n";
 
@@ -223,6 +222,29 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   const employee = employees.find((e) => e.id === employeeId);
   const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : slip?.employee.name ?? "";
   const rateEffective = slip?.rate_set_effective_from ?? rateSet?.effective_from ?? null;
+  // Taux d'affichage du bulletin (colonne « Taux » du modèle moteur), dérivés du
+  // barème en vigueur. Pas de retenue interne sur un bulletin unitaire (les
+  // avances/prêts/retards se saisissent dans la grille mensuelle).
+  const slipRates = rateSet
+    ? { vid_sal: rateSet.cnps.vid_sal_pct, vid_pat: rateSet.cnps.vid_pat_pct, pf: rateSet.cnps.pf_pct, at: rateSet.cnps.at_pct, cfc_sal: rateSet.fiscal.cfc_sal_pct, cfc_pat: rateSet.fiscal.cfc_pat_pct, fne: rateSet.fiscal.fne_pct, cac: rateSet.fiscal.cac_pct }
+    : null;
+  const noInternal = { avance: 0, pret: 0, retard: 0, autres: 0 };
+  const slipMeta = {
+    matricule: form.matricule || null,
+    cnps_number: form.cnps_number || null,
+    niu: form.niu || null,
+    fiscal_parts: form.fiscal_parts,
+    department: employee?.department?.name ?? null,
+    position: employee?.position ?? null,
+    hire_date: employee?.hireDate ? employee.hireDate.slice(0, 10) : null,
+    birth_date: employee?.birthDate ? employee.birthDate.slice(0, 10) : null,
+    category: form.category || null,
+    email: form.email || null,
+    payment_mode: form.payment_mode || null,
+    account_number: form.account_number || null,
+    rates: slipRates,
+    internal: noInternal,
+  };
 
   const readOnly = !canManage || locked;
   function txt(label: string, key: keyof PayrollProfileInput) {
@@ -368,17 +390,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
                   variant="view"
                   size="sm"
                   type="button"
-                  onClick={() =>
-                    printPayslip({
-                      employee_name: employeeName,
-                      period,
-                      matricule: form.matricule || null,
-                      cnps_number: form.cnps_number || null,
-                      niu: form.niu || null,
-                      fiscal_parts: form.fiscal_parts,
-                      payslip: displaySlip,
-                    })
-                  }
+                  onClick={() => printPayslipPdf({ employee_name: employeeName, period, ...slipMeta, payslip: displaySlip })}
                 >
                   {t("pay.print_slip", "Imprimer le bulletin / PDF")}
                 </Button>
@@ -420,15 +432,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
               loadPreview={(message) => previewPayslipEmail(employeeId, period, message, manualRetenue)}
               onSend={async (to, message) => {
                 // Bulletin PDF généré ici (navigateur), joint automatiquement à l'e-mail.
-                const pdf = buildPayslipPdfBase64({
-                  employee_name: employeeName,
-                  period,
-                  matricule: form.matricule || null,
-                  cnps_number: form.cnps_number || null,
-                  niu: form.niu || null,
-                  fiscal_parts: form.fiscal_parts,
-                  payslip: displaySlip,
-                });
+                const pdf = buildPayslipPdfBase64({ employee_name: employeeName, period, ...slipMeta, payslip: displaySlip });
                 const r = await sendPayslipEmail(employeeId, period, message, to, pdf, manualRetenue);
                 loadDispatches();
                 return r;

@@ -44,8 +44,10 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
     const rate = input.seniorityRate && input.seniorityRate > 0 ? input.seniorityRate : rates.ancDefPct;
     prime = r(input.base * rate);
   }
-  const brut = Math.max(input.base + input.complements + prime - input.retenueAbsence, 0);
-  const assietteFiscale = Math.max(input.fiscalBase + prime - input.retenueAbsence, 0);
+  // La retenue d'absence est une retenue INTERNE nette (voir moteur backend) :
+  // elle ne réduit ni le brut ni l'assiette, seulement le net.
+  const brut = Math.max(input.base + input.complements + prime, 0);
+  const assietteFiscale = Math.max(input.fiscalBase + prime, 0);
   const assietteCnps = Math.min(r(assietteFiscale * rates.coefAssiette), rates.cnpsCeiling);
   const pvidSal = r(assietteCnps * rates.vidSal);
   const pvidPat = r(assietteCnps * rates.vidPat);
@@ -59,7 +61,7 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
   const parts = input.applyFiscalParts ? Math.max(input.fiscalParts, 1) : 1;
   const baseIrppAnnuelle = Math.max(assietteFiscale * 12 * (1 - rates.abatPct) - rates.abatFixe, 0) / parts;
   const irppCac = r((irppAnnuel(baseIrppAnnuelle, rates.irpp) * (1 + rates.cacPct)) / 12);
-  const totalInternes = input.internal.avance + input.internal.pret + input.internal.retard + input.internal.autres;
+  const totalInternes = input.internal.avance + input.internal.pret + input.internal.retard + input.internal.autres + input.retenueAbsence;
   const totalRetenuesSal = pvidSal + cfcSal + tc + rav + irppCac;
   const totalChargesPat = pvidPat + pf + at + cfcPat + fne;
 

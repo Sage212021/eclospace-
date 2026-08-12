@@ -79,11 +79,14 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
     prime = r(input.base * rate);
   }
 
-  // H — salaire brut.
-  const brut = Math.max(input.base + input.complements + prime - input.retenueAbsence, 0);
+  // H — salaire brut. La retenue d'absence injustifiée n'entre PLUS ici : elle
+  // est traitée comme une RETENUE INTERNE nette (décision opérateur 12/08/2026),
+  // au même titre qu'une avance ou un prêt — elle ne réduit ni le brut ni
+  // l'assiette (donc pas les cotisations), seulement le net à payer.
+  const brut = Math.max(input.base + input.complements + prime, 0);
 
-  // I — assiette fiscale (base fiscale + prime − retenue absence).
-  const assietteFiscale = Math.max(input.fiscalBase + prime - input.retenueAbsence, 0);
+  // I — assiette fiscale (base fiscale + prime).
+  const assietteFiscale = Math.max(input.fiscalBase + prime, 0);
 
   // J — assiette CNPS plafonnée.
   const assietteCnps = Math.min(r(assietteFiscale * rates.coefAssiette), rates.cnpsCeiling);
@@ -110,8 +113,9 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
   // U — IRPP + CAC, mensualisé.
   const irppCac = r((irppAnnuel(baseIrppAnnuelle, rates.irpp) * (1 + rates.cacPct)) / 12);
 
-  // Retenues internes (V-Y → Z).
-  const totalInternes = input.internal.avance + input.internal.pret + input.internal.retard + input.internal.autres;
+  // Retenues internes (V-Y → Z) — la retenue d'absence injustifiée y est désormais
+  // intégrée (retenue nette saisie par le RH).
+  const totalInternes = input.internal.avance + input.internal.pret + input.internal.retard + input.internal.autres + input.retenueAbsence;
 
   // AA / AB.
   const totalRetenuesSal = pvidSal + cfcSal + tc + rav + irppCac;

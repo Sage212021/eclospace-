@@ -181,8 +181,10 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   remHeader();
   remRow("Salaire mensuel de base (forfaitaire)", "Forfait mensuel", dash, p.base);
   remRow("Compléments de salaire (primes du poste)", "Forfait", dash, p.complements);
-  if (p.prime_anciennete > 0) remRow("Prime d'ancienneté", "", "", p.prime_anciennete);
-  if (p.retenue_absence > 0) remRow("Retenue absence injustifiée (−)", "Journal retenues", dash, p.retenue_absence, { neg: true });
+  // Prime d'ancienneté : toujours affichée (comme le modèle moteur), même à 0.
+  // La retenue d'absence injustifiée N'apparaît plus ici : elle est désormais
+  // une retenue INTERNE (voir bloc « Retenues internes du mois »).
+  remRow("Prime d'ancienneté", "", "", p.prime_anciennete);
   doc.setFillColor(...BEIGE);
   doc.rect(LEFT, y - 3.4, RIGHT - LEFT, 5.2, "F");
   remRow("SALAIRE BRUT DU MOIS", "", "", p.salaire_brut, { bold: true });
@@ -248,6 +250,7 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
     hair();
     y += 4.9;
   };
+  intRow("Retenue absence injustifiée", p.retenue_absence);
   intRow("Avance sur salaire", intr.avance);
   intRow("Remboursement prêt personnel", intr.pret);
   intRow("Retenue retard non justifié", intr.retard);
@@ -292,7 +295,8 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   sectionBar("Informations complémentaires & congés");
   infoRow("Type de contrat", d.contract_type ? CONTRACT_LABEL[d.contract_type] ?? d.contract_type : dash, "Fonction / Poste", d.position ?? dash);
   infoRow("Date de naissance", d.birth_date ?? dash, "Situation familiale", d.situation_familiale ?? dash);
-  infoRow("Nombre d'enfants", d.children_count != null ? String(d.children_count) : dash, "Solde congés (jours)", d.leave_balance != null ? String(d.leave_balance) : dash);
+  infoRow("Nombre d'enfants", d.children_count != null ? String(d.children_count) : dash, "Téléphone", d.phone ?? dash);
+  infoRow("Solde congés disponible (j)", d.leave_balance != null ? String(d.leave_balance) : dash, "Jours de congés pris (cumul)", d.leave_taken != null ? String(d.leave_taken) : dash);
   infoRow("Contact urgence", d.emergency_contact ?? dash, "", "");
 }
 

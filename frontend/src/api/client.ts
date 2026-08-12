@@ -2842,7 +2842,7 @@ export function createEmployee(input: {
   return request<Employee>("/api/v1/employees", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateEmployee(id: string, input: Partial<{ department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null }>) {
+export function updateEmployee(id: string, input: Partial<{ first_name: string; last_name: string; hire_date: string | null; department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null }>) {
   return request<Employee>(`/api/v1/employees/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 

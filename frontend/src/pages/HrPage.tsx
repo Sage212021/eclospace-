@@ -123,7 +123,7 @@ type HrModal =
       linkUserId?: string;
       linkUsername?: string;
     }
-  | { kind: "mobility"; employee: Employee; position: string; birthDate: string }
+  | { kind: "mobility"; employee: Employee; firstName: string; lastName: string; position: string; departmentId: string; managerId: string; hireDate: string; birthDate: string }
   | { kind: "departure"; employee: Employee; date: string }
   | { kind: "view-confidential"; employee: Employee; baseSalary: string; notes: string }
   | { kind: "edit-confidential"; employee: Employee; baseSalary: string }
@@ -221,9 +221,21 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
   async function submitMobility() {
     if (modal?.kind !== "mobility") return;
+    if (!modal.firstName.trim() || !modal.lastName.trim()) {
+      setError("Le nom et le prénom sont obligatoires.");
+      return;
+    }
     try {
-      await updateEmployee(modal.employee.id, { position: modal.position, birth_date: modal.birthDate ? new Date(modal.birthDate).toISOString() : null });
-      setMessage(t("hr.msg.mobility_saved", "Mobilité enregistrée."));
+      await updateEmployee(modal.employee.id, {
+        first_name: modal.firstName.trim(),
+        last_name: modal.lastName.trim(),
+        position: modal.position,
+        department_id: modal.departmentId || null,
+        manager_id: modal.managerId || null,
+        hire_date: modal.hireDate ? new Date(modal.hireDate).toISOString() : null,
+        birth_date: modal.birthDate ? new Date(modal.birthDate).toISOString() : null,
+      });
+      setMessage(t("hr.msg.file_updated", "Fiche du collaborateur mise à jour."));
       setModal(null);
       await refresh();
     } catch (err) {
@@ -399,7 +411,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                   <StandardActionBar onPrint={() => printEmployeeFiche(employee)} />
                   <Button variant="view" size="sm" onClick={() => setContractsFor(employee)}>{t("hr.contracts", "Contrats")}</Button>
                   <Button variant="view" size="sm" onClick={() => setEvalFor(employee)}>{t("hr.evaluation", "Évaluation")}</Button>
-                  {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, position: employee.position ?? "", birthDate: employee.birthDate ? employee.birthDate.slice(0, 10) : "" })}>{t("hr.mobility", "Mobilité")}</Button>}
+                  {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, firstName: employee.firstName, lastName: employee.lastName, position: employee.position ?? "", departmentId: employee.department?.id ?? "", managerId: employee.manager?.id ?? "", hireDate: employee.hireDate ? employee.hireDate.slice(0, 10) : "", birthDate: employee.birthDate ? employee.birthDate.slice(0, 10) : "" })}>{t("hr.edit_file", "Modifier la fiche")}</Button>}
                   {canAdminister && !employee.departureDate && <Button variant="view" size="sm" onClick={() => setModal({ kind: "departure", employee, date: new Date().toISOString().slice(0, 10) })}>{t("hr.departure_btn", "Départ")}</Button>}
                   {canAdminister && employee.user?.status === "active" && <Button variant="danger" size="sm" onClick={() => handleSuspend(employee)}>{t("hr.suspend", "Suspendre")}</Button>}
                   {canAdminister && employee.user?.status === "suspended" && <Button variant="add" size="sm" onClick={() => handleReinstate(employee)}>{t("hr.reinstate", "Réactiver")}</Button>}
@@ -642,10 +654,28 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       )}
 
       {modal?.kind === "mobility" && (
-        <Modal title={t("hr.mobility_title", "Mobilité interne")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitMobility} confirmLabel={t("hr.save", "Enregistrer")} />}>
-          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{modal.employee.firstName} {modal.employee.lastName}</p>
-          <Field label={t("hr.new_position", "Nouveau poste")}><input value={modal.position} onChange={(e) => setModal({ ...modal, position: e.target.value })} autoFocus /></Field>
-          <Field label={t("hr.birth_date_opt", "Date de naissance (optionnel)")}><input type="date" value={modal.birthDate} onChange={(e) => setModal({ ...modal, birthDate: e.target.value })} /></Field>
+        <Modal title={t("hr.edit_file_title", "Modifier la fiche du collaborateur")} onClose={() => setModal(null)} footer={<ModalActions onCancel={() => setModal(null)} onConfirm={submitMobility} confirmLabel={t("hr.save", "Enregistrer")} />}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label={t("hr.first_name", "Prénom")}><input value={modal.firstName} onChange={(e) => setModal({ ...modal, firstName: e.target.value })} autoFocus /></Field>
+            <Field label={t("hr.last_name", "Nom")}><input value={modal.lastName} onChange={(e) => setModal({ ...modal, lastName: e.target.value })} /></Field>
+          </div>
+          <Field label={t("hr.position", "Poste")}><input value={modal.position} onChange={(e) => setModal({ ...modal, position: e.target.value })} /></Field>
+          <Field label={t("hr.department", "Département")}>
+            <select value={modal.departmentId} onChange={(e) => setModal({ ...modal, departmentId: e.target.value })}>
+              <option value="">{t("hr.no_department", "— aucun —")}</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </Field>
+          <Field label={t("hr.manager", "Responsable")}>
+            <select value={modal.managerId} onChange={(e) => setModal({ ...modal, managerId: e.target.value })}>
+              <option value="">{t("hr.no_manager", "— aucun —")}</option>
+              {employees.filter((e) => e.id !== modal.employee.id).map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+            </select>
+          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label={t("hr.hire_date", "Date d'embauche")}><input type="date" value={modal.hireDate} onChange={(e) => setModal({ ...modal, hireDate: e.target.value })} /></Field>
+            <Field label={t("hr.birth_date_opt", "Date de naissance (optionnel)")}><input type="date" value={modal.birthDate} onChange={(e) => setModal({ ...modal, birthDate: e.target.value })} /></Field>
+          </div>
         </Modal>
       )}
 

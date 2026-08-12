@@ -410,11 +410,66 @@ function DeclarationsCard({ kind }: { kind: "cnps" | "fiscal" }) {
   );
 }
 
-// Rubrique « en préparation » (sous-lot 5b) — honnête, pas de fausse donnée.
-function ComingCard({ title, icon, what }: { title: string; icon: string; what: string }) {
+// ── Retenues internes du mois : synthèse par salarié (données réelles) ──────
+function InternesCard() {
+  const [period, setPeriod] = useState(currentPeriod());
+  const [month, setMonth] = useState<PayrollMonth | null>(null);
+  const [state, setState] = useState<"loading" | "ok" | "none">("loading");
+  useEffect(() => {
+    setState("loading");
+    getPayrollMonth(period).then((m) => { setMonth(m); setState(m.exists ? "ok" : "none"); }).catch(() => { setMonth(null); setState("none"); });
+  }, [period]);
+  const rows = (month?.lines ?? []).map((l) => {
+    const e = l.elements;
+    const libres = (l.extra_lines ?? []).filter((x) => x.kind === "retenue").reduce((s, x) => s + x.amount, 0);
+    return { id: l.employee_id, name: l.employee_name, avance: e.avance, pret: e.pret, retard: e.retard, sanction: e.sanction, autres: e.autres, libres, total: l.payslip.total_retenues_internes };
+  });
+  const cols = [
+    { k: "avance", label: "Avance" }, { k: "pret", label: "Prêt" }, { k: "retard", label: "Retard" },
+    { k: "sanction", label: "Sanction" }, { k: "autres", label: "Autres" }, { k: "libres", label: "Lignes libres" },
+  ] as const;
+  const sum = (k: string) => rows.reduce((s, r) => s + ((r as unknown as Record<string, number>)[k] ?? 0), 0);
+  const totalAll = rows.reduce((s, r) => s + r.total, 0);
   return (
-    <Card title={title} icon={<span aria-hidden>{icon}</span>} subtitle="En préparation (prochain incrément)" collapsible>
-      <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>{what}</p>
+    <Card title="Retenues internes" icon={<span aria-hidden>➖</span>} subtitle="Synthèse du mois par salarié (avances, prêts, retards, sanctions, lignes libres)" collapsible>
+      <GuidanceNote title="Retenues internes du mois">
+        Ces montants se saisissent par salarié dans « Bulletins de paie » (colonnes de la grille et bouton « ＋ lignes »).
+        Cette vue en donne la synthèse. Les retenues internes viennent en déduction du net à payer.
+      </GuidanceNote>
+      <label style={{ fontSize: 13 }}>Mois : <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono)" }} /></label>
+      {state === "loading" && <p style={{ fontSize: 13, color: "var(--muted)" }}>Chargement…</p>}
+      {state === "none" && <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>Mois non préparé : préparez-le dans « Bulletins de paie ».</p>}
+      {state === "ok" && (
+        rows.every((r) => r.total === 0) ? (
+          <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>Aucune retenue interne saisie pour ce mois.</p>
+        ) : (
+          <div style={{ overflowX: "auto", marginTop: 8 }}>
+            <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 680 }}>
+              <thead>
+                <tr style={{ color: "var(--muted)", fontSize: 11, textAlign: "right" }}>
+                  <th style={{ textAlign: "left", padding: "4px 8px" }}>Salarié</th>
+                  {cols.map((c) => <th key={c.k} style={{ padding: "4px 8px" }}>{c.label}</th>)}
+                  <th style={{ padding: "4px 8px" }}>Total interne</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.filter((r) => r.total > 0).map((r) => (
+                  <tr key={r.id} style={{ borderTop: "1px solid var(--line)", fontFamily: "var(--font-mono)" }}>
+                    <td style={{ textAlign: "left", padding: "4px 8px", fontFamily: "inherit" }}>{r.name}</td>
+                    {cols.map((c) => <td key={c.k} style={{ textAlign: "right", padding: "4px 8px" }}>{fcfa((r as unknown as Record<string, number>)[c.k] ?? 0)}</td>)}
+                    <td style={{ textAlign: "right", padding: "4px 8px", fontWeight: 700 }}>{fcfa(r.total)}</td>
+                  </tr>
+                ))}
+                <tr style={{ borderTop: "2px solid var(--line)", fontFamily: "var(--font-mono)", fontWeight: 700 }}>
+                  <td style={{ textAlign: "left", padding: "4px 8px", fontFamily: "inherit" }}>TOTAL</td>
+                  {cols.map((c) => <td key={c.k} style={{ textAlign: "right", padding: "4px 8px" }}>{fcfa(sum(c.k))}</td>)}
+                  <td style={{ textAlign: "right", padding: "4px 8px", color: "var(--eclosion, #C89A1B)" }}>{fcfa(totalAll)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
     </Card>
   );
 }
@@ -443,7 +498,7 @@ export function PayrollEngineHub({
         <DashboardCard />
         <PayrollSettingsSection canManage={canManagePayroll} collapsible />
         <PayrollProfilesSection employees={employees} canManage={canEditPayroll} collapsible />
-        <ComingCard title="Retenues internes" icon="➖" what="Les avances, prêts, retards, sanctions et autres retenues — ainsi que les lignes libres — se saisissent par salarié dans « Bulletins de paie » (bouton « ＋ lignes » de la grille mensuelle). Une vue de synthèse dédiée arrive au prochain incrément." />
+        <InternesCard />
         <PayrollRegisterSection canClose={canClosePayroll} collapsible />
         <PayrollMonthlySection canManage={canEditPayroll} canValidateDg={canValidatePayrollDg} collapsible />
         <JournalCard />

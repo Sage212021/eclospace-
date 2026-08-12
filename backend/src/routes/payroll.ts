@@ -20,6 +20,9 @@ function rateSetView(r: Record<string, unknown> & { id: string; effectiveFrom: D
     effective_from: (r.effectiveFrom as Date).toISOString().slice(0, 10),
     label: r.label,
     active: r.active,
+    change_reason: (r.changeReason as string | null) ?? null,
+    created_at: r.createdAt instanceof Date ? (r.createdAt as Date).toISOString() : null,
+    created_by: (r.createdBy as string | null) ?? null,
     cnps: { vid_sal_pct: num(r.vidSalPct), vid_pat_pct: num(r.vidPatPct), pf_pct: num(r.pfPct), at_pct: num(r.atPct), ceiling: num(r.cnpsCeiling) },
     fiscal: { abat_pct: num(r.abatPct), abat_fixe: num(r.abatFixe), cac_pct: num(r.cacPct), cfc_sal_pct: num(r.cfcSalPct), cfc_pat_pct: num(r.cfcPatPct), fne_pct: num(r.fnePct) },
     misc: { coef_assiette: num(r.coefAssiette), heures_mois: num(r.heuresMois), anc_def_pct: num(r.ancDefPct) },
@@ -33,6 +36,7 @@ const money = z.number().min(0);
 const rateSetSchema = z.object({
   effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   label: z.string().max(120).optional(),
+  change_reason: z.string().max(2000).optional(),
   cnps: z.object({ vid_sal_pct: pct, vid_pat_pct: pct, pf_pct: pct, at_pct: pct, ceiling: money }),
   fiscal: z.object({ abat_pct: pct, abat_fixe: money, cac_pct: pct, cfc_sal_pct: pct, cfc_pat_pct: pct, fne_pct: pct }),
   misc: z.object({ coef_assiette: pct, heures_mois: z.number().positive(), anc_def_pct: pct }),
@@ -123,6 +127,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         data: {
           effectiveFrom: new Date(`${b.effective_from}T00:00:00.000Z`),
           label: b.label,
+          changeReason: b.change_reason,
           vidSalPct: b.cnps.vid_sal_pct, vidPatPct: b.cnps.vid_pat_pct, pfPct: b.cnps.pf_pct, atPct: b.cnps.at_pct, cnpsCeiling: b.cnps.ceiling,
           abatPct: b.fiscal.abat_pct, abatFixe: b.fiscal.abat_fixe, cacPct: b.fiscal.cac_pct, cfcSalPct: b.fiscal.cfc_sal_pct, cfcPatPct: b.fiscal.cfc_pat_pct, fnePct: b.fiscal.fne_pct,
           coefAssiette: b.misc.coef_assiette, heuresMois: b.misc.heures_mois, ancDefPct: b.misc.anc_def_pct,
@@ -131,7 +136,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
           createdBy: request.user!.id,
         },
       });
-      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "payroll_rate_set", entityId: created.id, newValues: { effective_from: b.effective_from, label: b.label ?? null }, ipAddress: request.ip });
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "payroll_rate_set", entityId: created.id, newValues: { effective_from: b.effective_from, label: b.label ?? null, change_reason: b.change_reason ?? null }, ipAddress: request.ip });
       return reply.code(201).send(rateSetView(created));
     },
   );

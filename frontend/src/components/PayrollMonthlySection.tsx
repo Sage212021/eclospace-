@@ -177,7 +177,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       for (const l of month?.lines ?? []) {
         await savePayrollMonthLine(period, l.employee_id, draft[l.employee_id], l.note, extraDraft[l.employee_id] ?? []);
       }
-      setMessage("Saisie enregistrée pour tous les salariés du mois.");
+      setMessage("Saisie enregistrée. Vous pouvez continuer à la modifier tant que le mois n'est pas soumis ni validé.");
       setError(null);
       await load();
     } catch (err) {

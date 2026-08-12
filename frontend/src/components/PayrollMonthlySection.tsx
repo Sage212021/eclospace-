@@ -169,6 +169,24 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
     }
   }
 
+  // Enregistrement EXPLICITE de toute la grille (bouton « Enregistrer la saisie »).
+  async function saveAll() {
+    if (!editable) return;
+    setBusy(true);
+    try {
+      for (const l of month?.lines ?? []) {
+        await savePayrollMonthLine(period, l.employee_id, draft[l.employee_id], l.note, extraDraft[l.employee_id] ?? []);
+      }
+      setMessage("Saisie enregistrée. Vous pouvez continuer à la modifier tant que le mois n'est pas soumis ni validé.");
+      setError(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Enregistrement impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveRow(l: PayrollMonthLine) {
     if (!editable) return;
     try {
@@ -292,6 +310,10 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
             {locked ? `✓ Validé${month.validated_at ? ` le ${month.validated_at.slice(0, 10)}` : ""}` : submitted ? "⏳ Soumis au DG (en attente de validation)" : "● Brouillon (modifiable)"}
           </span>
         )}
+        {/* RH : enregistrer explicitement la saisie (en plus de l'auto-enregistrement). */}
+        {month?.exists && editable && canManage && (month.lines?.length ?? 0) > 0 && (
+          <Button variant="edit" size="sm" type="button" disabled={busy} onClick={saveAll}>💾 Enregistrer la saisie</Button>
+        )}
         {/* RH : soumettre au DG (brouillon → en attente). */}
         {month?.exists && editable && canManage && (month.lines?.length ?? 0) > 0 && (
           <Button variant="add" size="sm" type="button" disabled={busy} onClick={submit}>➤ Soumettre au DG</Button>
@@ -365,7 +387,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
             <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--eclosion, #C89A1B)" }}>{fcfa(month.totals?.net ?? 0)}</span> · Coût employeur :{" "}
             <span style={{ fontFamily: "var(--font-mono)" }}>{fcfa(month.totals?.cout ?? 0)}</span>
           </div>
-          {editable && <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>Saisissez les montants (FCFA) ; l'enregistrement se fait en quittant la case. Le net se met à jour.</p>}
+          {editable && <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>Saisissez les montants (FCFA) : chaque case s'enregistre en la quittant, et le net se met à jour. Vous pouvez aussi cliquer <b>« Enregistrer la saisie »</b> pour tout enregistrer d'un coup avant de soumettre.</p>}
 
           <div style={{ overflowX: "auto", marginTop: 10 }}>
             <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 900 }}>

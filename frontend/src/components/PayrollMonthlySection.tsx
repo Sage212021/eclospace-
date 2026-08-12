@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements } from "../api/client";
+import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, submitPayrollMonth, returnPayrollMonth, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements } from "../api/client";
 import { downloadPayslipsPdf } from "../lib/payslipPdf";
 import type { PayslipPrintData } from "../lib/print";
 import { Card } from "./Card";
@@ -77,9 +77,45 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
   }
 
   const locked = month?.status === "valide";
+  const submitted = month?.status === "soumis_dg";
+  // La grille n'est saisissable qu'en brouillon (ni soumise au DG, ni validée).
+  const editable = month?.status === "brouillon";
+
+  async function submit() {
+    if (!window.confirm(`Soumettre la paie de ${period} au Directeur général ?\n\nLa grille sera figée en attente de validation ; vous ne pourrez plus la modifier tant que le DG ne l'aura pas validée ou retournée.`)) return;
+    setBusy(true);
+    try {
+      await submitPayrollMonth(period);
+      setMessage(`Paie de ${period} soumise au Directeur général.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Soumission impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function returnToRh() {
+    const reason = window.prompt("Motif du retour au RH (obligatoire) — précisez ce qui doit être corrigé :");
+    if (reason == null) return;
+    if (reason.trim().length < 3) {
+      setError("Le motif du retour est obligatoire (au moins quelques mots).");
+      return;
+    }
+    setBusy(true);
+    try {
+      await returnPayrollMonth(period, reason.trim());
+      setMessage(`Paie de ${period} retournée au RH pour correction.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Retour impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function saveRow(l: PayrollMonthLine) {
-    if (locked) return;
+    if (!editable) return;
     try {
       await savePayrollMonthLine(period, l.employee_id, draft[l.employee_id], l.note);
       setError(null);
@@ -162,12 +198,21 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
           <Button variant="add" size="sm" type="button" disabled={busy} onClick={prepare}>{busy ? "…" : "Préparer le mois de paie"}</Button>
         )}
         {month?.exists && (
-          <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 10px", ...(locked ? { background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)" } : { background: "#eef1f6", color: "var(--muted)" }) }}>
-            {locked ? `✓ Validé${month.validated_at ? ` le ${month.validated_at.slice(0, 10)}` : ""}` : "● Brouillon (modifiable)"}
+          <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 10px", ...(locked ? { background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)" } : submitted ? { background: "#fdeede", color: "var(--alert, #C4661F)" } : { background: "#eef1f6", color: "var(--muted)" }) }}>
+            {locked ? `✓ Validé${month.validated_at ? ` le ${month.validated_at.slice(0, 10)}` : ""}` : submitted ? "⏳ Soumis au DG (en attente de validation)" : "● Brouillon (modifiable)"}
           </span>
         )}
+        {/* RH : soumettre au DG (brouillon → en attente). */}
+        {month?.exists && editable && canManage && (month.lines?.length ?? 0) > 0 && (
+          <Button variant="add" size="sm" type="button" disabled={busy} onClick={submit}>➤ Soumettre au DG</Button>
+        )}
+        {/* DG : valider (depuis brouillon ou soumis). */}
         {month?.exists && !locked && canValidateDg && (month.lines?.length ?? 0) > 0 && (
           <Button variant="add" size="sm" type="button" disabled={busy} onClick={validate}>✓ Valider le mois (DG)</Button>
+        )}
+        {/* DG : retourner au RH pour correction (uniquement si soumis). */}
+        {month?.exists && submitted && canValidateDg && (
+          <Button variant="edit" size="sm" type="button" disabled={busy} onClick={returnToRh}>↩ Retourner au RH (DG)</Button>
         )}
         {month?.exists && locked && (
           <Button variant="view" size="sm" type="button" onClick={printAll}>🖨 Imprimer tous les bulletins</Button>
@@ -177,6 +222,14 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
         )}
       </div>
 
+      {/* Motif du dernier retour DG : visible pour le RH tant que le mois est en
+          brouillon, pour savoir quoi corriger avant de re-soumettre. */}
+      {month?.exists && editable && month.return_reason && (
+        <div style={{ marginTop: 8, background: "#fdeede", color: "var(--alert, #C4661F)", border: "1px solid var(--alert, #C4661F)", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>
+          ↩ <b>Retourné par la Direction pour correction</b>{month.returned_at ? ` (le ${month.returned_at.slice(0, 10)})` : ""} : {month.return_reason}
+        </div>
+      )}
+
       {month?.exists && month.lines && (
         <>
           <div style={{ marginTop: 10, fontSize: 13 }}>
@@ -184,7 +237,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
             <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--eclosion, #C89A1B)" }}>{fcfa(month.totals?.net ?? 0)}</span> · Coût employeur :{" "}
             <span style={{ fontFamily: "var(--font-mono)" }}>{fcfa(month.totals?.cout ?? 0)}</span>
           </div>
-          {!locked && <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>Saisissez les montants (FCFA) ; l'enregistrement se fait en quittant la case. Le net se met à jour.</p>}
+          {editable && <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>Saisissez les montants (FCFA) ; l'enregistrement se fait en quittant la case. Le net se met à jour.</p>}
 
           <div style={{ overflowX: "auto", marginTop: 10 }}>
             <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 900 }}>
@@ -208,11 +261,11 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
                           type="number"
                           min={0}
                           step={100}
-                          disabled={locked}
+                          disabled={!editable}
                           value={draft[l.employee_id]?.[c.key] ?? 0}
                           onChange={(e) => setCell(l.employee_id, c.key, e.target.value)}
                           onBlur={() => saveRow(l)}
-                          style={{ width: 84, padding: "4px 6px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", border: "1px solid var(--line)", borderRadius: 5, background: locked ? "#f4f5f8" : "#fff" }}
+                          style={{ width: 84, padding: "4px 6px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", border: "1px solid var(--line)", borderRadius: 5, background: editable ? "#fff" : "#f4f5f8" }}
                         />
                       </td>
                     ))}
@@ -225,7 +278,9 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
           <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>
             {locked
               ? "Mois validé : imprimez les bulletins (un PDF, un bulletin par page). Le DG peut rouvrir le mois pour corriger."
-              : "Quand la saisie est terminée, le Directeur général valide le mois (obligatoire avant impression des bulletins)."}
+              : submitted
+                ? "Paie soumise au Directeur général : en attente de sa décision. Le DG valide (verrouillage) ou retourne au RH avec un motif."
+                : "Quand la saisie est terminée, le RH soumet la paie au Directeur général, qui la valide (obligatoire avant impression des bulletins)."}
           </p>
         </>
       )}

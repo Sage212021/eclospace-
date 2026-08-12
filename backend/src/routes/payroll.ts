@@ -455,7 +455,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         (acc, r) => ({ brut: acc.brut + r.salaire_brut, net: acc.net + r.net_a_payer, cout: acc.cout + r.cout_employeur }),
         { brut: 0, net: 0, cout: 0 },
       );
-      return reply.send({ exists: true, period, status: run.status, validated_at: run.validatedAt, rate_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10), rates: rateDisplay(rateSet as unknown as Record<string, unknown>), lines: rows, totals });
+      return reply.send({ exists: true, period, status: run.status, validated_at: run.validatedAt, submitted_at: run.submittedAt, return_reason: run.returnReason, returned_at: run.returnedAt, rate_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10), rates: rateDisplay(rateSet as unknown as Record<string, unknown>), lines: rows, totals });
     },
   );
 
@@ -472,6 +472,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
       if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
       if (run.status === "valide") return reply.code(409).send({ code: "run_locked", message: "Mois validé par la Direction : il n'est plus modifiable. Rouvrez-le pour corriger." });
+      if (run.status === "soumis_dg") return reply.code(409).send({ code: "run_submitted", message: "Mois soumis au Directeur général : en attente de validation, il n'est plus modifiable. Le DG doit le valider ou le retourner pour correction." });
 
       const b = parsed.data;
       await prisma.payrollMonthlyLine.update({
@@ -483,6 +484,48 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         },
       });
       return reply.send({ ok: true });
+    },
+  );
+
+  // Soumission de la paie au DG (RH) : brouillon → soumis_dg. La grille se fige
+  // (en attente de validation) ; le DG doit valider ou retourner pour correction.
+  fastify.post(
+    "/api/v1/payroll/monthly/:period/submit",
+    { preHandler: requirePermission("paie", "saisie") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period }, include: { _count: { select: { lines: true } } } });
+      if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
+      if (run.status === "valide") return reply.code(409).send({ code: "already_validated", message: "Ce mois est déjà validé." });
+      if (run.status === "soumis_dg") return reply.code(409).send({ code: "already_submitted", message: "Ce mois est déjà soumis au Directeur général." });
+      if (run._count.lines === 0) return reply.code(409).send({ code: "empty_run", message: "Aucun salarié dans ce mois : rien à soumettre." });
+      await prisma.payrollMonthlyRun.update({ where: { id: run.id }, data: { status: "soumis_dg", submittedBy: request.user!.id, submittedAt: new Date(), returnReason: null } });
+      await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "payroll_monthly_run", entityId: period, newValues: { status: "soumis_dg" }, ipAddress: request.ip });
+      return reply.send({ period, status: "soumis_dg" });
+    },
+  );
+
+  // Retour de la paie au RH pour correction (DG) : soumis_dg → brouillon, avec un
+  // MOTIF obligatoire (§11, état 4A). La grille redevient modifiable.
+  fastify.post(
+    "/api/v1/payroll/monthly/:period/return",
+    { preHandler: requirePermission("paie", "validation") },
+    async (request, reply) => {
+      if (!request.user!.roles.some((r) => r === "DIR_GENERAL" || r === "ADMIN_GENERAL")) {
+        return reply.code(403).send({ code: "dg_only", message: "Retour au RH réservé au Directeur général." });
+      }
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const parsed = z.object({ reason: z.string().min(3).max(2000) }).safeParse(request.body ?? {});
+      if (!parsed.success) return reply.code(400).send({ code: "reason_required", message: "Motif du retour obligatoire : précisez ce que le RH doit corriger." });
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+      if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
+      if (run.status !== "soumis_dg") return reply.code(409).send({ code: "not_submitted", message: "Seule une paie soumise au DG peut être retournée pour correction." });
+      await prisma.payrollMonthlyRun.update({
+        where: { id: run.id },
+        data: { status: "brouillon", returnReason: parsed.data.reason, returnedBy: request.user!.id, returnedAt: new Date(), submittedBy: null, submittedAt: null },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "payroll_monthly_run", entityId: period, newValues: { status: "brouillon", returned: true, reason: parsed.data.reason }, ipAddress: request.ip });
+      return reply.send({ period, status: "brouillon", return_reason: parsed.data.reason });
     },
   );
 
@@ -735,7 +778,7 @@ function profileView(p: {
 // Livre de paie d'une période : calcul par lot (barème + consolidation Présences
 // chargés une seule fois) de tous les salariés dotés d'une fiche paie.
 async function computeRegister(period: string): Promise<
-  | { period: string; rate_effective_from: string; lines: RegisterLine[]; totals: { brut: number; net: number; charges_pat: number }; monthly_status: "brouillon" | "valide" | null }
+  | { period: string; rate_effective_from: string; lines: RegisterLine[]; totals: { brut: number; net: number; charges_pat: number }; monthly_status: "brouillon" | "soumis_dg" | "valide" | null }
   | { error: { code: string; message: string }; status: number }
 > {
   const [y, m] = period.split("-").map(Number);

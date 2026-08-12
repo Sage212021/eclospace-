@@ -182,6 +182,14 @@ function FormulasCard() {
       </GuidanceNote>
       {!rs && <p style={{ fontSize: 13, color: "var(--alert, #C4661F)" }}>Aucun barème en vigueur pour ce mois : renseignez-le dans « Paramètres ».</p>}
       {rs && (
+        <div style={{ fontSize: 12.5, margin: "0 0 8px", color: "var(--muted)" }}>
+          Période d'application : effet le <b style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{rs.effective_from}</b> ·
+          statut <b style={{ color: rs.active ? "var(--eclosion, #C89A1B)" : "var(--muted)" }}>{rs.active ? "actif" : "inactif"}</b>
+          {rs.change_reason ? <> · motif : {rs.change_reason}</> : null}
+          {rs.label ? <> · {rs.label}</> : null}
+        </div>
+      )}
+      {rs && (
         <div style={{ overflowX: "auto" }}>
           <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 560 }}>
             <thead><tr style={{ color: "var(--muted)", textAlign: "left", fontSize: 11.5 }}><th style={{ padding: "5px 8px" }}>Règle</th><th style={{ padding: "5px 8px" }}>Formule</th><th style={{ padding: "5px 8px", textAlign: "right" }}>Taux / valeur</th></tr></thead>

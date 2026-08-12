@@ -3685,13 +3685,16 @@ export interface PayrollRateSet {
   effective_from: string;
   label: string | null;
   active: boolean;
+  change_reason?: string | null;
+  created_at?: string | null;
+  created_by?: string | null;
   cnps: { vid_sal_pct: number; vid_pat_pct: number; pf_pct: number; at_pct: number; ceiling: number };
   fiscal: { abat_pct: number; abat_fixe: number; cac_pct: number; cfc_sal_pct: number; cfc_pat_pct: number; fne_pct: number };
   misc: { coef_assiette: number; heures_mois: number; anc_def_pct: number };
   irpp: { t1_ceiling: number; t1_pct: number; t2_ceiling: number; t2_pct: number; t3_ceiling: number; t3_pct: number; t4_pct: number };
   tc_rav: { seuil1: number; tc1: number; rav1: number; seuil2: number; tc2: number; rav2: number; tc3: number; rav3: number };
 }
-export type PayrollRateSetInput = Omit<PayrollRateSet, "id" | "active">;
+export type PayrollRateSetInput = Omit<PayrollRateSet, "id" | "active" | "created_at" | "created_by">;
 
 export function getPayrollConfig() {
   return request<{ internal_enabled: boolean }>(`/api/v1/payroll/config`);

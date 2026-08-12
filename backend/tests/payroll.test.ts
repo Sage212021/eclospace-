@@ -69,6 +69,21 @@ describe("module Paie — paramètres versionnés & interrupteur", () => {
     expect(resolved.json().effective_from).toBe("2027-01-01");
   });
 
+  it("enregistre et restitue le MOTIF d'une version du barème (Lot 4)", async () => {
+    const reason = `Loi de finances test ${Date.now()}`;
+    const create = await app.inject({
+      method: "POST", url: "/api/v1/payroll/rate-sets", headers: { cookie: adminCookie },
+      payload: { ...RATE_BODY, effective_from: "2029-01-01", label: "Barème 2029", change_reason: reason },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json().change_reason).toBe(reason);
+    // Restitué dans l'historique des versions.
+    const list = (await app.inject({ method: "GET", url: "/api/v1/payroll/rate-sets", headers: { cookie: adminCookie } })).json();
+    const row = list.find((r: { effective_from: string }) => r.effective_from === "2029-01-01");
+    expect(row.change_reason).toBe(reason);
+    expect(row.created_at).toBeTruthy();
+  });
+
   it("refuse un taux hors bornes (validation)", async () => {
     const bad = { ...RATE_BODY, cnps: { ...RATE_BODY.cnps, vid_sal_pct: 1.5 } };
     const res = await app.inject({ method: "POST", url: "/api/v1/payroll/rate-sets", headers: { cookie: adminCookie }, payload: bad });

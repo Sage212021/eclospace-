@@ -678,6 +678,9 @@ model PayrollRateSet {
   effectiveFrom DateTime @map("effective_from") @db.Date
   label         String?
   active        Boolean  @default(true)
+  // Motif de la modification (Lot 4, ch. 10) : pourquoi cette version du barème
+  // a été créée (loi de finances, correction…). Tracé, jamais rétroactif.
+  changeReason  String?  @map("change_reason")
 
   // CNPS (fractions : 0.042 = 4,2 %).
   vidSalPct   Decimal @map("vid_sal_pct") @db.Decimal(6, 4)

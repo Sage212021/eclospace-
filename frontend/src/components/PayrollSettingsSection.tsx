@@ -36,6 +36,7 @@ export function PayrollSettingsSection({ canManage, collapsible, defaultOpen }: 
   const [current, setCurrent] = useState<PayrollRateSet | null>(null);
   const [versions, setVersions] = useState<PayrollRateSet[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [reason, setReason] = useState(""); // motif obligatoire (Lot 4, ch. 10)
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -66,9 +67,14 @@ export function PayrollSettingsSection({ canManage, collapsible, defaultOpen }: 
 
   async function saveVersion() {
     if (!draft) return;
+    if (reason.trim().length < 3) {
+      setError(t("pay.reason_required", "Le motif de la modification est obligatoire (ex. loi de finances 2026, correction du taux CFC)."));
+      return;
+    }
     try {
-      await createPayrollRateSet(draft);
+      await createPayrollRateSet({ ...draft, change_reason: reason.trim() });
       setDraft(null);
+      setReason("");
       setMessage(t("pay.msg.scale_saved", "Nouvelle version du barème enregistrée."));
       setError(null);
       await refresh();
@@ -127,6 +133,7 @@ export function PayrollSettingsSection({ canManage, collapsible, defaultOpen }: 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
                 <Field label={t("pay.effective_date", "Date d'effet")}><input type="date" value={draft.effective_from} onChange={(e) => setDraft({ ...draft, effective_from: e.target.value })} /></Field>
                 <Field label={t("pay.label", "Libellé")}><input value={draft.label ?? ""} onChange={(e) => setDraft({ ...draft, label: e.target.value })} /></Field>
+                <Field label={t("pay.change_reason", "Motif de la modification *")}><input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("pay.change_reason_ph", "ex. Loi de finances 2026")} /></Field>
                 {numField(t("pay.pvid_sal", "PVID salarial (0-1)"), draft.cnps.vid_sal_pct, (n) => setDraft({ ...draft, cnps: { ...draft.cnps, vid_sal_pct: n } }))}
                 {numField(t("pay.pvid_pat", "PVID patronal (0-1)"), draft.cnps.vid_pat_pct, (n) => setDraft({ ...draft, cnps: { ...draft.cnps, vid_pat_pct: n } }))}
                 {numField(t("pay.pf", "Prest. familiales (0-1)"), draft.cnps.pf_pct, (n) => setDraft({ ...draft, cnps: { ...draft.cnps, pf_pct: n } }))}
@@ -148,7 +155,7 @@ export function PayrollSettingsSection({ canManage, collapsible, defaultOpen }: 
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <Button variant="add" size="sm" type="button" onClick={saveVersion}>{t("pay.save_version", "Enregistrer la version")}</Button>
-                <Button variant="subtle" size="sm" type="button" onClick={() => setDraft(null)}>{t("pay.cancel", "Annuler")}</Button>
+                <Button variant="subtle" size="sm" type="button" onClick={() => { setDraft(null); setReason(""); }}>{t("pay.cancel", "Annuler")}</Button>
               </div>
               <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>{t("pay.scale_note", "Les barèmes TC/RAV et divers reprennent la version précédente ; ajustez-les via une prochaine itération de l'écran si besoin.")}</p>
             </div>
@@ -156,12 +163,32 @@ export function PayrollSettingsSection({ canManage, collapsible, defaultOpen }: 
         </div>
       )}
 
-      {versions.length > 1 && (
-        <details style={{ marginTop: 12 }}>
-          <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--muted)" }}>{t("pay.scale_history", "Historique des barèmes")} ({versions.length})</summary>
-          <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13 }}>
-            {versions.map((v) => <li key={v.id}><span style={{ fontFamily: "var(--font-mono, monospace)" }}>{v.effective_from}</span>{v.label ? ` — ${v.label}` : ""}</li>)}
-          </ul>
+      {versions.length > 0 && (
+        <details style={{ marginTop: 12 }} open={versions.length > 1}>
+          <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--muted)" }}>{t("pay.scale_history", "Historique des versions du barème")} ({versions.length})</summary>
+          <div style={{ overflowX: "auto", marginTop: 8 }}>
+            <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 520 }}>
+              <thead><tr style={{ color: "var(--muted)", textAlign: "left", fontSize: 11.5 }}>
+                <th style={{ padding: "4px 8px" }}>{t("pay.effective_date", "Date d'effet")}</th>
+                <th style={{ padding: "4px 8px" }}>{t("pay.label", "Libellé")}</th>
+                <th style={{ padding: "4px 8px" }}>{t("pay.change_reason", "Motif")}</th>
+                <th style={{ padding: "4px 8px" }}>{t("pay.created_on", "Créée le")}</th>
+              </tr></thead>
+              <tbody>
+                {versions.map((v) => (
+                  <tr key={v.id} style={{ borderTop: "1px solid var(--line)" }}>
+                    <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono, monospace)", whiteSpace: "nowrap" }}>
+                      {v.effective_from}
+                      {current && v.id === current.id && <span style={{ marginLeft: 6, color: "var(--eclosion, #C89A1B)", fontWeight: 700 }}>● en vigueur</span>}
+                    </td>
+                    <td style={{ padding: "4px 8px" }}>{v.label ?? "—"}</td>
+                    <td style={{ padding: "4px 8px", color: "var(--muted)" }}>{v.change_reason ?? "—"}</td>
+                    <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono, monospace)", color: "var(--muted)", whiteSpace: "nowrap" }}>{v.created_at ? new Date(v.created_at).toLocaleDateString("fr-FR") : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </details>
       )}
 

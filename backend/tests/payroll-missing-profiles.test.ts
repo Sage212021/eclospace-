@@ -59,4 +59,19 @@ describe("grille de paie : salariés sans fiche paie", () => {
     expect(missingIds).toContain(withoutProfile);
     expect(missingIds).not.toContain(withProfile);
   });
+
+  it("un salarié dont la fiche paie est créée APRÈS préparation apparaît à la relecture (auto-complétion)", async () => {
+    // Nouveau salarié + fiche paie créés APRÈS que le mois a été préparé.
+    const late = await prisma.employee.create({ data: { firstName: `${tag}-Tardif`, lastName: "Fiche" } });
+    await prisma.payrollEmployeeProfile.create({ data: { employeeId: late.id, grossContractual: 200000, basePct: 1 } });
+
+    // Simple relecture de la grille : la ligne manquante est créée à la volée.
+    const month = (await app.inject({ method: "GET", url: `/api/v1/payroll/monthly/${period}`, headers: { cookie } })).json();
+    const lineIds = (month.lines as Array<{ employee_id: string }>).map((l) => l.employee_id);
+    expect(lineIds).toContain(late.id);
+
+    await prisma.payrollEmployeeProfile.deleteMany({ where: { employeeId: late.id } }).catch(() => {});
+    await prisma.payrollMonthlyLine.deleteMany({ where: { employeeId: late.id } }).catch(() => {});
+    await prisma.employee.deleteMany({ where: { id: late.id } }).catch(() => {});
+  });
 });

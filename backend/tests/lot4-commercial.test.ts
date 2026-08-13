@@ -277,19 +277,20 @@ describe("Commercial, distribution et ventes (Lot 4)", () => {
     expect(validated.json().validatedAt).not.toBeNull();
   });
 
-  it("vend au comptoir avec paiement mobile money et déduit le stock immédiatement (Ch. 17 §17.7)", async () => {
+  it("vend au comptoir SANS toucher au stock (décision opérateur 13/08/2026 — stock géré par un autre pôle)", async () => {
     const { isbnId } = await createIsbnWithStock("Manuscrit Commercial Comptoir", 30);
 
     const sale = await app.inject({
       method: "POST",
       url: "/api/v1/pos-sales",
       headers: { cookie: adminCookie },
-      payload: { isbn_id: isbnId, location_id: warehouseId, quantity: 3, unit_price: 12000, payment_method: "mobile_money", event_label: "Salon du livre" },
+      payload: { isbn_id: isbnId, quantity: 3, unit_price: 12000, payment_method: "mobile_money", event_label: "Salon du livre" },
     });
     expect(sale.statusCode).toBe(201);
 
+    // Le stock est INCHANGÉ : la vente au comptoir ne décrémente plus le stock.
     const stockItem = await prisma.stockItem.findFirstOrThrow({ where: { isbnId, locationId: warehouseId } });
-    expect(stockItem.quantityPhysical).toBe(27);
+    expect(stockItem.quantityPhysical).toBe(30);
   });
 
   it("gère un retour client avec verdict par exemplaire (Ch. 17 §17.9)", async () => {

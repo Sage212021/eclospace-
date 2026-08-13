@@ -2048,18 +2048,42 @@ export function createPosSale(input: {
   return request(`/api/v1/pos-sales`, { method: "POST", body: JSON.stringify(input) });
 }
 
-// Ventes provisoires « hors catalogue » à rattacher à un ouvrage officiel.
-export interface ProvisionalPosSale {
+// Ligne de vente au comptoir enrichie (registre des ventes).
+export interface PosSaleRow {
   id: string;
-  offCatalogueTitle: string | null;
-  offCatalogueAuthor: string | null;
-  offCatalogueIsbn: string | null;
+  sold_at: string;
+  is_catalogue: boolean;
+  isbn13: string | null;
+  title: string | null;
+  author: string | null;
   quantity: number;
-  unitPrice: string;
-  soldAt: string;
+  unit_price: number;
+  total: number;
+  payment_method: "cash" | "card" | "mobile_money";
+  event_label: string | null;
+  customer_name: string | null;
+  point_of_sale: string | null;
+  sold_by: string | null;
 }
+// Ventes provisoires « hors catalogue » à rattacher à un ouvrage officiel.
 export function listProvisionalPosSales() {
-  return request<ProvisionalPosSale[]>("/api/v1/pos-sales?provisional=true");
+  return request<PosSaleRow[]>("/api/v1/pos-sales?provisional=true");
+}
+// Registre des ventes du commercial courant (visible dès l'enregistrement).
+export function listMyPosSales() {
+  return request<PosSaleRow[]>("/api/v1/pos-sales?mine=true");
+}
+
+// Récapitulatif annuel des ventes au comptoir, par ouvrage et par auteur.
+export interface SalesAnnualRow { key: string; label: string; sublabel: string | null; quantity: number; revenue: number }
+export interface SalesAnnual {
+  year: number;
+  by_book: SalesAnnualRow[];
+  by_author: SalesAnnualRow[];
+  totals: { quantity: number; revenue: number; sales_count: number };
+}
+export function getSalesAnnual(year: number) {
+  return request<SalesAnnual>(`/api/v1/commercial/sales-annual?year=${year}`);
 }
 
 // Tableau de bord individuel de performance commerciale (« Mes performances »).

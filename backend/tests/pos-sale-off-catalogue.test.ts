@@ -72,9 +72,10 @@ describe("vente au comptoir hors catalogue", () => {
     const id = create.json().id as string;
     const list = await app.inject({ method: "GET", url: "/api/v1/pos-sales?provisional=true", headers: { cookie } });
     expect(list.statusCode).toBe(200);
-    const ids = (list.json() as { id: string; isbnId: string | null }[]).map((s) => s.id);
+    const ids = (list.json() as { id: string; is_catalogue: boolean }[]).map((s) => s.id);
     expect(ids).toContain(id);
-    expect((list.json() as { isbnId: string | null }[]).every((s) => s.isbnId === null)).toBe(true);
+    // provisional=true ne renvoie que des ventes hors catalogue.
+    expect((list.json() as { is_catalogue: boolean }[]).every((s) => s.is_catalogue === false)).toBe(true);
   });
 
   it("réconciliation : 404 sur une vente inexistante", async () => {

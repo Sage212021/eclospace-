@@ -92,8 +92,12 @@ const posSaleSchema = z
     customer_id: z.string().uuid().optional(),
     point_of_sale_id: z.string().uuid().optional(),
   })
-  .refine((d) => (d.isbn_id && d.location_id) || (d.off_catalogue_title && d.off_catalogue_title.trim().length > 0), {
-    message: "Indiquez un ouvrage du catalogue (ISBN + lieu) ou un livre hors catalogue (titre).",
+  // Le lieu (location_id) n'est plus obligatoire : la vente au comptoir ne touche
+  // plus au stock (décision opérateur 13/08/2026 — le stock/magasin sera géré par
+  // un autre pôle). On demande donc soit un ouvrage du catalogue (ISBN), soit un
+  // livre hors catalogue (titre).
+  .refine((d) => d.isbn_id || (d.off_catalogue_title && d.off_catalogue_title.trim().length > 0), {
+    message: "Indiquez un ouvrage du catalogue (ISBN) ou un livre hors catalogue (titre).",
   });
 
 const pointOfSaleSchema = z.object({
@@ -943,14 +947,13 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       return reply.code(201).send(sale);
     }
 
-    // Vente au CATALOGUE : ISBN + lieu garantis par le schéma (refine).
+    // Vente au CATALOGUE : ISBN garanti par le schéma (refine).
+    // NOTE (décision opérateur 13/08/2026) : la vente au comptoir ne modifie plus
+    // le stock (ni contrôle de disponibilité, ni mouvement de sortie). Le stock et
+    // le magasin seront gérés par un autre pôle (Contrat & droits d'auteur / Finance).
+    // La vente reste enregistrée et facturée immédiatement (facture + droits
+    // d'auteur), pour que le commercial puisse toujours saisir et voir sa vente.
     const isbnId = parsed.data.isbn_id;
-    const locationId = parsed.data.location_id!;
-    const stockItems = await prisma.stockItem.findMany({ where: { isbnId, locationId } });
-    const available = stockItems.reduce((sum, item) => sum + availableQuantity(item), 0);
-    if (available < parsed.data.quantity) {
-      return reply.code(409).send({ code: "insufficient_stock", message: "Stock disponible insuffisant pour cette vente." });
-    }
 
     try {
       const sale = await prisma.$transaction(async (tx) => {
@@ -966,21 +969,6 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
             soldBy: request.user!.id,
           },
         });
-        await tx.stockMovement.create({
-          data: {
-            type: "sale_out",
-            isbnId,
-            printRun: 0,
-            fromLocationId: locationId,
-            quantity: parsed.data.quantity,
-            reason: "Vente au comptoir",
-            referenceType: "pos_sale",
-            referenceId: created.id,
-            status: "completed",
-            movedBy: request.user!.id,
-          },
-        });
-        await adjustStockItem(tx, isbnId, locationId, 0, -parsed.data.quantity);
         // Ch. 18 §18.2, §18.7 : facture immédiate + encaissement + droits d'auteur.
         const invoice = await createInvoiceFromPosSale(tx, created.id);
         return { sale: created, invoice };
@@ -1005,11 +993,101 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get("/api/v1/pos-sales", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
-    const q = request.query as { provisional?: string };
+    const q = request.query as { provisional?: string; mine?: string };
     // provisional=true → uniquement les ventes hors catalogue à rattacher.
-    const where = q.provisional === "true" ? { isbnId: null } : {};
-    const sales = await prisma.posSale.findMany({ where, orderBy: { soldAt: "desc" }, take: 200 });
-    return reply.send(sales);
+    // mine=true → uniquement les ventes saisies par l'utilisateur courant (le
+    // commercial voit SES ventes tout de suite après enregistrement).
+    const where = {
+      ...(q.provisional === "true" ? { isbnId: null } : {}),
+      ...(q.mine === "true" ? { soldBy: request.user!.id } : {}),
+    };
+    const sales = await prisma.posSale.findMany({
+      where,
+      orderBy: { soldAt: "desc" },
+      take: 200,
+      include: {
+        isbn: { select: { isbn13: true, manuscript: { select: { title: true, workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, select: { partner: { select: { firstName: true, lastName: true } } } } } } } },
+        customer: { select: { name: true } },
+        pointOfSale: { select: { name: true } },
+      },
+    });
+    // Noms des vendeurs (soldBy = id de compte) résolus en un seul passage.
+    const sellerIds = [...new Set(sales.map((s) => s.soldBy).filter((v): v is string => Boolean(v)))];
+    const sellers = sellerIds.length
+      ? await prisma.user.findMany({ where: { id: { in: sellerIds } }, select: { id: true, username: true } })
+      : [];
+    const sellerName = new Map(sellers.map((u) => [u.id, u.username]));
+    return reply.send(sales.map((s) => {
+      const title = s.isbnId ? s.isbn?.manuscript?.title ?? null : s.offCatalogueTitle;
+      const author = s.isbnId
+        ? (s.isbn?.manuscript?.workContributors ?? []).map((c) => `${c.partner.firstName} ${c.partner.lastName}`.trim()).filter(Boolean).join(", ") || null
+        : s.offCatalogueAuthor ?? null;
+      return {
+        id: s.id,
+        sold_at: s.soldAt,
+        is_catalogue: Boolean(s.isbnId),
+        isbn13: s.isbn?.isbn13 ?? s.offCatalogueIsbn ?? null,
+        title,
+        author,
+        quantity: s.quantity,
+        unit_price: Number(s.unitPrice),
+        total: s.quantity * Number(s.unitPrice),
+        payment_method: s.paymentMethod,
+        event_label: s.eventLabel ?? null,
+        customer_name: s.customer?.name ?? null,
+        point_of_sale: s.pointOfSale?.name ?? null,
+        sold_by: s.soldBy ? sellerName.get(s.soldBy) ?? null : null,
+      };
+    }));
+  });
+
+  // Récapitulatif annuel des ventes au comptoir, agrégé PAR OUVRAGE et PAR AUTEUR
+  // (quantités + chiffre d'affaires). Vue commerciale de synthèse ; le calcul des
+  // droits d'auteur reste géré au pôle « Contrat & droits d'auteur ».
+  fastify.get("/api/v1/commercial/sales-annual", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
+    const q = request.query as { year?: string };
+    const year = q.year && /^\d{4}$/.test(q.year) ? Number(q.year) : new Date().getUTCFullYear();
+    const start = new Date(Date.UTC(year, 0, 1));
+    const end = new Date(Date.UTC(year + 1, 0, 1));
+    const sales = await prisma.posSale.findMany({
+      where: { soldAt: { gte: start, lt: end } },
+      select: {
+        quantity: true, unitPrice: true, isbnId: true, offCatalogueTitle: true, offCatalogueAuthor: true,
+        isbn: { select: { isbn13: true, manuscript: { select: { title: true, workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, select: { partner: { select: { firstName: true, lastName: true } } } } } } } },
+      },
+    });
+
+    type Agg = { key: string; label: string; sublabel: string | null; quantity: number; revenue: number };
+    const books = new Map<string, Agg>();
+    const authors = new Map<string, Agg>();
+    let totalQty = 0;
+    let totalRevenue = 0;
+
+    for (const s of sales) {
+      const revenue = s.quantity * Number(s.unitPrice);
+      totalQty += s.quantity;
+      totalRevenue += revenue;
+
+      const title = (s.isbnId ? s.isbn?.manuscript?.title : s.offCatalogueTitle) || "Sans titre";
+      const isbn13 = s.isbn?.isbn13 ?? null;
+      const bookKey = isbn13 ?? `title:${title}`;
+      const b = books.get(bookKey) ?? { key: bookKey, label: title, sublabel: isbn13, quantity: 0, revenue: 0 };
+      b.quantity += s.quantity; b.revenue += revenue; books.set(bookKey, b);
+
+      const authorName = s.isbnId
+        ? ((s.isbn?.manuscript?.workContributors ?? []).map((c) => `${c.partner.firstName} ${c.partner.lastName}`.trim()).filter(Boolean).join(", ") || "Auteur non précisé")
+        : (s.offCatalogueAuthor?.trim() || "Auteur non précisé");
+      const a = authors.get(authorName) ?? { key: authorName, label: authorName, sublabel: null, quantity: 0, revenue: 0 };
+      a.quantity += s.quantity; a.revenue += revenue; authors.set(authorName, a);
+    }
+
+    const sortByRevenue = (arr: Agg[]) => arr.sort((x, y) => y.revenue - x.revenue || y.quantity - x.quantity);
+    return reply.send({
+      year,
+      by_book: sortByRevenue([...books.values()]),
+      by_author: sortByRevenue([...authors.values()]),
+      totals: { quantity: totalQty, revenue: Math.round(totalRevenue), sales_count: sales.length },
+    });
   });
 
   // Réconciliation d'une vente HORS CATALOGUE : la rattacher à un ouvrage

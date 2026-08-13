@@ -47,7 +47,7 @@ import { IconAdmin } from "../components/icons";
 import { WorkScheduleSection } from "../components/WorkScheduleSection";
 import { PresenceSummaryCard } from "../components/PresenceSummaryCard";
 import { DeductionRulesSection } from "../components/DeductionRulesSection";
-import { AnomaliesSection } from "../components/AnomaliesSection";
+import { ErpConnectionsSection } from "../components/ErpConnectionsSection";
 import { AttendanceReportSection } from "../components/AttendanceReportSection";
 import { ActivityClosureSection } from "../components/ActivityClosureSection";
 import { useI18n } from "../i18n";
@@ -350,8 +350,10 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       {/* Évolution — Règles de retenues paramétrables et versionnées (§21-22) */}
       <DeductionRulesSection canAdminister={canAdministerPresence} />
 
-      {/* Évolution — File d'anomalies + justificatifs + validation (§19, §23-25) */}
-      <AnomaliesSection canValidate={canValidatePresence} employees={employees} />
+      {/* Relevé des connexions ERP (remplace l'ancien module « Anomalies de
+          présence ») — trace indicative, outil d'arbitrage RH, sans effet paie.
+          Réservé aux profils qui supervisent la présence. */}
+      {canOverseePresence && <ErpConnectionsSection employees={employees} />}
 
       {/* Évolution — Tableau de bord & rapports RH + exports (§32-33) */}
       {canOverseePresence && <AttendanceReportSection />}

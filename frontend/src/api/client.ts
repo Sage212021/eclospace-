@@ -3868,12 +3868,15 @@ export function getPayslip(
 // Retenues du mois mémorisées par employé et par mois (bulletin unitaire).
 export interface MonthlyDeductions {
   period: string;
+  primes: number; // gain imposable du mois
+  heures_sup: number; // gain imposable du mois
   retenue_absence: number;
   avance: number;
   pret: number;
   retard: number;
   autres: number;
   sanction: number; // saisie uniquement dans la grille mensuelle (lecture seule ici)
+  extra_lines: PayrollExtraLine[]; // lignes libres (gérées dans la grille)
   status: "brouillon" | "soumis_dg" | "valide" | null;
   locked: boolean; // true dès que le mois est soumis/validé
   saved: boolean;
@@ -3886,7 +3889,7 @@ export function getMonthlyDeductions(employeeId: string, period: string) {
 export function saveMonthlyDeductions(
   employeeId: string,
   period: string,
-  amounts: { retenue_absence: number; avance: number; pret: number; retard: number; autres: number },
+  amounts: { primes: number; heures_sup: number; retenue_absence: number; avance: number; pret: number; retard: number; autres: number },
 ) {
   return request<MonthlyDeductions>(`/api/v1/payroll/employees/${employeeId}/deductions`, {
     method: "PUT",

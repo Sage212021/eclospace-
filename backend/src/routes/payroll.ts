@@ -377,12 +377,15 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         : null;
       return reply.send({
         period,
+        primes: line ? num(line.primes) : 0,
+        heures_sup: line ? num(line.heuresSup) : 0,
         retenue_absence: line ? num(line.retenueAbsence) : 0,
         avance: line ? num(line.avance) : 0,
         pret: line ? num(line.pret) : 0,
         retard: line ? num(line.retard) : 0,
         autres: line ? num(line.autres) : 0,
         sanction: line ? num(line.sanction) : 0, // saisie uniquement dans la grille
+        extra_lines: line ? parseExtraLines(line.extraLines) : [], // lignes libres (grille)
         status: run?.status ?? null, // null | brouillon | soumis_dg | valide
         locked: run != null && run.status !== "brouillon",
         saved: line != null,
@@ -398,6 +401,8 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const parsed = z
         .object({
           period: z.string(),
+          primes: money.default(0),
+          heures_sup: money.default(0),
           retenue_absence: money.default(0),
           avance: money.default(0),
           pret: money.default(0),
@@ -429,28 +434,31 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       }
       // La ligne du salarié peut manquer (salarié sans fiche paie / ajouté après) :
       // on la crée à la volée.
+      // On n'écrit QUE les éléments gérés par le bulletin unitaire (gains + retenues) ;
+      // sanction, lignes libres et note restent tels quels (gérés dans la grille).
+      const elems = {
+        primes: parsed.data.primes, heuresSup: parsed.data.heures_sup,
+        retenueAbsence: parsed.data.retenue_absence,
+        avance: parsed.data.avance, pret: parsed.data.pret, retard: parsed.data.retard, autres: parsed.data.autres,
+      };
       await prisma.payrollMonthlyLine.upsert({
         where: { runId_employeeId: { runId: run.id, employeeId } },
-        update: {
-          retenueAbsence: parsed.data.retenue_absence,
-          avance: parsed.data.avance, pret: parsed.data.pret, retard: parsed.data.retard, autres: parsed.data.autres,
-        },
-        create: {
-          runId: run.id, employeeId,
-          retenueAbsence: parsed.data.retenue_absence,
-          avance: parsed.data.avance, pret: parsed.data.pret, retard: parsed.data.retard, autres: parsed.data.autres,
-        },
+        update: elems,
+        create: { runId: run.id, employeeId, ...elems },
       });
       await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payroll_monthly_line", entityId: `${period}:${employeeId}`, newValues: parsed.data, ipAddress: request.ip });
       const saved = await prisma.payrollMonthlyLine.findUnique({ where: { runId_employeeId: { runId: run.id, employeeId } } });
       return reply.send({
         period,
+        primes: num(saved!.primes),
+        heures_sup: num(saved!.heuresSup),
         retenue_absence: num(saved!.retenueAbsence),
         avance: num(saved!.avance),
         pret: num(saved!.pret),
         retard: num(saved!.retard),
         autres: num(saved!.autres),
         sanction: num(saved!.sanction),
+        extra_lines: parseExtraLines(saved!.extraLines),
         status: run.status,
         locked: false,
         saved: true,

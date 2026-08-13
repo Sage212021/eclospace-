@@ -56,6 +56,23 @@ describe("retenues bulletin ↔ grille mensuelle (source unique)", () => {
     expect(g.pret).toBe(25000);
   });
 
+  it("primes et heures sup saisies au bulletin sont écrites dans la grille (imposables)", async () => {
+    const put = await app.inject({ method: "PUT", url: `/api/v1/payroll/employees/${employeeId}/deductions`, headers: { cookie }, payload: { period, primes: 15000, heures_sup: 8000, pret: 25000, retard: 2250 } });
+    expect(put.statusCode).toBe(200);
+    const body = put.json();
+    expect(body.primes).toBe(15000);
+    expect(body.heures_sup).toBe(8000);
+
+    const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+    const line = await prisma.payrollMonthlyLine.findUnique({ where: { runId_employeeId: { runId: run!.id, employeeId } } });
+    expect(Number(line!.primes)).toBe(15000);
+    expect(Number(line!.heuresSup)).toBe(8000);
+
+    const g = (await ded()).json();
+    expect(g.primes).toBe(15000);
+    expect(g.heures_sup).toBe(8000);
+  });
+
   it("une modification dans la grille se reflète dans le bulletin (bidirectionnel)", async () => {
     await app.inject({
       method: "PATCH", url: `/api/v1/payroll/monthly/${period}/lines/${employeeId}`, headers: { cookie },

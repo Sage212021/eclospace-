@@ -85,9 +85,14 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   // Retenues internes du mois saisies par le RH (prêts, avances, retards…).
   // Modèle moteur : elles réduisent le NET (pas le brut, ni l'assiette d'impôt).
   const [internal, setInternal] = useState({ avance: 0, pret: 0, retard: 0, autres: 0 });
+  // Gains variables du mois (imposables), synchronisés avec la grille mensuelle.
+  const [gains, setGains] = useState({ primes: 0, heures_sup: 0 });
   // Sanction : saisie uniquement dans la grille mensuelle → lecture seule ici,
   // mais prise en compte dans le net. Verrou dès que le mois est soumis/validé.
   const [sanction, setSanction] = useState(0);
+  // Lignes libres saisies dans la grille : reprises telles quelles pour que
+  // l'aperçu/PDF du bulletin unitaire égale exactement la grille mensuelle.
+  const [extraLines, setExtraLines] = useState<{ label: string; kind: "gain" | "retenue"; amount: number }[]>([]);
   const [dedLocked, setDedLocked] = useState(false);
   const [dedStatus, setDedStatus] = useState<"brouillon" | "soumis_dg" | "valide" | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
@@ -168,7 +173,9 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
     const resetDed = () => {
       setManualRetenue(0);
       setInternal({ avance: 0, pret: 0, retard: 0, autres: 0 });
+      setGains({ primes: 0, heures_sup: 0 });
       setSanction(0);
+      setExtraLines([]);
       setDedLocked(false);
       setDedStatus(null);
     };
@@ -177,12 +184,14 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
       setSlip(null);
       return;
     }
-    // Retenues du mois (reliées à la grille mensuelle) : on les re-propose (sinon 0).
+    // Éléments du mois (reliés à la grille mensuelle) : on les re-propose (sinon 0).
     getMonthlyDeductions(employeeId, period)
       .then((d) => {
         setManualRetenue(d.retenue_absence);
         setInternal({ avance: d.avance, pret: d.pret, retard: d.retard, autres: d.autres });
+        setGains({ primes: d.primes, heures_sup: d.heures_sup });
         setSanction(d.sanction);
+        setExtraLines(d.extra_lines ?? []);
         setDedLocked(d.locked);
         setDedStatus(d.status);
       })
@@ -214,10 +223,10 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   async function saveDeductions() {
     if (!employeeId) return;
     try {
-      const d = await saveMonthlyDeductions(employeeId, period, { retenue_absence: manualRetenue, ...internal });
+      const d = await saveMonthlyDeductions(employeeId, period, { primes: gains.primes, heures_sup: gains.heures_sup, retenue_absence: manualRetenue, ...internal });
       setDedStatus(d.status);
       setDedLocked(d.locked);
-      setMessage(t("pay.deductions_saved", "Retenues du mois enregistrées (grille mensuelle mise à jour)."));
+      setMessage(t("pay.deductions_saved", "Éléments du mois enregistrés (grille mensuelle mise à jour)."));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("pay.deductions_save_err", "Enregistrement des retenues impossible."));
@@ -232,11 +241,17 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
     if (!rateSet) return null;
     const gross = form.gross_contractual;
     const b = Math.round(gross * form.base_pct);
+    // Mêmes règles que la grille mensuelle (computeMonthlyLine) : primes + heures
+    // sup + gains libres = imposables (brut & assiette) ; sanction + retenues
+    // libres s'ajoutent aux « autres » (net).
+    const extraGains = extraLines.filter((e) => e.kind === "gain").reduce((s, e) => s + e.amount, 0);
+    const extraRetenues = extraLines.filter((e) => e.kind === "retenue").reduce((s, e) => s + e.amount, 0);
+    const extraTaxable = gains.primes + gains.heures_sup + extraGains;
     return computePayslip(
       {
         base: b,
-        complements: Math.round(gross - b),
-        fiscalBase: form.fiscal_base != null ? form.fiscal_base : gross,
+        complements: Math.round(gross - b) + extraTaxable,
+        fiscalBase: (form.fiscal_base != null ? form.fiscal_base : gross) + extraTaxable,
         fiscalParts: form.fiscal_parts,
         applyFiscalParts: form.apply_fiscal_parts,
         seniorityYears: form.seniority_years,
@@ -244,12 +259,11 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
         seniorityThreshold: form.seniority_threshold ?? 0,
         applySeniority: form.apply_seniority,
         retenueAbsence: manualRetenue,
-        // La sanction (saisie dans la grille) s'ajoute aux « autres » pour le net.
-        internal: { ...internal, autres: internal.autres + sanction },
+        internal: { ...internal, autres: internal.autres + sanction + extraRetenues },
       },
       ratesFromRateSet(rateSet),
     );
-  }, [form, rateSet, manualRetenue, internal, sanction]);
+  }, [form, rateSet, manualRetenue, internal, sanction, gains, extraLines]);
 
   // Valeurs affichées / imprimées / envoyées : l'aperçu en direct s'il existe,
   // sinon le calcul serveur.
@@ -281,7 +295,9 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
     payment_mode: form.payment_mode || null,
     account_number: form.account_number || null,
     rates: slipRates,
+    // Comme la grille : sanction fondue dans « autres », lignes libres itemisées.
     internal: { ...internal, autres: internal.autres + sanction },
+    extra_lines: extraLines,
   };
 
   const readOnly = !canManage || locked;
@@ -388,6 +404,19 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
                   ● {t("pay.live", "Aperçu en direct")}
                 </span>
               )}
+            </div>
+            {/* Gains variables du mois (imposables), synchronisés avec la grille. */}
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>{t("pay.gains_title", "Gains du mois (saisie RH)")}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
+                <Field label={t("pay.gain_primes", "Primes du mois")}>
+                  <input type="number" min={0} step={100} disabled={dedLocked} value={gains.primes} onChange={(e) => setGains({ ...gains, primes: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                </Field>
+                <Field label={t("pay.gain_heures_sup", "Heures sup (montant)")}>
+                  <input type="number" min={0} step={100} disabled={dedLocked} value={gains.heures_sup} onChange={(e) => setGains({ ...gains, heures_sup: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                </Field>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{t("pay.gains_hint", "Imposables : ils s'ajoutent au salaire brut et à l'assiette d'impôt (comme dans la grille mensuelle).")}</p>
             </div>
             {/* Retenues du mois saisies par le RH : l'absence réduit le brut (avant
                 impôt) ; les prêts/avances/retards/autres réduisent le NET. Chaque

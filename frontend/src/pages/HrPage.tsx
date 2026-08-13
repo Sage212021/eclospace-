@@ -46,6 +46,7 @@ import { Button } from "../components/Button";
 import { IconAdmin } from "../components/icons";
 import { ErpConnectionsSection } from "../components/ErpConnectionsSection";
 import { HrDashboardSection } from "../components/HrDashboardSection";
+import { HrDuplicatesSection } from "../components/HrDuplicatesSection";
 import { ActivityClosureSection } from "../components/ActivityClosureSection";
 import { useI18n } from "../i18n";
 import { PayrollEngineHub } from "../components/PayrollEngineHub";
@@ -340,6 +341,10 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       {/* Tableau de bord RH (remplace l'ancien tableau de présence retiré) :
           effectif & répartition, contrats à échéance, congés, recrutement. */}
       <HrDashboardSection />
+
+      {/* Doublons d'employés : détection + suppression logique guidée (le RH
+          choisit la fiche à conserver). Suppression réservée à l'administration RH. */}
+      <HrDuplicatesSection canDelete={canAdminister} collapsible defaultOpen={false} />
 
       {/* Le module « Présences & Temps de travail » (pointage par connexion,
           tableau de bord de présence, règles de retenues, consolidation paie) a

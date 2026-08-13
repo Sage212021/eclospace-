@@ -2698,6 +2698,25 @@ export function getHrDashboard() {
   return request<HrDashboard>("/api/v1/hr/dashboard");
 }
 
+// Détection des doublons d'employés (même nom/prénom, insensible casse/accents).
+export interface DuplicateRecord {
+  employee_id: string;
+  name: string;
+  matricule: string | null;
+  phone: string | null;
+  hire_date: string | null;
+  created_at: string;
+  linked_total: number;
+  linked: { contrats: number; absences: number; bulletins: number; variables_paie: number; evaluations: number; formations: number };
+}
+export interface DuplicateGroup { key: string; records: DuplicateRecord[] }
+export function getDuplicateEmployees() {
+  return request<{ groups: DuplicateGroup[]; total_groups: number }>("/api/v1/hr/duplicates");
+}
+export function deleteEmployee(id: string) {
+  return request<{ deleted: true; name: string }>(`/api/v1/employees/${id}`, { method: "DELETE" });
+}
+
 // Contrats de travail & avenants (refonte RH — Étape 3).
 export interface HrContractAmendment {
   id: string;

@@ -542,6 +542,73 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     });
   });
 
+  // ─── Détection des doublons d'employés ─────────────────────────────────────
+  // Regroupe les fiches qui désignent probablement la MÊME personne : même
+  // nom+prénom (insensible à la casse et aux accents) OU même téléphone. Pour
+  // chaque fiche, on remonte de quoi décider laquelle garder (matricule, date
+  // d'embauche, et le volume de données liées : contrats, absences, bulletins…).
+  fastify.get("/api/v1/hr/duplicates", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const employees = await prisma.employee.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true, firstName: true, lastName: true, phone: true, hireDate: true, createdAt: true,
+        payrollProfile: { select: { matricule: true } },
+        _count: { select: { hrContracts: true, absences: true, payrollMonthlyLines: true, payrollVariables: true, evaluations: true, trainingRequests: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+    const groups = new Map<string, typeof employees>();
+    for (const e of employees) {
+      const key = `${norm(e.firstName)}|${norm(e.lastName)}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(e);
+    }
+    const duplicates = [...groups.values()]
+      .filter((g) => g.length > 1)
+      .map((g) => ({
+        key: `${g[0].firstName} ${g[0].lastName}`,
+        records: g.map((e) => {
+          const linked = e._count.hrContracts + e._count.absences + e._count.payrollMonthlyLines + e._count.payrollVariables + e._count.evaluations + e._count.trainingRequests;
+          return {
+            employee_id: e.id,
+            name: `${e.firstName} ${e.lastName}`,
+            matricule: e.payrollProfile?.matricule ?? null,
+            phone: e.phone,
+            hire_date: e.hireDate ? e.hireDate.toISOString().slice(0, 10) : null,
+            created_at: e.createdAt,
+            linked_total: linked,
+            linked: {
+              contrats: e._count.hrContracts, absences: e._count.absences, bulletins: e._count.payrollMonthlyLines,
+              variables_paie: e._count.payrollVariables, evaluations: e._count.evaluations, formations: e._count.trainingRequests,
+            },
+          };
+        }),
+      }))
+      .sort((a, b) => a.key.localeCompare(b.key));
+    return reply.send({ groups: duplicates, total_groups: duplicates.length });
+  });
+
+  // Suppression LOGIQUE d'une fiche employé (doublon). Réversible (deletedAt) :
+  // les données liées éventuelles sont conservées, jamais cassées. On renvoie
+  // le volume de données liées pour information (le front demande confirmation).
+  fastify.delete("/api/v1/employees/:id", { preHandler: requirePermission("rh", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const emp = await prisma.employee.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, firstName: true, lastName: true, _count: { select: { payrollMonthlyLines: true, absences: true, hrContracts: true } } },
+    });
+    if (!emp) return reply.code(404).send({ code: "not_found", message: "Employé introuvable." });
+    await prisma.employee.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+    await writeAuditLog({
+      userId: request.user!.id, action: "update", entityType: "employee", entityId: id,
+      oldValues: { name: `${emp.firstName} ${emp.lastName}`, deletedAt: null },
+      newValues: { deletedAt: new Date().toISOString(), reason: "suppression logique (doublon)", linked: emp._count },
+      ipAddress: request.ip,
+    });
+    return reply.send({ deleted: true, name: `${emp.firstName} ${emp.lastName}` });
+  });
+
   // ─── Recrutement : postes à pourvoir & candidatures (module amont RH) ───────
   // Un poste ouvert reçoit des candidatures ; chaque candidature suit le circuit
   // reçue → entretien → retenue / refusée. Le poste se clôt (pourvu / annulé).

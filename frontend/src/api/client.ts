@@ -3865,6 +3865,32 @@ export function getPayslip(
   return request<PayslipResult>(`/api/v1/payroll/employees/${employeeId}/payslip?${qs.toString()}`);
 }
 
+// Retenues du mois mémorisées par employé et par mois (bulletin unitaire).
+export interface MonthlyDeductions {
+  period: string;
+  retenue_absence: number;
+  avance: number;
+  pret: number;
+  retard: number;
+  autres: number;
+  saved: boolean;
+}
+
+export function getMonthlyDeductions(employeeId: string, period: string) {
+  return request<MonthlyDeductions>(`/api/v1/payroll/employees/${employeeId}/deductions?period=${period}`);
+}
+
+export function saveMonthlyDeductions(
+  employeeId: string,
+  period: string,
+  amounts: { retenue_absence: number; avance: number; pret: number; retard: number; autres: number },
+) {
+  return request<MonthlyDeductions>(`/api/v1/payroll/employees/${employeeId}/deductions`, {
+    method: "PUT",
+    body: JSON.stringify({ period, ...amounts }),
+  });
+}
+
 // Cycle mensuel de paie (grille éditable → validation DG). Étape 1 : préparer le
 // mois, saisir les éléments variables par salarié, net recalculé automatiquement.
 export interface PayrollMonthElements {

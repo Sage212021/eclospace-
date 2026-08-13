@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getPayrollProfile,
   getPayslip,
+  getMonthlyDeductions,
+  saveMonthlyDeductions,
   getPayrollRateSet,
   previewPayslipEmail,
   savePayrollProfile,
@@ -158,13 +160,22 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   // à chaque changement d'employé ou de période : alimente l'aperçu en direct.
   useEffect(() => {
     getPayrollRateSet(`${period}-01`).then(setRateSet).catch(() => setRateSet(null));
-    // Les retenues sont des saisies RH délibérées : on repart de 0 à chaque employé/mois.
-    setManualRetenue(0);
-    setInternal({ avance: 0, pret: 0, retard: 0, autres: 0 });
     if (!employeeId) {
+      setManualRetenue(0);
+      setInternal({ avance: 0, pret: 0, retard: 0, autres: 0 });
       setSlip(null);
       return;
     }
+    // Retenues mémorisées pour cet employé et ce mois : on les re-propose (sinon 0).
+    getMonthlyDeductions(employeeId, period)
+      .then((d) => {
+        setManualRetenue(d.retenue_absence);
+        setInternal({ avance: d.avance, pret: d.pret, retard: d.retard, autres: d.autres });
+      })
+      .catch(() => {
+        setManualRetenue(0);
+        setInternal({ avance: 0, pret: 0, retard: 0, autres: 0 });
+      });
     getPayslip(employeeId, period)
       .then((r) => {
         setSlip(r);
@@ -185,6 +196,18 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
       loadDispatches();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Calcul impossible.");
+    }
+  }
+
+  // Enregistre les retenues du mois pour cet employé (mémorisées, re-proposées).
+  async function saveDeductions() {
+    if (!employeeId) return;
+    try {
+      await saveMonthlyDeductions(employeeId, period, { retenue_absence: manualRetenue, ...internal });
+      setMessage(t("pay.deductions_saved", "Retenues du mois enregistrées."));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("pay.deductions_save_err", "Enregistrement des retenues impossible."));
     }
   }
 
@@ -373,7 +396,11 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
                 <Field label={t("pay.int_autres", "Autres retenues")}>
                   <input type="number" min={0} step={100} value={internal.autres} onChange={(e) => setInternal({ ...internal, autres: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
                 </Field>
+                {canManage && (
+                  <Button variant="add" size="sm" type="button" onClick={saveDeductions}>{t("pay.save_deductions", "Enregistrer les retenues du mois")}</Button>
+                )}
               </div>
+              <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{t("pay.deductions_hint", "Ces montants sont mémorisés par employé et par mois : ils se ré-affichent à la réouverture de la fiche.")}</p>
             </div>
             {!rateSet && <p style={{ fontSize: 12, color: "var(--alert, #C4661F)", marginTop: 8 }}>{t("pay.no_scale_period", "Aucun barème en vigueur pour ce mois : renseignez le barème dans « Paramètres de paie ».")}</p>}
             {displaySlip && (

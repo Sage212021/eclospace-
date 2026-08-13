@@ -360,6 +360,73 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // ----- Retenues du mois mémorisées (par employé et par mois) ---------------
+  // Le RH saisit une fois les retenues (absence, avance, prêt, retard, autres) ;
+  // elles sont conservées et re-proposées à chaque réouverture de la fiche.
+  fastify.get(
+    "/api/v1/payroll/employees/:employeeId/deductions",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const { employeeId } = request.params as { employeeId: string };
+      const period = normalizePeriod((request.query as { period?: string }).period);
+      const row = await prisma.payslipMonthlyDeduction.findUnique({ where: { employeeId_periodKey: { employeeId, periodKey: period } } });
+      return reply.send({
+        period,
+        retenue_absence: row ? num(row.retenueAbsence) : 0,
+        avance: row ? num(row.avance) : 0,
+        pret: row ? num(row.pret) : 0,
+        retard: row ? num(row.retard) : 0,
+        autres: row ? num(row.autres) : 0,
+        saved: Boolean(row),
+      });
+    },
+  );
+
+  fastify.put(
+    "/api/v1/payroll/employees/:employeeId/deductions",
+    { preHandler: requirePermission("paie", "saisie") },
+    async (request, reply) => {
+      const { employeeId } = request.params as { employeeId: string };
+      const parsed = z
+        .object({
+          period: z.string(),
+          retenue_absence: money.default(0),
+          avance: money.default(0),
+          pret: money.default(0),
+          retard: money.default(0),
+          autres: money.default(0),
+        })
+        .safeParse(request.body ?? {});
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Montants invalides.", details: parsed.error.issues });
+      const period = normalizePeriod(parsed.data.period);
+      const employee = await prisma.employee.findFirst({ where: { id: employeeId, deletedAt: null }, select: { id: true } });
+      if (!employee) return reply.code(404).send({ code: "not_found", message: "Employé introuvable." });
+      const data = {
+        retenueAbsence: parsed.data.retenue_absence,
+        avance: parsed.data.avance,
+        pret: parsed.data.pret,
+        retard: parsed.data.retard,
+        autres: parsed.data.autres,
+        updatedBy: request.user!.id,
+      };
+      const row = await prisma.payslipMonthlyDeduction.upsert({
+        where: { employeeId_periodKey: { employeeId, periodKey: period } },
+        update: data,
+        create: { employeeId, periodKey: period, ...data },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payslip_deduction", entityId: `${employeeId}:${period}`, newValues: parsed.data, ipAddress: request.ip });
+      return reply.send({
+        period,
+        retenue_absence: num(row.retenueAbsence),
+        avance: num(row.avance),
+        pret: num(row.pret),
+        retard: num(row.retard),
+        autres: num(row.autres),
+        saved: true,
+      });
+    },
+  );
+
   // ----- Envoi du bulletin par e-mail (incrément 4) --------------------------
   fastify.post(
     "/api/v1/payroll/employees/:employeeId/payslip/email",

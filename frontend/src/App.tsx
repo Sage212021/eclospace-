@@ -187,7 +187,6 @@ const NAV_POLES: NavPole[] = [
   {
     label: "Commercial",
     items: [
-      { key: "co-stock", label: "Stock & magasin", permission: "stock:consultation" },
       { key: "co-ventes", label: "Commercial & ventes", permission: "commercial:consultation" },
       { key: "co-mes-performances", label: "Mes performances", permission: "commercial:consultation" },
       { key: "co-suivi-ventes", label: "Suivi des ventes par ouvrage", permission: "commercial:consultation" },
@@ -202,6 +201,9 @@ const NAV_POLES: NavPole[] = [
       // affichée à deux endroits — le juridique la retrouve comme auparavant.
       { key: "jf-contrats", label: "Contrats & droits d'auteur", permission: "manuscripts:consultation" },
       { key: "jf-finance", label: "Finance & comptabilité", permission: "finance:consultation" },
+      // Stock & magasin rattaché au pôle Finance (décision opérateur 13/08/2026) :
+      // la gestion des stocks quitte le Commercial pour la Finance.
+      { key: "co-stock", label: "Stock & magasin", permission: "stock:consultation" },
       { key: "co-commissions", label: "Commissions commerciales", anyPermission: ["finance:consultation", "commercial:consultation"] },
       { key: "jf-droits-annuels", label: "États annuels de droits d'auteur", permission: "royalties:consultation" },
     ],

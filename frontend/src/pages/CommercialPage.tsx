@@ -4,8 +4,11 @@ import {
   createCustomer,
   createPosSale,
   listProvisionalPosSales,
+  listMyPosSales,
+  getSalesAnnual,
   reconcilePosSale,
-  type ProvisionalPosSale,
+  type PosSaleRow,
+  type SalesAnnual,
   createSalesOrder,
   listCustomers,
   getCustomer,
@@ -71,6 +74,8 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [newCustomer, setNewCustomer] = useState<{ name: string; category: CustomerCategory; zone: string } | null>(null);
+  // Rafraîchit le registre « Mes ventes » et le récap annuel après chaque vente.
+  const [salesKey, setSalesKey] = useState(0);
 
   const refresh = async () => {
     const [customerList, orderList, isbnList, locationList] = await Promise.all([
@@ -199,7 +204,9 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
       {canManage && (
         <>
           <NewOrderForm customers={customers} isbns={isbns} locations={locations} onCreated={(msg) => { setMessage(msg); refresh(); }} onError={setError} />
-          <PosSaleForm customers={customers} isbns={isbns} locations={locations} onCreated={() => { setMessage(t("com.pos_recorded", "Vente au comptoir enregistrée.")); refresh(); }} onError={setError} />
+          <PosSaleForm customers={customers} isbns={isbns} locations={locations} onCreated={() => { setSalesKey((k) => k + 1); }} onError={setError} />
+          <MySalesRegister refreshKey={salesKey} />
+          <AnnualSalesRecap refreshKey={salesKey} />
           {canValidate && <ProvisionalSalesSection isbns={isbns} onDone={(msg) => { setMessage(msg); refresh(); }} onError={setError} />}
         </>
       )}
@@ -399,6 +406,9 @@ function PosSaleForm({
   const [addingPoint, setAddingPoint] = useState(false);
   const [newPointName, setNewPointName] = useState("");
   const [newPointType, setNewPointType] = useState<PointOfSaleType>("librairie");
+  // Confirmation INLINE (à côté du bouton) : le commercial voit tout de suite
+  // que sa vente est bien enregistrée, sans devoir remonter en haut de page.
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isbnId && isbns[0]) setIsbnId(isbns[0].id);
@@ -425,6 +435,7 @@ function PosSaleForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    setSavedMsg(null);
     try {
       // Client optionnel : nouveau client auto-créé si saisie manuelle.
       let customer_id: string | undefined;
@@ -449,15 +460,24 @@ function PosSaleForm({
         await createPosSale({ isbn_id: isbnId, location_id: locationId, quantity, unit_price: unitPrice, payment_method: paymentMethod, customer_id, point_of_sale_id: pointId || undefined });
       }
       onCreated();
+      const total = (quantity * unitPrice).toLocaleString("fr-FR");
+      setSavedMsg(t("com.pos_saved_inline", `Vente enregistrée : ${quantity} × ${unitPrice.toLocaleString("fr-FR")} = ${total} FCFA. Elle apparaît dans « Mes ventes » ci-dessous.`));
       setOffTitle(""); setOffAuthor(""); setOffIsbn("");
       if (customerId === NEW) { setNewCust({ name: "", category: "particulier", phone: "", email: "", address: "" }); setCustomerId(""); }
     } catch (err) {
+      setSavedMsg(null);
       onError(err instanceof Error ? err.message : t("com.err_pos", "Échec de la vente au comptoir."));
     }
   }
 
   return (
-    <Card title={t("com.pos_title", "Vente au comptoir / salon")} icon={<IconCommercial />} subtitle={t("com.pos_sub", "Encaisser une vente directe.")}>
+    <Card title={t("com.pos_title", "Vente au comptoir / salon")} icon={<IconCommercial />} subtitle={t("com.pos_sub", "Vente directe payée sur place (espèces, carte, mobile money).")}>
+      <GuidanceNote title="Vente au comptoir : un seul geste">
+        Ici, <b>enregistrer</b> une vente au comptoir vaut <b>encaissement immédiat</b> : le paiement est reçu sur place, la
+        facture et les droits d'auteur sont générés aussitôt. (Le circuit « Commandes » ci-dessus est différent : on
+        <b> enregistre d'abord</b> la commande, puis la Finance <b>facture et encaisse</b> plus tard.) Cette vente n'a
+        aucun effet sur le stock pour le moment.
+      </GuidanceNote>
       <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
           <Field label={t("com.book_mode", "Livre")}>
@@ -571,8 +591,9 @@ function PosSaleForm({
             {t("com.new_point", "+ nouveau point de vente")}
           </button>
         )}
-        <div style={{ marginTop: 14 }}>
-          <Button variant="add" size="md" type="submit">{t("com.checkout", "Encaisser")}</Button>
+        <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <Button variant="add" size="md" type="submit">{t("com.checkout", "Enregistrer la vente")}</Button>
+          {savedMsg && <span style={{ color: "var(--eclosion, #C89A1B)", fontSize: 13, fontWeight: 600 }}>✓ {savedMsg}</span>}
         </div>
       </form>
     </Card>
@@ -592,7 +613,7 @@ function ProvisionalSalesSection({
   onError: (m: string) => void;
 }) {
   const { t } = useI18n();
-  const [sales, setSales] = useState<ProvisionalPosSale[]>([]);
+  const [sales, setSales] = useState<PosSaleRow[]>([]);
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -623,11 +644,11 @@ function ProvisionalSalesSection({
           {sales.map((s) => (
             <div key={s.id} className="ecl-row" style={{ flexWrap: "wrap", gap: 8 }}>
               <div className="ecl-row__main">
-                <div className="ecl-row__title">{s.offCatalogueTitle ?? "—"}</div>
+                <div className="ecl-row__title">{s.title ?? "—"}</div>
                 <div className="ecl-row__desc">
-                  {[s.offCatalogueAuthor, s.offCatalogueIsbn].filter(Boolean).join(" · ")}
-                  {s.offCatalogueAuthor || s.offCatalogueIsbn ? " · " : ""}
-                  {t("com.recon_qty", "qté")} <span style={{ fontFamily: "var(--font-mono)" }}>{s.quantity}</span> · <span style={{ fontFamily: "var(--font-mono)" }}>{s.unitPrice}</span> FCFA
+                  {[s.author, s.isbn13].filter(Boolean).join(" · ")}
+                  {s.author || s.isbn13 ? " · " : ""}
+                  {t("com.recon_qty", "qté")} <span style={{ fontFamily: "var(--font-mono)" }}>{s.quantity}</span> · <span style={{ fontFamily: "var(--font-mono)" }}>{s.unit_price.toLocaleString("fr-FR")}</span> FCFA
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -641,6 +662,124 @@ function ProvisionalSalesSection({
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+const PAY_LABEL: Record<string, string> = { cash: "Espèces", card: "Carte", mobile_money: "Mobile money" };
+function fcfa(n: number): string { return `${Math.round(n).toLocaleString("fr-FR")} FCFA`; }
+
+// Registre des ventes au comptoir du commercial : visible dès l'enregistrement.
+function MySalesRegister({ refreshKey }: { refreshKey: number }) {
+  const [sales, setSales] = useState<PosSaleRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setLoading(true);
+    listMyPosSales().then(setSales).catch(() => setSales([])).finally(() => setLoading(false));
+  }, [refreshKey]);
+  const total = sales.reduce((s, r) => s + r.total, 0);
+  return (
+    <Card title="Mes ventes au comptoir" icon={<IconCommercial />} subtitle="Vos ventes directes, les plus récentes en premier — visibles dès l'enregistrement." collapsible defaultOpen>
+      {loading ? (
+        <Empty>Chargement…</Empty>
+      ) : sales.length === 0 ? (
+        <Empty>Aucune vente enregistrée pour l'instant. Enregistrez une vente ci-dessus, elle apparaîtra ici.</Empty>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640 }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
+                <th style={{ padding: "6px 8px" }}>Date</th>
+                <th style={{ padding: "6px 8px" }}>Ouvrage</th>
+                <th style={{ padding: "6px 8px" }}>Auteur</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>Qté</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>P.U.</th>
+                <th style={{ padding: "6px 8px", textAlign: "right" }}>Total</th>
+                <th style={{ padding: "6px 8px" }}>Paiement</th>
+              </tr>
+            </thead>
+            <tbody style={{ fontFamily: "var(--font-mono, monospace)" }}>
+              {sales.map((s) => (
+                <tr key={s.id} style={{ borderTop: "1px solid var(--line)" }}>
+                  <td style={{ padding: "6px 8px" }}>{s.sold_at.slice(0, 10)}</td>
+                  <td style={{ padding: "6px 8px", fontFamily: "inherit" }}>
+                    {s.title ?? "—"}
+                    {!s.is_catalogue && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--retard, #C4661F)" }}>hors catalogue</span>}
+                  </td>
+                  <td style={{ padding: "6px 8px", fontFamily: "inherit", color: "var(--muted)" }}>{s.author ?? "—"}</td>
+                  <td style={{ padding: "6px 8px", textAlign: "right" }}>{s.quantity}</td>
+                  <td style={{ padding: "6px 8px", textAlign: "right" }}>{s.unit_price.toLocaleString("fr-FR")}</td>
+                  <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700 }}>{s.total.toLocaleString("fr-FR")}</td>
+                  <td style={{ padding: "6px 8px", fontFamily: "inherit" }}>{PAY_LABEL[s.payment_method] ?? s.payment_method}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700, fontFamily: "var(--font-mono, monospace)" }}>
+                <td style={{ padding: "6px 8px" }} colSpan={5}>Total ({sales.length} vente{sales.length > 1 ? "s" : ""})</td>
+                <td style={{ padding: "6px 8px", textAlign: "right" }}>{total.toLocaleString("fr-FR")}</td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// Récapitulatif annuel des ventes au comptoir, par ouvrage et par auteur.
+function AnnualSalesRecap({ refreshKey }: { refreshKey: number }) {
+  const nowYear = new Date().getUTCFullYear();
+  const [year, setYear] = useState(nowYear);
+  const [data, setData] = useState<SalesAnnual | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setLoading(true);
+    getSalesAnnual(year).then(setData).catch(() => setData(null)).finally(() => setLoading(false));
+  }, [year, refreshKey]);
+  const years = [nowYear, nowYear - 1, nowYear - 2, nowYear - 3];
+  const recapTable = (title: string, rows: SalesAnnual["by_book"]) => (
+    <div style={{ flex: "1 1 320px", minWidth: 300 }}>
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
+      {rows.length === 0 ? <Empty>Aucune vente.</Empty> : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead><tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
+              <th style={{ padding: "5px 8px" }}>Libellé</th>
+              <th style={{ padding: "5px 8px", textAlign: "right" }}>Qté</th>
+              <th style={{ padding: "5px 8px", textAlign: "right" }}>CA</th>
+            </tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.key} style={{ borderTop: "1px solid var(--line)" }}>
+                  <td style={{ padding: "5px 8px" }}>{r.label}{r.sublabel && <span style={{ color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 11 }}> · {r.sublabel}</span>}</td>
+                  <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "var(--font-mono)" }}>{r.quantity}</td>
+                  <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "var(--font-mono)" }}>{fcfa(r.revenue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+  return (
+    <Card title="Récapitulatif annuel des ventes" icon={<IconCommercial />} subtitle="Ventes au comptoir agrégées par ouvrage et par auteur." collapsible>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 12 }}>
+        <Field label="Année">
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </Field>
+        {data && <div style={{ fontSize: 13, color: "var(--muted)" }}>{data.totals.sales_count} vente(s) · {data.totals.quantity} ex. · <b style={{ color: "var(--ink)" }}>{fcfa(data.totals.revenue)}</b></div>}
+      </div>
+      {loading ? <Empty>Chargement…</Empty> : data && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
+          {recapTable("Par ouvrage", data.by_book)}
+          {recapTable("Par auteur", data.by_author)}
         </div>
       )}
     </Card>

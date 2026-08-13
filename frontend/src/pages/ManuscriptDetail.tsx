@@ -1272,6 +1272,9 @@ function EditFicheModal({
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [saving, setSaving] = useState(false);
   const [reason, setReason] = useState("");
+  // Erreur affichée DANS le modal (l'ancienne bannière parente était masquée par
+  // le voile du modal — le bouton semblait « ne pas réagir »).
+  const [localErr, setLocalErr] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: manuscript.title ?? "",
     subtitle: manuscript.subtitle ?? "",
@@ -1313,8 +1316,17 @@ function EditFicheModal({
   }, []);
 
   async function submit() {
+    setLocalErr(null);
+    if (!a.first_name.trim() || !a.last_name.trim()) {
+      setLocalErr("Le nom et le prénom de l'auteur sont obligatoires.");
+      return;
+    }
+    if (!form.title.trim()) {
+      setLocalErr("Le titre de l'ouvrage est obligatoire.");
+      return;
+    }
     if (reason.trim().length < 3) {
-      onError("Indiquez le motif de la correction (au moins 3 caractères).");
+      setLocalErr("Indiquez le motif de la correction (au moins 3 caractères) dans le champ ci-dessous.");
       return;
     }
     setSaving(true);
@@ -1342,7 +1354,7 @@ function EditFicheModal({
       });
       onSaved();
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Enregistrement impossible.");
+      setLocalErr(err instanceof Error ? err.message : "Enregistrement impossible.");
     } finally {
       setSaving(false);
     }
@@ -1421,9 +1433,16 @@ function EditFicheModal({
           </FField>
         </div>
 
+        {localErr && (
+          <div style={{ marginTop: 12, background: "var(--alert-soft, #f8e3dc)", color: "var(--alert, #C4661F)", border: "1px solid var(--alert, #C4661F)", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>
+            {localErr}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
           <button onClick={onClose} style={barBtn()}>Annuler</button>
-          <button onClick={submit} disabled={saving || !a.first_name.trim() || !a.last_name.trim() || !form.title.trim()} style={{ ...barBtn("primary"), opacity: saving ? 0.6 : 1 }}>
+          {/* Le bouton reste cliquable : la validation renvoie un message clair DANS
+              le modal (avant, il était désactivé/silencieux → « ne réagit pas »). */}
+          <button onClick={submit} disabled={saving} style={{ ...barBtn("primary"), opacity: saving ? 0.6 : 1 }}>
             {saving ? "Enregistrement…" : "Enregistrer les corrections"}
           </button>
         </div>

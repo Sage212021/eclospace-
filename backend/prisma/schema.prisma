@@ -206,18 +206,18 @@ enum JobApplicationStatus {
 }
 
 model JobApplication {
-  id             String               @id @default(uuid())
-  jobOpeningId   String               @map("job_opening_id")
-  jobOpening     JobOpening           @relation(fields: [jobOpeningId], references: [id])
-  firstName      String               @map("first_name")
-  lastName       String               @map("last_name")
-  email          String?
-  phone          String?
-  source         String?
-  status         JobApplicationStatus @default(recue)
-  notes          String?
-  appliedAt      DateTime             @default(now()) @map("applied_at")
-  decidedAt      DateTime?            @map("decided_at")
+  id           String               @id @default(uuid())
+  jobOpeningId String               @map("job_opening_id")
+  jobOpening   JobOpening           @relation(fields: [jobOpeningId], references: [id])
+  firstName    String               @map("first_name")
+  lastName     String               @map("last_name")
+  email        String?
+  phone        String?
+  source       String?
+  status       JobApplicationStatus @default(recue)
+  notes        String?
+  appliedAt    DateTime             @default(now()) @map("applied_at")
+  decidedAt    DateTime?            @map("decided_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
@@ -781,19 +781,19 @@ enum PayrollMonthlyStatus {
 }
 
 model PayrollMonthlyRun {
-  id          String               @id @default(uuid())
-  periodKey   String               @unique @map("period_key") // AAAA-MM
-  status      PayrollMonthlyStatus @default(brouillon)
-  preparedBy  String?              @map("prepared_by")
+  id           String               @id @default(uuid())
+  periodKey    String               @unique @map("period_key") // AAAA-MM
+  status       PayrollMonthlyStatus @default(brouillon)
+  preparedBy   String?              @map("prepared_by")
   // Soumission RH → DG (traçabilité §24-25).
-  submittedBy String?              @map("submitted_by")
-  submittedAt DateTime?            @map("submitted_at")
-  validatedBy String?              @map("validated_by") // Directeur général
-  validatedAt DateTime?            @map("validated_at")
+  submittedBy  String?              @map("submitted_by")
+  submittedAt  DateTime?            @map("submitted_at")
+  validatedBy  String?              @map("validated_by") // Directeur général
+  validatedAt  DateTime?            @map("validated_at")
   // Retour DG au RH pour correction (motif obligatoire, §11 état 4A).
-  returnReason String?             @map("return_reason")
-  returnedBy   String?             @map("returned_by")
-  returnedAt   DateTime?           @map("returned_at")
+  returnReason String?              @map("return_reason")
+  returnedBy   String?              @map("returned_by")
+  returnedAt   DateTime?            @map("returned_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -864,6 +864,25 @@ model PayrollReopenRequest {
   @@map("payroll_reopen_requests")
 }
 
+// Formule de calcul modifiable par le RH (D-007). Chaque élément « à formule »
+// du bulletin (cotisations assiette × taux, salaire brut, prime d'ancienneté) a
+// une ligne. `custom` = false → le moteur applique le calcul par défaut codé en
+// dur (aucun risque) ; `custom` = true → l'`expression` remplace le défaut. Toute
+// modification exige un MOTIF (changeReason) et est tracée dans l'audit_log.
+model PayrollFormula {
+  id           String   @id @default(uuid())
+  code         String   @unique // ex. « pvid_salarie », « salaire_brut »
+  label        String
+  expression   String // formule en vigueur (défaut ou personnalisée)
+  custom       Boolean  @default(false) // false = calcul par défaut du moteur
+  changeReason String?  @map("change_reason") // motif de la dernière modification
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  updatedBy    String?  @map("updated_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("payroll_formulas")
+}
+
 // Clôture mensuelle de la paie (D-007, incrément 5) — équivalent de la
 // « clôture du mois » du classeur (Livre de paie → Journal de paie). Une fois
 // clôturée, la période est FIGÉE : les lignes archivées sont immuables et la
@@ -899,16 +918,16 @@ enum SitePublicationStatus {
 }
 
 model SitePublication {
-  id             String                @id @default(uuid())
-  manuscriptId   String                @unique @map("manuscript_id")
-  manuscript     Manuscript            @relation(fields: [manuscriptId], references: [id])
-  status         SitePublicationStatus @default(non_publie)
-  externalId     String?               @map("external_id") // identifiant du produit sur le site
-  externalUrl    String?               @map("external_url") // lien public de la fiche
-  lastPayload    Json?                 @map("last_payload") // dernier contenu envoyé (aperçu)
-  lastError      String?               @map("last_error")
-  publishedAt    DateTime?             @map("published_at")
-  publishedBy    String?               @map("published_by")
+  id           String                @id @default(uuid())
+  manuscriptId String                @unique @map("manuscript_id")
+  manuscript   Manuscript            @relation(fields: [manuscriptId], references: [id])
+  status       SitePublicationStatus @default(non_publie)
+  externalId   String?               @map("external_id") // identifiant du produit sur le site
+  externalUrl  String?               @map("external_url") // lien public de la fiche
+  lastPayload  Json?                 @map("last_payload") // dernier contenu envoyé (aperçu)
+  lastError    String?               @map("last_error")
+  publishedAt  DateTime?             @map("published_at")
+  publishedBy  String?               @map("published_by")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1022,7 +1041,7 @@ enum AccountType {
 // Sens d'un fichier échangé avec l'auteur via son portail (Espace Auteur inc. 2a).
 enum AuthorFileDirection {
   from_author // déposé par l'auteur (manuscrit, corrections, illustrations…)
-  to_author   // partagé par la maison (BAT, épreuves, contrat…)
+  to_author // partagé par la maison (BAT, épreuves, contrat…)
 }
 
 // Guichets de la messagerie auteur (Espace Auteur inc. 2b) : l'auteur écrit à un
@@ -1099,26 +1118,26 @@ model AuthorFile {
 }
 
 model User {
-  id           String     @id @default(uuid())
-  employeeId   String?    @unique @map("employee_id")
-  employee     Employee?  @relation(fields: [employeeId], references: [id])
+  id           String      @id @default(uuid())
+  employeeId   String?     @unique @map("employee_id")
+  employee     Employee?   @relation(fields: [employeeId], references: [id])
   // Compte auteur (externe) relié à sa fiche Partenaire. Nul pour un employé.
   accountType  AccountType @default(internal) @map("account_type")
   partnerId    String?     @unique @map("partner_id")
   partner      Partner?    @relation(fields: [partnerId], references: [id])
-  username     String     @unique
-  email        String     @unique
-  passwordHash String     @map("password_hash")
-  mfaEnabled   Boolean    @default(false) @map("mfa_enabled")
-  mfaSecret    String?    @map("mfa_secret")
-  status       UserStatus @default(active)
+  username     String      @unique
+  email        String      @unique
+  passwordHash String      @map("password_hash")
+  mfaEnabled   Boolean     @default(false) @map("mfa_enabled")
+  mfaSecret    String?     @map("mfa_secret")
+  status       UserStatus  @default(active)
   // Langue d'interface choisie (i18n) : "fr" (défaut) ou "en".
-  language     String     @default("fr")
-  lastLoginAt  DateTime?  @map("last_login_at")
+  language     String      @default("fr")
+  lastLoginAt  DateTime?   @map("last_login_at")
   // Compte « passe-partout » (super-administrateur) : ne peut être ni suspendu,
   // ni supprimé, ni privé de son rôle ; seul compte éligible au mot de passe
   // maître de secours. Posé sur le compte admin initial par le seed.
-  isProtected  Boolean    @default(false) @map("is_protected")
+  isProtected  Boolean     @default(false) @map("is_protected")
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -1195,18 +1214,18 @@ model ChatMessage {
   sender         User         @relation(fields: [senderId], references: [id])
   body           String       @default("")
   // Pièce jointe optionnelle (stockage réutilisé, cf. lib/storage.ts).
-  fileName String? @map("file_name")
-  filePath String? @map("file_path")
-  fileMime String? @map("file_mime")
-  fileSize Int?    @map("file_size")
+  fileName       String?      @map("file_name")
+  filePath       String?      @map("file_path")
+  fileMime       String?      @map("file_mime")
+  fileSize       Int?         @map("file_size")
 
   // Modification (« Modifier ») : horodatage de la dernière édition du texte.
-  editedAt DateTime? @map("edited_at")
+  editedAt  DateTime?     @map("edited_at")
   // Transfert (« Transférer ») : message issu d'un transfert depuis un autre fil.
-  forwarded Boolean @default(false)
+  forwarded Boolean       @default(false)
   // Réponse citée (« Répondre ») : message auquel celui-ci répond (même fil).
-  replyToId String?      @map("reply_to_id")
-  replyTo   ChatMessage? @relation("ChatReply", fields: [replyToId], references: [id])
+  replyToId String?       @map("reply_to_id")
+  replyTo   ChatMessage?  @relation("ChatReply", fields: [replyToId], references: [id])
   replies   ChatMessage[] @relation("ChatReply")
 
   createdAt DateTime  @default(now()) @map("created_at")
@@ -1515,39 +1534,39 @@ enum PartnerCategory {
 }
 
 model Partner {
-  id        String          @id @default(uuid())
-  category  PartnerCategory @default(auteur)
-  firstName String          @map("first_name")
-  lastName  String          @map("last_name")
-  penName   String?         @map("pen_name")
-  email     String?
-  phone     String?
+  id            String          @id @default(uuid())
+  category      PartnerCategory @default(auteur)
+  firstName     String          @map("first_name")
+  lastName      String          @map("last_name")
+  penName       String?         @map("pen_name")
+  email         String?
+  phone         String?
   // Numéro WhatsApp de la contrepartie (auteur/prestataire) — sert à lui
   // adresser les notifications de suivi (demande opérateur du 02/08/2026).
-  whatsapp  String?
-  address   String?
-  bio       String?
-  taxStatus Json?           @map("tax_status")
+  whatsapp      String?
+  address       String?
+  bio           String?
+  taxStatus     Json?           @map("tax_status")
   // Identité civile de l'auteur (reprise en tête du contrat d'édition) —
   // collectée à l'enregistrement du manuscrit, complétable ensuite. Champs
   // facultatifs : le contrat imprime des pointillés tant qu'ils sont vides.
-  birthDate     DateTime? @map("birth_date")
-  birthPlace    String?   @map("birth_place")
+  birthDate     DateTime?       @map("birth_date")
+  birthPlace    String?         @map("birth_place")
   nationality   String?
   profession    String?
-  idNumber      String?   @map("id_number")
-  idIssuedDate  DateTime? @map("id_issued_date")
-  idIssuedPlace String?   @map("id_issued_place")
+  idNumber      String?         @map("id_number")
+  idIssuedDate  DateTime?       @map("id_issued_date")
+  idIssuedPlace String?         @map("id_issued_place")
   // Fiche d'enregistrement enrichie (grande maison d'édition) : type de pièce
   // d'identité, coordonnées de résidence structurées, autre moyen de contact,
   // NIU (identifiant fiscal). Tous facultatifs.
-  idType       String? @map("id_type")
-  country      String?
-  city         String?
-  quartier     String?
-  postalBox    String? @map("postal_box")
-  otherContact String? @map("other_contact")
-  niu          String?
+  idType        String?         @map("id_type")
+  country       String?
+  city          String?
+  quartier      String?
+  postalBox     String?         @map("postal_box")
+  otherContact  String?         @map("other_contact")
+  niu           String?
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -1632,38 +1651,38 @@ enum EvaluationFeeChoice {
 // du devis (Finance en est notifiée), le remettre à plus tard, ou passer l'étape
 // (avec justification). Le travail éditorial n'est jamais empêché.
 enum QuoteDecision {
-  pending   // aucune décision prise
+  pending // aucune décision prise
   requested // établissement demandé à la Finance
-  deferred  // « plus tard »
-  skipped   // étape passée (justifiée)
+  deferred // « plus tard »
+  skipped // étape passée (justifiée)
 }
 
 // Entité centrale (modèle §4.2) : le « manuscrit » et le « projet éditorial »
 // sont une même ligne dont le cycle de vie est porté par le statut.
 model Manuscript {
-  id               String           @id @default(uuid())
-  manuscriptNumber String           @unique @map("manuscript_number")
-  title            String
-  subtitle         String?
-  collectionId     String?          @map("collection_id")
-  collection       Collection?      @relation(fields: [collectionId], references: [id])
-  genreId          String?          @map("genre_id")
-  genre            Genre?           @relation(fields: [genreId], references: [id])
-  language         String
-  estimatedPages   Int?             @map("estimated_pages")
+  id                String            @id @default(uuid())
+  manuscriptNumber  String            @unique @map("manuscript_number")
+  title             String
+  subtitle          String?
+  collectionId      String?           @map("collection_id")
+  collection        Collection?       @relation(fields: [collectionId], references: [id])
+  genreId           String?           @map("genre_id")
+  genre             Genre?            @relation(fields: [genreId], references: [id])
+  language          String
+  estimatedPages    Int?              @map("estimated_pages")
   // Segment éditorial (renseigné par l'éditorial) : sépare le chiffre d'affaires
   // « livre scolaire & parascolaire » du « livre général / littérature ».
   // Null = non classé (compté en « général » en attendant le classement).
-  editorialSegment EditorialSegment? @map("editorial_segment")
-  summary          String?
-  keywords         String[]         @default([])
-  origin           ManuscriptOrigin @default(soumission)
+  editorialSegment  EditorialSegment? @map("editorial_segment")
+  summary           String?
+  keywords          String[]          @default([])
+  origin            ManuscriptOrigin  @default(soumission)
   // Prise en charge & jalon devis (non bloquant) — reconfiguration Finance.
-  fundingMode       FundingMode   @default(publisher) @map("funding_mode")
-  quoteDecision     QuoteDecision @default(pending) @map("quote_decision")
-  quoteDecisionNote String?       @map("quote_decision_note")
-  quoteDecisionAt   DateTime?     @map("quote_decision_at")
-  quoteDecisionBy   String?       @map("quote_decision_by")
+  fundingMode       FundingMode       @default(publisher) @map("funding_mode")
+  quoteDecision     QuoteDecision     @default(pending) @map("quote_decision")
+  quoteDecisionNote String?           @map("quote_decision_note")
+  quoteDecisionAt   DateTime?         @map("quote_decision_at")
+  quoteDecisionBy   String?           @map("quote_decision_by")
 
   // Fiche d'enregistrement enrichie : choix « frais de dépôt pour évaluation »
   // (à payer / sans frais), coché par l'éditorial à l'enregistrement ; et délai
@@ -1704,30 +1723,30 @@ model Manuscript {
   deletedAt DateTime? @map("deleted_at")
   deletedBy String?   @map("deleted_by")
 
-  workContributors   WorkContributor[]
-  steps              ManuscriptStep[]
-  stepTransitions    StepTransition[]
-  readingAssignments ReadingAssignment[]
-  editorialDecisions EditorialDecision[]
-  contracts          Contract[]
-  tasks              Task[]
-  productionSpecs    ProductionSpecs?
-  imageAssets        ImageAsset[]
-  checklists         Checklist[]
-  isbns              Isbn[]
-  legalDeposits      LegalDeposit[]
-  workMetadata       WorkMetadata?
-  metadataExports    MetadataExport[]
-  batRecords         BatRecord[]
-  printQuotes        PrintQuote[]
-  expenses           Expense[]
-  costEntries        CostEntry[]
-  budgets            Budget[]
-  editorialQuotes    EditorialQuote[]
-  sitePublication    SitePublication?
-  authorFiles        AuthorFile[]
+  workContributors     WorkContributor[]
+  steps                ManuscriptStep[]
+  stepTransitions      StepTransition[]
+  readingAssignments   ReadingAssignment[]
+  editorialDecisions   EditorialDecision[]
+  contracts            Contract[]
+  tasks                Task[]
+  productionSpecs      ProductionSpecs?
+  imageAssets          ImageAsset[]
+  checklists           Checklist[]
+  isbns                Isbn[]
+  legalDeposits        LegalDeposit[]
+  workMetadata         WorkMetadata?
+  metadataExports      MetadataExport[]
+  batRecords           BatRecord[]
+  printQuotes          PrintQuote[]
+  expenses             Expense[]
+  costEntries          CostEntry[]
+  budgets              Budget[]
+  editorialQuotes      EditorialQuote[]
+  sitePublication      SitePublication?
+  authorFiles          AuthorFile[]
   schoolRoyaltyEntries SchoolRoyaltyEntry[]
-  financeRequests    ManuscriptFinanceRequest[]
+  financeRequests      ManuscriptFinanceRequest[]
 
   @@map("manuscripts")
 }
@@ -2066,7 +2085,7 @@ model Contract {
 // Nature d'un document rattaché à un contrat.
 enum ContractDocumentKind {
   signed_scan // contrat physique signé, numérisé (PDF ou images)
-  annexe      // pièce jointe / annexe complémentaire
+  annexe // pièce jointe / annexe complémentaire
 }
 
 // Pièces numérisées d'un contrat (Ch. 9 §9.9 — conservation des originaux
@@ -2448,17 +2467,17 @@ model Isbn {
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  stockItems      StockItem[]
-  stockMovements  StockMovement[]
-  inventoryLines  InventoryLine[]
-  priceList       PriceList[]
-  salesOrderLines SalesOrderLine[]
-  deliveryLines   DeliveryLine[]
-  consignments    Consignment[]
-  posSales        PosSale[]
-  returnLines     ReturnLine[]
-  invoiceLines    InvoiceLine[]
-  billingOrderLines  BillingOrderLine[]
+  stockItems           StockItem[]
+  stockMovements       StockMovement[]
+  inventoryLines       InventoryLine[]
+  priceList            PriceList[]
+  salesOrderLines      SalesOrderLine[]
+  deliveryLines        DeliveryLine[]
+  consignments         Consignment[]
+  posSales             PosSale[]
+  returnLines          ReturnLine[]
+  invoiceLines         InvoiceLine[]
+  billingOrderLines    BillingOrderLine[]
   schoolRoyaltyEntries SchoolRoyaltyEntry[]
 
   @@map("isbns")
@@ -3191,27 +3210,27 @@ enum PosPaymentMethod {
 // Ch. 17 §17.7 : vente au comptoir et sur salons — chaque encaissement est
 // transmis au module Finance (Lot 5, non encore implémenté).
 model PosSale {
-  id            String           @id @default(uuid())
+  id                 String           @id @default(uuid())
   // isbnId null = vente « hors catalogue » (livre non encore référencé) : les
   // infos du livre sont alors saisies en texte libre ci-dessous, et la vente ne
   // touche pas au stock ni aux droits d'auteur tant qu'elle n'est pas rattachée.
-  isbnId        String?          @map("isbn_id")
-  isbn          Isbn?            @relation(fields: [isbnId], references: [id])
-  offCatalogueTitle  String?     @map("off_catalogue_title")
-  offCatalogueAuthor String?     @map("off_catalogue_author")
-  offCatalogueIsbn   String?     @map("off_catalogue_isbn")
-  quantity      Int
-  unitPrice     Decimal          @map("unit_price") @db.Decimal(10, 2)
-  paymentMethod PosPaymentMethod @map("payment_method")
-  eventLabel    String?          @map("event_label")
+  isbnId             String?          @map("isbn_id")
+  isbn               Isbn?            @relation(fields: [isbnId], references: [id])
+  offCatalogueTitle  String?          @map("off_catalogue_title")
+  offCatalogueAuthor String?          @map("off_catalogue_author")
+  offCatalogueIsbn   String?          @map("off_catalogue_isbn")
+  quantity           Int
+  unitPrice          Decimal          @map("unit_price") @db.Decimal(10, 2)
+  paymentMethod      PosPaymentMethod @map("payment_method")
+  eventLabel         String?          @map("event_label")
   // Client optionnel (au choix du commercial, selon la qualité du client).
-  customerId    String?          @map("customer_id")
-  customer      Customer?        @relation(fields: [customerId], references: [id])
+  customerId         String?          @map("customer_id")
+  customer           Customer?        @relation(fields: [customerId], references: [id])
   // Point de vente (dimension structurée, pour les rapports par point de vente).
-  pointOfSaleId String?          @map("point_of_sale_id")
-  pointOfSale   PointOfSale?     @relation(fields: [pointOfSaleId], references: [id])
-  soldBy        String?          @map("sold_by")
-  soldAt        DateTime         @default(now()) @map("sold_at")
+  pointOfSaleId      String?          @map("point_of_sale_id")
+  pointOfSale        PointOfSale?     @relation(fields: [pointOfSaleId], references: [id])
+  soldBy             String?          @map("sold_by")
+  soldAt             DateTime         @default(now()) @map("sold_at")
 
   @@map("pos_sales")
 }
@@ -3545,11 +3564,11 @@ model Invoice {
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
 
-  lines              InvoiceLine[]
-  paymentAllocations PaymentAllocation[]
-  editorialQuote     EditorialQuote?
-  installments       Installment[]
-  billingOrder       BillingOrder?
+  lines                InvoiceLine[]
+  paymentAllocations   PaymentAllocation[]
+  editorialQuote       EditorialQuote?
+  installments         Installment[]
+  billingOrder         BillingOrder?
   schoolRoyaltyEntries SchoolRoyaltyEntry[]
 
   @@map("invoices")
@@ -3672,21 +3691,21 @@ model EditorialQuoteLine {
 }
 
 model InvoiceLine {
-  id          String  @id @default(uuid())
-  invoiceId   String  @map("invoice_id")
-  invoice     Invoice @relation(fields: [invoiceId], references: [id])
-  isbnId      String? @map("isbn_id")
-  isbn        Isbn?   @relation(fields: [isbnId], references: [id])
-  description String
-  quantity    Int
-  unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
+  id              String   @id @default(uuid())
+  invoiceId       String   @map("invoice_id")
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id])
+  isbnId          String?  @map("isbn_id")
+  isbn            Isbn?    @relation(fields: [isbnId], references: [id])
+  description     String
+  quantity        Int
+  unitPrice       Decimal  @map("unit_price") @db.Decimal(10, 2)
   // Prix public HT unitaire AVANT remise commerciale (Ch. 9 §9.5) : sert
   // d'assiette aux droits d'auteur des contrats « prix public HT », pour qu'une
   // remise consentie au libraire ne réduise pas la rémunération de l'auteur.
   // Null = pas de remise (assiette = unitPrice).
   unitPublicPrice Decimal? @map("unit_public_price") @db.Decimal(10, 2)
-  taxRate     Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
-  lineTotal   Decimal @map("line_total") @db.Decimal(12, 2)
+  taxRate         Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  lineTotal       Decimal  @map("line_total") @db.Decimal(12, 2)
 
   @@map("invoice_lines")
 }

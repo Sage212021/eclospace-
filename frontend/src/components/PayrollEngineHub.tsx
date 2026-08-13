@@ -5,14 +5,19 @@ import {
   getPayrollRateSet,
   getMonthlyAnomalies,
   listAuditLog,
+  listPayrollFormulas,
+  testPayrollFormula,
+  updatePayrollFormula,
   type Employee,
   type PayrollMonth,
   type PayrollJournal,
   type PayrollRateSet,
   type PayrollAnomalies,
+  type PayrollFormula,
   type AuditEntry,
 } from "../api/client";
 import { Card } from "./Card";
+import { Button } from "./Button";
 import { GuidanceNote } from "./GuidanceNote";
 import { PayrollMonthlySection } from "./PayrollMonthlySection";
 import { PayrollProfilesSection } from "./PayrollProfilesSection";
@@ -247,11 +252,11 @@ function FormulasCard() {
     </tr>
   );
   return (
-    <Card title="Paramètres et formules de calcul" icon={<span aria-hidden>🧮</span>} subtitle="Règles du moteur (lecture) — édition paramétrable prévue" collapsible>
+    <Card title="Paramètres et formules de calcul" icon={<span aria-hidden>🧮</span>} subtitle="Règles du moteur (lecture) — modification dans « Modifier les formules de calcul »" collapsible>
       <GuidanceNote title="Règles de calcul du moteur">
         Ces formules sont celles réellement appliquées par le moteur. Les taux ci-dessous proviennent du barème en vigueur
-        (modifiable dans « Paramètres »). L'édition libre des formules elles-mêmes, avec historique des versions, est prévue
-        au lot suivant.
+        (modifiable dans « Paramètres »). Pour <b>changer une formule</b> (cotisations, salaire brut, prime d'ancienneté),
+        rendez-vous dans la rubrique « Modifier les formules de calcul » ci-dessous.
       </GuidanceNote>
       {!rs && <p style={{ fontSize: 13, color: "var(--alert, #C4661F)" }}>Aucun barème en vigueur pour ce mois : renseignez-le dans « Paramètres ».</p>}
       {rs && (
@@ -283,6 +288,134 @@ function FormulasCard() {
           </table>
         </div>
       )}
+    </Card>
+  );
+}
+
+// ── Modifier les formules de calcul (RH, avec motif) ────────────────────────
+function FormulaEditorRow({ f, canManage, onSaved }: { f: PayrollFormula; canManage: boolean; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [expr, setExpr] = useState(f.expression);
+  const [reason, setReason] = useState("");
+  const [test, setTest] = useState<{ ok: boolean; default_result: number; result?: number; error?: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const changed = expr.trim() !== f.expression.trim();
+  const canSave = canManage && changed && reason.trim().length >= 3 && test?.ok === true;
+
+  const runTest = async () => {
+    setMsg(null);
+    try {
+      const r = await testPayrollFormula(f.code, expr.trim());
+      setTest(r);
+    } catch {
+      setTest({ ok: false, default_result: 0, error: "Impossible de tester la formule." });
+    }
+  };
+  const save = async () => {
+    if (!canSave) return;
+    setBusy(true); setMsg(null);
+    try {
+      await updatePayrollFormula(f.code, { custom: true, expression: expr.trim(), change_reason: reason.trim() });
+      setMsg("Formule enregistrée. Elle s'applique désormais à tous les bulletins.");
+      setReason(""); setTest(null); setOpen(false);
+      onSaved();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Échec de l'enregistrement.");
+    } finally { setBusy(false); }
+  };
+  const reset = async () => {
+    if (!canManage || reason.trim().length < 3) { setMsg("Indiquez d'abord un motif (au moins 3 caractères)."); return; }
+    setBusy(true); setMsg(null);
+    try {
+      await updatePayrollFormula(f.code, { custom: false, change_reason: reason.trim() });
+      setMsg("Formule réinitialisée au calcul par défaut.");
+      setReason(""); setTest(null); setOpen(false);
+      onSaved();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Échec de la réinitialisation.");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ borderTop: "1px solid var(--line)", padding: "10px 0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 700 }}>
+          {f.label}
+          {f.custom
+            ? <span style={{ marginLeft: 8, fontSize: 11, color: "var(--eclosion, #C89A1B)", fontWeight: 700 }}>● personnalisée</span>
+            : <span style={{ marginLeft: 8, fontSize: 11, color: "var(--muted)" }}>par défaut</span>}
+        </div>
+        {canManage && (
+          <Button variant="edit" size="sm" type="button" onClick={() => { setOpen((o) => !o); setExpr(f.expression); setReason(""); setTest(null); setMsg(null); }}>
+            {open ? "Fermer" : "Modifier"}
+          </Button>
+        )}
+      </div>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>{f.description}</div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 12.5, marginTop: 4 }}>{f.expression}</div>
+
+      {open && (
+        <div style={{ marginTop: 8, background: "var(--surface-2, #F0F2F6)", borderRadius: 8, padding: 10 }}>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>
+            Variables disponibles : <span style={{ fontFamily: "var(--font-mono)" }}>{f.variables.join(", ")}</span> · fonctions : <span style={{ fontFamily: "var(--font-mono)" }}>min, max, round, floor, ceil, abs</span>
+          </div>
+          <textarea
+            value={expr}
+            onChange={(e) => { setExpr(e.target.value); setTest(null); }}
+            rows={2}
+            style={{ width: "100%", fontFamily: "var(--font-mono)", fontSize: 13, padding: 8, borderRadius: 6, border: "1px solid var(--line)", boxSizing: "border-box" }}
+          />
+          <div style={{ fontSize: 12, marginTop: 4 }}>
+            Défaut : <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{f.default_expression}</span>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+            <Button variant="view" size="sm" type="button" onClick={runTest} disabled={!expr.trim()}>Tester</Button>
+            {test && (test.ok
+              ? <span style={{ fontSize: 12.5, fontFamily: "var(--font-mono)" }}>Sur un exemple : <b>{Math.round(test.default_result).toLocaleString("fr-FR")}</b> → <b style={{ color: "var(--eclosion, #C89A1B)" }}>{Math.round(test.result ?? 0).toLocaleString("fr-FR")}</b> FCFA</span>
+              : <span style={{ fontSize: 12.5, color: "var(--critical, #C24B3A)" }}>{test.error}</span>)}
+          </div>
+          <label style={{ display: "block", fontSize: 12, marginTop: 8, fontWeight: 600 }}>
+            Motif de la modification (obligatoire)
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="ex. : révision du taux CFC (loi de finances)"
+              style={{ display: "block", width: "100%", marginTop: 3, padding: 7, borderRadius: 6, border: "1px solid var(--line)", boxSizing: "border-box", fontSize: 13 }}
+            />
+          </label>
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            <Button variant="add" size="sm" type="button" onClick={save} disabled={!canSave || busy}>Enregistrer la formule</Button>
+            {f.custom && <Button variant="subtle" size="sm" type="button" onClick={reset} disabled={busy}>Réinitialiser au défaut</Button>}
+          </div>
+          {!canSave && changed && (
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>
+              Pour enregistrer : testez la formule (résultat valide) et saisissez un motif d'au moins 3 caractères.
+            </div>
+          )}
+        </div>
+      )}
+      {msg && <div style={{ fontSize: 12.5, marginTop: 6, color: msg.startsWith("Échec") || msg.startsWith("Indiquez") ? "var(--critical, #C24B3A)" : "var(--eclosion, #C89A1B)" }}>{msg}</div>}
+    </div>
+  );
+}
+
+function FormulaEditorCard({ canManage }: { canManage: boolean }) {
+  const [formulas, setFormulas] = useState<PayrollFormula[] | null>(null);
+  const load = () => { listPayrollFormulas().then(setFormulas).catch(() => setFormulas([])); };
+  useEffect(load, []);
+  return (
+    <Card title="Modifier les formules de calcul" icon={<span aria-hidden>🛠️</span>} subtitle="Formules des cotisations, du brut et de la prime d'ancienneté — modifiables avec motif" collapsible>
+      <GuidanceNote title="Attention — ces formules pilotent les paies réelles">
+        Une formule modifiée s'applique <b>à tous les bulletins</b> recalculés. Testez toujours avant d'enregistrer, et
+        indiquez un <b>motif</b> (tracé dans l'historique). En cas de doute, laissez la formule « par défaut ». L'IRPP et la
+        Taxe communale/RAV ne sont pas ici : ce sont des barèmes par tranches, réglés dans « Paramètres ».
+      </GuidanceNote>
+      {!canManage && <p style={{ fontSize: 13, color: "var(--muted)" }}>Vous pouvez consulter les formules ; leur modification requiert l'habilitation « administration de la paie ».</p>}
+      {formulas == null && <p style={{ fontSize: 13, color: "var(--muted)" }}>Chargement…</p>}
+      {formulas && formulas.length === 0 && <p style={{ fontSize: 13, color: "var(--muted)" }}>Aucune formule paramétrable.</p>}
+      {formulas && formulas.map((f) => <FormulaEditorRow key={f.code} f={f} canManage={canManage} onSaved={load} />)}
     </Card>
   );
 }
@@ -536,6 +669,7 @@ export function PayrollEngineHub({
         <DeclarationsCard kind="cnps" />
         <DeclarationsCard kind="fiscal" />
         <FormulasCard />
+        <FormulaEditorCard canManage={canManagePayroll} />
         <HistoryCard />
         <AnomaliesCard />
       </div>

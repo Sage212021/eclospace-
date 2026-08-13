@@ -2,6 +2,9 @@
 // Réimplémentation FIDÈLE des formules du « Livre de paie » du classeur
 // (docs/paie/), législation camerounaise. Montants en FCFA, arrondis à l'unité.
 
+import { evalLeaf, type FormulaOverlay } from "./payrollFormula.js";
+export type { FormulaOverlay } from "./payrollFormula.js";
+
 export interface PayrollRates {
   vidSal: number;
   vidPat: number;
@@ -71,17 +74,26 @@ function irppAnnuel(baseAnnuelle: number, i: PayrollRates["irpp"]): number {
   return p1 * t1 + (p2 - p1) * t2 + (p3 - p2) * t3 + (baseAnnuelle - p3) * t4;
 }
 
-export function computePayslip(input: PayslipInput, rates: PayrollRates): Payslip {
+// `formulas` (optionnel) : surcharges de formules définies par le RH (code →
+// expression). En son absence, comportement historique CODÉ EN DUR, à l'octet
+// près (aucun des tests/appels existants n'est modifié). Quand une surcharge
+// existe pour un élément, sa formule remplace le calcul par défaut ; en cas
+// d'erreur d'évaluation on retombe sur le défaut (jamais de paie cassée).
+export function computePayslip(input: PayslipInput, rates: PayrollRates, formulas?: FormulaOverlay): Payslip {
   // F — prime d'ancienneté.
   let prime = 0;
   if (input.applySeniority && input.seniorityYears >= input.seniorityThreshold) {
     const rate = input.seniorityRate && input.seniorityRate > 0 ? input.seniorityRate : rates.ancDefPct;
-    prime = r(input.base * rate);
+    prime = evalLeaf("prime_anciennete", formulas, r(input.base * rate), {
+      base: input.base, complements: input.complements, taux_anciennete: rate,
+    });
   }
 
   // H — salaire brut. La retenue d'absence injustifiée réduit le brut (avant
   // impôt), comme dans le modèle moteur.
-  const brut = Math.max(input.base + input.complements + prime - input.retenueAbsence, 0);
+  const brut = evalLeaf("salaire_brut", formulas, Math.max(input.base + input.complements + prime - input.retenueAbsence, 0), {
+    base: input.base, complements: input.complements, prime_anciennete: prime, retenue_absence: input.retenueAbsence,
+  });
 
   // I — assiette fiscale (base fiscale + prime − retenue absence).
   const assietteFiscale = Math.max(input.fiscalBase + prime - input.retenueAbsence, 0);
@@ -90,15 +102,15 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
   const assietteCnps = Math.min(r(assietteFiscale * rates.coefAssiette), rates.cnpsCeiling);
 
   // K-N — cotisations CNPS sur l'assiette plafonnée.
-  const pvidSal = r(assietteCnps * rates.vidSal);
-  const pvidPat = r(assietteCnps * rates.vidPat);
-  const pf = r(assietteCnps * rates.pf);
-  const at = r(assietteCnps * rates.at);
+  const pvidSal = evalLeaf("pvid_salarie", formulas, r(assietteCnps * rates.vidSal), { assiette_cnps: assietteCnps, taux_pvid_sal: rates.vidSal });
+  const pvidPat = evalLeaf("pvid_patronal", formulas, r(assietteCnps * rates.vidPat), { assiette_cnps: assietteCnps, taux_pvid_pat: rates.vidPat });
+  const pf = evalLeaf("prestations_familiales", formulas, r(assietteCnps * rates.pf), { assiette_cnps: assietteCnps, taux_pf: rates.pf });
+  const at = evalLeaf("accidents_travail", formulas, r(assietteCnps * rates.at), { assiette_cnps: assietteCnps, taux_at: rates.at });
 
   // O-Q — CFC / FNE sur l'assiette fiscale.
-  const cfcSal = r(assietteFiscale * rates.cfcSal);
-  const cfcPat = r(assietteFiscale * rates.cfcPat);
-  const fne = r(assietteFiscale * rates.fne);
+  const cfcSal = evalLeaf("cfc_salarie", formulas, r(assietteFiscale * rates.cfcSal), { assiette_fiscale: assietteFiscale, taux_cfc_sal: rates.cfcSal });
+  const cfcPat = evalLeaf("cfc_patronal", formulas, r(assietteFiscale * rates.cfcPat), { assiette_fiscale: assietteFiscale, taux_cfc_pat: rates.cfcPat });
+  const fne = evalLeaf("fne", formulas, r(assietteFiscale * rates.fne), { assiette_fiscale: assietteFiscale, taux_fne: rates.fne });
 
   // R-S — taxe communale / RAV par tranches de brut.
   const tc = brut <= rates.tcRav.seuil1 ? rates.tcRav.tc1 : brut <= rates.tcRav.seuil2 ? rates.tcRav.tc2 : rates.tcRav.tc3;

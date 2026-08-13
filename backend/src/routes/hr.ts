@@ -623,6 +623,42 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     return reply.send({ deleted: true, name: `${emp.firstName} ${emp.lastName}` });
   });
 
+  // Corbeille RH : fiches supprimées (logiquement). Permet de VÉRIFIER ce qui a été
+  // supprimé et de RESTAURER une fiche supprimée par erreur (ex. mauvais doublon).
+  fastify.get("/api/v1/employees/deleted", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const rows = await prisma.employee.findMany({
+      where: { deletedAt: { not: null } },
+      select: {
+        id: true, firstName: true, lastName: true, deletedAt: true, deletedBy: true,
+        department: { select: { name: true } },
+        payrollProfile: { select: { matricule: true } },
+        _count: { select: { payrollMonthlyLines: true } },
+      },
+      orderBy: { deletedAt: "desc" },
+      take: 200,
+    });
+    return reply.send({
+      deleted: rows.map((e) => ({
+        employee_id: e.id,
+        name: `${e.firstName} ${e.lastName}`,
+        matricule: e.payrollProfile?.matricule ?? null,
+        department: e.department?.name ?? null,
+        deleted_at: e.deletedAt,
+        has_payslips: e._count.payrollMonthlyLines > 0,
+      })),
+    });
+  });
+
+  // Restauration d'une fiche supprimée (annulation de la suppression logique).
+  fastify.post("/api/v1/employees/:id/restore", { preHandler: requirePermission("rh", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const emp = await prisma.employee.findFirst({ where: { id, deletedAt: { not: null } }, select: { id: true, firstName: true, lastName: true } });
+    if (!emp) return reply.code(404).send({ code: "not_found", message: "Fiche supprimée introuvable (déjà restaurée ?)." });
+    await prisma.employee.update({ where: { id }, data: { deletedAt: null, deletedBy: null } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "employee", entityId: id, newValues: { restored: true, name: `${emp.firstName} ${emp.lastName}` }, ipAddress: request.ip });
+    return reply.send({ restored: true, name: `${emp.firstName} ${emp.lastName}` });
+  });
+
   // ─── Recrutement : postes à pourvoir & candidatures (module amont RH) ───────
   // Un poste ouvert reçoit des candidatures ; chaque candidature suit le circuit
   // reçue → entretien → retenue / refusée. Le poste se clôt (pourvu / annulé).

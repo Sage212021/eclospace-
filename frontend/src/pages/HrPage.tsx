@@ -48,6 +48,7 @@ import { IconAdmin } from "../components/icons";
 import { ErpConnectionsSection } from "../components/ErpConnectionsSection";
 import { HrDashboardSection } from "../components/HrDashboardSection";
 import { HrDuplicatesSection } from "../components/HrDuplicatesSection";
+import { HrTrashSection } from "../components/HrTrashSection";
 import { ActivityClosureSection } from "../components/ActivityClosureSection";
 import { useI18n } from "../i18n";
 import { PayrollEngineHub } from "../components/PayrollEngineHub";
@@ -368,6 +369,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       {/* Doublons d'employés : détection + suppression logique guidée (le RH
           choisit la fiche à conserver). Suppression réservée à l'administration RH. */}
       <HrDuplicatesSection canDelete={canAdminister} collapsible defaultOpen />
+
+      {/* Corbeille : restaurer une fiche supprimée par erreur (ex. mauvais doublon). */}
+      {canAdminister && <HrTrashSection canRestore={canAdminister} collapsible />}
 
       {/* Le module « Présences & Temps de travail » (pointage par connexion,
           tableau de bord de présence, règles de retenues, consolidation paie) a

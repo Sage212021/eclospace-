@@ -71,4 +71,22 @@ describe("doublons d'employés", () => {
     const del = await app.inject({ method: "DELETE", url: "/api/v1/employees/00000000-0000-0000-0000-000000000000", headers: { cookie } });
     expect(del.statusCode).toBe(404);
   });
+
+  it("une fiche supprimée apparaît dans la corbeille et peut être RESTAURÉE", async () => {
+    // b a été supprimé au test précédent : il doit être dans la corbeille.
+    const trash = (await app.inject({ method: "GET", url: "/api/v1/employees/deleted", headers: { cookie } })).json().deleted as Array<{ employee_id: string }>;
+    expect(trash.some((t) => t.employee_id === b)).toBe(true);
+
+    // Restauration.
+    const res = await app.inject({ method: "POST", url: `/api/v1/employees/${b}/restore`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().restored).toBe(true);
+
+    const row = await prisma.employee.findUnique({ where: { id: b } });
+    expect(row?.deletedAt).toBeNull();
+
+    // Restaurer une fiche déjà active → 404.
+    const again = await app.inject({ method: "POST", url: `/api/v1/employees/${b}/restore`, headers: { cookie } });
+    expect(again.statusCode).toBe(404);
+  });
 });

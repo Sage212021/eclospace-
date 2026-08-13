@@ -2717,6 +2717,22 @@ export function deleteEmployee(id: string) {
   return request<{ deleted: true; name: string }>(`/api/v1/employees/${id}`, { method: "DELETE" });
 }
 
+// Corbeille RH : fiches supprimées (logiquement) + restauration.
+export interface DeletedEmployee {
+  employee_id: string;
+  name: string;
+  matricule: string | null;
+  department: string | null;
+  deleted_at: string;
+  has_payslips: boolean;
+}
+export function getDeletedEmployees() {
+  return request<{ deleted: DeletedEmployee[] }>("/api/v1/employees/deleted");
+}
+export function restoreEmployee(id: string) {
+  return request<{ restored: true; name: string }>(`/api/v1/employees/${id}/restore`, { method: "POST" });
+}
+
 // Contrats de travail & avenants (refonte RH — Étape 3).
 export interface HrContractAmendment {
   id: string;

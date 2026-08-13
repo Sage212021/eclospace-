@@ -3953,6 +3953,8 @@ export interface PayrollMonth {
   rates?: PayslipRates;
   lines?: PayrollMonthLine[];
   totals?: { brut: number; net: number; cout: number };
+  // Employés sans fiche paie (exclus de la grille tant que leur fiche n'existe pas).
+  missing_profiles?: { employee_id: string; name: string; department: string | null }[];
 }
 export function preparePayrollMonth(period: string) {
   return request<{ period: string; status: PayrollMonthStatus }>(`/api/v1/payroll/monthly/${period}/prepare`, { method: "POST" });

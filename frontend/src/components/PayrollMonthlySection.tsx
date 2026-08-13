@@ -389,6 +389,18 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
           </div>
           {editable && <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>Saisissez les montants (FCFA) : chaque case s'enregistre en la quittant, et le net se met à jour. Vous pouvez aussi cliquer <b>« Enregistrer la saisie »</b> pour tout enregistrer d'un coup avant de soumettre.</p>}
 
+          {/* Employés sans fiche paie : ils n'apparaissent PAS dans la grille (le
+              calcul exige une fiche). On les liste ici pour que le RH sache qui
+              reste à compléter — sinon ils semblent avoir disparu. */}
+          {(month.missing_profiles?.length ?? 0) > 0 && (
+            <div style={{ marginTop: 10, background: "#fdeede", color: "var(--alert, #C4661F)", border: "1px solid var(--alert, #C4661F)", borderRadius: 8, padding: "8px 12px", fontSize: 12.5 }}>
+              <b>{month.missing_profiles!.length} salarié(s) sans fiche paie</b> — non inclus dans la paie tant que leur fiche n'est pas créée. Créez-la dans <b>« Fiches paie &amp; bulletin (par employé) »</b> (choisir l'employé → renseigner la rémunération → Enregistrer) : ils apparaîtront ensuite ici.
+              <div style={{ marginTop: 4, color: "var(--ink)" }}>
+                {month.missing_profiles!.map((m) => m.name + (m.department ? ` (${m.department})` : "")).join(" · ")}
+              </div>
+            </div>
+          )}
+
           <div style={{ overflowX: "auto", marginTop: 10 }}>
             <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 900 }}>
               <thead>

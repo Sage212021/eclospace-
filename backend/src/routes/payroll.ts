@@ -730,7 +730,16 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         (acc, r) => ({ brut: acc.brut + r.salaire_brut, net: acc.net + r.net_a_payer, cout: acc.cout + r.cout_employeur }),
         { brut: 0, net: 0, cout: 0 },
       );
-      return reply.send({ exists: true, period, status: run.status, validated_at: run.validatedAt, submitted_at: run.submittedAt, return_reason: run.returnReason, returned_at: run.returnedAt, rate_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10), rates: rateDisplay(rateSet as unknown as Record<string, unknown>), lines: rows, totals });
+      // Employés SANS fiche paie : ils n'apparaissent pas dans la grille (le calcul
+      // exige une fiche). On les remonte explicitement pour que le RH sache QUI
+      // reste à compléter — sinon ils semblent « disparus ».
+      const missing = await prisma.employee.findMany({
+        where: { deletedAt: null, payrollProfile: { is: null } },
+        select: { id: true, firstName: true, lastName: true, department: { select: { name: true } } },
+        orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      });
+      const missingProfiles = missing.map((e) => ({ employee_id: e.id, name: `${e.firstName} ${e.lastName}`, department: e.department?.name ?? null }));
+      return reply.send({ exists: true, period, status: run.status, validated_at: run.validatedAt, submitted_at: run.submittedAt, return_reason: run.returnReason, returned_at: run.returnedAt, rate_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10), rates: rateDisplay(rateSet as unknown as Record<string, unknown>), lines: rows, totals, missing_profiles: missingProfiles });
     },
   );
 

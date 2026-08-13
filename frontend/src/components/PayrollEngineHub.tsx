@@ -77,6 +77,37 @@ function GuideCard() {
         {step(10, "Corriger APRÈS verrouillage (exceptionnel)", "Bulletins de paie",
           <>Erreur découverte après validation ? « Demander une réouverture » : précisez l'élément, l'ancienne valeur, la correction et le motif. Le DG autorise → le mois repasse en brouillon et refait le circuit (étapes 3 à 6).</>)}
       </ol>
+
+      <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Où se modifie chaque donnée du bulletin ?</div>
+        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>
+          Les données du bulletin sont réparties par nature. Le Responsable RH a accès à toutes ces modifications.
+        </p>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 560 }}>
+            <thead><tr style={{ color: "var(--muted)", textAlign: "left", fontSize: 11.5 }}>
+              <th style={{ padding: "5px 8px" }}>Donnée</th><th style={{ padding: "5px 8px" }}>Où la modifier</th>
+            </tr></thead>
+            <tbody>
+              {[
+                ["Nom, prénom, poste, département, date d'embauche, date de naissance, situation familiale, nombre d'enfants, téléphone, congés", "Dossiers collaborateurs → bouton « Modifier la fiche »"],
+                ["Salaire de base (confidentiel — celui qui fait foi)", "Dossiers collaborateurs → bouton « Modifier conf. »"],
+                ["Matricule, N° CNPS, NIU, brut contractuel, catégorie, mode de paiement, N° de compte", "Moteur de paie → rubrique « Fiches paie & bulletin »"],
+                ["Primes, heures sup, absences, retards, avances, prêts, sanctions, lignes libres, modifier une ligne (par MOIS)", "Moteur de paie → « Bulletins de paie » (grille + bouton « ＋ lignes »)"],
+                ["Taux et formules de calcul (CNPS, IRPP, CFC…)", "Moteur de paie → « Paramètres » et « Paramètres et formules de calcul »"],
+              ].map(([d, w], i) => (
+                <tr key={i} style={{ borderTop: "1px solid var(--line)" }}>
+                  <td style={{ padding: "5px 8px" }}>{d}</td>
+                  <td style={{ padding: "5px 8px", color: "var(--muted)" }}>{w}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
+          Les 3 premières lignes sont des données <b>permanentes</b> du salarié ; les éléments variables (4ᵉ ligne) se saisissent chaque mois sur la grille.
+        </p>
+      </div>
     </Card>
   );
 }

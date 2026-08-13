@@ -3738,6 +3738,27 @@ export function updatePayrollFormula(code: string, body: { custom: boolean; expr
   return request<PayrollFormula>(`/api/v1/payroll/formulas/${code}`, { method: "PUT", body: JSON.stringify(body) });
 }
 
+// Relevé des connexions ERP (outil indicatif d'arbitrage RH, sans impact paie).
+export interface ErpConnectionDay {
+  date: string;
+  weekday: number;
+  has_connection: boolean;
+  first_login: string | null;
+  last_logout: string | null;
+  nb_logins: number;
+  nb_logouts: number;
+}
+export interface ErpConnectionRecord {
+  employee: { id: string; name: string; has_erp_account: boolean };
+  month: string;
+  days: ErpConnectionDay[];
+  recap: { days_in_month: number; days_with_connection: number; total_logins: number; total_logouts: number };
+  notice: string;
+}
+export function getErpConnections(employeeId: string, month: string) {
+  return request<ErpConnectionRecord>(`/api/v1/hr/erp-connections?employee_id=${employeeId}&month=${month}`);
+}
+
 // i18n : langue d'interface mémorisée sur le profil (fr|en).
 export function setMyLanguage(language: "fr" | "en") {
   return request<{ language: string }>(`/api/v1/me/language`, { method: "PATCH", body: JSON.stringify({ language }) });

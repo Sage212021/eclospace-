@@ -3873,6 +3873,9 @@ export interface MonthlyDeductions {
   pret: number;
   retard: number;
   autres: number;
+  sanction: number; // saisie uniquement dans la grille mensuelle (lecture seule ici)
+  status: "brouillon" | "soumis_dg" | "valide" | null;
+  locked: boolean; // true dès que le mois est soumis/validé
   saved: boolean;
 }
 

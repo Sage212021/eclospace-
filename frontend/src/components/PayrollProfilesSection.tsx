@@ -85,6 +85,11 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   // Retenues internes du mois saisies par le RH (prêts, avances, retards…).
   // Modèle moteur : elles réduisent le NET (pas le brut, ni l'assiette d'impôt).
   const [internal, setInternal] = useState({ avance: 0, pret: 0, retard: 0, autres: 0 });
+  // Sanction : saisie uniquement dans la grille mensuelle → lecture seule ici,
+  // mais prise en compte dans le net. Verrou dès que le mois est soumis/validé.
+  const [sanction, setSanction] = useState(0);
+  const [dedLocked, setDedLocked] = useState(false);
+  const [dedStatus, setDedStatus] = useState<"brouillon" | "soumis_dg" | "valide" | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
   const [dispatches, setDispatches] = useState<PayslipDispatch[]>([]);
   const loadDispatches = () => getPayslipDispatches(employeeId, period).then(setDispatches).catch(() => setDispatches([]));
@@ -160,22 +165,28 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   // à chaque changement d'employé ou de période : alimente l'aperçu en direct.
   useEffect(() => {
     getPayrollRateSet(`${period}-01`).then(setRateSet).catch(() => setRateSet(null));
-    if (!employeeId) {
+    const resetDed = () => {
       setManualRetenue(0);
       setInternal({ avance: 0, pret: 0, retard: 0, autres: 0 });
+      setSanction(0);
+      setDedLocked(false);
+      setDedStatus(null);
+    };
+    if (!employeeId) {
+      resetDed();
       setSlip(null);
       return;
     }
-    // Retenues mémorisées pour cet employé et ce mois : on les re-propose (sinon 0).
+    // Retenues du mois (reliées à la grille mensuelle) : on les re-propose (sinon 0).
     getMonthlyDeductions(employeeId, period)
       .then((d) => {
         setManualRetenue(d.retenue_absence);
         setInternal({ avance: d.avance, pret: d.pret, retard: d.retard, autres: d.autres });
+        setSanction(d.sanction);
+        setDedLocked(d.locked);
+        setDedStatus(d.status);
       })
-      .catch(() => {
-        setManualRetenue(0);
-        setInternal({ avance: 0, pret: 0, retard: 0, autres: 0 });
-      });
+      .catch(resetDed);
     getPayslip(employeeId, period)
       .then((r) => {
         setSlip(r);
@@ -190,7 +201,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   async function computeSlip() {
     if (!employeeId) return;
     try {
-      const r = await getPayslip(employeeId, period, { retenue_absence: manualRetenue, ...internal });
+      const r = await getPayslip(employeeId, period, { retenue_absence: manualRetenue, ...internal, autres: internal.autres + sanction });
       setSlip(r);
       setError(null);
       loadDispatches();
@@ -203,8 +214,10 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   async function saveDeductions() {
     if (!employeeId) return;
     try {
-      await saveMonthlyDeductions(employeeId, period, { retenue_absence: manualRetenue, ...internal });
-      setMessage(t("pay.deductions_saved", "Retenues du mois enregistrées."));
+      const d = await saveMonthlyDeductions(employeeId, period, { retenue_absence: manualRetenue, ...internal });
+      setDedStatus(d.status);
+      setDedLocked(d.locked);
+      setMessage(t("pay.deductions_saved", "Retenues du mois enregistrées (grille mensuelle mise à jour)."));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("pay.deductions_save_err", "Enregistrement des retenues impossible."));
@@ -231,11 +244,12 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
         seniorityThreshold: form.seniority_threshold ?? 0,
         applySeniority: form.apply_seniority,
         retenueAbsence: manualRetenue,
-        internal,
+        // La sanction (saisie dans la grille) s'ajoute aux « autres » pour le net.
+        internal: { ...internal, autres: internal.autres + sanction },
       },
       ratesFromRateSet(rateSet),
     );
-  }, [form, rateSet, manualRetenue, internal]);
+  }, [form, rateSet, manualRetenue, internal, sanction]);
 
   // Valeurs affichées / imprimées / envoyées : l'aperçu en direct s'il existe,
   // sinon le calcul serveur.
@@ -267,7 +281,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
     payment_mode: form.payment_mode || null,
     account_number: form.account_number || null,
     rates: slipRates,
-    internal,
+    internal: { ...internal, autres: internal.autres + sanction },
   };
 
   const readOnly = !canManage || locked;
@@ -382,25 +396,38 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
               <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>{t("pay.deductions_title", "Retenues du mois (saisie RH)")}</div>
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
                 <Field label={t("pay.manual_deduction", "Absence injustifiée")}>
-                  <input type="number" min={0} step={100} value={manualRetenue} onChange={(e) => setManualRetenue(Math.max(Number(e.target.value) || 0, 0))} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                  <input type="number" min={0} step={100} disabled={dedLocked} value={manualRetenue} onChange={(e) => setManualRetenue(Math.max(Number(e.target.value) || 0, 0))} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
                 </Field>
                 <Field label={t("pay.int_avance", "Avance sur salaire")}>
-                  <input type="number" min={0} step={100} value={internal.avance} onChange={(e) => setInternal({ ...internal, avance: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                  <input type="number" min={0} step={100} disabled={dedLocked} value={internal.avance} onChange={(e) => setInternal({ ...internal, avance: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
                 </Field>
                 <Field label={t("pay.int_pret", "Remboursement prêt")}>
-                  <input type="number" min={0} step={100} value={internal.pret} onChange={(e) => setInternal({ ...internal, pret: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                  <input type="number" min={0} step={100} disabled={dedLocked} value={internal.pret} onChange={(e) => setInternal({ ...internal, pret: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
                 </Field>
                 <Field label={t("pay.int_retard", "Retard non justifié")}>
-                  <input type="number" min={0} step={100} value={internal.retard} onChange={(e) => setInternal({ ...internal, retard: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                  <input type="number" min={0} step={100} disabled={dedLocked} value={internal.retard} onChange={(e) => setInternal({ ...internal, retard: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
                 </Field>
                 <Field label={t("pay.int_autres", "Autres retenues")}>
-                  <input type="number" min={0} step={100} value={internal.autres} onChange={(e) => setInternal({ ...internal, autres: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                  <input type="number" min={0} step={100} disabled={dedLocked} value={internal.autres} onChange={(e) => setInternal({ ...internal, autres: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
                 </Field>
-                {canManage && (
+                {sanction > 0 && (
+                  <Field label={t("pay.int_sanction", "Sanction (grille)")}>
+                    <input type="number" value={sanction} readOnly disabled style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                  </Field>
+                )}
+                {canManage && !dedLocked && (
                   <Button variant="add" size="sm" type="button" onClick={saveDeductions}>{t("pay.save_deductions", "Enregistrer les retenues du mois")}</Button>
                 )}
               </div>
-              <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{t("pay.deductions_hint", "Ces montants sont mémorisés par employé et par mois : ils se ré-affichent à la réouverture de la fiche.")}</p>
+              {dedLocked ? (
+                <p style={{ fontSize: 12, color: "var(--alert, #C4661F)", marginTop: 4 }}>
+                  {dedStatus === "valide"
+                    ? t("pay.deductions_locked_valide", "Mois validé par la Direction : les retenues ne sont plus modifiables. Rouvrez le mois dans la grille mensuelle pour corriger.")
+                    : t("pay.deductions_locked_soumis", "Mois soumis au Directeur général : en attente de validation, les retenues ne sont plus modifiables ici.")}
+                </p>
+              ) : (
+                <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{t("pay.deductions_hint", "Retenues reliées à la grille mensuelle : ce que vous enregistrez ici met à jour la préparation de paie du mois (et inversement). Modifiables tant que le mois n'est pas soumis au DG.")}</p>
+              )}
             </div>
             {!rateSet && <p style={{ fontSize: 12, color: "var(--alert, #C4661F)", marginTop: 8 }}>{t("pay.no_scale_period", "Aucun barème en vigueur pour ce mois : renseignez le barème dans « Paramètres de paie ».")}</p>}
             {displaySlip && (
@@ -421,6 +448,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
                 <SlipRow label={t("pay.int_pret", "Remboursement prêt")} value={internal.pret} />
                 <SlipRow label={t("pay.int_retard", "Retard non justifié")} value={internal.retard} />
                 <SlipRow label={t("pay.int_autres", "Autres retenues")} value={internal.autres} />
+                {sanction > 0 && <SlipRow label={t("pay.int_sanction", "Sanction (grille)")} value={sanction} />}
                 <SlipRow label={t("pay.slip.total_internal", "Total retenues internes")} value={displaySlip.total_retenues_internes} />
                 <SlipRow label={t("pay.slip.net", "NET À PAYER")} value={displaySlip.net_a_payer} strong tone="gold" />
                 <SlipRow label={t("pay.slip.total_emp_charges", "Total charges patronales")} value={displaySlip.total_charges_patronales} />

@@ -89,7 +89,6 @@ model Employee {
   absences                  Absence[]
   employeeSkills            EmployeeSkill[]
   payrollVariables          PayrollVariable[]
-  payslipDeductions         PayslipMonthlyDeduction[]
   accessReviewSubjectItems  AccessReviewItem[]      @relation("AccessReviewSubject")
   accessReviewReviewerItems AccessReviewItem[]      @relation("AccessReviewReviewer")
   workSchedules             WorkSchedule[]
@@ -406,29 +405,6 @@ model PayrollVariable {
 
   @@unique([employeeId, periodKey])
   @@map("payroll_variables")
-}
-
-// Retenues du mois saisies par le RH pour le bulletin UNITAIRE (Moteur de paie),
-// mémorisées par employé et par mois (demande opérateur 13/08/2026). L'absence
-// réduit le brut (avant impôt) ; prêts/avances/retards/autres réduisent le NET.
-// Table additive, indépendante de la grille mensuelle (batch).
-model PayslipMonthlyDeduction {
-  id             String   @id @default(uuid())
-  employeeId     String   @map("employee_id")
-  employee       Employee @relation(fields: [employeeId], references: [id])
-  periodKey      String   @map("period_key") // "AAAA-MM"
-  retenueAbsence Decimal  @default(0) @map("retenue_absence") @db.Decimal(12, 2)
-  avance         Decimal  @default(0) @db.Decimal(12, 2)
-  pret           Decimal  @default(0) @db.Decimal(12, 2)
-  retard         Decimal  @default(0) @db.Decimal(12, 2)
-  autres         Decimal  @default(0) @db.Decimal(12, 2)
-
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedBy String?  @map("updated_by")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@unique([employeeId, periodKey])
-  @@map("payslip_monthly_deductions")
 }
 
 // ===================================================================

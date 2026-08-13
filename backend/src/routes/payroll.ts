@@ -360,24 +360,32 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // ----- Retenues du mois mémorisées (par employé et par mois) ---------------
-  // Le RH saisit une fois les retenues (absence, avance, prêt, retard, autres) ;
-  // elles sont conservées et re-proposées à chaque réouverture de la fiche.
+  // ----- Retenues du mois : RELIÉES À LA GRILLE MENSUELLE --------------------
+  // Source UNIQUE = payroll_monthly_lines. Les retenues saisies au bulletin
+  // unitaire et celles de la grille mensuelle sont le même enregistrement : pas
+  // de double saisie ni de divergence. La saisie n'est possible que tant que le
+  // mois est en « brouillon » (avant soumission au Directeur général).
   fastify.get(
     "/api/v1/payroll/employees/:employeeId/deductions",
     { preHandler: requirePermission("paie", "consultation") },
     async (request, reply) => {
       const { employeeId } = request.params as { employeeId: string };
       const period = normalizePeriod((request.query as { period?: string }).period);
-      const row = await prisma.payslipMonthlyDeduction.findUnique({ where: { employeeId_periodKey: { employeeId, periodKey: period } } });
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period }, select: { id: true, status: true } });
+      const line = run
+        ? await prisma.payrollMonthlyLine.findUnique({ where: { runId_employeeId: { runId: run.id, employeeId } } })
+        : null;
       return reply.send({
         period,
-        retenue_absence: row ? num(row.retenueAbsence) : 0,
-        avance: row ? num(row.avance) : 0,
-        pret: row ? num(row.pret) : 0,
-        retard: row ? num(row.retard) : 0,
-        autres: row ? num(row.autres) : 0,
-        saved: Boolean(row),
+        retenue_absence: line ? num(line.retenueAbsence) : 0,
+        avance: line ? num(line.avance) : 0,
+        pret: line ? num(line.pret) : 0,
+        retard: line ? num(line.retard) : 0,
+        autres: line ? num(line.autres) : 0,
+        sanction: line ? num(line.sanction) : 0, // saisie uniquement dans la grille
+        status: run?.status ?? null, // null | brouillon | soumis_dg | valide
+        locked: run != null && run.status !== "brouillon",
+        saved: line != null,
       });
     },
   );
@@ -401,27 +409,50 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const period = normalizePeriod(parsed.data.period);
       const employee = await prisma.employee.findFirst({ where: { id: employeeId, deletedAt: null }, select: { id: true } });
       if (!employee) return reply.code(404).send({ code: "not_found", message: "Employé introuvable." });
-      const data = {
-        retenueAbsence: parsed.data.retenue_absence,
-        avance: parsed.data.avance,
-        pret: parsed.data.pret,
-        retard: parsed.data.retard,
-        autres: parsed.data.autres,
-        updatedBy: request.user!.id,
-      };
-      const row = await prisma.payslipMonthlyDeduction.upsert({
-        where: { employeeId_periodKey: { employeeId, periodKey: period } },
-        update: data,
-        create: { employeeId, periodKey: period, ...data },
+
+      // Le mois doit être en « brouillon » : soumis/validé = verrouillé (mêmes
+      // messages que la grille mensuelle, pour un discours cohérent au RH).
+      let run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+      if (run && run.status === "valide") return reply.code(409).send({ code: "run_locked", message: "Mois validé par la Direction : il n'est plus modifiable. Rouvrez-le pour corriger." });
+      if (run && run.status === "soumis_dg") return reply.code(409).send({ code: "run_submitted", message: "Mois soumis au Directeur général : en attente de validation, il n'est plus modifiable. Le DG doit le valider ou le retourner pour correction." });
+
+      // Aucun mois préparé encore : on l'ouvre en brouillon et on crée une ligne
+      // par salarié doté d'une fiche paie (comme « préparer le mois »). Ainsi la
+      // grille mensuelle et le bulletin unitaire partent du même point.
+      if (!run) {
+        run = await prisma.payrollMonthlyRun.create({ data: { periodKey: period, preparedBy: request.user!.id } });
+        await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "payroll_monthly_run", entityId: period, ipAddress: request.ip });
+        const profiles = await prisma.payrollEmployeeProfile.findMany({ where: { employee: { deletedAt: null } }, select: { employeeId: true } });
+        if (profiles.length > 0) {
+          await prisma.payrollMonthlyLine.createMany({ data: profiles.map((p) => ({ runId: run!.id, employeeId: p.employeeId })), skipDuplicates: true });
+        }
+      }
+      // La ligne du salarié peut manquer (salarié sans fiche paie / ajouté après) :
+      // on la crée à la volée.
+      await prisma.payrollMonthlyLine.upsert({
+        where: { runId_employeeId: { runId: run.id, employeeId } },
+        update: {
+          retenueAbsence: parsed.data.retenue_absence,
+          avance: parsed.data.avance, pret: parsed.data.pret, retard: parsed.data.retard, autres: parsed.data.autres,
+        },
+        create: {
+          runId: run.id, employeeId,
+          retenueAbsence: parsed.data.retenue_absence,
+          avance: parsed.data.avance, pret: parsed.data.pret, retard: parsed.data.retard, autres: parsed.data.autres,
+        },
       });
-      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payslip_deduction", entityId: `${employeeId}:${period}`, newValues: parsed.data, ipAddress: request.ip });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payroll_monthly_line", entityId: `${period}:${employeeId}`, newValues: parsed.data, ipAddress: request.ip });
+      const saved = await prisma.payrollMonthlyLine.findUnique({ where: { runId_employeeId: { runId: run.id, employeeId } } });
       return reply.send({
         period,
-        retenue_absence: num(row.retenueAbsence),
-        avance: num(row.avance),
-        pret: num(row.pret),
-        retard: num(row.retard),
-        autres: num(row.autres),
+        retenue_absence: num(saved!.retenueAbsence),
+        avance: num(saved!.avance),
+        pret: num(saved!.pret),
+        retard: num(saved!.retard),
+        autres: num(saved!.autres),
+        sanction: num(saved!.sanction),
+        status: run.status,
+        locked: false,
         saved: true,
       });
     },

@@ -45,6 +45,7 @@ import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconAdmin } from "../components/icons";
 import { ErpConnectionsSection } from "../components/ErpConnectionsSection";
+import { HrDashboardSection } from "../components/HrDashboardSection";
 import { ActivityClosureSection } from "../components/ActivityClosureSection";
 import { useI18n } from "../i18n";
 import { PayrollEngineHub } from "../components/PayrollEngineHub";
@@ -335,6 +336,10 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       {/* Signalement de clôture d'activité mensuelle : échéance du jour de clôture
           (10 par défaut, paramétrable) et rappels automatiques aux responsables. */}
       <ActivityClosureSection canAdminister={canAdminister} />
+
+      {/* Tableau de bord RH (remplace l'ancien tableau de présence retiré) :
+          effectif & répartition, contrats à échéance, congés, recrutement. */}
+      <HrDashboardSection />
 
       {/* Le module « Présences & Temps de travail » (pointage par connexion,
           tableau de bord de présence, règles de retenues, consolidation paie) a

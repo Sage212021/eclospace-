@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
-import { computePayslip, type Payslip, type PayrollRates } from "../lib/payrollEngine.js";
+import { computePayslip, type Payslip, type PayrollRates, type FormulaOverlay } from "../lib/payrollEngine.js";
+import { evaluateExpression, FormulaError, FORMULA_BY_CODE, FORMULA_CODES } from "../lib/payrollFormula.js";
 import type { PayrollEmployeeProfile, PayrollMonthlyLine } from "@prisma/client";
 import { buildPayslipEmail } from "../lib/documentEmail.js";
 import { sendMail, senderIdentity } from "../lib/mailer.js";
@@ -13,6 +14,15 @@ import { sendMail, senderIdentity } from "../lib/mailer.js";
 // Réimplémentation du moteur Excel (docs/paie/). Permissions : module `paie`.
 
 const num = (v: unknown): number => (v == null ? 0 : Number(v));
+
+// Charge les formules PERSONNALISÉES par le RH (custom = true) sous forme d'un
+// overlay code → expression, transmis au moteur. Les formules non personnalisées
+// n'y figurent pas : le moteur garde alors son calcul par défaut codé en dur.
+async function loadFormulaOverlay(): Promise<FormulaOverlay | undefined> {
+  const rows = await prisma.payrollFormula.findMany({ where: { custom: true } });
+  if (rows.length === 0) return undefined;
+  return Object.fromEntries(rows.map((r) => [r.code, r.expression]));
+}
 
 function rateSetView(r: Record<string, unknown> & { id: string; effectiveFrom: Date; label: string | null; active: boolean }) {
   return {
@@ -42,6 +52,43 @@ const rateSetSchema = z.object({
   misc: z.object({ coef_assiette: pct, heures_mois: z.number().positive(), anc_def_pct: pct }),
   irpp: z.object({ t1_ceiling: money, t1_pct: pct, t2_ceiling: money, t2_pct: pct, t3_ceiling: money, t3_pct: pct, t4_pct: pct }),
   tc_rav: z.object({ seuil1: money, tc1: money, rav1: money, seuil2: money, tc2: money, rav2: money, tc3: money, rav3: money }),
+});
+
+// Contexte d'exemple pour tester/valider une formule. On restreint aux
+// variables AUTORISÉES pour l'élément (liste blanche du def) : une formule qui
+// référence une variable hors de cette liste est rejetée à l'enregistrement.
+const FORMULA_SAMPLE: Record<string, number> = {
+  base: 400000, complements: 50000, taux_anciennete: 0.05, prime_anciennete: 20000, retenue_absence: 0,
+  assiette_cnps: 600000, assiette_fiscale: 470000,
+  taux_pvid_sal: 0.042, taux_pvid_pat: 0.042, taux_pf: 0.07, taux_at: 0.03,
+  taux_cfc_sal: 0.01, taux_cfc_pat: 0.015, taux_fne: 0.01,
+};
+function sampleContextFor(code: string): Record<string, number> {
+  const def = FORMULA_BY_CODE[code];
+  if (!def) return {};
+  return Object.fromEntries(def.variables.map((v) => [v, FORMULA_SAMPLE[v] ?? 0]));
+}
+function formulaView(row: { code: string; label: string; expression: string; custom: boolean; changeReason: string | null; updatedAt: Date; updatedBy: string | null }) {
+  const def = FORMULA_BY_CODE[row.code];
+  return {
+    code: row.code,
+    label: row.label,
+    description: def?.description ?? "",
+    variables: def?.variables ?? [],
+    expression: row.expression,
+    default_expression: def?.defaultExpression ?? row.expression,
+    custom: row.custom,
+    change_reason: row.changeReason,
+    updated_at: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : null,
+    updated_by: row.updatedBy,
+  };
+}
+const formulaUpdateSchema = z.object({
+  // custom = true : appliquer l'expression fournie. custom = false : réinitialiser
+  // au calcul par défaut du moteur.
+  custom: z.boolean(),
+  expression: z.string().max(500).optional(),
+  change_reason: z.string().min(3).max(2000),
 });
 
 // Éléments variables du mois pour un salarié (grille mensuelle).
@@ -138,6 +185,95 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       });
       await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "payroll_rate_set", entityId: created.id, newValues: { effective_from: b.effective_from, label: b.label ?? null, change_reason: b.change_reason ?? null }, ipAddress: request.ip });
       return reply.code(201).send(rateSetView(created));
+    },
+  );
+
+  // ----- Formules de calcul modifiables par le RH (D-007) --------------------
+  // Le RH peut personnaliser la formule de certains éléments du bulletin
+  // (cotisations, brut, prime d'ancienneté), avec un MOTIF obligatoire. L'IRPP
+  // et la Taxe communale/RAV restent pilotés par leurs paramètres (barèmes).
+
+  // Liste des formules (celles réellement appliquées par le moteur).
+  fastify.get(
+    "/api/v1/payroll/formulas",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (_request, reply) => {
+      const rows = await prisma.payrollFormula.findMany();
+      // On ordonne selon l'ordre métier des éléments (FORMULA_CODES).
+      const byCode = new Map(rows.map((r) => [r.code, r]));
+      const ordered = FORMULA_CODES.map((c) => byCode.get(c)).filter((r): r is NonNullable<typeof r> => Boolean(r));
+      return reply.send(ordered.map(formulaView));
+    },
+  );
+
+  // Tester une expression AVANT de l'enregistrer : renvoie le résultat par défaut
+  // et le résultat proposé sur un exemple, ou une erreur explicite.
+  fastify.post(
+    "/api/v1/payroll/formulas/:code/test",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const { code } = request.params as { code: string };
+      const def = FORMULA_BY_CODE[code];
+      if (!def) return reply.code(404).send({ code: "not_found", message: "Élément de formule inconnu." });
+      const parsed = z.object({ expression: z.string().min(1).max(500) }).safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Expression manquante." });
+      const ctx = sampleContextFor(code);
+      const defaultResult = evaluateExpression(def.defaultExpression, ctx);
+      try {
+        const result = evaluateExpression(parsed.data.expression, ctx);
+        return reply.send({ ok: true, sample: ctx, default_result: defaultResult, result });
+      } catch (e) {
+        const message = e instanceof FormulaError ? e.message : "Formule invalide.";
+        return reply.send({ ok: false, sample: ctx, default_result: defaultResult, error: message });
+      }
+    },
+  );
+
+  // Modifier (ou réinitialiser) une formule — MOTIF obligatoire, tracé à l'audit.
+  fastify.put(
+    "/api/v1/payroll/formulas/:code",
+    { preHandler: requirePermission("paie", "administration") },
+    async (request, reply) => {
+      const { code } = request.params as { code: string };
+      const def = FORMULA_BY_CODE[code];
+      if (!def) return reply.code(404).send({ code: "not_found", message: "Élément de formule inconnu." });
+      const parsed = formulaUpdateSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Motif obligatoire (au moins 3 caractères) et champs valides requis.", details: parsed.error.issues });
+      const b = parsed.data;
+      const existing = await prisma.payrollFormula.findUnique({ where: { code } });
+      if (!existing) return reply.code(404).send({ code: "not_found", message: "Formule introuvable." });
+
+      let expression: string;
+      let custom: boolean;
+      if (b.custom) {
+        // Personnalisation : l'expression est requise et doit être VALIDE sur la
+        // liste blanche de l'élément (variables autorisées + fonctions min/max/…).
+        if (!b.expression || !b.expression.trim()) return reply.code(400).send({ code: "validation_error", message: "Expression requise pour personnaliser la formule." });
+        try {
+          evaluateExpression(b.expression, sampleContextFor(code));
+        } catch (e) {
+          const message = e instanceof FormulaError ? e.message : "Formule invalide.";
+          return reply.code(400).send({ code: "invalid_formula", message });
+        }
+        expression = b.expression.trim();
+        custom = true;
+      } else {
+        // Réinitialisation au calcul par défaut du moteur.
+        expression = def.defaultExpression;
+        custom = false;
+      }
+
+      const updated = await prisma.payrollFormula.update({
+        where: { code },
+        data: { expression, custom, changeReason: b.change_reason, updatedBy: request.user!.id },
+      });
+      await writeAuditLog({
+        userId: request.user!.id, action: "update", entityType: "payroll_formula", entityId: code,
+        oldValues: { expression: existing.expression, custom: existing.custom },
+        newValues: { expression, custom, change_reason: b.change_reason },
+        ipAddress: request.ip,
+      });
+      return reply.send(formulaView(updated));
     },
   );
 
@@ -423,6 +559,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const rateSet = await prisma.payrollRateSet.findFirst({ where: { active: true, effectiveFrom: { lte: toDate } }, orderBy: { effectiveFrom: "desc" } });
       if (!rateSet) return reply.code(409).send({ code: "no_rate_set", message: "Aucun barème de paie en vigueur pour la période." });
       const rates = ratesFrom(rateSet as unknown as Record<string, unknown>);
+      const formulas = await loadFormulaOverlay();
 
       const lines = await prisma.payrollMonthlyLine.findMany({
         where: { runId: run.id },
@@ -445,7 +582,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         .map((l) => {
           const p = l.employee.payrollProfile!;
           const confBase = l.employee.confidential?.baseSalary != null ? num(l.employee.confidential.baseSalary) : null;
-          const slip = computeMonthlyLine(p, rates, l, confBase);
+          const slip = computeMonthlyLine(p, rates, l, confBase, formulas);
           return {
             employee_id: l.employeeId,
             employee_name: `${l.employee.firstName} ${l.employee.lastName}`,
@@ -798,6 +935,7 @@ async function resolvePayslip(
       internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
     },
     ratesFrom(rateSet),
+    await loadFormulaOverlay(),
   );
   return {
     employee: { id: employee.id },
@@ -846,6 +984,7 @@ async function computeAnomalies(period: string): Promise<{ blocking: PayrollAnom
     return { blocking, warnings };
   }
   const rates = ratesFrom(rateSet as unknown as Record<string, unknown>);
+  const formulas = await loadFormulaOverlay();
 
   // Salariés actifs sans fiche paie : ils ne figureront pas dans la paie du mois.
   const noProfile = await prisma.employee.findMany({ where: { deletedAt: null, status: "salarie", payrollProfile: { is: null } }, select: { id: true, firstName: true, lastName: true } });
@@ -867,7 +1006,7 @@ async function computeAnomalies(period: string): Promise<{ blocking: PayrollAnom
     const confBase = l.employee.confidential?.baseSalary != null ? num(l.employee.confidential.baseSalary) : null;
     const { base } = resolveBaseGross(p, confBase);
     if (base <= 0) blocking.push({ employee_id: l.employeeId, employee_name: name, message: "Salaire de base manquant ou nul : renseignez-le (bloc confidentiel ou fiche paie)." });
-    const slip = computeMonthlyLine(p, rates, l, confBase);
+    const slip = computeMonthlyLine(p, rates, l, confBase, formulas);
     if (slip.net_a_payer < 0) blocking.push({ employee_id: l.employeeId, employee_name: name, message: `Net à payer négatif (${Math.round(slip.net_a_payer).toLocaleString("fr-FR")} FCFA) : les retenues dépassent le salaire.` });
     if (!p.cnpsNumber) warnings.push({ employee_id: l.employeeId, employee_name: name, message: "N° CNPS non renseigné (requis pour la déclaration CNPS)." });
     if (!p.niu) warnings.push({ employee_id: l.employeeId, employee_name: name, message: "NIU non renseigné (requis pour la déclaration fiscale)." });
@@ -887,7 +1026,7 @@ function monthlyElements(l: PayrollMonthlyLine) {
 // Imposables (primes, heures sup) → ajoutés au brut ET à l'assiette. Avant impôt :
 // retenue d'absence. Retenues nettes internes : retard, avance, prêt, sanction,
 // autres. (Formules ajustables ensuite par l'opérateur.)
-function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine, confBase: number | null = null): Payslip {
+function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine, confBase: number | null = null, formulas?: FormulaOverlay): Payslip {
   const { base, gross } = resolveBaseGross(p, confBase);
   // Lignes libres : les gains s'ajoutent au brut imposable, les retenues au net.
   const extras = parseExtraLines(l.extraLines);
@@ -909,6 +1048,7 @@ function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: P
       internal: { avance: num(l.avance), pret: num(l.pret), retard: num(l.retard), autres: num(l.autres) + num(l.sanction) + extraRetenues },
     },
     rates,
+    formulas,
   );
 }
 
@@ -989,6 +1129,7 @@ async function computeRegister(period: string): Promise<
   const rateSet = await prisma.payrollRateSet.findFirst({ where: { active: true, effectiveFrom: { lte: toDate } }, orderBy: { effectiveFrom: "desc" } });
   if (!rateSet) return { error: { code: "no_rate_set", message: "Aucun barème de paie en vigueur pour la période." }, status: 409 };
   const rates = ratesFrom(rateSet as unknown as Record<string, unknown>);
+  const formulas = await loadFormulaOverlay();
 
   const profiles = await prisma.payrollEmployeeProfile.findMany({
     where: { employee: { deletedAt: null } },
@@ -1013,7 +1154,7 @@ async function computeRegister(period: string): Promise<
     const { base, gross } = resolveBaseGross(p, confBase);
     const monthLine = lineByEmp.get(p.employeeId);
     const ps = monthLine
-      ? computeMonthlyLine(p, rates, monthLine, confBase)
+      ? computeMonthlyLine(p, rates, monthLine, confBase, formulas)
       : computePayslip(
           {
             base,
@@ -1029,6 +1170,7 @@ async function computeRegister(period: string): Promise<
             internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
           },
           rates,
+          formulas,
         );
     lines.push({
       employee_id: p.employeeId,

@@ -3712,6 +3712,32 @@ export function createPayrollRateSet(body: PayrollRateSetInput) {
   return request<PayrollRateSet>(`/api/v1/payroll/rate-sets`, { method: "POST", body: JSON.stringify(body) });
 }
 
+// Formules de calcul modifiables par le RH (D-007).
+export interface PayrollFormula {
+  code: string;
+  label: string;
+  description: string;
+  variables: string[];
+  expression: string;
+  default_expression: string;
+  custom: boolean;
+  change_reason: string | null;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+export function listPayrollFormulas() {
+  return request<PayrollFormula[]>(`/api/v1/payroll/formulas`);
+}
+export function testPayrollFormula(code: string, expression: string) {
+  return request<{ ok: boolean; sample: Record<string, number>; default_result: number; result?: number; error?: string }>(
+    `/api/v1/payroll/formulas/${code}/test`,
+    { method: "POST", body: JSON.stringify({ expression }) },
+  );
+}
+export function updatePayrollFormula(code: string, body: { custom: boolean; expression?: string; change_reason: string }) {
+  return request<PayrollFormula>(`/api/v1/payroll/formulas/${code}`, { method: "PUT", body: JSON.stringify(body) });
+}
+
 // i18n : langue d'interface mémorisée sur le profil (fr|en).
 export function setMyLanguage(language: "fr" | "en") {
   return request<{ language: string }>(`/api/v1/me/language`, { method: "PATCH", body: JSON.stringify({ language }) });

@@ -3,6 +3,7 @@
 // initial. Rejouable sans effet de bord (upsert par code).
 import argon2 from "argon2";
 import { PrismaClient, PermissionAction, CustomerCategory } from "@prisma/client";
+import { FORMULA_DEFS } from "../src/lib/payrollFormula.js";
 
 const prisma = new PrismaClient();
 
@@ -515,6 +516,19 @@ async function main() {
         irppT3Ceiling: 5000000, irppT3Pct: 0.25, irppT4Pct: 0.35,
         tcRavSeuil1: 110000, tc1: 0, rav1: 1950, tcRavSeuil2: 200000, tc2: 500, rav2: 1950, tc3: 750, rav3: 3250,
       },
+    });
+  }
+
+  // Formules de calcul modifiables par le RH (D-007). On sème l'expression PAR
+  // DÉFAUT de chaque élément « à formule » avec custom=false : le moteur applique
+  // alors son calcul codé en dur (comportement identique). Le RH peut ensuite
+  // personnaliser une formule (avec motif) sans toucher au code. Idempotent :
+  // on n'écrase JAMAIS une formule déjà personnalisée par le RH.
+  for (const def of FORMULA_DEFS) {
+    await prisma.payrollFormula.upsert({
+      where: { code: def.code },
+      update: { label: def.label }, // ne touche ni expression ni custom (respecte les personnalisations)
+      create: { code: def.code, label: def.label, expression: def.defaultExpression, custom: false },
     });
   }
 

@@ -2668,6 +2668,36 @@ export function getContractAlerts(days?: number) {
   return request<{ horizon_days: number; alerts: ContractAlert[] }>(`/api/v1/hr/contract-alerts${days ? `?days=${days}` : ""}`);
 }
 
+// Tableau de bord RH (remplace l'ancien tableau de présence) : effectif,
+// contrats à échéance, congés, recrutement & formation.
+export interface HrDashboard {
+  effectif: {
+    total: number;
+    by_department: { name: string; count: number }[];
+    by_contract_type: { type: string; count: number }[];
+    by_status: { status: string; count: number }[];
+  };
+  contracts: {
+    ending_soon: { employee: string; position: string | null; type: string; end_date: string; days_left: number | null }[];
+  };
+  leaves: {
+    balance_total_days: number;
+    pending_count: number;
+    ongoing_count: number;
+    upcoming_count: number;
+    pending: { employee: string; from: string; to: string }[];
+  };
+  recruitment_training: {
+    open_positions: number;
+    applications_active: number;
+    trainings_planned: number;
+    training_requests_pending: number;
+  };
+}
+export function getHrDashboard() {
+  return request<HrDashboard>("/api/v1/hr/dashboard");
+}
+
 // Contrats de travail & avenants (refonte RH — Étape 3).
 export interface HrContractAmendment {
   id: string;

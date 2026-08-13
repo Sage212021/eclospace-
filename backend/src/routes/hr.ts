@@ -458,6 +458,90 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     return reply.send({ horizon_days: days, alerts });
   });
 
+  // ─── Tableau de bord RH (remplace l'ancien tableau de présence) ────────────
+  // Indicateurs utiles au RH : effectif & répartition, contrats à échéance,
+  // congés, recrutement & formation. Aucune donnée de présence/pointage.
+  fastify.get("/api/v1/hr/dashboard", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const now = new Date();
+    const in60 = new Date(now.getTime() + 60 * 864e5);
+    const in30 = new Date(now.getTime() + 30 * 864e5);
+    const today0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+    const [employees, endingContracts, leavesPending, leavesOngoing, leavesUpcoming, openPositions, applicationsActive, trainingsPlanned, trainingRequestsPending] = await Promise.all([
+      // Effectif actif (non supprimé, non parti) avec département et dernier contrat.
+      prisma.employee.findMany({
+        where: { deletedAt: null, departureDate: null },
+        select: {
+          id: true, status: true, leaveBalanceDays: true,
+          department: { select: { name: true } },
+          hrContracts: { orderBy: { startDate: "desc" }, take: 1, select: { type: true } },
+        },
+      }),
+      // Contrats (CDD/stage/prestation surtout) arrivant à échéance sous 60 jours.
+      prisma.hrContract.findMany({
+        where: { endDate: { not: null, gte: now, lte: in60 }, employee: { deletedAt: null, departureDate: null } },
+        include: { employee: { select: { firstName: true, lastName: true, position: true } } },
+        orderBy: { endDate: "asc" }, take: 20,
+      }),
+      // Congés en attente de validation.
+      prisma.absence.findMany({
+        where: { type: "conge", status: "en_attente" },
+        include: { employee: { select: { firstName: true, lastName: true } } },
+        orderBy: { fromDate: "asc" }, take: 20,
+      }),
+      prisma.absence.count({ where: { type: "conge", status: "validee", fromDate: { lte: now }, toDate: { gte: today0 } } }),
+      prisma.absence.count({ where: { type: "conge", status: "validee", fromDate: { gt: now, lte: in30 } } }),
+      prisma.jobOpening.count({ where: { status: "ouvert" } }),
+      prisma.jobApplication.count({ where: { status: { in: ["recue", "entretien"] } } }),
+      prisma.trainingSession.count({ where: { status: "planifiee" } }),
+      prisma.trainingRequest.count({ where: { status: "demandee" } }),
+    ]);
+
+    const byDepartment: Record<string, number> = {};
+    const byContractType: Record<string, number> = {};
+    const byStatus: Record<string, number> = {};
+    let leaveBalanceTotal = 0;
+    for (const e of employees) {
+      const dep = e.department?.name ?? "Sans département";
+      byDepartment[dep] = (byDepartment[dep] ?? 0) + 1;
+      const ct = e.hrContracts[0]?.type ?? "sans_contrat";
+      byContractType[ct] = (byContractType[ct] ?? 0) + 1;
+      byStatus[e.status] = (byStatus[e.status] ?? 0) + 1;
+      leaveBalanceTotal += e.leaveBalanceDays != null ? Number(e.leaveBalanceDays) : 0;
+    }
+
+    return reply.send({
+      effectif: {
+        total: employees.length,
+        by_department: Object.entries(byDepartment).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
+        by_contract_type: Object.entries(byContractType).map(([type, count]) => ({ type, count })),
+        by_status: Object.entries(byStatus).map(([status, count]) => ({ status, count })),
+      },
+      contracts: {
+        ending_soon: endingContracts.map((c) => ({
+          employee: `${c.employee.firstName} ${c.employee.lastName}`,
+          position: c.employee.position,
+          type: c.type,
+          end_date: c.endDate,
+          days_left: c.endDate ? Math.ceil((c.endDate.getTime() - now.getTime()) / 864e5) : null,
+        })),
+      },
+      leaves: {
+        balance_total_days: Math.round(leaveBalanceTotal * 10) / 10,
+        pending_count: leavesPending.length,
+        ongoing_count: leavesOngoing,
+        upcoming_count: leavesUpcoming,
+        pending: leavesPending.map((a) => ({ employee: `${a.employee.firstName} ${a.employee.lastName}`, from: a.fromDate, to: a.toDate })),
+      },
+      recruitment_training: {
+        open_positions: openPositions,
+        applications_active: applicationsActive,
+        trainings_planned: trainingsPlanned,
+        training_requests_pending: trainingRequestsPending,
+      },
+    });
+  });
+
   // ─── Recrutement : postes à pourvoir & candidatures (module amont RH) ───────
   // Un poste ouvert reçoit des candidatures ; chaque candidature suit le circuit
   // reçue → entretien → retenue / refusée. Le poste se clôt (pourvu / annulé).

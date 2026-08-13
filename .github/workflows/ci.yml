@@ -11,11 +11,15 @@ on:
   push:
     branches: [main]
 
-# Une seule exécution utile par branche : une nouvelle poussée annule la
-# précédente encore en cours.
+# Une seule exécution utile par PULL REQUEST : une nouvelle poussée sur la même PR
+# annule la précédente encore en cours (économie de minutes CI).
+# En revanche, on n'annule JAMAIS un run sur `main` : chaque commit de `main` doit
+# obtenir une conclusion définitive (success), car le déploiement Scalingo peut être
+# configuré pour ne déployer qu'après une CI verte — un run « cancelled » (provoqué
+# par des fusions rapprochées) bloquerait alors le déploiement de ce commit.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:

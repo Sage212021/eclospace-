@@ -72,4 +72,19 @@ describe("découplage présences ↔ paie", () => {
     // Le témoin reste inchangé quelle que soit la saisie.
     expect(avec.attendance_witness).toBe(60000);
   });
+
+  it("les retenues internes (prêt, avance, retard, autres) réduisent le NET sans toucher au brut", async () => {
+    const sans = (await app.inject({ method: "GET", url: `/api/v1/payroll/employees/${employeeId}/payslip?period=${period}`, headers: { cookie } })).json();
+    const avec = (await app.inject({
+      method: "GET",
+      url: `/api/v1/payroll/employees/${employeeId}/payslip?period=${period}&avance=10000&pret=25000&retard=2250&autres=1750`,
+      headers: { cookie },
+    })).json();
+    // Total des retenues internes = somme exacte des postes saisis.
+    expect(avec.payslip.total_retenues_internes).toBe(10000 + 25000 + 2250 + 1750);
+    // Le NET baisse d'autant ; le brut et les cotisations salariales sont inchangés.
+    expect(avec.payslip.salaire_brut).toBe(sans.payslip.salaire_brut);
+    expect(avec.payslip.total_retenues_salariales).toBe(sans.payslip.total_retenues_salariales);
+    expect(avec.payslip.net_a_payer).toBe(sans.payslip.net_a_payer - 39000);
+  });
 });

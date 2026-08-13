@@ -38,13 +38,17 @@ interface DirectionPageProps {
   // (annulation de facture) depuis sa propre page — permission pilotage:administration,
   // que la Finance ne détient pas (séparation des pouvoirs).
   canValidateCancellation: boolean;
+  // Le DG (ou l'administrateur général) valide la paie mensuelle préparée par le
+  // RH, depuis sa propre page (rôle DIR_GENERAL / ADMIN_GENERAL).
+  canValidatePayrollDg: boolean;
 }
 
 // Ch. 5 : tableau de bord Direction générale consolidé, recherche globale,
 // alertes automatiques et centre de pilotage intelligent (Ch. 5 §5.9).
 import { useI18n } from "../i18n";
+import { PayrollMonthlySection } from "../components/PayrollMonthlySection";
 
-export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canValidateCancellation }: DirectionPageProps) {
+export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canValidateCancellation, canValidatePayrollDg }: DirectionPageProps) {
   const { t, lang } = useI18n();
   const [dashboard, setDashboard] = useState<DirectionDashboard | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -120,6 +124,12 @@ export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canVa
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
+
+      {/* Validation de la paie mensuelle par le DG, sur sa propre page : il choisit
+          le mois, contrôle la grille préparée par le RH, puis « Valide le mois »
+          (ou le retourne au RH). Sans quoi le DG ne voyait aucune fenêtre de
+          validation de la paie. */}
+      {canValidatePayrollDg && <PayrollMonthlySection canManage={false} canValidateDg collapsible defaultOpen={false} />}
 
       {/* Décision de gouvernance du DG : annulations de factures à valider —
           présentées ici, sur la page du DG, pas seulement côté Finance. */}

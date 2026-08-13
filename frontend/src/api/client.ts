@@ -2004,6 +2004,12 @@ export function getCustomer(id: string) {
   return request<Customer & { outstandingBalance: number }>(`/api/v1/customers/${id}`);
 }
 
+// Suppression logique d'un client (fiches de test / doublons). Bloquée côté
+// serveur si le client a un historique comptable.
+export function deleteCustomer(id: string) {
+  return request<{ deleted: true }>(`/api/v1/customers/${id}`, { method: "DELETE" });
+}
+
 export interface SalesOrder {
   id: string;
   orderNumber: string;
@@ -3845,8 +3851,50 @@ export interface PayslipResult {
   // Témoin indicatif du cahier de présence — n'est PAS appliqué au net.
   attendance_witness: number;
 }
-export function getPayslip(employeeId: string, period: string) {
-  return request<PayslipResult>(`/api/v1/payroll/employees/${employeeId}/payslip?period=${period}`);
+export function getPayslip(
+  employeeId: string,
+  period: string,
+  deductions?: { retenue_absence?: number; avance?: number; pret?: number; retard?: number; autres?: number },
+) {
+  const qs = new URLSearchParams({ period });
+  if (deductions) {
+    for (const [k, v] of Object.entries(deductions)) {
+      if (v != null && v > 0) qs.set(k, String(v));
+    }
+  }
+  return request<PayslipResult>(`/api/v1/payroll/employees/${employeeId}/payslip?${qs.toString()}`);
+}
+
+// Retenues du mois mémorisées par employé et par mois (bulletin unitaire).
+export interface MonthlyDeductions {
+  period: string;
+  primes: number; // gain imposable du mois
+  heures_sup: number; // gain imposable du mois
+  retenue_absence: number;
+  avance: number;
+  pret: number;
+  retard: number;
+  autres: number;
+  sanction: number; // saisie uniquement dans la grille mensuelle (lecture seule ici)
+  extra_lines: PayrollExtraLine[]; // lignes libres (gérées dans la grille)
+  status: "brouillon" | "soumis_dg" | "valide" | null;
+  locked: boolean; // true dès que le mois est soumis/validé
+  saved: boolean;
+}
+
+export function getMonthlyDeductions(employeeId: string, period: string) {
+  return request<MonthlyDeductions>(`/api/v1/payroll/employees/${employeeId}/deductions?period=${period}`);
+}
+
+export function saveMonthlyDeductions(
+  employeeId: string,
+  period: string,
+  amounts: { primes: number; heures_sup: number; retenue_absence: number; avance: number; pret: number; retard: number; autres: number },
+) {
+  return request<MonthlyDeductions>(`/api/v1/payroll/employees/${employeeId}/deductions`, {
+    method: "PUT",
+    body: JSON.stringify({ period, ...amounts }),
+  });
 }
 
 // Cycle mensuel de paie (grille éditable → validation DG). Étape 1 : préparer le

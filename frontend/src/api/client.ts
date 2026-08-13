@@ -2004,6 +2004,12 @@ export function getCustomer(id: string) {
   return request<Customer & { outstandingBalance: number }>(`/api/v1/customers/${id}`);
 }
 
+// Suppression logique d'un client (fiches de test / doublons). Bloquée côté
+// serveur si le client a un historique comptable.
+export function deleteCustomer(id: string) {
+  return request<{ deleted: true }>(`/api/v1/customers/${id}`, { method: "DELETE" });
+}
+
 export interface SalesOrder {
   id: string;
   orderNumber: string;

@@ -206,6 +206,50 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     return reply.send({ ...customer, outstandingBalance });
   });
 
+  // Suppression LOGIQUE d'un client (deletedAt) — pour retirer les fiches de test
+  // ou les doublons. Bloquée si le client a un historique (commandes, ventes,
+  // factures, dépôts-ventes, retours), afin de ne jamais casser une trace
+  // comptable. Réservée au commercial (saisie) et à la Direction.
+  fastify.delete("/api/v1/customers/:id", { preHandler: requirePermission("commercial", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const customer = await prisma.customer.findFirst({ where: { id, deletedAt: null } });
+    if (!customer) {
+      return reply.code(404).send({ code: "not_found", message: "Client introuvable." });
+    }
+    const [orders, sales, invoices, consignments, returns] = await Promise.all([
+      prisma.salesOrder.count({ where: { customerId: id } }),
+      prisma.posSale.count({ where: { customerId: id } }),
+      prisma.invoice.count({ where: { customerId: id } }),
+      prisma.consignment.count({ where: { customerId: id } }),
+      prisma.customerReturn.count({ where: { customerId: id } }),
+    ]);
+    const history = orders + sales + invoices + consignments + returns;
+    if (history > 0) {
+      const parts: string[] = [];
+      if (orders) parts.push(`${orders} commande(s)`);
+      if (sales) parts.push(`${sales} vente(s)`);
+      if (invoices) parts.push(`${invoices} facture(s)`);
+      if (consignments) parts.push(`${consignments} dépôt(s)-vente`);
+      if (returns) parts.push(`${returns} retour(s)`);
+      return reply.code(409).send({
+        code: "customer_has_history",
+        message: `Suppression impossible : ce client a un historique (${parts.join(", ")}). Les fiches liées à des documents comptables sont conservées.`,
+      });
+    }
+    await prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } });
+    // Suppression logique = mise à jour de deletedAt (journal append-only).
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "customer",
+      entityId: id,
+      oldValues: { name: customer.name, category: customer.category, deletedAt: null },
+      newValues: { deletedAt: new Date().toISOString(), reason: "suppression logique du client" },
+      ipAddress: request.ip,
+    });
+    return reply.send({ deleted: true });
+  });
+
   // Remise hors grille : exige une validation tracée (commercial:administration, §17.4).
   fastify.post(
     "/api/v1/customers/:id/discounts",

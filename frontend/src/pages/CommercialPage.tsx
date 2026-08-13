@@ -3,6 +3,7 @@ import {
   approveSalesOrder,
   createCustomer,
   createPosSale,
+  deleteCustomer,
   listProvisionalPosSales,
   listMyPosSales,
   getSalesAnnual,
@@ -172,7 +173,33 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
                 </div>
                 {customer.creditLimit && <span className="ecl-row__desc" style={{ margin: 0 }}>{t("com.limit", "plafond")} <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{customer.creditLimit}</strong></span>}
                 {/* Barre d'actions standard (refonte, Étape 1) : impression de la fiche client. */}
-                <StandardActionBar onPrint={() => getCustomer(customer.id).then((c) => printCustomerFiche(c)).catch((e) => setError(e instanceof Error ? e.message : "Impression impossible."))} />
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <StandardActionBar onPrint={() => getCustomer(customer.id).then((c) => printCustomerFiche(c)).catch((e) => setError(e instanceof Error ? e.message : "Impression impossible."))} />
+                  {canManage && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: t("com.del_customer_title", "Supprimer ce client ?"),
+                          message: t("com.del_customer_msg", `« ${customer.name} » sera retiré de la liste. Les clients ayant un historique (commandes, ventes, factures) ne peuvent pas être supprimés.`),
+                          confirmLabel: t("com.del_customer_ok", "Supprimer"),
+                          tone: "danger",
+                        });
+                        if (!ok) return;
+                        try {
+                          await deleteCustomer(customer.id);
+                          setMessage(t("com.del_customer_done", `Client « ${customer.name} » supprimé.`));
+                          await refresh();
+                        } catch (e) {
+                          setError(e instanceof Error ? e.message : t("com.del_customer_err", "Suppression impossible."));
+                        }
+                      }}
+                    >
+                      {t("com.delete", "Supprimer")}
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

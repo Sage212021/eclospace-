@@ -80,8 +80,6 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   // Retenue d'absence SAISIE PAR LE RH (règle métier 07/08/2026 : le cahier de
   // présence est un simple témoin, jamais relié automatiquement au calcul).
   const [manualRetenue, setManualRetenue] = useState(0);
-  // Témoin indicatif issu du cahier de présence (affiché, non appliqué).
-  const [attendanceWitness, setAttendanceWitness] = useState(0);
   const [emailOpen, setEmailOpen] = useState(false);
   const [dispatches, setDispatches] = useState<PayslipDispatch[]>([]);
   const loadDispatches = () => getPayslipDispatches(employeeId, period).then(setDispatches).catch(() => setDispatches([]));
@@ -161,28 +159,24 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
     setManualRetenue(0);
     if (!employeeId) {
       setSlip(null);
-      setAttendanceWitness(0);
       return;
     }
     getPayslip(employeeId, period)
       .then((r) => {
         setSlip(r);
-        setAttendanceWitness(r.attendance_witness);
       })
       .catch(() => {
-        // Attendu tant que la fiche n'est pas enregistrée : aperçu sans témoin.
+        // Attendu tant que la fiche n'est pas enregistrée.
         setSlip(null);
-        setAttendanceWitness(0);
       });
   }, [employeeId, period]);
 
-  // Bouton « Actualiser » : rafraîchit le barème et le témoin de présence (serveur).
+  // Bouton « Actualiser » : rafraîchit le barème (serveur).
   async function computeSlip() {
     if (!employeeId) return;
     try {
       const r = await getPayslip(employeeId, period);
       setSlip(r);
-      setAttendanceWitness(r.attendance_witness);
       setError(null);
       loadDispatches();
     } catch (err) {
@@ -358,18 +352,8 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
                 </span>
               )}
             </div>
-            {/* Témoin indicatif du cahier de présence : jamais appliqué d'office ;
-                le RH décide de le reporter (ou non) dans la retenue ci-dessus. */}
-            <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
-              {t("pay.witness_label", "Témoin cahier de présence")} :{" "}
-              <span style={{ fontFamily: "var(--font-mono)" }}>{fcfa(attendanceWitness)}</span>
-              {attendanceWitness > 0 && (
-                <button type="button" onClick={() => setManualRetenue(attendanceWitness)} style={{ marginLeft: 8, border: "1px solid var(--eclosion)", background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 6, padding: "1px 8px", fontSize: 11.5, cursor: "pointer" }}>
-                  {t("pay.witness_apply", "Reporter dans la retenue")}
-                </button>
-              )}
-              <span style={{ display: "block", marginTop: 2 }}>{t("pay.witness_hint", "Indicatif : non relié au calcul. La retenue appliquée est celle que vous saisissez.")}</span>
-            </p>
+            {/* Le « témoin cahier de présence » a été retiré avec le module
+                Présences (13/08/2026). La retenue reste 100 % manuelle. */}
             {!rateSet && <p style={{ fontSize: 12, color: "var(--alert, #C4661F)", marginTop: 8 }}>{t("pay.no_scale_period", "Aucun barème en vigueur pour ce mois : renseignez le barème dans « Paramètres de paie ».")}</p>}
             {displaySlip && (
               <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8, fontSize: 13 }}>

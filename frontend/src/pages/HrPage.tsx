@@ -44,14 +44,9 @@ import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconAdmin } from "../components/icons";
-import { WorkScheduleSection } from "../components/WorkScheduleSection";
-import { PresenceSummaryCard } from "../components/PresenceSummaryCard";
-import { DeductionRulesSection } from "../components/DeductionRulesSection";
 import { ErpConnectionsSection } from "../components/ErpConnectionsSection";
-import { AttendanceReportSection } from "../components/AttendanceReportSection";
 import { ActivityClosureSection } from "../components/ActivityClosureSection";
 import { useI18n } from "../i18n";
-import { PayrollConsolidationSection } from "../components/PayrollConsolidationSection";
 import { PayrollEngineHub } from "../components/PayrollEngineHub";
 
 const STATUS_LABELS: Record<EmployeeStatus, string> = {
@@ -341,25 +336,13 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
           (10 par défaut, paramétrable) et rappels automatiques aux responsables. */}
       <ActivityClosureSection canAdminister={canAdminister} />
 
-      {/* Évolution — Présences & Temps de travail : paramétrage des horaires (§9) */}
-      <WorkScheduleSection canAdminister={canAdministerPresence} />
-
-      {/* Évolution — Calcul de présence : synthèse du mois de l'utilisateur (§12-17) */}
-      <PresenceSummaryCard />
-
-      {/* Évolution — Règles de retenues paramétrables et versionnées (§21-22) */}
-      <DeductionRulesSection canAdminister={canAdministerPresence} />
-
-      {/* Relevé des connexions ERP (remplace l'ancien module « Anomalies de
-          présence ») — trace indicative, outil d'arbitrage RH, sans effet paie.
-          Réservé aux profils qui supervisent la présence. */}
+      {/* Le module « Présences & Temps de travail » (pointage par connexion,
+          tableau de bord de présence, règles de retenues, consolidation paie) a
+          été RETIRÉ à la demande de l'opérateur (13/08/2026) : la connexion à
+          l'ERP ne servait pas de véritable pointage. Seul subsiste le « Relevé
+          des connexions ERP » ci-dessous, conservé comme simple témoin /
+          outil d'arbitrage RH, sans aucun effet sur la paie. */}
       {canOverseePresence && <ErpConnectionsSection employees={employees} />}
-
-      {/* Évolution — Tableau de bord & rapports RH + exports (§32-33) */}
-      {canOverseePresence && <AttendanceReportSection />}
-
-      {/* Évolution — Consolidation vers la paie (§28-31) */}
-      {canOverseePresence && <PayrollConsolidationSection canAdminister={canAdministerPresence} />}
 
       {/* Lot 5 — accès UNIQUE « Moteur de Paie & Paramétrage » : toutes les
           rubriques de la paie regroupées en accordéon (centre de contrôle). */}

@@ -338,11 +338,14 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     { preHandler: requirePermission("paie", "consultation") },
     async (request, reply) => {
       const { employeeId } = request.params as { employeeId: string };
-      const q = request.query as { period?: string; retenue_absence?: string };
+      const q = request.query as { period?: string; retenue_absence?: string; avance?: string; pret?: string; retard?: string; autres?: string };
       const period = normalizePeriod(q.period);
       // Retenue d'absence saisie par le RH (0 par défaut) — jamais issue des présences.
       const manualRetenue = q.retenue_absence != null ? Math.max(Number(q.retenue_absence) || 0, 0) : 0;
-      const resolved = await resolvePayslip(employeeId, period, manualRetenue);
+      // Retenues internes du mois saisies par le RH (prêts, avances, retards, autres).
+      const pos = (v?: string) => Math.max(Number(v) || 0, 0);
+      const internal = { avance: pos(q.avance), pret: pos(q.pret), retard: pos(q.retard), autres: pos(q.autres) };
+      const resolved = await resolvePayslip(employeeId, period, manualRetenue, internal);
       if ("error" in resolved) return reply.code(resolved.status).send(resolved.error);
       await writeAuditLog({ userId: request.user!.id, action: "view_sensitive", entityType: "payslip", entityId: `${employeeId}:${period}`, ipAddress: request.ip });
       return reply.send({
@@ -897,6 +900,9 @@ async function resolvePayslip(
   // Le cahier de présence (module Présences) n'est qu'un TÉMOIN indicatif : il
   // n'alimente jamais automatiquement le calcul (règle métier, 07/08/2026).
   manualRetenue = 0,
+  // Retenues internes du mois saisies par le RH (prêts, avances, retards, autres) :
+  // elles réduisent le NET (pas le brut ni l'assiette d'impôt).
+  internal: { avance: number; pret: number; retard: number; autres: number } = { avance: 0, pret: 0, retard: 0, autres: 0 },
 ): Promise<
   | { employee: { id: string }; employeeName: string; profile: { matricule: string | null; email: string | null }; rateEffectiveFrom: string; rates: ReturnType<typeof rateDisplay>; payslip: Payslip; attendanceWitness: number }
   | { error: { code: string; message: string }; status: number }
@@ -932,7 +938,12 @@ async function resolvePayslip(
       seniorityThreshold: profile.seniorityThreshold ?? 0,
       applySeniority: profile.applySeniority,
       retenueAbsence: Math.max(manualRetenue, 0),
-      internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
+      internal: {
+        avance: Math.max(internal.avance, 0),
+        pret: Math.max(internal.pret, 0),
+        retard: Math.max(internal.retard, 0),
+        autres: Math.max(internal.autres, 0),
+      },
     },
     ratesFrom(rateSet),
     await loadFormulaOverlay(),

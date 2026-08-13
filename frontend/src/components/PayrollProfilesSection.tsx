@@ -80,6 +80,9 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   // Retenue d'absence SAISIE PAR LE RH (règle métier 07/08/2026 : le cahier de
   // présence est un simple témoin, jamais relié automatiquement au calcul).
   const [manualRetenue, setManualRetenue] = useState(0);
+  // Retenues internes du mois saisies par le RH (prêts, avances, retards…).
+  // Modèle moteur : elles réduisent le NET (pas le brut, ni l'assiette d'impôt).
+  const [internal, setInternal] = useState({ avance: 0, pret: 0, retard: 0, autres: 0 });
   const [emailOpen, setEmailOpen] = useState(false);
   const [dispatches, setDispatches] = useState<PayslipDispatch[]>([]);
   const loadDispatches = () => getPayslipDispatches(employeeId, period).then(setDispatches).catch(() => setDispatches([]));
@@ -155,8 +158,9 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   // à chaque changement d'employé ou de période : alimente l'aperçu en direct.
   useEffect(() => {
     getPayrollRateSet(`${period}-01`).then(setRateSet).catch(() => setRateSet(null));
-    // La retenue est une saisie RH délibérée : on repart de 0 à chaque employé/mois.
+    // Les retenues sont des saisies RH délibérées : on repart de 0 à chaque employé/mois.
     setManualRetenue(0);
+    setInternal({ avance: 0, pret: 0, retard: 0, autres: 0 });
     if (!employeeId) {
       setSlip(null);
       return;
@@ -175,7 +179,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   async function computeSlip() {
     if (!employeeId) return;
     try {
-      const r = await getPayslip(employeeId, period);
+      const r = await getPayslip(employeeId, period, { retenue_absence: manualRetenue, ...internal });
       setSlip(r);
       setError(null);
       loadDispatches();
@@ -204,11 +208,11 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
         seniorityThreshold: form.seniority_threshold ?? 0,
         applySeniority: form.apply_seniority,
         retenueAbsence: manualRetenue,
-        internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
+        internal,
       },
       ratesFromRateSet(rateSet),
     );
-  }, [form, rateSet, manualRetenue]);
+  }, [form, rateSet, manualRetenue, internal]);
 
   // Valeurs affichées / imprimées / envoyées : l'aperçu en direct s'il existe,
   // sinon le calcul serveur.
@@ -222,7 +226,6 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   const slipRates = rateSet
     ? { vid_sal: rateSet.cnps.vid_sal_pct, vid_pat: rateSet.cnps.vid_pat_pct, pf: rateSet.cnps.pf_pct, at: rateSet.cnps.at_pct, cfc_sal: rateSet.fiscal.cfc_sal_pct, cfc_pat: rateSet.fiscal.cfc_pat_pct, fne: rateSet.fiscal.fne_pct, cac: rateSet.fiscal.cac_pct }
     : null;
-  const noInternal = { avance: 0, pret: 0, retard: 0, autres: 0 };
   const slipMeta = {
     matricule: form.matricule || null,
     cnps_number: form.cnps_number || null,
@@ -241,7 +244,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
     payment_mode: form.payment_mode || null,
     account_number: form.account_number || null,
     rates: slipRates,
-    internal: noInternal,
+    internal,
   };
 
   const readOnly = !canManage || locked;
@@ -342,31 +345,56 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
           <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
               <Field label={t("pay.period_field", "Mois du bulletin (AAAA-MM)")}><input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
-              <Field label={t("pay.manual_deduction", "Retenue d'absence (saisie RH)")}>
-                <input type="number" min={0} step={100} value={manualRetenue} onChange={(e) => setManualRetenue(Math.max(Number(e.target.value) || 0, 0))} style={{ fontFamily: "var(--font-mono, monospace)", width: 130 }} />
-              </Field>
-              <Button variant="edit" size="sm" type="button" onClick={computeSlip}>{t("pay.compute_slip", "Actualiser (barème + témoin)")}</Button>
+              <Button variant="edit" size="sm" type="button" onClick={computeSlip}>{t("pay.compute_slip", "Actualiser (barème)")}</Button>
               {liveSlip && (
                 <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", background: "var(--eclosion-soft)", borderRadius: 999, padding: "3px 10px" }}>
                   ● {t("pay.live", "Aperçu en direct")}
                 </span>
               )}
             </div>
-            {/* Le « témoin cahier de présence » a été retiré avec le module
-                Présences (13/08/2026). La retenue reste 100 % manuelle. */}
+            {/* Retenues du mois saisies par le RH : l'absence réduit le brut (avant
+                impôt) ; les prêts/avances/retards/autres réduisent le NET. Chaque
+                montant recalcule l'aperçu en direct. */}
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>{t("pay.deductions_title", "Retenues du mois (saisie RH)")}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
+                <Field label={t("pay.manual_deduction", "Absence injustifiée")}>
+                  <input type="number" min={0} step={100} value={manualRetenue} onChange={(e) => setManualRetenue(Math.max(Number(e.target.value) || 0, 0))} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                </Field>
+                <Field label={t("pay.int_avance", "Avance sur salaire")}>
+                  <input type="number" min={0} step={100} value={internal.avance} onChange={(e) => setInternal({ ...internal, avance: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                </Field>
+                <Field label={t("pay.int_pret", "Remboursement prêt")}>
+                  <input type="number" min={0} step={100} value={internal.pret} onChange={(e) => setInternal({ ...internal, pret: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                </Field>
+                <Field label={t("pay.int_retard", "Retard non justifié")}>
+                  <input type="number" min={0} step={100} value={internal.retard} onChange={(e) => setInternal({ ...internal, retard: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                </Field>
+                <Field label={t("pay.int_autres", "Autres retenues")}>
+                  <input type="number" min={0} step={100} value={internal.autres} onChange={(e) => setInternal({ ...internal, autres: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                </Field>
+              </div>
+            </div>
             {!rateSet && <p style={{ fontSize: 12, color: "var(--alert, #C4661F)", marginTop: 8 }}>{t("pay.no_scale_period", "Aucun barème en vigueur pour ce mois : renseignez le barème dans « Paramètres de paie ».")}</p>}
             {displaySlip && (
               <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8, fontSize: 13 }}>
-                <SlipRow label={t("pay.slip.gross", "Salaire brut")} value={displaySlip.salaire_brut} strong />
+                <SlipRow label={t("pay.slip.base", "Salaire de base")} value={displaySlip.base} />
+                <SlipRow label={t("pay.slip.complements", "Compléments (primes du poste)")} value={displaySlip.complements} />
                 <SlipRow label={t("pay.slip.seniority", "Prime d'ancienneté")} value={displaySlip.prime_anciennete} />
+                <SlipRow label={t("pay.slip.gross", "Salaire brut")} value={displaySlip.salaire_brut} strong />
                 <SlipRow label={t("pay.slip.cnps_base", "Assiette CNPS")} value={displaySlip.assiette_cnps} />
                 <SlipRow label={t("pay.slip.pvid_emp", "PVID salarié")} value={displaySlip.pvid_salarie} />
                 <SlipRow label={t("pay.slip.cfc_emp", "CFC salarié")} value={displaySlip.cfc_salarie} />
                 <SlipRow label={t("pay.slip.communal_tax", "Taxe communale")} value={displaySlip.taxe_communale} />
                 <SlipRow label={t("pay.slip.rav", "RAV")} value={displaySlip.rav} />
                 <SlipRow label={t("pay.slip.irpp_cac", "IRPP + CAC")} value={displaySlip.irpp_cac} />
-                <SlipRow label={t("pay.slip.absence_deduction", "Retenue absence (saisie RH)")} value={displaySlip.retenue_absence} />
                 <SlipRow label={t("pay.slip.total_emp_deductions", "Total retenues salariales")} value={displaySlip.total_retenues_salariales} />
+                <SlipRow label={t("pay.slip.absence_deduction", "Retenue absence")} value={displaySlip.retenue_absence} />
+                <SlipRow label={t("pay.int_avance", "Avance sur salaire")} value={internal.avance} />
+                <SlipRow label={t("pay.int_pret", "Remboursement prêt")} value={internal.pret} />
+                <SlipRow label={t("pay.int_retard", "Retard non justifié")} value={internal.retard} />
+                <SlipRow label={t("pay.int_autres", "Autres retenues")} value={internal.autres} />
+                <SlipRow label={t("pay.slip.total_internal", "Total retenues internes")} value={displaySlip.total_retenues_internes} />
                 <SlipRow label={t("pay.slip.net", "NET À PAYER")} value={displaySlip.net_a_payer} strong tone="gold" />
                 <SlipRow label={t("pay.slip.total_emp_charges", "Total charges patronales")} value={displaySlip.total_charges_patronales} />
                 <SlipRow label={t("pay.slip.employer_cost", "Coût employeur")} value={displaySlip.cout_employeur} strong />

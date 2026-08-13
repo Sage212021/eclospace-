@@ -3851,8 +3851,18 @@ export interface PayslipResult {
   // Témoin indicatif du cahier de présence — n'est PAS appliqué au net.
   attendance_witness: number;
 }
-export function getPayslip(employeeId: string, period: string) {
-  return request<PayslipResult>(`/api/v1/payroll/employees/${employeeId}/payslip?period=${period}`);
+export function getPayslip(
+  employeeId: string,
+  period: string,
+  deductions?: { retenue_absence?: number; avance?: number; pret?: number; retard?: number; autres?: number },
+) {
+  const qs = new URLSearchParams({ period });
+  if (deductions) {
+    for (const [k, v] of Object.entries(deductions)) {
+      if (v != null && v > 0) qs.set(k, String(v));
+    }
+  }
+  return request<PayslipResult>(`/api/v1/payroll/employees/${employeeId}/payslip?${qs.toString()}`);
 }
 
 // Cycle mensuel de paie (grille éditable → validation DG). Étape 1 : préparer le

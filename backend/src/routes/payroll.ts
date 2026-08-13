@@ -670,6 +670,19 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const rates = ratesFrom(rateSet as unknown as Record<string, unknown>);
       const formulas = await loadFormulaOverlay();
 
+      // Auto-complétion : un salarié dont la FICHE PAIE a été créée APRÈS la
+      // préparation du mois n'avait pas de ligne et restait invisible. Tant que le
+      // mois est modifiable (brouillon), on crée à la volée les lignes manquantes
+      // pour tous les salariés dotés d'une fiche → ils apparaissent immédiatement.
+      if (run.status === "brouillon") {
+        const profiles = await prisma.payrollEmployeeProfile.findMany({ where: { employee: { deletedAt: null } }, select: { employeeId: true } });
+        const existing = new Set((await prisma.payrollMonthlyLine.findMany({ where: { runId: run.id }, select: { employeeId: true } })).map((l) => l.employeeId));
+        const toCreate = profiles.filter((p) => !existing.has(p.employeeId));
+        if (toCreate.length > 0) {
+          await prisma.payrollMonthlyLine.createMany({ data: toCreate.map((p) => ({ runId: run.id, employeeId: p.employeeId })), skipDuplicates: true });
+        }
+      }
+
       const lines = await prisma.payrollMonthlyLine.findMany({
         where: { runId: run.id },
         include: {

@@ -558,12 +558,26 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       orderBy: { createdAt: "asc" },
     });
     const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
-    const groups = new Map<string, typeof employees>();
-    for (const e of employees) {
-      const key = `${norm(e.firstName)}|${norm(e.lastName)}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(e);
+    // Tokens significatifs du nom complet (mots de ≥ 2 lettres).
+    const tokensOf = (e: (typeof employees)[number]) => new Set(norm(`${e.firstName} ${e.lastName}`).split(" ").filter((w) => w.length >= 2));
+    const tok = employees.map(tokensOf);
+    // Union-find : deux fiches sont réunies si elles PARTAGENT ≥ 2 mots de nom
+    // (ex. « NOAH MBA » / « NOAH MBALA » partagent NOAH+…), OU même matricule,
+    // OU même téléphone. Détection large → l'opérateur tranche (rien d'automatique).
+    const parent = employees.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const union = (i: number, j: number) => { const a = find(i), b = find(j); if (a !== b) parent[a] = b; };
+    for (let i = 0; i < employees.length; i++) {
+      for (let j = i + 1; j < employees.length; j++) {
+        let shared = 0;
+        for (const w of tok[i]) if (tok[j].has(w)) shared++;
+        const sameMat = employees[i].payrollProfile?.matricule && employees[i].payrollProfile?.matricule === employees[j].payrollProfile?.matricule;
+        const samePhone = employees[i].phone && employees[i].phone === employees[j].phone;
+        if (shared >= 2 || sameMat || samePhone) union(i, j);
+      }
     }
+    const groups = new Map<number, typeof employees>();
+    employees.forEach((e, i) => { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r)!.push(e); });
     const duplicates = [...groups.values()]
       .filter((g) => g.length > 1)
       .map((g) => ({

@@ -37,6 +37,19 @@ describe("doublons d'employés", () => {
     expect(grp!.records.length).toBe(2);
   });
 
+  it("détecte un quasi-doublon (faute de frappe : NOAH MBA vs NOAH MBALA — 2 mots partagés)", async () => {
+    const t2 = `${tag}X`;
+    const e1 = await prisma.employee.create({ data: { firstName: `${t2} HERMAN`, lastName: "NOAH MBA" } });
+    const e2 = await prisma.employee.create({ data: { firstName: `${t2} Herman`, lastName: "noah MBALA" } });
+    try {
+      const groups = (await app.inject({ method: "GET", url: "/api/v1/hr/duplicates", headers: { cookie } })).json().groups as Array<{ records: Array<{ employee_id: string }> }>;
+      const grp = groups.find((g) => g.records.some((r) => r.employee_id === e1.id) && g.records.some((r) => r.employee_id === e2.id));
+      expect(grp).toBeTruthy();
+    } finally {
+      await prisma.employee.deleteMany({ where: { id: { in: [e1.id, e2.id] } } }).catch(() => {});
+    }
+  });
+
   it("supprime UNE fiche (doublon) et conserve l'autre", async () => {
     const del = await app.inject({ method: "DELETE", url: `/api/v1/employees/${b}`, headers: { cookie } });
     expect(del.statusCode).toBe(200);

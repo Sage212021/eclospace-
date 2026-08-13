@@ -13,6 +13,7 @@ import {
   listAccessReviews,
   listDepartments,
   listEmployees,
+  deleteEmployee,
   getContractAlerts,
   type ContractAlert,
   listRoles,
@@ -50,6 +51,7 @@ import { HrDuplicatesSection } from "../components/HrDuplicatesSection";
 import { ActivityClosureSection } from "../components/ActivityClosureSection";
 import { useI18n } from "../i18n";
 import { PayrollEngineHub } from "../components/PayrollEngineHub";
+import { useConfirm } from "../components/ConfirmProvider";
 
 const STATUS_LABELS: Record<EmployeeStatus, string> = {
   salarie: "Salarié",
@@ -129,6 +131,7 @@ type HrModal =
 // compte, absences, revue des accès (couche transverse du Lot 6).
 export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence, canOverseePresence, canViewPayroll, canManagePayroll, canEditPayroll, canClosePayroll, canValidatePayrollDg }: HrPageProps) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -143,6 +146,26 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   const [contractAlerts, setContractAlerts] = useState<ContractAlert[]>([]);
   const [contractsFor, setContractsFor] = useState<Employee | null>(null);
   const [evalFor, setEvalFor] = useState<Employee | null>(null);
+
+  // Suppression logique d'un dossier collaborateur (doublon, erreur de saisie).
+  // Confirmation obligatoire ; la grille se rafraîchit aussitôt.
+  async function handleDeleteEmployee(employee: Employee) {
+    const ok = await confirm({
+      title: t("hr.delete_title", "Supprimer ce dossier collaborateur ?"),
+      message: t("hr.delete_msg", `« ${employee.firstName} ${employee.lastName} » sera retiré des listes. Suppression logique et réversible : les éventuelles données liées (bulletins, contrats, absences) sont conservées. Vérifiez que vous supprimez bien le DOUBLON et non la fiche à conserver.`),
+      confirmLabel: t("hr.delete_ok", "Supprimer le dossier"),
+      tone: "danger",
+    });
+    if (!ok) return;
+    try {
+      await deleteEmployee(employee.id);
+      setMessage(t("hr.delete_done", `Dossier « ${employee.firstName} ${employee.lastName} » supprimé.`));
+      setError(null);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("hr.delete_err", "Suppression impossible."));
+    }
+  }
 
   const refresh = async () => {
     const [employeeList, absenceList] = await Promise.all([listEmployees(), listAbsences()]);
@@ -344,7 +367,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
 
       {/* Doublons d'employés : détection + suppression logique guidée (le RH
           choisit la fiche à conserver). Suppression réservée à l'administration RH. */}
-      <HrDuplicatesSection canDelete={canAdminister} collapsible defaultOpen={false} />
+      <HrDuplicatesSection canDelete={canAdminister} collapsible defaultOpen />
 
       {/* Le module « Présences & Temps de travail » (pointage par connexion,
           tableau de bord de présence, règles de retenues, consolidation paie) a
@@ -404,6 +427,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                   {canReadConfidential && <Button variant="view" size="sm" onClick={() => openConfidential(employee)}>{t("hr.confidential", "Confidentiel")}</Button>}
                   {canWriteConfidential && <Button variant="edit" size="sm" onClick={() => setModal({ kind: "edit-confidential", employee, baseSalary: "" })}>{t("hr.edit_conf", "Modifier conf.")}</Button>}
                   {canManageUsers && <Button variant="edit" size="sm" onClick={() => setModal({ kind: "grant-role", employee, roleCode: "", justification: "" })}>{t("hr.grant_role", "Attribuer un rôle")}</Button>}
+                  {canAdminister && <Button variant="danger" size="sm" onClick={() => handleDeleteEmployee(employee)}>{t("hr.delete_employee", "Supprimer")}</Button>}
                 </div>
               </div>
             ))}

@@ -95,6 +95,33 @@ describe("rapports hebdomadaires (Lot rapports)", () => {
     expect(byA.statusCode).toBe(403);
   });
 
+  it("un chef de département ne voit PLUS les rapports des autres (403)", async () => {
+    const s = Math.random().toString(36).slice(2, 6);
+    await createUserWithRole(`auth_${s}`, "CORRECTEUR", "Auth123!");
+    const authCookie = await loginCookie(app, `auth_${s}`, "Auth123!");
+    await createUserWithRole(`chef_${s}`, "CHEF_DEPARTEMENT", "Chef123!");
+    const chefCookie = await loginCookie(app, `chef_${s}`, "Chef123!");
+    const reportId = (await app.inject({ method: "POST", url: "/api/v1/weekly-reports", headers: { cookie: authCookie } })).json().id;
+    await app.inject({ method: "POST", url: `/api/v1/weekly-reports/${reportId}/submit`, headers: { cookie: authCookie } });
+    const asChef = await app.inject({ method: "GET", url: `/api/v1/weekly-reports/${reportId}`, headers: { cookie: chefCookie } });
+    expect(asChef.statusCode).toBe(403);
+  });
+
+  it("le RH VOIT un rapport soumis mais ne peut PAS le valider (403)", async () => {
+    const s = Math.random().toString(36).slice(2, 6);
+    await createUserWithRole(`auth2_${s}`, "CORRECTEUR", "Auth123!");
+    const authCookie = await loginCookie(app, `auth2_${s}`, "Auth123!");
+    await createUserWithRole(`rh_${s}`, "RESP_RH", "RhPass123!");
+    const rhCookie = await loginCookie(app, `rh_${s}`, "RhPass123!");
+    const reportId = (await app.inject({ method: "POST", url: "/api/v1/weekly-reports", headers: { cookie: authCookie } })).json().id;
+    await app.inject({ method: "POST", url: `/api/v1/weekly-reports/${reportId}/submit`, headers: { cookie: authCookie } });
+    // RH : lecture autorisée…
+    expect((await app.inject({ method: "GET", url: `/api/v1/weekly-reports/${reportId}`, headers: { cookie: rhCookie } })).statusCode).toBe(200);
+    // …mais validation refusée (réservée DG / Admin).
+    const rhValidate = await app.inject({ method: "POST", url: `/api/v1/weekly-reports/${reportId}/validate`, headers: { cookie: rhCookie }, payload: { decision: "validate" } });
+    expect(rhValidate.statusCode).toBe(403);
+  });
+
   it("objectifs : un agent ordinaire ne peut pas en créer (403), la DG oui", async () => {
     const period = { period_start: "2026-07-01T00:00:00.000Z", period_end: "2026-07-31T00:00:00.000Z" };
     const byAgent = await app.inject({

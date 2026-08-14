@@ -60,8 +60,9 @@ export interface DashboardStats {
   utilisateurs: number | null;
   ventes: number | null;
   chiffre_affaires: number | null;
-  // "company" = CA global de l'entreprise ; "own" = CA du commercial connecté.
-  chiffre_affaires_scope?: "company" | "own" | null;
+  // "company" = CA global entreprise ; "team" = total de tous les commerciaux ;
+  // "own" = CA du commercial connecté.
+  chiffre_affaires_scope?: "company" | "team" | "own" | null;
   stock: number | null;
   ruptures: number | null;
   taches_en_retard: number | null;

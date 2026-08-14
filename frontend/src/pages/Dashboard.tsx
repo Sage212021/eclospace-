@@ -95,9 +95,14 @@ export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar }: Dashboar
         >
           {visibleKpis.map((c) => {
             const value = stats![c.key] as number;
-            // Pour un commercial simple, le CA affiché est le SIEN → libellé adapté.
-            const label = c.key === "chiffre_affaires" && stats!.chiffre_affaires_scope === "own"
-              ? t("dash.kpi.chiffre_affaires_own", "Mon chiffre d'affaires")
+            // Libellé du CA adapté au périmètre : le mien (commercial simple),
+            // l'équipe (responsable commercial) ou l'entreprise (DG/Finance).
+            const label = c.key === "chiffre_affaires"
+              ? stats!.chiffre_affaires_scope === "own"
+                ? t("dash.kpi.chiffre_affaires_own", "Mon chiffre d'affaires")
+                : stats!.chiffre_affaires_scope === "team"
+                  ? t("dash.kpi.chiffre_affaires_team", "Chiffre d'affaires (équipe commerciale)")
+                  : t(`dash.kpi.${c.key}`, c.label)
               : t(`dash.kpi.${c.key}`, c.label);
             return (
               <KpiCard

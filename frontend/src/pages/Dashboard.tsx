@@ -95,11 +95,15 @@ export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar }: Dashboar
         >
           {visibleKpis.map((c) => {
             const value = stats![c.key] as number;
+            // Pour un commercial simple, le CA affiché est le SIEN → libellé adapté.
+            const label = c.key === "chiffre_affaires" && stats!.chiffre_affaires_scope === "own"
+              ? t("dash.kpi.chiffre_affaires_own", "Mon chiffre d'affaires")
+              : t(`dash.kpi.${c.key}`, c.label);
             return (
               <KpiCard
                 key={c.key}
                 icon={c.icon}
-                label={t(`dash.kpi.${c.key}`, c.label)}
+                label={label}
                 value={value}
                 money={c.money}
                 tone={c.tone?.(value)}

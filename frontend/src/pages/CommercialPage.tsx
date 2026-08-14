@@ -31,6 +31,7 @@ import { StandardActionBar } from "../components/StandardActionBar";
 import { printCustomerFiche } from "../lib/print";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
+import { TeamPerformanceSection } from "../components/TeamPerformanceSection";
 import { useConfirm } from "../components/ConfirmProvider";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
@@ -58,13 +59,15 @@ interface CommercialPageProps {
   canValidate: boolean;
   // Initiation d'une commande à facturer / proforma (commercial ou DG).
   canInitiateOrder: boolean;
+  // Responsable commercial / DG : voit la performance de chaque commercial + total.
+  canSeeTeam: boolean;
 }
 
 // Commercial, distribution et ventes (Ch. 17) : clients, commandes, vente
 // directe. Écran transverse, non rattaché à un seul manuscrit.
 import { useI18n } from "../i18n";
 
-export function CommercialPage({ canManage, canValidate, canInitiateOrder }: CommercialPageProps) {
+export function CommercialPage({ canManage, canValidate, canInitiateOrder, canSeeTeam }: CommercialPageProps) {
   const { t } = useI18n();
   const confirm = useConfirm();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -139,6 +142,9 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder }: Com
       {/* Commandes à facturer (ex. livre scolaire) : le commercial les initie ; la
           Finance établit la facture. */}
       <BillingOrdersSection canCreate={canInitiateOrder} canInvoice={false} canValidateThreshold={false} />
+
+      {/* Responsable commercial / DG : performance de CHAQUE commercial + total équipe. */}
+      {canSeeTeam && <TeamPerformanceSection />}
 
       <Card
         title={t("com.customers", "Clients")}

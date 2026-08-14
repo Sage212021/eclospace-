@@ -22,6 +22,19 @@ import { editorialIndicators, commercialIndicators, revenueByFamily, annualSumma
 // stock, utilisateurs…). Correctif du 05/08/2026.
 const EDITORIAL_VIEW_ROLES = ["ADMIN_GENERAL", "DIR_GENERAL", "DIR_EDITORIAL", "ASSISTANT_EDITORIAL"];
 
+// Chiffre d'affaires PROPRE d'un commercial : ses ventes au comptoir (soldBy) +
+// ses commandes (createdBy), remise déduite. Sert à n'exposer, sur la page
+// d'accueil d'un commercial simple, que le CA lié à SES ventes enregistrées.
+async function ownCommercialRevenue(userId: string): Promise<number> {
+  const [posSales, orders] = await Promise.all([
+    prisma.posSale.findMany({ where: { soldBy: userId }, select: { quantity: true, unitPrice: true } }),
+    prisma.salesOrder.findMany({ where: { createdBy: userId }, select: { lines: { select: { quantity: true, unitPrice: true, discountPct: true } } } }),
+  ]);
+  const pos = posSales.reduce((s, p) => s + p.quantity * Number(p.unitPrice), 0);
+  const ord = orders.reduce((s, o) => s + o.lines.reduce((ls, l) => ls + l.quantity * Number(l.unitPrice) * (1 - Number(l.discountPct) / 100), 0), 0);
+  return Math.round(pos + ord);
+}
+
 export default async function dashboardRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/dashboard/stats", { preHandler: requireAuth }, async (request, reply) => {
     const perms = request.user!.permissions;
@@ -30,8 +43,12 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
     const canCommercial = perms.has("commercial:consultation");
     const canStock = perms.has("stock:consultation");
     const canDirection = perms.has("direction:consultation");
+    // Chiffre d'affaires GLOBAL de l'entreprise : réservé aux responsables / DG /
+    // Finance. Un commercial simple ne voit QUE le CA de ses propres ventes.
+    const canSeeCompanyRevenue = perms.has("commercial:validation") || perms.has("commercial:administration") || canDirection || perms.has("finance:consultation");
+    const isPlainCommercial = canCommercial && !canSeeCompanyRevenue;
 
-    const [editorial, utilisateurs, ventes, stockSum, tachesEnRetard, commercial] = await Promise.all([
+    const [editorial, utilisateurs, ventes, stockSum, tachesEnRetard, commercial, ownRevenue] = await Promise.all([
       // Éditorial : total + répartition par étape (source unique lib/kpi.ts).
       // Réservé aux rôles éditorial/direction (indicateurs de pilotage).
       canEditorialView ? editorialIndicators() : Promise.resolve(null),
@@ -42,8 +59,11 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       canDirection
         ? prisma.task.count({ where: { deletedAt: null, status: { notIn: ["terminee", "validee"] }, plannedEnd: { lt: new Date() } } })
         : Promise.resolve(null),
-      // Commercial : chiffre d'affaires + ruptures (une seule agrégation partagée).
-      canCommercial || canStock ? commercialIndicators() : Promise.resolve(null),
+      // Commercial : chiffre d'affaires GLOBAL + ruptures (agrégation partagée),
+      // seulement si l'utilisateur a le droit de voir les chiffres d'entreprise.
+      canSeeCompanyRevenue || canStock ? commercialIndicators() : Promise.resolve(null),
+      // CA PROPRE d'un commercial simple : ses ventes comptoir + ses commandes.
+      isPlainCommercial ? ownCommercialRevenue(request.user!.id) : Promise.resolve(null),
     ]);
 
     // Ouvrages en cours = tous les ouvrages non archivés (dérivé de la frise,
@@ -57,7 +77,9 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       ouvrages_en_cours: ouvragesEnCours,
       utilisateurs,
       ventes,
-      chiffre_affaires: commercial && canCommercial ? commercial.revenue_total : null,
+      chiffre_affaires: canSeeCompanyRevenue ? (commercial ? commercial.revenue_total : null) : (isPlainCommercial ? ownRevenue : null),
+      // "own" = le CA affiché est celui du commercial connecté ; "company" = global.
+      chiffre_affaires_scope: canSeeCompanyRevenue ? "company" : (isPlainCommercial ? "own" : null),
       // Total d'exemplaires physiques en stock (somme des quantités).
       stock: stockSum ? stockSum._sum.quantityPhysical ?? 0 : null,
       ruptures: commercial && canStock ? commercial.stock_outs : null,

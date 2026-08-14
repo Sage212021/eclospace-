@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { ContractDocumentKind, ContractType, ContractStatus, RoyaltyBase, SignatureParty, StatementPeriodicity } from "@prisma/client";
+import { ContractDispatchChannel, ContractDocumentKind, ContractType, ContractStatus, RoyaltyBase, SignatureParty, StatementPeriodicity } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -384,6 +384,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         royaltyTerms: true,
         amendments: true,
         signatures: { orderBy: { signedAt: "asc" } },
+        dispatches: { orderBy: { sentAt: "desc" } },
       },
     });
     if (!contract) {
@@ -780,6 +781,80 @@ export default async function contractRoutes(fastify: FastifyInstance) {
       return reply.send({ ok: true });
     },
   );
+
+  // Journal d'envoi du contrat — trace des transmissions à l'auteur (messagerie
+  // interne / WhatsApp). Consultation ouverte à qui peut voir les contrats.
+  fastify.get(
+    "/api/v1/contracts/:id/dispatches",
+    { preHandler: requirePermission("contracts", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!(await contractExists(id))) return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
+      const rows = await prisma.contractDispatch.findMany({ where: { contractId: id }, orderBy: { sentAt: "desc" } });
+      const actorNames = await resolveActorNames(rows.map((r) => r.sentById));
+      return reply.send(rows.map((r) => dispatchView(r, actorNames)));
+    },
+  );
+
+  // Enregistrement d'un envoi (append-only : on n'efface jamais une trace). Le
+  // transfert lui-même (pièce jointe / ouverture WhatsApp) se fait côté client ;
+  // cette route ne fait qu'inscrire au registre que l'envoi a eu lieu.
+  fastify.post(
+    "/api/v1/contracts/:id/dispatches",
+    { preHandler: requirePermission("contracts", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!(await contractExists(id))) return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
+      const parsed = createDispatchSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const created = await prisma.contractDispatch.create({
+        data: {
+          contractId: id,
+          channel: parsed.data.channel,
+          documentLabel: parsed.data.document_label?.trim() ?? "",
+          recipient: parsed.data.recipient?.trim() ?? "",
+          note: parsed.data.note?.trim() ?? "",
+          sentById: request.user!.id,
+        },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "contract_dispatch",
+        entityId: created.id,
+        newValues: { contractId: id, channel: created.channel, recipient: created.recipient, documentLabel: created.documentLabel },
+        ipAddress: request.ip,
+      });
+      const actorNames = await resolveActorNames([created.sentById]);
+      return reply.code(201).send(dispatchView(created, actorNames));
+    },
+  );
+}
+
+const createDispatchSchema = z.object({
+  channel: z.nativeEnum(ContractDispatchChannel),
+  document_label: z.string().max(200).optional(),
+  recipient: z.string().max(120).optional(),
+  note: z.string().max(500).optional(),
+});
+
+// Vue lisible d'un envoi (avec le nom de l'expéditeur).
+function dispatchView(
+  r: { id: string; contractId: string; channel: ContractDispatchChannel; documentLabel: string; recipient: string; note: string; sentAt: Date; sentById: string | null },
+  actorNames: Map<string, string>,
+) {
+  return {
+    id: r.id,
+    contract_id: r.contractId,
+    channel: r.channel,
+    document_label: r.documentLabel,
+    recipient: r.recipient,
+    note: r.note,
+    sent_at: r.sentAt,
+    sent_by_name: r.sentById ? actorNames.get(r.sentById) ?? null : null,
+  };
 }
 
 // Empreinte stable des clauses signées : uniquement le contenu contractuel

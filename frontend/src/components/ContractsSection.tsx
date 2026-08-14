@@ -19,7 +19,10 @@ import {
   getChatDirectory,
   startConversation,
   sendChatMessageWithFile,
+  listContractDispatches,
+  recordContractDispatch,
   type Contract,
+  type ContractDispatch,
   type ContractDocument,
   type ContractDocumentKind,
   type ContractSignature,
@@ -90,6 +93,9 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
   const [editContract, setEditContract] = useState<Contract | null>(null);
   const [amendContract, setAmendContract] = useState<Contract | null>(null);
   const [articleContract, setArticleContract] = useState<Contract | null>(null);
+  // Incrémenté à chaque envoi enregistré : recharge les journaux d'envoi.
+  const [dispatchVersion, setDispatchVersion] = useState(0);
+  const bumpDispatch = () => setDispatchVersion((v) => v + 1);
 
   const refresh = () => listContracts(manuscriptId).then(setContracts).catch((e) => setError(e.message));
 
@@ -205,7 +211,10 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
           {contract.type === "edition" && <AuthorIdentityBlock partner={contract.partner} canEdit={canCreate} onChanged={refresh} onError={setError} />}
 
           {/* Contrat physique signé, numérisé (PDF ou images) + annexes. */}
-          <DocumentsBlock contractId={contract.id} canManage={canCreate} partnerWhatsapp={contract.partner.whatsapp} onError={setError} />
+          <DocumentsBlock contractId={contract.id} canManage={canCreate} partnerWhatsapp={contract.partner.whatsapp} onDispatched={bumpDispatch} onError={setError} />
+
+          {/* Journal d'envoi : preuve de transmission du contrat à l'auteur. */}
+          <DispatchJournal contractId={contract.id} refreshToken={dispatchVersion} />
 
           {/* Traçabilité : qui a saisi / modifié en dernier. */}
           <TraceabilityLine contract={contract} />
@@ -233,6 +242,8 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
             return new File([buildAuthorContractPdf(c, pub)], `Contrat-${transferContract.contractNumber}.pdf`, { type: "application/pdf" });
           }}
           partnerWhatsapp={transferContract.partner.whatsapp}
+          contractId={transferContract.id}
+          onDispatched={bumpDispatch}
           onClose={() => setTransferContract(null)}
           onError={setError}
         />
@@ -507,7 +518,7 @@ const DOC_KIND_LABELS: Record<ContractDocumentKind, string> = {
 // Pièces numérisées du contrat : le contrat physique signé de l'auteur, scanné
 // en PDF ou en images, et d'éventuelles annexes. Téléversement, téléchargement,
 // retrait (suppression logique côté serveur).
-function DocumentsBlock({ contractId, canManage, partnerWhatsapp, onError }: { contractId: string; canManage: boolean; partnerWhatsapp?: string | null; onError: (m: string) => void }) {
+function DocumentsBlock({ contractId, canManage, partnerWhatsapp, onDispatched, onError }: { contractId: string; canManage: boolean; partnerWhatsapp?: string | null; onDispatched?: () => void; onError: (m: string) => void }) {
   const [docs, setDocs] = useState<ContractDocument[]>([]);
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<ContractDocumentKind>("signed_scan");
@@ -618,10 +629,44 @@ function DocumentsBlock({ contractId, canManage, partnerWhatsapp, onError }: { c
             return new File([blob], transferDoc.name || transferDoc.label || "document", { type: blob.type || "application/octet-stream" });
           }}
           partnerWhatsapp={partnerWhatsapp}
+          contractId={contractId}
+          onDispatched={onDispatched}
           onClose={() => setTransferDoc(null)}
           onError={onError}
         />
       )}
+    </div>
+  );
+}
+
+const DISPATCH_CHANNEL_LABELS: Record<ContractDispatch["channel"], string> = {
+  messagerie_interne: "💬 Messagerie interne",
+  whatsapp: "💬 WhatsApp",
+};
+
+// Journal d'envoi du contrat : historique horodaté des transmissions à l'auteur
+// (preuve d'envoi côté éditeur). Se recharge quand `refreshToken` change (après
+// un nouvel envoi). N'affiche rien tant qu'aucun envoi n'a eu lieu.
+function DispatchJournal({ contractId, refreshToken }: { contractId: string; refreshToken: number }) {
+  const [rows, setRows] = useState<ContractDispatch[]>([]);
+  useEffect(() => {
+    listContractDispatches(contractId).then(setRows).catch(() => setRows([]));
+  }, [contractId, refreshToken]);
+
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ marginTop: 8, fontSize: 12 }}>
+      <div style={{ fontWeight: 700, color: "var(--muted)", marginBottom: 4 }}>Journal d'envoi ({rows.length})</div>
+      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        {rows.map((r) => (
+          <li key={r.id} style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap", borderLeft: "2px solid var(--eclosion-soft)", paddingLeft: 8 }}>
+            <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{new Date(r.sent_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</span>
+            <span style={{ color: "var(--eclosion)", fontWeight: 600 }}>{DISPATCH_CHANNEL_LABELS[r.channel]}</span>
+            {r.recipient && <span>→ {r.recipient}</span>}
+            {r.sent_by_name && <span style={{ color: "var(--muted)" }}>(par {r.sent_by_name})</span>}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -632,7 +677,7 @@ function DocumentsBlock({ contractId, canManage, partnerWhatsapp, onError }: { c
 // main, faute de passerelle WhatsApp automatique côté serveur — cf. AVANCEMENT).
 // Générique : `getFile` fournit le fichier à transférer (fetch d'une pièce ou
 // génération d'un PDF côté navigateur).
-function TransferDocDialog({ title, fileName, getFile, partnerWhatsapp, onClose, onError }: { title: string; fileName: string; getFile: () => Promise<File> | File; partnerWhatsapp?: string | null; onClose: () => void; onError: (m: string) => void }) {
+function TransferDocDialog({ title, fileName, getFile, partnerWhatsapp, contractId, onDispatched, onClose, onError }: { title: string; fileName: string; getFile: () => Promise<File> | File; partnerWhatsapp?: string | null; contractId?: string; onDispatched?: () => void; onClose: () => void; onError: (m: string) => void }) {
   const [dir, setDir] = useState<ChatDirectoryEntry[]>([]);
   const [recipient, setRecipient] = useState("");
   const [note, setNote] = useState("");
@@ -642,6 +687,18 @@ function TransferDocDialog({ title, fileName, getFile, partnerWhatsapp, onClose,
     getChatDirectory().then((d) => { setDir(d); if (d[0]) setRecipient(d[0].id); }).catch(() => setDir([]));
   }, []);
 
+  // Inscrit l'envoi au journal du contrat (preuve de transmission). Best-effort :
+  // le transfert reste valable même si l'inscription échoue.
+  async function logDispatch(channel: "messagerie_interne" | "whatsapp", recipientLabel: string) {
+    if (!contractId) return;
+    try {
+      await recordContractDispatch(contractId, { channel, document_label: title, recipient: recipientLabel, note: note.trim() || undefined });
+      onDispatched?.();
+    } catch {
+      /* l'échec du journal ne doit pas bloquer l'envoi lui-même */
+    }
+  }
+
   async function sendInternal() {
     if (!recipient) return;
     setSending(true);
@@ -650,6 +707,7 @@ function TransferDocDialog({ title, fileName, getFile, partnerWhatsapp, onClose,
       const body = (note.trim() ? note.trim() + "\n\n" : "") + `Document du contrat : ${title}`;
       const file = await getFile();
       await sendChatMessageWithFile(conv.id, body, file);
+      await logDispatch("messagerie_interne", dir.find((u) => u.id === recipient)?.name ?? "");
       onClose();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Transfert impossible.");
@@ -676,6 +734,7 @@ function TransferDocDialog({ title, fileName, getFile, partnerWhatsapp, onClose,
       const num = (partnerWhatsapp ?? "").replace(/[^\d]/g, "");
       const url = num ? `https://wa.me/${num}?text=${text}` : `https://wa.me/?text=${text}`;
       window.open(url, "_blank", "noopener");
+      await logDispatch("whatsapp", partnerWhatsapp ? partnerWhatsapp : "Contact WhatsApp");
       onClose();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Préparation du fichier impossible.");

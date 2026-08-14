@@ -710,7 +710,25 @@ const PERIODICITY_LABELS: Record<string, [string, string]> = {
 // (base, paliers, à-valoir, retenue, périodicité). Résumé structuré du contrat.
 export function printContract(c: ContractDetail, opts?: PrintOpts): void {
   const cur = "XAF";
-  const partner = `${c.partner.firstName} ${c.partner.lastName}`;
+  const p = c.partner;
+  const partner = `${p.firstName} ${p.lastName}`;
+  // Identité civile de l'auteur, collectée à l'enregistrement du manuscrit et
+  // reprise ici automatiquement (né(e), nationalité, profession, adresse, CNI…).
+  const escId = (v?: string | null) => (v && v.trim() ? escapeHtml(v) : null);
+  const frId = (v?: string | null) => {
+    if (!v) return null;
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString("fr-FR");
+  };
+  const authorIdentity = [
+    (p.birthDate || p.birthPlace) ? `${tr("né(e) le", "born")} ${frId(p.birthDate) ?? "—"} ${tr("à", "in")} ${escId(p.birthPlace) ?? "—"}` : null,
+    escId(p.nationality) ? `${tr("nationalité", "nationality")} ${escId(p.nationality)}` : null,
+    escId(p.profession) ? `${tr("profession", "occupation")} ${escId(p.profession)}` : null,
+    escId(p.address) ? `${tr("adresse / BP", "address")} ${escId(p.address)}` : null,
+    escId(p.phone) ? `${tr("tél.", "tel.")} ${escId(p.phone)}` : null,
+    escId(p.idNumber) ? `${tr("CNI n°", "ID no.")} ${escId(p.idNumber)}${frId(p.idIssuedDate) ? ` ${tr("du", "of")} ${frId(p.idIssuedDate)}` : ""}${escId(p.idIssuedPlace) ? ` ${tr("à", "at")} ${escId(p.idIssuedPlace)}` : ""}` : null,
+    escId(p.email) ? `${tr("e-mail", "email")} ${escId(p.email)}` : null,
+  ].filter(Boolean).join(" · ");
   const signed = c.signedAt ? fdate(c.signedAt) : "—";
   const effective = c.effectiveAt ? fdate(c.effectiveAt) : "—";
   const duration = c.durationMonths ? `${c.durationMonths} ${tr("mois", "months")}` : "—";
@@ -752,7 +770,7 @@ export function printContract(c: ContractDetail, opts?: PrintOpts): void {
     </div>
     <div style="display:flex; gap:40px; flex-wrap:wrap; margin-bottom:6px">
       <div class="party"><div class="party__label">${tr("Éditeur", "Publisher")}</div><div class="party__name">Éclosion Édition</div></div>
-      <div class="party"><div class="party__label">${tr("Cocontractant", "Counterparty")}</div><div class="party__name">${escapeHtml(partner)}</div></div>
+      <div class="party"><div class="party__label">${tr("Cocontractant", "Counterparty")}</div><div class="party__name">${escapeHtml(partner)}</div>${authorIdentity ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;max-width:520px;line-height:1.4">${authorIdentity}</div>` : ""}</div>
     </div>
     ${c.manuscript ? `<div class="party"><div class="party__label">${tr("Ouvrage", "Title")}</div><div class="party__name">${escapeHtml(c.manuscript.title)} <span class="num" style="font-weight:400;color:#6b7280">(${escapeHtml(c.manuscript.manuscriptNumber)})</span></div></div>` : ""}
     <div class="meta" style="margin-top:14px">

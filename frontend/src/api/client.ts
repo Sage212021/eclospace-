@@ -60,6 +60,8 @@ export interface DashboardStats {
   utilisateurs: number | null;
   ventes: number | null;
   chiffre_affaires: number | null;
+  // "company" = CA global de l'entreprise ; "own" = CA du commercial connecté.
+  chiffre_affaires_scope?: "company" | "own" | null;
   stock: number | null;
   ruptures: number | null;
   taches_en_retard: number | null;
@@ -2127,6 +2129,26 @@ export function getMyPerformance(params?: { from?: string; to?: string; rep?: st
   if (params?.rep) p.set("rep", params.rep);
   const qs = p.toString();
   return request<MyPerformance>(`/api/v1/commercial/my-performance${qs ? "?" + qs : ""}`);
+}
+
+// Performance PAR commercial + total de l'équipe (responsable commercial / DG).
+export interface TeamPerformanceRep {
+  user_id: string | null;
+  username: string;
+  revenue: number;
+  pos_count: number;
+  orders_count: number;
+}
+export interface TeamPerformance {
+  reps: TeamPerformanceRep[];
+  total: { revenue: number; pos_count: number; orders_count: number };
+}
+export function getTeamPerformance(params?: { from?: string; to?: string }) {
+  const p = new URLSearchParams();
+  if (params?.from) p.set("from", params.from);
+  if (params?.to) p.set("to", params.to);
+  const qs = p.toString();
+  return request<TeamPerformance>(`/api/v1/commercial/team-performance${qs ? "?" + qs : ""}`);
 }
 export function reconcilePosSale(id: string, isbnId: string) {
   return request<{ reconciled: true; invoice_id: string }>(`/api/v1/pos-sales/${id}/reconcile`, { method: "POST", body: JSON.stringify({ isbn_id: isbnId }) });

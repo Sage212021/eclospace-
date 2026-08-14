@@ -495,6 +495,68 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     });
   });
 
+  // Performance PAR commercial + total de l'équipe. Réservé au responsable
+  // commercial et à la Direction (commercial:validation / administration /
+  // direction). Un commercial simple n'y a pas accès (il a « Mes performances »).
+  fastify.get("/api/v1/commercial/team-performance", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
+    const perms = request.user!.permissions;
+    const canSeeOthers = perms.has("commercial:validation") || perms.has("commercial:administration") || perms.has("direction:consultation");
+    if (!canSeeOthers) {
+      return reply.code(403).send({ code: "forbidden", message: "Réservé au responsable commercial et à la Direction." });
+    }
+    const q = request.query as { from?: string; to?: string };
+    const from = q.from ? new Date(q.from) : undefined;
+    const to = q.to ? new Date(q.to) : undefined;
+    if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+      return reply.code(400).send({ code: "validation_error", message: "Dates invalides (AAAA-MM-JJ)." });
+    }
+    const soldAt = from || to ? { gte: from, lte: to } : undefined;
+
+    const [posSales, orders] = await Promise.all([
+      prisma.posSale.findMany({ where: soldAt ? { soldAt } : {}, select: { soldBy: true, quantity: true, unitPrice: true } }),
+      prisma.salesOrder.findMany({ where: soldAt ? { createdAt: soldAt } : {}, select: { createdBy: true, lines: { select: { quantity: true, unitPrice: true, discountPct: true } } } }),
+    ]);
+
+    const UNASSIGNED = "__unassigned__";
+    const map = new Map<string, { revenue: number; pos_count: number; orders_count: number }>();
+    const bucket = (uid: string | null) => {
+      const key = uid ?? UNASSIGNED;
+      let b = map.get(key);
+      if (!b) { b = { revenue: 0, pos_count: 0, orders_count: 0 }; map.set(key, b); }
+      return b;
+    };
+    for (const p of posSales) {
+      const b = bucket(p.soldBy);
+      b.revenue += p.quantity * Number(p.unitPrice);
+      b.pos_count += 1;
+    }
+    for (const o of orders) {
+      const b = bucket(o.createdBy);
+      b.revenue += o.lines.reduce((s, l) => s + l.quantity * Number(l.unitPrice) * (1 - Number(l.discountPct) / 100), 0);
+      b.orders_count += 1;
+    }
+
+    const ids = [...map.keys()].filter((k) => k !== UNASSIGNED);
+    const users = ids.length ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, username: true } }) : [];
+    const names = new Map(users.map((u) => [u.id, u.username]));
+
+    const reps = [...map.entries()]
+      .map(([key, b]) => ({
+        user_id: key === UNASSIGNED ? null : key,
+        username: key === UNASSIGNED ? "Non attribué" : (names.get(key) ?? "—"),
+        revenue: Math.round(b.revenue),
+        pos_count: b.pos_count,
+        orders_count: b.orders_count,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const total = reps.reduce(
+      (acc, r) => ({ revenue: acc.revenue + r.revenue, pos_count: acc.pos_count + r.pos_count, orders_count: acc.orders_count + r.orders_count }),
+      { revenue: 0, pos_count: 0, orders_count: 0 },
+    );
+    return reply.send({ reps, total });
+  });
+
   fastify.get("/api/v1/commercial/commissions", { preHandler: requireAnyPermission([{ module: "commercial", action: "consultation" }, { module: "finance", action: "consultation" }]) }, async (request, reply) => {
     const q = request.query as { from?: string; to?: string; granularity?: string };
     const allowed = ["week", "month", "semester", "year"];

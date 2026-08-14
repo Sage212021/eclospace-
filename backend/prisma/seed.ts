@@ -35,6 +35,7 @@ const roles: { code: string; label: string; departmentCode: string | null }[] = 
   { code: "RESP_FINANCE", label: "Responsable administratif et financier", departmentCode: "FIN" },
   { code: "COMPTABLE", label: "Comptable", departmentCode: "FIN" },
   { code: "RESP_COMMERCIAL", label: "Responsable commercial", departmentCode: "COM" },
+  { code: "COMMERCIAL", label: "Commercial", departmentCode: "COM" },
   { code: "RESP_INFOGRAPHIE", label: "Responsable infographie", departmentCode: "INFOG" },
   { code: "CORRECTEUR", label: "Correcteur", departmentCode: "CORR" },
   { code: "MAQUETTISTE", label: "Maquettiste", departmentCode: "MAQ" },
@@ -321,6 +322,10 @@ async function main() {
   // à la Direction générale (commercial:administration), même schéma que
   // printing:administration (Ch. 15).
   await grant("RESP_COMMERCIAL", ["commercial:consultation", "commercial:saisie", "commercial:validation"]);
+  // Commercial simple : enregistre ses ventes et consulte SES performances, mais
+  // ne voit ni le chiffre d'affaires global de l'entreprise, ni la performance des
+  // autres commerciaux (pas de commercial:validation).
+  await grant("COMMERCIAL", ["commercial:consultation", "commercial:saisie"]);
   await grant("RESP_FINANCE", ["commercial:consultation", "commercial:validation"]);
   await grant("DIR_GENERAL", ["commercial:consultation", "commercial:validation", "commercial:administration"]);
 

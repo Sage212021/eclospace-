@@ -785,7 +785,7 @@ export function App() {
           <StockPage canManage={permissions.has("stock:saisie")} canAdminister={permissions.has("stock:administration")} canValidate={permissions.has("stock:validation")} />
         )}
         {leaf && "page" in leaf && leaf.page === "commercial" && (
-          <CommercialPage canManage={permissions.has("commercial:saisie")} canValidate={permissions.has("commercial:administration")} canInitiateOrder={canInitiateOrder} />
+          <CommercialPage canManage={permissions.has("commercial:saisie")} canValidate={permissions.has("commercial:administration")} canInitiateOrder={canInitiateOrder} canSeeTeam={permissions.has("commercial:validation")} />
         )}
         {leaf && "page" in leaf && leaf.page === "finance" && (
           <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} canInitiateOrder={canInitiateOrder} canValidateCancellation={permissions.has("pilotage:administration")} />

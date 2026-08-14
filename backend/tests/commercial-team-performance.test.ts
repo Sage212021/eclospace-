@@ -66,8 +66,17 @@ describe("performance commerciale par vendeur", () => {
     expect(body.chiffre_affaires).toBe(10000); // uniquement sa vente
   });
 
-  it("sur l'accueil, le responsable voit le CA GLOBAL (scope company)", async () => {
+  it("sur l'accueil, le responsable voit le CA de l'ÉQUIPE commerciale (scope team)", async () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/dashboard/stats", headers: { cookie: respCookie } });
+    const body = res.json();
+    expect(body.chiffre_affaires_scope).toBe("team");
+    // Le total équipe inclut au moins nos deux ventes (10 000 + 25 000).
+    expect(body.chiffre_affaires).toBeGreaterThanOrEqual(35000);
+  });
+
+  it("un profil Direction voit le CA GLOBAL de l'entreprise (scope company)", async () => {
+    const adminCookie = await login("admin", process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!");
+    const res = await app.inject({ method: "GET", url: "/api/v1/dashboard/stats", headers: { cookie: adminCookie } });
     expect(res.json().chiffre_affaires_scope).toBe("company");
   });
 });

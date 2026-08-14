@@ -35,6 +35,19 @@ async function ownCommercialRevenue(userId: string): Promise<number> {
   return Math.round(pos + ord);
 }
 
+// CA TOTAL de l'équipe commerciale : toutes les ventes comptoir + toutes les
+// commandes (remise déduite), quel que soit le vendeur. C'est le même total que
+// la ligne « TOTAL ÉQUIPE » de « Performance par commercial ».
+async function teamCommercialRevenue(): Promise<number> {
+  const [posSales, orders] = await Promise.all([
+    prisma.posSale.findMany({ select: { quantity: true, unitPrice: true } }),
+    prisma.salesOrder.findMany({ select: { lines: { select: { quantity: true, unitPrice: true, discountPct: true } } } }),
+  ]);
+  const pos = posSales.reduce((s, p) => s + p.quantity * Number(p.unitPrice), 0);
+  const ord = orders.reduce((s, o) => s + o.lines.reduce((ls, l) => ls + l.quantity * Number(l.unitPrice) * (1 - Number(l.discountPct) / 100), 0), 0);
+  return Math.round(pos + ord);
+}
+
 export default async function dashboardRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/dashboard/stats", { preHandler: requireAuth }, async (request, reply) => {
     const perms = request.user!.permissions;
@@ -43,12 +56,15 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
     const canCommercial = perms.has("commercial:consultation");
     const canStock = perms.has("stock:consultation");
     const canDirection = perms.has("direction:consultation");
-    // Chiffre d'affaires GLOBAL de l'entreprise : réservé aux responsables / DG /
-    // Finance. Un commercial simple ne voit QUE le CA de ses propres ventes.
-    const canSeeCompanyRevenue = perms.has("commercial:validation") || perms.has("commercial:administration") || canDirection || perms.has("finance:consultation");
-    const isPlainCommercial = canCommercial && !canSeeCompanyRevenue;
+    // Trois niveaux de lecture du « chiffre d'affaires » sur l'accueil :
+    //  - company : CA GLOBAL de l'entreprise (DG, Finance, Administrateur) ;
+    //  - team    : total des ventes de TOUS les commerciaux (responsable commercial) ;
+    //  - own     : uniquement les ventes du commercial connecté (commercial simple).
+    const canSeeCompanyRevenue = canDirection || perms.has("finance:consultation");
+    const canSeeTeamRevenue = !canSeeCompanyRevenue && (perms.has("commercial:validation") || perms.has("commercial:administration"));
+    const isPlainCommercial = canCommercial && !canSeeCompanyRevenue && !canSeeTeamRevenue;
 
-    const [editorial, utilisateurs, ventes, stockSum, tachesEnRetard, commercial, ownRevenue] = await Promise.all([
+    const [editorial, utilisateurs, ventes, stockSum, tachesEnRetard, commercial, ownRevenue, teamRevenue] = await Promise.all([
       // Éditorial : total + répartition par étape (source unique lib/kpi.ts).
       // Réservé aux rôles éditorial/direction (indicateurs de pilotage).
       canEditorialView ? editorialIndicators() : Promise.resolve(null),
@@ -64,6 +80,8 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       canSeeCompanyRevenue || canStock ? commercialIndicators() : Promise.resolve(null),
       // CA PROPRE d'un commercial simple : ses ventes comptoir + ses commandes.
       isPlainCommercial ? ownCommercialRevenue(request.user!.id) : Promise.resolve(null),
+      // CA TOTAL de l'équipe commerciale (tous les commerciaux) : pour le responsable.
+      canSeeTeamRevenue ? teamCommercialRevenue() : Promise.resolve(null),
     ]);
 
     // Ouvrages en cours = tous les ouvrages non archivés (dérivé de la frise,
@@ -77,9 +95,10 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       ouvrages_en_cours: ouvragesEnCours,
       utilisateurs,
       ventes,
-      chiffre_affaires: canSeeCompanyRevenue ? (commercial ? commercial.revenue_total : null) : (isPlainCommercial ? ownRevenue : null),
-      // "own" = le CA affiché est celui du commercial connecté ; "company" = global.
-      chiffre_affaires_scope: canSeeCompanyRevenue ? "company" : (isPlainCommercial ? "own" : null),
+      chiffre_affaires: canSeeCompanyRevenue ? (commercial ? commercial.revenue_total : null) : canSeeTeamRevenue ? teamRevenue : isPlainCommercial ? ownRevenue : null,
+      // "company" = CA global entreprise ; "team" = total de tous les commerciaux ;
+      // "own" = les ventes du commercial connecté.
+      chiffre_affaires_scope: canSeeCompanyRevenue ? "company" : canSeeTeamRevenue ? "team" : isPlainCommercial ? "own" : null,
       // Total d'exemplaires physiques en stock (somme des quantités).
       stock: stockSum ? stockSum._sum.quantityPhysical ?? 0 : null,
       ruptures: commercial && canStock ? commercial.stock_outs : null,

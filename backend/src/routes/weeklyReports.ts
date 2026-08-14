@@ -21,6 +21,19 @@ function isChef(user: EffectiveUser): boolean {
   return user.roles.includes(CHEF_ROLE);
 }
 
+// Rapports hebdomadaires — droits STRICTS demandés par l'opérateur (13/08/2026) :
+// - VOIR les rapports soumis : uniquement DG, Administrateur général et RH
+//   (en plus de l'auteur, qui voit toujours les siens). PAS les chefs de pôle.
+// - VALIDER un rapport : uniquement DG ou Administrateur général (pas le RH).
+const REPORT_VIEW_ROLES = ["DIR_GENERAL", "ADMIN_GENERAL", "RESP_RH"];
+const REPORT_VALIDATE_ROLES = ["DIR_GENERAL", "ADMIN_GENERAL"];
+function canOverseeReports(user: EffectiveUser): boolean {
+  return user.roles.some((r) => REPORT_VIEW_ROLES.includes(r));
+}
+function canValidateReports(user: EffectiveUser): boolean {
+  return user.roles.some((r) => REPORT_VALIDATE_ROLES.includes(r));
+}
+
 // Grand pôle de l'utilisateur, déduit de sa fiche employé (repli « Administration »).
 async function userPole(userId: string): Promise<string> {
   const u = await prisma.user.findUnique({
@@ -172,10 +185,10 @@ export default async function weeklyReportRoutes(fastify: FastifyInstance) {
     const user = request.user!;
     const q = request.query as { status?: string; user_id?: string };
     const where: Record<string, unknown> = { deletedAt: null, ...(q.status ? { status: q.status } : {}) };
-    if (isOversight(user)) {
+    // Seuls DG / Administrateur / RH voient les rapports des autres ; tout le reste
+    // (y compris les chefs de pôle) ne voit QUE ses propres rapports.
+    if (canOverseeReports(user)) {
       if (q.user_id) where.userId = q.user_id;
-    } else if (isChef(user)) {
-      where.pole = await userPole(user.id);
     } else {
       where.userId = user.id;
     }
@@ -284,22 +297,16 @@ export default async function weeklyReportRoutes(fastify: FastifyInstance) {
   });
 }
 
-// Périmètre de lecture d'un rapport : l'auteur, le chef du pôle, ou l'oversight.
+// Périmètre de lecture d'un rapport : l'auteur, ou un profil habilité (DG / Admin / RH).
 async function canView(user: EffectiveUser, report: { userId: string; pole: string }): Promise<boolean> {
   if (report.userId === user.id) return true;
-  if (isOversight(user)) return true;
-  if (isChef(user)) return (await userPole(user.id)) === report.pole;
-  return false;
+  return canOverseeReports(user);
 }
 
-// Habilitation à valider selon le mode paramétré.
-async function canValidate(user: EffectiveUser, report: { pole: string }): Promise<boolean> {
-  if (isOversight(user)) return true; // la DG peut toujours valider
-  const mode = await getSettingString("weekly_report_validation_mode", "dg");
-  if (mode === "chef" && isChef(user)) {
-    return (await userPole(user.id)) === report.pole;
-  }
-  return false;
+// Habilitation à valider : uniquement DG ou Administrateur général (pas le RH,
+// pas les chefs de pôle — demande opérateur 13/08/2026).
+async function canValidate(user: EffectiveUser, _report: { pole: string }): Promise<boolean> {
+  return canValidateReports(user);
 }
 
 function denied(request: FastifyRequest, entity: string): Promise<void> {

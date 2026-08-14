@@ -45,14 +45,16 @@ function fmtDate(s: string) {
 // période, relié à ses objectifs et à sa recherche ; le chef de département (son
 // pôle) ou la Direction générale suivent et valident.
 export function WeeklyReportsPage({ user }: { user: EffectiveUser }) {
-  const isOversight = user.permissions.includes("direction:consultation");
-  const isChef = user.roles.includes("CHEF_DEPARTEMENT");
+  // Droits stricts (demande opérateur) : seuls DG, Administrateur et RH voient les
+  // rapports soumis ; seuls DG et Administrateur peuvent les valider (pas le RH).
+  const canView = user.roles.some((r) => ["DIR_GENERAL", "ADMIN_GENERAL", "RESP_RH"].includes(r));
+  const canValidate = user.roles.some((r) => ["DIR_GENERAL", "ADMIN_GENERAL"].includes(r));
 
   return (
     <div className="ecl-page" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <MyReport userId={user.id} />
       <MyObjectives userId={user.id} />
-      {(isOversight || isChef) && <ReportOversight />}
+      {canView && <ReportOversight canValidate={canValidate} />}
     </div>
   );
 }
@@ -214,7 +216,7 @@ function MyObjectives({ userId }: { userId: string }) {
 }
 
 // Suivi / validation (chef de pôle ou Direction générale).
-function ReportOversight() {
+function ReportOversight({ canValidate }: { canValidate: boolean }) {
   const [reports, setReports] = useState<WeeklyReport[]>([]);
   const [open, setOpen] = useState<WeeklyReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -242,12 +244,12 @@ function ReportOversight() {
           </div>
         ))
       )}
-      {open && <ReviewModal report={open} onClose={() => setOpen(null)} onDone={() => { setOpen(null); refresh(); }} />}
+      {open && <ReviewModal report={open} canValidate={canValidate} onClose={() => setOpen(null)} onDone={() => { setOpen(null); refresh(); }} />}
     </Card>
   );
 }
 
-function ReviewModal({ report, onClose, onDone }: { report: WeeklyReport; onClose: () => void; onDone: () => void }) {
+function ReviewModal({ report, canValidate, onClose, onDone }: { report: WeeklyReport; canValidate: boolean; onClose: () => void; onDone: () => void }) {
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -270,7 +272,7 @@ function ReviewModal({ report, onClose, onDone }: { report: WeeklyReport; onClos
       wide
       onClose={onClose}
       footer={
-        report.status === "submitted" ? (
+        report.status === "submitted" && canValidate ? (
           <>
             <button onClick={() => act("return")} disabled={busy} style={btnSecondary}>Retourner</button>
             <button onClick={() => act("validate")} disabled={busy} style={btnPrimary}>Valider</button>

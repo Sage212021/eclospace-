@@ -1130,11 +1130,20 @@ function NewContractForm({
   onError: (m: string) => void;
 }) {
   const [type, setType] = useState("edition");
-  const [rate, setRate] = useState(10);
   const [advance, setAdvance] = useState(0);
   // Durée de la cession (terme du contrat) — variable d'un auteur à l'autre,
   // reprise automatiquement sur le contrat imprimé. 0 = non précisée.
   const [durationYears, setDurationYears] = useState(5);
+  // Termes financiers VARIABLES par contrat/auteur :
+  const [base, setBase] = useState<"prix_public_ht" | "prix_net_editeur">("prix_public_ht");
+  // Paliers de droits d'auteur : { up_to: N exemplaires (null = au-delà), rate: % }.
+  const [tiers, setTiers] = useState<{ up_to: number | null; rate: number }[]>([{ up_to: null, rate: 10 }]);
+  const [paymentSchedule, setPaymentSchedule] = useState("semestriel");
+  const [statementPeriodicity, setStatementPeriodicity] = useState<"mensuelle" | "trimestrielle" | "semestrielle" | "annuelle">("semestrielle");
+  const [taxWithholding, setTaxWithholding] = useState(0);
+  const setTier = (i: number, patch: Partial<{ up_to: number | null; rate: number }>) => setTiers((cur) => cur.map((t, k) => (k === i ? { ...t, ...patch } : t)));
+  const addTier = () => setTiers((cur) => [...cur.slice(0, -1), { up_to: cur[cur.length - 1].up_to ?? 3000, rate: cur[cur.length - 1].rate }, { up_to: null, rate: cur[cur.length - 1].rate }]);
+  const removeTier = (i: number) => setTiers((cur) => (cur.length > 1 ? cur.filter((_, k) => k !== i) : cur));
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnerId, setPartnerId] = useState(defaultPartnerId);
   const [showPartnerForm, setShowPartnerForm] = useState(false);
@@ -1156,10 +1165,12 @@ function NewContractForm({
         partner_id: partnerId,
         ...(durationYears > 0 ? { duration_months: durationYears * 12 } : {}),
         financial_terms: {
-          base: "prix_public_ht",
-          tiers: [{ up_to: null, rate: rate / 100 }],
+          base,
+          tiers: tiers.map((t) => ({ up_to: t.up_to, rate: t.rate / 100 })),
           advance_amount: advance,
-          payment_schedule: "semestriel",
+          payment_schedule: paymentSchedule,
+          statement_periodicity: statementPeriodicity,
+          ...(taxWithholding > 0 ? { tax_withholding_pct: taxWithholding } : {}),
         },
       });
       onCreated();
@@ -1218,31 +1229,59 @@ function NewContractForm({
         </div>
       )}
 
-      <div style={{ fontSize: 12, marginTop: 10 }}>
-        Taux de droits d'auteur — cochez le pourcentage validé pour cet ouvrage (entre 8 % et 15 %)
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-          {[8, 9, 10, 11, 12, 13, 14, 15].map((p) => (
-            <button
-              type="button"
-              key={p}
-              onClick={() => setRate(p)}
-              aria-pressed={rate === p}
-              style={{
-                padding: "6px 14px",
-                borderRadius: 999,
-                border: `1px solid ${rate === p ? "var(--eclosion)" : "var(--line)"}`,
-                background: rate === p ? "var(--eclosion)" : "#fff",
-                color: rate === p ? "#fff" : "var(--muted)",
-                fontWeight: rate === p ? 700 : 500,
-                fontFamily: "var(--font-mono, monospace)",
-                cursor: "pointer",
-                fontSize: 13,
-              }}
-            >
-              {p} %
-            </button>
-          ))}
+      {/* Termes financiers VARIABLES par auteur : base, paliers de droits,
+          périodicités, retenue fiscale. Chaque contrat peut différer. */}
+      <div style={{ marginTop: 12, border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8, color: "var(--eclosion-dark, #8A6A12)" }}>Termes financiers (propres à cet auteur / cet ouvrage)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <label style={{ fontSize: 12 }}>Base de calcul
+            <select value={base} onChange={(e) => setBase(e.target.value as typeof base)} style={inputStyle}>
+              <option value="prix_public_ht">Prix public HT</option>
+              <option value="prix_net_editeur">Prix net éditeur</option>
+            </select>
+          </label>
+          <label style={{ fontSize: 12 }}>Retenue fiscale (%)
+            <input type="number" min={0} max={100} step={0.5} value={taxWithholding} onChange={(e) => setTaxWithholding(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+          </label>
+          <label style={{ fontSize: 12 }}>Périodicité des relevés
+            <select value={statementPeriodicity} onChange={(e) => setStatementPeriodicity(e.target.value as typeof statementPeriodicity)} style={inputStyle}>
+              <option value="mensuelle">Mensuelle</option>
+              <option value="trimestrielle">Trimestrielle</option>
+              <option value="semestrielle">Semestrielle</option>
+              <option value="annuelle">Annuelle</option>
+            </select>
+          </label>
+          <label style={{ fontSize: 12 }}>Échéancier de paiement
+            <select value={paymentSchedule} onChange={(e) => setPaymentSchedule(e.target.value)} style={inputStyle}>
+              <option value="a_la_signature">À la signature</option>
+              <option value="mensuel">Mensuel</option>
+              <option value="trimestriel">Trimestriel</option>
+              <option value="semestriel">Semestriel</option>
+              <option value="annuel">Annuel</option>
+            </select>
+          </label>
         </div>
+
+        <div style={{ fontSize: 12, marginTop: 12, fontWeight: 600 }}>Paliers de droits d'auteur (taux entre 8 % et 15 %)</div>
+        <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>Un seul palier = taux unique. Plusieurs paliers = taux progressif selon le nombre d'exemplaires vendus.</div>
+        {tiers.map((tri, i) => {
+          const last = i === tiers.length - 1;
+          return (
+            <div key={i} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>Jusqu'à</span>
+              {last ? (
+                <span style={{ fontSize: 12.5, fontStyle: "italic", minWidth: 120 }}>au-delà (dernier palier)</span>
+              ) : (
+                <input type="number" min={1} value={tri.up_to ?? ""} onChange={(e) => setTier(i, { up_to: e.target.value ? Number(e.target.value) : null })} placeholder="ex. 3000" style={{ ...inputStyle, width: 120, display: "inline-block", marginTop: 0 }} />
+              )}
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>exemplaires →</span>
+              <input type="number" min={8} max={15} step={0.5} value={tri.rate} onChange={(e) => setTier(i, { rate: Number(e.target.value) || 0 })} style={{ ...inputStyle, width: 90, display: "inline-block", marginTop: 0 }} />
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>%</span>
+              {tiers.length > 1 && <button type="button" onClick={() => removeTier(i)} style={{ ...secondaryButtonStyle, padding: "3px 8px", color: "var(--alert, #C4661F)" }}>Retirer</button>}
+            </div>
+          );
+        })}
+        <button type="button" onClick={addTier} style={{ ...secondaryButtonStyle, marginTop: 4 }}>+ Ajouter un palier</button>
       </div>
       <button type="submit" style={{ ...secondaryButtonStyle, marginTop: 10, background: "var(--eclosion)", color: "#fff", border: "none" }}>
         Créer le contrat

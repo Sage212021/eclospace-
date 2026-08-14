@@ -2078,6 +2078,7 @@ model Contract {
   hrContracts          HrContract[]
   signatures           ContractSignature[]
   documents            ContractDocument[]
+  dispatches           ContractDispatch[]
 
   @@map("contracts")
 }
@@ -2111,6 +2112,33 @@ model ContractDocument {
 
   @@index([contractId])
   @@map("contract_documents")
+}
+
+enum ContractDispatchChannel {
+  messagerie_interne // messagerie interne de l'ERP (pièce réellement jointe)
+  whatsapp // WhatsApp (message pré-rempli ; pièce jointe manuellement)
+}
+
+// Journal d'envoi d'un contrat (demande opérateur du 14/08/2026) : chaque
+// transmission du contrat (ou d'une de ses pièces) à l'auteur via la messagerie
+// interne ou WhatsApp est tracée — quoi, à qui, par qui, quand, par quel canal.
+// Append-only : on n'efface jamais un envoi, on en ajoute un nouveau (même
+// esprit que le journal d'audit). Sert de preuve de transmission côté éditeur.
+model ContractDispatch {
+  id            String                  @id @default(uuid())
+  contractId    String                  @map("contract_id")
+  contract      Contract                @relation(fields: [contractId], references: [id])
+  channel       ContractDispatchChannel
+  documentLabel String                  @default("") @map("document_label") // ce qui a été transmis
+  recipient     String                  @default("") // destinataire lisible (nom messagerie ou n° WhatsApp)
+  note          String                  @default("") // mot d'accompagnement éventuel
+  sentAt        DateTime                @default(now()) @map("sent_at")
+  sentById      String?                 @map("sent_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([contractId])
+  @@map("contract_dispatches")
 }
 
 // Partie qui appose une signature (Ch. 9 §9.3) : la « partie contractante »

@@ -1045,6 +1045,31 @@ export function deleteContractDocument(contractId: string, docId: string) {
   return request<{ ok: true }>(`/api/v1/contracts/${contractId}/documents/${docId}`, { method: "DELETE" });
 }
 
+// Journal d'envoi du contrat — preuve de transmission à l'auteur (messagerie
+// interne ou WhatsApp). Append-only : chaque envoi est un nouvel enregistrement.
+export type ContractDispatchChannel = "messagerie_interne" | "whatsapp";
+export interface ContractDispatch {
+  id: string;
+  contract_id: string;
+  channel: ContractDispatchChannel;
+  document_label: string;
+  recipient: string;
+  note: string;
+  sent_at: string;
+  sent_by_name: string | null;
+}
+
+export function listContractDispatches(contractId: string) {
+  return request<ContractDispatch[]>(`/api/v1/contracts/${contractId}/dispatches`);
+}
+
+export function recordContractDispatch(
+  contractId: string,
+  input: { channel: ContractDispatchChannel; document_label?: string; recipient?: string; note?: string },
+) {
+  return request<ContractDispatch>(`/api/v1/contracts/${contractId}/dispatches`, { method: "POST", body: JSON.stringify(input) });
+}
+
 // Suppression logique d'un contrat non signé (contrat de test, brouillon…).
 // Refusée côté serveur dès qu'une signature existe (409 contract_signed).
 export function deleteContract(id: string) {

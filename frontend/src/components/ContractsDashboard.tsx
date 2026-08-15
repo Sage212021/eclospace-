@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getContractsDashboard, restoreContract, type ContractsDashboard as Dash, type ContractStatus } from "../api/client";
+import { getContractsDashboard, restoreContract, runContractAlerts, type ContractsDashboard as Dash, type ContractStatus } from "../api/client";
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
@@ -46,6 +46,20 @@ export function ContractsDashboard({ canRestore }: { canRestore: boolean }) {
     }
   }
 
+  const [checking, setChecking] = useState(false);
+  async function checkAlerts() {
+    setChecking(true);
+    try {
+      const { created } = await runContractAlerts();
+      setMessage(created > 0 ? `${created} alerte(s) d'échéance envoyée(s) à la Direction.` : "Aucune nouvelle alerte : la Direction est déjà avertie des échéances en cours.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Vérification impossible.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
   return (
     <Card title="Tableau de bord des contrats" icon={<IconAdmin />} subtitle="Répartition par statut, avances, échéances à venir et alertes." collapsible defaultOpen>
       {error && <div style={{ background: "#f8e3df", color: "var(--danger, #C24B3A)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{error}</div>}
@@ -74,9 +88,17 @@ export function ContractsDashboard({ canRestore }: { canRestore: boolean }) {
             <span>Avances contractuelles : <strong style={{ fontFamily: "var(--font-mono)" }}>{fcfa(data.advances_total)}</strong></span>
           </div>
 
-          {/* Échéances à venir + retards */}
+          {/* Échéances à venir + préavis de non-reconduction + retards */}
           <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Échéances (90 jours) &amp; retards</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Échéances (90 jours) &amp; retards</div>
+              <Button variant="subtle" onClick={checkAlerts} disabled={checking}>
+                {checking ? "Vérification…" : "🔔 Vérifier les échéances maintenant"}
+              </Button>
+            </div>
+            <p style={{ color: "var(--muted)", fontSize: 11.5, margin: "0 0 8px" }}>
+              La reconduction est tacite : le préavis de non-reconduction doit être envoyé au plus tard 3 mois avant le terme (art. 5). La Direction est alertée automatiquement (cloche + e-mail).
+            </p>
             {data.expiring.length === 0 ? (
               <p style={{ color: "var(--muted)", fontSize: 12.5, margin: 0 }}>Aucun contrat actif n'arrive à échéance dans les 90 jours.</p>
             ) : (
@@ -87,24 +109,37 @@ export function ContractsDashboard({ canRestore }: { canRestore: boolean }) {
                       <th style={{ padding: "4px 8px" }}>Contrat</th>
                       <th style={{ padding: "4px 8px" }}>Ouvrage / Partie</th>
                       <th style={{ padding: "4px 8px" }}>Échéance</th>
+                      <th style={{ padding: "4px 8px" }}>Préavis (−3 mois)</th>
                       <th style={{ padding: "4px 8px" }}>État</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.expiring.map((e) => (
-                      <tr key={e.id} style={{ borderTop: "1px solid var(--line)" }}>
-                        <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono)" }}>{e.contract_number}</td>
-                        <td style={{ padding: "4px 8px" }}>{e.title ?? "—"} · <span style={{ color: "var(--muted)" }}>{e.partner_name}</span></td>
-                        <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono)" }}>{e.expiry}</td>
-                        <td style={{ padding: "4px 8px" }}>
-                          {e.overdue ? (
-                            <span style={{ color: "#fff", background: "var(--danger, #C24B3A)", borderRadius: 999, padding: "1px 9px", fontSize: 11.5, fontWeight: 700 }}>Échu depuis {Math.abs(e.days_left)} j</span>
-                          ) : (
-                            <span style={{ color: "var(--alert, #C4661F)", fontWeight: 600 }}>dans {e.days_left} j</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {data.expiring.map((e) => {
+                      const critical = e.level === "critique";
+                      const rowAccent = critical ? "var(--danger, #C24B3A)" : "var(--alert, #C4661F)";
+                      return (
+                        <tr key={e.id} style={{ borderTop: "1px solid var(--line)", borderLeft: `3px solid ${rowAccent}` }}>
+                          <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono)" }}>{e.contract_number}</td>
+                          <td style={{ padding: "4px 8px" }}>{e.title ?? "—"} · <span style={{ color: "var(--muted)" }}>{e.partner_name}</span></td>
+                          <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono)" }}>{e.expiry}</td>
+                          <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono)" }}>
+                            {e.renewal_notice_deadline}{" "}
+                            {e.notice_passed ? (
+                              <span style={{ color: "var(--danger, #C24B3A)", fontWeight: 700 }}>(dépassé)</span>
+                            ) : (
+                              <span style={{ color: "var(--muted)" }}>(J−{e.notice_days_left})</span>
+                            )}
+                          </td>
+                          <td style={{ padding: "4px 8px" }}>
+                            {e.overdue ? (
+                              <span style={{ color: "#fff", background: "var(--danger, #C24B3A)", borderRadius: 999, padding: "1px 9px", fontSize: 11.5, fontWeight: 700 }}>Échu depuis {Math.abs(e.days_left)} j</span>
+                            ) : (
+                              <span style={{ color: rowAccent, fontWeight: 600 }}>dans {e.days_left} j</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -993,14 +993,33 @@ export interface ContractsDashboard {
   by_status: Record<ContractStatus, number>;
   with_amendments: number;
   advances_total: number;
-  expiring: { id: string; contract_number: string; title: string | null; partner_name: string; status: ContractStatus; expiry: string; days_left: number; overdue: boolean }[];
+  expiring: ContractDeadline[];
   deleted: { id: string; contract_number: string; title: string | null; partner_name: string; deleted_at: string | null }[];
+}
+export interface ContractDeadline {
+  id: string;
+  contract_number: string;
+  title: string | null;
+  partner_name: string;
+  status: ContractStatus;
+  expiry: string;
+  renewal_notice_deadline: string;
+  days_left: number;
+  notice_days_left: number;
+  overdue: boolean;
+  notice_passed: boolean;
+  level: "critique" | "attention";
 }
 export function getContractsDashboard() {
   return request<ContractsDashboard>("/api/v1/contracts/dashboard");
 }
 export function restoreContract(id: string) {
   return request<{ restored: boolean }>(`/api/v1/contracts/${id}/restore`, { method: "POST" });
+}
+// Déclenche l'envoi des alertes d'échéance en attente à la Direction (bouton
+// « Vérifier maintenant »). Renvoie le nombre d'alertes nouvellement émises.
+export function runContractAlerts() {
+  return request<{ created: number }>("/api/v1/contracts/alerts/run", { method: "POST" });
 }
 
 // --- Pièces numérisées d'un contrat (contrat signé scanné, annexes) --------

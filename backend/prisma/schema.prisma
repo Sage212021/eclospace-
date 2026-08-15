@@ -2553,10 +2553,43 @@ model WorkMetadata {
   themaCodes     String[]   @default([]) @map("thema_codes")
   priceByCountry Json?      @map("price_by_country")
 
+  // Fiche ouvrage — volet commercial & financier (§3, §4). Le type d'édition
+  // (§4) pilotera à terme le traitement des coûts et des droits.
+  editionType             EditionType?             @map("edition_type")
+  pricePublic             Decimal?                 @map("price_public") @db.Decimal(12, 2)
+  pricePro                Decimal?                 @map("price_pro") @db.Decimal(12, 2)
+  priceEditeur            Decimal?                 @map("price_editeur") @db.Decimal(12, 2)
+  unitProductionCost      Decimal?                 @map("unit_production_cost") @db.Decimal(12, 2)
+  commercializationStatus CommercializationStatus? @map("commercialization_status")
+  // Volet scolaire (§3) — renseigné pour un livre scolaire.
+  isSchoolBook            Boolean                  @default(false) @map("is_school_book")
+  schoolLevel             String?                  @map("school_level")
+  schoolSubject           String?                  @map("school_subject")
+  schoolYear              String?                  @map("school_year")
+
   updatedAt DateTime @updatedAt @map("updated_at")
   updatedBy String?  @map("updated_by")
 
   @@map("work_metadata")
+}
+
+// Type d'édition (§4) — paramètre déterminant pour le traitement des stocks,
+// coûts et droits selon le mode de collaboration avec l'auteur/partenaire.
+enum EditionType {
+  compte_editeur
+  compte_auteur
+  coedition
+  coproduction
+  partenariat
+  autre
+}
+
+// Statut de commercialisation d'un ouvrage (§3).
+enum CommercializationStatus {
+  a_paraitre
+  disponible
+  epuise
+  arret_commercialisation
 }
 
 enum MetadataExportFormat {

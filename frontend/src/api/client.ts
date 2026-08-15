@@ -1678,18 +1678,47 @@ export function createLegalDeposit(manuscriptId: string, input: { country: strin
   return request<LegalDeposit>(`/api/v1/manuscripts/${manuscriptId}/legal-deposits`, { method: "POST", body: JSON.stringify(input) });
 }
 
+export type EditionType = "compte_editeur" | "compte_auteur" | "coedition" | "coproduction" | "partenariat" | "autre";
+export type CommercializationStatus = "a_paraitre" | "disponible" | "epuise" | "arret_commercialisation";
+
 export interface WorkMetadata {
   version: number;
   summary: string | null;
   weightGrams: number | null;
   themaCodes: string[];
+  editionType: EditionType | null;
+  pricePublic: string | null;
+  pricePro: string | null;
+  priceEditeur: string | null;
+  unitProductionCost: string | null;
+  commercializationStatus: CommercializationStatus | null;
+  isSchoolBook: boolean;
+  schoolLevel: string | null;
+  schoolSubject: string | null;
+  schoolYear: string | null;
 }
 
 export function getWorkMetadata(manuscriptId: string) {
   return request<WorkMetadata | null>(`/api/v1/manuscripts/${manuscriptId}/metadata`);
 }
 
-export function updateWorkMetadata(manuscriptId: string, input: Partial<{ summary: string; weight_grams: number; thema_codes: string[] }>) {
+export type WorkMetadataInput = Partial<{
+  summary: string;
+  weight_grams: number;
+  thema_codes: string[];
+  edition_type: EditionType | null;
+  price_public: number | null;
+  price_pro: number | null;
+  price_editeur: number | null;
+  unit_production_cost: number | null;
+  commercialization_status: CommercializationStatus | null;
+  is_school_book: boolean;
+  school_level: string | null;
+  school_subject: string | null;
+  school_year: string | null;
+}>;
+
+export function updateWorkMetadata(manuscriptId: string, input: WorkMetadataInput) {
   return request<WorkMetadata>(`/api/v1/manuscripts/${manuscriptId}/metadata`, { method: "PATCH", body: JSON.stringify(input) });
 }
 

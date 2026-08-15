@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { StockLocationType, StockMovementType, InventoryType } from "@prisma/client";
+import { StockLocationType, StockMovementType, StockMovementStatus, StockItemCondition, InventoryType } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -59,6 +60,58 @@ const MOVEMENT_REQUIREMENTS: Record<StockMovementType, { from: boolean; to: bool
   inventory_adjustment: { from: false, to: false },
 };
 
+// Types de mouvements SAISIS À LA MAIN par le magasinier — les seuls qu'il peut
+// corriger ou annuler ici. Les mouvements générés par un autre document (vente,
+// retour client, dépôt-vente…) portent une référence et se corrigent à la source.
+const MANUAL_MOVEMENT_TYPES: StockMovementType[] = [
+  "production_in",
+  "transfer",
+  "press_copy",
+  "author_copy",
+  "pulping",
+  "inventory_adjustment",
+];
+
+// Effet d'un mouvement sur le stock PHYSIQUE (mêmes règles que la création + la
+// confirmation de transfert). Sert à contre-passer exactement le bon compartiment
+// lors d'une correction ou d'une annulation.
+function physicalEffects(m: {
+  type: StockMovementType;
+  status: StockMovementStatus;
+  quantity: number;
+  fromLocationId: string | null;
+  toLocationId: string | null;
+}): Array<{ locationId: string; delta: number }> {
+  const effects: Array<{ locationId: string; delta: number }> = [];
+  if (m.fromLocationId) effects.push({ locationId: m.fromLocationId, delta: -m.quantity });
+  // La destination n'est créditée que si ce n'est pas un transfert encore en transit.
+  const creditsTo = m.toLocationId && (m.type !== "transfer" || m.status === "completed");
+  if (creditsTo && m.toLocationId) effects.push({ locationId: m.toLocationId, delta: m.quantity });
+  return effects;
+}
+
+// Erreur métier « le stock deviendrait négatif » — remontée en 409 explicite.
+class StockWouldGoNegativeError extends Error {
+  constructor(public locationId: string, public resulting: number) {
+    super("stock_negative");
+  }
+}
+
+// Applique une liste d'ajustements physiques et refuse tout résultat négatif
+// (le stock affiché doit refléter la réalité, §16.1 — jamais de quantité < 0).
+async function applyEffects(
+  tx: Prisma.TransactionClient,
+  isbnId: string,
+  printRun: number,
+  condition: StockItemCondition,
+  effects: Array<{ locationId: string; delta: number }>,
+): Promise<void> {
+  for (const e of effects) {
+    const updated = await adjustStockItem(tx, isbnId, e.locationId, printRun, e.delta, 0, condition);
+    if (updated.quantityPhysical < 0) throw new StockWouldGoNegativeError(e.locationId, updated.quantityPhysical);
+  }
+}
+
 const stockLocationSchema = z.object({
   type: z.nativeEnum(StockLocationType),
   label: z.string().min(1),
@@ -80,6 +133,47 @@ const stockMovementSchema = z.object({
   // (« touchés »). Par défaut « vendable ».
   condition: z.enum(["vendable", "declasse"]).optional(),
 });
+
+// Correction d'une saisie : le magasinier ajuste la quantité, le motif ou l'état.
+const editMovementSchema = z.object({
+  quantity: z.number().int().positive().optional(),
+  reason: z.string().min(1).optional(),
+  condition: z.enum(["vendable", "declasse"]).optional(),
+});
+const cancelMovementSchema = z.object({
+  reason: z.string().max(300).optional(),
+});
+
+// Un mouvement n'est corrigeable que s'il s'agit d'une SAISIE MANUELLE non
+// annulée. Renvoie une charge d'erreur (409) sinon, avec un message explicite.
+function correctableGuard(m: { status: StockMovementStatus; referenceType: string | null; type: StockMovementType }):
+  | { code: string; message: string }
+  | null {
+  if (m.status === "cancelled") return { code: "already_cancelled", message: "Ce mouvement est déjà annulé." };
+  if (m.referenceType || !MANUAL_MOVEMENT_TYPES.includes(m.type)) {
+    return {
+      code: "system_movement",
+      message: "Ce mouvement provient d'un autre document (vente, retour, dépôt-vente…). Corrigez-le à sa source, pas ici.",
+    };
+  }
+  return null;
+}
+
+// Noms lisibles des acteurs d'un mouvement (magasinier / annulateur).
+async function resolveStockActorNames(ids: (string | null | undefined)[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter((x): x is string => Boolean(x)))];
+  if (unique.length === 0) return new Map();
+  const users = await prisma.user.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, username: true, employee: { select: { firstName: true, lastName: true } } },
+  });
+  const map = new Map<string, string>();
+  for (const u of users) {
+    const name = u.employee ? `${u.employee.firstName} ${u.employee.lastName}`.trim() : u.username;
+    map.set(u.id, name || u.username);
+  }
+  return map;
+}
 
 const inventorySchema = z.object({
   type: z.nativeEnum(InventoryType),
@@ -318,6 +412,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     const fromLocationId = appliesFrom ? body.from_location_id : undefined;
     const toLocationId = appliesTo ? body.to_location_id : undefined;
 
+    const condition = body.condition ?? "vendable";
     const movement = await prisma.$transaction(async (tx) => {
       const created = await tx.stockMovement.create({
         data: {
@@ -331,11 +426,11 @@ export default async function stockRoutes(fastify: FastifyInstance) {
           referenceType: body.reference_type,
           referenceId: body.reference_id,
           status: isTransfer ? "in_transit" : "completed",
+          condition,
           movedBy: request.user!.id,
         },
       });
 
-      const condition = body.condition ?? "vendable";
       if (fromLocationId) {
         await adjustStockItem(tx, body.isbn_id, fromLocationId, body.print_run, -body.quantity, 0, condition);
       }
@@ -380,14 +475,115 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // MODIFIER un mouvement saisi par erreur (quantité, motif, état). Le magasinier
+  // peut corriger sa saisie : le stock est recalculé atomiquement (contre-passation
+  // de l'ancien effet + application du nouveau), jamais figé. Réservé aux saisies
+  // manuelles non annulées ; les mouvements issus d'un autre document (vente,
+  // retour…) se corrigent à la source.
+  fastify.patch("/api/v1/stock-movements/:id", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = editMovementSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const m = await prisma.stockMovement.findUnique({ where: { id } });
+    if (!m) return reply.code(404).send({ code: "not_found", message: "Mouvement introuvable." });
+    const guard = correctableGuard(m);
+    if (guard) return reply.code(409).send(guard);
+
+    const newQty = parsed.data.quantity ?? m.quantity;
+    const newCondition = parsed.data.condition ?? m.condition;
+    const newReason = parsed.data.reason === undefined ? m.reason : parsed.data.reason;
+
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        // 1) Contre-passer l'effet actuel (ancienne quantité, ancien état).
+        await applyEffects(tx, m.isbnId, m.printRun, m.condition, physicalEffects(m).map((e) => ({ ...e, delta: -e.delta })));
+        // 2) Appliquer le nouvel effet (nouvelle quantité, nouvel état).
+        await applyEffects(tx, m.isbnId, m.printRun, newCondition, physicalEffects({ ...m, quantity: newQty }));
+        return tx.stockMovement.update({ where: { id }, data: { quantity: newQty, reason: newReason, condition: newCondition } });
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "stock_movement",
+        entityId: id,
+        oldValues: { quantity: m.quantity, reason: m.reason, condition: m.condition },
+        newValues: { quantity: newQty, reason: newReason, condition: newCondition },
+        ipAddress: request.ip,
+      });
+      return reply.send(updated);
+    } catch (e) {
+      if (e instanceof StockWouldGoNegativeError) {
+        return reply.code(409).send({ code: "stock_negative", message: `Correction impossible : le stock deviendrait négatif (${e.resulting}). Vérifiez la quantité ou les mouvements postérieurs.` });
+      }
+      throw e;
+    }
+  });
+
+  // ANNULER un mouvement saisi par erreur (contre-passation). L'écriture n'est
+  // jamais effacée (audit append-only) : elle passe au statut « annulé » et son
+  // effet sur le stock est neutralisé.
+  fastify.post("/api/v1/stock-movements/:id/cancel", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = cancelMovementSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const m = await prisma.stockMovement.findUnique({ where: { id } });
+    if (!m) return reply.code(404).send({ code: "not_found", message: "Mouvement introuvable." });
+    const guard = correctableGuard(m);
+    if (guard) return reply.code(409).send(guard);
+
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        await applyEffects(tx, m.isbnId, m.printRun, m.condition, physicalEffects(m).map((e) => ({ ...e, delta: -e.delta })));
+        return tx.stockMovement.update({
+          where: { id },
+          data: { status: "cancelled", cancelledAt: new Date(), cancelledBy: request.user!.id, cancelReason: parsed.data.reason?.trim() || null },
+        });
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "stock_movement",
+        entityId: id,
+        oldValues: { status: m.status },
+        newValues: { status: "cancelled", cancelReason: parsed.data.reason?.trim() || null },
+        ipAddress: request.ip,
+      });
+      return reply.send(updated);
+    } catch (e) {
+      if (e instanceof StockWouldGoNegativeError) {
+        return reply.code(409).send({ code: "stock_negative", message: `Annulation impossible : le stock deviendrait négatif (${e.resulting}). Les exemplaires ont probablement déjà été sortis ; enregistrez plutôt un mouvement inverse.` });
+      }
+      throw e;
+    }
+  });
+
   fastify.get("/api/v1/stock-movements", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
     const query = request.query as { isbn_id?: string };
     const movements = await prisma.stockMovement.findMany({
       where: query.isbn_id ? { isbnId: query.isbn_id } : {},
       orderBy: { movedAt: "desc" },
       take: 200,
+      include: {
+        isbn: { select: { isbn13: true } },
+        fromLocation: { select: { label: true } },
+        toLocation: { select: { label: true } },
+      },
     });
-    return reply.send(movements);
+    const actorNames = await resolveStockActorNames(movements.flatMap((m) => [m.movedBy, m.cancelledBy]));
+    return reply.send(movements.map((m) => ({
+      ...m,
+      isbn13: m.isbn?.isbn13 ?? null,
+      from_location_label: m.fromLocation?.label ?? null,
+      to_location_label: m.toLocation?.label ?? null,
+      moved_by_name: m.movedBy ? actorNames.get(m.movedBy) ?? null : null,
+      cancelled_by_name: m.cancelledBy ? actorNames.get(m.cancelledBy) ?? null : null,
+      // Le magasinier ne corrige que ses saisies manuelles non annulées.
+      editable: m.status !== "cancelled" && !m.referenceType && MANUAL_MOVEMENT_TYPES.includes(m.type),
+    })));
   });
 
   // Entrée de fabrication (Ch. 16 §16.4, Ch. 15 §15.7) : seuls les

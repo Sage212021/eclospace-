@@ -7,6 +7,7 @@ import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { nextContractNumber } from "../lib/contractNumber.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
+import { buildContractDeadline, runContractDeadlineAlerts } from "../lib/contractDeadlines.js";
 
 const MAX_DOC_LABEL = 120;
 
@@ -308,29 +309,24 @@ export default async function contractRoutes(fastify: FastifyInstance) {
     let withAmendments = 0;
     let advancesTotal = 0;
     const now = new Date();
-    const soon = new Date();
-    soon.setDate(soon.getDate() + 90);
-    const expiring: { id: string; contract_number: string; title: string | null; partner_name: string; status: string; expiry: string; days_left: number; overdue: boolean }[] = [];
+
+    // Échéances (date d'effet + durée) avec préavis de non-reconduction et niveau
+    // de gravité — source unique partagée avec l'alerte de la Direction.
+    const expiring = contracts
+      .map((c) => buildContractDeadline(c, now))
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+      .sort((a, b) => a.days_left - b.days_left);
 
     for (const c of contracts) {
       byStatus[c.status] = (byStatus[c.status] ?? 0) + 1;
       if (c._count.amendments > 0) withAmendments += 1;
       if (c.royaltyTerms?.advanceAmount) advancesTotal += Number(c.royaltyTerms.advanceAmount);
-      // Échéance = date d'effet + durée. Signalée si active et proche/dépassée.
-      if (c.status === "active" && c.effectiveAt && c.durationMonths) {
-        const expiry = new Date(c.effectiveAt);
-        expiry.setMonth(expiry.getMonth() + c.durationMonths);
-        const daysLeft = Math.round((expiry.getTime() - now.getTime()) / 86400000);
-        if (expiry <= soon) {
-          expiring.push({
-            id: c.id, contract_number: c.contractNumber, title: c.manuscript?.title ?? null,
-            partner_name: `${c.partner.firstName} ${c.partner.lastName}`.trim(),
-            status: c.status, expiry: expiry.toISOString().slice(0, 10), days_left: daysLeft, overdue: expiry < now,
-          });
-        }
-      }
     }
-    expiring.sort((a, b) => a.days_left - b.days_left);
+
+    // Alerte proactive de la Direction (best-effort, dédupliquée) : faute de tâche
+    // planifiée dans cet hébergement, l'ouverture du tableau de bord contrats
+    // déclenche l'envoi des alertes en attente. N'échoue jamais le tableau.
+    await runContractDeadlineAlerts(now).catch(() => {});
 
     const deletedRows = await prisma.contract.findMany({
       where: { deletedAt: { not: null } },
@@ -351,6 +347,13 @@ export default async function contractRoutes(fastify: FastifyInstance) {
       expiring,
       deleted,
     });
+  });
+
+  // Déclenchement manuel de l'alerte d'échéance (bouton « Vérifier maintenant »).
+  // Renvoie le nombre d'alertes nouvellement envoyées à la Direction.
+  fastify.post("/api/v1/contracts/alerts/run", { preHandler: requirePermission("contracts", "consultation") }, async (_request, reply) => {
+    const created = await runContractDeadlineAlerts();
+    return reply.send({ created });
   });
 
   // Restauration d'un contrat supprimé logiquement (chap. VIII/IX) — réservée à
@@ -435,6 +438,9 @@ export default async function contractRoutes(fastify: FastifyInstance) {
           // La date de validation est posée au passage en « attente de signature »
           // (le circuit de validation est terminé), une seule fois.
           validatedAt: nextStatus === "awaiting_signature" && !contract.validatedAt ? new Date() : contract.validatedAt,
+          // Idem que la signature activante : le passage « actif » fixe la date
+          // d'effet (base de calcul de l'échéance) si elle n'est pas déjà posée.
+          effectiveAt: nextStatus === "active" ? contract.effectiveAt ?? new Date() : contract.effectiveAt,
           updatedBy: request.user!.id,
         },
       });
@@ -654,7 +660,9 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         if (activates) {
           await tx.contract.update({
             where: { id },
-            data: { status: "active", signedAt: contract.signedAt ?? signedAtDate, updatedBy: request.user!.id },
+            // Date d'effet posée à l'activation : c'est elle qui, avec la durée,
+            // détermine l'échéance et le préavis de non-reconduction.
+            data: { status: "active", signedAt: contract.signedAt ?? signedAtDate, effectiveAt: contract.effectiveAt ?? signedAtDate, updatedBy: request.user!.id },
           });
         }
       });

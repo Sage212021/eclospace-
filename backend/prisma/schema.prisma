@@ -2053,6 +2053,10 @@ model Contract {
   // signature ») — distincte de la signature. Alimente la fiche et le PDF.
   validatedAt    DateTime?      @map("validated_at")
   effectiveAt    DateTime?      @map("effective_at")
+  // Anti-doublon des alertes d'échéance : horodatage du dernier envoi d'alerte
+  // « contrat arrivant à terme » à la Direction. Remis à null quand les termes
+  // changent (nouvelle période) — pour ré-alerter au cycle suivant.
+  renewalAlertSentAt DateTime?  @map("renewal_alert_sent_at")
   durationMonths Int?           @map("duration_months")
   territories    String[]       @default([])
   languages      String[]       @default([])

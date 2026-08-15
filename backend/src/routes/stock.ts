@@ -3,7 +3,7 @@ import { z } from "zod";
 import { StockLocationType, StockMovementType, StockMovementStatus, StockItemCondition, InventoryType } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { adjustStockItem, availableQuantity } from "../lib/stock.js";
@@ -901,5 +901,135 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     }
     const updated = await prisma.inventory.update({ where: { id }, data: { status: "closed", closedAt: new Date() } });
     return reply.send(updated);
+  });
+
+  // ————————————————————————————————————————————————————————————————
+  // STOCK COMMERCIAL INDIVIDUEL (§10)
+  // Chaque commercial dispose d'un lieu de stock propre. Une remise magasin →
+  // commercial n'est PAS une vente : c'est un transfert de responsabilité. Le
+  // système suit reçus / vendus / retournés / offerts / pertes / détenus, et
+  // affiche les exemplaires « à justifier » (ce que le commercial détient encore).
+  // ————————————————————————————————————————————————————————————————
+
+  const handoverSchema = z.object({
+    isbn_id: z.string().uuid(),
+    print_run: z.number().int().nonnegative().default(0),
+    quantity: z.number().int().positive(),
+    location_id: z.string().uuid(), // magasin source (remise) ou destination (retour)
+    reason: z.string().optional(),
+  });
+
+  // Lieu de stock d'un commercial, créé à la première remise.
+  async function getOrCreateCommercialLocation(userId: string) {
+    const existing = await prisma.stockLocation.findFirst({ where: { commercialUserId: userId, type: "stock_commercial" } });
+    if (existing) return existing;
+    const names = await resolveStockActorNames([userId]);
+    return prisma.stockLocation.create({ data: { type: "stock_commercial", label: `Stock commercial — ${names.get(userId) ?? "commercial"}`, commercialUserId: userId } });
+  }
+
+  // Déplace des exemplaires entre un magasin et le lieu du commercial (les deux
+  // côtés ajustés dans une même transaction, effet immédiat, refus si négatif).
+  async function moveBetween(isbnId: string, printRun: number, quantity: number, fromId: string, toId: string, type: StockMovementType, userId: string, reason: string, ip: string) {
+    return prisma.$transaction(async (tx) => {
+      const debited = await adjustStockItem(tx, isbnId, fromId, printRun, -quantity, 0, "vendable");
+      if (debited.quantityPhysical < 0) throw new StockWouldGoNegativeError(fromId, debited.quantityPhysical);
+      await adjustStockItem(tx, isbnId, toId, printRun, quantity, 0, "vendable");
+      const mv = await tx.stockMovement.create({
+        data: { type, isbnId, printRun, fromLocationId: fromId, toLocationId: toId, quantity, reason, status: "completed", condition: "vendable", movedBy: userId },
+      });
+      await writeAuditLog({ userId, action: "create", entityType: "stock_movement", entityId: mv.id, newValues: { type, isbnId, quantity, from: fromId, to: toId }, ipAddress: ip });
+      return mv;
+    });
+  }
+
+  // État du stock d'un commercial : agrégats par catégorie + détenus (à justifier).
+  async function commercialStockReport(locationId: string) {
+    const movements = await prisma.stockMovement.findMany({ where: { OR: [{ fromLocationId: locationId }, { toLocationId: locationId }], status: { not: "cancelled" } } });
+    let recus = 0, vendus = 0, retournes = 0, offerts = 0, pertes = 0;
+    const OFFERTS: StockMovementType[] = ["author_copy", "press_copy", "promotional_out", "free_out", "event_out", "institutional_out"];
+    const PERTES: StockMovementType[] = ["loss", "damage", "destruction", "pulping"];
+    for (const m of movements) {
+      if (m.toLocationId === locationId) recus += m.quantity;
+      else if (m.fromLocationId === locationId) {
+        if (m.type === "sale_out") vendus += m.quantity;
+        else if (m.type === "commercial_return" || m.type === "transfer") retournes += m.quantity;
+        else if (OFFERTS.includes(m.type)) offerts += m.quantity;
+        else if (PERTES.includes(m.type)) pertes += m.quantity;
+        else retournes += m.quantity; // toute autre sortie assimilée à une restitution
+      }
+    }
+    const items = await prisma.stockItem.findMany({ where: { locationId } });
+    const detenus = items.reduce((s, it) => s + it.quantityPhysical, 0);
+    return { recus, vendus, retournes, offerts, pertes, detenus, a_justifier: detenus };
+  }
+
+  // Remise d'exemplaires à un commercial (magasin → commercial). Réservé à la saisie stock.
+  fastify.post("/api/v1/commercial-stock/:userId/handover", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const { userId } = request.params as { userId: string };
+    const parsed = handoverSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const target = await prisma.user.findUnique({ where: { id: userId } });
+    if (!target) return reply.code(404).send({ code: "not_found", message: "Commercial introuvable." });
+    const loc = await getOrCreateCommercialLocation(userId);
+    try {
+      const mv = await moveBetween(parsed.data.isbn_id, parsed.data.print_run, parsed.data.quantity, parsed.data.location_id, loc.id, "transfer", request.user!.id, parsed.data.reason || "Remise au commercial", request.ip);
+      return reply.code(201).send(mv);
+    } catch (e) {
+      if (e instanceof StockWouldGoNegativeError) return reply.code(409).send({ code: "stock_negative", message: `Remise impossible : le magasin ne détient pas ${parsed.data.quantity} exemplaire(s) disponible(s).` });
+      throw e;
+    }
+  });
+
+  // Retour d'exemplaires par un commercial (commercial → magasin).
+  fastify.post("/api/v1/commercial-stock/:userId/return", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const { userId } = request.params as { userId: string };
+    const parsed = handoverSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const loc = await getOrCreateCommercialLocation(userId);
+    try {
+      const mv = await moveBetween(parsed.data.isbn_id, parsed.data.print_run, parsed.data.quantity, loc.id, parsed.data.location_id, "commercial_return", request.user!.id, parsed.data.reason || "Retour du commercial", request.ip);
+      return reply.code(201).send(mv);
+    } catch (e) {
+      if (e instanceof StockWouldGoNegativeError) return reply.code(409).send({ code: "stock_negative", message: `Retour impossible : le commercial ne détient pas ${parsed.data.quantity} exemplaire(s).` });
+      throw e;
+    }
+  });
+
+  // État de TOUS les commerciaux — responsable commercial / direction / admin stock.
+  fastify.get(
+    "/api/v1/commercial-stock",
+    { preHandler: requireAnyPermission([{ module: "commercial", action: "validation" }, { module: "commercial", action: "administration" }, { module: "direction", action: "consultation" }, { module: "stock", action: "administration" }]) },
+    async (_request, reply) => {
+      const locations = await prisma.stockLocation.findMany({ where: { type: "stock_commercial", commercialUserId: { not: null } } });
+      const names = await resolveStockActorNames(locations.map((l) => l.commercialUserId));
+      const rows = await Promise.all(locations.map(async (l) => ({
+        user_id: l.commercialUserId,
+        commercial_name: l.commercialUserId ? names.get(l.commercialUserId) ?? null : null,
+        location_id: l.id,
+        ...(await commercialStockReport(l.id)),
+      })));
+      rows.sort((a, b) => b.a_justifier - a.a_justifier);
+      const total = rows.reduce((t, r) => ({ recus: t.recus + r.recus, vendus: t.vendus + r.vendus, retournes: t.retournes + r.retournes, offerts: t.offerts + r.offerts, pertes: t.pertes + r.pertes, detenus: t.detenus + r.detenus, a_justifier: t.a_justifier + r.a_justifier }), { recus: 0, vendus: 0, retournes: 0, offerts: 0, pertes: 0, detenus: 0, a_justifier: 0 });
+      return reply.send({ reps: rows, total });
+    },
+  );
+
+  // Liste des commerciaux (pour la remise) — accessible à la saisie stock, sans
+  // exiger la permission d'administration des utilisateurs.
+  fastify.get("/api/v1/commercial-stock/commercials", { preHandler: requirePermission("stock", "saisie") }, async (_request, reply) => {
+    const userRoles = await prisma.userRole.findMany({
+      where: { revokedAt: null, role: { code: { in: ["COMMERCIAL", "RESP_COMMERCIAL"] } }, user: { deletedAt: null, status: "active" } },
+      select: { userId: true },
+    });
+    const ids = [...new Set(userRoles.map((u) => u.userId))];
+    const names = await resolveStockActorNames(ids);
+    return reply.send(ids.map((id) => ({ id, name: names.get(id) ?? id })).sort((a, b) => a.name.localeCompare(b.name)));
+  });
+
+  // État du commercial connecté (son propre stock à justifier).
+  fastify.get("/api/v1/commercial-stock/mine", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
+    const loc = await prisma.stockLocation.findFirst({ where: { commercialUserId: request.user!.id, type: "stock_commercial" } });
+    if (!loc) return reply.send({ location_id: null, recus: 0, vendus: 0, retournes: 0, offerts: 0, pertes: 0, detenus: 0, a_justifier: 0 });
+    return reply.send({ location_id: loc.id, ...(await commercialStockReport(loc.id)) });
   });
 }

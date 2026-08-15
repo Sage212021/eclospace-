@@ -1170,6 +1170,7 @@ model User {
   authoredAnnouncements  Announcement[]          @relation("AnnouncementAuthor")
   announcementReceipts   AnnouncementReceipt[]   @relation("AnnouncementReceipts")
   notificationPreference NotificationPreference? @relation("UserNotificationPreference")
+  commercialStockLocations StockLocation[]       @relation("CommercialStock")
   authoredEvents         CalendarEvent[]         @relation("CalendarEventAuthor")
   authoredNewsletters    Newsletter[]            @relation("NewsletterAuthor")
 
@@ -2856,6 +2857,7 @@ enum StockLocationType {
   depot
   depot_vente
   emplacement
+  stock_commercial // stock individuel confié à un commercial (§10)
 }
 
 model StockLocation {
@@ -2867,6 +2869,9 @@ model StockLocation {
   children   StockLocation[]   @relation("StockLocationHierarchy")
   customerId String?           @map("customer_id")
   customer   Customer?         @relation(fields: [customerId], references: [id])
+  // Stock commercial individuel (§10) : lieu rattaché au compte du commercial.
+  commercialUserId String?     @map("commercial_user_id")
+  commercialUser   User?       @relation("CommercialStock", fields: [commercialUserId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
 

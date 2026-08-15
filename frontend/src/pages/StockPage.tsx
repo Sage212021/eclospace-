@@ -150,6 +150,27 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
         ouvrages sous le seuil d'alerte remontent en réapprovisionnement.
       </GuidanceNote>
 
+      {/* Mode d'emploi du magasinier — guide pas à pas (page servie par l'app). */}
+      <a
+        href="/guides/mode-emploi-stock.html"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: "flex", alignItems: "center", gap: 10, textDecoration: "none",
+          background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 10,
+          padding: "10px 14px", margin: "12px 0", color: "var(--eclosion)", fontWeight: 600, fontSize: 13.5,
+        }}
+      >
+        <span style={{ fontSize: 20 }}>📘</span>
+        <span style={{ flex: 1 }}>
+          Mode d'emploi du magasinier
+          <span style={{ display: "block", fontWeight: 400, color: "var(--muted)", fontSize: 12 }}>
+            Comment introduire et suivre le stock, pas à pas — s'ouvre dans un nouvel onglet.
+          </span>
+        </span>
+        <span aria-hidden="true">↗</span>
+      </a>
+
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 

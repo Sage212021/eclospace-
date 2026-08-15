@@ -52,6 +52,18 @@ const workMetadataSchema = z.object({
   age_range: z.string().optional(),
   thema_codes: z.array(z.string()).optional(),
   price_by_country: z.record(z.unknown()).optional(),
+  // Fiche ouvrage — volet commercial & financier (§3, §4). Nullable pour
+  // permettre d'effacer un champ (null) ou de le laisser inchangé (absent).
+  edition_type: z.enum(["compte_editeur", "compte_auteur", "coedition", "coproduction", "partenariat", "autre"]).nullish(),
+  price_public: z.number().nonnegative().nullish(),
+  price_pro: z.number().nonnegative().nullish(),
+  price_editeur: z.number().nonnegative().nullish(),
+  unit_production_cost: z.number().nonnegative().nullish(),
+  commercialization_status: z.enum(["a_paraitre", "disponible", "epuise", "arret_commercialisation"]).nullish(),
+  is_school_book: z.boolean().optional(),
+  school_level: z.string().max(120).nullish(),
+  school_subject: z.string().max(120).nullish(),
+  school_year: z.string().max(60).nullish(),
 });
 
 const metadataExportSchema = z.object({
@@ -351,6 +363,17 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
         ageRange: body.age_range,
         themaCodes: body.thema_codes,
         priceByCountry: body.price_by_country ? JSON.parse(JSON.stringify(body.price_by_country)) : undefined,
+        // Volet commercial & financier (undefined = inchangé, null = effacé).
+        editionType: body.edition_type,
+        pricePublic: body.price_public,
+        pricePro: body.price_pro,
+        priceEditeur: body.price_editeur,
+        unitProductionCost: body.unit_production_cost,
+        commercializationStatus: body.commercialization_status,
+        isSchoolBook: body.is_school_book,
+        schoolLevel: body.school_level,
+        schoolSubject: body.school_subject,
+        schoolYear: body.school_year,
         updatedBy: request.user!.id,
       };
 

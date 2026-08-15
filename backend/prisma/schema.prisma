@@ -2855,7 +2855,9 @@ model StockLocation {
 // stock vendable normal, pas seulement une mention sur la ligne de retour.
 enum StockItemCondition {
   vendable
-  declasse
+  declasse // endommagé / défraîchi mais encore commercialisable (§5, §12)
+  perdu // manquant constaté (perte) — hors stock vendable, conservé pour l'audit
+  detruit // détruit / pilonné — tombstone auditable, jamais réintégrable
 }
 
 model StockItem {
@@ -2884,13 +2886,22 @@ model StockItem {
 // stock courant est la somme des mouvements, vérifiable à tout instant).
 enum StockMovementType {
   production_in
+  supplier_in // entrée fournisseur (§7)
   sale_out
   consignment_out
   consignment_return
   customer_return
+  commercial_return // retour d'un commercial (§7)
   transfer
   press_copy
   author_copy
+  promotional_out // sortie promotionnelle (§7)
+  institutional_out // sortie institutionnelle (§7)
+  event_out // sortie événementielle (§7)
+  free_out // sortie gratuite (§7)
+  loss // perte constatée → compartiment « perdu » (§7, §5)
+  damage // casse → reclassé en « déclassé » (§7, §5)
+  destruction // destruction → compartiment « détruit » (§7, §5)
   pulping
   inventory_adjustment
 }

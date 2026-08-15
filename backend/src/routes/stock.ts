@@ -49,15 +49,35 @@ function diceScore(a: string, b: string): number {
 // part (statut en_transit jusqu'à confirmation, §16.4).
 const MOVEMENT_REQUIREMENTS: Record<StockMovementType, { from: boolean; to: boolean }> = {
   production_in: { from: false, to: true },
+  supplier_in: { from: false, to: true },
   sale_out: { from: true, to: false },
   consignment_out: { from: true, to: true },
   consignment_return: { from: true, to: true },
   customer_return: { from: false, to: true },
+  commercial_return: { from: false, to: true },
   transfer: { from: true, to: true },
   press_copy: { from: true, to: false },
   author_copy: { from: true, to: false },
+  promotional_out: { from: true, to: false },
+  institutional_out: { from: true, to: false },
+  event_out: { from: true, to: false },
+  free_out: { from: true, to: false },
+  // Perte / casse / destruction : reclassement AU MÊME LIEU (le compartiment
+  // source diminue, le compartiment cible augmente) — d'où from seul.
+  loss: { from: true, to: false },
+  damage: { from: true, to: false },
+  destruction: { from: true, to: false },
   pulping: { from: true, to: false },
   inventory_adjustment: { from: false, to: false },
+};
+
+// Reclassement d'un compartiment vers un autre AU MÊME LIEU (§5, §7). La quantité
+// n'est pas retirée du stock total : elle change d'état (vendable → perdu/…), ce
+// qui garde le total auditable (rien ne « disparaît »).
+const RECLASSIFY_OUTCOME: Partial<Record<StockMovementType, StockItemCondition>> = {
+  loss: "perdu",
+  damage: "declasse",
+  destruction: "detruit",
 };
 
 // Types de mouvements SAISIS À LA MAIN par le magasinier — les seuls qu'il peut
@@ -65,28 +85,45 @@ const MOVEMENT_REQUIREMENTS: Record<StockMovementType, { from: boolean; to: bool
 // retour client, dépôt-vente…) portent une référence et se corrigent à la source.
 const MANUAL_MOVEMENT_TYPES: StockMovementType[] = [
   "production_in",
+  "supplier_in",
+  "commercial_return",
   "transfer",
   "press_copy",
   "author_copy",
+  "promotional_out",
+  "institutional_out",
+  "event_out",
+  "free_out",
+  "loss",
+  "damage",
+  "destruction",
   "pulping",
   "inventory_adjustment",
 ];
 
-// Effet d'un mouvement sur le stock PHYSIQUE (mêmes règles que la création + la
-// confirmation de transfert). Sert à contre-passer exactement le bon compartiment
-// lors d'une correction ou d'une annulation.
+// Effet d'un mouvement sur le stock PHYSIQUE, compartiment par compartiment
+// (mêmes règles que la création + la confirmation de transfert). Sert aussi à
+// contre-passer exactement lors d'une correction ou d'une annulation.
 function physicalEffects(m: {
   type: StockMovementType;
   status: StockMovementStatus;
   quantity: number;
   fromLocationId: string | null;
   toLocationId: string | null;
-}): Array<{ locationId: string; delta: number }> {
-  const effects: Array<{ locationId: string; delta: number }> = [];
-  if (m.fromLocationId) effects.push({ locationId: m.fromLocationId, delta: -m.quantity });
+  condition: StockItemCondition;
+}): Array<{ locationId: string; condition: StockItemCondition; delta: number }> {
+  const effects: Array<{ locationId: string; condition: StockItemCondition; delta: number }> = [];
+  const outcome = RECLASSIFY_OUTCOME[m.type];
+  if (outcome && m.fromLocationId) {
+    // Reclassement : compartiment source → compartiment cible, au même lieu.
+    effects.push({ locationId: m.fromLocationId, condition: m.condition, delta: -m.quantity });
+    effects.push({ locationId: m.fromLocationId, condition: outcome, delta: m.quantity });
+    return effects;
+  }
+  if (m.fromLocationId) effects.push({ locationId: m.fromLocationId, condition: m.condition, delta: -m.quantity });
   // La destination n'est créditée que si ce n'est pas un transfert encore en transit.
   const creditsTo = m.toLocationId && (m.type !== "transfer" || m.status === "completed");
-  if (creditsTo && m.toLocationId) effects.push({ locationId: m.toLocationId, delta: m.quantity });
+  if (creditsTo && m.toLocationId) effects.push({ locationId: m.toLocationId, condition: m.condition, delta: m.quantity });
   return effects;
 }
 
@@ -97,17 +134,16 @@ class StockWouldGoNegativeError extends Error {
   }
 }
 
-// Applique une liste d'ajustements physiques et refuse tout résultat négatif
-// (le stock affiché doit refléter la réalité, §16.1 — jamais de quantité < 0).
+// Applique une liste d'ajustements physiques (chacun sur son compartiment) et
+// refuse tout résultat négatif (§16.1 — jamais de quantité < 0).
 async function applyEffects(
   tx: Prisma.TransactionClient,
   isbnId: string,
   printRun: number,
-  condition: StockItemCondition,
-  effects: Array<{ locationId: string; delta: number }>,
+  effects: Array<{ locationId: string; condition: StockItemCondition; delta: number }>,
 ): Promise<void> {
   for (const e of effects) {
-    const updated = await adjustStockItem(tx, isbnId, e.locationId, printRun, e.delta, 0, condition);
+    const updated = await adjustStockItem(tx, isbnId, e.locationId, printRun, e.delta, 0, e.condition);
     if (updated.quantityPhysical < 0) throw new StockWouldGoNegativeError(e.locationId, updated.quantityPhysical);
   }
 }
@@ -275,39 +311,43 @@ export default async function stockRoutes(fastify: FastifyInstance) {
         location: { select: { label: true } },
       },
     });
+    // Ventilation par compartiment (§5) : vendable (= disponible), déclassé,
+    // perdu, détruit. Le total agrège tous les compartiments (rien ne disparaît).
+    type Buckets = { vendable: number; declasse: number; perdu: number; detruit: number };
+    const zero = (): Buckets => ({ vendable: 0, declasse: 0, perdu: 0, detruit: 0 });
+    const add = (b: Buckets, c: StockItemCondition, q: number) => { b[c] += q; };
     const byIsbn = new Map<string, {
       isbn_id: string; isbn13: string; title: string | null;
-      vendable: number; declasse: number;
-      locations: Map<string, { location_label: string; vendable: number; declasse: number }>;
+      buckets: Buckets;
+      locations: Map<string, { location_label: string } & Buckets>;
     }>();
     for (const it of items) {
       let row = byIsbn.get(it.isbnId);
       if (!row) {
-        row = { isbn_id: it.isbnId, isbn13: it.isbn.isbn13, title: it.isbn.manuscript?.title ?? null, vendable: 0, declasse: 0, locations: new Map() };
+        row = { isbn_id: it.isbnId, isbn13: it.isbn.isbn13, title: it.isbn.manuscript?.title ?? null, buckets: zero(), locations: new Map() };
         byIsbn.set(it.isbnId, row);
       }
       const label = it.location.label;
       let loc = row.locations.get(label);
       if (!loc) {
-        loc = { location_label: label, vendable: 0, declasse: 0 };
+        loc = { location_label: label, ...zero() };
         row.locations.set(label, loc);
       }
-      if (it.condition === "declasse") {
-        row.declasse += it.quantityPhysical;
-        loc.declasse += it.quantityPhysical;
-      } else {
-        row.vendable += it.quantityPhysical;
-        loc.vendable += it.quantityPhysical;
-      }
+      add(row.buckets, it.condition, it.quantityPhysical);
+      add(loc, it.condition, it.quantityPhysical);
     }
+    const sumAll = (b: Buckets) => b.vendable + b.declasse + b.perdu + b.detruit;
     const rows = [...byIsbn.values()]
       .map((r) => ({
         isbn_id: r.isbn_id, isbn13: r.isbn13, title: r.title,
-        vendable: r.vendable, declasse: r.declasse, total: r.vendable + r.declasse,
+        ...r.buckets, total: sumAll(r.buckets),
         by_location: [...r.locations.values()].sort((a, b) => a.location_label.localeCompare(b.location_label, "fr")),
       }))
       .sort((a, b) => (a.title ?? a.isbn13).localeCompare(b.title ?? b.isbn13, "fr"));
-    const totals = rows.reduce((acc, r) => ({ vendable: acc.vendable + r.vendable, declasse: acc.declasse + r.declasse, total: acc.total + r.total }), { vendable: 0, declasse: 0, total: 0 });
+    const totals = rows.reduce(
+      (acc, r) => ({ vendable: acc.vendable + r.vendable, declasse: acc.declasse + r.declasse, perdu: acc.perdu + r.perdu, detruit: acc.detruit + r.detruit, total: acc.total + r.total }),
+      { vendable: 0, declasse: 0, perdu: 0, detruit: 0, total: 0 },
+    );
     return reply.send({ rows, totals });
   });
 
@@ -327,10 +367,12 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       let declasse = 0;
       for (const it of its) {
         const l = locMap.get(it.locationId) ?? { location_id: it.locationId, location_label: it.location.label, vendable: 0, declasse: 0 };
+        // Ce panneau montre le stock commercialisable (§24 vision logistique) :
+        // vendable et déclassé. Les compartiments perdu / détruit en sont exclus.
         if (it.condition === "declasse") {
           l.declasse += it.quantityPhysical;
           declasse += it.quantityPhysical;
-        } else {
+        } else if (it.condition === "vendable") {
           l.vendable += it.quantityPhysical;
           vendable += it.quantityPhysical;
         }
@@ -413,46 +455,47 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     const toLocationId = appliesTo ? body.to_location_id : undefined;
 
     const condition = body.condition ?? "vendable";
-    const movement = await prisma.$transaction(async (tx) => {
-      const created = await tx.stockMovement.create({
-        data: {
-          type: body.type,
-          isbnId: body.isbn_id,
-          printRun: body.print_run,
-          fromLocationId,
-          toLocationId,
-          quantity: body.quantity,
-          reason: body.reason,
-          referenceType: body.reference_type,
-          referenceId: body.reference_id,
-          status: isTransfer ? "in_transit" : "completed",
-          condition,
-          movedBy: request.user!.id,
-        },
+    try {
+      const movement = await prisma.$transaction(async (tx) => {
+        const created = await tx.stockMovement.create({
+          data: {
+            type: body.type,
+            isbnId: body.isbn_id,
+            printRun: body.print_run,
+            fromLocationId,
+            toLocationId,
+            quantity: body.quantity,
+            reason: body.reason,
+            referenceType: body.reference_type,
+            referenceId: body.reference_id,
+            status: isTransfer ? "in_transit" : "completed",
+            condition,
+            movedBy: request.user!.id,
+          },
+        });
+        // Effet sur le stock, compartiment par compartiment (crédit de la
+        // destination différé pour un transfert ; reclassement au même lieu pour
+        // perte/casse/destruction). Refuse un résultat négatif.
+        await applyEffects(tx, body.isbn_id, body.print_run, physicalEffects(created));
+        return created;
       });
 
-      if (fromLocationId) {
-        await adjustStockItem(tx, body.isbn_id, fromLocationId, body.print_run, -body.quantity, 0, condition);
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "stock_movement",
+        entityId: movement.id,
+        newValues: body,
+        ipAddress: request.ip,
+      });
+
+      return reply.code(201).send(movement);
+    } catch (e) {
+      if (e instanceof StockWouldGoNegativeError) {
+        return reply.code(409).send({ code: "stock_negative", message: `Mouvement impossible : le stock deviendrait négatif (${e.resulting}). Vérifiez la quantité disponible au lieu d'origine.` });
       }
-      // Un transfert ne crédite le lieu de destination qu'à la confirmation
-      // de réception (§16.4) ; les autres types créditent immédiatement.
-      if (toLocationId && !isTransfer) {
-        await adjustStockItem(tx, body.isbn_id, toLocationId, body.print_run, body.quantity, 0, condition);
-      }
-
-      return created;
-    });
-
-    await writeAuditLog({
-      userId: request.user!.id,
-      action: "create",
-      entityType: "stock_movement",
-      entityId: movement.id,
-      newValues: body,
-      ipAddress: request.ip,
-    });
-
-    return reply.code(201).send(movement);
+      throw e;
+    }
   });
 
   fastify.patch(
@@ -468,7 +511,8 @@ export default async function stockRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ code: "invalid_transition", message: "Ce mouvement n'est pas un transfert en transit." });
       }
       const updated = await prisma.$transaction(async (tx) => {
-        await adjustStockItem(tx, movement.isbnId, movement.toLocationId!, movement.printRun, movement.quantity);
+        // Crédit du lieu de destination dans le même compartiment (état) que l'origine.
+        await adjustStockItem(tx, movement.isbnId, movement.toLocationId!, movement.printRun, movement.quantity, 0, movement.condition);
         return tx.stockMovement.update({ where: { id }, data: { status: "completed" } });
       });
       return reply.send(updated);
@@ -498,9 +542,9 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     try {
       const updated = await prisma.$transaction(async (tx) => {
         // 1) Contre-passer l'effet actuel (ancienne quantité, ancien état).
-        await applyEffects(tx, m.isbnId, m.printRun, m.condition, physicalEffects(m).map((e) => ({ ...e, delta: -e.delta })));
+        await applyEffects(tx, m.isbnId, m.printRun, physicalEffects(m).map((e) => ({ ...e, delta: -e.delta })));
         // 2) Appliquer le nouvel effet (nouvelle quantité, nouvel état).
-        await applyEffects(tx, m.isbnId, m.printRun, newCondition, physicalEffects({ ...m, quantity: newQty }));
+        await applyEffects(tx, m.isbnId, m.printRun, physicalEffects({ ...m, quantity: newQty, condition: newCondition }));
         return tx.stockMovement.update({ where: { id }, data: { quantity: newQty, reason: newReason, condition: newCondition } });
       });
       await writeAuditLog({
@@ -537,7 +581,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
 
     try {
       const updated = await prisma.$transaction(async (tx) => {
-        await applyEffects(tx, m.isbnId, m.printRun, m.condition, physicalEffects(m).map((e) => ({ ...e, delta: -e.delta })));
+        await applyEffects(tx, m.isbnId, m.printRun, physicalEffects(m).map((e) => ({ ...e, delta: -e.delta })));
         return tx.stockMovement.update({
           where: { id },
           data: { status: "cancelled", cancelledAt: new Date(), cancelledBy: request.user!.id, cancelReason: parsed.data.reason?.trim() || null },

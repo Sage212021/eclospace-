@@ -1,0 +1,250 @@
+<title>Mode d'emploi du magasinier</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ground: #F8F9FB; --surface: #FFFFFF; --surface-2: #F1F3F8;
+    --ink: #16233D; --ink-soft: #43506A; --muted: #6B7488;
+    --line: #E1E6EF; --line-strong: #C9D1E0;
+    --gold: #B7891A; --gold-soft: #F7EFD6;
+    --orange: #C4661F; --orange-soft: #F8E7D8;
+    --red: #C24B3A; --red-soft: #F7E0DC;
+    --green: #3F7A52; --green-soft: #E1EFE4;
+    --mono: ui-monospace, "SFMono-Regular", "IBM Plex Mono", Menlo, monospace;
+    --serif: Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --ground: #0E1526; --surface: #16223B; --surface-2: #1D2C49;
+    --ink: #EAEEF6; --ink-soft: #C0C9DC; --muted: #8B96AE;
+    --line: #26355480; --line-strong: #33456A;
+    --gold: #E7C25A; --gold-soft: #2A2913;
+    --orange: #E5904F; --orange-soft: #331F0F;
+    --red: #E27567; --red-soft: #331713;
+    --green: #7FC08F; --green-soft: #12251A;
+  } }
+  :root[data-theme="dark"] {
+    --ground: #0E1526; --surface: #16223B; --surface-2: #1D2C49;
+    --ink: #EAEEF6; --ink-soft: #C0C9DC; --muted: #8B96AE;
+    --line: #26355480; --line-strong: #33456A;
+    --gold: #E7C25A; --gold-soft: #2A2913;
+    --orange: #E5904F; --orange-soft: #331F0F;
+    --red: #E27567; --red-soft: #331713;
+    --green: #7FC08F; --green-soft: #12251A;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.6; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px 96px; }
+
+  .hero { padding: 54px 0 24px; border-bottom: 1px solid var(--line); }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 0 0 14px; }
+  h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(30px, 5.5vw, 46px); line-height: 1.08; margin: 0 0 16px; text-wrap: balance; }
+  .lede { font-size: clamp(16px, 2.3vw, 19px); color: var(--ink-soft); max-width: 60ch; margin: 0; }
+
+  /* Golden rules */
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 28px; }
+  .rule { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: 12px; padding: 15px 16px; }
+  .rule b { display: block; font-size: 14.5px; margin-bottom: 3px; }
+  .rule span { font-size: 13px; color: var(--ink-soft); }
+
+  section { padding-top: 44px; }
+  h2 { font-family: var(--serif); font-weight: 600; font-size: clamp(21px, 3.2vw, 27px); margin: 0 0 4px; text-wrap: balance; display: flex; align-items: baseline; gap: 12px; }
+  h2 .n { font-family: var(--mono); font-size: .62em; color: var(--gold); font-weight: 700; }
+  .sec-lead { color: var(--muted); margin: 0 0 20px; font-size: 15px; max-width: 66ch; }
+
+  .where { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px; color: var(--gold); background: var(--gold-soft); border-radius: 6px; padding: 3px 8px; margin-bottom: 14px; }
+
+  ol.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  ol.steps > li { counter-increment: step; position: relative; padding-left: 46px; }
+  ol.steps > li::before { content: counter(step); position: absolute; left: 0; top: -2px; width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--surface); font-family: var(--mono); font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+  ol.steps > li b { color: var(--ink); }
+  ol.steps p { margin: 2px 0 0; font-size: 14.5px; color: var(--ink-soft); }
+  .tag { font-family: var(--mono); font-size: 12.5px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; color: var(--ink); white-space: nowrap; }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin-top: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 520px; }
+  thead th { text-align: left; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; padding: 11px 14px; background: var(--surface-2); border-bottom: 1px solid var(--line-strong); }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  td .m { font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 600; }
+
+  .callout { border-radius: 12px; padding: 14px 16px; margin-top: 16px; font-size: 14px; border: 1px solid; }
+  .callout.warn { background: var(--orange-soft); border-color: color-mix(in srgb, var(--orange) 35%, transparent); color: var(--ink); }
+  .callout.good { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 35%, transparent); color: var(--ink); }
+  .callout b { color: var(--ink); }
+  .callout .lbl { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; display: block; margin-bottom: 4px; }
+  .callout.warn .lbl { color: var(--orange); }
+  .callout.good .lbl { color: var(--green); }
+
+  .field-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+  .fl { display: grid; grid-template-columns: 160px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .fl .k { font-family: var(--mono); font-size: 12.5px; color: var(--ink); font-weight: 600; }
+  .fl .v { color: var(--ink-soft); }
+  @media (max-width: 520px) { .fl { grid-template-columns: 1fr; gap: 2px; } }
+
+  .foot { margin-top: 54px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); font-family: var(--mono); }
+  strong.k { font-family: var(--mono); font-weight: 600; font-size: .95em; }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">Éclospace · Magasin & Stock — Guide du magasinier</p>
+    <h1>Faire entrer et suivre le stock</h1>
+    <p class="lede">Ce guide vous accompagne pas à pas pour introduire les données de stock dans Éclospace et enregistrer chaque mouvement d'exemplaires — de la réception à la remise à l'auteur.</p>
+
+    <div class="rules">
+      <div class="rule"><b>Le stock se calcule</b><span>Vous ne tapez jamais un total « à la main ». Vous enregistrez des mouvements, le système calcule le stock.</span></div>
+      <div class="rule"><b>Une erreur se corrige</b><span>Rien n'est verrouillé : un mouvement erroné se Modifie ou s'Annule ; le stock se recalcule tout seul.</span></div>
+      <div class="rule"><b>Chaque geste laisse une trace</b><span>Qui, quand, combien, pourquoi : tout est journalisé. Renseignez toujours un motif clair.</span></div>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="n">1</span>Préparer les lieux de stockage</h2>
+    <p class="sec-lead">Avant tout, le stock doit savoir « où ». On crée une fois pour toutes ses magasins et emplacements.</p>
+    <div class="where">📍 Stock et magasin → carte « Lieux de stockage » → bouton <b>+ Lieu</b></div>
+    <ol class="steps">
+      <li><b>Ouvrez</b> le menu <span class="tag">Stock et magasin</span> puis la carte <b>Lieux de stockage</b>.<p>Le bouton <b>+ Lieu</b> n'apparaît qu'aux profils d'administration du stock. Si vous ne le voyez pas, demandez à un responsable de créer les lieux.</p></li>
+      <li><b>Nommez</b> le lieu (ex. « Magasin principal », « Réserve », « Boutique ») et choisissez son <b>type</b>.<p>Types disponibles : Entrepôt · Dépôt · Dépôt-vente · Emplacement · Stock commercial.</p></li>
+      <li><b>Créez.</b> Le lieu apparaît dans la liste et devient sélectionnable dans tous les mouvements.</li>
+    </ol>
+    <div class="callout good"><span class="lbl">Conseil</span>Créez au minimum un <b>Magasin principal</b>. Ajoutez une <b>Réserve</b> et une <b>Boutique</b> si vous gérez plusieurs emplacements physiques. Le « Stock commercial » d'un vendeur est créé automatiquement à la première remise — pas besoin de le créer à la main.</div>
+  </section>
+
+  <section>
+    <h2><span class="n">2</span>Faire entrer le stock de départ</h2>
+    <p class="sec-lead">Deux situations : soit vous démarrez avec un stock déjà existant à recenser, soit vous recevez une nouvelle impression.</p>
+
+    <div class="where">📍 Stock et magasin → carte « Chargement de l'inventaire initial »</div>
+    <p><b>Cas A — vous avez déjà des livres en magasin au démarrage.</b> Utilisez le <b>Chargement de l'inventaire initial</b> : c'est la façon la plus rapide de recenser tout un magasin d'un coup.</p>
+    <ol class="steps">
+      <li><b>Choisissez la zone</b> (le magasin) à recenser.</li>
+      <li><b>Saisissez, ouvrage par ouvrage,</b> la quantité physiquement constatée. La colonne <b>« dont touchés »</b> sert aux exemplaires abîmés : ils entreront en état <b>Déclassé</b> (séparés du stock vendable).</li>
+      <li><b>Cliquez</b> <b>Charger le stock</b>. Les quantités deviennent des écritures d'entrée officielles. À partir de là, tout se fait par mouvements.</li>
+    </ol>
+
+    <div class="where" style="margin-top:20px">📍 Stock et magasin → carte « Nouveau mouvement de stock »</div>
+    <p><b>Cas B — vous recevez une nouvelle impression.</b> Enregistrez une <b>Réception de fabrication</b> (voir section 3), avec le magasin comme <b>lieu de destination</b>.</p>
+    <div class="callout warn"><span class="lbl">À retenir</span>Ne saisissez le stock initial <b>qu'une seule fois</b> par magasin. Ensuite, toute quantité qui change doit passer par un mouvement (entrée, sortie, transfert…), jamais par une nouvelle « initialisation ».</div>
+  </section>
+
+  <section>
+    <h2><span class="n">3</span>Enregistrer un mouvement — le geste central</h2>
+    <p class="sec-lead">C'est l'action que vous répéterez le plus. Chaque entrée, sortie ou transfert d'exemplaires est un mouvement.</p>
+    <div class="where">📍 Stock et magasin → carte « Nouveau mouvement de stock »</div>
+    <p>Le formulaire s'adapte au <b>type</b> choisi (il affiche le lieu d'origine, de destination, ou les deux). Voici chaque champ :</p>
+    <div class="field-list">
+      <div class="fl"><span class="k">Type</span><span class="v">La nature du mouvement (voir le tableau ci-dessous).</span></div>
+      <div class="fl"><span class="k">Référence (ISBN)</span><span class="v">L'ouvrage concerné, choisi par son ISBN et son titre.</span></div>
+      <div class="fl"><span class="k">Quantité</span><span class="v">Le nombre d'exemplaires. Toujours un nombre positif.</span></div>
+      <div class="fl"><span class="k">Lieu d'origine</span><span class="v">D'où sortent les exemplaires (sorties, transferts, pertes).</span></div>
+      <div class="fl"><span class="k">Lieu de destination</span><span class="v">Où entrent les exemplaires (réceptions, transferts, retours).</span></div>
+      <div class="fl"><span class="k">État / Compartiment</span><span class="v">Vendable ou Déclassé. Par défaut « Vendable ».</span></div>
+      <div class="fl"><span class="k">Motif</span><span class="v"><b>Obligatoire.</b> Une phrase claire (« Réception BL n°123 », « Casse transport »…).</span></div>
+    </div>
+    <p style="margin-top:20px">Quel type choisir&nbsp;?</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Quand…</th><th>Type à choisir</th><th>Sens</th></tr></thead>
+        <tbody>
+          <tr><td>Vous recevez une impression</td><td><span class="m">Réception de fabrication</span></td><td>Entrée → magasin</td></tr>
+          <tr><td>Un fournisseur livre des exemplaires</td><td><span class="m">Entrée fournisseur</span></td><td>Entrée → magasin</td></tr>
+          <tr><td>Vous déplacez entre deux magasins</td><td><span class="m">Transfert interne</span></td><td>Origine → destination</td></tr>
+          <tr><td>Vous vendez au comptoir / en direct</td><td><span class="m">Sortie vente</span></td><td>Sortie du magasin</td></tr>
+          <tr><td>Service de presse, exemplaire d'auteur</td><td><span class="m">Service de presse</span> · <span class="m">Exemplaire d'auteur</span></td><td>Sortie du magasin</td></tr>
+          <tr><td>Don promotionnel, événement, institution, gratuit</td><td><span class="m">Sortie promotionnelle / événementielle / institutionnelle / gratuite</span></td><td>Sortie du magasin</td></tr>
+          <tr><td>Des exemplaires manquent (introuvables)</td><td><span class="m">Perte</span></td><td>Sortie → compartiment « perdu »</td></tr>
+          <tr><td>Des exemplaires sont abîmés</td><td><span class="m">Casse (→ déclassé)</span></td><td>Reclassé en « déclassé »</td></tr>
+          <tr><td>Des exemplaires sont détruits / pilonnés</td><td><span class="m">Destruction</span> · <span class="m">Mise au pilon</span></td><td>Sortie définitive</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout warn"><span class="lbl">Ne pas confondre</span>Confier des livres à un <b>commercial</b> ou déposer chez un <b>libraire</b> n'est <b>pas</b> une vente. Ces cas ont leurs propres outils (sections 6). Une « Sortie vente » ne s'utilise que pour une vente réellement encaissée.</div>
+  </section>
+
+  <section>
+    <h2><span class="n">4</span>Les états : vendable, déclassé, perdu, détruit</h2>
+    <p class="sec-lead">Un même ouvrage peut exister dans plusieurs états. Ils ne se mélangent jamais dans le même total.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>État</th><th>Signification</th><th>Comment y arriver</th></tr></thead>
+        <tbody>
+          <tr><td><span class="m">Vendable</span></td><td>Exemplaires neufs, en bon état, commercialisables.</td><td>Réceptions, transferts (état par défaut).</td></tr>
+          <tr><td><span class="m">Déclassé</span></td><td>Abîmés mais existants (vendus à prix réduit, dons…).</td><td>Mouvement <span class="m">Casse (→ déclassé)</span>.</td></tr>
+          <tr><td><span class="m">Perdu</span></td><td>Introuvables, sortis du stock réel.</td><td>Mouvement <span class="m">Perte</span>.</td></tr>
+          <tr><td><span class="m">Détruit</span></td><td>Physiquement éliminés (pilon, destruction).</td><td>Mouvements <span class="m">Destruction</span> / <span class="m">Mise au pilon</span>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout good"><span class="lbl">Bon réflexe</span>Pour une casse ou une perte, choisissez le <b>compartiment concerné</b> (Vendable en général) : le système retire du bon stock et bascule vers le compartiment cible. Le total « vendable » reste juste.</div>
+  </section>
+
+  <section>
+    <h2><span class="n">5</span>Corriger une erreur de saisie</h2>
+    <p class="sec-lead">Une faute de frappe (100 au lieu de 60), un mauvais ouvrage ? Rien n'est bloqué.</p>
+    <div class="where">📍 Stock et magasin → carte « Historique des mouvements »</div>
+    <ol class="steps">
+      <li><b>Retrouvez</b> la ligne concernée dans l'<b>Historique des mouvements</b>.</li>
+      <li><b>Modifier</b> : corrigez la quantité, le motif ou l'état. Le stock se recalcule immédiatement.</li>
+      <li><b>Annuler</b> : si toute la ligne était fausse (mauvais ouvrage, double saisie), annulez-la avec un motif. Elle reste visible, barrée « Annulé », et le stock revient à l'état d'avant.</li>
+    </ol>
+    <div class="callout warn"><span class="lbl">Limite normale</span>On ne corrige ici que <b>vos saisies manuelles</b>. Un mouvement issu d'une <b>vente</b> ou d'un <b>retour client</b> se corrige à sa source (côté commercial), pas dans l'historique du stock. Le système vous le dira clairement.</div>
+  </section>
+
+  <section>
+    <h2><span class="n">6</span>Confier des exemplaires à un commercial</h2>
+    <p class="sec-lead">Remettre 100 livres à un commercial, c'est lui transférer une responsabilité — pas les vendre.</p>
+    <div class="where">📍 Stock et magasin → carte « Stock commercial » → boutons <b>Remettre</b> / <b>Retour</b></div>
+    <ol class="steps">
+      <li><b>Remettre</b> : choisissez le commercial, l'ouvrage, le magasin d'origine et la quantité. Les exemplaires quittent le magasin et rejoignent le <b>stock propre</b> du commercial.</li>
+      <li><b>Suivi automatique</b> : le tableau affiche, par commercial, les <b>reçus / vendus / retournés / offerts / pertes</b> et surtout les <b>« à justifier »</b> (ce qu'il détient encore).</li>
+      <li><b>Retour</b> : quand le commercial rapporte des invendus, enregistrez un <b>Retour</b> vers le magasin. Son « à justifier » diminue.</li>
+    </ol>
+    <div class="callout good"><span class="lbl">À savoir</span>Les <b>ventes</b> faites par le commercial se saisissent en « Sortie vente » depuis son stock : elles réduisent automatiquement son « à justifier ». Chaque commercial voit son propre stock dans <b>son</b> espace ; vous et le responsable voyez tout le monde.</div>
+  </section>
+
+  <section>
+    <h2><span class="n">7</span>Remettre des exemplaires à l'auteur</h2>
+    <p class="sec-lead">Le contrat prévoit des exemplaires « dus » à l'auteur. On distingue toujours ce qui est <b>dû</b> de ce qui est <b>effectivement remis</b>.</p>
+    <div class="where">📍 Fiche du manuscrit → Contrats → bloc « Compte auteur » → <b>Remettre à l'auteur</b></div>
+    <ol class="steps">
+      <li><b>Vérifiez les « Dus »</b> : le nombre d'exemplaires gratuits prévu au contrat (renseigné par le service éditorial).</li>
+      <li><b>Remettre à l'auteur</b> : choisissez l'ISBN, la <b>catégorie</b> (Au titre du contrat, Gratuit, Promotionnel, Événement, Acheté), le magasin et la quantité.</li>
+      <li><b>Lecture du compte</b> : « Remis (total) », « dont au contrat », et <b>« Encore dus »</b> (en orange s'il reste des exemplaires à remettre). Le stock du magasin est décrémenté automatiquement.</li>
+    </ol>
+    <div class="callout warn"><span class="lbl">Règle clé</span>Seule la catégorie <b>« Au titre du contrat »</b> réduit les « encore dus ». Un exemplaire promotionnel ou un exemplaire acheté par l'auteur ne diminue pas son quota contractuel.</div>
+  </section>
+
+  <section>
+    <h2><span class="n">8</span>Faire un inventaire physique</h2>
+    <p class="sec-lead">Régulièrement, on compte les rayons et on compare au stock théorique.</p>
+    <div class="where">📍 Stock et magasin → carte « Inventaire physique »</div>
+    <ol class="steps">
+      <li><b>Lancez une campagne</b> sur un lieu. Le comptage se fait « à l'aveugle » : la quantité théorique reste masquée pour ne pas influencer le comptage.</li>
+      <li><b>Saisissez le compté</b> ouvrage par ouvrage. Le système calcule l'<b>écart</b> (théorique vs réel).</li>
+      <li><b>Justifiez et régularisez</b> les écarts. Un écart important n'est jamais corrigé tout seul : il demande une validation selon vos droits.</li>
+      <li><b>Clôturez</b> l'inventaire une fois tous les écarts traités.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2><span class="n">9</span>Compléter la fiche de l'ouvrage</h2>
+    <p class="sec-lead">Au-delà des quantités, chaque ouvrage a une fiche commerciale utile aux prix et aux droits.</p>
+    <div class="where">📍 Fiche du manuscrit → ISBN &amp; métadonnées → bloc « Édition, prix &amp; coût »</div>
+    <p>Renseignez, quand vous les connaissez : le <b>type d'édition</b> (compte d'éditeur, compte d'auteur, coédition…), les <b>prix</b> (public, professionnel, éditeur), le <b>coût de production unitaire</b>, le <b>statut de commercialisation</b>, et pour un manuel scolaire le <b>niveau / matière / année</b>. Ces informations sont souvent partagées avec le service éditorial.</p>
+  </section>
+
+  <section>
+    <h2><span class="n">10</span>Aide-mémoire quotidien</h2>
+    <p class="sec-lead">À garder sous les yeux.</p>
+    <div class="rules">
+      <div class="rule" style="border-left-color:var(--green)"><b>✔ Chaque réception</b><span>= un mouvement « Réception de fabrication » ou « Entrée fournisseur », avec le bon magasin de destination et un motif clair.</span></div>
+      <div class="rule" style="border-left-color:var(--green)"><b>✔ Chaque sortie</b><span>a un type précis (vente, presse, auteur, promo, perte…). Jamais de « sortie » sans motif.</span></div>
+      <div class="rule" style="border-left-color:var(--orange)"><b>⚠ Confié ≠ vendu</b><span>Commercial → « Remettre » ; libraire → dépôt. La « Sortie vente » est réservée aux ventes encaissées.</span></div>
+      <div class="rule" style="border-left-color:var(--orange)"><b>⚠ Doute sur une saisie</b><span>Ne re-saisissez pas « pour rattraper ». Corrigez la ligne d'origine (Modifier / Annuler).</span></div>
+      <div class="rule" style="border-left-color:var(--gold)"><b>◆ Fin de journée</b><span>Vérifiez que les quantités à l'écran correspondent au réel. Un écart ? Notez-le pour le prochain inventaire.</span></div>
+      <div class="rule" style="border-left-color:var(--gold)"><b>◆ En cas de blocage</b><span>Le message d'erreur est explicite (ex. « le stock deviendrait négatif »). Lisez-le : il indique quoi corriger.</span></div>
+    </div>
+  </section>
+
+  <p class="foot">Mode d'emploi du magasinier · Module Magasin &amp; Stock · Éclospace — Éclosion Édition</p>
+</div>

@@ -2019,6 +2019,45 @@ export function createStockMovement(input: {
   return request(`/api/v1/stock-movements`, { method: "POST", body: JSON.stringify(input) });
 }
 
+export type StockMovementStatus = "pending" | "in_transit" | "completed" | "cancelled";
+export interface StockMovement {
+  id: string;
+  type: StockMovementType;
+  isbnId: string;
+  isbn13: string | null;
+  printRun: number;
+  quantity: number;
+  reason: string | null;
+  condition: "vendable" | "declasse";
+  status: StockMovementStatus;
+  from_location_label: string | null;
+  to_location_label: string | null;
+  referenceType: string | null;
+  movedAt: string;
+  moved_by_name: string | null;
+  cancelledAt: string | null;
+  cancelled_by_name: string | null;
+  cancelReason: string | null;
+  editable: boolean;
+}
+
+export function listStockMovements(isbnId?: string) {
+  const qs = isbnId ? `?isbn_id=${encodeURIComponent(isbnId)}` : "";
+  return request<StockMovement[]>(`/api/v1/stock-movements${qs}`);
+}
+
+// Corriger une saisie de mouvement (quantité, motif, état) — le stock est
+// recalculé automatiquement côté serveur.
+export function updateStockMovement(id: string, input: { quantity?: number; reason?: string; condition?: "vendable" | "declasse" }) {
+  return request<StockMovement>(`/api/v1/stock-movements/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+// Annuler un mouvement saisi par erreur (contre-passation : l'effet sur le stock
+// est neutralisé, l'écriture reste tracée au statut « annulé »).
+export function cancelStockMovement(id: string, reason?: string) {
+  return request<StockMovement>(`/api/v1/stock-movements/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
 export type CustomerCategory = "librairie" | "distributeur" | "institution" | "particulier" | "plateforme" | "auteur";
 
 export interface Customer {

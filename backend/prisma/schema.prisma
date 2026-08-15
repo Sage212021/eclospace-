@@ -2899,6 +2899,7 @@ enum StockMovementStatus {
   pending
   in_transit
   completed
+  cancelled // mouvement annulé (contre-passation) — corrige une saisie erronée
 }
 
 model StockMovement {
@@ -2918,8 +2919,15 @@ model StockMovement {
   referenceType  String?             @map("reference_type")
   referenceId    String?             @map("reference_id")
   status         StockMovementStatus @default(completed)
+  // État du stock touché par ce mouvement (vendable / déclassé) : mémorisé pour
+  // pouvoir contre-passer exactement le bon compartiment lors d'une correction.
+  condition      StockItemCondition  @default(vendable)
   movedBy        String?             @map("moved_by")
   movedAt        DateTime            @default(now()) @map("moved_at")
+  // Correction d'une saisie erronée (magasinier) : annulation par contre-passation.
+  cancelledAt    DateTime?           @map("cancelled_at")
+  cancelledBy    String?             @map("cancelled_by")
+  cancelReason   String?             @map("cancel_reason")
 
   inventoryAdjustmentFor InventoryLine?
 

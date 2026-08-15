@@ -6,10 +6,14 @@ import {
   listStockAlerts,
   listStockItems,
   listStockLocations,
+  listStockMovements,
+  updateStockMovement,
+  cancelStockMovement,
   type IsbnRef,
   type StockItem,
   type StockLocation,
   type StockLocationType,
+  type StockMovement,
   type StockMovementType,
 } from "../api/client";
 import { Card } from "../components/Card";
@@ -60,6 +64,9 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [newLocation, setNewLocation] = useState<{ label: string; type: StockLocationType } | null>(null);
+  // Rechargé à chaque saisie / correction / annulation de mouvement.
+  const [movVersion, setMovVersion] = useState(0);
+  const bumpMovements = () => setMovVersion((v) => v + 1);
 
   const refresh = async () => {
     const [locationList, itemList, alertList, isbnList] = await Promise.all([
@@ -184,10 +191,18 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
         <MovementForm
           isbns={isbns}
           locations={locations}
-          onRecorded={() => { setMessage(t("stock.movement_recorded", "Mouvement enregistré.")); refresh(); }}
+          onRecorded={() => { setMessage(t("stock.movement_recorded", "Mouvement enregistré.")); refresh(); bumpMovements(); }}
           onError={setError}
         />
       )}
+
+      <MovementHistory
+        canManage={canManage}
+        version={movVersion}
+        onChanged={() => { refresh(); bumpMovements(); }}
+        onMessage={setMessage}
+        onError={setError}
+      />
 
       {newLocation && (
         <Modal
@@ -292,6 +307,155 @@ function MovementForm({
         </div>
       </form>
     </Card>
+  );
+}
+
+// Historique des mouvements de stock avec correction (Modifier / Annuler). Le
+// magasinier peut rectifier une saisie erronée : le stock est recalculé
+// automatiquement, l'écriture n'est jamais figée. Seules ses saisies manuelles
+// (hors ventes/retours) sont modifiables.
+function MovementHistory({
+  canManage,
+  version,
+  onChanged,
+  onMessage,
+  onError,
+}: {
+  canManage: boolean;
+  version: number;
+  onChanged: () => void;
+  onMessage: (m: string) => void;
+  onError: (m: string) => void;
+}) {
+  const { t } = useI18n();
+  const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [editing, setEditing] = useState<StockMovement | null>(null);
+
+  useEffect(() => {
+    listStockMovements().then(setMovements).catch((e) => onError(e instanceof Error ? e.message : "Chargement des mouvements impossible."));
+  }, [version]);
+
+  async function cancel(m: StockMovement) {
+    const reason = window.prompt("Annuler ce mouvement saisi par erreur ?\nMotif (facultatif) :", "");
+    if (reason === null) return; // annulation de la boîte de dialogue
+    try {
+      await cancelStockMovement(m.id, reason.trim() || undefined);
+      onMessage("Mouvement annulé — le stock a été recalculé.");
+      onChanged();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Annulation impossible.");
+    }
+  }
+
+  const sign = (m: StockMovement) => (m.type === "production_in" || m.type === "customer_return" || (m.type === "inventory_adjustment" && m.to_location_label) ? "+" : "−");
+
+  return (
+    <Card title={t("stock.history_title", "Historique des mouvements")} icon={<IconCommercial />} subtitle={t("stock.history_sub", "Corrigez ou annulez une saisie erronée — le stock est recalculé automatiquement.")} collapsible defaultOpen>
+      {movements.length === 0 ? (
+        <Empty>{t("stock.no_movement", "Aucun mouvement enregistré.")}</Empty>
+      ) : (
+        <div className="ecl-list">
+          {movements.map((m) => {
+            const cancelled = m.status === "cancelled";
+            return (
+              <div key={m.id} className="ecl-row" style={{ alignItems: "flex-start", opacity: cancelled ? 0.55 : 1 }}>
+                <div className="ecl-row__main" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span className="ecl-row__title" style={{ textDecoration: cancelled ? "line-through" : "none" }}>{MOVEMENT_LABELS[m.type] ?? m.type}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{sign(m)}{m.quantity}</span>
+                    {m.isbn13 && <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--muted)" }}>{m.isbn13}</span>}
+                    {m.condition === "declasse" && <span style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 999, padding: "1px 8px", fontSize: 11 }}>{t("stock.declasse", "Déclassé")}</span>}
+                    {cancelled && <span style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 999, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>Annulé</span>}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                    {[m.from_location_label, m.to_location_label].filter(Boolean).join(" → ")}
+                    {m.reason ? ` · ${m.reason}` : ""}
+                    {" · "}{new Date(m.movedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}
+                    {m.moved_by_name ? ` · ${m.moved_by_name}` : ""}
+                    {cancelled && m.cancelReason ? ` · motif d'annulation : ${m.cancelReason}` : ""}
+                  </div>
+                </div>
+                {canManage && m.editable && (
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <Button variant="edit" size="sm" onClick={() => setEditing(m)}>{t("common.edit", "Modifier")}</Button>
+                    <Button variant="view" size="sm" onClick={() => cancel(m)}>{t("common.cancel_entry", "Annuler")}</Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {editing && (
+        <EditMovementModal
+          movement={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); onMessage("Mouvement corrigé — le stock a été recalculé."); onChanged(); }}
+          onError={onError}
+        />
+      )}
+    </Card>
+  );
+}
+
+function EditMovementModal({
+  movement,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  movement: StockMovement;
+  onClose: () => void;
+  onSaved: () => void;
+  onError: (m: string) => void;
+}) {
+  const { t } = useI18n();
+  const [quantity, setQuantity] = useState(movement.quantity);
+  const [reason, setReason] = useState(movement.reason ?? "");
+  const [condition, setCondition] = useState<"vendable" | "declasse">(movement.condition);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (quantity <= 0) { onError("La quantité doit être supérieure à zéro."); return; }
+    setBusy(true);
+    try {
+      await updateStockMovement(movement.id, { quantity, reason: reason.trim() || undefined, condition });
+      onSaved();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Correction impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={t("stock.edit_movement", "Corriger le mouvement")}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="view" size="sm" onClick={onClose}>{t("common.cancel", "Annuler")}</Button>
+          <Button variant="add" size="sm" onClick={save} disabled={busy}>{busy ? t("common.saving", "Enregistrement…") : t("common.save", "Enregistrer")}</Button>
+        </>
+      }
+    >
+      <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 0 }}>
+        {MOVEMENT_LABELS[movement.type] ?? movement.type}{movement.isbn13 ? ` · ${movement.isbn13}` : ""}. Le stock sera recalculé automatiquement.
+      </p>
+      <Field label={t("stock.quantity", "Quantité")}>
+        <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} autoFocus />
+      </Field>
+      <Field label={t("stock.reason", "Motif")}>
+        <input value={reason} onChange={(e) => setReason(e.target.value)} />
+      </Field>
+      <Field label={t("stock.condition", "État")}>
+        <select value={condition} onChange={(e) => setCondition(e.target.value as "vendable" | "declasse")}>
+          <option value="vendable">{t("stock.vendable", "Vendable")}</option>
+          <option value="declasse">{t("stock.declasse", "Déclassé")}</option>
+        </select>
+      </Field>
+    </Modal>
   );
 }
 

@@ -18,6 +18,7 @@ import {
 } from "../api/client";
 import { Card } from "../components/Card";
 import { StockInventorySection } from "../components/StockInventorySection";
+import { CommercialStockSection } from "../components/CommercialStockSection";
 import { StockConsolidatedSection } from "../components/StockConsolidatedSection";
 import { StockInitialImportSection } from "../components/StockInitialImportSection";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -243,6 +244,14 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
         version={movVersion}
         onChanged={() => { refresh(); bumpMovements(); }}
         onMessage={setMessage}
+        onError={setError}
+      />
+
+      <CommercialStockSection
+        isbns={isbns}
+        locations={locations}
+        canManage={canManage}
+        onMessage={(m) => { setMessage(m); refresh(); bumpMovements(); }}
         onError={setError}
       />
 

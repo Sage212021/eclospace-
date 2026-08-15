@@ -32,6 +32,7 @@ import { printCustomerFiche } from "../lib/print";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { TeamPerformanceSection } from "../components/TeamPerformanceSection";
+import { MyCommercialStockCard } from "../components/CommercialStockSection";
 import { useConfirm } from "../components/ConfirmProvider";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
@@ -142,6 +143,9 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder, canSe
       {/* Commandes à facturer (ex. livre scolaire) : le commercial les initie ; la
           Finance établit la facture. */}
       <BillingOrdersSection canCreate={canInitiateOrder} canInvoice={false} canValidateThreshold={false} />
+
+      {/* Mon stock commercial : exemplaires qui me sont confiés, à justifier (§10). */}
+      <MyCommercialStockCard />
 
       {/* Responsable commercial / DG : performance de CHAQUE commercial + total équipe. */}
       {canSeeTeam && <TeamPerformanceSection />}

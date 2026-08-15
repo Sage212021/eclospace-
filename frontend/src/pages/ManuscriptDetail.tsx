@@ -465,6 +465,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           defaultPartnerId={manuscript.workContributors[0]?.partner.id ?? ""}
           canCreate={permissions.has("contracts:saisie")}
           canValidate={permissions.has("contracts:validation")}
+          canRemitAuthor={permissions.has("stock:saisie")}
         />
       )}
 

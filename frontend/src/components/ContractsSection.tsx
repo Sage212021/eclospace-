@@ -37,6 +37,7 @@ import { buildAuthorContractPdf } from "../lib/contractPdf";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
+import { AuthorAccountBlock } from "./AuthorAccountBlock";
 
 const SIGNATURE_PARTY_LABELS: Record<SignatureParty, string> = {
   author: "Partie contractante (auteur / prestataire)",
@@ -78,13 +79,14 @@ interface ContractsSectionProps {
   defaultPartnerId: string;
   canCreate: boolean;
   canValidate: boolean;
+  canRemitAuthor?: boolean;
 }
 
 // Juridique et contrats (Ch. 9) — circuit de validation affiché comme une
 // suite d'étapes, cohérent avec la frise du manuscrit (guide de style §5.1).
 // La contrepartie du contrat est un Partenaire (fiche unique auteur +
 // prestataires externes — décision opérateur du 04/07/2026).
-export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, canValidate }: ContractsSectionProps) {
+export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, canValidate, canRemitAuthor = false }: ContractsSectionProps) {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -215,6 +217,18 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
 
           {/* Journal d'envoi : preuve de transmission du contrat à l'auteur. */}
           <DispatchJournal contractId={contract.id} refreshToken={dispatchVersion} />
+
+          {/* Compte auteur : exemplaires dus vs effectivement remis (§14). */}
+          {contract.type === "edition" && (
+            <AuthorAccountBlock
+              contractId={contract.id}
+              partnerId={contract.partner.id}
+              manuscriptId={manuscriptId}
+              canManage={canCreate}
+              canRemit={canRemitAuthor}
+              onError={setError}
+            />
+          )}
 
           {/* Traçabilité : qui a saisi / modifié en dernier. */}
           <TraceabilityLine contract={contract} />

@@ -1587,6 +1587,7 @@ model Partner {
   userAccount          User?
   authorFiles          AuthorFile[]
   serviceThreads       ServiceThread[]
+  authorCopies         AuthorCopyEntry[]
 
   @@map("partners")
 }
@@ -2084,6 +2085,7 @@ model Contract {
   signatures           ContractSignature[]
   documents            ContractDocument[]
   dispatches           ContractDispatch[]
+  authorCopies         AuthorCopyEntry[]
 
   @@map("contracts")
 }
@@ -2206,10 +2208,48 @@ model RoyaltyTerms {
   taxWithholdingPct    Decimal?              @map("tax_withholding_pct") @db.Decimal(5, 2)
   statementPeriodicity StatementPeriodicity? @map("statement_periodicity")
 
+  // Exemplaires gratuits DUS à l'auteur au titre du contrat (§14, §15). Sert de
+  // référence pour « exemplaires encore dus » = dus − remis (catégorie contractuel).
+  authorFreeCopies Int? @map("author_free_copies")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("royalty_terms")
+}
+
+// Compte auteur (§14) — catégorie d'un exemplaire remis à l'auteur. Ne jamais
+// confondre « dus » (droit contractuel) et « effectivement remis ».
+enum AuthorCopyCategory {
+  contractuel // remis au titre du contrat (impute les exemplaires dus)
+  gratuit // gratuit hors quota contractuel
+  promotionnel
+  evenement // remis pour un événement
+  achete // acheté par l'auteur
+  autre
+}
+
+// Registre 5 (§14) : chaque remise effective d'exemplaire(s) à un auteur, liée
+// au mouvement de stock correspondant (author_copy). Append-only.
+model AuthorCopyEntry {
+  id              String             @id @default(uuid())
+  partnerId       String             @map("partner_id")
+  partner         Partner            @relation(fields: [partnerId], references: [id])
+  isbnId          String             @map("isbn_id")
+  isbn            Isbn               @relation(fields: [isbnId], references: [id])
+  contractId      String?            @map("contract_id")
+  contract        Contract?          @relation(fields: [contractId], references: [id])
+  category        AuthorCopyCategory
+  quantity        Int
+  note            String?
+  stockMovementId String?            @map("stock_movement_id") // mouvement author_copy associé
+  deliveredAt     DateTime           @default(now()) @map("delivered_at")
+  recordedBy      String?            @map("recorded_by")
+  createdAt       DateTime           @default(now()) @map("created_at")
+
+  @@index([partnerId])
+  @@index([isbnId])
+  @@map("author_copy_entries")
 }
 
 // Répartition des droits entre plusieurs bénéficiaires d'un même contrat
@@ -2512,6 +2552,7 @@ model Isbn {
   invoiceLines         InvoiceLine[]
   billingOrderLines    BillingOrderLine[]
   schoolRoyaltyEntries SchoolRoyaltyEntry[]
+  authorCopies         AuthorCopyEntry[]
 
   @@map("isbns")
 }

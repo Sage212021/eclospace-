@@ -86,6 +86,7 @@ const LOCATION_TYPE_LABELS: Record<StockLocationType, string> = {
   depot: "Dépôt",
   depot_vente: "Dépôt-vente",
   emplacement: "Emplacement",
+  stock_commercial: "Stock commercial",
 };
 
 interface StockPageProps {

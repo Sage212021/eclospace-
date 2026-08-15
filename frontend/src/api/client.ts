@@ -1635,6 +1635,26 @@ export function listIsbns(manuscriptId: string) {
   return request<Isbn[]>(`/api/v1/manuscripts/${manuscriptId}/isbn`);
 }
 
+// Compte auteur (§14) : exemplaires dus (contrat) vs effectivement remis.
+export type AuthorCopyCategory = "contractuel" | "gratuit" | "promotionnel" | "evenement" | "achete" | "autre";
+export interface AuthorAccount {
+  author_free_copies: number | null;
+  encore_dus: number | null;
+  remis_total: number;
+  remis_contractuel: number;
+  by_category: Record<AuthorCopyCategory, number>;
+  entries: { id: string; category: AuthorCopyCategory; category_label: string; quantity: number; note: string | null; delivered_at: string }[];
+}
+export function getAuthorAccount(contractId: string) {
+  return request<AuthorAccount>(`/api/v1/author-copies/account?contract_id=${encodeURIComponent(contractId)}`);
+}
+export function setAuthorFreeCopies(contractId: string, value: number | null) {
+  return request<{ author_free_copies: number | null }>(`/api/v1/contracts/${contractId}/author-free-copies`, { method: "PATCH", body: JSON.stringify({ author_free_copies: value }) });
+}
+export function recordAuthorCopy(input: { partner_id: string; isbn_id: string; contract_id?: string; category: AuthorCopyCategory; quantity: number; from_location_id: string; note?: string }) {
+  return request(`/api/v1/author-copies`, { method: "POST", body: JSON.stringify(input) });
+}
+
 // Catalogue global des ISBN (avec le titre de l'ouvrage) — sélecteur des lignes
 // « livre scolaire » à facturer.
 export interface IsbnCatalogueItem {
@@ -1863,7 +1883,7 @@ export function listIsbnRefs(format?: IsbnFormat) {
   return request<IsbnRef[]>(`/api/v1/isbns${query}`);
 }
 
-export type StockLocationType = "entrepot" | "depot" | "depot_vente" | "emplacement";
+export type StockLocationType = "entrepot" | "depot" | "depot_vente" | "emplacement" | "stock_commercial";
 
 export interface StockLocation {
   id: string;

@@ -27,6 +27,7 @@ import isbnRoutes from "./routes/isbn.js";
 import batRoutes from "./routes/bat.js";
 import printingRoutes from "./routes/printing.js";
 import stockRoutes from "./routes/stock.js";
+import authorCopyRoutes from "./routes/authorCopies.js";
 import commercialRoutes from "./routes/commercial.js";
 import financeRoutes from "./routes/finance.js";
 import financeRequestRoutes from "./routes/financeRequests.js";
@@ -163,6 +164,7 @@ export async function buildApp() {
   await app.register(batRoutes);
   await app.register(printingRoutes);
   await app.register(stockRoutes);
+  await app.register(authorCopyRoutes);
   await app.register(commercialRoutes);
   await app.register(financeRoutes);
   await app.register(financeRequestRoutes);

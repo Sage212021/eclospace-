@@ -1885,6 +1885,8 @@ export interface StockConsolidatedLocation {
   location_label: string;
   vendable: number;
   declasse: number;
+  perdu: number;
+  detruit: number;
 }
 export interface StockConsolidatedRow {
   isbn_id: string;
@@ -1892,12 +1894,14 @@ export interface StockConsolidatedRow {
   title: string | null;
   vendable: number;
   declasse: number;
+  perdu: number;
+  detruit: number;
   total: number;
   by_location: StockConsolidatedLocation[];
 }
 export interface StockConsolidated {
   rows: StockConsolidatedRow[];
-  totals: { vendable: number; declasse: number; total: number };
+  totals: { vendable: number; declasse: number; perdu: number; detruit: number; total: number };
 }
 export function getStockConsolidated() {
   return request<StockConsolidated>("/api/v1/stock-consolidated");
@@ -1996,13 +2000,22 @@ export function closeInventory(id: string) {
 
 export type StockMovementType =
   | "production_in"
+  | "supplier_in"
   | "sale_out"
   | "consignment_out"
   | "consignment_return"
   | "customer_return"
+  | "commercial_return"
   | "transfer"
   | "press_copy"
   | "author_copy"
+  | "promotional_out"
+  | "institutional_out"
+  | "event_out"
+  | "free_out"
+  | "loss"
+  | "damage"
+  | "destruction"
   | "pulping"
   | "inventory_adjustment";
 

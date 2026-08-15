@@ -27,16 +27,58 @@ import { IconCommercial } from "../components/icons";
 
 const MOVEMENT_LABELS: Record<StockMovementType, string> = {
   production_in: "Réception de fabrication",
+  supplier_in: "Entrée fournisseur",
   sale_out: "Sortie vente",
   consignment_out: "Mise en dépôt-vente",
   consignment_return: "Retour de dépôt-vente",
   customer_return: "Retour client",
-  transfer: "Transfert",
+  commercial_return: "Retour commercial",
+  transfer: "Transfert interne",
   press_copy: "Service de presse",
   author_copy: "Exemplaire d'auteur",
+  promotional_out: "Sortie promotionnelle",
+  institutional_out: "Sortie institutionnelle",
+  event_out: "Sortie événementielle",
+  free_out: "Sortie gratuite",
+  loss: "Perte",
+  damage: "Casse (→ déclassé)",
+  destruction: "Destruction",
   pulping: "Mise au pilon",
   inventory_adjustment: "Régularisation d'inventaire",
 };
+
+// Types saisis manuellement par le magasinier, proposés dans le formulaire.
+const MANUAL_FORM_TYPES: StockMovementType[] = [
+  "production_in", "supplier_in", "commercial_return", "transfer",
+  "press_copy", "author_copy", "promotional_out", "institutional_out",
+  "event_out", "free_out", "loss", "damage", "destruction", "pulping",
+  "inventory_adjustment",
+];
+// Exigences de lieux par type (miroir du backend) : d'où / vers où.
+const MOVEMENT_NEEDS: Record<StockMovementType, { from: boolean; to: boolean }> = {
+  production_in: { from: false, to: true },
+  supplier_in: { from: false, to: true },
+  sale_out: { from: true, to: false },
+  consignment_out: { from: true, to: true },
+  consignment_return: { from: true, to: true },
+  customer_return: { from: false, to: true },
+  commercial_return: { from: false, to: true },
+  transfer: { from: true, to: true },
+  press_copy: { from: true, to: false },
+  author_copy: { from: true, to: false },
+  promotional_out: { from: true, to: false },
+  institutional_out: { from: true, to: false },
+  event_out: { from: true, to: false },
+  free_out: { from: true, to: false },
+  loss: { from: true, to: false },
+  damage: { from: true, to: false },
+  destruction: { from: true, to: false },
+  pulping: { from: true, to: false },
+  inventory_adjustment: { from: false, to: false },
+};
+// Types de reclassement (au même lieu) : le compartiment source diminue, un
+// compartiment cible augmente (perte → perdu, casse → déclassé, destruction → détruit).
+const RECLASS_TYPES: StockMovementType[] = ["loss", "damage", "destruction"];
 
 const LOCATION_TYPE_LABELS: Record<StockLocationType, string> = {
   entrepot: "Entrepôt",
@@ -245,11 +287,18 @@ function MovementForm({
   const [toLocationId, setToLocationId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [reason, setReason] = useState("");
+  const [condition, setCondition] = useState<"vendable" | "declasse">("vendable");
 
   useEffect(() => {
     if (!isbnId && isbns[0]) setIsbnId(isbns[0].id);
     if (!toLocationId && locations[0]) setToLocationId(locations[0].id);
   }, [isbns, locations]);
+
+  const needs = MOVEMENT_NEEDS[type];
+  const showFrom = needs.from || type === "inventory_adjustment";
+  const showTo = needs.to || type === "inventory_adjustment";
+  const isReclass = RECLASS_TYPES.includes(type);
+  const RECLASS_OUTCOME: Record<string, string> = { loss: "perdu", damage: "déclassé", destruction: "détruit" };
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -257,10 +306,11 @@ function MovementForm({
       await createStockMovement({
         type,
         isbn_id: isbnId,
-        from_location_id: fromLocationId || undefined,
-        to_location_id: toLocationId || undefined,
+        from_location_id: showFrom ? fromLocationId || undefined : undefined,
+        to_location_id: showTo ? toLocationId || undefined : undefined,
         quantity,
         reason,
+        condition,
       });
       setReason("");
       onRecorded();
@@ -270,12 +320,12 @@ function MovementForm({
   }
 
   return (
-    <Card title={t("stock.movement_title", "Nouveau mouvement de stock")} icon={<IconCommercial />} subtitle={t("stock.movement_sub", "Enregistrer une entrée, une sortie ou un transfert.")}>
+    <Card title={t("stock.movement_title", "Nouveau mouvement de stock")} icon={<IconCommercial />} subtitle={t("stock.movement_sub", "Entrée, sortie, transfert, perte, casse, destruction…")}>
       <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
           <Field label={t("common.type", "Type")}>
             <select value={type} onChange={(e) => setType(e.target.value as StockMovementType)}>
-              {Object.entries(MOVEMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{t(`stock.mv.${value}`, label)}</option>)}
+              {MANUAL_FORM_TYPES.map((value) => <option key={value} value={value}>{t(`stock.mv.${value}`, MOVEMENT_LABELS[value])}</option>)}
             </select>
           </Field>
           <Field label={t("stock.ref_isbn", "Référence (ISBN)")}>
@@ -286,22 +336,39 @@ function MovementForm({
           <Field label={t("stock.quantity", "Quantité")}>
             <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} />
           </Field>
-          <Field label={t("stock.from", "Lieu d'origine")}>
-            <select value={fromLocationId} onChange={(e) => setFromLocationId(e.target.value)}>
-              <option value="">—</option>
-              {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
-            </select>
-          </Field>
-          <Field label={t("stock.to", "Lieu de destination")}>
-            <select value={toLocationId} onChange={(e) => setToLocationId(e.target.value)}>
-              <option value="">—</option>
-              {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
-            </select>
-          </Field>
+          {showFrom && (
+            <Field label={isReclass ? t("stock.from_reclass", "Lieu des exemplaires") : t("stock.from", "Lieu d'origine")}>
+              <select value={fromLocationId} onChange={(e) => setFromLocationId(e.target.value)}>
+                <option value="">—</option>
+                {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
+              </select>
+            </Field>
+          )}
+          {showTo && (
+            <Field label={t("stock.to", "Lieu de destination")}>
+              <select value={toLocationId} onChange={(e) => setToLocationId(e.target.value)}>
+                <option value="">—</option>
+                {locations.map((location) => <option key={location.id} value={location.id}>{location.label}</option>)}
+              </select>
+            </Field>
+          )}
+          {(isReclass || showFrom) && (
+            <Field label={isReclass ? t("stock.source_compartment", "Compartiment concerné") : t("stock.condition", "État")}>
+              <select value={condition} onChange={(e) => setCondition(e.target.value as "vendable" | "declasse")}>
+                <option value="vendable">{t("stock.vendable", "Vendable")}</option>
+                <option value="declasse">{t("stock.declasse", "Déclassé")}</option>
+              </select>
+            </Field>
+          )}
           <Field label={t("stock.reason", "Motif")}>
             <input value={reason} onChange={(e) => setReason(e.target.value)} required />
           </Field>
         </div>
+        {isReclass && (
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: "10px 0 0" }}>
+            {quantity} exemplaire(s) passeront du compartiment « {condition === "declasse" ? "déclassé" : "vendable"} » au compartiment « {RECLASS_OUTCOME[type]} » au même lieu. Le stock total reste inchangé (rien ne disparaît, tout reste traçable).
+          </p>
+        )}
         <div style={{ marginTop: 14 }}>
           <Button variant="add" size="md" type="submit">{t("stock.record_movement", "Enregistrer le mouvement")}</Button>
         </div>
@@ -347,7 +414,13 @@ function MovementHistory({
     }
   }
 
-  const sign = (m: StockMovement) => (m.type === "production_in" || m.type === "customer_return" || (m.type === "inventory_adjustment" && m.to_location_label) ? "+" : "−");
+  const IN_TYPES: StockMovementType[] = ["production_in", "supplier_in", "customer_return", "commercial_return", "consignment_return"];
+  const RECLASS: StockMovementType[] = ["loss", "damage", "destruction"];
+  const sign = (m: StockMovement) => {
+    if (RECLASS.includes(m.type)) return "→"; // reclassement de compartiment, pas de perte de total
+    if (IN_TYPES.includes(m.type) || (m.type === "inventory_adjustment" && m.to_location_label)) return "+";
+    return "−";
+  };
 
   return (
     <Card title={t("stock.history_title", "Historique des mouvements")} icon={<IconCommercial />} subtitle={t("stock.history_sub", "Corrigez ou annulez une saisie erronée — le stock est recalculé automatiquement.")} collapsible defaultOpen>

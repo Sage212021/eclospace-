@@ -23,7 +23,7 @@ export function StockConsolidatedSection({ collapsible, defaultOpen }: { collaps
     <Card
       title="Stock réel consolidé (toutes zones)"
       icon={<IconCommercial />}
-      subtitle="Total par ouvrage tous lieux confondus (vendable / déclassé). Cliquez une ligne pour le détail par zone."
+      subtitle="Total par ouvrage tous lieux confondus, par compartiment (vendable / déclassé / perdu / détruit). Cliquez une ligne pour le détail par zone."
       collapsible={collapsible}
       defaultOpen={defaultOpen}
     >
@@ -38,6 +38,8 @@ export function StockConsolidatedSection({ collapsible, defaultOpen }: { collaps
                 <th style={{ padding: "5px 8px" }}>ISBN</th>
                 <th style={{ padding: "5px 8px", textAlign: "right" }}>Vendable</th>
                 <th style={{ padding: "5px 8px", textAlign: "right" }}>Déclassé</th>
+                <th style={{ padding: "5px 8px", textAlign: "right" }}>Perdu</th>
+                <th style={{ padding: "5px 8px", textAlign: "right" }}>Détruit</th>
                 <th style={{ padding: "5px 8px", textAlign: "right" }}>Total</th>
               </tr>
             </thead>
@@ -55,6 +57,8 @@ export function StockConsolidatedSection({ collapsible, defaultOpen }: { collaps
                     <td style={{ padding: "5px 8px", fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{r.isbn13}</td>
                     <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "var(--font-mono)" }}>{num(r.vendable)}</td>
                     <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: r.declasse ? "var(--alert, #C4661F)" : undefined }}>{num(r.declasse)}</td>
+                    <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: r.perdu ? "var(--alert, #C4661F)" : "var(--muted)" }}>{num(r.perdu)}</td>
+                    <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: r.detruit ? "var(--danger, #C24B3A)" : "var(--muted)" }}>{num(r.detruit)}</td>
                     <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 700 }}>{num(r.total)}</td>
                   </tr>
                   {open === r.isbn_id &&
@@ -63,7 +67,9 @@ export function StockConsolidatedSection({ collapsible, defaultOpen }: { collaps
                         <td style={{ padding: "3px 8px 3px 26px", color: "var(--muted)" }} colSpan={2}>{loc.location_label}</td>
                         <td style={{ padding: "3px 8px", textAlign: "right", fontFamily: "var(--font-mono)" }}>{num(loc.vendable)}</td>
                         <td style={{ padding: "3px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: loc.declasse ? "var(--alert, #C4661F)" : undefined }}>{num(loc.declasse)}</td>
-                        <td style={{ padding: "3px 8px", textAlign: "right", fontFamily: "var(--font-mono)" }}>{num(loc.vendable + loc.declasse)}</td>
+                        <td style={{ padding: "3px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{num(loc.perdu)}</td>
+                        <td style={{ padding: "3px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{num(loc.detruit)}</td>
+                        <td style={{ padding: "3px 8px", textAlign: "right", fontFamily: "var(--font-mono)" }}>{num(loc.vendable + loc.declasse + loc.perdu + loc.detruit)}</td>
                       </tr>
                     ))}
                 </Fragment>
@@ -74,6 +80,8 @@ export function StockConsolidatedSection({ collapsible, defaultOpen }: { collaps
                 <td style={{ padding: "6px 8px" }} colSpan={2}>Total général</td>
                 <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "var(--font-mono)" }}>{num(data.totals.vendable)}</td>
                 <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: data.totals.declasse ? "var(--alert, #C4661F)" : undefined }}>{num(data.totals.declasse)}</td>
+                <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: data.totals.perdu ? "var(--alert, #C4661F)" : "var(--muted)" }}>{num(data.totals.perdu)}</td>
+                <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: data.totals.detruit ? "var(--danger, #C24B3A)" : "var(--muted)" }}>{num(data.totals.detruit)}</td>
                 <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--eclosion, #C89A1B)" }}>{num(data.totals.total)}</td>
               </tr>
             </tfoot>

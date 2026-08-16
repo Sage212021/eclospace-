@@ -62,6 +62,10 @@ const MOVEMENT_REQUIREMENTS: Record<StockMovementType, { from: boolean; to: bool
   institutional_out: { from: true, to: false },
   event_out: { from: true, to: false },
   free_out: { from: true, to: false },
+  // Retours (événement, promotion, autre) : entrée dans le magasin.
+  event_return: { from: false, to: true },
+  promotional_return: { from: false, to: true },
+  other_return: { from: false, to: true },
   // Perte / casse / destruction : reclassement AU MÊME LIEU (le compartiment
   // source diminue, le compartiment cible augmente) — d'où from seul.
   loss: { from: true, to: false },
@@ -94,6 +98,9 @@ const MANUAL_MOVEMENT_TYPES: StockMovementType[] = [
   "institutional_out",
   "event_out",
   "free_out",
+  "event_return",
+  "promotional_return",
+  "other_return",
   "loss",
   "damage",
   "destruction",

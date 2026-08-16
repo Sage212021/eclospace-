@@ -61,8 +61,12 @@ type MovementPrefill = {
   nonce: number; // force la ré-application même si les valeurs sont identiques
 };
 
+// Types proposés dans le formulaire générique « Nouveau mouvement de stock ».
+// « Retour commercial » n'y figure PAS volontairement : remettre à un commercial
+// ET récupérer ses invendus se font tous deux via la carte « Stock commercial »
+// (boutons Remettre / Retour), qui impute le compte du commercial concerné.
 const MANUAL_FORM_TYPES: StockMovementType[] = [
-  "production_in", "supplier_in", "commercial_return", "transfer",
+  "production_in", "supplier_in", "transfer",
   "press_copy", "author_copy", "promotional_out", "institutional_out",
   "event_out", "free_out", "loss", "damage", "destruction", "pulping",
   "inventory_adjustment",

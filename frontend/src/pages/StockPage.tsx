@@ -42,6 +42,9 @@ const MOVEMENT_LABELS: Record<StockMovementType, string> = {
   institutional_out: "Sortie institutionnelle",
   event_out: "Sortie événementielle",
   free_out: "Sortie gratuite",
+  event_return: "Retour événement",
+  promotional_return: "Retour promotion",
+  other_return: "Autre retour (à préciser)",
   loss: "Perte",
   damage: "Casse (→ déclassé)",
   destruction: "Destruction",
@@ -68,7 +71,9 @@ type MovementPrefill = {
 const MANUAL_FORM_TYPES: StockMovementType[] = [
   "production_in", "supplier_in", "transfer",
   "press_copy", "author_copy", "promotional_out", "institutional_out",
-  "event_out", "free_out", "loss", "damage", "destruction", "pulping",
+  "event_out", "free_out",
+  "event_return", "promotional_return", "other_return",
+  "loss", "damage", "destruction", "pulping",
   "inventory_adjustment",
 ];
 // Exigences de lieux par type (miroir du backend) : d'où / vers où.
@@ -87,6 +92,9 @@ const MOVEMENT_NEEDS: Record<StockMovementType, { from: boolean; to: boolean }> 
   institutional_out: { from: true, to: false },
   event_out: { from: true, to: false },
   free_out: { from: true, to: false },
+  event_return: { from: false, to: true },
+  promotional_return: { from: false, to: true },
+  other_return: { from: false, to: true },
   loss: { from: true, to: false },
   damage: { from: true, to: false },
   destruction: { from: true, to: false },
@@ -400,6 +408,11 @@ function MovementForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    // « Autre retour » : le magasinier DOIT préciser la nature dans le motif.
+    if (type === "other_return" && !reason.trim()) {
+      onError("Précisez la nature de ce retour dans le champ « Motif ».");
+      return;
+    }
     try {
       await createStockMovement({
         type,
@@ -458,8 +471,8 @@ function MovementForm({
               </select>
             </Field>
           )}
-          <Field label={t("stock.reason", "Motif")}>
-            <input value={reason} onChange={(e) => setReason(e.target.value)} required />
+          <Field label={type === "other_return" ? "Motif — précisez la nature du retour" : t("stock.reason", "Motif")}>
+            <input value={reason} onChange={(e) => setReason(e.target.value)} required placeholder={type === "other_return" ? "Ex. retour d'un salon, invendus d'un point de vente…" : undefined} />
           </Field>
         </div>
         {isReclass && (
@@ -518,7 +531,7 @@ function MovementHistory({
     }
   }
 
-  const IN_TYPES: StockMovementType[] = ["production_in", "supplier_in", "customer_return", "commercial_return", "consignment_return"];
+  const IN_TYPES: StockMovementType[] = ["production_in", "supplier_in", "customer_return", "commercial_return", "consignment_return", "event_return", "promotional_return", "other_return"];
   const RECLASS: StockMovementType[] = ["loss", "damage", "destruction"];
   const sign = (m: StockMovement) => {
     if (RECLASS.includes(m.type)) return "→"; // reclassement de compartiment, pas de perte de total

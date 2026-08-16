@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { getStockConsolidated, type StockConsolidated } from "../api/client";
+import { getStockConsolidated, type StockConsolidated, type StockConsolidatedRow } from "../api/client";
 import { Card } from "./Card";
 import { IconCommercial } from "./icons";
 
@@ -7,11 +7,12 @@ import { IconCommercial } from "./icons";
 // ouvrage, par compartiment, avec détail par lieu au clic. Les valeurs négatives
 // (anomalies de saisie antérieures) sont signalées en rouge et corrigeables via
 // « Corriger » (renvoie à l'historique des mouvements de l'ouvrage).
-export function StockConsolidatedSection({ collapsible, defaultOpen, canCorrect, onCorrect }: {
+export function StockConsolidatedSection({ collapsible, defaultOpen, canCorrect, onCorrect, onRegularize }: {
   collapsible?: boolean;
   defaultOpen?: boolean;
   canCorrect?: boolean;
   onCorrect?: (isbnId: string, title: string | null) => void;
+  onRegularize?: (row: StockConsolidatedRow) => void;
 }) {
   const [data, setData] = useState<StockConsolidated | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +44,7 @@ export function StockConsolidatedSection({ collapsible, defaultOpen, canCorrect,
       {error && <div style={{ background: "#f8e3df", color: "var(--danger, #C24B3A)", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>{error}</div>}
       {hasNegative && (
         <div style={{ background: "var(--alert-soft, #f8e3df)", color: "var(--danger, #C24B3A)", borderRadius: 8, padding: "8px 12px", fontSize: 12.5, marginBottom: 10 }}>
-          ⚠️ Une ou plusieurs lignes sont <b>négatives</b> : plus de sorties que d'entrées ont été enregistrées (saisie antérieure au contrôle). Cliquez <b>« Corriger »</b> pour retrouver et rectifier le mouvement en cause, ou enregistrez une régularisation d'inventaire.
+          ⚠️ Une ou plusieurs lignes sont <b>négatives</b> : plus de sorties que d'entrées ont été enregistrées (saisie antérieure au contrôle). Cliquez <b>« Régulariser »</b> pour ramener le stock à 0 en un mouvement de régularisation d'inventaire. <b>« Corriger »</b> ouvre l'historique de l'ouvrage pour examiner le mouvement en cause.
         </div>
       )}
       {data && data.rows.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucun stock enregistré pour le moment.</p>}
@@ -84,10 +85,18 @@ export function StockConsolidatedSection({ collapsible, defaultOpen, canCorrect,
                     <td style={cell(r.detruit, r.detruit ? "var(--danger, #C24B3A)" : "var(--muted)")}>{num(r.detruit)}</td>
                     <td style={cell(r.total, undefined, 700)}>{num(r.total)}</td>
                     {canCorrect && (
-                      <td style={{ padding: "5px 8px", textAlign: "right" }}>
+                      <td style={{ padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap" }}>
+                        {rowNeg && onRegularize && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onRegularize(r); }}
+                            style={{ fontSize: 11.5, cursor: "pointer", border: "1px solid var(--danger, #C24B3A)", color: "#fff", background: "var(--danger, #C24B3A)", borderRadius: 6, padding: "3px 9px", fontWeight: 600, marginRight: 6 }}
+                          >
+                            Régulariser
+                          </button>
+                        )}
                         <button
                           onClick={(e) => { e.stopPropagation(); onCorrect?.(r.isbn_id, r.title); }}
-                          style={{ fontSize: 11.5, cursor: "pointer", border: `1px solid ${rowNeg ? "var(--danger, #C24B3A)" : "var(--line)"}`, color: rowNeg ? "var(--danger, #C24B3A)" : "var(--eclosion)", background: "transparent", borderRadius: 6, padding: "3px 9px", fontWeight: 600, whiteSpace: "nowrap" }}
+                          style={{ fontSize: 11.5, cursor: "pointer", border: `1px solid ${rowNeg ? "var(--danger, #C24B3A)" : "var(--line)"}`, color: rowNeg ? "var(--danger, #C24B3A)" : "var(--eclosion)", background: "transparent", borderRadius: 6, padding: "3px 9px", fontWeight: 600 }}
                         >
                           Corriger
                         </button>

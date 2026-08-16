@@ -307,24 +307,55 @@ export default async function stockRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/stock-consolidated", { preHandler: requirePermission("stock", "consultation") }, async (_request, reply) => {
     const items = await prisma.stockItem.findMany({
       include: {
-        isbn: { select: { isbn13: true, manuscript: { select: { title: true } } } },
+        isbn: {
+          select: {
+            isbn13: true,
+            manuscript: {
+              select: {
+                title: true,
+                workContributors: {
+                  where: { role: "author" },
+                  orderBy: { displayOrder: "asc" },
+                  select: { partner: { select: { firstName: true, lastName: true } } },
+                },
+              },
+            },
+          },
+        },
         location: { select: { label: true } },
       },
     });
+    // « Stock initial » chargé par ouvrage = somme des entrées de régularisation
+    // d'inventaire (le chargement de démarrage). Sert de repère auditable
+    // « chargé → reste aujourd'hui ».
+    const initialByIsbn = new Map<string, number>();
+    const initialMoves = await prisma.stockMovement.groupBy({
+      by: ["isbnId"],
+      where: { type: "inventory_adjustment", status: "completed", toLocationId: { not: null } },
+      _sum: { quantity: true },
+    });
+    for (const m of initialMoves) initialByIsbn.set(m.isbnId, m._sum.quantity ?? 0);
+    // Nom d'auteur affiché (premier auteur, ordre d'affichage).
+    const authorName = (contribs: Array<{ partner: { firstName: string | null; lastName: string | null } }>): string | null => {
+      if (!contribs.length) return null;
+      const p = contribs[0].partner;
+      const n = `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim();
+      return n || null;
+    };
     // Ventilation par compartiment (§5) : vendable (= disponible), déclassé,
     // perdu, détruit. Le total agrège tous les compartiments (rien ne disparaît).
     type Buckets = { vendable: number; declasse: number; perdu: number; detruit: number };
     const zero = (): Buckets => ({ vendable: 0, declasse: 0, perdu: 0, detruit: 0 });
     const add = (b: Buckets, c: StockItemCondition, q: number) => { b[c] += q; };
     const byIsbn = new Map<string, {
-      isbn_id: string; isbn13: string; title: string | null;
+      isbn_id: string; isbn13: string; title: string | null; author: string | null;
       buckets: Buckets;
       locations: Map<string, { location_label: string } & Buckets>;
     }>();
     for (const it of items) {
       let row = byIsbn.get(it.isbnId);
       if (!row) {
-        row = { isbn_id: it.isbnId, isbn13: it.isbn.isbn13, title: it.isbn.manuscript?.title ?? null, buckets: zero(), locations: new Map() };
+        row = { isbn_id: it.isbnId, isbn13: it.isbn.isbn13, title: it.isbn.manuscript?.title ?? null, author: authorName(it.isbn.manuscript?.workContributors ?? []), buckets: zero(), locations: new Map() };
         byIsbn.set(it.isbnId, row);
       }
       const label = it.location.label;
@@ -339,8 +370,9 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     const sumAll = (b: Buckets) => b.vendable + b.declasse + b.perdu + b.detruit;
     const rows = [...byIsbn.values()]
       .map((r) => ({
-        isbn_id: r.isbn_id, isbn13: r.isbn13, title: r.title,
+        isbn_id: r.isbn_id, isbn13: r.isbn13, title: r.title, author: r.author,
         ...r.buckets, total: sumAll(r.buckets),
+        initial_loaded: initialByIsbn.get(r.isbn_id) ?? 0,
         by_location: [...r.locations.values()].sort((a, b) => a.location_label.localeCompare(b.location_label, "fr")),
       }))
       .sort((a, b) => (a.title ?? a.isbn13).localeCompare(b.title ?? b.isbn13, "fr"));

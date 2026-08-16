@@ -485,7 +485,9 @@ export function App() {
         v &&
         ((v.kind === "leaf" && typeof v.key === "string" && v.key in LEAF_VIEWS) ||
           (v.kind === "manuscript-detail" && typeof v.id === "string"));
-      setView(valid ? (v as View) : DEFAULT_VIEW);
+      // Toujours produire un objet NEUF (même pour le repli par défaut) : ainsi le
+      // changement d'état déclenche bien l'effet qui consomme le drapeau « retour ».
+      setView(valid ? ({ ...(v as View) } as View) : { ...DEFAULT_VIEW });
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -493,6 +495,13 @@ export function App() {
 
   useEffect(() => {
     if (!user) return;
+    // On CONSOMME le drapeau « retour » en tout premier, avant toute sortie
+    // anticipée : sinon, si un « retour » aboutit à une vue de même référence
+    // (ex. repli sur la vue par défaut), le drapeau resterait coincé à `true` et
+    // bloquerait tous les empilements suivants — le bouton « retour » finirait
+    // par fermer l'appli après un ou deux écrans seulement.
+    const cameFromPop = isPopRef.current;
+    isPopRef.current = false;
     // Un simple rafraîchissement du profil (même `view`) ne doit rien empiler :
     // on ne réagit qu'à un VRAI changement d'écran (nouvelle référence `view`).
     if (lastHistoryViewRef.current === view) return;
@@ -503,11 +512,8 @@ export function App() {
       window.history.replaceState({ eclView: view }, "");
       return;
     }
-    // Vue issue d'un « retour » : ne pas réempiler.
-    if (isPopRef.current) {
-      isPopRef.current = false;
-      return;
-    }
+    // Vue issue d'un « retour » : ne pas réempiler (l'entrée existe déjà).
+    if (cameFromPop) return;
     // Navigation vers un nouvel écran : on empile une entrée d'historique.
     window.history.pushState({ eclView: view }, "");
   }, [view, user]);

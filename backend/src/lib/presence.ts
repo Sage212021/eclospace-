@@ -204,7 +204,19 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
   // transitent pas par la diffusion générale. Ils ne sont révélés que sur
   // demande, à un profil habilité (Direction générale, super-administrateur, ou
   // responsable pour son propre pôle), via une route REST vérifiée côté serveur.
-  function broadcast() {
+  // Diffusion regroupée (anti-rebond) + dédoublonnée.
+  //
+  // Sans cela, CHAQUE événement de présence (connexion, navigation d'écran =
+  // presence:join, départ, déconnexion) de N'IMPORTE quel poste déclenchait un
+  // io.emit vers TOUS les postes, et chaque poste re-rendait toute sa page.
+  // Sur une maison active, cette tempête de recalculs ralentissait les machines
+  // (constaté par l'infographe). On coalesce donc les rafales dans une seule
+  // diffusion (~800 ms) et on n'émet que si les compteurs ont réellement changé.
+  const COALESCE_MS = 800;
+  let pending: NodeJS.Timeout | null = null;
+  let lastSignature = "";
+
+  function computeCounts() {
     const connectedUserIds = new Set<string>();
     const byPole: Record<string, Set<string>> = {};
     const byModule: Record<string, Set<string>> = {};
@@ -221,13 +233,34 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
     }
 
     const toCounts = (map: Record<string, Set<string>>) =>
-      Object.fromEntries(Object.entries(map).map(([k, set]) => [k, set.size]));
+      Object.fromEntries(
+        Object.entries(map)
+          .map(([k, set]) => [k, set.size] as const)
+          .sort(([a], [b]) => a.localeCompare(b)),
+      );
 
-    io.emit("presence:update", {
+    return {
       total: connectedUserIds.size,
       byPole: toCounts(byPole),
       byModule: toCounts(byModule),
-    });
+    };
+  }
+
+  function emitNow() {
+    pending = null;
+    const payload = computeCounts();
+    const signature = JSON.stringify(payload);
+    // Rien n'a bougé depuis la dernière diffusion : on ne réveille pas les postes.
+    if (signature === lastSignature) return;
+    lastSignature = signature;
+    io.emit("presence:update", payload);
+  }
+
+  // Programme une diffusion coalescée. Les rafales (plusieurs navigations en
+  // même temps) sont fusionnées en un seul envoi.
+  function broadcast() {
+    if (pending) return;
+    pending = setTimeout(emitNow, COALESCE_MS);
   }
 
   io.on("connection", (socket: Socket) => {
@@ -241,6 +274,10 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
     // Salle par utilisateur : permet de pousser une notification ciblée (ex.
     // nouvelle annonce du Babillard) au seul destinataire concerné.
     socket.join(userRoom(socket.data.userId));
+    // Le nouvel arrivant reçoit l'état courant tout de suite (envoi ciblé),
+    // sans réveiller les autres postes ; la diffusion générale, elle, reste
+    // coalescée et n'émet que si les compteurs changent.
+    socket.emit("presence:update", computeCounts());
     broadcast();
 
     socket.on("presence:join", (payload: JoinPayload) => {

@@ -32,6 +32,10 @@ export interface AnnouncementPush {
 export function usePresence(enabled: boolean, onAnnouncement?: (a: AnnouncementPush) => void, onNotification?: (n: AnnouncementPush) => void) {
   const [presence, setPresence] = useState<PresenceState>(EMPTY);
   const socketRef = useRef<Socket | null>(null);
+  // Signature de la dernière présence appliquée : on ne re-rend l'application
+  // que si les compteurs ont réellement changé. Le serveur coalesce déjà les
+  // diffusions ; cette garde évite en plus tout rendu inutile côté poste.
+  const lastPresenceSig = useRef("");
   // Les gestionnaires sont stockés dans des refs pour rester à jour sans
   // reconnecter la socket à chaque rendu.
   const annHandler = useRef(onAnnouncement);
@@ -41,6 +45,7 @@ export function usePresence(enabled: boolean, onAnnouncement?: (a: AnnouncementP
 
   useEffect(() => {
     if (!enabled) {
+      lastPresenceSig.current = "";
       setPresence(EMPTY);
       return;
     }
@@ -48,7 +53,12 @@ export function usePresence(enabled: boolean, onAnnouncement?: (a: AnnouncementP
     // reconnexion qui charge la machine quand le serveur est indisponible.
     const socket = io(API_BASE || undefined, { withCredentials: true, reconnectionDelayMax: 20000, timeout: 20000 });
     socketRef.current = socket;
-    socket.on("presence:update", (p: PresenceState) => setPresence(p));
+    socket.on("presence:update", (p: PresenceState) => {
+      const sig = JSON.stringify(p);
+      if (sig === lastPresenceSig.current) return; // aucun changement : pas de rendu
+      lastPresenceSig.current = sig;
+      setPresence(p);
+    });
     socket.on("announcement:new", (a: AnnouncementPush) => annHandler.current?.(a));
     // Alerte temps réel générale (info renvoyée par un autre pôle) : son + pop-up.
     socket.on("notification:new", (n: AnnouncementPush) => notifHandler.current?.(n));
@@ -67,6 +77,7 @@ export function usePresence(enabled: boolean, onAnnouncement?: (a: AnnouncementP
   const disconnect = useCallback(() => {
     socketRef.current?.disconnect();
     socketRef.current = null;
+    lastPresenceSig.current = "";
     setPresence(EMPTY);
   }, []);
 

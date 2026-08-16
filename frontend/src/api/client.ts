@@ -1941,11 +1941,13 @@ export interface StockConsolidatedRow {
   isbn_id: string;
   isbn13: string;
   title: string | null;
+  author: string | null;
   vendable: number;
   declasse: number;
   perdu: number;
   detruit: number;
   total: number;
+  initial_loaded: number;
   by_location: StockConsolidatedLocation[];
 }
 export interface StockConsolidated {

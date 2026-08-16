@@ -53,6 +53,7 @@ export function StockConsolidatedSection({ collapsible, defaultOpen, canCorrect,
             <thead>
               <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
                 <th style={{ padding: "5px 8px" }}>Ouvrage</th>
+                <th style={{ padding: "5px 8px" }}>Auteur</th>
                 <th style={{ padding: "5px 8px" }}>ISBN</th>
                 <th style={{ padding: "5px 8px", textAlign: "right" }}>Vendable</th>
                 <th style={{ padding: "5px 8px", textAlign: "right" }}>Déclassé</th>
@@ -75,6 +76,7 @@ export function StockConsolidatedSection({ collapsible, defaultOpen, canCorrect,
                       <span style={{ color: "var(--muted)", marginRight: 6, display: "inline-block", transform: open === r.isbn_id ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
                       {r.title ?? "—"}
                     </td>
+                    <td style={{ padding: "5px 8px", color: r.author ? undefined : "var(--muted)" }}>{r.author ?? "—"}</td>
                     <td style={{ padding: "5px 8px", fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{r.isbn13}</td>
                     <td style={cell(r.vendable)}>{num(r.vendable)}</td>
                     <td style={cell(r.declasse, r.declasse ? "var(--alert, #C4661F)" : undefined)}>{num(r.declasse)}</td>
@@ -92,12 +94,23 @@ export function StockConsolidatedSection({ collapsible, defaultOpen, canCorrect,
                       </td>
                     )}
                   </tr>
+                  {open === r.isbn_id && (
+                    <tr style={{ background: "var(--paper, #F8F9FB)", fontSize: 12 }}>
+                      <td colSpan={canCorrect ? 9 : 8} style={{ padding: "3px 8px 3px 26px", color: "var(--muted)" }}>
+                        Chargé à l'inventaire initial : <b style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}>{num(r.initial_loaded)}</b>
+                        {" · "}stock à date : <b style={{ fontFamily: "var(--font-mono)", color: col(r.total, "var(--text)") }}>{num(r.total)}</b>
+                        {r.initial_loaded > 0 && r.total !== r.initial_loaded && (
+                          <> {" · "}écart depuis le chargement : <b style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}>{r.total - r.initial_loaded > 0 ? "+" : ""}{num(r.total - r.initial_loaded)}</b></>
+                        )}
+                      </td>
+                    </tr>
+                  )}
                   {open === r.isbn_id &&
                     r.by_location.map((loc) => {
                       const locTotal = loc.vendable + loc.declasse + loc.perdu + loc.detruit;
                       return (
                       <tr key={`${r.isbn_id}-${loc.location_label}`} style={{ background: "var(--paper, #F8F9FB)", fontSize: 12.5 }}>
-                        <td style={{ padding: "3px 8px 3px 26px", color: "var(--muted)" }} colSpan={2}>{loc.location_label}</td>
+                        <td style={{ padding: "3px 8px 3px 26px", color: "var(--muted)" }} colSpan={3}>{loc.location_label}</td>
                         <td style={cell(loc.vendable)}>{num(loc.vendable)}</td>
                         <td style={cell(loc.declasse, loc.declasse ? "var(--alert, #C4661F)" : undefined)}>{num(loc.declasse)}</td>
                         <td style={cell(loc.perdu, "var(--muted)")}>{num(loc.perdu)}</td>
@@ -113,7 +126,7 @@ export function StockConsolidatedSection({ collapsible, defaultOpen, canCorrect,
             </tbody>
             <tfoot>
               <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700 }}>
-                <td style={{ padding: "6px 8px" }} colSpan={2}>Total général</td>
+                <td style={{ padding: "6px 8px" }} colSpan={3}>Total général</td>
                 <td style={cell(data.totals.vendable, undefined, 700)}>{num(data.totals.vendable)}</td>
                 <td style={cell(data.totals.declasse, data.totals.declasse ? "var(--alert, #C4661F)" : undefined, 700)}>{num(data.totals.declasse)}</td>
                 <td style={cell(data.totals.perdu, data.totals.perdu ? "var(--alert, #C4661F)" : "var(--muted)", 700)}>{num(data.totals.perdu)}</td>

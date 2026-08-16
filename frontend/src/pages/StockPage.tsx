@@ -111,6 +111,12 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
   // Rechargé à chaque saisie / correction / annulation de mouvement.
   const [movVersion, setMovVersion] = useState(0);
   const bumpMovements = () => setMovVersion((v) => v + 1);
+  // Filtre « Corriger » depuis le consolidé : concentre l'historique sur un ouvrage.
+  const [focusIsbn, setFocusIsbn] = useState<{ id: string; title: string | null } | null>(null);
+  function focusOnIsbn(id: string, title: string | null) {
+    setFocusIsbn({ id, title });
+    setTimeout(() => document.getElementById("historique-mouvements")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
 
   const refresh = async () => {
     const [locationList, itemList, alertList, isbnList] = await Promise.all([
@@ -174,7 +180,7 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
-      <StockConsolidatedSection collapsible defaultOpen />
+      <StockConsolidatedSection collapsible defaultOpen canCorrect={canManage} onCorrect={focusOnIsbn} />
 
       <StockInitialImportSection canManage={canManage} collapsible defaultOpen={false} />
 
@@ -261,13 +267,18 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
         />
       )}
 
-      <MovementHistory
-        canManage={canManage}
-        version={movVersion}
-        onChanged={() => { refresh(); bumpMovements(); }}
-        onMessage={setMessage}
-        onError={setError}
-      />
+      <div id="historique-mouvements">
+        <MovementHistory
+          canManage={canManage}
+          version={movVersion}
+          filterIsbnId={focusIsbn?.id ?? null}
+          filterLabel={focusIsbn?.title ?? null}
+          onClearFilter={() => setFocusIsbn(null)}
+          onChanged={() => { refresh(); bumpMovements(); }}
+          onMessage={setMessage}
+          onError={setError}
+        />
+      </div>
 
       <CommercialStockSection
         isbns={isbns}
@@ -415,12 +426,18 @@ function MovementForm({
 function MovementHistory({
   canManage,
   version,
+  filterIsbnId,
+  filterLabel,
+  onClearFilter,
   onChanged,
   onMessage,
   onError,
 }: {
   canManage: boolean;
   version: number;
+  filterIsbnId?: string | null;
+  filterLabel?: string | null;
+  onClearFilter?: () => void;
   onChanged: () => void;
   onMessage: (m: string) => void;
   onError: (m: string) => void;
@@ -430,8 +447,8 @@ function MovementHistory({
   const [editing, setEditing] = useState<StockMovement | null>(null);
 
   useEffect(() => {
-    listStockMovements().then(setMovements).catch((e) => onError(e instanceof Error ? e.message : "Chargement des mouvements impossible."));
-  }, [version]);
+    listStockMovements(filterIsbnId ?? undefined).then(setMovements).catch((e) => onError(e instanceof Error ? e.message : "Chargement des mouvements impossible."));
+  }, [version, filterIsbnId]);
 
   async function cancel(m: StockMovement) {
     const reason = window.prompt("Annuler ce mouvement saisi par erreur ?\nMotif (facultatif) :", "");
@@ -455,6 +472,12 @@ function MovementHistory({
 
   return (
     <Card title={t("stock.history_title", "Historique des mouvements")} icon={<IconCommercial />} subtitle={t("stock.history_sub", "Corrigez ou annulez une saisie erronée — le stock est recalculé automatiquement.")} collapsible defaultOpen>
+      {filterIsbnId && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", background: "var(--eclosion-soft)", borderRadius: 8, padding: "6px 12px", marginBottom: 10, fontSize: 12.5 }}>
+          <span>Filtré sur <b>{filterLabel || "cet ouvrage"}</b> — repérez le mouvement en cause puis <b>Modifier</b> ou <b>Annuler</b>.</span>
+          <button onClick={() => onClearFilter?.()} style={{ fontSize: 12, cursor: "pointer", border: "1px solid var(--line)", background: "#fff", borderRadius: 6, padding: "3px 10px", fontWeight: 600 }}>Tout afficher</button>
+        </div>
+      )}
       {movements.length === 0 ? (
         <Empty>{t("stock.no_movement", "Aucun mouvement enregistré.")}</Empty>
       ) : (

@@ -1931,6 +1931,7 @@ export function listStockAlerts() {
 // Stock consolidé « toutes zones » — stock réel total par ouvrage (vendable vs
 // déclassé), avec le détail par lieu.
 export interface StockConsolidatedLocation {
+  location_id: string;
   location_label: string;
   vendable: number;
   declasse: number;

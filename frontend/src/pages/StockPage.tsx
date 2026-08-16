@@ -15,6 +15,7 @@ import {
   type StockLocationType,
   type StockMovement,
   type StockMovementType,
+  type StockConsolidatedRow,
 } from "../api/client";
 import { Card } from "../components/Card";
 import { StockInventorySection } from "../components/StockInventorySection";
@@ -49,6 +50,17 @@ const MOVEMENT_LABELS: Record<StockMovementType, string> = {
 };
 
 // Types saisis manuellement par le magasinier, proposés dans le formulaire.
+// Pré-remplissage du formulaire de mouvement depuis « Régulariser » (consolidé).
+type MovementPrefill = {
+  type: StockMovementType;
+  isbnId: string;
+  toLocationId?: string;
+  condition?: "vendable" | "declasse";
+  quantity: number;
+  reason: string;
+  nonce: number; // force la ré-application même si les valeurs sont identiques
+};
+
 const MANUAL_FORM_TYPES: StockMovementType[] = [
   "production_in", "supplier_in", "commercial_return", "transfer",
   "press_copy", "author_copy", "promotional_out", "institutional_out",
@@ -117,6 +129,30 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
     setFocusIsbn({ id, title });
     setTimeout(() => document.getElementById("historique-mouvements")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
   }
+  // « Régulariser » depuis le consolidé : pré-remplit le formulaire avec une
+  // entrée de régularisation d'inventaire qui ramène le compartiment négatif à 0.
+  const [prefill, setPrefill] = useState<MovementPrefill | null>(null);
+  function regularizeRow(row: StockConsolidatedRow) {
+    // Cherche le compartiment (lieu + état) négatif à rétablir. Le formulaire ne
+    // sait créditer que « vendable » ou « déclassé » — les seuls régularisables ici.
+    let target: { locationId: string; condition: "vendable" | "declasse"; deficit: number } | null = null;
+    for (const loc of row.by_location) {
+      for (const c of ["vendable", "declasse"] as const) {
+        if (loc[c] < 0 && (!target || loc[c] < -target.deficit)) target = { locationId: loc.location_id, condition: c, deficit: -loc[c] };
+      }
+    }
+    if (!target) return;
+    setPrefill({
+      type: "inventory_adjustment",
+      isbnId: row.isbn_id,
+      toLocationId: target.locationId,
+      condition: target.condition,
+      quantity: target.deficit,
+      reason: `Régularisation stock négatif — ${row.title ?? row.isbn13}`,
+      nonce: Date.now(),
+    });
+    setTimeout(() => document.getElementById("nouveau-mouvement")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
 
   const refresh = async () => {
     const [locationList, itemList, alertList, isbnList] = await Promise.all([
@@ -180,7 +216,7 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
-      <StockConsolidatedSection collapsible defaultOpen canCorrect={canManage} onCorrect={focusOnIsbn} />
+      <StockConsolidatedSection collapsible defaultOpen canCorrect={canManage} onCorrect={focusOnIsbn} onRegularize={regularizeRow} />
 
       <StockInitialImportSection canManage={canManage} collapsible defaultOpen={false} />
 
@@ -259,12 +295,15 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
       </Card>
 
       {canManage && (
-        <MovementForm
-          isbns={isbns}
-          locations={locations}
-          onRecorded={() => { setMessage(t("stock.movement_recorded", "Mouvement enregistré.")); refresh(); bumpMovements(); }}
-          onError={setError}
-        />
+        <div id="nouveau-mouvement">
+          <MovementForm
+            isbns={isbns}
+            locations={locations}
+            prefill={prefill}
+            onRecorded={() => { setMessage(t("stock.movement_recorded", "Mouvement enregistré.")); setPrefill(null); refresh(); bumpMovements(); }}
+            onError={setError}
+          />
+        </div>
       )}
 
       <div id="historique-mouvements">
@@ -314,11 +353,13 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
 function MovementForm({
   isbns,
   locations,
+  prefill,
   onRecorded,
   onError,
 }: {
   isbns: IsbnRef[];
   locations: StockLocation[];
+  prefill?: MovementPrefill | null;
   onRecorded: () => void;
   onError: (m: string) => void;
 }) {
@@ -335,6 +376,17 @@ function MovementForm({
     if (!isbnId && isbns[0]) setIsbnId(isbns[0].id);
     if (!toLocationId && locations[0]) setToLocationId(locations[0].id);
   }, [isbns, locations]);
+
+  // Applique un pré-remplissage « Régulariser » (entrée qui rétablit un négatif).
+  useEffect(() => {
+    if (!prefill) return;
+    setType(prefill.type);
+    setIsbnId(prefill.isbnId);
+    if (prefill.toLocationId) setToLocationId(prefill.toLocationId);
+    if (prefill.condition) setCondition(prefill.condition);
+    setQuantity(prefill.quantity);
+    setReason(prefill.reason);
+  }, [prefill?.nonce]);
 
   const needs = MOVEMENT_NEEDS[type];
   const showFrom = needs.from || type === "inventory_adjustment";
@@ -474,7 +526,7 @@ function MovementHistory({
     <Card title={t("stock.history_title", "Historique des mouvements")} icon={<IconCommercial />} subtitle={t("stock.history_sub", "Corrigez ou annulez une saisie erronée — le stock est recalculé automatiquement.")} collapsible defaultOpen>
       {filterIsbnId && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", background: "var(--eclosion-soft)", borderRadius: 8, padding: "6px 12px", marginBottom: 10, fontSize: 12.5 }}>
-          <span>Filtré sur <b>{filterLabel || "cet ouvrage"}</b> — repérez le mouvement en cause puis <b>Modifier</b> ou <b>Annuler</b>.</span>
+          <span>Filtré sur <b>{filterLabel || "cet ouvrage"}</b>. Les mouvements saisis à la main portent <b>Modifier</b>/<b>Annuler</b> ; ceux issus d'un autre document (vente, dépôt-vente…) se corrigent à la source. Pour rétablir un stock négatif, utilisez <b>« Régulariser »</b> dans le tableau consolidé.</span>
           <button onClick={() => onClearFilter?.()} style={{ fontSize: 12, cursor: "pointer", border: "1px solid var(--line)", background: "#fff", borderRadius: 6, padding: "3px 10px", fontWeight: 600 }}>Tout afficher</button>
         </div>
       )}

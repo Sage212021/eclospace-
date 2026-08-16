@@ -322,7 +322,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
             },
           },
         },
-        location: { select: { label: true } },
+        location: { select: { id: true, label: true } },
       },
     });
     // « Stock initial » chargé par ouvrage = somme des entrées de régularisation
@@ -350,7 +350,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     const byIsbn = new Map<string, {
       isbn_id: string; isbn13: string; title: string | null; author: string | null;
       buckets: Buckets;
-      locations: Map<string, { location_label: string } & Buckets>;
+      locations: Map<string, { location_id: string; location_label: string } & Buckets>;
     }>();
     for (const it of items) {
       let row = byIsbn.get(it.isbnId);
@@ -361,7 +361,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       const label = it.location.label;
       let loc = row.locations.get(label);
       if (!loc) {
-        loc = { location_label: label, ...zero() };
+        loc = { location_id: it.location.id, location_label: label, ...zero() };
         row.locations.set(label, loc);
       }
       add(row.buckets, it.condition, it.quantityPhysical);

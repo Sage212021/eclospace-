@@ -119,12 +119,15 @@
     <ol class="steps">
       <li><b>Choisissez la zone</b> (le magasin) à recenser.</li>
       <li><b>Saisissez, ouvrage par ouvrage,</b> la quantité physiquement constatée. La colonne <b>« dont touchés »</b> sert aux exemplaires abîmés : ils entreront en état <b>Déclassé</b> (séparés du stock vendable).</li>
-      <li><b>Cliquez</b> <b>Charger le stock</b>. Les quantités deviennent des écritures d'entrée officielles. À partir de là, tout se fait par mouvements.</li>
+      <li><b>Cliquez</b> <b>Prévisualiser et charger</b>. Une fenêtre de vérification récapitule tout <b>avant</b> l'enregistrement : pour chaque ouvrage, la quantité à charger, ce qui est <b>déjà en stock</b> dans la zone et le total <b>après</b>. Relisez, puis <b>Confirmer le chargement</b>. Les quantités deviennent des écritures d'entrée officielles.</li>
     </ol>
+    <div class="callout warn"><span class="lbl">Deux alertes à lire</span>La prévisualisation surligne en orange&nbsp;: une <b>quantité anormalement élevée</b> (≥ 1000 — souvent un nombre du titre lu par erreur comme quantité), et un <b>ouvrage déjà en stock</b> dans la zone (charger <b>ajoute</b> à l'existant — attention au double comptage). En cas de doute, cliquez <b>« Revenir corriger »</b>.</div>
+
+    <p style="margin-top:20px"><b>Astuce — rapprochement automatique.</b> Si vous avez déjà un rapport « <b>Titre&nbsp;… quantité</b> » (une ligne par ouvrage), dépliez <b>« Rapprochement automatique depuis le rapport »</b>, collez le texte et cliquez <b>Rapprocher</b>&nbsp;: le système reconnaît chaque titre et place la quantité sur le bon ouvrage. Les titres <b>non reconnus</b> sont listés pour saisie manuelle, et un pourcentage de confiance signale les correspondances à vérifier. Vous passez ensuite par la même prévisualisation.</p>
 
     <div class="where" style="margin-top:20px">📍 Stock et magasin → carte « Nouveau mouvement de stock »</div>
-    <p><b>Cas B — vous recevez une nouvelle impression.</b> Enregistrez une <b>Réception de fabrication</b> (voir section 3), avec le magasin comme <b>lieu de destination</b>.</p>
-    <div class="callout warn"><span class="lbl">À retenir</span>Ne saisissez le stock initial <b>qu'une seule fois</b> par magasin. Ensuite, toute quantité qui change doit passer par un mouvement (entrée, sortie, transfert…), jamais par une nouvelle « initialisation ».</div>
+    <p><b>Cas B — vous recevez une nouvelle impression, ou vous ajoutez du stock à un ouvrage déjà présent.</b> Enregistrez une <b>Réception de fabrication</b> (voir section 3), avec le magasin comme <b>lieu de destination</b>. La quantité <b>s'ajoute</b> automatiquement au stock existant du même ouvrage — vous n'écrasez jamais le total en place.</p>
+    <div class="callout warn"><span class="lbl">À retenir</span>Ne passez par le <b>Chargement de l'inventaire initial</b> qu'<b>une seule fois</b> par magasin (le recensement de départ). Ensuite, toute quantité qui change — y compris un réapprovisionnement — passe par un <b>mouvement</b> (entrée, sortie, transfert…), jamais par une nouvelle « initialisation ».</div>
   </section>
 
   <section>
@@ -179,15 +182,26 @@
   </section>
 
   <section>
-    <h2><span class="n">5</span>Corriger une erreur de saisie</h2>
-    <p class="sec-lead">Une faute de frappe (100 au lieu de 60), un mauvais ouvrage ? Rien n'est bloqué.</p>
-    <div class="where">📍 Stock et magasin → carte « Historique des mouvements »</div>
+    <h2><span class="n">5</span>Lire le stock réel et corriger une erreur</h2>
+    <p class="sec-lead">Le tableau <b>« Stock réel consolidé (toutes zones) »</b> est votre vue de vérité : le stock total par ouvrage, tous lieux confondus. Rien ne s'y tape à la main — tout y est calculé.</p>
+    <div class="where">📍 Stock et magasin → carte « Stock réel consolidé (toutes zones) »</div>
+    <p>Chaque ligne montre&nbsp;: <b>Ouvrage</b>, <b>Auteur</b>, <b>ISBN</b>, puis les quantités par état — <b>Vendable · Déclassé · Perdu · Détruit · Total</b>. <b>Cliquez une ligne</b> pour déplier le détail par zone, ainsi qu'un repère d'audit&nbsp;: «&nbsp;<b>Chargé à l'inventaire initial</b>&nbsp;: X · <b>stock à date</b>&nbsp;: Y · écart&nbsp;: ±N&nbsp;» (compare votre point de départ au stock d'aujourd'hui).</p>
+
+    <p style="margin-top:18px"><b>Corriger une faute de frappe</b> (100 au lieu de 60, mauvais ouvrage…)&nbsp;:</p>
     <ol class="steps">
-      <li><b>Retrouvez</b> la ligne concernée dans l'<b>Historique des mouvements</b>.</li>
+      <li><b>Cliquez</b> <span class="tag">Corriger</span> sur la ligne de l'ouvrage (ou retrouvez-la directement dans <b>Historique des mouvements</b>). L'historique se filtre sur cet ouvrage.</li>
       <li><b>Modifier</b> : corrigez la quantité, le motif ou l'état. Le stock se recalcule immédiatement.</li>
       <li><b>Annuler</b> : si toute la ligne était fausse (mauvais ouvrage, double saisie), annulez-la avec un motif. Elle reste visible, barrée « Annulé », et le stock revient à l'état d'avant.</li>
     </ol>
-    <div class="callout warn"><span class="lbl">Limite normale</span>On ne corrige ici que <b>vos saisies manuelles</b>. Un mouvement issu d'une <b>vente</b> ou d'un <b>retour client</b> se corrige à sa source (côté commercial), pas dans l'historique du stock. Le système vous le dira clairement.</div>
+    <div class="callout warn"><span class="lbl">Limite normale</span>On ne <b>Modifie / Annule</b> que <b>vos saisies manuelles</b>. Un mouvement issu d'une <b>vente</b>, d'un <b>dépôt-vente</b> ou d'un <b>retour client</b> porte une référence à un autre document et se corrige <b>à sa source</b>, pas dans l'historique du stock — d'où l'absence des boutons sur ces lignes.</div>
+
+    <p style="margin-top:22px"><b>Rétablir un stock négatif</b> (une ligne affichée en <span style="color:var(--red)">rouge</span>, ex. «&nbsp;−20&nbsp;»). Un négatif vient d'anciennes sorties supérieures au stock, souvent liées à une vente&nbsp;: on ne peut donc pas l'annuler ici. La bonne façon&nbsp;:</p>
+    <ol class="steps">
+      <li><b>Cliquez</b> <span class="tag">Régulariser</span> sur la ligne rouge du <b>Stock réel consolidé</b>.</li>
+      <li>Le <b>formulaire « Nouveau mouvement de stock » se pré-remplit tout seul</b> : une <b>Régularisation d'inventaire</b> en entrée, sur le bon lieu et le bon compartiment, avec la quantité qui ramène le stock à <b>0</b>, motif inclus.</li>
+      <li><b>Relisez</b> et cliquez <b>Enregistrer le mouvement</b>. La ligne n'est plus négative.</li>
+    </ol>
+    <div class="callout good"><span class="lbl">Bon à savoir</span><b>« Corriger »</b> sert à <b>examiner</b> l'historique d'un ouvrage ; <b>« Régulariser »</b> (sur les lignes rouges) est celui qui <b>rétablit</b> le stock. Désormais, une sortie supérieure au stock est <b>refusée</b> à la saisie (« le stock deviendrait négatif ») : de nouveaux négatifs ne peuvent plus se créer.</div>
   </section>
 
   <section>
@@ -240,7 +254,8 @@
       <div class="rule" style="border-left-color:var(--green)"><b>✔ Chaque réception</b><span>= un mouvement « Réception de fabrication » ou « Entrée fournisseur », avec le bon magasin de destination et un motif clair.</span></div>
       <div class="rule" style="border-left-color:var(--green)"><b>✔ Chaque sortie</b><span>a un type précis (vente, presse, auteur, promo, perte…). Jamais de « sortie » sans motif.</span></div>
       <div class="rule" style="border-left-color:var(--orange)"><b>⚠ Confié ≠ vendu</b><span>Commercial → « Remettre » ; libraire → dépôt. La « Sortie vente » est réservée aux ventes encaissées.</span></div>
-      <div class="rule" style="border-left-color:var(--orange)"><b>⚠ Doute sur une saisie</b><span>Ne re-saisissez pas « pour rattraper ». Corrigez la ligne d'origine (Modifier / Annuler).</span></div>
+      <div class="rule" style="border-left-color:var(--orange)"><b>⚠ Doute sur une saisie</b><span>Ne re-saisissez pas « pour rattraper ». Corrigez la ligne d'origine (Modifier / Annuler), ou <b>Régularisez</b> depuis le stock consolidé.</span></div>
+      <div class="rule" style="border-left-color:var(--red)"><b>⚠ Une ligne en rouge (négatif)</b><span>Bouton <b>« Régulariser »</b> sur la ligne du stock consolidé : le formulaire se pré-remplit pour ramener le stock à 0.</span></div>
       <div class="rule" style="border-left-color:var(--gold)"><b>◆ Fin de journée</b><span>Vérifiez que les quantités à l'écran correspondent au réel. Un écart ? Notez-le pour le prochain inventaire.</span></div>
       <div class="rule" style="border-left-color:var(--gold)"><b>◆ En cas de blocage</b><span>Le message d'erreur est explicite (ex. « le stock deviendrait négatif »). Lisez-le : il indique quoi corriger.</span></div>
     </div>

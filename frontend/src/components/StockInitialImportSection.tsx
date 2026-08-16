@@ -1,9 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
-import { listIsbnRefs, listStockLocations, createStockMovement, matchStockInitial, type IsbnRef, type StockLocation, type StockMatchResult } from "../api/client";
+import { listIsbnRefs, listStockLocations, createStockMovement, matchStockInitial, getStockConsolidated, type IsbnRef, type StockLocation, type StockMatchResult } from "../api/client";
 import { Card } from "./Card";
-import { Field } from "./Modal";
+import { Field, Modal } from "./Modal";
 import { Button } from "./Button";
 import { IconCommercial } from "./icons";
+
+// Seuil au-delà duquel une quantité mérite une relecture (repère une saisie
+// aberrante, ex. un nombre du titre lu comme quantité).
+const QUANTITE_ANORMALE = 1000;
+
+type PreviewLine = {
+  isbnId: string;
+  title: string;
+  isbn13: string;
+  total: number;
+  damaged: number;
+  existing: number; // déjà en stock dans la zone choisie
+  warnHigh: boolean; // quantité anormalement élevée
+  warnDup: boolean; // ouvrage déjà en stock dans cette zone (risque de doublon)
+};
 
 // Rapport d'inventaire (06/07/2026) pré-chargé pour gagner du temps : « titre
 // quantité ». Le magasinier corrigera manuellement au besoin.
@@ -81,6 +96,8 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
   const [pasteText, setPasteText] = useState(REPORT_DEFAULT);
   const [matchResults, setMatchResults] = useState<StockMatchResult[] | null>(null);
   const [matching, setMatching] = useState(false);
+  const [preview, setPreview] = useState<PreviewLine[] | null>(null);
+  const [preparing, setPreparing] = useState(false);
 
   useEffect(() => {
     Promise.all([listIsbnRefs("print"), listStockLocations()])
@@ -134,7 +151,9 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
     }
   }
 
-  async function load() {
+  // Étape 1 — construit la prévisualisation : ce qui sera enregistré, le stock
+  // déjà présent dans la zone, et les alertes (quantité anormale, doublon).
+  async function openPreview() {
     if (!locationId) {
       setError("Choisissez d'abord la zone de stockage.");
       return;
@@ -143,7 +162,43 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
       setError("Saisissez au moins une quantité.");
       return;
     }
-    if (!window.confirm(`Charger le stock de ${entries.length} ouvrage(s) dans « ${locations.find((l) => l.id === locationId)?.label} » ?`)) return;
+    setPreparing(true);
+    setError(null);
+    try {
+      // Stock déjà présent, par ouvrage, dans la zone choisie.
+      const consolidated = await getStockConsolidated();
+      const existingByIsbn = new Map<string, number>();
+      for (const row of consolidated.rows) {
+        const loc = row.by_location.find((l) => l.location_id === locationId);
+        if (loc) existingByIsbn.set(row.isbn_id, loc.vendable + loc.declasse + loc.perdu + loc.detruit);
+      }
+      const lines: PreviewLine[] = entries.map(([isbnId, v]) => {
+        const total = Math.round(Number(v));
+        const damaged = Math.min(Math.max(Math.round(Number(dmg[isbnId]) || 0), 0), total);
+        const ref = isbns.find((i) => i.id === isbnId);
+        const existing = existingByIsbn.get(isbnId) ?? 0;
+        return {
+          isbnId,
+          title: ref?.manuscript?.title ?? "—",
+          isbn13: ref?.isbn13 ?? isbnId,
+          total,
+          damaged,
+          existing,
+          warnHigh: total >= QUANTITE_ANORMALE,
+          warnDup: existing > 0,
+        };
+      }).sort((a, b) => a.title.localeCompare(b.title, "fr"));
+      setPreview(lines);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Prévisualisation impossible.");
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  // Étape 2 — enregistre réellement, après confirmation dans la prévisualisation.
+  async function load() {
+    setPreview(null);
     setBusy(true);
     setError(null);
     let ok = 0;
@@ -229,7 +284,7 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
           <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Titre ou ISBN…" />
         </Field>
         <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{entries.length} ligne(s) à charger</div>
-        <Button variant="add" size="sm" type="button" disabled={busy || !locationId || entries.length === 0} onClick={load}>{busy ? "Chargement…" : "Charger le stock"}</Button>
+        <Button variant="add" size="sm" type="button" disabled={busy || preparing || !locationId || entries.length === 0} onClick={openPreview}>{preparing ? "Préparation…" : busy ? "Chargement…" : "Prévisualiser et charger"}</Button>
       </div>
 
       {isbns.length === 0 ? (
@@ -277,8 +332,62 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
         </div>
       )}
       <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>
-        Astuce : sélectionnez une zone (ex. « Magasin — cartons »), saisissez les quantités du rapport en face de chaque ouvrage, puis « Charger le stock ». Répétez par zone.
+        Astuce : sélectionnez une zone (ex. « Magasin — cartons »), saisissez les quantités du rapport en face de chaque ouvrage, puis « Prévisualiser et charger ». Répétez par zone.
       </p>
+
+      {preview && (() => {
+        const zone = locations.find((l) => l.id === locationId)?.label ?? "";
+        const totalQty = preview.reduce((s, l) => s + l.total, 0);
+        const totalDmg = preview.reduce((s, l) => s + l.damaged, 0);
+        const nbHigh = preview.filter((l) => l.warnHigh).length;
+        const nbDup = preview.filter((l) => l.warnDup).length;
+        return (
+          <Modal title="Vérifier avant de charger" onClose={() => setPreview(null)} wide>
+            <p style={{ fontSize: 13, margin: "0 0 10px" }}>
+              <b>{preview.length}</b> ouvrage(s) — <b style={{ fontFamily: "var(--font-mono)" }}>{totalQty.toLocaleString("fr-FR")}</b> exemplaire(s){totalDmg > 0 && <> dont <b style={{ fontFamily: "var(--font-mono)", color: "var(--alert, #C4661F)" }}>{totalDmg}</b> touché(s)</>} seront chargés dans <b>« {zone} »</b>.
+            </p>
+            {(nbHigh > 0 || nbDup > 0) && (
+              <div style={{ background: "var(--alert-soft, #f8e3df)", color: "var(--alert, #C4661F)", borderRadius: 8, padding: "8px 12px", fontSize: 12.5, marginBottom: 10 }}>
+                ⚠️ À vérifier :
+                {nbHigh > 0 && <> {nbHigh} quantité(s) anormalement élevée(s) (≥ {QUANTITE_ANORMALE.toLocaleString("fr-FR")}) — un nombre du titre lu comme quantité ?</>}
+                {nbHigh > 0 && nbDup > 0 && <> ·</>}
+                {nbDup > 0 && <> {nbDup} ouvrage(s) <b>déjà en stock</b> dans cette zone — charger <b>ajoutera</b> à l'existant (risque de doublon).</>}
+              </div>
+            )}
+            <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid var(--line)", borderRadius: 8 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                <thead style={{ position: "sticky", top: 0, background: "var(--card, #fff)" }}>
+                  <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11.5 }}>
+                    <th style={{ padding: "5px 8px" }}>Ouvrage</th>
+                    <th style={{ padding: "5px 8px", textAlign: "right" }}>À charger</th>
+                    <th style={{ padding: "5px 8px", textAlign: "right" }}>dont touchés</th>
+                    <th style={{ padding: "5px 8px", textAlign: "right" }}>Déjà en stock</th>
+                    <th style={{ padding: "5px 8px", textAlign: "right" }}>Après</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.map((l) => (
+                    <tr key={l.isbnId} style={{ borderTop: "1px solid var(--line)", background: l.warnHigh || l.warnDup ? "var(--alert-soft, #fbeeeb)" : undefined }}>
+                      <td style={{ padding: "4px 8px" }}>
+                        {l.title}
+                        {l.warnDup && <span style={{ color: "var(--alert, #C4661F)", fontSize: 11 }}> · déjà en stock</span>}
+                      </td>
+                      <td style={{ padding: "4px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: l.warnHigh ? "var(--alert, #C4661F)" : undefined, fontWeight: l.warnHigh ? 700 : undefined }}>{l.total.toLocaleString("fr-FR")}</td>
+                      <td style={{ padding: "4px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: l.damaged ? "var(--alert, #C4661F)" : "var(--muted)" }}>{l.damaged || "—"}</td>
+                      <td style={{ padding: "4px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{l.existing.toLocaleString("fr-FR")}</td>
+                      <td style={{ padding: "4px 8px", textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 700 }}>{(l.existing + l.total).toLocaleString("fr-FR")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <Button variant="view" size="sm" type="button" onClick={() => setPreview(null)}>Revenir corriger</Button>
+              <Button variant="add" size="sm" type="button" disabled={busy} onClick={load}>{busy ? "Chargement…" : `Confirmer le chargement (${preview.length})`}</Button>
+            </div>
+          </Modal>
+        );
+      })()}
     </Card>
   );
 }

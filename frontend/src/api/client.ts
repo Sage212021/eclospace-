@@ -2257,6 +2257,11 @@ export interface PosSaleRow {
   customer_name: string | null;
   point_of_sale: string | null;
   sold_by: string | null;
+  // Annulation (suppression logique) : la vente reste affichée, barrée.
+  cancelled: boolean;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+  cancelled_by: string | null;
 }
 // Ventes provisoires « hors catalogue » à rattacher à un ouvrage officiel.
 export function listProvisionalPosSales() {
@@ -2337,6 +2342,15 @@ export function getTeamPerformance(params?: { from?: string; to?: string }) {
 }
 export function reconcilePosSale(id: string, isbnId: string) {
   return request<{ reconciled: true; invoice_id: string }>(`/api/v1/pos-sales/${id}/reconcile`, { method: "POST", body: JSON.stringify({ isbn_id: isbnId }) });
+}
+// Annuler une vente au comptoir saisie par erreur (motif obligatoire). La vente
+// n'est jamais effacée : elle passe « annulée ». Une vente au catalogue déclenche
+// un avoir + contre-passation des droits d'auteur + notification à la Finance.
+export function cancelPosSale(id: string, reason: string) {
+  return request<{ id: string; cancelled_at: string; cancellation_reason: string; credit_note_id: string | null }>(
+    `/api/v1/pos-sales/${id}/cancel`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
 }
 
 // Points de vente (librairie, salon, boutique en ligne…) — dimension des rapports.

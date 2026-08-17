@@ -8,6 +8,7 @@ import {
   listMyPosSales,
   getSalesAnnual,
   reconcilePosSale,
+  cancelPosSale,
   type PosSaleRow,
   type SalesAnnual,
   createSalesOrder,
@@ -712,20 +713,51 @@ function fcfa(n: number): string { return `${Math.round(n).toLocaleString("fr-FR
 function MySalesRegister({ refreshKey }: { refreshKey: number }) {
   const [sales, setSales] = useState<PosSaleRow[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    setLoading(true);
-    listMyPosSales().then(setSales).catch(() => setSales([])).finally(() => setLoading(false));
-  }, [refreshKey]);
-  const total = sales.reduce((s, r) => s + r.total, 0);
+  // Annulation : vente ciblée, motif saisi, état d'envoi et message d'erreur.
+  const [target, setTarget] = useState<PosSaleRow | null>(null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+
+  const load = () => { setLoading(true); listMyPosSales().then(setSales).catch(() => setSales([])).finally(() => setLoading(false)); };
+  useEffect(() => { load(); }, [refreshKey]);
+
+  // Le total ne compte QUE les ventes actives (une vente annulée ne pèse plus).
+  const total = sales.reduce((s, r) => s + (r.cancelled ? 0 : r.total), 0);
+  const activeCount = sales.filter((s) => !s.cancelled).length;
+
+  function openCancel(s: PosSaleRow) { setTarget(s); setReason(""); setErr(null); }
+
+  async function confirmCancel() {
+    if (!target) return;
+    const r = reason.trim();
+    if (!r) { setErr("Le motif de l'annulation est obligatoire."); return; }
+    setBusy(true); setErr(null);
+    try {
+      const res = await cancelPosSale(target.id, r);
+      setTarget(null);
+      setFlash(res.credit_note_id
+        ? "Vente annulée : un avoir a été émis, les droits d'auteur contre-passés et la Direction financière notifiée."
+        : "Vente annulée.");
+      load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Annulation impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <Card title="Mes ventes au comptoir" icon={<IconCommercial />} subtitle="Vos ventes directes, les plus récentes en premier — visibles dès l'enregistrement." collapsible defaultOpen>
+    <Card title="Mes ventes au comptoir" icon={<IconCommercial />} subtitle="Vos ventes directes, les plus récentes en premier — visibles dès l'enregistrement. Une vente saisie par erreur peut être annulée (avec motif) ; elle reste au journal, barrée." collapsible defaultOpen>
+      {flash && <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(200,154,27,0.12)", color: "var(--ink)", fontSize: 13 }}>{flash}</div>}
       {loading ? (
         <Empty>Chargement…</Empty>
       ) : sales.length === 0 ? (
         <Empty>Aucune vente enregistrée pour l'instant. Enregistrez une vente ci-dessus, elle apparaîtra ici.</Empty>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 720 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
                 <th style={{ padding: "6px 8px" }}>Date</th>
@@ -735,33 +767,78 @@ function MySalesRegister({ refreshKey }: { refreshKey: number }) {
                 <th style={{ padding: "6px 8px", textAlign: "right" }}>P.U.</th>
                 <th style={{ padding: "6px 8px", textAlign: "right" }}>Total</th>
                 <th style={{ padding: "6px 8px" }}>Paiement</th>
+                <th style={{ padding: "6px 8px" }} />
               </tr>
             </thead>
             <tbody style={{ fontFamily: "var(--font-mono, monospace)" }}>
               {sales.map((s) => (
-                <tr key={s.id} style={{ borderTop: "1px solid var(--line)" }}>
+                <tr key={s.id} style={{ borderTop: "1px solid var(--line)", opacity: s.cancelled ? 0.55 : 1, textDecoration: s.cancelled ? "line-through" : "none" }}>
                   <td style={{ padding: "6px 8px" }}>{s.sold_at.slice(0, 10)}</td>
                   <td style={{ padding: "6px 8px", fontFamily: "inherit" }}>
                     {s.title ?? "—"}
-                    {!s.is_catalogue && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--retard, #C4661F)" }}>hors catalogue</span>}
+                    {!s.is_catalogue && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--retard, #C4661F)", textDecoration: "none" }}>hors catalogue</span>}
                   </td>
                   <td style={{ padding: "6px 8px", fontFamily: "inherit", color: "var(--muted)" }}>{s.author ?? "—"}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>{s.quantity}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>{s.unit_price.toLocaleString("fr-FR")}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700 }}>{s.total.toLocaleString("fr-FR")}</td>
                   <td style={{ padding: "6px 8px", fontFamily: "inherit" }}>{PAY_LABEL[s.payment_method] ?? s.payment_method}</td>
+                  <td style={{ padding: "6px 8px", fontFamily: "inherit", textDecoration: "none", whiteSpace: "nowrap" }}>
+                    {s.cancelled ? (
+                      <span title={s.cancellation_reason ?? undefined} style={{ fontSize: 11, color: "var(--critique, #C24B3A)" }}>
+                        Annulée{s.cancellation_reason ? ` · ${s.cancellation_reason}` : ""}
+                      </span>
+                    ) : (
+                      <Button variant="danger" size="sm" type="button" onClick={() => openCancel(s)}>Annuler</Button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700, fontFamily: "var(--font-mono, monospace)" }}>
-                <td style={{ padding: "6px 8px" }} colSpan={5}>Total ({sales.length} vente{sales.length > 1 ? "s" : ""})</td>
+                <td style={{ padding: "6px 8px" }} colSpan={5}>Total ({activeCount} vente{activeCount > 1 ? "s" : ""} active{activeCount > 1 ? "s" : ""})</td>
                 <td style={{ padding: "6px 8px", textAlign: "right" }}>{total.toLocaleString("fr-FR")}</td>
-                <td />
+                <td colSpan={2} />
               </tr>
             </tfoot>
           </table>
         </div>
+      )}
+
+      {target && (
+        <Modal
+          title="Annuler cette vente"
+          onClose={() => (busy ? undefined : setTarget(null))}
+          footer={
+            <>
+              <Button variant="subtle" type="button" disabled={busy} onClick={() => setTarget(null)}>Fermer</Button>
+              <Button variant="danger" type="button" disabled={busy} onClick={confirmCancel}>
+                {busy ? "Annulation…" : "Confirmer l'annulation"}
+              </Button>
+            </>
+          }
+        >
+          <div style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>
+            Vente du <b>{target.sold_at.slice(0, 10)}</b> : <b>{target.quantity} × {target.title ?? "—"}</b> à{" "}
+            <span style={{ fontFamily: "var(--font-mono)" }}>{target.unit_price.toLocaleString("fr-FR")}</span> FCFA
+            (total <span style={{ fontFamily: "var(--font-mono)" }}>{target.total.toLocaleString("fr-FR")}</span> FCFA).
+            {target.is_catalogue
+              ? " Un avoir sera émis, les droits d'auteur contre-passés et la Direction financière notifiée."
+              : " Vente provisoire (hors catalogue) : simple annulation, sans effet comptable."}
+            {" "}Le stock n'est pas modifié (il est piloté par le magasin).
+          </div>
+          <Field label="Motif de l'annulation (obligatoire)">
+            <input
+              autoFocus
+              value={reason}
+              onChange={(e) => { setReason(e.target.value); if (err) setErr(null); }}
+              placeholder="Ex. erreur de saisie, vente de test, montant erroné"
+              maxLength={300}
+            />
+          </Field>
+          {err && <div style={{ marginTop: 8, color: "var(--critique, #C24B3A)", fontSize: 13 }}>{err}</div>}
+        </Modal>
       )}
     </Card>
   );

@@ -352,7 +352,7 @@ export default async function financeRoutes(fastify: FastifyInstance) {
       prisma.payment.groupBy({ by: ["bankAccountId"], where: paymentWhere, _sum: { amount: true }, _count: true }),
       prisma.paymentMethodDef.findMany(),
       prisma.bankAccount.findMany(),
-      prisma.posSale.findMany({ where: hasRange ? { soldAt: range } : {}, select: { pointOfSaleId: true, quantity: true, unitPrice: true } }),
+      prisma.posSale.findMany({ where: { ...(hasRange ? { soldAt: range } : {}), cancelledAt: null }, select: { pointOfSaleId: true, quantity: true, unitPrice: true } }),
       prisma.pointOfSale.findMany(),
     ]);
 

@@ -3364,6 +3364,15 @@ model PosSale {
   pointOfSale        PointOfSale?     @relation(fields: [pointOfSaleId], references: [id])
   soldBy             String?          @map("sold_by")
   soldAt             DateTime         @default(now()) @map("sold_at")
+  // Annulation d'une vente saisie par erreur (mauvais titre, vente de test,
+  // montant/quantité erroné). Suppression logique uniquement : la vente n'est
+  // jamais effacée, elle passe « annulée » avec son motif et son auteur. La
+  // vente n'ayant jamais touché le stock (décision 13/08/2026), l'annulation ne
+  // restitue aucun stock ; elle émet un avoir + contre-passe les droits d'auteur
+  // (vente au catalogue) et notifie la Direction financière.
+  cancelledAt        DateTime?        @map("cancelled_at")
+  cancelledBy        String?          @map("cancelled_by")
+  cancellationReason String?          @map("cancellation_reason")
 
   @@map("pos_sales")
 }

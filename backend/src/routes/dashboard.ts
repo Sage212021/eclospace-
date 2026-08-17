@@ -27,7 +27,7 @@ const EDITORIAL_VIEW_ROLES = ["ADMIN_GENERAL", "DIR_GENERAL", "DIR_EDITORIAL", "
 // d'accueil d'un commercial simple, que le CA lié à SES ventes enregistrées.
 async function ownCommercialRevenue(userId: string): Promise<number> {
   const [posSales, orders] = await Promise.all([
-    prisma.posSale.findMany({ where: { soldBy: userId }, select: { quantity: true, unitPrice: true } }),
+    prisma.posSale.findMany({ where: { soldBy: userId, cancelledAt: null }, select: { quantity: true, unitPrice: true } }),
     prisma.salesOrder.findMany({ where: { createdBy: userId }, select: { lines: { select: { quantity: true, unitPrice: true, discountPct: true } } } }),
   ]);
   const pos = posSales.reduce((s, p) => s + p.quantity * Number(p.unitPrice), 0);
@@ -40,7 +40,7 @@ async function ownCommercialRevenue(userId: string): Promise<number> {
 // la ligne « TOTAL ÉQUIPE » de « Performance par commercial ».
 async function teamCommercialRevenue(): Promise<number> {
   const [posSales, orders] = await Promise.all([
-    prisma.posSale.findMany({ select: { quantity: true, unitPrice: true } }),
+    prisma.posSale.findMany({ where: { cancelledAt: null }, select: { quantity: true, unitPrice: true } }),
     prisma.salesOrder.findMany({ select: { lines: { select: { quantity: true, unitPrice: true, discountPct: true } } } }),
   ]);
   const pos = posSales.reduce((s, p) => s + p.quantity * Number(p.unitPrice), 0);

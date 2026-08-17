@@ -110,7 +110,8 @@ export async function commissions(opts: { from?: Date; to?: Date; granularity: C
   const isbnSel = { select: { isbn13: true, manuscript: { select: { title: true } } } };
   const [posSales, orders] = await Promise.all([
     prisma.posSale.findMany({
-      where: dateWhere("soldAt", from, to),
+      // Une vente annulée ne donne droit à aucune commission.
+      where: { ...dateWhere("soldAt", from, to), cancelledAt: null },
       select: { soldBy: true, isbnId: true, quantity: true, unitPrice: true, soldAt: true, isbn: isbnSel },
     }),
     prisma.salesOrder.findMany({

@@ -7,8 +7,8 @@ import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { adjustStockItem, availableQuantity } from "../lib/stock.js";
 import { nextSalesOrderNumber, nextDeliveryNumber } from "../lib/salesOrderNumber.js";
-import { createInvoiceFromDelivery, createInvoiceFromConsignmentStatement, createInvoiceFromPosSale, createCreditNoteFromReturn } from "../lib/invoicing.js";
-import { PeriodClosedError } from "../lib/accountingPeriod.js";
+import { createInvoiceFromDelivery, createInvoiceFromConsignmentStatement, createInvoiceFromPosSale, createCreditNoteFromReturn, createCreditNoteFromInvoice } from "../lib/invoicing.js";
+import { PeriodClosedError, assertPeriodOpen } from "../lib/accountingPeriod.js";
 import { computeCustomerOutstandingBalance } from "../lib/finance.js";
 import { lookupTaxRatePct } from "../lib/taxRate.js";
 import { computeShippingFee, computeOrderWeightGrams } from "../lib/shipping.js";
@@ -218,7 +218,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     }
     const [orders, sales, invoices, consignments, returns] = await Promise.all([
       prisma.salesOrder.count({ where: { customerId: id } }),
-      prisma.posSale.count({ where: { customerId: id } }),
+      prisma.posSale.count({ where: { customerId: id, cancelledAt: null } }),
       prisma.invoice.count({ where: { customerId: id } }),
       prisma.consignment.count({ where: { customerId: id } }),
       prisma.customerReturn.count({ where: { customerId: id } }),
@@ -375,7 +375,9 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     const repId = canSeeOthers ? (q.rep === "all" ? null : q.rep ?? request.user!.id) : request.user!.id;
 
     const soldAt = from || to ? { gte: from, lte: to } : undefined;
-    const posWhere = { ...(repId ? { soldBy: repId } : {}), ...(soldAt ? { soldAt } : {}) };
+    // Les ventes annulées sont exclues de tous les indicateurs (une erreur
+    // annulée ne doit plus gonfler le chiffre d'affaires ni les volumes).
+    const posWhere = { ...(repId ? { soldBy: repId } : {}), ...(soldAt ? { soldAt } : {}), cancelledAt: null };
     const orderWhere = { ...(repId ? { createdBy: repId } : {}), ...(soldAt ? { createdAt: soldAt } : {}) };
 
     const [posSales, orders, newCustomers] = await Promise.all([
@@ -471,7 +473,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       if (target) {
         const yearStart = new Date(year, 0, 1);
         const [ytdPos, ytdOrders] = await Promise.all([
-          prisma.posSale.findMany({ where: { soldBy: repId, soldAt: { gte: yearStart } }, select: { quantity: true, unitPrice: true } }),
+          prisma.posSale.findMany({ where: { soldBy: repId, soldAt: { gte: yearStart }, cancelledAt: null }, select: { quantity: true, unitPrice: true } }),
           prisma.salesOrder.findMany({ where: { createdBy: repId, createdAt: { gte: yearStart } }, select: { lines: { select: { quantity: true, unitPrice: true, discountPct: true } } } }),
         ]);
         const ytd = Math.round(
@@ -513,7 +515,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     const soldAt = from || to ? { gte: from, lte: to } : undefined;
 
     const [posSales, orders] = await Promise.all([
-      prisma.posSale.findMany({ where: soldAt ? { soldAt } : {}, select: { soldBy: true, quantity: true, unitPrice: true } }),
+      prisma.posSale.findMany({ where: { ...(soldAt ? { soldAt } : {}), cancelledAt: null }, select: { soldBy: true, quantity: true, unitPrice: true } }),
       prisma.salesOrder.findMany({ where: soldAt ? { createdAt: soldAt } : {}, select: { createdBy: true, lines: { select: { quantity: true, unitPrice: true, discountPct: true } } } }),
     ]);
 
@@ -1117,12 +1119,12 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
         pointOfSale: { select: { name: true } },
       },
     });
-    // Noms des vendeurs (soldBy = id de compte) résolus en un seul passage.
-    const sellerIds = [...new Set(sales.map((s) => s.soldBy).filter((v): v is string => Boolean(v)))];
-    const sellers = sellerIds.length
-      ? await prisma.user.findMany({ where: { id: { in: sellerIds } }, select: { id: true, username: true } })
+    // Noms des vendeurs et des annulateurs (id de compte) résolus en un passage.
+    const actorIds = [...new Set(sales.flatMap((s) => [s.soldBy, s.cancelledBy]).filter((v): v is string => Boolean(v)))];
+    const actors = actorIds.length
+      ? await prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, username: true } })
       : [];
-    const sellerName = new Map(sellers.map((u) => [u.id, u.username]));
+    const sellerName = new Map(actors.map((u) => [u.id, u.username]));
     return reply.send(sales.map((s) => {
       const title = s.isbnId ? s.isbn?.manuscript?.title ?? null : s.offCatalogueTitle;
       const author = s.isbnId
@@ -1143,6 +1145,11 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
         customer_name: s.customer?.name ?? null,
         point_of_sale: s.pointOfSale?.name ?? null,
         sold_by: s.soldBy ? sellerName.get(s.soldBy) ?? null : null,
+        // Annulation (suppression logique) : la vente reste au journal, barrée.
+        cancelled: Boolean(s.cancelledAt),
+        cancelled_at: s.cancelledAt ?? null,
+        cancellation_reason: s.cancellationReason ?? null,
+        cancelled_by: s.cancelledBy ? sellerName.get(s.cancelledBy) ?? null : null,
       };
     }));
   });
@@ -1156,7 +1163,8 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     const start = new Date(Date.UTC(year, 0, 1));
     const end = new Date(Date.UTC(year + 1, 0, 1));
     const sales = await prisma.posSale.findMany({
-      where: { soldAt: { gte: start, lt: end } },
+      // Ventes annulées exclues du récapitulatif (le CA annuel ne les compte pas).
+      where: { soldAt: { gte: start, lt: end }, cancelledAt: null },
       select: {
         quantity: true, unitPrice: true, isbnId: true, offCatalogueTitle: true, offCatalogueAuthor: true,
         isbn: { select: { isbn13: true, manuscript: { select: { title: true, workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, select: { partner: { select: { firstName: true, lastName: true } } } } } } } },
@@ -1229,6 +1237,94 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
     } catch (err) {
       if (err instanceof PeriodClosedError) {
         return reply.code(409).send({ code: "accounting_period_closed", message: err.message });
+      }
+      throw err;
+    }
+  });
+
+  // ANNULER une vente au comptoir saisie par erreur (mauvais titre, vente de
+  // test, montant/quantité erroné). Le commercial annule LUI-MÊME, tout de suite,
+  // avec un motif obligatoire (décision opérateur 17/08/2026). Suppression
+  // logique : la vente n'est jamais effacée (elle reste au journal, barrée, avec
+  // son motif). Puisque la vente n'a jamais touché le stock, l'annulation ne
+  // restitue AUCUN stock. Pour une vente au CATALOGUE (facturée), on émet un
+  // avoir qui neutralise le chiffre d'affaires et contre-passe les droits
+  // d'auteur, puis on notifie la Direction financière. Possible tant que le mois
+  // comptable de la vente est ouvert (sinon 409 explicite).
+  fastify.post("/api/v1/pos-sales/:id/cancel", { preHandler: requirePermission("commercial", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ reason: z.string().trim().min(1, "Motif requis.").max(300) }).safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Le motif de l'annulation est obligatoire.", details: parsed.error.issues });
+    }
+    const reason = parsed.data.reason.trim();
+    const sale = await prisma.posSale.findUnique({ where: { id }, include: { isbn: { select: { manuscript: { select: { title: true } } } } } });
+    if (!sale) return reply.code(404).send({ code: "not_found", message: "Vente introuvable." });
+    if (sale.cancelledAt) return reply.code(409).send({ code: "already_cancelled", message: "Cette vente est déjà annulée." });
+
+    let creditNoteId: string | null = null;
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        // Garde-fou « mois de la vente ouvert » : une vente d'un mois clôturé ne
+        // peut plus être annulée (l'écriture est figée). Message explicite ci-dessous.
+        await assertPeriodOpen(tx, sale.soldAt);
+
+        // Vente au catalogue : une facture a été émise et des droits d'auteur
+        // enregistrés → avoir + contre-passation. La brique gère aussi le contrôle
+        // de la période courante et l'idempotence (facture déjà créditée).
+        if (sale.isbnId) {
+          const invoice = await tx.invoice.findFirst({
+            where: { sourceType: "pos_sale", sourceId: sale.id, type: "invoice" },
+          });
+          if (invoice) {
+            const creditNote = await createCreditNoteFromInvoice(tx, invoice.id, `Annulation vente comptoir : ${reason}`);
+            creditNoteId = creditNote.id;
+          }
+        }
+
+        return tx.posSale.update({
+          where: { id },
+          data: { cancelledAt: new Date(), cancelledBy: request.user!.id, cancellationReason: reason },
+        });
+      });
+
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "pos_sale",
+        entityId: id,
+        oldValues: { cancelledAt: null },
+        newValues: { cancelledAt: updated.cancelledAt, cancellationReason: reason, creditNoteId },
+        ipAddress: request.ip,
+      });
+
+      // Notifier la Direction financière quand un avoir a été émis (le CA et les
+      // droits d'auteur bougent) — décision opérateur 17/08/2026.
+      if (creditNoteId) {
+        const title = sale.isbn?.manuscript?.title ?? "ouvrage";
+        await notifyRole({
+          roleCode: "RESP_FINANCE",
+          type: "autre",
+          priority: "high",
+          title: "Vente au comptoir annulée — avoir émis",
+          body: `Annulation d'une vente au comptoir (${sale.quantity} × « ${title} »). Un avoir a été émis et les droits d'auteur contre-passés. Motif : ${reason}.`,
+          entityType: "invoice",
+          entityId: creditNoteId,
+        });
+      }
+
+      return reply.send({
+        id: updated.id,
+        cancelled_at: updated.cancelledAt,
+        cancellation_reason: updated.cancellationReason,
+        credit_note_id: creditNoteId,
+      });
+    } catch (err) {
+      if (err instanceof PeriodClosedError) {
+        return reply.code(409).send({
+          code: "accounting_period_closed",
+          message: `Vente du ${sale.soldAt.toISOString().slice(0, 10)} : le mois comptable ${err.periodKey} est clôturé, l'annulation n'est plus possible. Contactez la Direction financière.`,
+        });
       }
       throw err;
     }

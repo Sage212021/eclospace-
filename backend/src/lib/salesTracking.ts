@@ -80,7 +80,9 @@ export async function salesByBook(opts: { from?: Date; to?: Date; granularity: G
       select: { isbnId: true, quantity: true, movedAt: true, isbn: { select: { isbn13: true, manuscript: { select: { title: true } } } } },
     }),
     prisma.posSale.findMany({
-      where: dateWhere("soldAt", from, to),
+      // Ventes annulées exclues du rapprochement Sortis/Vendus (elles ne sont
+      // plus des ventes ; le stock, lui, reste piloté par les mouvements magasin).
+      where: { ...dateWhere("soldAt", from, to), cancelledAt: null },
       select: { isbnId: true, quantity: true, unitPrice: true, soldAt: true, isbn: { select: { isbn13: true, manuscript: { select: { title: true } } } } },
     }),
     prisma.salesOrder.findMany({

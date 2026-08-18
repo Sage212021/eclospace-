@@ -93,7 +93,8 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
     for (const status of ["legal_review", "direction_approval", "awaiting_signature", "active"]) {
       await app.inject({ method: "PATCH", url: `/api/v1/contracts/${contract.id}/status`, headers: { cookie: adminCookie }, payload: { status } });
     }
-    await validate(manuscript.id, "CONTRACTUALISATION");
+    // D-010 : après la décision, on passe à la PLANIFICATION ; la
+    // contractualisation intervient plus tard (juste après la validation du BAT).
     await validate(manuscript.id, "PLANIFICATION");
     await validate(manuscript.id, "CORRECTION");
 
@@ -232,7 +233,13 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
 
     const validatedBat = await validate(manuscript.id, "VALIDATION_BAT");
     expect(validatedBat.statusCode).toBe(200);
-    expect(validatedBat.json().status).toBe("IMPRESSION");
+    // D-010 : la validation du BAT mène désormais à la CONTRACTUALISATION, qui
+    // précède l'impression.
+    expect(validatedBat.json().status).toBe("CONTRACTUALISATION");
+
+    const validatedContract = await validate(manuscript.id, "CONTRACTUALISATION");
+    expect(validatedContract.statusCode).toBe(200);
+    expect(validatedContract.json().status).toBe("IMPRESSION");
 
     // Ch. 15 §15.4 : IMPRESSION bloquée tant qu'aucun bon de commande n'est transmis.
     const blockedImpression = await validate(manuscript.id, "IMPRESSION");

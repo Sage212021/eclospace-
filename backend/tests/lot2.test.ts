@@ -99,12 +99,9 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       });
     }
 
-    await app.inject({
-      method: "POST",
-      url: `/api/v1/manuscripts/${manuscript.id}/steps/CONTRACTUALISATION/validate`,
-      headers: { cookie: adminCookie },
-      payload: {},
-    });
+    // D-010 : après la décision éditoriale, le manuscrit est à la PLANIFICATION.
+    // On la valide pour l'amener à la CORRECTION (la contractualisation
+    // n'intervient plus ici, mais après la validation du BAT).
     await app.inject({
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/steps/PLANIFICATION/validate`,
@@ -209,7 +206,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
     expect(response.statusCode).toBe(403);
   });
 
-  it("bloque le passage en production sans contrat d'édition actif (Ch. 9 §9.12)", async () => {
+  it("laisse la production démarrer sans contrat d'édition (D-010 : contrat après le BAT)", async () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/v1/manuscripts",
@@ -252,14 +249,20 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       payload: { decision: "acceptation", motivation: "OK" },
     });
 
+    // Après la décision éditoriale, le manuscrit est à la PLANIFICATION (D-010).
+    const afterDecision = await prisma.manuscript.findUniqueOrThrow({ where: { id: manuscript.id }, include: { status: true } });
+    expect(afterDecision.status.code).toBe("PLANIFICATION");
+
+    // La production démarre SANS contrat : valider la planification réussit et
+    // mène à la correction (l'ancien verrou « contrat requis » est supprimé).
     const attempt = await app.inject({
       method: "POST",
-      url: `/api/v1/manuscripts/${manuscript.id}/steps/CONTRACTUALISATION/validate`,
+      url: `/api/v1/manuscripts/${manuscript.id}/steps/PLANIFICATION/validate`,
       headers: { cookie: adminCookie },
       payload: {},
     });
-    expect(attempt.statusCode).toBe(409);
-    expect(attempt.json().code).toBe("contract_required");
+    expect(attempt.statusCode).toBe(200);
+    expect(attempt.json().status).toBe("CORRECTION");
   });
 
   it("saute l'étape EXPERTISE quand elle n'est pas requise (régression Ch. 4 §4.3)", async () => {

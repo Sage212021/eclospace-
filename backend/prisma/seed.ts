@@ -83,19 +83,25 @@ const workflowStatuses: {
   { code: "VERIF_ADMIN", label: "Vérification administrative", stepOrder: 2, departmentCode: "SECR" },
   { code: "COMITE_LECTURE", label: "Comité de lecture", stepOrder: 3, departmentCode: "COMLEC" },
   { code: "DECISION_EDITORIALE", label: "Décision éditoriale", stepOrder: 4, departmentCode: "DIRED" },
-  { code: "CONTRACTUALISATION", label: "Contractualisation", stepOrder: 5, departmentCode: "JURID" },
-  { code: "PLANIFICATION", label: "Planification du projet", stepOrder: 6, departmentCode: "DIRED" },
-  { code: "CORRECTION", label: "Correction éditoriale", stepOrder: 7, departmentCode: "CORR" },
-  { code: "EXPERTISE", label: "Expertise scientifique", stepOrder: 8, departmentCode: "EXPERT", isConditional: true },
-  { code: "REECRITURE", label: "Réécriture éditoriale", stepOrder: 9, departmentCode: "CORR", isConditional: true },
-  { code: "MISE_EN_PAGE", label: "Mise en page", stepOrder: 10, departmentCode: "MAQ" },
-  { code: "INFOGRAPHIE", label: "Infographie", stepOrder: 11, departmentCode: "INFOG" },
+  // Décision opérateur (18/08/2026, D-010) : la CONTRACTUALISATION est déplacée
+  // juste APRÈS la « Validation du BAT » (elle était à l'étape 5). L'auteur
+  // valide d'abord le bon à tirer, puis le contrat est signé — enchaînement
+  // « Validation BAT → Contractualisation → Impression ». Dérogation assumée au
+  // Ch. 9 §9.12 (qui plaçait le contrat avant la production) : cf. registre des
+  // décisions et docs/JOURNAL_TECHNIQUE.md.
+  { code: "PLANIFICATION", label: "Planification du projet", stepOrder: 5, departmentCode: "DIRED" },
+  { code: "CORRECTION", label: "Correction éditoriale", stepOrder: 6, departmentCode: "CORR" },
+  { code: "EXPERTISE", label: "Expertise scientifique", stepOrder: 7, departmentCode: "EXPERT", isConditional: true },
+  { code: "REECRITURE", label: "Réécriture éditoriale", stepOrder: 8, departmentCode: "CORR", isConditional: true },
+  { code: "MISE_EN_PAGE", label: "Mise en page", stepOrder: 9, departmentCode: "MAQ" },
+  { code: "INFOGRAPHIE", label: "Infographie", stepOrder: 10, departmentCode: "INFOG" },
   // Ordre corrigé (Lot 3) par rapport au Lot 1 : Ch. 13 §13.9 et Ch. 14 §14.2
   // exigent tous deux que la complétude ISBN/dépôt légal/métadonnées soit
   // vérifiée AVANT la constitution du dossier de BAT — l'ordre initial du
   // Lot 1 (BAT avant attribution des références) contredisait ce texte.
-  { code: "ATTRIBUTION_REFERENCES", label: "Attribution des références", stepOrder: 12, departmentCode: "SECR" },
-  { code: "VALIDATION_BAT", label: "Validation du BAT", stepOrder: 13, departmentCode: "CQ" },
+  { code: "ATTRIBUTION_REFERENCES", label: "Attribution des références", stepOrder: 11, departmentCode: "SECR" },
+  { code: "VALIDATION_BAT", label: "Validation du BAT", stepOrder: 12, departmentCode: "CQ" },
+  { code: "CONTRACTUALISATION", label: "Contractualisation", stepOrder: 13, departmentCode: "JURID" },
   { code: "IMPRESSION", label: "Impression", stepOrder: 14, departmentCode: "IMPR" },
   { code: "CONTROLE_QUALITE_IMPRESSION", label: "Contrôle qualité (exemplaires imprimés)", stepOrder: 15, departmentCode: "CQ" },
   { code: "ENTREE_STOCK", label: "Entrée en stock", stepOrder: 16, departmentCode: "STOCK" },

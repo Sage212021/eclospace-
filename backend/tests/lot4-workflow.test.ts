@@ -98,7 +98,8 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
     for (const status of ["legal_review", "direction_approval", "awaiting_signature", "active"]) {
       await app.inject({ method: "PATCH", url: `/api/v1/contracts/${contract.id}/status`, headers: { cookie: adminCookie }, payload: { status } });
     }
-    await validate(manuscript.id, "CONTRACTUALISATION");
+    // Depuis D-010, la décision éditoriale mène à la PLANIFICATION ; la
+    // contractualisation est franchie plus tard, juste après la validation du BAT.
     await validate(manuscript.id, "PLANIFICATION");
     await validate(manuscript.id, "CORRECTION");
 
@@ -169,6 +170,8 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
     await app.inject({ method: "PATCH", url: `/api/v1/bat/${bat.id}/status`, headers: { cookie: adminCookie }, payload: { status: "awaiting_signature" } });
     await app.inject({ method: "POST", url: `/api/v1/bat/${bat.id}/sign`, headers: { cookie: adminCookie }, payload: {} });
     await validate(manuscript.id, "VALIDATION_BAT");
+    // D-010 : la contractualisation suit désormais la validation du BAT.
+    await validate(manuscript.id, "CONTRACTUALISATION");
 
     const quoteResponse = await app.inject({
       method: "POST",

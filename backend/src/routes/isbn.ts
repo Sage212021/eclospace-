@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { IsbnFormat, LegalDepositStatus, MetadataExportFormat, ContractStatus } from "@prisma/client";
+import { IsbnFormat, LegalDepositStatus, MetadataExportFormat } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -163,15 +163,11 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
       }
 
-      const activeContract = await prisma.contract.findFirst({
-        where: { manuscriptId: id, status: ContractStatus.active },
-      });
-      if (!activeContract) {
-        return reply.code(409).send({
-          code: "contract_required",
-          message: "Aucun contrat actif : l'ISBN ne peut pas être attribué (Ch. 13 §13.3).",
-        });
-      }
+      // Décision opérateur D-010 (18/08/2026) : la contractualisation a été
+      // déplacée APRÈS la validation du BAT. L'attribution des références (ISBN)
+      // se fait à l'étape 11, donc AVANT le contrat — l'ancien blocage « aucun
+      // contrat actif : l'ISBN ne peut pas être attribué » (Ch. 13 §13.3) est
+      // retiré en conséquence, cohérent avec le retrait du verrou de production.
 
       const existingForFormat = await prisma.isbn.findFirst({
         where: { manuscriptId: id, format: parsed.data.format },

@@ -115,7 +115,15 @@ describe("ISBN, dépôt légal et métadonnées (Lot 3)", () => {
     expect(duplicate.json().code).toBe("isbn_already_assigned");
   });
 
-  it("refuse l'attribution d'un ISBN sans contrat actif (Ch. 13 §13.3)", async () => {
+  it("attribue un ISBN sans contrat actif (D-010 : contrat après le BAT)", async () => {
+    // Depuis D-010, l'attribution des références (ISBN) précède la
+    // contractualisation : elle ne requiert donc plus de contrat actif.
+    const pool = await app.inject({
+      method: "POST",
+      url: "/api/v1/isbn-pools",
+      headers: { cookie: adminCookie },
+      payload: { prefix: uniqueIsbnPrefix(1), digit_width: 1, range_start: 0, range_end: 9 },
+    });
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/v1/manuscripts",
@@ -133,10 +141,10 @@ describe("ISBN, dépôt légal et métadonnées (Lot 3)", () => {
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/isbn`,
       headers: { cookie: adminCookie },
-      payload: { format: "print" },
+      payload: { format: "print", pool_id: pool.json().id },
     });
-    expect(attribution.statusCode).toBe(409);
-    expect(attribution.json().code).toBe("contract_required");
+    expect(attribution.statusCode).toBe(201);
+    expect(attribution.json().manuscriptId).toBe(manuscript.id);
   });
 
   it("ne réutilise jamais un ISBN attribué même si le titre est ensuite abandonné (Ch. 13 §13.2)", async () => {

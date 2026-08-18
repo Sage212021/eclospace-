@@ -648,8 +648,11 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
           });
 
           // Ch. 4 §4.3 étape 4 : un refus clôt le workflow (archivage direct) ;
-          // une acceptation avance vers la contractualisation (étape 5, Lot 2).
-          const nextCode = parsed.data.decision === "refus" ? "ARCHIVAGE" : "CONTRACTUALISATION";
+          // une acceptation avance vers la PLANIFICATION du projet (étape 5).
+          // Depuis D-010 (18/08/2026), la contractualisation n'est plus l'étape
+          // qui suit la décision : elle a été déplacée juste après la validation
+          // du BAT. La production démarre donc sur la planification.
+          const nextCode = parsed.data.decision === "refus" ? "ARCHIVAGE" : "PLANIFICATION";
           const nextStatus = await tx.workflowStatus.findUniqueOrThrow({ where: { code: nextCode } });
           await tx.manuscript.update({ where: { id }, data: { statusId: nextStatus.id, updatedBy: request.user!.id } });
           await tx.stepTransition.create({

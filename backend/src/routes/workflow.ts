@@ -101,7 +101,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { observations, outcome, override_justification, requires_rewrite } = parsed.data;
+      const { observations, outcome, requires_rewrite } = parsed.data;
       const now = new Date();
 
       // Vérification administrative : la fiche de l'auteur doit être suffisamment
@@ -123,36 +123,12 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         }
       }
 
-      // Ch. 9 §9.12 : un ouvrage ne passe en production (planification) que
-      // si son contrat d'édition est actif, sauf dérogation motivée de la
-      // Direction générale.
-      if (targetStatus.code === "CONTRACTUALISATION") {
-        const activeEditionContract = await prisma.contract.findFirst({
-          where: { manuscriptId: id, type: { in: ["edition", "coedition"] }, status: "active", deletedAt: null },
-        });
-        if (!activeEditionContract) {
-          if (!override_justification) {
-            return reply.code(409).send({
-              code: "contract_required",
-              message: "Aucun contrat d'édition actif pour ce manuscrit. La production ne peut pas démarrer sans dérogation motivée de la Direction générale.",
-            });
-          }
-          if (!request.user!.permissions.has("manuscripts:administration")) {
-            return reply.code(403).send({
-              code: "forbidden",
-              message: "Seule la Direction générale peut accorder une dérogation à cette règle.",
-            });
-          }
-          await writeAuditLog({
-            userId: request.user!.id,
-            action: "status_change",
-            entityType: "manuscript",
-            entityId: id,
-            newValues: { derogation: "contrat_absent", justification: override_justification },
-            ipAddress: request.ip,
-          });
-        }
-      }
+      // Décision opérateur D-010 (18/08/2026) : la contractualisation a été
+      // déplacée APRÈS la validation du BAT. La production (planification,
+      // correction, mise en page, ISBN, BAT) démarre donc désormais SANS contrat
+      // d'édition actif — l'ancien verrou « pas de production sans contrat »
+      // (Ch. 9 §9.12) est retiré en conséquence. Le contrat est signé une fois le
+      // BAT validé par l'auteur, à l'étape Contractualisation, avant l'impression.
 
       // Ch. 10 §10.7 : un point bloquant non levé empêche la validation de
       // l'étape de correction.

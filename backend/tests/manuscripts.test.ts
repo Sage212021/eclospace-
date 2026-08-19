@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { createUserWithRole, extractSessionCookie } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
@@ -49,7 +49,9 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
       },
     });
     expect(response.statusCode).toBe(201);
-    return response.json();
+    const manuscript = response.json();
+    await seedManuscriptSourceFile(manuscript.id);
+    return manuscript;
   }
 
   it("génère un numéro de manuscrit et valide automatiquement l'étape 1 (réception)", async () => {

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, uniqueIsbnPrefix } from "./helpers.js";
+import { extractSessionCookie, uniqueIsbnPrefix, seedManuscriptSourceFile } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
@@ -59,6 +59,7 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
       payload: { title, genre_id: genreId, language: "fr", owner_id: adminId, evaluation_fee_choice: "sans_frais", author: { first_name: "Auteur", last_name: title, email: "auteur@example.com", id_type: "CNI", id_number: "100200300" } },
     });
     const manuscript = createResponse.json();
+    await seedManuscriptSourceFile(manuscript.id);
 
     await validate(manuscript.id, "VERIF_ADMIN");
     const assignResponse = await app.inject({

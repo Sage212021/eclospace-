@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { storeFile } from "../src/lib/storage.js";
-import { createUserWithRole, extractSessionCookie } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile } from "./helpers.js";
 import { buildDocx } from "./docxFixture.js";
 import type { FastifyInstance } from "fastify";
 
@@ -49,6 +49,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       },
     });
     const manuscript = createResponse.json();
+    await seedManuscriptSourceFile(manuscript.id);
 
     await app.inject({
       method: "POST",
@@ -221,6 +222,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       },
     });
     const manuscript = createResponse.json();
+    await seedManuscriptSourceFile(manuscript.id);
     await app.inject({
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/steps/VERIF_ADMIN/validate`,

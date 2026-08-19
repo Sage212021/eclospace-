@@ -81,16 +81,28 @@ export default async function chatRoutes(fastify: FastifyInstance) {
   // Mes conversations : correspondant, dernier message, non-lus, date.
   fastify.get("/api/v1/chat/conversations", { preHandler: requireAuth }, async (request, reply) => {
     const me = request.user!.id;
-    const convs = await prisma.conversation.findMany({
+    const allConvs = await prisma.conversation.findMany({
       where: { OR: [{ userAId: me }, { userBId: me }] },
       orderBy: { lastMessageAt: "desc" },
+    });
+    if (allConvs.length === 0) return reply.send([]);
+
+    // Marqueurs par utilisateur (lecture + « effacé de mon côté »).
+    const myReads = await prisma.conversationRead.findMany({ where: { userId: me, conversationId: { in: allConvs.map((c) => c.id) } } });
+    const clearedAt = new Map(myReads.map((r) => [r.conversationId, r.clearedAt]));
+    // Une conversation effacée de mon côté reste masquée tant qu'aucun message
+    // plus récent que l'effacement n'est arrivé.
+    const convs = allConvs.filter((c) => {
+      const cl = clearedAt.get(c.id);
+      if (!cl) return true;
+      return c.lastMessageAt != null && c.lastMessageAt > cl;
     });
     if (convs.length === 0) return reply.send([]);
 
     const otherIds = convs.map((c) => otherOf(c, me));
     const [users, reads, lastMsgs] = await Promise.all([
       prisma.user.findMany({ where: { id: { in: otherIds } }, select: { id: true, username: true } }),
-      prisma.conversationRead.findMany({ where: { userId: me, conversationId: { in: convs.map((c) => c.id) } } }),
+      Promise.resolve(myReads.filter((r) => convs.some((c) => c.id === r.conversationId))),
       prisma.chatMessage.findMany({
         where: { conversationId: { in: convs.map((c) => c.id) } },
         orderBy: { createdAt: "desc" },
@@ -177,7 +189,14 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       await writeAuditLog({ userId: me, action: "view_sensitive", entityType: "conversation_supervision", entityId: id, newValues: { participants: [conv.userAId, conv.userBId] }, ipAddress: request.ip });
     }
 
-    const msgs = await prisma.chatMessage.findMany({ where: { conversationId: id }, orderBy: { createdAt: "asc" }, take: 500 });
+    // « Effacé de mon côté » : un participant ne voit que les messages postérieurs
+    // à son effacement. La Direction en supervision voit tout l'historique.
+    let clearedFilter: { createdAt: { gt: Date } } | Record<string, never> = {};
+    if (participant) {
+      const myRead = await prisma.conversationRead.findUnique({ where: { conversationId_userId: { conversationId: id, userId: me } } });
+      if (myRead?.clearedAt) clearedFilter = { createdAt: { gt: myRead.clearedAt } };
+    }
+    const msgs = await prisma.chatMessage.findMany({ where: { conversationId: id, ...clearedFilter }, orderBy: { createdAt: "asc" }, take: 500 });
     const senderIds = [...new Set(msgs.map((m) => m.senderId))];
     const senders = await prisma.user.findMany({ where: { id: { in: senderIds } }, select: { id: true, username: true } });
     const nameById = new Map(senders.map((s) => [s.id, s.username]));
@@ -280,6 +299,48 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     // Prévient l'expéditeur en temps réel que ses messages sont lus (2 coches or).
     emitToUsers([otherOf(conv, me)], "chat:read", { conversationId: id, readerId: me, readAt });
     return reply.send({ ok: true });
+  });
+
+  // « Supprimer la discussion ». Deux portées (choix au moment de supprimer) :
+  //  • scope=me  → efface la conversation de MON côté (marqueur clearedAt) ;
+  //    l'autre garde sa copie ; elle réapparaît si un message plus récent arrive.
+  //  • scope=all → supprime logiquement TOUS les messages (pour les deux) et
+  //    efface la conversation des deux côtés. Rien n'est effacé physiquement
+  //    (suppression logique + journal d'audit).
+  fastify.delete("/api/v1/chat/conversations/:id", { preHandler: requireAuth }, async (request, reply) => {
+    const me = request.user!.id;
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ scope: z.enum(["me", "all"]).default("me") }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Portée invalide." });
+    const conv = await prisma.conversation.findUnique({ where: { id } });
+    if (!conv || !isParticipant(conv, me)) return reply.code(404).send({ code: "not_found", message: "Conversation introuvable." });
+    const now = new Date();
+    const other = otherOf(conv, me);
+
+    if (parsed.data.scope === "all") {
+      await prisma.$transaction(async (tx) => {
+        await tx.chatMessage.updateMany({ where: { conversationId: id, deletedAt: null }, data: { deletedAt: now, deletedBy: me } });
+        for (const uid of [me, other]) {
+          await tx.conversationRead.upsert({
+            where: { conversationId_userId: { conversationId: id, userId: uid } },
+            create: { conversationId: id, userId: uid, lastReadAt: now, clearedAt: now },
+            update: { lastReadAt: now, clearedAt: now },
+          });
+        }
+      });
+      await writeAuditLog({ userId: me, action: "update", entityType: "conversation", entityId: id, newValues: { deleted: "all", participants: [conv.userAId, conv.userBId] }, ipAddress: request.ip });
+      // Le correspondant retire la discussion de sa liste en temps réel.
+      emitToUsers([other], "chat:conversation:cleared", { conversationId: id });
+      return reply.send({ ok: true, scope: "all" });
+    }
+
+    // scope=me : effacement de mon seul côté (réversible si nouveau message).
+    await prisma.conversationRead.upsert({
+      where: { conversationId_userId: { conversationId: id, userId: me } },
+      create: { conversationId: id, userId: me, lastReadAt: now, clearedAt: now },
+      update: { lastReadAt: now, clearedAt: now },
+    });
+    return reply.send({ ok: true, scope: "me" });
   });
 
   // Suppression logique de son propre message.

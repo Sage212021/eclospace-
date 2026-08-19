@@ -2859,6 +2859,7 @@ export interface Employee {
   maritalStatus: string | null;
   childrenCount: number | null;
   phone: string | null;
+  emergencyContact: string | null;
   leaveTakenDays: string | null;
   departureDate: string | null;
   leaveBalanceDays: string;
@@ -3158,6 +3159,7 @@ export function createEmployee(input: {
   marital_status?: string;
   children_count?: number;
   phone?: string;
+  emergency_contact?: string;
   leave_taken_days?: number;
   account?: { username: string; email: string; password: string; role_code: string };
   // Rattachement à un compte déjà ouvert par l'administrateur (exclusif avec account).
@@ -3166,7 +3168,7 @@ export function createEmployee(input: {
   return request<Employee>("/api/v1/employees", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateEmployee(id: string, input: Partial<{ first_name: string; last_name: string; hire_date: string | null; department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null; marital_status: string | null; children_count: number | null; phone: string | null; leave_taken_days: number | null }>) {
+export function updateEmployee(id: string, input: Partial<{ first_name: string; last_name: string; hire_date: string | null; department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null; marital_status: string | null; children_count: number | null; phone: string | null; emergency_contact: string | null; leave_taken_days: number | null }>) {
   return request<Employee>(`/api/v1/employees/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
@@ -4209,6 +4211,7 @@ export interface PayrollMonthLine {
   marital_status: string | null;
   children_count: number | null;
   phone: string | null;
+  emergency_contact: string | null;
   leave_taken: number | null;
   contract_type: string | null;
   category: string | null;
@@ -4863,6 +4866,14 @@ export function markConversationRead(conversationId: string) {
 }
 export function deleteChatMessage(messageId: string) {
   return request<{ ok: true }>(`/api/v1/chat/messages/${messageId}`, { method: "DELETE" });
+}
+// Supprimer une discussion entière : "me" = de mon côté seulement (réversible),
+// "all" = pour les deux correspondants (suppression logique des messages).
+export function deleteChatConversation(conversationId: string, scope: "me" | "all") {
+  return request<{ ok: true; scope: "me" | "all" }>(`/api/v1/chat/conversations/${conversationId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ scope }),
+  });
 }
 // Modifier le texte d'un message déjà envoyé.
 export function editChatMessage(messageId: string, body: string) {

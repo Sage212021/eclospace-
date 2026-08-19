@@ -19,6 +19,7 @@ export function useChatSocket(
   onRead?: (e: ChatReadEvent) => void,
   enabled = true,
   onUpdate?: (m: ChatMessage) => void,
+  onConversationCleared?: (e: { conversationId: string }) => void,
 ) {
   const handler = useRef(onMessage);
   handler.current = onMessage;
@@ -26,6 +27,8 @@ export function useChatSocket(
   readHandler.current = onRead;
   const updateHandler = useRef(onUpdate);
   updateHandler.current = onUpdate;
+  const clearedHandler = useRef(onConversationCleared);
+  clearedHandler.current = onConversationCleared;
 
   useEffect(() => {
     if (!enabled) return;
@@ -37,6 +40,8 @@ export function useChatSocket(
     socket.on("chat:read", (e: ChatReadEvent) => readHandler.current?.(e));
     // Message modifié / supprimé à distance : mise à jour en place du fil.
     socket.on("chat:message:update", (m: ChatMessage) => updateHandler.current?.(m));
+    // Discussion supprimée « pour tout le monde » par le correspondant.
+    socket.on("chat:conversation:cleared", (e: { conversationId: string }) => clearedHandler.current?.(e));
     return () => {
       socket.disconnect();
     };

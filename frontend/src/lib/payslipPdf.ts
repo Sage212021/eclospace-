@@ -265,6 +265,21 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   doc.setFillColor(...BEIGE);
   doc.rect(LEFT, y - 3.2, RIGHT - LEFT, 5.2, "F");
   intRow("TOTAL RETENUES INTERNES", p.total_retenues_internes, true);
+  // Rappel de la retenue d'absence : elle n'est PAS une retenue interne (elle a
+  // déjà réduit le salaire brut, avant impôt) — mais on la re-signale ici, là où
+  // le RH cherche les retenues du mois, pour éviter l'impression qu'elle a été
+  // oubliée. Montant informatif, volontairement NON additionné au total ci-dessus.
+  if (p.retenue_absence > 0) {
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(6.9);
+    doc.setTextColor(...MUTED);
+    doc.text(
+      `Rappel : retenue d'absence injustifiée −${money(p.retenue_absence)} déjà déduite du SALAIRE BRUT (avant impôt) — non recomptée ici.`,
+      LEFT,
+      y,
+    );
+    y += 4.4;
+  }
   y += 2;
 
   // ---- NET À PAYER (bandeau or) -------------------------------------------

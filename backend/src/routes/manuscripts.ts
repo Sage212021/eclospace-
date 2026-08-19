@@ -262,6 +262,22 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     }
     const body = parsed.data;
 
+    // Anti-doublon (demande opérateur 19/08/2026) : un manuscrit ne peut pas être
+    // enregistré deux fois sous un titre déjà utilisé par un ouvrage ACTIF —
+    // sauf si le premier a été totalement supprimé. Comparaison insensible à la
+    // casse et aux espaces de bord. Message explicite pointant l'existant.
+    const dupTitle = body.title.trim();
+    const existing = await prisma.manuscript.findFirst({
+      where: { deletedAt: null, title: { equals: dupTitle, mode: "insensitive" } },
+      select: { manuscriptNumber: true, status: { select: { label: true } } },
+    });
+    if (existing) {
+      return reply.code(409).send({
+        code: "duplicate_manuscript",
+        message: `Un manuscrit « ${dupTitle} » est déjà enregistré sous ${existing.manuscriptNumber} (étape : ${existing.status.label}). Reprenez cette fiche, ou supprimez-la d'abord si vous voulez la ré-enregistrer.`,
+      });
+    }
+
     const receptionStatus = await prisma.workflowStatus.findUnique({ where: { code: "RECEPTION" } });
     if (!receptionStatus) {
       return reply.code(500).send({ code: "referential_missing", message: "Statut RECEPTION absent du référentiel (seed manquant)." });

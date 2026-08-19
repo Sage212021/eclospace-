@@ -4864,6 +4864,14 @@ export function markConversationRead(conversationId: string) {
 export function deleteChatMessage(messageId: string) {
   return request<{ ok: true }>(`/api/v1/chat/messages/${messageId}`, { method: "DELETE" });
 }
+// Supprimer une discussion entière : "me" = de mon côté seulement (réversible),
+// "all" = pour les deux correspondants (suppression logique des messages).
+export function deleteChatConversation(conversationId: string, scope: "me" | "all") {
+  return request<{ ok: true; scope: "me" | "all" }>(`/api/v1/chat/conversations/${conversationId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ scope }),
+  });
+}
 // Modifier le texte d'un message déjà envoyé.
 export function editChatMessage(messageId: string, body: string) {
   return request<ChatMessage>(`/api/v1/chat/messages/${messageId}`, { method: "PATCH", body: JSON.stringify({ body }) });

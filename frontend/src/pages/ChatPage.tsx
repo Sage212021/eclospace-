@@ -8,6 +8,7 @@ import {
   sendChatMessageWithFile,
   markConversationRead,
   deleteChatMessage,
+  deleteChatConversation,
   editChatMessage,
   forwardChatMessage,
   chatFileUrl,
@@ -51,6 +52,8 @@ export function ChatPage() {
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [forwardFor, setForwardFor] = useState<ChatMessage | null>(null);
   const [infoFor, setInfoFor] = useState<ChatMessage | null>(null);
+  // Menu de la discussion (en-tête du fil) : effacer / supprimer la discussion.
+  const [convMenuOpen, setConvMenuOpen] = useState(false);
   // Affichage responsive : sous ce seuil (téléphone), une seule colonne à la
   // fois (liste OU fil). L'écouteur matchMedia suit aussi la rotation de l'écran.
   const [isMobile, setIsMobile] = useState(false);
@@ -123,6 +126,14 @@ export function ChatPage() {
     (m) => {
       if (m.conversation_id !== activeRef.current) return;
       setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, body: m.body, deleted: m.deleted, edited: m.edited, file: m.deleted ? null : x.file } : x)));
+    },
+    // Le correspondant a supprimé la discussion « pour tout le monde ».
+    (e) => {
+      setConversations((prev) => prev.filter((c) => c.id !== e.conversationId));
+      if (e.conversationId === activeRef.current) {
+        setActiveId(null);
+        setMessages([]);
+      }
     },
   );
 
@@ -224,6 +235,32 @@ export function ChatPage() {
     }
   }
 
+  // Supprimer la discussion entière : "me" (de mon côté) ou "all" (pour les deux).
+  async function deleteConversation(scope: "me" | "all") {
+    if (!activeId) return;
+    const convId = activeId;
+    setConvMenuOpen(false);
+    const ok = await confirm({
+      title: scope === "all" ? t("chat.conv_del_all_title", "Supprimer pour tout le monde") : t("chat.conv_del_me_title", "Effacer la discussion"),
+      message:
+        scope === "all"
+          ? t("chat.conv_del_all_confirm", "Supprimer cette discussion pour vous ET votre correspondant ? Tous les messages seront retirés des deux côtés (ils restent tracés, jamais effacés).")
+          : t("chat.conv_del_me_confirm", "Effacer cette discussion de votre côté ? Votre correspondant garde sa copie ; elle réapparaîtra si un nouveau message arrive."),
+      tone: "danger",
+      confirmLabel: t("chat.delete", "Supprimer"),
+    });
+    if (!ok) return;
+    try {
+      await deleteChatConversation(convId, scope);
+      setConversations((prev) => prev.filter((c) => c.id !== convId));
+      setActiveId(null);
+      setMessages([]);
+      setNotice(scope === "all" ? t("chat.conv_del_all_done", "Discussion supprimée pour les deux correspondants.") : t("chat.conv_del_me_done", "Discussion effacée de votre côté."));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+    }
+  }
+
   // Démarrer une réponse citée à un message.
   function startReply(m: ChatMessage) {
     setMenuFor(null);
@@ -320,7 +357,23 @@ export function ChatPage() {
                 {isMobile && (
                   <button onClick={() => setActiveId(null)} aria-label={t("chat.back", "Retour")} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 20, lineHeight: 1, color: "var(--eclosion-dark)", padding: 0 }}>←</button>
                 )}
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeName}</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{activeName}</span>
+                {/* Menu de la discussion : effacer / supprimer. */}
+                <span style={{ position: "relative" }}>
+                  <button
+                    onClick={() => setConvMenuOpen((v) => !v)}
+                    aria-label={t("chat.conv_actions", "Options de la discussion")}
+                    style={{ border: "none", background: "none", color: "var(--muted)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: "0 4px" }}
+                  >
+                    ⋯
+                  </button>
+                  {convMenuOpen && (
+                    <div style={{ position: "absolute", zIndex: 6, top: 26, right: 0, background: "#fff", border: "1px solid var(--line)", borderRadius: 8, boxShadow: "0 6px 20px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden", textAlign: "left", fontWeight: 400 }}>
+                      <MenuItem label={`🧹 ${t("chat.conv_del_me", "Effacer de mon côté")}`} onClick={() => deleteConversation("me")} />
+                      <MenuItem label={`🗑 ${t("chat.conv_del_all", "Supprimer pour tout le monde")}`} danger onClick={() => deleteConversation("all")} />
+                    </div>
+                  )}
+                </span>
               </div>
               <div ref={threadRef} style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
                 {messages.map((m) => (

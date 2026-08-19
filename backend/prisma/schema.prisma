@@ -1243,6 +1243,10 @@ model ConversationRead {
   userId         String       @map("user_id")
   user           User         @relation(fields: [userId], references: [id])
   lastReadAt     DateTime     @default(now()) @map("last_read_at")
+  // « Effacer la discussion de mon côté » : la conversation disparaît de MA
+  // liste et son fil est vidé pour moi jusqu'à cette date ; l'autre participant
+  // garde sa copie. Elle réapparaît dès qu'un message plus récent arrive.
+  clearedAt      DateTime?    @map("cleared_at")
 
   @@id([conversationId, userId])
   @@map("conversation_reads")

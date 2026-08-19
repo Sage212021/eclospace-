@@ -31,13 +31,16 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
     await prisma.$disconnect();
   });
 
+  // Titres rendus uniques : la base de test est partagée et l'enregistrement
+  // refuse désormais un titre en doublon (règle métier anti-doublon).
+  const uniq = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   async function createManuscript(title: string) {
     const response = await app.inject({
       method: "POST",
       url: "/api/v1/manuscripts",
       headers: { cookie: adminCookie },
       payload: {
-        title,
+        title: `${title} ${uniq()}`,
         genre_id: genreId,
         language: "fr",
         owner_id: adminId,
@@ -63,6 +66,39 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
     expect(steps[0].validated_at).not.toBeNull();
     expect(steps[1].status_code).toBe("VERIF_ADMIN");
     expect(steps[1].validated_at).toBeNull();
+  });
+
+  it("refuse un doublon (même titre) tant que le premier n'est pas supprimé", async () => {
+    const base = `Rêver en Afrique ${uniq()}`;
+    const create = await app.inject({
+      method: "POST", url: "/api/v1/manuscripts", headers: { cookie: adminCookie },
+      payload: { title: base, genre_id: genreId, language: "fr", owner_id: adminId, author: { first_name: "Auteur", last_name: "Test" } },
+    });
+    expect(create.statusCode).toBe(201);
+    const first = create.json();
+
+    // Même titre (casse/espaces différents) → refus 409 pointant l'existant.
+    const dup = await app.inject({
+      method: "POST",
+      url: "/api/v1/manuscripts",
+      headers: { cookie: adminCookie },
+      payload: { title: `  ${base.toUpperCase()} `, genre_id: genreId, language: "fr", owner_id: adminId, author: { first_name: "Autre", last_name: "Auteur" } },
+    });
+    expect(dup.statusCode).toBe(409);
+    expect(dup.json().code).toBe("duplicate_manuscript");
+    expect(dup.json().message).toContain(first.manuscriptNumber);
+
+    // Après suppression (logique) du premier, le titre est de nouveau disponible.
+    const del = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${first.id}/delete`, headers: { cookie: adminCookie }, payload: {} });
+    expect(del.statusCode).toBe(200);
+    const again = await app.inject({
+      method: "POST",
+      url: "/api/v1/manuscripts",
+      headers: { cookie: adminCookie },
+      payload: { title: base, genre_id: genreId, language: "fr", owner_id: adminId, author: { first_name: "Auteur", last_name: "Test" } },
+    });
+    expect(again.statusCode).toBe(201);
+    expect(again.json().manuscriptNumber).not.toBe(first.manuscriptNumber);
   });
 
   it("interdit de sauter une étape ou de valider hors séquence", async () => {
@@ -198,7 +234,7 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
       url: "/api/v1/manuscripts/import",
       headers: { cookie: adminCookie },
       payload: {
-        title: "Ouvrage historique",
+        title: `Ouvrage historique ${uniq()}`,
         genre_id: genreId,
         language: "fr",
         owner_id: adminId,
@@ -233,7 +269,7 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
       url: "/api/v1/manuscripts/import",
       headers: { cookie: adminCookie },
       payload: {
-        title: "Ouvrage du futur",
+        title: `Ouvrage du futur ${uniq()}`,
         genre_id: genreId,
         language: "fr",
         owner_id: adminId,

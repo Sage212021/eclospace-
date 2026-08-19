@@ -296,6 +296,30 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
       <div id="fiche-actions" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20, scrollMarginTop: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Étape courante : {manuscript.status.label}</div>
 
+        {/* Un manuscrit resté à « Réception » (donnée ancienne : la création
+            fait normalement passer directement à la vérification) : bouton pour
+            le débloquer vers la vérification administrative. */}
+        {manuscript.status.code === "RECEPTION" && canValidate && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <ActionButton
+              onClick={() =>
+                confirmThen(
+                  {
+                    title: "Valider la réception",
+                    message: "Confirmer la réception de ce manuscrit ?",
+                    detail: "Le manuscrit passera à la vérification administrative.",
+                    confirmLabel: "Réception confirmée",
+                  },
+                  () => validateStep(manuscript.id, "RECEPTION", { outcome: "conforme" }),
+                  "Réception confirmée : passage à la vérification administrative.",
+                )
+              }
+            >
+              Réception confirmée
+            </ActionButton>
+          </div>
+        )}
+
         {manuscript.status.code === "VERIF_ADMIN" && canValidate && (
           <div style={{ display: "flex", gap: 8 }}>
             <ActionButton

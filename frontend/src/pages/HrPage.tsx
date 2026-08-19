@@ -120,7 +120,7 @@ type HrModal =
       linkUserId?: string;
       linkUsername?: string;
     }
-  | { kind: "mobility"; employee: Employee; firstName: string; lastName: string; position: string; departmentId: string; managerId: string; hireDate: string; birthDate: string; maritalStatus: string; childrenCount: string; phone: string; emergencyContact: string; leaveTaken: string }
+  | { kind: "mobility"; employee: Employee; firstName: string; lastName: string; position: string; departmentId: string; managerId: string; hireDate: string; birthDate: string; maritalStatus: string; childrenCount: string; phone: string; emergencyContact: string; niu: string; leaveTaken: string }
   | { kind: "departure"; employee: Employee; date: string }
   | { kind: "view-confidential"; employee: Employee; baseSalary: string; notes: string }
   | { kind: "edit-confidential"; employee: Employee; baseSalary: string }
@@ -256,6 +256,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
         children_count: modal.childrenCount.trim() !== "" ? Math.max(Number(modal.childrenCount) || 0, 0) : null,
         phone: modal.phone.trim() || null,
         emergency_contact: modal.emergencyContact.trim() || null,
+        niu: modal.niu.trim() || null,
         leave_taken_days: modal.leaveTaken.trim() !== "" ? Math.max(Number(modal.leaveTaken) || 0, 0) : null,
       });
       setMessage(t("hr.msg.file_updated", "Fiche du collaborateur mise à jour."));
@@ -425,7 +426,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                   <StandardActionBar onPrint={() => printEmployeeFiche(employee)} />
                   <Button variant="view" size="sm" onClick={() => setContractsFor(employee)}>{t("hr.contracts", "Contrats")}</Button>
                   <Button variant="view" size="sm" onClick={() => setEvalFor(employee)}>{t("hr.evaluation", "Évaluation")}</Button>
-                  {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, firstName: employee.firstName, lastName: employee.lastName, position: employee.position ?? "", departmentId: employee.department?.id ?? "", managerId: employee.manager?.id ?? "", hireDate: employee.hireDate ? employee.hireDate.slice(0, 10) : "", birthDate: employee.birthDate ? employee.birthDate.slice(0, 10) : "", maritalStatus: employee.maritalStatus ?? "", childrenCount: employee.childrenCount != null ? String(employee.childrenCount) : "", phone: employee.phone ?? "", emergencyContact: employee.emergencyContact ?? "", leaveTaken: employee.leaveTakenDays != null ? String(employee.leaveTakenDays) : "" })}>{t("hr.edit_file", "Modifier la fiche")}</Button>}
+                  {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, firstName: employee.firstName, lastName: employee.lastName, position: employee.position ?? "", departmentId: employee.department?.id ?? "", managerId: employee.manager?.id ?? "", hireDate: employee.hireDate ? employee.hireDate.slice(0, 10) : "", birthDate: employee.birthDate ? employee.birthDate.slice(0, 10) : "", maritalStatus: employee.maritalStatus ?? "", childrenCount: employee.childrenCount != null ? String(employee.childrenCount) : "", phone: employee.phone ?? "", emergencyContact: employee.emergencyContact ?? "", niu: employee.niu ?? "", leaveTaken: employee.leaveTakenDays != null ? String(employee.leaveTakenDays) : "" })}>{t("hr.edit_file", "Modifier la fiche")}</Button>}
                   {canAdminister && !employee.departureDate && <Button variant="view" size="sm" onClick={() => setModal({ kind: "departure", employee, date: new Date().toISOString().slice(0, 10) })}>{t("hr.departure_btn", "Départ")}</Button>}
                   {canAdminister && employee.user?.status === "active" && <Button variant="danger" size="sm" onClick={() => handleSuspend(employee)}>{t("hr.suspend", "Suspendre")}</Button>}
                   {canAdminister && employee.user?.status === "suspended" && <Button variant="add" size="sm" onClick={() => handleReinstate(employee)}>{t("hr.reinstate", "Réactiver")}</Button>}
@@ -706,6 +707,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Field label={t("hr.phone", "Téléphone")}><input value={modal.phone} onChange={(e) => setModal({ ...modal, phone: e.target.value })} /></Field>
             <Field label={t("hr.emergency_contact", "Numéro d'urgence (personne à prévenir)")}><input value={modal.emergencyContact} onChange={(e) => setModal({ ...modal, emergencyContact: e.target.value })} placeholder={t("hr.emergency_hint", "Ex. Nom + téléphone")} /></Field>
+            <Field label={t("hr.niu", "NIU (identifiant fiscal)")}><input value={modal.niu} onChange={(e) => setModal({ ...modal, niu: e.target.value })} placeholder={t("hr.niu_hint", "Numéro d'identifiant unique")} /></Field>
             <Field label={t("hr.leave_taken", "Jours de congés pris (cumul)")}><input type="number" min={0} step={0.5} value={modal.leaveTaken} onChange={(e) => setModal({ ...modal, leaveTaken: e.target.value })} /></Field>
           </div>
         </Modal>

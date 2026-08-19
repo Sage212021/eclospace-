@@ -35,7 +35,7 @@ const EMPLOYER = {
   lines: [
     "Carrefour INSTIC – Nouvelle route Kondengui, Yaoundé, Cameroun",
     "B.P. 33071 Yaoundé · Tél. : (+237) 698 03 15 02 / 678 70 40 86",
-    "eclosionedition@gmail.com · https://eclosioneditions.cm",
+    "eclosionedition@gmail.com · https://www.eclosion.cm",
     "RCCM : RC/YAO/2019/B/144 · NIU : M021912751174Y · N° Affil. CNPS : C-YAO-2019-0144",
   ],
 };

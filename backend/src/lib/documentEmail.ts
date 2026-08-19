@@ -13,7 +13,7 @@ const HOUSE = {
   poBox: "B.P. 33071 Yaoundé",
   phone: "(+237) 654 366 663 / 698 03 15 02 / 678 70 40 86",
   email: "eclosionedition@gmail.com",
-  website: "https://eclosioneditions.cm",
+  website: "https://www.eclosion.cm",
   rccm: "RC/YAO/2019/B/144",
   niu: "M021912751174Y",
   cnps: "C-YAO-2019-0144",

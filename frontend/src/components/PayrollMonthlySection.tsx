@@ -282,6 +282,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       situation_familiale: l.marital_status,
       children_count: l.children_count,
       phone: l.phone,
+      emergency_contact: l.emergency_contact,
       extra_lines: l.extra_lines ?? [],
       rates: month?.rates ?? null,
       // Détail des retenues internes (la sanction est comptée avec « autres »,

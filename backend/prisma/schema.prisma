@@ -74,6 +74,8 @@ model Employee {
   maritalStatus    String?        @map("marital_status")
   childrenCount    Int?           @map("children_count")
   phone            String?
+  // Personne / numéro à prévenir en cas d'urgence — figure sur le bulletin de paie.
+  emergencyContact String?        @map("emergency_contact")
   leaveTakenDays   Decimal?       @map("leave_taken_days") @db.Decimal(5, 1)
 
   createdAt DateTime  @default(now()) @map("created_at")

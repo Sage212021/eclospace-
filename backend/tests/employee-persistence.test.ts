@@ -90,6 +90,20 @@ describe("persistance de la fiche employé (nom / date d'embauche)", () => {
     expect(body.childrenCount).toBe(3);
   });
 
+  it("numéro d'urgence (bulletin) est persisté et renvoyé", async () => {
+    const id = await createEmployee();
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/employees/${id}`,
+      headers: { cookie },
+      payload: { emergency_contact: "Awa Bello — 690 00 00 00" },
+    });
+    expect(patch.statusCode).toBe(200);
+
+    const got = await app.inject({ method: "GET", url: `/api/v1/employees/${id}`, headers: { cookie } });
+    expect(got.json().emergencyContact).toBe("Awa Bello — 690 00 00 00");
+  });
+
   it("une mise à jour partielle (poste seul) ne remet pas le nom à zéro", async () => {
     const id = await createEmployee();
 

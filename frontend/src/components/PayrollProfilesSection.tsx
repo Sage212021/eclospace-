@@ -289,6 +289,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
     situation_familiale: employee?.maritalStatus ?? null,
     children_count: employee?.childrenCount ?? null,
     phone: employee?.phone ?? null,
+    emergency_contact: employee?.emergencyContact ?? null,
     leave_taken: employee?.leaveTakenDays != null ? Number(employee.leaveTakenDays) : null,
     category: form.category || null,
     email: form.email || null,

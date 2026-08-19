@@ -19,6 +19,7 @@ const employeeSchema = z.object({
   marital_status: z.string().max(60).optional(),
   children_count: z.number().int().min(0).max(30).optional(),
   phone: z.string().max(40).optional(),
+  emergency_contact: z.string().max(120).optional(),
   leave_taken_days: z.number().min(0).max(400).optional(),
   // Arrivée (Ch. 19 §19.3) : création du compte utilisateur avec le rôle du
   // poste, dans le même mouvement que le dossier — champs optionnels, aucun
@@ -52,6 +53,7 @@ const employeeUpdateSchema = z.object({
   marital_status: z.string().max(60).nullable().optional(),
   children_count: z.number().int().min(0).max(30).nullable().optional(),
   phone: z.string().max(40).nullable().optional(),
+  emergency_contact: z.string().max(120).nullable().optional(),
   leave_taken_days: z.number().min(0).max(400).nullable().optional(),
 });
 
@@ -170,6 +172,7 @@ export default async function hrRoutes(fastify: FastifyInstance) {
           maritalStatus: body.marital_status,
           childrenCount: body.children_count,
           phone: body.phone,
+          emergencyContact: body.emergency_contact,
           leaveTakenDays: body.leave_taken_days,
           createdBy: request.user!.id,
         },
@@ -283,6 +286,7 @@ export default async function hrRoutes(fastify: FastifyInstance) {
         ...(parsed.data.marital_status !== undefined ? { maritalStatus: parsed.data.marital_status } : {}),
         ...(parsed.data.children_count !== undefined ? { childrenCount: parsed.data.children_count } : {}),
         ...(parsed.data.phone !== undefined ? { phone: parsed.data.phone } : {}),
+        ...(parsed.data.emergency_contact !== undefined ? { emergencyContact: parsed.data.emergency_contact } : {}),
         ...(parsed.data.leave_taken_days !== undefined ? { leaveTakenDays: parsed.data.leave_taken_days } : {}),
         updatedBy: request.user!.id,
       },

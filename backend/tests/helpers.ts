@@ -24,6 +24,37 @@ export function extractSessionCookie(setCookieHeader: string | string[] | undefi
   return raw.split(";")[0];
 }
 
+// Dépose un fichier source « Manuscrit (source) » pour un manuscrit, comme le
+// fait POST /manuscripts/:id/source-file. Nécessaire dès qu'un test fait
+// avancer un manuscrit au-delà de la vérification administrative : le passage
+// au comité de lecture exige désormais que le fichier source soit déposé.
+export async function seedManuscriptSourceFile(manuscriptId: string) {
+  const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+  const doc = await prisma.document.create({
+    data: {
+      entityType: "manuscript",
+      entityId: manuscriptId,
+      category: "manuscrit",
+      title: "Manuscrit (source)",
+      createdBy: admin.id,
+      updatedBy: admin.id,
+    },
+  });
+  await prisma.documentVersion.create({
+    data: {
+      documentId: doc.id,
+      versionNumber: 1,
+      filePath: `test/source-${manuscriptId}.txt`,
+      fileSize: 12,
+      mimeType: "text/plain",
+      sha256Hash: "0".repeat(64),
+      changeSummary: "Fichier source (seed de test)",
+      uploadedBy: admin.id,
+    },
+  });
+  return doc;
+}
+
 // isbn13 est unique en base : un préfixe de test statique collisionne dès la
 // deuxième exécution de la suite sur une base non réinitialisée entre les runs.
 export function uniqueIsbnPrefix(digitWidth: number): string {

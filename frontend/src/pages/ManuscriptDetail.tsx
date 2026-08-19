@@ -746,7 +746,9 @@ function SourceFileBlock({
           </a>
         </>
       ) : (
-        <span style={{ color: "var(--muted)", fontSize: 13 }}>Aucun fichier manuscrit déposé pour le moment.</span>
+        <span style={{ color: "var(--eclosion-retard, #C4661F)", fontSize: 13 }}>
+          Aucun fichier manuscrit déposé — obligatoire avant le passage au comité de lecture.
+        </span>
       )}
       {canDeposit && (
         <label style={{ cursor: busy ? "default" : "pointer", fontWeight: 600, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5 }}>

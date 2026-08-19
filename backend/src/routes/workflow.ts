@@ -115,6 +115,13 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         if (!p || !(p.email || p.phone || p.whatsapp)) missing.push("un moyen de contact de l'auteur (e-mail, téléphone ou WhatsApp)");
         if (!p?.idType || !p?.idNumber) missing.push("la pièce d'identité de l'auteur (type et numéro)");
         if (manuscript.evaluationFeeChoice === "non_defini") missing.push("le choix des frais de dépôt pour évaluation (à payer / sans frais)");
+        // Le fichier source doit être déposé : le comité de lecture ne peut pas
+        // évaluer un manuscrit sans son fichier (demande opérateur 19/08/2026).
+        const sourceDoc = await prisma.document.findFirst({
+          where: { entityType: "manuscript", entityId: id, category: "manuscrit", title: "Manuscrit (source)", deletedAt: null },
+          select: { versions: { select: { id: true }, take: 1 } },
+        });
+        if (!sourceDoc || sourceDoc.versions.length === 0) missing.push("le fichier source du manuscrit (à déposer à la réception)");
         if (missing.length > 0) {
           return reply.code(409).send({
             code: "dossier_incomplete",

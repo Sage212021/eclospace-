@@ -1403,6 +1403,9 @@ enum DocumentCategory {
   couverture
   livre_monte
   piece_archivage
+  // Pièce jointe libre déposée à une étape de production (fiche technique, scan,
+  // justificatif) par l'acteur de l'étape.
+  piece_etape
   autre
 }
 

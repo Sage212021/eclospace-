@@ -90,4 +90,42 @@ describe("Dépôt du manuscrit source à la réception", () => {
     const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/source-file/meta` });
     expect(res.statusCode).toBe(401);
   });
+
+  it("pièces d'étape : dépôt libre de fichiers/scans, listés et téléchargeables", async () => {
+    const m = await newManuscript();
+    // Rien au départ.
+    const empty = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/step-attachments`, headers: { cookie: secCookie } });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json()).toHaveLength(0);
+
+    // Dépôt d'un fichier avec le libellé de l'étape.
+    const mp = multipart("file", "fiche-technique.txt", "Contenu de la fiche technique.");
+    const up = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${m.id}/step-attachments?step_label=${encodeURIComponent("Mise en page")}`,
+      headers: { cookie: secCookie, ...mp.headers },
+      payload: mp.body,
+    });
+    expect(up.statusCode).toBe(201);
+    const versionId = up.json().version_id as string;
+    expect(up.json().title).toContain("Mise en page");
+
+    // Listé.
+    const list = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/step-attachments`, headers: { cookie: secCookie } });
+    const rows = list.json() as { title: string; version_id: string }[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toContain("fiche-technique.txt");
+
+    // Téléchargeable au besoin.
+    const dl = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/step-attachments/${versionId}/download`, headers: { cookie: secCookie } });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.body).toContain("Contenu de la fiche technique.");
+  });
+
+  it("pièce d'étape : un rôle sans manuscripts:saisie ne peut pas déposer (403)", async () => {
+    const m = await newManuscript();
+    const mp = multipart("file", "x.txt", "y");
+    const up = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/step-attachments`, headers: { cookie: readerCookie, ...mp.headers }, payload: mp.body });
+    expect(up.statusCode).toBe(403);
+  });
 });

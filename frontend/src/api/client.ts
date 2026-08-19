@@ -516,6 +516,30 @@ export async function uploadManuscriptSourceFile(manuscriptId: string, file: Fil
   return response.json() as Promise<{ has_file: boolean; version_number: number }>;
 }
 
+// Pièces jointes d'étape : dépôt libre de fichiers / scans par l'acteur de l'étape.
+export interface StepAttachment {
+  id: string;
+  title: string;
+  created_at: string;
+  version_id: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+}
+export function listStepAttachments(manuscriptId: string) {
+  return request<StepAttachment[]>(`/api/v1/manuscripts/${manuscriptId}/step-attachments`);
+}
+export async function uploadStepAttachment(manuscriptId: string, file: File, stepLabel: string) {
+  const form = new FormData();
+  form.append("file", file);
+  const url = `${API_BASE}/api/v1/manuscripts/${manuscriptId}/step-attachments?step_label=${encodeURIComponent(stepLabel)}`;
+  const response = await fetch(url, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Dépôt impossible.");
+  return response.json() as Promise<{ id: string; version_id: string; title: string }>;
+}
+export function stepAttachmentDownloadUrl(manuscriptId: string, versionId: string): string {
+  return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/step-attachments/${versionId}/download`;
+}
+
 // Étape Maquette : entrée = manuscrit corrigé, sortie = maquette mise en page.
 export function getManuscriptLayoutMeta(manuscriptId: string) {
   return request<{ corrected_has_file: boolean; layout_has_file: boolean }>(`/api/v1/manuscripts/${manuscriptId}/layout-file/meta`);

@@ -745,6 +745,64 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     return reply.code(201).send({ has_file: true, version_number: version.versionNumber });
   });
 
+  // --- Pièces jointes d'étape (dépôt libre de fichiers / scans) --------------
+  // Demande opérateur (19/08/2026) : à chaque étape de production, l'acteur peut
+  // déposer un fichier ou un document scanné (fiche technique, justificatif,
+  // BAT annoté…). Chaque dépôt = un document « pièce d'étape » (confidentialité
+  // interne), réutilisant le stockage objet et le versionnage existants. Gouverné
+  // par la permission manuscrite (ceux qui travaillent le manuscrit), sans exposer
+  // la GED confidentielle (contrats, finance) qui reste sous permission documents.
+  fastify.post("/api/v1/manuscripts/:id/step-attachments", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, include: { status: true } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+    const buffer = await file.toBuffer();
+    if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+    const q = request.query as { step_label?: string };
+    const stepLabel = (q.step_label?.trim() || manuscript.status.label).slice(0, 80);
+    const stored = await storeFile(buffer, `piece-etape-${id}-${file.filename}`);
+    const doc = await prisma.document.create({
+      data: { entityType: "manuscript", entityId: id, category: "piece_etape", confidentiality: "interne", title: `${stepLabel} — ${file.filename}`, createdBy: request.user!.id, updatedBy: request.user!.id },
+    });
+    const version = await prisma.documentVersion.create({
+      data: { documentId: doc.id, versionNumber: 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: file.mimetype, sha256Hash: stored.sha256Hash, changeSummary: `Pièce déposée à l'étape « ${stepLabel} »`, uploadedBy: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { step_attachment: true, step: stepLabel }, ipAddress: request.ip });
+    return reply.code(201).send({ id: doc.id, version_id: version.id, title: doc.title });
+  });
+
+  fastify.get("/api/v1/manuscripts/:id/step-attachments", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const docs = await prisma.document.findMany({
+      where: { entityType: "manuscript", entityId: id, category: "piece_etape", deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, title: true, createdAt: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true, fileSize: true, mimeType: true } } },
+    });
+    return reply.send(
+      docs.map((d) => ({
+        id: d.id,
+        title: d.title,
+        created_at: d.createdAt,
+        version_id: d.versions[0]?.id ?? null,
+        file_size: d.versions[0]?.fileSize ?? null,
+        mime_type: d.versions[0]?.mimeType ?? null,
+      })),
+    );
+  });
+
+  fastify.get("/api/v1/manuscripts/:id/step-attachments/:versionId/download", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+    const { id, versionId } = request.params as { id: string; versionId: string };
+    const version = await prisma.documentVersion.findFirst({
+      where: { id: versionId, document: { entityType: "manuscript", entityId: id, category: "piece_etape", deletedAt: null } },
+    });
+    if (!version) return reply.code(404).send({ code: "not_found", message: "Pièce introuvable." });
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
+  });
+
   fastify.patch("/api/v1/manuscripts/:id", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const parsed = patchManuscriptSchema.safeParse(request.body);

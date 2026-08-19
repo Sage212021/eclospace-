@@ -363,7 +363,8 @@ export function ChatPage() {
                   <button
                     onClick={() => setConvMenuOpen((v) => !v)}
                     aria-label={t("chat.conv_actions", "Options de la discussion")}
-                    style={{ border: "none", background: "none", color: "var(--muted)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: "0 4px" }}
+                    title={t("chat.conv_actions", "Options de la discussion")}
+                    style={{ border: "1px solid var(--line)", background: "var(--card, #fff)", color: "var(--eclosion-dark, #8A6A12)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "4px 10px", borderRadius: 999, fontWeight: 800 }}
                   >
                     ⋯
                   </button>
@@ -411,13 +412,15 @@ export function ChatPage() {
                           {m.read ? "✓✓" : "✓"}
                         </span>
                       )}
-                      {/* Menu d'actions du message */}
+                      {/* Menu d'actions du message : pastille bien visible et
+                          confortable au doigt (répondre, transférer, modifier…). */}
                       {!m.deleted && (
                         <span style={{ position: "relative" }}>
                           <button
                             onClick={() => setMenuFor((v) => (v === m.id ? null : m.id))}
                             aria-label={t("chat.actions", "Options du message")}
-                            style={{ border: "none", background: "none", color: "var(--muted)", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "0 2px" }}
+                            title={t("chat.actions", "Options du message")}
+                            style={{ border: "1px solid var(--line)", background: "var(--card, #fff)", color: "var(--eclosion-dark, #8A6A12)", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "3px 9px", borderRadius: 999, fontWeight: 800 }}
                           >
                             ⋯
                           </button>

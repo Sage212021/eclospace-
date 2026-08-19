@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   assignReader,
   closeReadingCommittee,
@@ -8,6 +8,10 @@ import {
   getManuscriptSourceFileMeta,
   manuscriptSourceFileUrl,
   uploadManuscriptSourceFile,
+  listStepAttachments,
+  uploadStepAttachment,
+  stepAttachmentDownloadUrl,
+  type StepAttachment,
   getManuscriptLayoutMeta,
   manuscriptCorrectedFileUrl,
   manuscriptLayoutFileUrl,
@@ -434,7 +438,16 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           </div>
         )}
 
-        {["CONTRACTUALISATION", "PLANIFICATION", "CORRECTION", "EXPERTISE", "REECRITURE"].includes(manuscript.status.code) && canValidate && (
+        {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && (
+          <StepAttachments
+            manuscriptId={manuscript.id}
+            stepLabel={manuscript.status.label}
+            canDeposit={canEditFiche}
+            onError={setError}
+          />
+        )}
+
+        {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && canValidate && (
           <GenericStepValidation
             manuscriptId={manuscript.id}
             stepCode={manuscript.status.code}
@@ -446,11 +459,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           />
         )}
 
-        {!["RECEPTION", "VERIF_ADMIN", "COMITE_LECTURE", "DECISION_EDITORIALE", "CONTRACTUALISATION", "PLANIFICATION", "CORRECTION", "EXPERTISE", "REECRITURE"].includes(
+        {!["RECEPTION", "VERIF_ADMIN", "COMITE_LECTURE", "DECISION_EDITORIALE", ...GENERIC_VALIDATION_STEPS].includes(
           manuscript.status.code,
         ) && (
           <p style={{ fontSize: 13, color: "var(--muted)" }}>
-            Aucune action disponible à cette étape dans les lots actuellement livrés.
+            Aucune action disponible à cette étape (étape terminale ou pilotée ailleurs).
           </p>
         )}
 
@@ -1225,7 +1238,123 @@ const STEP_ACTION_LABELS: Record<string, string> = {
   CORRECTION: "Valider la correction",
   EXPERTISE: "Valider l'expertise scientifique",
   REECRITURE: "Valider la réécriture",
+  MISE_EN_PAGE: "Valider la mise en page",
+  INFOGRAPHIE: "Valider l'infographie",
+  ATTRIBUTION_REFERENCES: "Valider l'attribution des références",
+  VALIDATION_BAT: "Valider le BAT",
+  IMPRESSION: "Valider l'impression",
+  CONTROLE_QUALITE_IMPRESSION: "Valider le contrôle qualité",
+  ENTREE_STOCK: "Valider l'entrée en stock",
+  COMMERCIALISATION: "Valider la commercialisation",
+  VENTE_LIVRAISON: "Valider la vente et livraison",
+  SUIVI_POST_PUBLICATION: "Valider le suivi post-publication",
 };
+
+// Toutes les étapes que le responsable fait avancer par une simple validation
+// depuis la fiche (le backend garde ses prérequis : fiche technique, BAT signé,
+// bon de commande, prix public… et renvoie un message clair si l'un manque).
+// Les étapes à flux dédié (réception, vérif. admin, comité, décision) ont leur
+// propre bloc d'action ; l'archivage est terminal.
+const GENERIC_VALIDATION_STEPS = [
+  "PLANIFICATION",
+  "CORRECTION",
+  "EXPERTISE",
+  "REECRITURE",
+  "MISE_EN_PAGE",
+  "INFOGRAPHIE",
+  "ATTRIBUTION_REFERENCES",
+  "VALIDATION_BAT",
+  "CONTRACTUALISATION",
+  "IMPRESSION",
+  "CONTROLE_QUALITE_IMPRESSION",
+  "ENTREE_STOCK",
+  "COMMERCIALISATION",
+  "VENTE_LIVRAISON",
+  "SUIVI_POST_PUBLICATION",
+];
+
+// Dépôt libre de fichiers / scans à l'étape courante (demande opérateur du
+// 19/08/2026) : l'acteur de l'étape joint une fiche technique, un justificatif,
+// un document scanné… Chaque pièce est versionnée et téléchargeable.
+function fmtSize(n: number | null): string {
+  if (!n || n <= 0) return "";
+  if (n < 1024) return `${n} o`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} Ko`;
+  return `${(n / (1024 * 1024)).toFixed(1)} Mo`;
+}
+function StepAttachments({
+  manuscriptId,
+  stepLabel,
+  canDeposit,
+  onError,
+}: {
+  manuscriptId: string;
+  stepLabel: string;
+  canDeposit: boolean;
+  onError: (m: string) => void;
+}) {
+  const [files, setFiles] = useState<StepAttachment[]>([]);
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const load = () => listStepAttachments(manuscriptId).then(setFiles).catch(() => setFiles([]));
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manuscriptId]);
+
+  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      await uploadStepAttachment(manuscriptId, file, stepLabel);
+      await load();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Dépôt impossible.");
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div style={{ border: "1px dashed var(--line)", borderRadius: 8, padding: "10px 13px", marginBottom: 12 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>📎 Documents de l'étape (dépôt de fichiers / scans)</div>
+      {files.length === 0 ? (
+        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 8px" }}>Aucune pièce déposée pour l'instant.</p>
+      ) : (
+        <ul style={{ listStyle: "none", padding: 0, margin: "0 0 8px" }}>
+          {files.map((f) => (
+            <li key={f.id} style={{ fontSize: 12.5, padding: "3px 0", borderTop: "1px solid var(--line)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {f.version_id ? (
+                <a href={stepAttachmentDownloadUrl(manuscriptId, f.version_id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark, #8A6A12)", textDecoration: "underline", fontWeight: 600 }}>
+                  📄 {f.title}
+                </a>
+              ) : (
+                <span>{f.title}</span>
+              )}
+              <span style={{ color: "var(--muted)" }}>{fmtSize(f.file_size)} · {new Date(f.created_at).toLocaleDateString("fr-FR")}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {canDeposit && (
+        <div>
+          <input ref={inputRef} type="file" onChange={onPick} disabled={busy} style={{ display: "none" }} />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={busy}
+            style={{ background: "#fff", color: "var(--eclosion-dark, #8A6A12)", border: "1px solid var(--eclosion)", borderRadius: 6, padding: "6px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
+          >
+            {busy ? "Envoi…" : "＋ Déposer un fichier / scan"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Étapes pilotées par le moteur de workflow générique (Ch. 4 §4.2), au-delà
 // de la décision éditoriale. La réécriture (Ch. 4 §4.3) est activée mais

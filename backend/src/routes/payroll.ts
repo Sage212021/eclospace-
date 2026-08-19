@@ -688,7 +688,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         include: {
           employee: {
             select: {
-              id: true, firstName: true, lastName: true, position: true, hireDate: true, birthDate: true, leaveBalanceDays: true, maritalStatus: true, childrenCount: true, phone: true, emergencyContact: true, leaveTakenDays: true,
+              id: true, firstName: true, lastName: true, position: true, hireDate: true, birthDate: true, leaveBalanceDays: true, maritalStatus: true, childrenCount: true, phone: true, emergencyContact: true, niu: true, leaveTakenDays: true,
               department: { select: { name: true } },
               hrContracts: { orderBy: { startDate: "desc" }, take: 1, select: { type: true } },
               payrollProfile: true,
@@ -710,7 +710,9 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
             employee_name: `${l.employee.firstName} ${l.employee.lastName}`,
             matricule: p.matricule,
             cnps_number: p.cnpsNumber,
-            niu: p.niu,
+            // NIU : on préfère celui saisi sur la fiche RH (identité de l'employé),
+            // avec repli sur le profil de paie pour les données antérieures.
+            niu: l.employee.niu ?? p.niu,
             fiscal_parts: num(p.fiscalParts),
             // Informations salarié pour le bulletin (modèle du classeur).
             department: l.employee.department?.name ?? null,

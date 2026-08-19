@@ -18,7 +18,7 @@ const PUBLISHER_DEFAULTS = {
   siege: "Yaoundé, Hippodrome, BP. 33071, Yaoundé",
   tel: "677 157 326",
   email: "editioneclosion@gmail.com",
-  web: "www.eclosioneditions.cm",
+  web: "www.eclosion.cm",
   rep: "Mme Christelle NOAH, Directeur Général",
   ville: "Yaoundé",
 };

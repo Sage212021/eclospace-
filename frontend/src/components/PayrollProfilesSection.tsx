@@ -280,7 +280,8 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   const slipMeta = {
     matricule: form.matricule || null,
     cnps_number: form.cnps_number || null,
-    niu: form.niu || null,
+    // NIU : priorité à la fiche RH (identité de l'employé), repli sur le profil de paie.
+    niu: employee?.niu || form.niu || null,
     fiscal_parts: form.fiscal_parts,
     department: employee?.department?.name ?? null,
     position: employee?.position ?? null,

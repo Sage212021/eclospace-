@@ -104,6 +104,20 @@ describe("persistance de la fiche employé (nom / date d'embauche)", () => {
     expect(got.json().emergencyContact).toBe("Awa Bello — 690 00 00 00");
   });
 
+  it("NIU (bulletin) est persisté et renvoyé", async () => {
+    const id = await createEmployee();
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/employees/${id}`,
+      headers: { cookie },
+      payload: { niu: "P987654321012Z" },
+    });
+    expect(patch.statusCode).toBe(200);
+
+    const got = await app.inject({ method: "GET", url: `/api/v1/employees/${id}`, headers: { cookie } });
+    expect(got.json().niu).toBe("P987654321012Z");
+  });
+
   it("une mise à jour partielle (poste seul) ne remet pas le nom à zéro", async () => {
     const id = await createEmployee();
 

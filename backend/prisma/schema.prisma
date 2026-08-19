@@ -76,6 +76,9 @@ model Employee {
   phone            String?
   // Personne / numéro à prévenir en cas d'urgence — figure sur le bulletin de paie.
   emergencyContact String?        @map("emergency_contact")
+  // NIU (numéro d'identifiant unique / identifiant fiscal) de l'employé — saisi
+  // sur la fiche RH et repris sur le bulletin de paie.
+  niu              String?
   leaveTakenDays   Decimal?       @map("leave_taken_days") @db.Decimal(5, 1)
 
   createdAt DateTime  @default(now()) @map("created_at")

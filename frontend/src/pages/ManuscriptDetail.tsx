@@ -421,7 +421,20 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           </div>
         )}
 
-        {["CONTRACTUALISATION", "PLANIFICATION", "CORRECTION"].includes(manuscript.status.code) && canValidate && (
+        {/* Expertise scientifique : étape FACULTATIVE (Ch. 4 §4.3). Elle
+            n'apparaît que si l'ouvrage a été marqué « expertise requise » ; elle
+            n'exige aucun élément particulier — un avis d'expert est joint dans
+            « Documents » si besoin, puis on valide pour poursuivre. */}
+        {manuscript.status.code === "EXPERTISE" && (
+          <div style={{ background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 8, padding: "10px 13px", fontSize: 12.5, color: "var(--ink)", marginBottom: 12 }}>
+            <strong>Expertise scientifique — étape facultative.</strong>
+            <p style={{ margin: "6px 0 0", lineHeight: 1.6 }}>
+              Aucun élément n'est obligatoire ici. Joignez l'avis de l'expert dans « Documents » si vous en avez un, puis validez l'étape ci-dessous pour faire avancer le manuscrit. Si l'expertise n'était pas nécessaire, validez simplement pour poursuivre.
+            </p>
+          </div>
+        )}
+
+        {["CONTRACTUALISATION", "PLANIFICATION", "CORRECTION", "EXPERTISE", "REECRITURE"].includes(manuscript.status.code) && canValidate && (
           <GenericStepValidation
             manuscriptId={manuscript.id}
             stepCode={manuscript.status.code}
@@ -433,7 +446,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           />
         )}
 
-        {!["VERIF_ADMIN", "COMITE_LECTURE", "DECISION_EDITORIALE", "CONTRACTUALISATION", "PLANIFICATION", "CORRECTION"].includes(
+        {!["RECEPTION", "VERIF_ADMIN", "COMITE_LECTURE", "DECISION_EDITORIALE", "CONTRACTUALISATION", "PLANIFICATION", "CORRECTION", "EXPERTISE", "REECRITURE"].includes(
           manuscript.status.code,
         ) && (
           <p style={{ fontSize: 13, color: "var(--muted)" }}>
@@ -1210,6 +1223,8 @@ const STEP_ACTION_LABELS: Record<string, string> = {
   CONTRACTUALISATION: "Valider la contractualisation",
   PLANIFICATION: "Valider la planification",
   CORRECTION: "Valider la correction",
+  EXPERTISE: "Valider l'expertise scientifique",
+  REECRITURE: "Valider la réécriture",
 };
 
 // Étapes pilotées par le moteur de workflow générique (Ch. 4 §4.2), au-delà

@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ManuscriptOrigin, EditorialSegment, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
+import { CORRECTION_PHASES, isCorrectionPhase, correctionDocTitle, correctionCycleState } from "../lib/correctionCycle.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
@@ -802,6 +803,47 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     reply.header("content-type", version.mimeType);
     return reply.send(buffer);
   });
+
+  // --- Correction éditoriale en deux temps (cycle de 4 phases) ---------------
+  // Rapport de correction → intégration → 2e relecture → intégration finale.
+  // Chaque phase = un dépôt de fichier (pièce d'étape à titre stable). Consultable
+  // et déposable par les acteurs de la correction (droit tasks) ou de l'éditorial
+  // (droit manuscrits) ; les fichiers se téléchargent via la route step-attachments.
+  fastify.get(
+    "/api/v1/manuscripts/:id/correction-cycle",
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "consultation" }, { module: "manuscripts", action: "consultation" }]) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      return reply.send(await correctionCycleState(id));
+    },
+  );
+
+  fastify.post(
+    "/api/v1/manuscripts/:id/correction-cycle/:phase",
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "saisie" }, { module: "manuscripts", action: "saisie" }]) },
+    async (request, reply) => {
+      const { id, phase } = request.params as { id: string; phase: string };
+      if (!isCorrectionPhase(phase)) return reply.code(400).send({ code: "invalid_phase", message: "Phase de correction inconnue." });
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const file = await request.file();
+      if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+      const buffer = await file.toBuffer();
+      if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+      const label = CORRECTION_PHASES.find((p) => p.key === phase)!.label;
+      const stored = await storeFile(buffer, `correction-${phase}-${id}-${file.filename}`);
+      const doc = await prisma.document.create({
+        data: { entityType: "manuscript", entityId: id, category: "piece_etape", confidentiality: "interne", title: correctionDocTitle(phase, file.filename), createdBy: request.user!.id, updatedBy: request.user!.id },
+      });
+      const version = await prisma.documentVersion.create({
+        data: { documentId: doc.id, versionNumber: 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: file.mimetype, sha256Hash: stored.sha256Hash, changeSummary: `Correction — ${label}`, uploadedBy: request.user!.id },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { correction_phase: phase }, ipAddress: request.ip });
+      return reply.code(201).send({ version_id: version.id, phase, label });
+    },
+  );
 
   fastify.patch("/api/v1/manuscripts/:id", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
     const { id } = request.params as { id: string };

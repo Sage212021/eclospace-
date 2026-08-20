@@ -1225,6 +1225,97 @@ async function main() {
     }
     const provCount = generalCatalogue.filter((b) => b.provisional).length;
     console.log(`Catalogue général : ${generalCatalogue.length} ouvrages disponibles à la commande (${provCount} avec ISBN provisoire à corriger).`);
+
+    // ── Liste officielle « Livres & ISBN » de la maison (docx opérateur du
+    // 20/08/2026) : fait foi pour l'ISBN DÉFINITIF et le PRIX PUBLIC (XAF) de
+    // chaque ouvrage. On corrige les ISBN provisoires, on renseigne les prix, et
+    // on ajoute au catalogue les titres qui n'y figuraient pas encore. Mappage
+    // DÉTERMINISTE (chaque ligne pointe un numéro de catalogue précis) — aucune
+    // correspondance floue à l'exécution. Idempotent (upsert par numéro).
+    const officialList: { num: string; title: string; author: string; isbn?: string; price?: number; isNew?: boolean }[] = [
+      { num: "LG-CAT-0101", title: "Afrique première puissance", author: "Milton Mbombo", isbn: "9789956078332", price: 10000, isNew: true },
+      { num: "LG-CAT-0102", title: "L'éveil démocratique", author: "Frank Kemajou", isbn: "9789956363094", price: 5000, isNew: true },
+      { num: "LG-CAT-0103", title: "De la misère à l'abondance", author: "Lucas Kamdem", isbn: "9789956510999", price: 10000, isNew: true },
+      { num: "LG-CAT-0076", title: "L'Antenne de nos 30 ans", author: "Daniel Anicet Noah", isbn: "9789956078400", price: 10000 },
+      { num: "LG-CAT-0092", title: "Les fantômes du passé", author: "Marie Nicaise Ebanga", isbn: "9789956078141", price: 3500 },
+      { num: "LG-CAT-0090", title: "L'appel Pressant", author: "Mgr Jean Ndjewel", isbn: "9789956362547", price: 4000 },
+      { num: "LG-CAT-0104", title: "Management, outils essentiels", author: "Joël Nana Kontchou", price: 10000, isNew: true },
+      { num: "LG-CAT-0094", title: "Réalités épineuses", author: "Aminatou Ndam Mbendia", isbn: "9789956378155", price: 5000 },
+      { num: "LG-CAT-0006", title: "Voici pourquoi la Chine dominera le Monde", author: "Pierre Chemete", isbn: "9789956363025", price: 10000 },
+      { num: "LG-CAT-0089", title: "L'Afrique en larmes", author: "Bibiche Kound", isbn: "9789956078134", price: 4000 },
+      { num: "LG-CAT-0087", title: "À qui la faute ?", author: "Arsène Mangoumou", isbn: "9789956362578", price: 4000 },
+      { num: "LG-CAT-0097", title: "Les Mémoires d'une Terre Camerounaise", author: "Sara Timb", isbn: "9789956078233", price: 3500 },
+      { num: "LG-CAT-0099", title: "Matricule E.C.I", author: "Ibrahim Fioko", isbn: "9789956078288", price: 5000 },
+      { num: "LG-CAT-0105", title: "Rhapsodies", author: "Mouelle Kombi II", isbn: "9789956079391", price: 5000, isNew: true },
+      { num: "LG-CAT-0106", title: "Journalisme culturel : entre tradition & modernité", author: "Marie Gabrielle Mfegue", isbn: "9789956078653", price: 5000, isNew: true },
+      { num: "LG-CAT-0107", title: "Marketing & communication politique et électorale", author: "François Elandi", isbn: "9789956078509", price: 10000, isNew: true },
+      { num: "LG-CAT-0080", title: "Le Roi Mbella", author: "Samuel Eddy Mbog", isbn: "9789956077977", price: 5000 },
+      { num: "LG-CAT-0017", title: "Mpod bo kl mbon", author: "Yamb Timba", isbn: "9789956077762" },
+      { num: "LG-CAT-0084", title: "L'enfance effacée", author: "Arthur Bilounga", isbn: "9789956077809", price: 4000 },
+      { num: "LG-CAT-0086", title: "On a volé Dieu", author: "David Serge Mvondo", isbn: "9789956077816", price: 2500 },
+      { num: "LG-CAT-0083", title: "La troisième Manquée", author: "Léopold Ngodji", isbn: "9789956077823", price: 5000 },
+      { num: "LG-CAT-0098", title: "Ronoowo", author: "Nadine Ndjomo", isbn: "9789956078271", price: 3500 },
+      { num: "LG-CAT-0108", title: "Maire de Tsanga sud", author: "David Massoma", isbn: "9789956078622", price: 7000, isNew: true },
+      { num: "LG-CAT-0074", title: "Dans la Tourmente", author: "Aline Fomete", isbn: "9789956996216", price: 3500 },
+    ];
+
+    let priced = 0;
+    let corrected = 0;
+    let created = 0;
+    for (const b of officialList) {
+      const ms = await prisma.manuscript.upsert({
+        where: { manuscriptNumber: b.num },
+        update: {},
+        create: {
+          manuscriptNumber: b.num,
+          title: b.title,
+          subtitle: "Catalogue Éclosion",
+          language: "fr",
+          statusId: catStatus.id,
+          ownerId: adminUser.id,
+          receivedAt: new Date("2024-01-01"),
+          publicationDate: new Date("2024-09-01"),
+          isBackCatalogue: true,
+          editorialSegment: "general",
+          keywords: ["Catalogue Éclosion"],
+        },
+      });
+      if (b.isNew) created++;
+
+      // Auteur (créé si absent), sans dédoublonner un auteur déjà rattaché.
+      const author = await ensureAuthor(b.author);
+      await prisma.workContributor.upsert({
+        where: { manuscriptId_partnerId_role: { manuscriptId: ms.id, partnerId: author.id, role: "author" } },
+        update: {},
+        create: { manuscriptId: ms.id, partnerId: author.id, role: "author", displayOrder: 0 },
+      });
+
+      // ISBN officiel — posé seulement s'il n'est pas déjà rattaché à un AUTRE
+      // ouvrage (respect de la contrainte « ISBN jamais réutilisé »).
+      if (b.isbn) {
+        const clash = await prisma.isbn.findFirst({ where: { isbn13: b.isbn, manuscriptId: { not: ms.id } } });
+        if (!clash) {
+          const existing = await prisma.isbn.findFirst({ where: { manuscriptId: ms.id, format: "print" } });
+          if (!existing) {
+            await prisma.isbn.create({ data: { isbn13: b.isbn, format: "print", manuscriptId: ms.id, status: "published", assignedAt: new Date() } });
+          } else if (existing.isbn13 !== b.isbn) {
+            await prisma.isbn.update({ where: { id: existing.id }, data: { isbn13: b.isbn } });
+            corrected++;
+          }
+        }
+      }
+
+      // Prix public officiel (XAF) → fiche ouvrage (work_metadata).
+      if (b.price != null) {
+        await prisma.workMetadata.upsert({
+          where: { manuscriptId: ms.id },
+          update: { pricePublic: b.price },
+          create: { manuscriptId: ms.id, pricePublic: b.price },
+        });
+        priced++;
+      }
+    }
+    console.log(`Liste officielle : ${officialList.length} ouvrages traités (${created} ajoutés, ${corrected} ISBN corrigés, ${priced} prix renseignés).`);
   }
 
   console.log("Seed Lot 0 terminé.");

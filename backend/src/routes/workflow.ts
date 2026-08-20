@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Manuscript } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
+import { missingRequiredCorrectionPhases } from "../lib/correctionCycle.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
 import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
@@ -154,6 +155,16 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
           return reply.code(409).send({
             code: "blocking_comment_unresolved",
             message: "Au moins un point bloquant du correcteur n'a pas été levé sur ce manuscrit.",
+          });
+        }
+        // Correction en deux temps (demande opérateur 20/08/2026) : on ne passe
+        // pas à la mise en page tant que le rapport de correction ET la version
+        // finale intégrée (après 2e relecture) ne sont pas déposés.
+        const missingPhases = await missingRequiredCorrectionPhases(id);
+        if (missingPhases.length > 0) {
+          return reply.code(409).send({
+            code: "correction_cycle_incomplete",
+            message: `Correction incomplète — déposez, dans le cycle de correction, avant de poursuivre : ${missingPhases.join(" ; ")}.`,
           });
         }
       }

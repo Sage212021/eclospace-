@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, uniqueIsbnPrefix, seedManuscriptSourceFile } from "./helpers.js";
+import { extractSessionCookie, uniqueIsbnPrefix, seedManuscriptSourceFile, seedCorrectionCycle } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
@@ -97,6 +97,7 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
     // D-010 : après la décision, on passe à la PLANIFICATION ; la
     // contractualisation intervient plus tard (juste après la validation du BAT).
     await validate(manuscript.id, "PLANIFICATION");
+    await seedCorrectionCycle(manuscript.id);
     await validate(manuscript.id, "CORRECTION");
 
     return manuscript;

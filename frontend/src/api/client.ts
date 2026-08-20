@@ -572,6 +572,29 @@ export function stepAttachmentDownloadUrl(manuscriptId: string, versionId: strin
   return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/step-attachments/${versionId}/download`;
 }
 
+// Correction éditoriale en deux temps (rapport → intégration → 2e relecture →
+// intégration finale). Chaque phase = un dépôt de fichier ; les livrables se
+// téléchargent via la route step-attachments.
+export interface CorrectionPhaseState {
+  key: string;
+  label: string;
+  required: boolean;
+  has_file: boolean;
+  version_id: string | null;
+  filename: string | null;
+  created_at: string | null;
+}
+export function getCorrectionCycle(manuscriptId: string) {
+  return request<CorrectionPhaseState[]>(`/api/v1/manuscripts/${manuscriptId}/correction-cycle`);
+}
+export async function uploadCorrectionPhase(manuscriptId: string, phase: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/manuscripts/${manuscriptId}/correction-cycle/${phase}`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Dépôt impossible.");
+  return response.json() as Promise<{ version_id: string; phase: string; label: string }>;
+}
+
 // Étape Maquette : entrée = manuscrit corrigé, sortie = maquette mise en page.
 export function getManuscriptLayoutMeta(manuscriptId: string) {
   return request<{ corrected_has_file: boolean; layout_has_file: boolean }>(`/api/v1/manuscripts/${manuscriptId}/layout-file/meta`);

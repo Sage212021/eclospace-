@@ -44,6 +44,7 @@ import { ContractsSection } from "../components/ContractsSection";
 import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
 import { TasksSection } from "../components/TasksSection";
 import { CorrectionSection } from "../components/CorrectionSection";
+import { CorrectionCyclePanel } from "../components/CorrectionCyclePanel";
 import { ProductionSection } from "../components/ProductionSection";
 import { IsbnSection } from "../components/IsbnSection";
 import { BatSection } from "../components/BatSection";
@@ -556,6 +557,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
       {(show("correction") || show("expertise")) && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && permissions.has("tasks:consultation") && (
         <>
           <TasksSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
+          <CorrectionCyclePanel manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")} />
           <CorrectionSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
         </>
       )}

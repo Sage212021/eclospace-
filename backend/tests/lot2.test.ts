@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { storeFile } from "../src/lib/storage.js";
-import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile, seedCorrectionCycle } from "./helpers.js";
 import { buildDocx } from "./docxFixture.js";
 import type { FastifyInstance } from "fastify";
 
@@ -110,6 +110,9 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       payload: {},
     });
 
+    // Livrables obligatoires du cycle de correction (rapport + version finale
+    // intégrée) pour pouvoir valider l'étape CORRECTION.
+    await seedCorrectionCycle(manuscript.id);
     return manuscript;
   }
 

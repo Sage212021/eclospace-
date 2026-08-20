@@ -55,6 +55,29 @@ export async function seedManuscriptSourceFile(manuscriptId: string) {
   return doc;
 }
 
+// Dépose les livrables OBLIGATOIRES du cycle de correction (rapport + version
+// finale intégrée) pour permettre la validation de l'étape CORRECTION. Le nom
+// des documents suit le préfixe stable « [correction:<clé>] » lu par le gate.
+export async function seedCorrectionCycle(manuscriptId: string) {
+  const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+  for (const key of ["rapport_1", "integration_finale"]) {
+    const doc = await prisma.document.create({
+      data: {
+        entityType: "manuscript",
+        entityId: manuscriptId,
+        category: "piece_etape",
+        confidentiality: "interne",
+        title: `[correction:${key}] seed-${key}.txt`,
+        createdBy: admin.id,
+        updatedBy: admin.id,
+      },
+    });
+    await prisma.documentVersion.create({
+      data: { documentId: doc.id, versionNumber: 1, filePath: `test/corr-${key}-${manuscriptId}.txt`, fileSize: 10, mimeType: "text/plain", sha256Hash: "0".repeat(64), changeSummary: "seed", uploadedBy: admin.id },
+    });
+  }
+}
+
 // isbn13 est unique en base : un préfixe de test statique collisionne dès la
 // deuxième exécution de la suite sur une base non réinitialisée entre les runs.
 export function uniqueIsbnPrefix(digitWidth: number): string {

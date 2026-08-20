@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listSettings, updateSetting, getPublisherIdentity, updatePublisherIdentity, getWorkflowDeliverableSteps, updateWorkflowDeliverableSteps, type AppSetting, type EffectiveUser, type PublisherIdentity, type WorkflowDeliverableConfig } from "../api/client";
+import { listSettings, updateSetting, getPublisherIdentity, updatePublisherIdentity, getWorkflowDeliverableSteps, updateWorkflowDeliverableSteps, getWorkflowStepModes, updateWorkflowStepModes, type AppSetting, type EffectiveUser, type PublisherIdentity, type WorkflowDeliverableConfig, type WorkflowStepModesConfig } from "../api/client";
 import { AccountSecurity } from "../components/AccountSecurity";
 import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -105,6 +105,9 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
 
       {/* Verrou éditorial : étapes exigeant un livrable déposé avant l'avancement. */}
       <WorkflowDeliverableCard canAdminister={canAdminister} />
+
+      {/* Étapes « à option » : facultative (on peut passer) / obligatoire (à réaliser). */}
+      <WorkflowStepModesCard canAdminister={canAdminister} />
 
       {/* Diagnostic de persistance : vérifier que les données sont bien conservées en base. */}
       <SystemDiagnosticCard />
@@ -288,6 +291,86 @@ function WorkflowDeliverableCard({ canAdminister }: { canAdminister: boolean }) 
         <div style={{ marginTop: 12 }}>
           <button onClick={save} disabled={saving || !dirty} style={{ border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: saving || !dirty ? "default" : "pointer", opacity: saving || !dirty ? 0.55 : 1 }}>
             {saving ? "Enregistrement…" : "Enregistrer les étapes verrouillées"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Étapes « à option » (Expertise, Réécriture, Projet) : mode défini à l'avance —
+// « facultative » (l'opérateur peut passer l'étape avec un motif) ou
+// « obligatoire » (l'étape doit être réalisée, ses éléments renseignés). Demande
+// opérateur du 20/08/2026.
+function WorkflowStepModesCard({ canAdminister }: { canAdminister: boolean }) {
+  const [config, setConfig] = useState<WorkflowStepModesConfig | null>(null);
+  const [draft, setDraft] = useState<WorkflowStepModesConfig["modes"] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    getWorkflowStepModes()
+      .then((c) => { setConfig(c); setDraft(c.modes); })
+      .catch(() => setErr("Chargement des modes d'étape impossible."));
+  }, []);
+
+  function set(code: string, mode: "facultative" | "obligatoire") {
+    setNote(null);
+    setDraft((d) => (d ? { ...d, [code]: mode } : d));
+  }
+
+  async function save() {
+    if (!draft) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      const saved = await updateWorkflowStepModes(draft);
+      setConfig(saved);
+      setDraft(saved.modes);
+      setNote("Modes d'étape enregistrés. Ils s'appliquent dès la prochaine validation d'étape.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Échec de l'enregistrement.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const dirty = config && draft ? JSON.stringify(draft) !== JSON.stringify(config.modes) : false;
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 14 }}>Étapes à option (Expertise, Réécriture, Projet)</div>
+      <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "4px 0 12px", lineHeight: 1.6 }}>
+        Pour chaque étape, choisissez si elle est <strong>facultative</strong> (l'opérateur peut la passer en indiquant un
+        motif) ou <strong>obligatoire</strong> (elle doit être réalisée : les éléments attendus sont renseignés et le
+        fichier déposé avant de poursuivre).
+      </p>
+      {err && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+      {note && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{note}</div>}
+      {!config || !draft ? (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {config.steps.map((s) => (
+            <div key={s.code} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "9px 11px", border: "1px solid var(--line)", borderRadius: 6, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13 }}>{s.label}</span>
+              <div style={{ display: "flex", gap: 12 }}>
+                {(["facultative", "obligatoire"] as const).map((m) => (
+                  <label key={m} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--muted)", cursor: canAdminister ? "pointer" : "default" }}>
+                    <input type="radio" name={`mode-${s.code}`} checked={(draft as Record<string, string>)[s.code] === m} disabled={!canAdminister} onChange={() => set(s.code, m)} />
+                    {m === "facultative" ? "Facultative" : "Obligatoire"}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {canAdminister && config && (
+        <div style={{ marginTop: 12 }}>
+          <button onClick={save} disabled={saving || !dirty} style={{ border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: saving || !dirty ? "default" : "pointer", opacity: saving || !dirty ? 0.55 : 1 }}>
+            {saving ? "Enregistrement…" : "Enregistrer les modes d'étape"}
           </button>
         </div>
       )}

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { storeFile } from "../src/lib/storage.js";
-import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload } from "./helpers.js";
 import { buildDocx } from "./docxFixture.js";
 import type { FastifyInstance } from "fastify";
 
@@ -108,7 +108,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/steps/PLANIFICATION/validate`,
       headers: { cookie: adminCookie },
-      payload: {},
+      payload: realizationPayload("PLANIFICATION"),
     });
 
     // Livrables obligatoires du cycle de correction (rapport + version finale
@@ -266,51 +266,76 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/steps/PLANIFICATION/validate`,
       headers: { cookie: adminCookie },
-      payload: {},
+      payload: realizationPayload("PLANIFICATION"),
     });
     expect(attempt.statusCode).toBe(200);
     expect(attempt.json().status).toBe("CORRECTION");
   });
 
-  it("saute l'étape EXPERTISE quand elle n'est pas requise (régression Ch. 4 §4.3)", async () => {
+  it("l'étape EXPERTISE est un point de décision : on peut la PASSER (facultative par défaut)", async () => {
+    // Nouveau modèle (demande opérateur 20/08/2026) : le manuscrit s'arrête à
+    // l'Expertise, l'opérateur choisit « Réaliser » ou « Passer ». Facultative
+    // par défaut : on peut la passer avec un motif.
     const manuscript = await createManuscriptAtCorrection("Manuscrit Sans Expertise");
-    const stored = await prisma.manuscript.findUniqueOrThrow({ where: { id: manuscript.id } });
-    expect(stored.requiresExpertise).toBe(false);
 
-    const validate = await app.inject({
+    const afterCorrection = await app.inject({
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/steps/CORRECTION/validate`,
       headers: { cookie: adminCookie },
       payload: {},
     });
-    expect(validate.statusCode).toBe(200);
-    expect(validate.json().status).toBe("MISE_EN_PAGE");
+    expect(afterCorrection.statusCode).toBe(200);
+    expect(afterCorrection.json().status).toBe("EXPERTISE");
+
+    // Passer l'Expertise sans motif → refusé.
+    const noReason = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscript.id}/steps/EXPERTISE/validate`,
+      headers: { cookie: adminCookie },
+      payload: { step_decision: "passe" },
+    });
+    expect(noReason.statusCode).toBe(409);
+    expect(noReason.json().code).toBe("skip_reason_required");
+
+    // Passer avec motif → passe à la Réécriture (étape suivante à option).
+    const skipped = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscript.id}/steps/EXPERTISE/validate`,
+      headers: { cookie: adminCookie },
+      payload: { step_decision: "passe", skip_reason: "Ouvrage non scientifique" },
+    });
+    expect(skipped.statusCode).toBe(200);
+    expect(skipped.json().status).toBe("REECRITURE");
   });
 
-  it("l'étape RÉÉCRITURE est activée mais facultative (décision opérateur du 04/07/2026)", async () => {
-    const manuscript = await createManuscriptAtCorrection("Manuscrit Réécriture Non Requise");
+  it("réaliser l'Expertise exige les éléments (expert + avis + rapport), puis passe à la Réécriture", async () => {
+    const manuscript = await createManuscriptAtCorrection("Manuscrit Expertise Réalisée");
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/CORRECTION/validate`, headers: { cookie: adminCookie }, payload: {} });
 
-    const withoutFlag = await app.inject({
+    // Réaliser sans les éléments → refusé.
+    const incomplete = await app.inject({
       method: "POST",
-      url: `/api/v1/manuscripts/${manuscript.id}/steps/CORRECTION/validate`,
+      url: `/api/v1/manuscripts/${manuscript.id}/steps/EXPERTISE/validate`,
       headers: { cookie: adminCookie },
-      payload: {},
+      payload: { step_decision: "realise", realization: {} },
     });
-    expect(withoutFlag.statusCode).toBe(200);
-    expect(withoutFlag.json().status).toBe("MISE_EN_PAGE");
+    expect(incomplete.statusCode).toBe(409);
+    expect(incomplete.json().code).toBe("realization_incomplete");
 
-    const manuscriptWithRewrite = await createManuscriptAtCorrection("Manuscrit Réécriture Requise");
-    const withFlag = await app.inject({
+    // Éléments + rapport (livrable) déposés → validation OK.
+    await seedStepDeliverable(manuscript.id, "EXPERTISE");
+    const done = await app.inject({
       method: "POST",
-      url: `/api/v1/manuscripts/${manuscriptWithRewrite.id}/steps/CORRECTION/validate`,
+      url: `/api/v1/manuscripts/${manuscript.id}/steps/EXPERTISE/validate`,
       headers: { cookie: adminCookie },
-      payload: { requires_rewrite: true },
+      payload: realizationPayload("EXPERTISE"),
     });
-    expect(withFlag.statusCode).toBe(200);
-    expect(withFlag.json().status).toBe("REECRITURE");
+    expect(done.statusCode).toBe(200);
+    expect(done.json().status).toBe("REECRITURE");
 
-    const stored = await prisma.manuscript.findUniqueOrThrow({ where: { id: manuscriptWithRewrite.id } });
-    expect(stored.requiresRewrite).toBe(true);
+    const step = await prisma.manuscriptStep.findFirstOrThrow({ where: { manuscriptId: manuscript.id, status: { code: "EXPERTISE" } } });
+    expect(step.realizationMode).toBe("realise");
+    expect((step.realizationData as { expert_opinion?: string }).expert_opinion).toBe("favorable");
   });
 
   it("gère les partenaires par catégorie (auteur, correcteur, imprimeur...) sans refonte de structure", async () => {

@@ -28,12 +28,14 @@ import {
   updateManuscriptRegistration,
   validateStep,
   getNextAssignees,
+  getOptionalStep,
   listGenres,
   listUsers,
   type EditorialSegment,
   type Genre,
   type ManuscriptDetail as ManuscriptDetailData,
   type NextAssignee,
+  type OptionalStepMeta,
   type ReadingCandidate,
   type TimelineStep,
   type UserSummary,
@@ -426,19 +428,6 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
               <li>Les points bloquants sont levés (sinon la validation est refusée).</li>
               <li>Vous validez l'étape ci-dessous — le manuscrit passe alors à la mise en page.</li>
             </ol>
-          </div>
-        )}
-
-        {/* Expertise scientifique : étape FACULTATIVE (Ch. 4 §4.3). Elle
-            n'apparaît que si l'ouvrage a été marqué « expertise requise » ; elle
-            n'exige aucun élément particulier — un avis d'expert est joint dans
-            « Documents » si besoin, puis on valide pour poursuivre. */}
-        {manuscript.status.code === "EXPERTISE" && (
-          <div style={{ background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 8, padding: "10px 13px", fontSize: 12.5, color: "var(--ink)", marginBottom: 12 }}>
-            <strong>Expertise scientifique — étape facultative.</strong>
-            <p style={{ margin: "6px 0 0", lineHeight: 1.6 }}>
-              Aucun élément n'est obligatoire ici. Joignez l'avis de l'expert dans « Documents » si vous en avez un, puis validez l'étape ci-dessous pour faire avancer le manuscrit. Si l'expertise n'était pas nécessaire, validez simplement pour poursuivre.
-            </p>
           </div>
         )}
 
@@ -1392,6 +1381,11 @@ function GenericStepValidation({
   const [assignees, setAssignees] = useState<NextAssignee[]>([]);
   const [nextLabel, setNextLabel] = useState<string | null>(null);
   const [assigneeId, setAssigneeId] = useState("");
+  // Étape « à option » (Expertise, Réécriture, Projet) : décision Réaliser/Passer.
+  const [optMeta, setOptMeta] = useState<OptionalStepMeta | null>(null);
+  const [decision, setDecision] = useState<"realise" | "passe">("realise");
+  const [skipReason, setSkipReason] = useState("");
+  const [realization, setRealization] = useState<Record<string, string>>({});
 
   const label = STEP_ACTION_LABELS[stepCode] ?? "Valider cette étape";
 
@@ -1402,24 +1396,38 @@ function GenericStepValidation({
     getNextAssignees(manuscriptId)
       .then((r) => { if (alive) { setAssignees(r.assignees); setNextLabel(r.next_step?.label ?? null); } })
       .catch(() => { if (alive) { setAssignees([]); setNextLabel(null); } });
+    getOptionalStep(manuscriptId, stepCode)
+      .then((m) => { if (alive) { setOptMeta(m); if (m.is_optional && m.mode === "obligatoire") setDecision("realise"); } })
+      .catch(() => { if (alive) setOptMeta(null); });
     return () => { alive = false; };
   }, [manuscriptId, stepCode]);
 
+  const isOptional = optMeta?.is_optional === true;
+  const canSkip = optMeta?.is_optional === true && optMeta.mode === "facultative";
+
   async function handleValidate() {
     const chosen = assignees.find((a) => a.id === assigneeId);
+    const passing = isOptional && decision === "passe";
     const ok = await confirm({
-      title: "Valider l'étape",
-      message: `${label} ?`,
-      detail: chosen
-        ? `Le manuscrit passera à l'étape suivante et sera confié à ${chosen.username}.`
-        : "Le manuscrit passera à l'étape suivante.",
-      confirmLabel: label,
+      title: passing ? "Passer l'étape" : "Valider l'étape",
+      message: passing ? `Passer l'étape « ${optMeta && optMeta.is_optional ? optMeta.label : ""} » ?` : `${label} ?`,
+      detail: passing
+        ? "L'étape sera marquée « passée » (avec votre motif) et le manuscrit avancera à l'étape suivante."
+        : chosen
+          ? `Le manuscrit passera à l'étape suivante et sera confié à ${chosen.username}.`
+          : "Le manuscrit passera à l'étape suivante.",
+      confirmLabel: passing ? "Passer l'étape" : label,
     });
     if (!ok) return;
     try {
       const result = await validateStep(manuscriptId, stepCode, {
         ...(stepCode === "CORRECTION" ? { requires_rewrite: requiresRewrite } : {}),
         ...(assigneeId ? { assignee_id: assigneeId } : {}),
+        ...(isOptional
+          ? passing
+            ? { step_decision: "passe", skip_reason: skipReason }
+            : { step_decision: "realise", realization }
+          : {}),
       });
       onValidated(result.status);
     } catch (err) {
@@ -1429,6 +1437,55 @@ function GenericStepValidation({
 
   return (
     <div>
+      {optMeta?.is_optional && (
+        <div style={{ background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 8, padding: "11px 13px", marginBottom: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>
+            Étape « {optMeta.label} » —{" "}
+            <span style={{ color: optMeta.mode === "obligatoire" ? "var(--eclosion-retard, #C4661F)" : "var(--muted)" }}>
+              {optMeta.mode === "obligatoire" ? "obligatoire" : "facultative"}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 16, margin: "8px 0", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+              <input type="radio" name={`dec-${stepCode}`} checked={decision === "realise"} onChange={() => setDecision("realise")} />
+              Réaliser l'étape
+            </label>
+            {canSkip && (
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                <input type="radio" name={`dec-${stepCode}`} checked={decision === "passe"} onChange={() => setDecision("passe")} />
+                Passer l'étape
+              </label>
+            )}
+          </div>
+          {decision === "realise" ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              {optMeta.fields.map((f) => (
+                <label key={f.key} style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 12 }}>
+                  <span style={{ color: "var(--muted)" }}>{f.label}{f.required ? " *" : ""}</span>
+                  {f.type === "textarea" ? (
+                    <textarea rows={2} value={realization[f.key] ?? ""} onChange={(e) => setRealization((r) => ({ ...r, [f.key]: e.target.value }))} style={{ padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13, resize: "vertical" }} />
+                  ) : f.type === "select" ? (
+                    <select value={realization[f.key] ?? ""} onChange={(e) => setRealization((r) => ({ ...r, [f.key]: e.target.value }))} style={{ padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 }}>
+                      <option value="">— choisir —</option>
+                      {(f.options ?? []).map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                    </select>
+                  ) : (
+                    <input type={f.type === "number" ? "number" : "text"} value={realization[f.key] ?? ""} onChange={(e) => setRealization((r) => ({ ...r, [f.key]: e.target.value }))} style={{ padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 }} />
+                  )}
+                </label>
+              ))}
+              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                Le fichier attendu (rapport, version, fiche…) se dépose dans le bloc « Livrable de l'étape » ci-dessus.
+              </span>
+            </div>
+          ) : (
+            <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 12 }}>
+              <span style={{ color: "var(--muted)" }}>Motif du passage (obligatoire) *</span>
+              <textarea rows={2} value={skipReason} onChange={(e) => setSkipReason(e.target.value)} style={{ padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13, resize: "vertical" }} placeholder="Ex. : ouvrage non scientifique, pas de réécriture nécessaire…" />
+            </label>
+          )}
+        </div>
+      )}
       {stepCode === "CORRECTION" && (
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 10 }}>
           <input type="checkbox" checked={requiresRewrite} onChange={(e) => setRequiresRewrite(e.target.checked)} />
@@ -1451,7 +1508,7 @@ function GenericStepValidation({
           </span>
         </label>
       )}
-      <ActionButton onClick={handleValidate}>{label}</ActionButton>
+      <ActionButton onClick={handleValidate}>{isOptional && decision === "passe" ? "Passer l'étape" : label}</ActionButton>
     </div>
   );
 }

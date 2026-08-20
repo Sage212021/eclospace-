@@ -5,19 +5,19 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { missingRequiredCorrectionPhases } from "../lib/correctionCycle.js";
 import { isDeliverableRequired, hasStepDeliverable, DELIVERABLE_LABELS } from "../lib/stepDeliverables.js";
+import { isOptionalDecisionStep, stepMode, missingRealizationFields, sanitizeRealizationData, OPTIONAL_STEP_LABELS, type OptionalStepCode } from "../lib/stepRealization.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
 import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
 
-// Ch. 4 §4.3, §4.6 : les étapes 8 (expertise) et 9 (réécriture) ne sont
-// activées que si le projet le requiert ; leur absence n'est pas comptée
-// comme une étape sautée. Décision opérateur du 04/07/2026 : la réécriture
-// est activée mais facultative, déclenchée par un drapeau posé à la
-// validation de CORRECTION ou EXPERTISE (voir plus bas), au même titre que
-// l'expertise.
-function isStepRequired(statusCode: string, manuscript: Manuscript): boolean {
-  if (statusCode === "EXPERTISE") return manuscript.requiresExpertise;
-  if (statusCode === "REECRITURE") return manuscript.requiresRewrite;
+// Étapes « à option » — Expertise, Réécriture, Projet (demande opérateur
+// 20/08/2026). Le manuscrit S'ARRÊTE désormais à ces étapes : l'opérateur y
+// choisit explicitement « Réaliser » ou « Passer » (selon le mode défini dans
+// les Paramètres). Elles ne sont donc plus sautées automatiquement — le choix
+// est tracé sur l'étape (realizationMode / skipReason / realizationData). Les
+// anciens drapeaux requiresExpertise / requiresRewrite ne servent plus qu'à
+// pré-remplir la suggestion « à réaliser » à l'écran.
+function isStepRequired(_statusCode: string, _manuscript: Manuscript): boolean {
   return true;
 }
 
@@ -60,6 +60,13 @@ const validateStepSchema = z.object({
   // l'étape suivante. Facultatif : sans désignation, tout le service concerné
   // est notifié (comportement historique).
   assignee_id: z.string().uuid().optional(),
+  // Étapes « à option » (Expertise, Réécriture, Projet) : décision explicite de
+  // l'opérateur — « realise » (réaliser, avec les éléments renseignés) ou
+  // « passe » (passer, motif obligatoire, autorisé seulement si l'étape est
+  // déclarée facultative). Ignoré pour les étapes ordinaires.
+  step_decision: z.enum(["realise", "passe"]).optional(),
+  skip_reason: z.string().max(500).optional(),
+  realization: z.record(z.union([z.string(), z.number()])).optional(),
 });
 
 // Étapes pilotées par un flux dédié plutôt que par cet endpoint générique :
@@ -110,8 +117,48 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { observations, outcome, requires_rewrite, assignee_id } = parsed.data;
+      const { observations, outcome, requires_rewrite, assignee_id, step_decision, skip_reason, realization } = parsed.data;
       const now = new Date();
+
+      // Étapes « à option » (Expertise, Réécriture, Projet) : l'opérateur décide
+      // ici de RÉALISER ou de PASSER l'étape. On prépare la trace à écrire sur
+      // l'étape et on contrôle la cohérence AVANT toute validation.
+      let realizationMode: "realise" | "passe" | null = null;
+      let realizationSkipReason: string | null = null;
+      let realizationDataToStore: Record<string, unknown> | null = null;
+      if (isOptionalDecisionStep(targetStatus.code)) {
+        const code = targetStatus.code as OptionalStepCode;
+        const mode = await stepMode(code);
+        // Par défaut : réaliser (l'opérateur ne peut passer que si autorisé).
+        const decision = step_decision ?? "realise";
+        if (decision === "passe") {
+          if (mode === "obligatoire") {
+            return reply.code(409).send({
+              code: "step_mandatory",
+              message: `L'étape « ${OPTIONAL_STEP_LABELS[code]} » est déclarée obligatoire : elle doit être réalisée (elle ne peut pas être passée). Un administrateur peut la rendre facultative dans les Paramètres.`,
+            });
+          }
+          if (!skip_reason || skip_reason.trim() === "") {
+            return reply.code(409).send({
+              code: "skip_reason_required",
+              message: `Pour passer l'étape « ${OPTIONAL_STEP_LABELS[code]} », indiquez le motif (il sera tracé au journal).`,
+            });
+          }
+          realizationMode = "passe";
+          realizationSkipReason = skip_reason.trim();
+        } else {
+          // Réaliser : les éléments attendus doivent être renseignés.
+          const missing = missingRealizationFields(code, realization);
+          if (missing.length > 0) {
+            return reply.code(409).send({
+              code: "realization_incomplete",
+              message: `Étape « ${OPTIONAL_STEP_LABELS[code]} » à réaliser — renseignez avant de valider : ${missing.join(" ; ")}.`,
+            });
+          }
+          realizationMode = "realise";
+          realizationDataToStore = sanitizeRealizationData(code, realization);
+        }
+      }
 
       // Vérification administrative : la fiche de l'auteur doit être suffisamment
       // renseignée avant de transmettre au comité de lecture. Si des éléments
@@ -332,7 +379,9 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       // Verrou « livrable de sortie » (paramétrable) : les étapes qui produisent
       // un fichier pour l'étape suivante ne se valident pas tant que ce fichier
       // n'est pas déposé — pour qu'un manuscrit n'arrive jamais « les mains vides ».
-      if (await isDeliverableRequired(targetStatus.code)) {
+      // Une étape « à option » PASSÉE ne produit pas de livrable : on n'exige
+      // alors pas de fichier (le motif du passage suffit).
+      if (realizationMode !== "passe" && (await isDeliverableRequired(targetStatus.code))) {
         if (!(await hasStepDeliverable(id, targetStatus.code))) {
           return reply.code(409).send({
             code: "deliverable_missing",
@@ -373,7 +422,13 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       await prisma.$transaction(async (tx) => {
         await tx.manuscriptStep.upsert({
           where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
-          update: { validationBy: request.user!.id, validatedAt: now, observations, actualEnd: now },
+          update: {
+            validationBy: request.user!.id,
+            validatedAt: now,
+            observations,
+            actualEnd: now,
+            ...(realizationMode ? { realizationMode, skipReason: realizationSkipReason, realizationData: (realizationDataToStore ?? undefined) as never } : {}),
+          },
           create: {
             manuscriptId: id,
             statusId: targetStatus.id,
@@ -382,6 +437,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
             actualStart: now,
             actualEnd: now,
             observations,
+            ...(realizationMode ? { realizationMode, skipReason: realizationSkipReason, realizationData: (realizationDataToStore ?? undefined) as never } : {}),
           },
         });
 
@@ -457,11 +513,15 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         entityType: "manuscript",
         entityId: id,
         oldValues: { statusCode: targetStatus.code },
-        newValues: { statusCode: nextStatus?.code ?? null, observations },
+        newValues: {
+          statusCode: nextStatus?.code ?? null,
+          observations,
+          ...(realizationMode ? { realizationMode, skipReason: realizationSkipReason } : {}),
+        },
         ipAddress: request.ip,
       });
 
-      return reply.send({ advanced: true, status: nextStatus?.code ?? null });
+      return reply.send({ advanced: true, status: nextStatus?.code ?? null, realization_mode: realizationMode });
     },
   );
 

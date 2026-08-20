@@ -92,6 +92,16 @@ export async function seedStepDeliverable(manuscriptId: string, stepCode: string
   return doc;
 }
 
+// Étapes « à option » (Expertise, Réécriture, Projet) : payload minimal pour
+// RÉALISER l'étape (éléments obligatoires renseignés). Pour PASSER une étape
+// facultative, utiliser plutôt { step_decision: "passe", skip_reason: "…" }.
+export function realizationPayload(stepCode: string): Record<string, unknown> {
+  if (stepCode === "PLANIFICATION") return { step_decision: "realise", realization: { responsible_name: "Resp. projet", schedule: "Jalons prévisionnels" } };
+  if (stepCode === "EXPERTISE") return { step_decision: "realise", realization: { expert_name: "Dr. Expert", expert_opinion: "favorable" } };
+  if (stepCode === "REECRITURE") return { step_decision: "realise", realization: { note: "Consignes de réécriture" } };
+  return {};
+}
+
 // isbn13 est unique en base : un préfixe de test statique collisionne dès la
 // deuxième exécution de la suite sur une base non réinitialisée entre les runs.
 export function uniqueIsbnPrefix(digitWidth: number): string {

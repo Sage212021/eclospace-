@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
 import { CORRECTION_PHASES, isCorrectionPhase, correctionDocTitle, correctionCycleState } from "../lib/correctionCycle.js";
 import { deliverableDocTitle, stepDeliverableMeta } from "../lib/stepDeliverables.js";
+import { optionalStepMeta } from "../lib/stepRealization.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
@@ -915,6 +916,19 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       });
       await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { step_deliverable: code }, ipAddress: request.ip });
       return reply.code(201).send({ version_id: version.id, step_code: code });
+    },
+  );
+
+  // Étape « à option » (Expertise, Réécriture, Projet) : méta pour piloter le
+  // panneau de décision « Réaliser / Passer » et les éléments à renseigner.
+  fastify.get(
+    "/api/v1/manuscripts/:id/optional-step/:code",
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "consultation" }, { module: "manuscripts", action: "consultation" }]) },
+    async (request, reply) => {
+      const { id, code } = request.params as { id: string; code: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      return reply.send(await optionalStepMeta(id, code));
     },
   );
 

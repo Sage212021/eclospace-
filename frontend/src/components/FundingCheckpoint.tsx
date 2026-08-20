@@ -62,7 +62,9 @@ export function FundingCheckpoint({
     <section className="ecl-card">
       <h3 style={{ fontSize: 15, margin: "0 0 4px", color: "var(--ink)" }}>Prise en charge & devis</h3>
       <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 0 }}>
-        Qui finance l'ouvrage ? Pour un ouvrage à compte d'auteur, un devis est attendu — mais cette étape ne bloque jamais le travail éditorial.
+        Chez Éclosion, l'auteur paie le <strong>travail éditorial jusqu'au BAT</strong> dans les deux cas. La différence : à
+        compte d'éditeur, Éclosion prend en charge la suite (impression, communication…) ; à compte d'auteur, l'auteur paie
+        aussi toute la suite de la chaîne. Un devis est donc attendu dans les deux modes — sans jamais bloquer le travail éditorial.
       </p>
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{error}</div>}
 
@@ -80,12 +82,16 @@ export function FundingCheckpoint({
         ))}
       </div>
 
-      {!author && <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>À compte d'éditeur : aucun devis auteur requis.</p>}
+      <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 8px" }}>
+        {author
+          ? "À compte d'auteur : l'auteur finance le travail éditorial (jusqu'au BAT) ET toute la suite (impression, diffusion…)."
+          : "À compte d'éditeur : l'auteur finance le travail éditorial (jusqu'au BAT) ; Éclosion prend en charge la suite."}
+      </p>
 
-      {author && (
+      {(
         <>
           <div style={{ fontSize: 13, marginBottom: 8 }}>
-            <span style={{ color: "var(--muted)" }}>État du jalon : </span>
+            <span style={{ color: "var(--muted)" }}>État du jalon (devis éditorial jusqu'au BAT) : </span>
             <span style={{ fontWeight: 700, color: quoteDecision === "skipped" ? "var(--muted)" : "var(--ink)" }}>{DECISION_LABEL[quoteDecision]}</span>
             {quoteDecision === "skipped" && quoteDecisionNote ? <span style={{ color: "var(--muted)" }}> — {quoteDecisionNote}</span> : null}
           </div>

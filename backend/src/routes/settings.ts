@@ -188,6 +188,44 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
     return reply.send({ steps: updated.value, candidates: CANDIDATE_STEPS });
   });
 
+  // Étapes « à option » (Expertise, Réécriture, Projet/Planification) : mode
+  // choisi À L'AVANCE — « facultative » (l'opérateur peut passer l'étape avec un
+  // motif) ou « obligatoire » (l'étape doit être réalisée). Le détail des
+  // éléments à renseigner quand l'étape est réalisée est fixé côté backend.
+  const OPTIONAL_STEP_META = [
+    { code: "EXPERTISE", label: "Expertise scientifique" },
+    { code: "REECRITURE", label: "Réécriture éditoriale" },
+    { code: "PLANIFICATION", label: "Projet (planification)" },
+  ];
+  const STEP_MODES_KEY = "workflow_step_modes";
+  const DEFAULT_STEP_MODES = { EXPERTISE: "facultative", REECRITURE: "facultative", PLANIFICATION: "obligatoire" } as const;
+
+  fastify.get("/api/v1/workflow-step-modes", { preHandler: requireAuth }, async (_request, reply) => {
+    const row = await prisma.setting.findUnique({ where: { key: STEP_MODES_KEY } });
+    const stored = { ...DEFAULT_STEP_MODES };
+    const value = (row?.value ?? {}) as Record<string, unknown>;
+    for (const s of OPTIONAL_STEP_META) {
+      if (value[s.code] === "facultative" || value[s.code] === "obligatoire") (stored as Record<string, string>)[s.code] = value[s.code] as string;
+    }
+    return reply.send({ modes: stored, steps: OPTIONAL_STEP_META });
+  });
+
+  fastify.put("/api/v1/workflow-step-modes", { preHandler: requirePermission("settings", "administration") }, async (request, reply) => {
+    const modeEnum = z.enum(["facultative", "obligatoire"]);
+    const parsed = z
+      .object({ modes: z.object({ EXPERTISE: modeEnum, REECRITURE: modeEnum, PLANIFICATION: modeEnum }) })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Modes d'étape invalides.", details: parsed.error.issues });
+    const existing = await prisma.setting.findUnique({ where: { key: STEP_MODES_KEY } });
+    const updated = await prisma.setting.upsert({
+      where: { key: STEP_MODES_KEY },
+      create: { key: STEP_MODES_KEY, value: parsed.data.modes as never, updatedBy: request.user!.id },
+      update: { value: parsed.data.modes as never, version: { increment: 1 }, updatedBy: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "setting", entityId: STEP_MODES_KEY, oldValues: (existing?.value ?? null) as never, newValues: updated.value as never, ipAddress: request.ip });
+    return reply.send({ modes: updated.value, steps: OPTIONAL_STEP_META });
+  });
+
   // Diagnostic de persistance : vérifie, DEPUIS L'INTERFACE, que la base de
   // données est joignable, à jour (migrations appliquées) et DURABLE — en
   // affichant le nombre réel d'enregistrements. L'opérateur enregistre une donnée

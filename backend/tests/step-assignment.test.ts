@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { createUserWithRole, extractSessionCookie, seedStepDeliverable } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, seedStepDeliverable, realizationPayload } from "./helpers.js";
 
 // Affectation nominative d'étape (demande opérateur 20/08/2026) : l'étape qui
 // transmet peut confier le dossier à UNE personne précise du service suivant
@@ -61,7 +61,7 @@ describe("affectation nominative de l'étape suivante", () => {
       method: "POST",
       url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`,
       headers: { cookie: adminCookie },
-      payload: { assignee_id: correcteurId },
+      payload: { ...realizationPayload("PLANIFICATION"), assignee_id: correcteurId },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe("CORRECTION");
@@ -84,7 +84,7 @@ describe("affectation nominative de l'étape suivante", () => {
       method: "POST",
       url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`,
       headers: { cookie: adminCookie },
-      payload: { assignee_id: magasinierId },
+      payload: { ...realizationPayload("PLANIFICATION"), assignee_id: magasinierId },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe("invalid_assignee");
@@ -103,7 +103,7 @@ describe("affectation nominative de l'étape suivante", () => {
     expect((before.json() as { manuscript_id: string }[]).some((d) => d.manuscript_id === m.id)).toBe(false);
 
     // On confie le dossier au correcteur.
-    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie: adminCookie }, payload: { assignee_id: correcteurId } });
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie: adminCookie }, payload: { ...realizationPayload("PLANIFICATION"), assignee_id: correcteurId } });
 
     const after = await app.inject({ method: "GET", url: "/api/v1/my-dossiers", headers: { cookie: corrCookie } });
     expect(after.statusCode).toBe(200);
@@ -114,7 +114,7 @@ describe("affectation nominative de l'étape suivante", () => {
 
   it("sans désignation, l'affectation reste facultative (le service est notifié)", async () => {
     const m = await manuscriptAt("PLANIFICATION");
-    const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie: adminCookie }, payload: {} });
+    const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie: adminCookie }, payload: realizationPayload("PLANIFICATION") });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe("CORRECTION");
     // Le service correction (dont le correcteur) est notifié « Nouveau dossier ».

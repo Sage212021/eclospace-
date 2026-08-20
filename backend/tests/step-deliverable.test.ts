@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie } from "./helpers.js";
+import { extractSessionCookie, realizationPayload } from "./helpers.js";
 
 // Verrou « livrable de sortie » : une étape soumise au verrou (Planification…)
 // ne se valide pas tant que son fichier livrable n'est pas déposé.
@@ -49,7 +49,7 @@ describe("verrou « livrable de sortie » d'étape", () => {
     expect(meta0.json().has_file).toBe(false);
 
     // Validation refusée.
-    const blocked = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: {} });
+    const blocked = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: realizationPayload("PLANIFICATION") });
     expect(blocked.statusCode).toBe(409);
     expect(blocked.json().code).toBe("deliverable_missing");
 
@@ -62,7 +62,7 @@ describe("verrou « livrable de sortie » d'étape", () => {
     expect(meta1.json().has_file).toBe(true);
 
     // Validation possible.
-    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: {} });
+    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: realizationPayload("PLANIFICATION") });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().status).toBe("CORRECTION");
   });
@@ -80,7 +80,7 @@ describe("verrou « livrable de sortie » d'étape", () => {
     expect(put.statusCode).toBe(200);
     try {
       const m = await manuscriptAt("PLANIFICATION");
-      const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: {} });
+      const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: realizationPayload("PLANIFICATION") });
       expect(ok.statusCode).toBe(200);
     } finally {
       // Restaure le défaut pour ne pas contaminer les autres suites.

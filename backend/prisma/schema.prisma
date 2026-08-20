@@ -1855,6 +1855,14 @@ model ManuscriptStep {
   validatedAt   DateTime?      @map("validated_at")
   observations  String?
 
+  // Étapes « à option » (Expertise, Réécriture, Projet/Planification) : trace de
+  // la décision opérateur au moment de valider — soit l'étape est RÉALISÉE (avec
+  // ses éléments renseignés dans realizationData), soit elle est PASSÉE (motif
+  // obligatoire dans skipReason). Nul pour les étapes ordinaires.
+  realizationMode String?  @map("realization_mode") // "realise" | "passe"
+  skipReason      String?  @map("skip_reason")
+  realizationData Json?    @map("realization_data")
+
   createdAt DateTime @default(now()) @map("created_at")
 
   tasks Task[]

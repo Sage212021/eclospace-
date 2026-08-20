@@ -478,12 +478,58 @@ export function setPublicationDate(manuscriptId: string, publicationDate: string
 export function validateStep(
   manuscriptId: string,
   step: string,
-  options?: { observations?: string; outcome?: "conforme" | "incomplet"; requires_rewrite?: boolean; assignee_id?: string },
+  options?: {
+    observations?: string;
+    outcome?: "conforme" | "incomplet";
+    requires_rewrite?: boolean;
+    assignee_id?: string;
+    // Étapes « à option » (Expertise, Réécriture, Projet) : décision de l'opérateur.
+    step_decision?: "realise" | "passe";
+    skip_reason?: string;
+    realization?: Record<string, string | number>;
+  },
 ) {
-  return request<{ advanced: boolean; status: string | null }>(`/api/v1/manuscripts/${manuscriptId}/steps/${step}/validate`, {
+  return request<{ advanced: boolean; status: string | null; realization_mode?: string | null }>(`/api/v1/manuscripts/${manuscriptId}/steps/${step}/validate`, {
     method: "POST",
     body: JSON.stringify(options ?? {}),
   });
+}
+
+// Étape « à option » (Expertise, Réécriture, Projet) : méta pour piloter le
+// panneau « Réaliser / Passer » et les éléments à renseigner quand on réalise.
+export interface OptionalStepField {
+  key: string;
+  label: string;
+  type: "text" | "textarea" | "number" | "select";
+  required: boolean;
+  options?: { value: string; label: string }[];
+}
+export type OptionalStepMeta =
+  | { step_code: string; is_optional: false }
+  | {
+      step_code: string;
+      is_optional: true;
+      mode: "facultative" | "obligatoire";
+      label: string;
+      fields: OptionalStepField[];
+      decided_mode: "realise" | "passe" | null;
+      skip_reason: string | null;
+      data: Record<string, unknown> | null;
+    };
+export function getOptionalStep(manuscriptId: string, code: string) {
+  return request<OptionalStepMeta>(`/api/v1/manuscripts/${manuscriptId}/optional-step/${code}`);
+}
+
+// Paramètre : mode (facultative / obligatoire) des étapes « à option ».
+export interface WorkflowStepModesConfig {
+  modes: Record<"EXPERTISE" | "REECRITURE" | "PLANIFICATION", "facultative" | "obligatoire">;
+  steps: { code: string; label: string }[];
+}
+export function getWorkflowStepModes() {
+  return request<WorkflowStepModesConfig>("/api/v1/workflow-step-modes");
+}
+export function updateWorkflowStepModes(modes: WorkflowStepModesConfig["modes"]) {
+  return request<WorkflowStepModesConfig>("/api/v1/workflow-step-modes", { method: "PUT", body: JSON.stringify({ modes }) });
 }
 
 // Candidats à l'affectation nominative de l'étape suivante (maquettiste,

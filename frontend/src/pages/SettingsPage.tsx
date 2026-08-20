@@ -153,6 +153,9 @@ const PUBLISHER_FIELDS: { key: keyof PublisherIdentity; label: string }[] = [
   { key: "web", label: "Site web" },
   { key: "rep", label: "Représentant (signataire)" },
   { key: "ville", label: "Ville (lieu de signature)" },
+  { key: "dipe", label: "N° DIPE employeur (CNPS)" },
+  { key: "dipe_cle", label: "Clé DIPE (CNPS)" },
+  { key: "cnps_regime", label: "Régime CNPS (DIPE)" },
 ];
 
 function PublisherIdentityCard({ canAdminister }: { canAdminister: boolean }) {
@@ -196,7 +199,7 @@ function PublisherIdentityCard({ canAdminister }: { canAdminister: boolean }) {
             <label key={f.key} style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 12 }}>
               <span style={{ color: "var(--muted)" }}>{f.label}</span>
               <input
-                value={identity[f.key]}
+                value={identity[f.key] ?? ""}
                 disabled={!canAdminister}
                 onChange={(e) => setIdentity((cur) => (cur ? { ...cur, [f.key]: e.target.value } : cur))}
                 onFocus={() => setNote(null)}

@@ -3693,6 +3693,9 @@ export interface PublisherIdentity {
   web: string;
   rep: string;
   ville: string;
+  dipe?: string;
+  dipe_cle?: string;
+  cnps_regime?: string;
 }
 export function getPublisherIdentity() {
   return request<PublisherIdentity>("/api/v1/publisher-identity");
@@ -4144,10 +4147,10 @@ export function savePayrollProfile(employeeId: string, input: PayrollProfileInpu
 // Calcul du bulletin (D-007, incrément 3).
 export interface Payslip {
   base: number; complements: number; prime_anciennete: number; retenue_absence: number;
-  salaire_brut: number; assiette_fiscale: number; assiette_cnps: number;
+  salaire_brut: number; assiette_fiscale: number; cnps_cotisable_total: number; assiette_cnps: number;
   pvid_salarie: number; pvid_patronal: number; prestations_familiales: number; accidents_travail: number;
   cfc_salarie: number; cfc_patronal: number; fne: number; taxe_communale: number; rav: number;
-  base_irpp_annuelle: number; irpp_cac: number;
+  base_irpp_annuelle: number; irpp: number; irpp_cac: number;
   total_retenues_internes: number; total_retenues_salariales: number; total_charges_patronales: number;
   net_a_payer: number; cout_employeur: number;
 }
@@ -4284,6 +4287,38 @@ export function returnPayrollMonth(period: string, reason: string) {
 }
 export function getPayrollMonth(period: string) {
   return request<PayrollMonth>(`/api/v1/payroll/monthly/${period}`);
+}
+
+// DIPE mensuel CNPS : colonnes exactes du formulaire de télédéclaration.
+export interface DipeRow {
+  matricule_assure: string;
+  nb_jours: number;
+  salaire_brut: number;
+  elements_exceptionnels: number;
+  salaire_taxable: number;
+  cotisable_total: number;
+  cotisable_plafonne: number;
+  irpp: number;
+  matricule_interne: string;
+  nom_prenom: string;
+}
+export type DipeIrppMode = "irpp_cac" | "irpp";
+export interface DipeMonth {
+  period: string;
+  annee: number;
+  mois: number;
+  n_dipe: string;
+  cle: string;
+  regime: string;
+  irpp_mode: DipeIrppMode;
+  irpp_label: string;
+  effectif: number;
+  rows: DipeRow[];
+  totals: { salaire_brut: number; salaire_taxable: number; cotisable_total: number; cotisable_plafonne: number; irpp: number };
+  closed: boolean;
+}
+export function getPayrollDipe(period: string, irppMode: DipeIrppMode = "irpp_cac") {
+  return request<DipeMonth>(`/api/v1/payroll/dipe?period=${encodeURIComponent(period)}&irpp_mode=${irppMode}`);
 }
 export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null, extraLines?: PayrollExtraLine[]) {
   return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...elements, note: note ?? null, extra_lines: extraLines ?? [] }) });

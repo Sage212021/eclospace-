@@ -21,6 +21,10 @@ const PUBLISHER_DEFAULTS = {
   web: "www.eclosion.cm",
   rep: "Mme Christelle NOAH, Directeur Général",
   ville: "Yaoundé",
+  // Identifiants employeur CNPS, servent au DIPE mensuel (déclaration CNPS).
+  dipe: "",
+  dipe_cle: "",
+  cnps_regime: "General",
 };
 const publisherSchema = z.object({
   name: z.string().max(200),
@@ -33,6 +37,9 @@ const publisherSchema = z.object({
   web: z.string().max(200),
   rep: z.string().max(200),
   ville: z.string().max(120),
+  dipe: z.string().max(60).optional().default(""),
+  dipe_cle: z.string().max(10).optional().default(""),
+  cnps_regime: z.string().max(40).optional().default("General"),
 });
 
 // Identifiant d'instance (par processus) et heure de démarrage : servent au

@@ -4,6 +4,8 @@ import {
   getPayrollJournal,
   getPayrollRateSet,
   getMonthlyAnomalies,
+  getPayrollDipe,
+  getPublisherIdentity,
   listAuditLog,
   listPayrollFormulas,
   testPayrollFormula,
@@ -15,7 +17,9 @@ import {
   type PayrollAnomalies,
   type PayrollFormula,
   type AuditEntry,
+  type DipeMonth,
 } from "../api/client";
+import { printDipe } from "../lib/print";
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { GuidanceNote } from "./GuidanceNote";
@@ -574,6 +578,122 @@ function DeclarationsCard({ kind }: { kind: "cnps" | "fiscal" }) {
   );
 }
 
+// ── DIPE mensuel CNPS : le livre de paie aux colonnes du formulaire officiel ──
+// de télédéclaration (e-services CNPS). Aperçu à l'écran + impression/PDF (mise
+// en forme officielle) + export CSV pour saisie/import sur le portail.
+function DipeCard() {
+  const [period, setPeriod] = useState(currentPeriod());
+  const [irppMode, setIrppMode] = useState<"irpp_cac" | "irpp">("irpp_cac");
+  const [dipe, setDipe] = useState<DipeMonth | null>(null);
+  const [employer, setEmployer] = useState("EDITIONS ECLOSION");
+  const [state, setState] = useState<"loading" | "ok" | "none">("loading");
+  useEffect(() => {
+    setState("loading");
+    Promise.all([getPayrollDipe(period, irppMode), getPublisherIdentity().catch(() => null)])
+      .then(([d, id]) => { setDipe(d); if (id?.name) setEmployer(id.name); setState(d.rows.length > 0 ? "ok" : "none"); })
+      .catch(() => { setDipe(null); setState("none"); });
+  }, [period, irppMode]);
+
+  function exportCsv() {
+    if (!dipe) return;
+    const header = ["Matricule Assuré", "NB. Jrs", "Salaire Brut", "Éléments except.", "Salaire Taxable", "Cotisable Total", "Cotisable Plafonné", dipe.irpp_label, "Matricule interne", "Nom et Prénom"];
+    const lines = dipe.rows.map((r) => [r.matricule_assure, r.nb_jours, r.salaire_brut, r.elements_exceptionnels, r.salaire_taxable, r.cotisable_total, r.cotisable_plafonne, r.irpp, r.matricule_interne, r.nom_prenom]);
+    const csv = [header, ...lines].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dipe-mensuel_${dipe.period}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const cols = [
+    { k: "matricule_assure", label: "Matricule Assuré", money: false },
+    { k: "nb_jours", label: "NB. Jrs", money: false },
+    { k: "salaire_brut", label: "Salaire Brut", money: true },
+    { k: "elements_exceptionnels", label: "Élém. except.", money: true },
+    { k: "salaire_taxable", label: "Salaire Taxable", money: true },
+    { k: "cotisable_total", label: "Cotisable — Total", money: true },
+    { k: "cotisable_plafonne", label: "Cotisable — Plafonné", money: true },
+    { k: "irpp", label: "IRPP", money: true },
+    { k: "matricule_interne", label: "Matricule interne", money: false },
+    { k: "nom_prenom", label: "Nom et Prénom", money: false },
+  ] as const;
+
+  return (
+    <Card title="DIPE mensuel (CNPS)" icon={<span aria-hidden>🏛️</span>} subtitle="Déclaration mensuelle CNPS aux colonnes du formulaire officiel — aperçu, impression/PDF et export CSV." collapsible>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+        <label style={{ fontSize: 13 }}>Mois : <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono)" }} /></label>
+        <label style={{ fontSize: 13 }}>Colonne IRPP :{" "}
+          <select value={irppMode} onChange={(e) => setIrppMode(e.target.value as "irpp_cac" | "irpp")} style={{ fontSize: 13 }}>
+            <option value="irpp_cac">IRPP + CAC (total à reverser)</option>
+            <option value="irpp">IRPP seul (hors CAC)</option>
+          </select>
+        </label>
+        {state === "ok" && dipe && (
+          <>
+            <Button variant="edit" size="sm" type="button" onClick={() => printDipe({ ...dipe, employer })}>Imprimer / PDF</Button>
+            <Button variant="export" size="sm" type="button" onClick={exportCsv}>Export CSV</Button>
+          </>
+        )}
+      </div>
+
+      {state === "loading" && <p style={{ fontSize: 13, color: "var(--muted)" }}>Chargement…</p>}
+      {state === "none" && <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>Aucun salarié avec fiche paie pour ce mois — préparez la paie dans « Bulletins de paie ».</p>}
+      {state === "ok" && dipe && (
+        <>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 10, fontSize: 12.5 }}>
+            <span>N° DIPE : <b className="num" style={{ fontFamily: "var(--font-mono)" }}>{dipe.n_dipe || "— (à renseigner dans Paramètres)"}</b></span>
+            <span>Clé : <b style={{ fontFamily: "var(--font-mono)" }}>{dipe.cle || "—"}</b></span>
+            <span>Régime : <b>{dipe.regime}</b></span>
+            <span>Effectif : <b style={{ fontFamily: "var(--font-mono)" }}>{dipe.effectif}</b></span>
+          </div>
+          {!dipe.n_dipe && (
+            <p style={{ fontSize: 12, color: "var(--eclosion-retard, #C4661F)", marginTop: 6 }}>
+              Le N° DIPE de l'employeur n'est pas renseigné : ouvrez « Paramètres » du moteur de paie pour le saisir (il figurera sur la déclaration).
+            </p>
+          )}
+          <div style={{ overflowX: "auto", marginTop: 10 }}>
+            <table style={{ borderCollapse: "collapse", fontSize: 11.5, minWidth: 900 }}>
+              <thead>
+                <tr style={{ color: "var(--muted)", fontSize: 10.5, textAlign: "right" }}>
+                  {cols.map((c) => <th key={c.k} style={{ padding: "4px 8px", textAlign: c.money ? "right" : "left", whiteSpace: "nowrap" }}>{c.k === "irpp" ? dipe.irpp_label : c.label}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {dipe.rows.map((r, i) => (
+                  <tr key={i} style={{ borderTop: "1px solid var(--line)", fontFamily: "var(--font-mono)" }}>
+                    {cols.map((c) => {
+                      const v = (r as unknown as Record<string, string | number>)[c.k];
+                      return <td key={c.k} style={{ padding: "4px 8px", textAlign: c.money ? "right" : "left", fontFamily: c.money || c.k === "matricule_assure" || c.k === "matricule_interne" ? "var(--font-mono)" : "inherit", whiteSpace: "nowrap" }}>{c.money ? fcfa(Number(v)) : v}</td>;
+                    })}
+                  </tr>
+                ))}
+                <tr style={{ borderTop: "2px solid var(--line)", fontFamily: "var(--font-mono)", fontWeight: 700 }}>
+                  <td style={{ padding: "4px 8px", fontFamily: "inherit" }}>TOTAL ({dipe.effectif})</td>
+                  <td></td>
+                  <td style={{ padding: "4px 8px", textAlign: "right" }}>{fcfa(dipe.totals.salaire_brut)}</td>
+                  <td></td>
+                  <td style={{ padding: "4px 8px", textAlign: "right" }}>{fcfa(dipe.totals.salaire_taxable)}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right" }}>{fcfa(dipe.totals.cotisable_total)}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right" }}>{fcfa(dipe.totals.cotisable_plafonne)}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right" }}>{fcfa(dipe.totals.irpp)}</td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 8, lineHeight: 1.6 }}>
+            « Salaire Cotisable CNPS » : Total = assiette avant plafond, Plafonné = assiette retenue (plafond CNPS). Colonne « {dipe.irpp_label} » : {dipe.irpp_mode === "irpp_cac" ? "impôt sur le revenu total (IRPP + CAC), montant à reverser au fisc" : "IRPP seul, hors centimes additionnels communaux"}. NB. Jrs = 30. Montants issus des bulletins du mois.
+          </p>
+        </>
+      )}
+    </Card>
+  );
+}
+
 // ── Retenues internes du mois : synthèse par salarié (données réelles) ──────
 function InternesCard() {
   const [period, setPeriod] = useState(currentPeriod());
@@ -668,6 +788,7 @@ export function PayrollEngineHub({
         <JournalCard />
         <DeclarationsCard kind="cnps" />
         <DeclarationsCard kind="fiscal" />
+        <DipeCard />
         <FormulasCard />
         <FormulaEditorCard canManage={canManagePayroll} />
         <HistoryCard />

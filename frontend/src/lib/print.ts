@@ -626,6 +626,87 @@ export function printAuthorRoyaltyStatement(d: AuthorRoyaltyStatementData, opts?
   openPrintWindow(`${tr("État annuel des droits", "Annual royalty statement")} — ${d.authorName} — ${d.year}`, body, opts);
 }
 
+export interface DipePrintData {
+  annee: number;
+  mois: number;
+  n_dipe: string;
+  cle: string;
+  regime: string;
+  irpp_label: string;
+  effectif: number;
+  employer: string;
+  rows: {
+    matricule_assure: string;
+    nb_jours: number;
+    salaire_brut: number;
+    elements_exceptionnels: number;
+    salaire_taxable: number;
+    cotisable_total: number;
+    cotisable_plafonne: number;
+    irpp: number;
+    matricule_interne: string;
+    nom_prenom: string;
+  }[];
+  totals: { salaire_brut: number; salaire_taxable: number; cotisable_total: number; cotisable_plafonne: number; irpp: number };
+}
+
+// DIPE mensuel CNPS : reprend, aux colonnes exactes du formulaire officiel de
+// télédéclaration, le livre de paie du mois. Orientation paysage (10 colonnes).
+export function printDipe(d: DipePrintData): void {
+  const MONTHS = ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+  const rows = d.rows
+    .map(
+      (r) => `<tr>
+        <td class="num">${escapeHtml(r.matricule_assure)}</td>
+        <td class="r num">${r.nb_jours}</td>
+        <td class="r num">${fnum(r.salaire_brut)}</td>
+        <td class="r num">${fnum(r.elements_exceptionnels)}</td>
+        <td class="r num">${fnum(r.salaire_taxable)}</td>
+        <td class="r num">${fnum(r.cotisable_total)}</td>
+        <td class="r num">${fnum(r.cotisable_plafonne)}</td>
+        <td class="r num">${fnum(r.irpp)}</td>
+        <td class="num">${escapeHtml(r.matricule_interne)}</td>
+        <td>${escapeHtml(r.nom_prenom)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const body = `
+    <style>@page { size: A4 landscape; }</style>
+    <div class="doc__title">Formulaire de génération du DIPE mensuel — CNPS</div>
+    <div class="meta">
+      <span>N° DIPE : <b class="num">${escapeHtml(d.n_dipe) || "—"}</b></span>
+      <span>Clé : <b class="num">${escapeHtml(d.cle) || "—"}</b></span>
+      <span>Année : <b class="num">${d.annee}</b></span>
+      <span>Mois : <b>${MONTHS[d.mois] ?? d.mois}</b></span>
+      <span>Régime : <b>${escapeHtml(d.regime)}</b></span>
+      <span>Effectif : <b class="num">${d.effectif}</b></span>
+    </div>
+    <div class="party"><div class="party__label">Employeur</div><div class="party__name">${escapeHtml(d.employer)}</div></div>
+    <table class="lines" style="margin-top:12px; font-size:10px">
+      <thead><tr>
+        <th>Matricule Assuré</th><th class="r">NB. Jrs</th><th class="r">Salaire Brut</th>
+        <th class="r">Élém. except.</th><th class="r">Salaire Taxable</th>
+        <th class="r">Cotisable — Total</th><th class="r">Cotisable — Plafonné</th>
+        <th class="r">${escapeHtml(d.irpp_label)}</th><th>Matricule interne</th><th>Nom et Prénom</th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="10">Aucun salarié avec fiche paie pour ce mois.</td></tr>`}</tbody>
+      <tfoot><tr style="font-weight:700; border-top:2px solid #16233d">
+        <td>TOTAL (${d.effectif})</td><td></td>
+        <td class="r num">${fnum(d.totals.salaire_brut)}</td><td></td>
+        <td class="r num">${fnum(d.totals.salaire_taxable)}</td>
+        <td class="r num">${fnum(d.totals.cotisable_total)}</td>
+        <td class="r num">${fnum(d.totals.cotisable_plafonne)}</td>
+        <td class="r num">${fnum(d.totals.irpp)}</td><td></td><td></td>
+      </tr></tfoot>
+    </table>
+    <div style="margin-top:18px;font-size:10px;color:#6b7280;line-height:1.6">
+      « Salaire Cotisable CNPS » : Montant Total = assiette avant plafond ; Montant Plafonné = assiette retenue (plafond CNPS). Colonne « ${escapeHtml(d.irpp_label)} »${d.irpp_label.includes("CAC") ? " : impôt sur le revenu total (IRPP + centimes additionnels communaux)" : " : impôt sur le revenu seul (hors CAC)"}. NB. Jrs = 30 (convention CNPS pour un mois complet). Montants issus des bulletins du mois — aucun recalcul à l'impression.
+    </div>`;
+
+  openPrintWindow(`DIPE ${MONTHS[d.mois] ?? d.mois} ${d.annee}`, body);
+}
+
 const PO_STATUS_LABELS: Record<string, [string, string]> = {
   draft: ["Brouillon", "Draft"],
   approved: ["Approuvé", "Approved"],

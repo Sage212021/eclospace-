@@ -561,6 +561,68 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // DIPE mensuel CNPS : reprend le livre de paie du mois dans les colonnes
+  // exactes du « Formulaire de génération du DIPE mensuel » (e-services CNPS),
+  // pour saisie/import sur le portail. NB. Jrs = 30 (convention CNPS pour un mois
+  // complet). Éléments de salaire exceptionnels = 0 (aucun distinct à ce jour).
+  // Colonne IRPP = IRPP seul (le CAC est une taxe communale distincte).
+  fastify.get(
+    "/api/v1/payroll/dipe",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const q = request.query as { period?: string; irpp_mode?: string };
+      const period = normalizePeriod(q.period);
+      // Colonne IRPP : au Cameroun le DIPE reverse l'impôt sur le revenu total,
+      // soit IRPP + CAC (défaut). Le RH peut demander l'IRPP seul (hors centimes
+      // additionnels communaux) via irpp_mode=irpp.
+      const irppMode = q.irpp_mode === "irpp" ? "irpp" : "irpp_cac";
+      const reg = await computeRegister(period);
+      if ("error" in reg) return reply.code(reg.status).send(reg.error);
+
+      const idRow = await prisma.setting.findUnique({ where: { key: "publisher_identity" } });
+      const identity = (idRow?.value ?? {}) as Record<string, unknown>;
+      const [year, month] = period.split("-");
+
+      const rows = reg.lines.map((l) => ({
+        matricule_assure: l.cnps_number ?? "",
+        nb_jours: 30,
+        salaire_brut: l.salaire_brut,
+        elements_exceptionnels: 0,
+        salaire_taxable: l.salaire_taxable,
+        cotisable_total: l.cnps_cotisable_total,
+        cotisable_plafonne: l.assiette_cnps,
+        irpp: irppMode === "irpp" ? l.irpp : l.irpp_cac,
+        matricule_interne: l.matricule ?? "",
+        nom_prenom: l.employee_name,
+      }));
+      const totals = rows.reduce(
+        (t, r) => ({
+          salaire_brut: t.salaire_brut + r.salaire_brut,
+          salaire_taxable: t.salaire_taxable + r.salaire_taxable,
+          cotisable_total: t.cotisable_total + r.cotisable_total,
+          cotisable_plafonne: t.cotisable_plafonne + r.cotisable_plafonne,
+          irpp: t.irpp + r.irpp,
+        }),
+        { salaire_brut: 0, salaire_taxable: 0, cotisable_total: 0, cotisable_plafonne: 0, irpp: 0 },
+      );
+
+      return reply.send({
+        period,
+        annee: Number(year),
+        mois: Number(month),
+        n_dipe: (identity.dipe as string) ?? "",
+        cle: (identity.dipe_cle as string) ?? "",
+        regime: (identity.cnps_regime as string) || "General",
+        irpp_mode: irppMode,
+        irpp_label: irppMode === "irpp" ? "IRPP" : "IRPP + CAC",
+        effectif: rows.length,
+        rows,
+        totals,
+        closed: Boolean(await prisma.payrollClosure.findUnique({ where: { periodKey: period }, select: { closedAt: true } })),
+      });
+    },
+  );
+
   // Clôture / gel d'une période : archive le livre dans le journal immuable.
   // Refusée si la période est déjà clôturée (anti-doublon).
   fastify.post(
@@ -1321,7 +1383,10 @@ async function computeRegister(period: string): Promise<
       cnps_number: p.cnpsNumber,
       niu: p.niu,
       salaire_brut: ps.salaire_brut,
+      salaire_taxable: ps.assiette_fiscale,
+      cnps_cotisable_total: ps.cnps_cotisable_total,
       assiette_cnps: ps.assiette_cnps,
+      irpp: ps.irpp,
       pvid_salarie: ps.pvid_salarie,
       pvid_patronal: ps.pvid_patronal,
       prestations_familiales: ps.prestations_familiales,
@@ -1352,7 +1417,10 @@ interface RegisterLine {
   cnps_number: string | null;
   niu: string | null;
   salaire_brut: number;
+  salaire_taxable: number;
+  cnps_cotisable_total: number;
   assiette_cnps: number;
+  irpp: number;
   pvid_salarie: number;
   pvid_patronal: number;
   prestations_familiales: number;

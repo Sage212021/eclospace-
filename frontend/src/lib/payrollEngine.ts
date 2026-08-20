@@ -46,7 +46,8 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
   }
   const brut = Math.max(input.base + input.complements + prime - input.retenueAbsence, 0);
   const assietteFiscale = Math.max(input.fiscalBase + prime - input.retenueAbsence, 0);
-  const assietteCnps = Math.min(r(assietteFiscale * rates.coefAssiette), rates.cnpsCeiling);
+  const cnpsCotisableTotal = r(assietteFiscale * rates.coefAssiette);
+  const assietteCnps = Math.min(cnpsCotisableTotal, rates.cnpsCeiling);
   const pvidSal = r(assietteCnps * rates.vidSal);
   const pvidPat = r(assietteCnps * rates.vidPat);
   const pf = r(assietteCnps * rates.pf);
@@ -58,6 +59,7 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
   const rav = brut <= rates.tcRav.seuil1 ? rates.tcRav.rav1 : brut <= rates.tcRav.seuil2 ? rates.tcRav.rav2 : rates.tcRav.rav3;
   const parts = input.applyFiscalParts ? Math.max(input.fiscalParts, 1) : 1;
   const baseIrppAnnuelle = Math.max(assietteFiscale * 12 * (1 - rates.abatPct) - rates.abatFixe, 0) / parts;
+  const irppSeul = r(irppAnnuel(baseIrppAnnuelle, rates.irpp) / 12);
   const irppCac = r((irppAnnuel(baseIrppAnnuelle, rates.irpp) * (1 + rates.cacPct)) / 12);
   const totalInternes = input.internal.avance + input.internal.pret + input.internal.retard + input.internal.autres;
   const totalRetenuesSal = pvidSal + cfcSal + tc + rav + irppCac;
@@ -70,6 +72,7 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
     retenue_absence: input.retenueAbsence,
     salaire_brut: brut,
     assiette_fiscale: assietteFiscale,
+    cnps_cotisable_total: cnpsCotisableTotal,
     assiette_cnps: assietteCnps,
     pvid_salarie: pvidSal,
     pvid_patronal: pvidPat,
@@ -81,6 +84,7 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
     taxe_communale: tc,
     rav,
     base_irpp_annuelle: r(baseIrppAnnuelle),
+    irpp: irppSeul,
     irpp_cac: irppCac,
     total_retenues_internes: totalInternes,
     total_retenues_salariales: totalRetenuesSal,

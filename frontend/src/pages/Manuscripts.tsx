@@ -8,10 +8,12 @@ import {
   listGenres,
   listManuscripts,
   listUsers,
+  getManuscriptsHistoryByDay,
   type CatalogueFilters,
   type Collection,
   type Genre,
   type Manuscript,
+  type ManuscriptHistoryDay,
   type UserSummary,
 } from "../api/client";
 import { Button } from "../components/Button";
@@ -241,11 +243,69 @@ export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, status
             </div>
           </AccordionSection>
 
+          <AccordionSection open={section === "historique"} onToggle={() => setSection(section === "historique" ? "" : "historique")} icon="🗓️" label="Historique par jour (manuscrits reçus)">
+            {section === "historique" && <HistoryByDay onOpenManuscript={onOpenManuscript} />}
+          </AccordionSection>
+
           <AccordionSection open={section === "stats"} onToggle={() => setSection(section === "stats" ? "" : "stats")} icon="📊" label="Statistiques & indicateurs">
             <ManuscriptsDashboard />
           </AccordionSection>
         </div>
       )}
+    </div>
+  );
+}
+
+// Historique chronologique des manuscrits reçus / inscrits, un jour = une
+// section dépliable (chargé à l'ouverture de l'accordéon parent).
+function HistoryByDay({ onOpenManuscript }: { onOpenManuscript: (id: string) => void }) {
+  const [days, setDays] = useState<ManuscriptHistoryDay[] | null>(null);
+  const [openDay, setOpenDay] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getManuscriptsHistoryByDay()
+      .then((d) => { setDays(d); setOpenDay(d[0]?.date ?? null); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
+  }, []);
+
+  const fmtDay = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+  if (error) return <p style={{ color: "var(--alert)", fontSize: 13, margin: 0 }}>{error}</p>;
+  if (days === null) return <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Chargement…</p>;
+  if (days.length === 0) return <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucun manuscrit enregistré pour l'instant.</p>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {days.map((d) => {
+        const open = openDay === d.date;
+        return (
+          <div key={d.date} style={{ border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden" }}>
+            <button
+              onClick={() => setOpenDay(open ? null : d.date)}
+              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: open ? "var(--eclosion-soft)" : "#fff", border: "none", padding: "9px 12px", cursor: "pointer", textAlign: "left", fontSize: 13 }}
+            >
+              <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{open ? "▾" : "▸"} {fmtDay(d.date)}</span>
+              <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{d.count} manuscrit{d.count > 1 ? "s" : ""}</span>
+            </button>
+            {open && (
+              <div style={{ padding: "4px 12px 10px" }}>
+                {d.items.map((m) => (
+                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "6px 0", borderTop: "1px solid var(--line)" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--muted)" }}>{fmtTime(m.at)}</span>
+                    <button onClick={() => onOpenManuscript(m.id)} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", color: "var(--eclosion-dark)", fontWeight: 600, fontSize: 13, textAlign: "left" }}>
+                      {m.title}
+                    </button>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--muted)" }}>{m.manuscript_number}</span>
+                    <span style={{ marginLeft: "auto", fontSize: 11, background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 999, padding: "1px 9px", fontWeight: 600 }}>{m.status_label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

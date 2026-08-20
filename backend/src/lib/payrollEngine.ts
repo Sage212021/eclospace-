@@ -44,6 +44,7 @@ export interface Payslip {
   retenue_absence: number;
   salaire_brut: number;
   assiette_fiscale: number;
+  cnps_cotisable_total: number;
   assiette_cnps: number;
   pvid_salarie: number;
   pvid_patronal: number;
@@ -55,6 +56,7 @@ export interface Payslip {
   taxe_communale: number;
   rav: number;
   base_irpp_annuelle: number;
+  irpp: number;
   irpp_cac: number;
   total_retenues_internes: number;
   total_retenues_salariales: number;
@@ -98,8 +100,10 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates, formula
   // I — assiette fiscale (base fiscale + prime − retenue absence).
   const assietteFiscale = Math.max(input.fiscalBase + prime - input.retenueAbsence, 0);
 
-  // J — assiette CNPS plafonnée.
-  const assietteCnps = Math.min(r(assietteFiscale * rates.coefAssiette), rates.cnpsCeiling);
+  // J — salaire cotisable CNPS : montant total (avant plafond) puis plafonné.
+  // Le DIPE mensuel CNPS déclare les deux (« Montant Total » / « Montant Plafonné »).
+  const cnpsCotisableTotal = r(assietteFiscale * rates.coefAssiette);
+  const assietteCnps = Math.min(cnpsCotisableTotal, rates.cnpsCeiling);
 
   // K-N — cotisations CNPS sur l'assiette plafonnée.
   const pvidSal = evalLeaf("pvid_salarie", formulas, r(assietteCnps * rates.vidSal), { assiette_cnps: assietteCnps, taux_pvid_sal: rates.vidSal });
@@ -120,7 +124,9 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates, formula
   const parts = input.applyFiscalParts ? Math.max(input.fiscalParts, 1) : 1;
   const baseIrppAnnuelle = Math.max(assietteFiscale * 12 * (1 - rates.abatPct) - rates.abatFixe, 0) / parts;
 
-  // U — IRPP + CAC, mensualisé.
+  // U — IRPP + CAC, mensualisé. On expose aussi l'IRPP seul (la colonne « IRPP »
+  // du DIPE déclare l'impôt principal ; le CAC est une taxe communale distincte).
+  const irppSeul = r(irppAnnuel(baseIrppAnnuelle, rates.irpp) / 12);
   const irppCac = r((irppAnnuel(baseIrppAnnuelle, rates.irpp) * (1 + rates.cacPct)) / 12);
 
   // Retenues internes (V-Y → Z).
@@ -137,6 +143,7 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates, formula
     retenue_absence: input.retenueAbsence,
     salaire_brut: brut,
     assiette_fiscale: assietteFiscale,
+    cnps_cotisable_total: cnpsCotisableTotal,
     assiette_cnps: assietteCnps,
     pvid_salarie: pvidSal,
     pvid_patronal: pvidPat,
@@ -148,6 +155,7 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates, formula
     taxe_communale: tc,
     rav,
     base_irpp_annuelle: r(baseIrppAnnuelle),
+    irpp: irppSeul,
     irpp_cac: irppCac,
     total_retenues_internes: totalInternes,
     total_retenues_salariales: totalRetenuesSal,

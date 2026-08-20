@@ -73,7 +73,10 @@ const confidentialSchema = z.object({
 
 const absenceSchema = z.object({
   employee_id: z.string().uuid(),
+  // Type (catégorie) déduit du motif quand un motif est fourni ; conservé pour
+  // compatibilité et pour les saisies rapides sans motif précis.
   type: z.nativeEnum(AbsenceType),
+  reason_code: z.string().optional(),
   from_date: z.string().datetime(),
   to_date: z.string().datetime(),
   reason: z.string().optional(),
@@ -1153,10 +1156,21 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     if (!employee) {
       return reply.code(404).send({ code: "not_found", message: "Dossier collaborateur introuvable." });
     }
+    // Motif : source de vérité pour la catégorie et les règles. Quand un motif
+    // est fourni, on impose sa catégorie (évite les incohérences type↔motif).
+    let category = parsed.data.type;
+    if (parsed.data.reason_code) {
+      const reasonRef = await prisma.absenceReason.findUnique({ where: { code: parsed.data.reason_code } });
+      if (!reasonRef || !reasonRef.active) {
+        return reply.code(400).send({ code: "invalid_reason", message: "Motif d'absence inconnu ou désactivé." });
+      }
+      category = reasonRef.category;
+    }
     const absence = await prisma.absence.create({
       data: {
         employeeId: parsed.data.employee_id,
-        type: parsed.data.type,
+        type: category,
+        reasonCode: parsed.data.reason_code ?? null,
         fromDate,
         toDate,
         reason: parsed.data.reason,
@@ -1191,6 +1205,7 @@ export default async function hrRoutes(fastify: FastifyInstance) {
         ...(query.employee_id ? { employeeId: query.employee_id } : {}),
         ...(query.status ? { status: query.status as AbsenceStatus } : {}),
       },
+      include: { reasonRef: true },
       orderBy: { fromDate: "desc" },
     });
     return reply.send(absences);
@@ -1214,17 +1229,103 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       return reply.code(409).send({ code: "invalid_transition", message: "Cette demande a déjà été traitée." });
     }
 
+    // Règles du motif (source de vérité) ; repli sur le type quand aucun motif
+    // n'est rattaché (absences saisies avant l'enrichissement du catalogue).
+    const reasonRef = absence.reasonCode ? await prisma.absenceReason.findUnique({ where: { code: absence.reasonCode } }) : null;
+    const decrementsLeave = reasonRef ? reasonRef.decrementsLeave : absence.type === "conge";
+    const isFault = reasonRef ? reasonRef.isFault : absence.type === "injustifiee";
+
     const updated = await prisma.$transaction(async (tx) => {
       const result = await tx.absence.update({
         where: { id },
         data: { status: parsed.data.decision, approvedBy: request.user!.id, approvedAt: new Date() },
       });
-      if (parsed.data.decision === "validee" && absence.type === "conge") {
+      if (parsed.data.decision === "validee" && decrementsLeave) {
         const days = Math.ceil((absence.toDate.getTime() - absence.fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         await tx.employee.update({ where: { id: absence.employeeId }, data: { leaveBalanceDays: { decrement: days } } });
       }
       return result;
     });
+
+    // Absence fautive validée : signalement à la RH/DG (le circuit de sanctions
+    // — blâme, mise à pied, licenciement — reste à traiter hors de l'ERP pour
+    // l'instant). Notifie les personnes habilitées « rh:validation ».
+    if (parsed.data.decision === "validee" && isFault) {
+      const employee = await prisma.employee.findUnique({ where: { id: absence.employeeId } });
+      const supervisors = await prisma.user.findMany({
+        where: { status: "active", userRoles: { some: { revokedAt: null, role: { rolePermissions: { some: { permission: { module: "rh", action: "validation" } } } } } } },
+        select: { id: true },
+      });
+      const label = reasonRef?.label ?? "Absence injustifiée";
+      for (const s of supervisors) {
+        await prisma.notification.create({
+          data: {
+            userId: s.id,
+            type: "autre",
+            priority: "high",
+            title: "Absence fautive signalée",
+            body: `${employee ? `${employee.firstName} ${employee.lastName}` : "Un collaborateur"} — « ${label} » du ${absence.fromDate.toISOString().slice(0, 10)} au ${absence.toDate.toISOString().slice(0, 10)}. À traiter côté discipline.`,
+            entityType: "absence",
+            entityId: absence.id,
+          },
+        });
+      }
+    }
+    return reply.send(updated);
+  });
+
+  // Catalogue des motifs d'absence (intégration des types du droit du travail).
+  // Liste pour la saisie (RH consultation) ; par défaut seulement les motifs
+  // actifs (?all=1 pour inclure les désactivés côté administration).
+  fastify.get("/api/v1/absence-reasons", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const q = request.query as { all?: string };
+    const reasons = await prisma.absenceReason.findMany({
+      where: q.all === "1" ? {} : { active: true },
+      orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+    });
+    return reply.send(reasons);
+  });
+
+  // Réglage des règles d'un motif (RH/DG — habilitation d'administration) :
+  // payé, justificatif, retenue, faute, durée indicative, activation. Le code et
+  // la catégorie ne se modifient pas ici (structurants) — la catégorie reste
+  // celle du catalogue.
+  fastify.patch("/api/v1/absence-reasons/:code", { preHandler: requirePermission("rh", "administration") }, async (request, reply) => {
+    const { code } = request.params as { code: string };
+    const schema = z.object({
+      label: z.string().min(1).optional(),
+      paid: z.boolean().optional(),
+      requires_justification: z.boolean().optional(),
+      justification_deadline_days: z.number().int().min(0).max(365).nullable().optional(),
+      indicative_days_min: z.number().int().min(0).max(400).nullable().optional(),
+      indicative_days_max: z.number().int().min(0).max(400).nullable().optional(),
+      decrements_leave: z.boolean().optional(),
+      payroll_deductible: z.boolean().optional(),
+      is_fault: z.boolean().optional(),
+      active: z.boolean().optional(),
+    });
+    const parsed = schema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const existing = await prisma.absenceReason.findUnique({ where: { code } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Motif d'absence introuvable." });
+    const d = parsed.data;
+    const updated = await prisma.absenceReason.update({
+      where: { code },
+      data: {
+        ...(d.label !== undefined ? { label: d.label } : {}),
+        ...(d.paid !== undefined ? { paid: d.paid } : {}),
+        ...(d.requires_justification !== undefined ? { requiresJustification: d.requires_justification } : {}),
+        ...(d.justification_deadline_days !== undefined ? { justificationDeadlineDays: d.justification_deadline_days } : {}),
+        ...(d.indicative_days_min !== undefined ? { indicativeDaysMin: d.indicative_days_min } : {}),
+        ...(d.indicative_days_max !== undefined ? { indicativeDaysMax: d.indicative_days_max } : {}),
+        ...(d.decrements_leave !== undefined ? { decrementsLeave: d.decrements_leave } : {}),
+        ...(d.payroll_deductible !== undefined ? { payrollDeductible: d.payroll_deductible } : {}),
+        ...(d.is_fault !== undefined ? { isFault: d.is_fault } : {}),
+        ...(d.active !== undefined ? { active: d.active } : {}),
+        updatedBy: request.user!.id,
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "absence_reason", entityId: code, oldValues: existing as never, newValues: updated as never, ipAddress: request.ip });
     return reply.send(updated);
   });
 

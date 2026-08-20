@@ -3582,21 +3582,52 @@ export function decideAccessReviewItem(itemId: string, decision: AccessReviewDec
   return request<AccessReviewItem>(`/api/v1/access-review-items/${itemId}`, { method: "PATCH", body: JSON.stringify({ decision, comment }) });
 }
 
-export type AbsenceType = "conge" | "maladie" | "mission" | "teletravail";
+export type AbsenceType = "conge" | "maladie" | "mission" | "teletravail" | "permission" | "suspension" | "injustifiee";
 export type AbsenceStatus = "en_attente" | "validee" | "refusee";
+
+// Motif d'absence (catalogue paramétrable) — porte les règles.
+export interface AbsenceReason {
+  code: string;
+  label: string;
+  category: AbsenceType;
+  paid: boolean;
+  requiresJustification: boolean;
+  justificationDeadlineDays: number | null;
+  indicativeDaysMin: number | null;
+  indicativeDaysMax: number | null;
+  decrementsLeave: boolean;
+  payrollDeductible: boolean;
+  isFault: boolean;
+  sortOrder: number;
+  active: boolean;
+}
 
 export interface Absence {
   id: string;
   employeeId: string;
   type: AbsenceType;
+  reasonCode: string | null;
+  reasonRef?: AbsenceReason | null;
   fromDate: string;
   toDate: string;
   status: AbsenceStatus;
   reason: string | null;
 }
 
-export function createAbsence(input: { employee_id: string; type: AbsenceType; from_date: string; to_date: string; reason?: string }) {
+export function createAbsence(input: { employee_id: string; type: AbsenceType; reason_code?: string; from_date: string; to_date: string; reason?: string }) {
   return request<Absence>("/api/v1/absences", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function listAbsenceReasons(all = false) {
+  return request<AbsenceReason[]>(`/api/v1/absence-reasons${all ? "?all=1" : ""}`);
+}
+
+export function updateAbsenceReason(code: string, patch: Partial<{
+  label: string; paid: boolean; requires_justification: boolean; justification_deadline_days: number | null;
+  indicative_days_min: number | null; indicative_days_max: number | null; decrements_leave: boolean;
+  payroll_deductible: boolean; is_fault: boolean; active: boolean;
+}>) {
+  return request<AbsenceReason>(`/api/v1/absence-reasons/${code}`, { method: "PATCH", body: JSON.stringify(patch) });
 }
 
 export function listAbsences(filters?: { employee_id?: string; status?: string }) {

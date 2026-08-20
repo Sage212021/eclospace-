@@ -4,6 +4,7 @@
 import argon2 from "argon2";
 import { PrismaClient, PermissionAction, CustomerCategory } from "@prisma/client";
 import { FORMULA_DEFS } from "../src/lib/payrollFormula.js";
+import { DEFAULT_ABSENCE_REASONS } from "../src/lib/absenceReasons.js";
 
 const prisma = new PrismaClient();
 
@@ -901,6 +902,32 @@ async function main() {
       create: cat,
     });
   }
+
+  // Catalogue des motifs d'absence (droit du travail — intégration 20/08/2026).
+  // Idempotent (upsert par code). On ne remet à jour QUE le libellé, la catégorie
+  // et l'ordre : les RÈGLES (payé, justificatif, retenue…) ne sont pas réécrites
+  // au redéploiement pour préserver les réglages faits par la RH depuis l'écran.
+  for (const r of DEFAULT_ABSENCE_REASONS) {
+    await prisma.absenceReason.upsert({
+      where: { code: r.code },
+      update: { label: r.label, category: r.category, sortOrder: r.sortOrder },
+      create: {
+        code: r.code,
+        label: r.label,
+        category: r.category,
+        paid: r.paid,
+        requiresJustification: r.requiresJustification,
+        justificationDeadlineDays: r.justificationDeadlineDays ?? null,
+        indicativeDaysMin: r.indicativeDaysMin ?? null,
+        indicativeDaysMax: r.indicativeDaysMax ?? null,
+        decrementsLeave: r.decrementsLeave,
+        payrollDeductible: r.payrollDeductible,
+        isFault: r.isFault,
+        sortOrder: r.sortOrder,
+      },
+    });
+  }
+  console.log(`Motifs d'absence : ${DEFAULT_ABSENCE_REASONS.length} référencés.`);
 
   // Réparation des identifiants/e-mails « pollués » par un espace parasite
   // (clavier mobile) : un espace de début/fin empêchait la connexion (comparaison

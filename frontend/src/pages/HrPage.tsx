@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import {
   createAbsence,
+  listAbsenceReasons,
+  updateAbsenceReason,
+  type AbsenceReason,
   createAccessReview,
   createEmployee,
   decideAbsence,
@@ -63,7 +66,10 @@ const STATUS_LABELS: Record<EmployeeStatus, string> = {
 
 const ABSENCE_TYPE_LABELS: Record<AbsenceType, string> = {
   conge: "Congé",
-  maladie: "Maladie",
+  permission: "Permission",
+  maladie: "Maladie / justifiée",
+  suspension: "Suspension",
+  injustifiee: "Injustifiée / faute",
   mission: "Mission",
   teletravail: "Télétravail",
 };
@@ -125,7 +131,7 @@ type HrModal =
   | { kind: "view-confidential"; employee: Employee; baseSalary: string; notes: string }
   | { kind: "edit-confidential"; employee: Employee; baseSalary: string }
   | { kind: "grant-role"; employee: Employee; roleCode: string; justification: string }
-  | { kind: "absence"; employeeId: string; type: AbsenceType; from: string; to: string }
+  | { kind: "absence"; employeeId: string; type: AbsenceType; reasonCode: string; from: string; to: string }
   | { kind: "review"; label: string };
 
 // Ch. 19 : Ressources humaines — dossier collaborateur, cycle de vie du
@@ -135,6 +141,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   const confirm = useConfirm();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [absences, setAbsences] = useState<Absence[]>([]);
+  const [absenceReasons, setAbsenceReasons] = useState<AbsenceReason[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [anomalies, setAnomalies] = useState<AccessAnomaly[]>([]);
@@ -172,6 +179,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
     const [employeeList, absenceList] = await Promise.all([listEmployees(), listAbsences()]);
     setEmployees(employeeList);
     setAbsences(absenceList);
+    listAbsenceReasons().then(setAbsenceReasons).catch(() => setAbsenceReasons([]));
     getContractAlerts().then((r) => setContractAlerts(r.alerts)).catch(() => setContractAlerts([]));
     if (canManage) {
       const [anomalyList, reviewList] = await Promise.all([listAccessAnomalies(), listAccessReviews()]);
@@ -313,7 +321,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   async function submitAbsence() {
     if (modal?.kind !== "absence" || !modal.employeeId || !modal.from || !modal.to) return;
     try {
-      await createAbsence({ employee_id: modal.employeeId, type: modal.type, from_date: new Date(modal.from).toISOString(), to_date: new Date(modal.to).toISOString() });
+      await createAbsence({ employee_id: modal.employeeId, type: modal.type, reason_code: modal.reasonCode || undefined, from_date: new Date(modal.from).toISOString(), to_date: new Date(modal.to).toISOString() });
       setMessage(t("hr.msg.absence_saved", "Demande d'absence enregistrée."));
       setModal(null);
       await refresh();
@@ -498,7 +506,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
         title={t("hr.absences", "Absences")}
         icon={<IconAdmin />}
         subtitle={t("hr.absences_sub", "Congés, maladies, missions et télétravail.")}
-        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "absence", employeeId: employees[0]?.id ?? "", type: "conge", from: "", to: "" })}>{t("hr.add_absence", "+ Demande")}</Button> : undefined}
+        action={canManage ? <Button variant="add" size="sm" onClick={() => setModal({ kind: "absence", employeeId: employees[0]?.id ?? "", type: "conge", reasonCode: "conge_annuel", from: "", to: "" })}>{t("hr.add_absence", "+ Demande")}</Button> : undefined}
       >
         {absences.length === 0 ? (
           <Empty>{t("hr.no_absence", "Aucune demande.")}</Empty>
@@ -507,8 +515,11 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
             {absences.map((absence) => (
               <div key={absence.id} className="ecl-row">
                 <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span className="ecl-row__title">{t("hr.abs." + absence.type, ABSENCE_TYPE_LABELS[absence.type])}</span>
+                  <span className="ecl-row__title">{absence.reasonRef?.label ?? t("hr.abs." + absence.type, ABSENCE_TYPE_LABELS[absence.type])}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px" }}>{t("hr.abs." + absence.type, ABSENCE_TYPE_LABELS[absence.type])}</span>
                   <span className="ecl-row__desc" style={{ margin: 0 }}>{absence.fromDate.slice(0, 10)} → {absence.toDate.slice(0, 10)}</span>
+                  {absence.reasonRef?.isFault && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--alert)", background: "var(--alert-soft)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px" }}>Faute</span>}
+                  {absence.reasonRef && !absence.reasonRef.paid && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#C4661F", background: "rgba(196,102,31,0.12)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px" }}>Non payée</span>}
                   <StatusChip label={t("hr.absst." + absence.status, ABSENCE_STATUS_LABELS[absence.status])} />
                 </div>
                 {canValidateAbsence && absence.status === "en_attente" && (
@@ -522,6 +533,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
           </div>
         )}
       </Card>
+
+      {/* Paramétrage des motifs d'absence (RH/DG — administration). */}
+      {canAdminister && <AbsenceReasonsAdmin onError={(m) => setError(m)} onMessage={(m) => setMessage(m)} />}
 
       {/* Ch. 19 §19.4 — Anomalies d'accès */}
       {canManage && (
@@ -755,11 +769,34 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
               {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>)}
             </select>
           </Field>
-          <Field label={t("hr.type", "Type")}>
-            <select value={modal.type} onChange={(e) => setModal({ ...modal, type: e.target.value as AbsenceType })}>
+          <Field label={t("hr.category", "Catégorie")}>
+            <select
+              value={modal.type}
+              onChange={(e) => {
+                const cat = e.target.value as AbsenceType;
+                const first = absenceReasons.filter((r) => r.category === cat)[0];
+                setModal({ ...modal, type: cat, reasonCode: first?.code ?? "" });
+              }}
+            >
               {Object.entries(ABSENCE_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{t("hr.abs." + value, label)}</option>)}
             </select>
           </Field>
+          {(() => {
+            const opts = absenceReasons.filter((r) => r.category === modal.type);
+            const current = absenceReasons.find((r) => r.code === modal.reasonCode) ?? null;
+            return (
+              <>
+                {opts.length > 0 && (
+                  <Field label={t("hr.reason_motive", "Motif")}>
+                    <select value={modal.reasonCode} onChange={(e) => setModal({ ...modal, reasonCode: e.target.value })}>
+                      {opts.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+                    </select>
+                  </Field>
+                )}
+                {current && <ReasonRuleChips reason={current} />}
+              </>
+            );
+          })()}
           <Field label={t("hr.from", "Du")}><input type="date" value={modal.from} onChange={(e) => setModal({ ...modal, from: e.target.value })} /></Field>
           <Field label={t("hr.to", "Au")}><input type="date" value={modal.to} onChange={(e) => setModal({ ...modal, to: e.target.value })} /></Field>
         </Modal>
@@ -781,6 +818,110 @@ function ModalActions({ onCancel, onConfirm, confirmLabel }: { onCancel: () => v
       <Button variant="view" size="sm" onClick={onCancel}>{t("hr.cancel", "Annuler")}</Button>
       <Button variant="add" size="sm" onClick={onConfirm}>{confirmLabel}</Button>
     </>
+  );
+}
+
+const ABSENCE_CATEGORY_LABELS: Record<AbsenceType, string> = {
+  conge: "Congé",
+  permission: "Permission (congé court payé)",
+  maladie: "Maladie / absence justifiée",
+  suspension: "Suspension (non payée)",
+  injustifiee: "Absence injustifiée / faute",
+  mission: "Mission",
+  teletravail: "Télétravail",
+};
+
+// Paramétrage RH/DG des motifs d'absence : chaque motif porte ses règles
+// (payé, retenue de paie, justificatif, décompte du solde, faute, activation),
+// modifiables sans redéploiement. Réservé à l'habilitation d'administration.
+function AbsenceReasonsAdmin({ onError, onMessage }: { onError: (m: string) => void; onMessage: (m: string) => void }) {
+  const { t } = useI18n();
+  const [reasons, setReasons] = useState<AbsenceReason[]>([]);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => { if (open && reasons.length === 0) listAbsenceReasons(true).then(setReasons).catch(() => onError("Chargement des motifs impossible.")); }, [open]);
+
+  async function toggle(code: string, field: keyof AbsenceReason, value: boolean) {
+    setBusy(code);
+    try {
+      const map: Record<string, string> = { paid: "paid", payrollDeductible: "payroll_deductible", requiresJustification: "requires_justification", decrementsLeave: "decrements_leave", isFault: "is_fault", active: "active" };
+      const updated = await updateAbsenceReason(code, { [map[field as string]]: value } as never);
+      setReasons((rs) => rs.map((r) => (r.code === code ? updated : r)));
+      onMessage("Motif mis à jour.");
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Échec de la mise à jour.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const cats = Array.from(new Set(reasons.map((r) => r.category)));
+  const Toggle = ({ r, field, label }: { r: AbsenceReason; field: keyof AbsenceReason; label: string }) => (
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "var(--muted)", opacity: busy === r.code ? 0.5 : 1 }}>
+      <input type="checkbox" checked={Boolean(r[field])} disabled={busy === r.code} onChange={(e) => toggle(r.code, field, e.target.checked)} />
+      {label}
+    </label>
+  );
+
+  return (
+    <Card title={t("hr.absence_reasons", "Motifs d'absence (paramétrage)")} icon={<IconAdmin />} subtitle={t("hr.absence_reasons_sub", "Règles de chaque motif : payé, retenue, justificatif, faute…")}>
+      <button onClick={() => setOpen((o) => !o)} style={{ background: "none", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12.5, cursor: "pointer", color: "var(--ink)" }}>
+        {open ? "▾ Masquer" : "▸ Afficher"} le paramétrage des motifs
+      </button>
+      {open && (
+        <div style={{ marginTop: 12, display: "grid", gap: 14 }}>
+          {cats.map((cat) => (
+            <div key={cat}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--eclosion-dark, var(--ink))", marginBottom: 6 }}>{ABSENCE_CATEGORY_LABELS[cat]}</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {reasons.filter((r) => r.category === cat).map((r) => (
+                  <div key={r.code} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "9px 11px", opacity: r.active ? 1 : 0.6 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{r.label}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 14, rowGap: 6 }}>
+                      <Toggle r={r} field="paid" label="Payée" />
+                      <Toggle r={r} field="payrollDeductible" label="Retenue de paie" />
+                      <Toggle r={r} field="requiresJustification" label="Justificatif requis" />
+                      <Toggle r={r} field="decrementsLeave" label="Décompte solde congés" />
+                      <Toggle r={r} field="isFault" label="Faute" />
+                      <Toggle r={r} field="active" label="Actif" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// Résumé visuel des règles d'un motif (payé, justificatif, retenue, faute,
+// durée indicative) — aide la RH au moment de la saisie.
+function ReasonRuleChips({ reason }: { reason: AbsenceReason }) {
+  const chips: { label: string; tone: "ok" | "warn" | "alert" | "muted" }[] = [];
+  chips.push(reason.paid ? { label: "Payée", tone: "ok" } : { label: "Non payée", tone: "warn" });
+  if (reason.payrollDeductible) chips.push({ label: "Retenue de paie", tone: "warn" });
+  if (reason.requiresJustification) chips.push({ label: reason.justificationDeadlineDays ? `Justificatif sous ${reason.justificationDeadlineDays} j` : "Justificatif requis", tone: "muted" });
+  if (reason.decrementsLeave) chips.push({ label: "Décompte le solde de congés", tone: "muted" });
+  if (reason.isFault) chips.push({ label: "Faute (signalée RH/DG)", tone: "alert" });
+  const dur = reason.indicativeDaysMin != null || reason.indicativeDaysMax != null
+    ? `Durée indicative : ${reason.indicativeDaysMin ?? "?"}${reason.indicativeDaysMax && reason.indicativeDaysMax !== reason.indicativeDaysMin ? `–${reason.indicativeDaysMax}` : ""} j`
+    : null;
+  if (dur) chips.push({ label: dur, tone: "muted" });
+  const color = (tone: string) =>
+    tone === "ok" ? { bg: "var(--eclosion-soft)", fg: "var(--eclosion)" }
+    : tone === "alert" ? { bg: "var(--alert-soft)", fg: "var(--alert)" }
+    : tone === "warn" ? { bg: "rgba(196,102,31,0.12)", fg: "#C4661F" }
+    : { bg: "var(--paper)", fg: "var(--muted)" };
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "2px 0 6px" }}>
+      {chips.map((c, i) => {
+        const col = color(c.tone);
+        return <span key={i} style={{ fontSize: 11.5, fontWeight: 600, background: col.bg, color: col.fg, border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px" }}>{c.label}</span>;
+      })}
+    </div>
   );
 }
 

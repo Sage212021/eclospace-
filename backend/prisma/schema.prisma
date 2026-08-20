@@ -334,6 +334,12 @@ enum AbsenceType {
   maladie
   mission
   teletravail
+  // Catégories ajoutées (intégration des types d'absence du droit du travail,
+  // demande opérateur 20/08/2026) : permissions courtes payées, suspensions non
+  // payées (mise à pied, chômage technique), absences injustifiées (fautes).
+  permission
+  suspension
+  injustifiee
 }
 
 enum AbsenceStatus {
@@ -349,6 +355,11 @@ model Absence {
   employeeId String        @map("employee_id")
   employee   Employee      @relation(fields: [employeeId], references: [id])
   type       AbsenceType
+  // Motif précis (mariage, décès, maternité, mise à pied…) porteur des règles
+  // (payé, justificatif, retenue, faute). Facultatif pour compatibilité avec
+  // les absences déjà saisies avant l'enrichissement du catalogue.
+  reasonCode String?        @map("reason_code")
+  reasonRef  AbsenceReason? @relation(fields: [reasonCode], references: [code])
   fromDate   DateTime      @map("from_date")
   toDate     DateTime      @map("to_date")
   status     AbsenceStatus @default(en_attente)
@@ -360,6 +371,34 @@ model Absence {
   createdBy String?  @map("created_by")
 
   @@map("absences")
+}
+
+// Catalogue des motifs d'absence (demande opérateur 20/08/2026) — chaque motif
+// porte ses règles : payé ou non, justificatif requis (et délai), durée
+// indicative, décompte du solde de congés, retenue de paie, caractère « faute ».
+// Paramétrable par la RH/DG (aucun redéploiement) ; semé avec les motifs usuels
+// du droit du travail camerounais.
+model AbsenceReason {
+  code                      String      @id
+  label                     String
+  category                  AbsenceType
+  paid                      Boolean     @default(true)
+  requiresJustification     Boolean     @default(false) @map("requires_justification")
+  justificationDeadlineDays Int?        @map("justification_deadline_days")
+  indicativeDaysMin         Int?        @map("indicative_days_min")
+  indicativeDaysMax         Int?        @map("indicative_days_max")
+  decrementsLeave           Boolean     @default(false) @map("decrements_leave")
+  payrollDeductible         Boolean     @default(false) @map("payroll_deductible")
+  isFault                   Boolean     @default(false) @map("is_fault")
+  sortOrder                 Int         @default(0) @map("sort_order")
+  active                    Boolean     @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedBy String?  @map("updated_by")
+
+  absences Absence[]
+
+  @@map("absence_reasons")
 }
 
 // Cartographie des compétences (Ch. 19 §19.8) : langues de correction,

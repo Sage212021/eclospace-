@@ -156,6 +156,38 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
     return reply.send({ ...PUBLISHER_DEFAULTS, ...(updated.value as Record<string, unknown>) });
   });
 
+  // Paramètre du workflow : liste des étapes soumises au verrou « livrable de
+  // sortie » (un fichier doit être déposé avant d'avancer). Modifiable par un
+  // administrateur ; sert au « pas d'avancement sans le fichier attendu ».
+  const CANDIDATE_STEPS = [
+    { code: "PLANIFICATION", label: "Planification du projet" },
+    { code: "EXPERTISE", label: "Expertise scientifique" },
+    { code: "REECRITURE", label: "Réécriture éditoriale" },
+    { code: "MISE_EN_PAGE", label: "Mise en page" },
+    { code: "INFOGRAPHIE", label: "Infographie" },
+  ];
+  const DELIVERABLE_KEY = "workflow_deliverable_steps";
+  const DEFAULT_DELIVERABLE = ["PLANIFICATION", "EXPERTISE", "REECRITURE"];
+
+  fastify.get("/api/v1/workflow-deliverable-steps", { preHandler: requireAuth }, async (_request, reply) => {
+    const row = await prisma.setting.findUnique({ where: { key: DELIVERABLE_KEY } });
+    const stored = Array.isArray(row?.value) ? (row!.value as string[]) : DEFAULT_DELIVERABLE;
+    return reply.send({ steps: stored, candidates: CANDIDATE_STEPS });
+  });
+
+  fastify.put("/api/v1/workflow-deliverable-steps", { preHandler: requirePermission("settings", "administration") }, async (request, reply) => {
+    const parsed = z.object({ steps: z.array(z.enum(["PLANIFICATION", "EXPERTISE", "REECRITURE", "MISE_EN_PAGE", "INFOGRAPHIE"])) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Liste d'étapes invalide.", details: parsed.error.issues });
+    const existing = await prisma.setting.findUnique({ where: { key: DELIVERABLE_KEY } });
+    const updated = await prisma.setting.upsert({
+      where: { key: DELIVERABLE_KEY },
+      create: { key: DELIVERABLE_KEY, value: parsed.data.steps as never, updatedBy: request.user!.id },
+      update: { value: parsed.data.steps as never, version: { increment: 1 }, updatedBy: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "setting", entityId: DELIVERABLE_KEY, oldValues: (existing?.value ?? null) as never, newValues: updated.value as never, ipAddress: request.ip });
+    return reply.send({ steps: updated.value, candidates: CANDIDATE_STEPS });
+  });
+
   // Diagnostic de persistance : vérifie, DEPUIS L'INTERFACE, que la base de
   // données est joignable, à jour (migrations appliquées) et DURABLE — en
   // affichant le nombre réel d'enregistrements. L'opérateur enregistre une donnée

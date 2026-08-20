@@ -4,6 +4,7 @@ import type { Manuscript } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { missingRequiredCorrectionPhases } from "../lib/correctionCycle.js";
+import { isDeliverableRequired, hasStepDeliverable, DELIVERABLE_LABELS } from "../lib/stepDeliverables.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
 import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
@@ -326,6 +327,18 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
           });
         }
         return reply.send({ advanced: false, message: "Dossier incomplet : passage à l'étape suivante bloqué." });
+      }
+
+      // Verrou « livrable de sortie » (paramétrable) : les étapes qui produisent
+      // un fichier pour l'étape suivante ne se valident pas tant que ce fichier
+      // n'est pas déposé — pour qu'un manuscrit n'arrive jamais « les mains vides ».
+      if (await isDeliverableRequired(targetStatus.code)) {
+        if (!(await hasStepDeliverable(id, targetStatus.code))) {
+          return reply.code(409).send({
+            code: "deliverable_missing",
+            message: `Livrable manquant — déposez « ${DELIVERABLE_LABELS[targetStatus.code] ?? "le livrable de l'étape"} » avant de passer à l'étape suivante.`,
+          });
+        }
       }
 
       const nextStatus = await findNextApplicableStatus(targetStatus.stepOrder, manuscriptForNextStep);

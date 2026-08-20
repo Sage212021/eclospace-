@@ -45,6 +45,7 @@ import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
 import { TasksSection } from "../components/TasksSection";
 import { CorrectionSection } from "../components/CorrectionSection";
 import { CorrectionCyclePanel } from "../components/CorrectionCyclePanel";
+import { StepDeliverableBlock } from "../components/StepDeliverableBlock";
 import { ProductionSection } from "../components/ProductionSection";
 import { IsbnSection } from "../components/IsbnSection";
 import { BatSection } from "../components/BatSection";
@@ -447,6 +448,14 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             stepLabel={manuscript.status.label}
             canDeposit={canEditFiche}
             onError={setError}
+          />
+        )}
+
+        {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && (
+          <StepDeliverableBlock
+            manuscriptId={manuscript.id}
+            stepCode={manuscript.status.code}
+            canManage={canEditFiche || permissions.has("tasks:saisie")}
           />
         )}
 

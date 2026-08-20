@@ -51,6 +51,13 @@ const validateStepSchema = z.object({
   // Ch. 4 §4.3 : la réécriture est déclenchée par la correction ou
   // l'expertise — posé à la validation de l'une de ces deux étapes.
   requires_rewrite: z.boolean().optional(),
+  // Affectation nominative (demande opérateur 20/08/2026) : l'étape qui
+  // transmet peut désigner NOMMÉMENT la personne à qui confier le dossier pour
+  // l'étape suivante (ex. tel correcteur, tel maquettiste, tel infographe). La
+  // personne désignée est notifiée personnellement et devient responsable de
+  // l'étape suivante. Facultatif : sans désignation, tout le service concerné
+  // est notifié (comportement historique).
+  assignee_id: z.string().uuid().optional(),
 });
 
 // Étapes pilotées par un flux dédié plutôt que par cet endpoint générique :
@@ -101,7 +108,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { observations, outcome, requires_rewrite } = parsed.data;
+      const { observations, outcome, requires_rewrite, assignee_id } = parsed.data;
       const now = new Date();
 
       // Vérification administrative : la fiche de l'auteur doit être suffisamment
@@ -312,6 +319,33 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
 
       const nextStatus = await findNextApplicableStatus(targetStatus.stepOrder, manuscriptForNextStep);
 
+      // Affectation nominative pour l'étape suivante : on vérifie, AVANT de
+      // valider, que la personne désignée peut bien recevoir ce dossier — elle
+      // doit être active et rattachée au service de l'étape suivante (ex. on ne
+      // confie la mise en page qu'à un maquettiste). Le comité de lecture garde
+      // son propre mode de répartition (plusieurs relecteurs, évaluations).
+      if (assignee_id) {
+        if (!nextStatus) {
+          return reply.code(409).send({ code: "no_next_step", message: "Ce manuscrit n'a pas d'étape suivante : aucune affectation possible." });
+        }
+        if (nextStatus.code === "COMITE_LECTURE") {
+          return reply.code(409).send({ code: "dedicated_flow_required", message: "Le comité de lecture se répartit via l'affectation des relecteurs (page Comité de lecture)." });
+        }
+        const assignee = await prisma.user.findFirst({
+          where: {
+            id: assignee_id,
+            status: "active",
+            ...(nextStatus.departmentId
+              ? { userRoles: { some: { revokedAt: null, role: { departmentId: nextStatus.departmentId } } } }
+              : {}),
+          },
+          select: { id: true },
+        });
+        if (!assignee) {
+          return reply.code(400).send({ code: "invalid_assignee", message: `La personne choisie ne fait pas partie du service « ${nextStatus.label} » ou n'est plus active.` });
+        }
+      }
+
       await prisma.$transaction(async (tx) => {
         await tx.manuscriptStep.upsert({
           where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
@@ -341,7 +375,26 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
             },
           });
 
-          if (nextStatus.departmentId) {
+          if (assignee_id && nextStatus.code !== "COMITE_LECTURE") {
+            // Affectation nominative : la personne désignée devient responsable
+            // de l'étape suivante (préparée ici) et est notifiée personnellement.
+            await tx.manuscriptStep.upsert({
+              where: { manuscriptId_statusId: { manuscriptId: id, statusId: nextStatus.id } },
+              update: { responsibleId: assignee_id, plannedStart: now },
+              create: { manuscriptId: id, statusId: nextStatus.id, responsibleId: assignee_id, plannedStart: now },
+            });
+            await tx.notification.create({
+              data: {
+                userId: assignee_id,
+                type: "affectation",
+                priority: "medium",
+                title: `Dossier confié — ${nextStatus.label}`,
+                body: `Le manuscrit ${manuscript.manuscriptNumber} vous est confié pour l'étape « ${nextStatus.label} ».`,
+                entityType: "manuscript",
+                entityId: id,
+              },
+            });
+          } else if (nextStatus.departmentId) {
             const departmentUsers = await tx.user.findMany({
               where: { userRoles: { some: { revokedAt: null, role: { departmentId: nextStatus.departmentId } } }, status: "active" },
             });
@@ -385,6 +438,40 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       });
 
       return reply.send({ advanced: true, status: nextStatus?.code ?? null });
+    },
+  );
+
+  // Candidats à l'affectation nominative de l'étape SUIVANTE : les personnes
+  // actives du service de la prochaine étape (ex. les maquettistes pour la mise
+  // en page, les infographes pour l'infographie, les correcteurs pour la
+  // correction). Sert au sélecteur « Transmettre à… » lors de la validation.
+  // Renvoie une liste vide quand l'affectation nominative ne s'applique pas
+  // (dernière étape, service non défini, ou comité de lecture — répartition
+  // dédiée via l'affectation des relecteurs).
+  fastify.get(
+    "/api/v1/manuscripts/:id/next-assignees",
+    { preHandler: requirePermission("manuscripts", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const current = await prisma.workflowStatus.findUnique({ where: { id: manuscript.statusId } });
+      if (!current) return reply.send({ next_step: null, assignees: [] });
+      const nextStatus = await findNextApplicableStatus(current.stepOrder, manuscript);
+      if (!nextStatus || !nextStatus.departmentId || nextStatus.code === "COMITE_LECTURE") {
+        return reply.send({ next_step: nextStatus ? { code: nextStatus.code, label: nextStatus.label } : null, assignees: [] });
+      }
+      const users = await prisma.user.findMany({
+        where: { status: "active", userRoles: { some: { revokedAt: null, role: { departmentId: nextStatus.departmentId } } } },
+        select: { id: true, username: true, userRoles: { where: { revokedAt: null }, select: { role: { select: { label: true, departmentId: true } } } } },
+        orderBy: { username: "asc" },
+      });
+      const assignees = users.map((u) => ({
+        id: u.id,
+        username: u.username,
+        role: u.userRoles.find((r) => r.role.departmentId === nextStatus.departmentId)?.role.label ?? u.userRoles[0]?.role.label ?? null,
+      }));
+      return reply.send({ next_step: { code: nextStatus.code, label: nextStatus.label }, assignees });
     },
   );
 

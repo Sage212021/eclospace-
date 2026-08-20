@@ -459,12 +459,25 @@ export function setPublicationDate(manuscriptId: string, publicationDate: string
 export function validateStep(
   manuscriptId: string,
   step: string,
-  options?: { observations?: string; outcome?: "conforme" | "incomplet"; requires_rewrite?: boolean },
+  options?: { observations?: string; outcome?: "conforme" | "incomplet"; requires_rewrite?: boolean; assignee_id?: string },
 ) {
   return request<{ advanced: boolean; status: string | null }>(`/api/v1/manuscripts/${manuscriptId}/steps/${step}/validate`, {
     method: "POST",
     body: JSON.stringify(options ?? {}),
   });
+}
+
+// Candidats à l'affectation nominative de l'étape suivante (maquettiste,
+// infographe, correcteur…). Liste vide quand l'affectation ne s'applique pas.
+export interface NextAssignee {
+  id: string;
+  username: string;
+  role: string | null;
+}
+export function getNextAssignees(manuscriptId: string) {
+  return request<{ next_step: { code: string; label: string } | null; assignees: NextAssignee[] }>(
+    `/api/v1/manuscripts/${manuscriptId}/next-assignees`,
+  );
 }
 
 // Retour à l'étape précédente (correction d'une validation faite par erreur).

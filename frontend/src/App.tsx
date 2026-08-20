@@ -22,6 +22,7 @@ const ArchivesPage = lazy(() => import("./pages/ArchivesPage").then((m) => ({ de
 const RightsMatrixPage = lazy(() => import("./pages/RightsMatrixPage").then((m) => ({ default: m.RightsMatrixPage })));
 const ManuscriptDetail = lazy(() => import("./pages/ManuscriptDetail").then((m) => ({ default: m.ManuscriptDetail })));
 const MyReadings = lazy(() => import("./pages/MyReadings").then((m) => ({ default: m.MyReadings })));
+const MyDossiers = lazy(() => import("./pages/MyDossiers").then((m) => ({ default: m.MyDossiers })));
 const StockPage = lazy(() => import("./pages/StockPage").then((m) => ({ default: m.StockPage })));
 const CommercialPage = lazy(() => import("./pages/CommercialPage").then((m) => ({ default: m.CommercialPage })));
 const FinancePage = lazy(() => import("./pages/FinancePage").then((m) => ({ default: m.FinancePage })));
@@ -77,6 +78,7 @@ type PageId =
   | "correction-editorial"
   | "my-corrections"
   | "my-readings"
+  | "my-dossiers"
   | "editorial-quotes-inbox"
   | "catalogue-ref"
   | "archives"
@@ -140,6 +142,7 @@ const NAV_POLES: NavPole[] = [
       // direction. Les autres pôles voient l'entrée verrouillée (comme un module
       // hors périmètre) — contrôle confirmé aussi côté serveur (TRACKING_ROLES).
       { key: "suivi", label: "Suivi des ouvrages", anyRole: TRACKING_ROLES },
+      { key: "mes-dossiers", label: "Mes dossiers à traiter" },
       { key: "mes-rapports", label: "Mes rapports hebdo" },
     ],
   },
@@ -242,6 +245,7 @@ const NAV_POLES: NavPole[] = [
 const LEAF_VIEWS: Record<string, LeafView> = {
   dashboard: { page: "dashboard" },
   suivi: { page: "production-tracking" },
+  "mes-dossiers": { page: "my-dossiers" },
   "mes-rapports": { page: "weekly-reports" },
   "ed-manuscrits": { page: "manuscripts" },
   "ed-comite": { page: "reading-committee" },
@@ -778,6 +782,9 @@ export function App() {
           <CorrectionEditorial onOpenManuscript={openManuscript} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-readings" && <MyReadings />}
+        {leaf && "page" in leaf && leaf.page === "my-dossiers" && (
+          <MyDossiers onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation")} />
+        )}
         {leaf && "page" in leaf && leaf.page === "my-corrections" && <MyCorrections />}
         {leaf && "page" in leaf && leaf.page === "editorial-quotes-inbox" && <EditorialQuotesInbox />}
         {leaf && "page" in leaf && leaf.page === "catalogue-ref" && (

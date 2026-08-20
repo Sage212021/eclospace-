@@ -89,6 +89,25 @@ describe("affectation nominative de l'étape suivante", () => {
     expect(still.status.code).toBe("PLANIFICATION");
   });
 
+  it("« Mes dossiers à traiter » liste les manuscrits confiés à l'utilisateur connecté", async () => {
+    const login = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: (await prisma.user.findUniqueOrThrow({ where: { id: correcteurId } })).username, password: "Corr123!" } });
+    const corrCookie = extractSessionCookie(login.cookies.map((c) => `${c.name}=${c.value}`));
+
+    const m = await manuscriptAt("PLANIFICATION");
+    // Avant affectation : absent de mes dossiers.
+    const before = await app.inject({ method: "GET", url: "/api/v1/my-dossiers", headers: { cookie: corrCookie } });
+    expect((before.json() as { manuscript_id: string }[]).some((d) => d.manuscript_id === m.id)).toBe(false);
+
+    // On confie le dossier au correcteur.
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie: adminCookie }, payload: { assignee_id: correcteurId } });
+
+    const after = await app.inject({ method: "GET", url: "/api/v1/my-dossiers", headers: { cookie: corrCookie } });
+    expect(after.statusCode).toBe(200);
+    const mine = (after.json() as { manuscript_id: string; step_code: string }[]).find((d) => d.manuscript_id === m.id);
+    expect(mine).toBeTruthy();
+    expect(mine!.step_code).toBe("CORRECTION");
+  });
+
   it("sans désignation, l'affectation reste facultative (le service est notifié)", async () => {
     const m = await manuscriptAt("PLANIFICATION");
     const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie: adminCookie }, payload: {} });

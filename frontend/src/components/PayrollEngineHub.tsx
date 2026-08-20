@@ -27,6 +27,7 @@ import { PayrollMonthlySection } from "./PayrollMonthlySection";
 import { PayrollProfilesSection } from "./PayrollProfilesSection";
 import { PayrollSettingsSection } from "./PayrollSettingsSection";
 import { PayrollRegisterSection } from "./PayrollRegisterSection";
+import { TableScroll } from "./TableScroll";
 
 // MOTEUR DE PAIE & PARAMÉTRAGE (Lot 5) — accès UNIQUE regroupant toutes les
 // rubriques de la paie en accordéon, comme le classeur moteur. Chaque rubrique
@@ -92,7 +93,7 @@ function GuideCard() {
         <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>
           Les données du bulletin sont réparties par nature. Le Responsable RH a accès à toutes ces modifications.
         </p>
-        <div style={{ overflowX: "auto" }}>
+        <TableScroll>
           <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 560 }}>
             <thead><tr style={{ color: "var(--muted)", textAlign: "left", fontSize: 11.5 }}>
               <th style={{ padding: "5px 8px" }}>Donnée</th><th style={{ padding: "5px 8px" }}>Où la modifier</th>
@@ -112,7 +113,7 @@ function GuideCard() {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
         <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
           Les 3 premières lignes sont des données <b>permanentes</b> du salarié ; les éléments variables (4ᵉ ligne) se saisissent chaque mois sur la grille.
         </p>
@@ -212,7 +213,7 @@ function JournalCard() {
             Clôturé le <b>{new Date(journal.closed_at).toLocaleDateString("fr-FR")}</b> · {journal.employees} salarié(s) · Net total{" "}
             <b style={{ fontFamily: "var(--font-mono)" }}>{fcfa(journal.totals.net)}</b>
           </div>
-          <div style={{ overflowX: "auto" }}>
+          <TableScroll>
             <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 620 }}>
               <thead>
                 <tr style={{ textAlign: "right", color: "var(--muted)", fontSize: 11 }}>
@@ -235,7 +236,7 @@ function JournalCard() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         </>
       )}
     </Card>
@@ -272,7 +273,7 @@ function FormulasCard() {
         </div>
       )}
       {rs && (
-        <div style={{ overflowX: "auto" }}>
+        <TableScroll>
           <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 560 }}>
             <thead><tr style={{ color: "var(--muted)", textAlign: "left", fontSize: 11.5 }}><th style={{ padding: "5px 8px" }}>Règle</th><th style={{ padding: "5px 8px" }}>Formule</th><th style={{ padding: "5px 8px", textAlign: "right" }}>Taux / valeur</th></tr></thead>
             <tbody>
@@ -290,7 +291,7 @@ function FormulasCard() {
               {row("Coût employeur", "brut + charges patronales", "—")}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       )}
     </Card>
   );
@@ -455,7 +456,7 @@ function HistoryCard() {
       {state === "loading" && <p style={{ fontSize: 13, color: "var(--muted)" }}>Chargement…</p>}
       {state === "ok" && rows.length === 0 && <p style={{ fontSize: 13, color: "var(--muted)" }}>Aucune action enregistrée pour l'instant.</p>}
       {rows.length > 0 && (
-        <div style={{ overflowX: "auto" }}>
+        <TableScroll>
           <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 560 }}>
             <thead><tr style={{ color: "var(--muted)", textAlign: "left", fontSize: 11.5 }}><th style={{ padding: "4px 8px" }}>Date</th><th style={{ padding: "4px 8px" }}>Objet</th><th style={{ padding: "4px 8px" }}>Action</th><th style={{ padding: "4px 8px" }}>Par</th></tr></thead>
             <tbody>
@@ -469,7 +470,7 @@ function HistoryCard() {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       )}
     </Card>
   );
@@ -551,7 +552,7 @@ function DeclarationsCard({ kind }: { kind: "cnps" | "fiscal" }) {
       {state === "loading" && <p style={{ fontSize: 13, color: "var(--muted)" }}>Chargement…</p>}
       {state === "none" && <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>Mois non préparé : préparez-le dans « Bulletins de paie ».</p>}
       {state === "ok" && (
-        <div style={{ overflowX: "auto", marginTop: 8 }}>
+        <TableScroll style={{ marginTop: 8 }}>
           <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 640 }}>
             <thead>
               <tr style={{ color: "var(--muted)", fontSize: 11, textAlign: "right" }}>
@@ -572,7 +573,7 @@ function DeclarationsCard({ kind }: { kind: "cnps" | "fiscal" }) {
               </tr>
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       )}
     </Card>
   );
@@ -654,7 +655,7 @@ function DipeCard() {
               Le N° DIPE de l'employeur n'est pas renseigné : ouvrez « Paramètres » du moteur de paie pour le saisir (il figurera sur la déclaration).
             </p>
           )}
-          <div style={{ overflowX: "auto", marginTop: 10 }}>
+          <TableScroll style={{ marginTop: 10 }}>
             <table style={{ borderCollapse: "collapse", fontSize: 11.5, minWidth: 900 }}>
               <thead>
                 <tr style={{ color: "var(--muted)", fontSize: 10.5, textAlign: "right" }}>
@@ -684,7 +685,7 @@ function DipeCard() {
                 </tr>
               </tbody>
             </table>
-          </div>
+          </TableScroll>
           <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 8, lineHeight: 1.6 }}>
             « Salaire Cotisable CNPS » : Total = assiette avant plafond, Plafonné = assiette retenue (plafond CNPS). Colonne « {dipe.irpp_label} » : {dipe.irpp_mode === "irpp_cac" ? "impôt sur le revenu total (IRPP + CAC), montant à reverser au fisc" : "IRPP seul, hors centimes additionnels communaux"}. NB. Jrs = 30. Montants issus des bulletins du mois.
           </p>
@@ -727,7 +728,7 @@ function InternesCard() {
         rows.every((r) => r.total === 0) ? (
           <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>Aucune retenue interne saisie pour ce mois.</p>
         ) : (
-          <div style={{ overflowX: "auto", marginTop: 8 }}>
+          <TableScroll style={{ marginTop: 8 }}>
             <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 680 }}>
               <thead>
                 <tr style={{ color: "var(--muted)", fontSize: 11, textAlign: "right" }}>
@@ -751,7 +752,7 @@ function InternesCard() {
                 </tr>
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         )
       )}
     </Card>

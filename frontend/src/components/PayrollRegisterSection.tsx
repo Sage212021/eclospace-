@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { closePayrollPeriod, getPayrollRegister, type PayrollRegister, type RegisterLine } from "../api/client";
 import { Card } from "./Card";
+import { TableScroll } from "./TableScroll";
 import { Field } from "./Modal";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
@@ -125,7 +126,7 @@ export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: {
           {reg.lines.length === 0 ? (
             <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>{t("pay.no_employee_period", "Aucun salarié avec fiche paie sur cette période.")}</p>
           ) : (
-            <div style={{ overflowX: "auto" }}>
+            <TableScroll>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
@@ -151,7 +152,7 @@ export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: {
                 </tbody>
               </table>
               {reg.lines.length > 150 && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>{t("pay.rows_limited_150", "Affichage limité à 150 lignes ; les exports CSV contiennent tout.")}</p>}
-            </div>
+            </TableScroll>
           )}
         </div>
       )}

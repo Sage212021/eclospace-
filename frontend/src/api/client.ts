@@ -480,6 +480,20 @@ export function getNextAssignees(manuscriptId: string) {
   );
 }
 
+// « Mes dossiers à traiter » : les manuscrits dont l'étape courante m'est
+// personnellement confiée (équivalent de « Mes lectures » pour toute la chaîne).
+export interface MyDossier {
+  manuscript_id: string;
+  manuscript_number: string;
+  title: string;
+  step_code: string;
+  step_label: string;
+  since: string;
+}
+export function getMyDossiers() {
+  return request<MyDossier[]>("/api/v1/my-dossiers");
+}
+
 // Retour à l'étape précédente (correction d'une validation faite par erreur).
 export function revertManuscriptStep(manuscriptId: string, reason?: string) {
   return request<{ reverted: boolean; status: string | null; statusLabel: string }>(

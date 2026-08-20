@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Manuscript } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
 import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
@@ -474,6 +474,37 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       return reply.send({ next_step: { code: nextStatus.code, label: nextStatus.label }, assignees });
     },
   );
+
+  // « Mes dossiers à traiter » : les manuscrits dont l'ÉTAPE COURANTE m'est
+  // personnellement confiée (responsable = moi et étape non encore validée).
+  // Accessible à tout utilisateur connecté — chacun ne voit QUE ses propres
+  // dossiers (un correcteur/maquettiste/infographe n'a pas forcément le droit
+  // large « manuscripts:consultation »). Équivalent de « Mes lectures » pour le
+  // reste de la chaîne.
+  fastify.get("/api/v1/my-dossiers", { preHandler: requireAuth }, async (request, reply) => {
+    const me = request.user!.id;
+    const steps = await prisma.manuscriptStep.findMany({
+      where: { responsibleId: me, validatedAt: null, manuscript: { deletedAt: null } },
+      include: {
+        status: { select: { code: true, label: true } },
+        manuscript: { select: { id: true, manuscriptNumber: true, title: true, statusId: true } },
+      },
+      orderBy: [{ plannedStart: "asc" }, { createdAt: "asc" }],
+    });
+    // On ne garde que les étapes où le manuscrit se trouve ENCORE (l'étape
+    // courante) : une étape déjà dépassée n'est plus « à traiter ».
+    const rows = steps
+      .filter((s) => s.manuscript.statusId === s.statusId)
+      .map((s) => ({
+        manuscript_id: s.manuscript.id,
+        manuscript_number: s.manuscript.manuscriptNumber,
+        title: s.manuscript.title,
+        step_code: s.status.code,
+        step_label: s.status.label,
+        since: (s.plannedStart ?? s.createdAt).toISOString(),
+      }));
+    return reply.send(rows);
+  });
 
   // Retour à l'étape précédente (Ch. 4 §4.5, correction d'erreur) : ramène le
   // manuscrit à l'étape applicable immédiatement précédente et « rouvre » cette

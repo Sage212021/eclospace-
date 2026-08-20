@@ -30,6 +30,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: "include",
+    // Toujours interroger le réseau (jamais le cache HTTP du navigateur/proxy) :
+    // sinon une lecture juste après une saisie peut renvoyer l'ancienne donnée
+    // — d'où l'impression que « ça met 1–2 min à s'actualiser » voire qu'il faut
+    // se reconnecter. Les données de l'ERP doivent toujours être fraîches.
+    cache: "no-store",
     // Ne déclarer le type JSON que s'il y a un corps : sinon Fastify rejette une
     // requête POST sans corps (FST_ERR_CTP_EMPTY_JSON_BODY).
     headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...init?.headers },

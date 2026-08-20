@@ -345,14 +345,26 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
             const departmentUsers = await tx.user.findMany({
               where: { userRoles: { some: { revokedAt: null, role: { departmentId: nextStatus.departmentId } } }, status: "active" },
             });
+            // Le comité de lecture fonctionne par AFFECTATION : un relecteur ne
+            // voit dans « Mes lectures » que les manuscrits qui lui sont
+            // personnellement confiés. À l'arrivée au comité, aucun relecteur
+            // n'est encore désigné : le manuscrit est « à répartir » (page
+            // Comité de lecture), pas « à lire ». On adapte donc le message pour
+            // cette étape — sinon l'opérateur cherche en vain le manuscrit dans
+            // « Mes lectures » alors qu'il est en attente d'affectation.
+            const isCommittee = nextStatus.code === "COMITE_LECTURE";
+            const title = isCommittee ? "Manuscrit à répartir au comité de lecture" : "Nouveau dossier à traiter";
+            const body = isCommittee
+              ? `Le manuscrit ${manuscript.manuscriptNumber} est arrivé au comité de lecture : ouvrez « Comité de lecture » pour affecter un ou plusieurs relecteurs (il n'apparaît dans « Mes lectures » qu'une fois qu'il vous est confié).`
+              : `Le manuscrit ${manuscript.manuscriptNumber} arrive à l'étape « ${nextStatus.label} ».`;
             for (const departmentUser of departmentUsers) {
               await tx.notification.create({
                 data: {
                   userId: departmentUser.id,
                   type: "affectation",
                   priority: "medium",
-                  title: "Nouveau dossier à traiter",
-                  body: `Le manuscrit ${manuscript.manuscriptNumber} arrive à l'étape « ${nextStatus.label} ».`,
+                  title,
+                  body,
                   entityType: "manuscript",
                   entityId: id,
                 },

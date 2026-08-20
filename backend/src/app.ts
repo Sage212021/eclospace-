@@ -108,6 +108,19 @@ export async function buildApp() {
   await app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024 } });
   await app.register(authPlugin);
 
+  // Les réponses de l'API portent des données vivantes : on interdit tout cache
+  // (navigateur ET proxy intermédiaire). Sans cela, une lecture juste après une
+  // saisie peut renvoyer l'ancienne valeur pendant 1 à 2 minutes (voire jusqu'à
+  // une reconnexion) — l'opérateur croit alors que « ça n'a pas enregistré ».
+  app.addHook("onSend", async (request, reply, payload) => {
+    if (request.url.startsWith("/api/")) {
+      reply.header("Cache-Control", "no-store, no-cache, must-revalidate");
+      reply.header("Pragma", "no-cache");
+      reply.header("Expires", "0");
+    }
+    return payload;
+  });
+
   // Filet de sécurité global : toute erreur non rattrapée par une route est
   // convertie ici en message clair, en français — jamais de détail technique
   // (ex. « Unique constraint failed ») renvoyé au navigateur.

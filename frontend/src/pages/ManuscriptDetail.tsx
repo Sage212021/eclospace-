@@ -27,11 +27,13 @@ import {
   submitEditorialDecision,
   updateManuscriptRegistration,
   validateStep,
+  getNextAssignees,
   listGenres,
   listUsers,
   type EditorialSegment,
   type Genre,
   type ManuscriptDetail as ManuscriptDetailData,
+  type NextAssignee,
   type ReadingCandidate,
   type TimelineStep,
   type UserSummary,
@@ -1376,23 +1378,38 @@ function GenericStepValidation({
   onError: (message: string) => void;
 }) {
   const [requiresRewrite, setRequiresRewrite] = useState(false);
+  const [assignees, setAssignees] = useState<NextAssignee[]>([]);
+  const [nextLabel, setNextLabel] = useState<string | null>(null);
+  const [assigneeId, setAssigneeId] = useState("");
 
   const label = STEP_ACTION_LABELS[stepCode] ?? "Valider cette étape";
 
+  // Qui pourra prendre le dossier à l'étape SUIVANTE (maquettiste, infographe,
+  // correcteur…) : on propose de le confier nommément à l'un d'eux.
+  useEffect(() => {
+    let alive = true;
+    getNextAssignees(manuscriptId)
+      .then((r) => { if (alive) { setAssignees(r.assignees); setNextLabel(r.next_step?.label ?? null); } })
+      .catch(() => { if (alive) { setAssignees([]); setNextLabel(null); } });
+    return () => { alive = false; };
+  }, [manuscriptId, stepCode]);
+
   async function handleValidate() {
+    const chosen = assignees.find((a) => a.id === assigneeId);
     const ok = await confirm({
       title: "Valider l'étape",
       message: `${label} ?`,
-      detail: "Le manuscrit passera à l'étape suivante.",
+      detail: chosen
+        ? `Le manuscrit passera à l'étape suivante et sera confié à ${chosen.username}.`
+        : "Le manuscrit passera à l'étape suivante.",
       confirmLabel: label,
     });
     if (!ok) return;
     try {
-      const result = await validateStep(
-        manuscriptId,
-        stepCode,
-        stepCode === "CORRECTION" ? { requires_rewrite: requiresRewrite } : undefined,
-      );
+      const result = await validateStep(manuscriptId, stepCode, {
+        ...(stepCode === "CORRECTION" ? { requires_rewrite: requiresRewrite } : {}),
+        ...(assigneeId ? { assignee_id: assigneeId } : {}),
+      });
       onValidated(result.status);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Échec de la validation.");
@@ -1405,6 +1422,22 @@ function GenericStepValidation({
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 10 }}>
           <input type="checkbox" checked={requiresRewrite} onChange={(e) => setRequiresRewrite(e.target.checked)} />
           Cette version nécessite une réécriture avant de poursuivre
+        </label>
+      )}
+      {assignees.length > 0 && (
+        <label style={{ display: "block", fontSize: 13, marginBottom: 10 }}>
+          <span style={{ display: "block", color: "var(--muted)", marginBottom: 4 }}>
+            Transmettre à{nextLabel ? ` (${nextLabel})` : ""} :
+          </span>
+          <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} style={{ padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13, minWidth: 240 }}>
+            <option value="">Tout le service (au choix)</option>
+            {assignees.map((a) => (
+              <option key={a.id} value={a.id}>{a.username}{a.role ? ` — ${a.role}` : ""}</option>
+            ))}
+          </select>
+          <span style={{ display: "block", color: "var(--muted)", fontSize: 11.5, marginTop: 3 }}>
+            Sans choix, tout le service est notifié. En désignant une personne, elle seule est prévenue et devient responsable de l'étape.
+          </span>
         </label>
       )}
       <ActionButton onClick={handleValidate}>{label}</ActionButton>

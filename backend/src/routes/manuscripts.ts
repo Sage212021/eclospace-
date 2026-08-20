@@ -564,6 +564,39 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     return reply.send(manuscripts);
   });
 
+  // Historique des manuscrits REÇUS / INSCRITS, groupés PAR JOUR (demande
+  // opérateur 20/08/2026) : un journal chronologique des dépôts, du plus récent
+  // au plus ancien, pour un affichage en accordéon (un jour = une section
+  // dépliable). La date de référence est la date de réception (à défaut, la date
+  // d'enregistrement dans l'ERP).
+  fastify.get("/api/v1/manuscripts/history-by-day", { preHandler: requirePermission("manuscripts", "consultation") }, async (_request, reply) => {
+    const rows = await prisma.manuscript.findMany({
+      where: { deletedAt: null },
+      select: { id: true, manuscriptNumber: true, title: true, receivedAt: true, createdAt: true, origin: true, status: { select: { label: true, code: true } } },
+      orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }],
+    });
+    const byDay = new Map<string, { id: string; manuscript_number: string; title: string; origin: string | null; status_label: string; status_code: string; at: string }[]>();
+    for (const m of rows) {
+      const ref = m.receivedAt ?? m.createdAt;
+      const key = ref.toISOString().slice(0, 10);
+      const list = byDay.get(key) ?? [];
+      list.push({
+        id: m.id,
+        manuscript_number: m.manuscriptNumber,
+        title: m.title,
+        origin: m.origin ?? null,
+        status_label: m.status.label,
+        status_code: m.status.code,
+        at: ref.toISOString(),
+      });
+      byDay.set(key, list);
+    }
+    const days = [...byDay.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([date, items]) => ({ date, count: items.length, items }));
+    return reply.send(days);
+  });
+
   // Fiches du CATALOGUE incomplètes (chemin A) : ouvrages déjà parus dont la
   // fiche manque d'informations clés (ISBN, prix, domaine, identité auteur).
   // Objectif : les compléter sur place, sans rien effacer.

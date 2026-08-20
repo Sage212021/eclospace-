@@ -318,6 +318,25 @@ export function listManuscripts(filters?: CatalogueFilters) {
   return request<Manuscript[]>(`/api/v1/manuscripts?${params.toString()}`);
 }
 
+// Historique des manuscrits reçus / inscrits, groupés par jour (accordéon).
+export interface ManuscriptHistoryItem {
+  id: string;
+  manuscript_number: string;
+  title: string;
+  origin: string | null;
+  status_label: string;
+  status_code: string;
+  at: string;
+}
+export interface ManuscriptHistoryDay {
+  date: string;
+  count: number;
+  items: ManuscriptHistoryItem[];
+}
+export function getManuscriptsHistoryByDay() {
+  return request<ManuscriptHistoryDay[]>("/api/v1/manuscripts/history-by-day");
+}
+
 // --- Domaines & collections (gestion du catalogue, spéc. fonctionnelle §6) ---
 
 export interface Collection {

@@ -78,6 +78,20 @@ export async function seedCorrectionCycle(manuscriptId: string) {
   }
 }
 
+// Dépose le livrable de sortie d'une étape (verrou « pas d'avancement sans le
+// fichier attendu »). Nécessaire pour valider les étapes soumises au verrou
+// (Planification, Expertise, Réécriture, Mise en page, Infographie).
+export async function seedStepDeliverable(manuscriptId: string, stepCode: string) {
+  const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+  const doc = await prisma.document.create({
+    data: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape", confidentiality: "interne", title: `[livrable:${stepCode}] seed-${stepCode}.txt`, createdBy: admin.id, updatedBy: admin.id },
+  });
+  await prisma.documentVersion.create({
+    data: { documentId: doc.id, versionNumber: 1, filePath: `test/livrable-${stepCode}-${manuscriptId}.txt`, fileSize: 10, mimeType: "text/plain", sha256Hash: "0".repeat(64), changeSummary: "seed", uploadedBy: admin.id },
+  });
+  return doc;
+}
+
 // isbn13 est unique en base : un préfixe de test statique collisionne dès la
 // deuxième exécution de la suite sur une base non réinitialisée entre les runs.
 export function uniqueIsbnPrefix(digitWidth: number): string {

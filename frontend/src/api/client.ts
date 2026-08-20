@@ -614,6 +614,39 @@ export async function uploadCorrectionPhase(manuscriptId: string, phase: string,
   return response.json() as Promise<{ version_id: string; phase: string; label: string }>;
 }
 
+// Livrable de sortie d'une étape (verrou « pas d'avancement sans le fichier »).
+export interface StepDeliverableMeta {
+  step_code: string;
+  required: boolean;
+  label: string;
+  has_file: boolean;
+  version_id: string | null;
+  filename: string | null;
+  created_at: string | null;
+}
+export function getStepDeliverable(manuscriptId: string, code: string) {
+  return request<StepDeliverableMeta>(`/api/v1/manuscripts/${manuscriptId}/step-deliverable/${code}`);
+}
+export async function uploadStepDeliverable(manuscriptId: string, code: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/manuscripts/${manuscriptId}/step-deliverable/${code}`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Dépôt impossible.");
+  return response.json() as Promise<{ version_id: string; step_code: string }>;
+}
+
+// Paramètre : étapes soumises au verrou « livrable de sortie ».
+export interface WorkflowDeliverableConfig {
+  steps: string[];
+  candidates: { code: string; label: string }[];
+}
+export function getWorkflowDeliverableSteps() {
+  return request<WorkflowDeliverableConfig>("/api/v1/workflow-deliverable-steps");
+}
+export function updateWorkflowDeliverableSteps(steps: string[]) {
+  return request<WorkflowDeliverableConfig>("/api/v1/workflow-deliverable-steps", { method: "PUT", body: JSON.stringify({ steps }) });
+}
+
 // Étape Maquette : entrée = manuscrit corrigé, sortie = maquette mise en page.
 export function getManuscriptLayoutMeta(manuscriptId: string) {
   return request<{ corrected_has_file: boolean; layout_has_file: boolean }>(`/api/v1/manuscripts/${manuscriptId}/layout-file/meta`);

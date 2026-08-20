@@ -4,6 +4,7 @@ import { ManuscriptOrigin, EditorialSegment, type Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
 import { CORRECTION_PHASES, isCorrectionPhase, correctionDocTitle, correctionCycleState } from "../lib/correctionCycle.js";
+import { deliverableDocTitle, stepDeliverableMeta } from "../lib/stepDeliverables.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
@@ -875,6 +876,45 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       });
       await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { correction_phase: phase }, ipAddress: request.ip });
       return reply.code(201).send({ version_id: version.id, phase, label });
+    },
+  );
+
+  // --- Livrable de sortie d'une étape (verrou « pas d'avancement sans le fichier
+  // attendu par l'étape suivante ») ------------------------------------------
+  // GET : présence + méta du livrable de l'étape courante. POST : dépôt du
+  // fichier livrable (droit tasks:saisie OU manuscripts:saisie). Téléchargement
+  // via la route step-attachments (documents « pièce d'étape »).
+  fastify.get(
+    "/api/v1/manuscripts/:id/step-deliverable/:code",
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "consultation" }, { module: "manuscripts", action: "consultation" }]) },
+    async (request, reply) => {
+      const { id, code } = request.params as { id: string; code: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      return reply.send(await stepDeliverableMeta(id, code));
+    },
+  );
+
+  fastify.post(
+    "/api/v1/manuscripts/:id/step-deliverable/:code",
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "saisie" }, { module: "manuscripts", action: "saisie" }]) },
+    async (request, reply) => {
+      const { id, code } = request.params as { id: string; code: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const file = await request.file();
+      if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+      const buffer = await file.toBuffer();
+      if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+      const stored = await storeFile(buffer, `livrable-${code}-${id}-${file.filename}`);
+      const doc = await prisma.document.create({
+        data: { entityType: "manuscript", entityId: id, category: "piece_etape", confidentiality: "interne", title: deliverableDocTitle(code, file.filename), createdBy: request.user!.id, updatedBy: request.user!.id },
+      });
+      const version = await prisma.documentVersion.create({
+        data: { documentId: doc.id, versionNumber: 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: file.mimetype, sha256Hash: stored.sha256Hash, changeSummary: `Livrable de l'étape ${code}`, uploadedBy: request.user!.id },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { step_deliverable: code }, ipAddress: request.ip });
+      return reply.code(201).send({ version_id: version.id, step_code: code });
     },
   );
 

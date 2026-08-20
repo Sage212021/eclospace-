@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listSettings, updateSetting, getPublisherIdentity, updatePublisherIdentity, type AppSetting, type EffectiveUser, type PublisherIdentity } from "../api/client";
+import { listSettings, updateSetting, getPublisherIdentity, updatePublisherIdentity, getWorkflowDeliverableSteps, updateWorkflowDeliverableSteps, type AppSetting, type EffectiveUser, type PublisherIdentity, type WorkflowDeliverableConfig } from "../api/client";
 import { AccountSecurity } from "../components/AccountSecurity";
 import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -102,6 +102,9 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
 
       {/* Identité de l'éditeur imprimée sur les contrats d'édition. */}
       <PublisherIdentityCard canAdminister={canAdminister} />
+
+      {/* Verrou éditorial : étapes exigeant un livrable déposé avant l'avancement. */}
+      <WorkflowDeliverableCard canAdminister={canAdminister} />
 
       {/* Diagnostic de persistance : vérifier que les données sont bien conservées en base. */}
       <SystemDiagnosticCard />
@@ -213,6 +216,78 @@ function PublisherIdentityCard({ canAdminister }: { canAdminister: boolean }) {
         <div style={{ marginTop: 12 }}>
           <button onClick={save} disabled={saving} style={{ border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: saving ? "default" : "pointer", opacity: saving ? 0.6 : 1 }}>
             {saving ? "Enregistrement…" : "Enregistrer l'identité de l'éditeur"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Verrou éditorial « livrable de sortie » : l'opérateur choisit ici les étapes
+// qui ne pourront plus être validées tant que leur fichier attendu par l'étape
+// suivante n'est pas déposé (garde-fou demandé le 20/08/2026). Cases à cocher :
+// aucun JSON à manipuler.
+function WorkflowDeliverableCard({ canAdminister }: { canAdminister: boolean }) {
+  const [config, setConfig] = useState<WorkflowDeliverableConfig | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    getWorkflowDeliverableSteps()
+      .then((c) => { setConfig(c); setSelected(c.steps); })
+      .catch(() => setErr("Chargement des étapes verrouillées impossible."));
+  }, []);
+
+  function toggle(code: string) {
+    setNote(null);
+    setSelected((cur) => (cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]));
+  }
+
+  async function save() {
+    setSaving(true);
+    setErr(null);
+    try {
+      const saved = await updateWorkflowDeliverableSteps(selected);
+      setConfig(saved);
+      setSelected(saved.steps);
+      setNote("Étapes verrouillées enregistrées. Le verrou s'applique dès la prochaine validation d'étape.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Échec de l'enregistrement.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const dirty = config ? selected.slice().sort().join(",") !== config.steps.slice().sort().join(",") : false;
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 14 }}>Verrou éditorial — livrables exigés</div>
+      <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "4px 0 12px", lineHeight: 1.6 }}>
+        Cochez les étapes qui ne pourront pas être validées tant que leur fichier de sortie (celui qu'attend l'étape
+        suivante) n'aura pas été déposé. Cela évite qu'un manuscrit avance sans que l'étape précédente ait été
+        réellement traitée.
+      </p>
+      {err && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+      {note && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{note}</div>}
+      {!config ? (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8 }}>
+          {config.candidates.map((c) => (
+            <label key={c.code} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 6, cursor: canAdminister ? "pointer" : "default", background: canAdminister ? "#fff" : "var(--panel, #f4f5f8)" }}>
+              <input type="checkbox" checked={selected.includes(c.code)} disabled={!canAdminister} onChange={() => toggle(c.code)} />
+              <span>{c.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      {canAdminister && config && (
+        <div style={{ marginTop: 12 }}>
+          <button onClick={save} disabled={saving || !dirty} style={{ border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: saving || !dirty ? "default" : "pointer", opacity: saving || !dirty ? 0.55 : 1 }}>
+            {saving ? "Enregistrement…" : "Enregistrer les étapes verrouillées"}
           </button>
         </div>
       )}

@@ -496,7 +496,11 @@ function PosSaleForm({
         }
         await createPosSale({ off_catalogue_title: offTitle.trim(), off_catalogue_author: offAuthor.trim() || undefined, off_catalogue_isbn: offIsbn.trim() || undefined, quantity, unit_price: unitPrice, payment_method: paymentMethod, customer_id, point_of_sale_id: pointId || undefined });
       } else {
-        await createPosSale({ isbn_id: isbnId, location_id: locationId, quantity, unit_price: unitPrice, payment_method: paymentMethod, customer_id, point_of_sale_id: pointId || undefined });
+        if (!isbnId) {
+          onError(t("com.err_isbn", "Sélectionnez un ouvrage du catalogue (ISBN)."));
+          return;
+        }
+        await createPosSale({ isbn_id: isbnId, location_id: locationId || undefined, quantity, unit_price: unitPrice, payment_method: paymentMethod, customer_id, point_of_sale_id: pointId || undefined });
       }
       onCreated();
       const total = (quantity * unitPrice).toLocaleString("fr-FR");

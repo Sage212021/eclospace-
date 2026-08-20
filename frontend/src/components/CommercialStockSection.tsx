@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TableScroll } from "./TableScroll";
 import {
   listStockCommercials,
   getCommercialStockAll,
@@ -62,7 +63,7 @@ export function CommercialStockSection({ isbns, locations, canManage, onMessage,
       ) : rows.length === 0 ? (
         <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucun exemplaire confié à un commercial pour l'instant.</p>
       ) : (
-        <div style={{ overflowX: "auto" }}>
+        <TableScroll>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 620 }}>
             <thead>
               <tr style={{ textAlign: "right", color: "var(--muted)", fontSize: 11.5 }}>
@@ -103,7 +104,7 @@ export function CommercialStockSection({ isbns, locations, canManage, onMessage,
             )}
           </table>
           <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>« À justifier » = exemplaires encore détenus par le commercial (à vendre ou à retourner).</p>
-        </div>
+        </TableScroll>
       )}
 
       {dialog && (

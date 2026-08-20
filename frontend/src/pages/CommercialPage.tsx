@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TableScroll } from "../components/TableScroll";
 import {
   approveSalesOrder,
   createCustomer,
@@ -756,7 +757,7 @@ function MySalesRegister({ refreshKey }: { refreshKey: number }) {
       ) : sales.length === 0 ? (
         <Empty>Aucune vente enregistrée pour l'instant. Enregistrez une vente ci-dessus, elle apparaîtra ici.</Empty>
       ) : (
-        <div style={{ overflowX: "auto" }}>
+        <TableScroll>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 720 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
@@ -803,7 +804,7 @@ function MySalesRegister({ refreshKey }: { refreshKey: number }) {
               </tr>
             </tfoot>
           </table>
-        </div>
+        </TableScroll>
       )}
 
       {target && (
@@ -859,7 +860,7 @@ function AnnualSalesRecap({ refreshKey }: { refreshKey: number }) {
     <div style={{ flex: "1 1 320px", minWidth: 300 }}>
       <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
       {rows.length === 0 ? <Empty>Aucune vente.</Empty> : (
-        <div style={{ overflowX: "auto" }}>
+        <TableScroll>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead><tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
               <th style={{ padding: "5px 8px" }}>Libellé</th>
@@ -876,7 +877,7 @@ function AnnualSalesRecap({ refreshKey }: { refreshKey: number }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { TableScroll } from "../components/TableScroll";
 import { getSalesByBook, type SalesTrackingResult } from "../api/client";
 import { Card } from "../components/Card";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -100,7 +101,7 @@ export function SalesByBookPage() {
 
           {/* Par ouvrage */}
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--eclosion-dark)", margin: "6px 0 8px" }}>{t("sbb.by_book", "Par ouvrage")}</div>
-          <div style={{ overflowX: "auto" }}>
+          <TableScroll>
             <table style={tbl}>
               <thead>
                 <tr>
@@ -126,13 +127,13 @@ export function SalesByBookPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
 
           {/* Par période */}
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--eclosion-dark)", margin: "18px 0 8px" }}>
             {granularity === "month" ? t("sbb.by_month", "Par mois") : t("sbb.by_week", "Par semaine")}
           </div>
-          <div style={{ overflowX: "auto" }}>
+          <TableScroll>
             <table style={tbl}>
               <thead>
                 <tr>
@@ -155,7 +156,7 @@ export function SalesByBookPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         </>
       )}
     </Card>

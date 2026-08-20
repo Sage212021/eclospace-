@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { TableScroll } from "../components/TableScroll";
 import { getMyPerformance, getSalesTargets, setSalesTarget, type MyPerformance, type SalesTargetRow } from "../api/client";
 import { GuidanceNote } from "../components/GuidanceNote";
 
@@ -217,7 +218,7 @@ function SalesChart({ series }: { series: { month: string; revenue: number }[] }
   };
   const fmt = (n: number) => `${Math.round(n).toLocaleString("fr-FR")} FCFA`;
   return (
-    <div style={{ overflowX: "auto" }}>
+    <TableScroll>
       <svg width={W} height={H} role="img" aria-label="Évolution du chiffre d'affaires par mois" style={{ maxWidth: "100%" }}>
         {series.map((s, i) => {
           const h = Math.round((s.revenue / max) * chartH);
@@ -233,7 +234,7 @@ function SalesChart({ series }: { series: { month: string; revenue: number }[] }
           );
         })}
       </svg>
-    </div>
+    </TableScroll>
   );
 }
 

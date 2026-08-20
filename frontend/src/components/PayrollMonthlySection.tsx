@@ -3,6 +3,7 @@ import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, validatePay
 import { downloadPayslipsPdf } from "../lib/payslipPdf";
 import type { PayslipPrintData } from "../lib/print";
 import { Card } from "./Card";
+import { TableScroll } from "./TableScroll";
 import { Field, Modal } from "./Modal";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
@@ -402,7 +403,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
             </div>
           )}
 
-          <div style={{ overflowX: "auto", marginTop: 10 }}>
+          <TableScroll style={{ marginTop: 10 }}>
             <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 900 }}>
               <thead>
                 <tr style={{ textAlign: "right", color: "var(--muted)", fontSize: 11.5 }}>
@@ -447,7 +448,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
           <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>
             {locked
               ? "Mois validé : imprimez les bulletins (un PDF, un bulletin par page). Le DG peut rouvrir le mois pour corriger."

@@ -78,8 +78,11 @@ const consignmentStatementSchema = z.object({
 
 const posSaleSchema = z
   .object({
-    isbn_id: z.string().uuid().optional(),
-    location_id: z.string().uuid().optional(),
+    // Champs UUID facultatifs : une chaîne vide envoyée par un <select> non
+    // renseigné est traitée comme « absent » (sinon .uuid() rejetait « » et la
+    // vente échouait à l'enregistrement — cas d'un commercial sans lieu de stock).
+    isbn_id: z.preprocess((v) => (v === "" ? undefined : v), z.string().uuid().optional()),
+    location_id: z.preprocess((v) => (v === "" ? undefined : v), z.string().uuid().optional()),
     // Livre hors catalogue (provisoire) : au moins le titre.
     off_catalogue_title: z.string().max(300).optional(),
     off_catalogue_author: z.string().max(200).optional(),
@@ -89,8 +92,8 @@ const posSaleSchema = z
     payment_method: z.nativeEnum(PosPaymentMethod),
     event_label: z.string().optional(),
     // Client optionnel (au choix du commercial).
-    customer_id: z.string().uuid().optional(),
-    point_of_sale_id: z.string().uuid().optional(),
+    customer_id: z.preprocess((v) => (v === "" ? undefined : v), z.string().uuid().optional()),
+    point_of_sale_id: z.preprocess((v) => (v === "" ? undefined : v), z.string().uuid().optional()),
   })
   // Le lieu (location_id) n'est plus obligatoire : la vente au comptoir ne touche
   // plus au stock (décision opérateur 13/08/2026 — le stock/magasin sera géré par

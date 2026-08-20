@@ -45,6 +45,19 @@ describe("registre des ventes au comptoir & récap annuel", () => {
     expect(row!.total).toBe(10000); // 2 × 5 000
   });
 
+  it("enregistre une vente du catalogue même quand le lieu (location_id) est vide", async () => {
+    // Bug signalé (20/08/2026) : le formulaire envoyait location_id = "" quand le
+    // commercial n'a pas de lieu de stock → l'API rejetait « » (pas un UUID) et
+    // « ça buggait à l'enregistrement ». La chaîne vide doit être ignorée.
+    const isbn = await prisma.isbn.findFirst({ where: { status: "published" }, select: { id: true } });
+    expect(isbn).toBeTruthy();
+    const res = await app.inject({
+      method: "POST", url: "/api/v1/pos-sales", headers: { cookie: repCookie },
+      payload: { isbn_id: isbn!.id, location_id: "", customer_id: "", point_of_sale_id: "", quantity: 1, unit_price: 4000, payment_method: "cash" },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
   it("le filtre « mine » isole les ventes du commercial courant", async () => {
     await app.inject({
       method: "POST", url: "/api/v1/pos-sales", headers: { cookie: otherCookie },

@@ -8,7 +8,7 @@
 //   • le reste → comportement navigateur par défaut.
 // Incrémenter la version ci-dessous force le remplacement de l'ancien cache.
 
-const CACHE = "eclospace-shell-v2";
+const CACHE = "eclospace-shell-v3";
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {

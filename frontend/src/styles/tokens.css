@@ -328,6 +328,10 @@ textarea {
   box-shadow: 0 1px 2px rgba(16, 35, 61, 0.04), 0 10px 28px rgba(16, 35, 61, 0.05);
   padding: clamp(16px, 3.2vw, 22px);
   margin-top: 18px;
+  /* En contexte flex/grid, un enfant a min-width:auto (taille du contenu) : sans
+     ceci, une carte contenant un large tableau refuserait de rétrécir et
+     déborderait de l'écran au lieu de laisser le tableau défiler. */
+  min-width: 0;
 }
 .ecl-card__head {
   display: flex;

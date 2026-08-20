@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { TableScroll } from "./TableScroll";
 import { getStockConsolidated, type StockConsolidated, type StockConsolidatedRow } from "../api/client";
 import { Card } from "./Card";
 import { IconCommercial } from "./icons";
@@ -49,7 +50,7 @@ export function StockConsolidatedSection({ collapsible, defaultOpen, canCorrect,
       )}
       {data && data.rows.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucun stock enregistré pour le moment.</p>}
       {data && data.rows.length > 0 && (
-        <div style={{ overflowX: "auto" }}>
+        <TableScroll>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
@@ -145,7 +146,7 @@ export function StockConsolidatedSection({ collapsible, defaultOpen, canCorrect,
               </tr>
             </tfoot>
           </table>
-        </div>
+        </TableScroll>
       )}
     </Card>
   );

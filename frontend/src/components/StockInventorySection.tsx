@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TableScroll } from "./TableScroll";
 import {
   listInventories,
   getInventory,
@@ -180,7 +181,7 @@ export function StockInventorySection({
       {/* Liste des campagnes + avancement */}
       {list.length === 0 && !current && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune campagne d'inventaire. Créez-en une pour démarrer le comptage.</p>}
       {list.length > 0 && (
-        <div style={{ overflowX: "auto", marginBottom: current ? 16 : 0 }}>
+        <TableScroll style={{ marginBottom: current ? 16 : 0 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
@@ -219,7 +220,7 @@ export function StockInventorySection({
               })}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       )}
 
       {/* Détail : comptage des lignes */}
@@ -235,7 +236,7 @@ export function StockInventorySection({
               {!closed && canValidate && <Button variant="add" size="sm" type="button" disabled={busy} onClick={close}>Clôturer l'inventaire</Button>}
             </div>
           </div>
-          <div style={{ overflowX: "auto" }}>
+          <TableScroll>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
@@ -293,7 +294,7 @@ export function StockInventorySection({
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
           {!closed && (
             <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>
               Saisissez la quantité comptée et, le cas échéant, le nombre d'exemplaires « abîmés » (déclassés à la régularisation). En cas d'écart, un second comptage (↻) est demandé, puis la Direction régularise. La clôture exige que tous les écarts et exemplaires abîmés soient régularisés.

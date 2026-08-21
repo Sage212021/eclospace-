@@ -26,6 +26,7 @@ import { GuidanceNote } from "./GuidanceNote";
 import { PayrollMonthlySection } from "./PayrollMonthlySection";
 import { PayrollProfilesSection } from "./PayrollProfilesSection";
 import { PayrollSettingsSection } from "./PayrollSettingsSection";
+import { SalaryElementsGuide } from "./SalaryElementsGuide";
 import { PayrollRegisterSection } from "./PayrollRegisterSection";
 import { TableScroll } from "./TableScroll";
 
@@ -782,6 +783,7 @@ export function PayrollEngineHub({
         <AccueilCard />
         <DashboardCard />
         <PayrollSettingsSection canManage={canManagePayroll} collapsible />
+        <SalaryElementsGuide canManage={canManagePayroll} />
         <PayrollProfilesSection employees={employees} canManage={canEditPayroll} collapsible />
         <InternesCard />
         <PayrollRegisterSection canClose={canClosePayroll} collapsible />

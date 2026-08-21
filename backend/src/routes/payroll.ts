@@ -8,6 +8,7 @@ import { evaluateExpression, FormulaError, FORMULA_BY_CODE, FORMULA_CODES } from
 import type { PayrollEmployeeProfile, PayrollMonthlyLine } from "@prisma/client";
 import { buildPayslipEmail } from "../lib/documentEmail.js";
 import { absenceAutoDeductionEnabled, setAbsenceAutoDeduction, computeAbsenceDeduction } from "../lib/absencePayDeduction.js";
+import { SALARY_ELEMENT_CATEGORY_LABELS, FISCAL_STATUS_LABELS, CNPS_STATUS_LABELS } from "../lib/salaryElements.js";
 import { sendMail, senderIdentity } from "../lib/mailer.js";
 
 // Module « Paie » natif (D-007) — incrément 1 : barème légal camerounais
@@ -39,6 +40,11 @@ function rateSetView(r: Record<string, unknown> & { id: string; effectiveFrom: D
     misc: { coef_assiette: num(r.coefAssiette), heures_mois: num(r.heuresMois), anc_def_pct: num(r.ancDefPct) },
     irpp: { t1_ceiling: num(r.irppT1Ceiling), t1_pct: num(r.irppT1Pct), t2_ceiling: num(r.irppT2Ceiling), t2_pct: num(r.irppT2Pct), t3_ceiling: num(r.irppT3Ceiling), t3_pct: num(r.irppT3Pct), t4_pct: num(r.irppT4Pct) },
     tc_rav: { seuil1: num(r.tcRavSeuil1), tc1: num(r.tc1), rav1: num(r.rav1), seuil2: num(r.tcRavSeuil2), tc2: num(r.tc2), rav2: num(r.rav2), tc3: num(r.tc3), rav3: num(r.rav3) },
+    // Barème des avantages en nature (CGI art. 33), en fraction du brut taxable.
+    avantages_nature: {
+      logement: num(r.anLogementPct), electricite: num(r.anElectricitePct), eau: num(r.anEauPct),
+      domestique: num(r.anDomestiquePct), vehicule: num(r.anVehiculePct), nourriture: num(r.anNourriturePct),
+    },
   };
 }
 
@@ -53,6 +59,8 @@ const rateSetSchema = z.object({
   misc: z.object({ coef_assiette: pct, heures_mois: z.number().positive(), anc_def_pct: pct }),
   irpp: z.object({ t1_ceiling: money, t1_pct: pct, t2_ceiling: money, t2_pct: pct, t3_ceiling: money, t3_pct: pct, t4_pct: pct }),
   tc_rav: z.object({ seuil1: money, tc1: money, rav1: money, seuil2: money, tc2: money, rav2: money, tc3: money, rav3: money }),
+  // Barème avantages en nature (optionnel : défauts légaux si absent).
+  avantages_nature: z.object({ logement: pct, electricite: pct, eau: pct, domestique: pct, vehicule: pct, nourriture: pct }).optional(),
 });
 
 // Contexte d'exemple pour tester/valider une formule. On restreint aux
@@ -181,6 +189,12 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
           coefAssiette: b.misc.coef_assiette, heuresMois: b.misc.heures_mois, ancDefPct: b.misc.anc_def_pct,
           irppT1Ceiling: b.irpp.t1_ceiling, irppT1Pct: b.irpp.t1_pct, irppT2Ceiling: b.irpp.t2_ceiling, irppT2Pct: b.irpp.t2_pct, irppT3Ceiling: b.irpp.t3_ceiling, irppT3Pct: b.irpp.t3_pct, irppT4Pct: b.irpp.t4_pct,
           tcRavSeuil1: b.tc_rav.seuil1, tc1: b.tc_rav.tc1, rav1: b.tc_rav.rav1, tcRavSeuil2: b.tc_rav.seuil2, tc2: b.tc_rav.tc2, rav2: b.tc_rav.rav2, tc3: b.tc_rav.tc3, rav3: b.tc_rav.rav3,
+          ...(b.avantages_nature
+            ? {
+                anLogementPct: b.avantages_nature.logement, anElectricitePct: b.avantages_nature.electricite, anEauPct: b.avantages_nature.eau,
+                anDomestiquePct: b.avantages_nature.domestique, anVehiculePct: b.avantages_nature.vehicule, anNourriturePct: b.avantages_nature.nourriture,
+              }
+            : {}),
           createdBy: request.user!.id,
         },
       });
@@ -188,6 +202,59 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       return reply.code(201).send(rateSetView(created));
     },
   );
+
+  // ----- Catalogue des éléments de salaire (traitement fiscal / CNPS) ---------
+  // Guide de référence (CGI, Ordonnance CNPS…) : quel élément est taxable/exonéré
+  // et cotisable/non. Consultable par le RH ; statuts modifiables par un
+  // administrateur (tracé). Sert de base au calcul par rubriques (à venir).
+  fastify.get("/api/v1/payroll/salary-elements", { preHandler: requirePermission("paie", "consultation") }, async (request, reply) => {
+    const q = request.query as { all?: string };
+    const rows = await prisma.salaryElement.findMany({
+      where: q.all === "1" ? {} : { active: true },
+      orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+    });
+    return reply.send({
+      elements: rows.map((r) => ({
+        code: r.code, label: r.label, category: r.category,
+        category_label: SALARY_ELEMENT_CATEGORY_LABELS[r.category] ?? r.category,
+        fiscal_status: r.fiscalStatus, fiscal_label: FISCAL_STATUS_LABELS[r.fiscalStatus as keyof typeof FISCAL_STATUS_LABELS] ?? r.fiscalStatus,
+        cnps_status: r.cnpsStatus, cnps_label: CNPS_STATUS_LABELS[r.cnpsStatus as keyof typeof CNPS_STATUS_LABELS] ?? r.cnpsStatus,
+        legal_ref: r.legalRef, active: r.active,
+      })),
+      fiscal_statuses: Object.entries(FISCAL_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+      cnps_statuses: Object.entries(CNPS_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+    });
+  });
+
+  fastify.patch("/api/v1/payroll/salary-elements/:code", { preHandler: requirePermission("paie", "administration") }, async (request, reply) => {
+    const { code } = request.params as { code: string };
+    const parsed = z
+      .object({
+        label: z.string().min(1).optional(),
+        fiscal_status: z.enum(["taxable", "non_taxable", "partiel"]).optional(),
+        cnps_status: z.enum(["cotisable", "non_cotisable", "partiel"]).optional(),
+        legal_ref: z.string().max(500).nullable().optional(),
+        active: z.boolean().optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const existing = await prisma.salaryElement.findUnique({ where: { code } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Élément de salaire introuvable." });
+    const d = parsed.data;
+    const updated = await prisma.salaryElement.update({
+      where: { code },
+      data: {
+        ...(d.label !== undefined ? { label: d.label } : {}),
+        ...(d.fiscal_status !== undefined ? { fiscalStatus: d.fiscal_status } : {}),
+        ...(d.cnps_status !== undefined ? { cnpsStatus: d.cnps_status } : {}),
+        ...(d.legal_ref !== undefined ? { legalRef: d.legal_ref } : {}),
+        ...(d.active !== undefined ? { active: d.active } : {}),
+        updatedBy: request.user!.id,
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "salary_element", entityId: code, oldValues: existing as never, newValues: updated as never, ipAddress: request.ip });
+    return reply.send({ code: updated.code, fiscal_status: updated.fiscalStatus, cnps_status: updated.cnpsStatus, active: updated.active });
+  });
 
   // ----- Formules de calcul modifiables par le RH (D-007) --------------------
   // Le RH peut personnaliser la formule de certains éléments du bulletin

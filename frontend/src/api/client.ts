@@ -4241,8 +4241,35 @@ export interface PayrollRateSet {
   misc: { coef_assiette: number; heures_mois: number; anc_def_pct: number };
   irpp: { t1_ceiling: number; t1_pct: number; t2_ceiling: number; t2_pct: number; t3_ceiling: number; t3_pct: number; t4_pct: number };
   tc_rav: { seuil1: number; tc1: number; rav1: number; seuil2: number; tc2: number; rav2: number; tc3: number; rav3: number };
+  // Barème des avantages en nature (CGI art. 33), en fraction du brut taxable.
+  avantages_nature?: { logement: number; electricite: number; eau: number; domestique: number; vehicule: number; nourriture: number };
 }
 export type PayrollRateSetInput = Omit<PayrollRateSet, "id" | "active" | "created_at" | "created_by">;
+
+// Catalogue des éléments de salaire (traitement fiscal / CNPS) — guide + réglage.
+export interface SalaryElement {
+  code: string;
+  label: string;
+  category: string;
+  category_label: string;
+  fiscal_status: "taxable" | "non_taxable" | "partiel";
+  fiscal_label: string;
+  cnps_status: "cotisable" | "non_cotisable" | "partiel";
+  cnps_label: string;
+  legal_ref: string | null;
+  active: boolean;
+}
+export interface SalaryElementsConfig {
+  elements: SalaryElement[];
+  fiscal_statuses: { value: string; label: string }[];
+  cnps_statuses: { value: string; label: string }[];
+}
+export function getSalaryElements(all = false) {
+  return request<SalaryElementsConfig>(`/api/v1/payroll/salary-elements${all ? "?all=1" : ""}`);
+}
+export function updateSalaryElement(code: string, patch: Partial<{ label: string; fiscal_status: string; cnps_status: string; legal_ref: string | null; active: boolean }>) {
+  return request<{ code: string; fiscal_status: string; cnps_status: string; active: boolean }>(`/api/v1/payroll/salary-elements/${code}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
 
 export function getPayrollConfig() {
   return request<{ internal_enabled: boolean }>(`/api/v1/payroll/config`);

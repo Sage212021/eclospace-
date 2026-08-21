@@ -746,6 +746,17 @@ model PayrollRateSet {
   heuresMois   Decimal @map("heures_mois") @db.Decimal(7, 2)
   ancDefPct    Decimal @map("anc_def_pct") @db.Decimal(6, 4)
 
+  // Barème des AVANTAGES EN NATURE (CGI art. 33), en fraction du salaire brut
+  // taxable. Valeurs légales par défaut : logement 15 %, électricité 4 %, eau
+  // 2 %, domestique 5 %/pers, véhicule 10 %/véh, nourriture 10 %. Versionné par
+  // date d'effet comme le reste du barème.
+  anLogementPct    Decimal @default(0.15) @map("an_logement_pct") @db.Decimal(6, 4)
+  anElectricitePct Decimal @default(0.04) @map("an_electricite_pct") @db.Decimal(6, 4)
+  anEauPct         Decimal @default(0.02) @map("an_eau_pct") @db.Decimal(6, 4)
+  anDomestiquePct  Decimal @default(0.05) @map("an_domestique_pct") @db.Decimal(6, 4)
+  anVehiculePct    Decimal @default(0.10) @map("an_vehicule_pct") @db.Decimal(6, 4)
+  anNourriturePct  Decimal @default(0.10) @map("an_nourriture_pct") @db.Decimal(6, 4)
+
   // Barème IRPP progressif (plafonds annuels par part, taux en fraction).
   irppT1Ceiling Decimal @map("irpp_t1_ceiling") @db.Decimal(12, 2)
   irppT1Pct     Decimal @map("irpp_t1_pct") @db.Decimal(6, 4)
@@ -770,6 +781,29 @@ model PayrollRateSet {
 
   @@index([active, effectiveFrom])
   @@map("payroll_rate_sets")
+}
+
+// Catalogue des ÉLÉMENTS DE SALAIRE et leur traitement fiscal (IRPP) et CNPS,
+// d'après la procédure fiscale officielle (CGI, Ordonnance CNPS 73/17…). Sert
+// de référentiel/guide au RH et de base au calcul par rubriques (à venir).
+// Paramétrable par la RH/DG (statuts modifiables, tracés) ; semé avec la
+// classification légale.
+model SalaryElement {
+  code         String  @id
+  label        String
+  // principal | accessoire_imposable | accessoire_exonere | accessoire_partiel |
+  // avantage_nature | indemnite_rupture | prestation_diverse
+  category     String
+  fiscalStatus String  @map("fiscal_status") // taxable | non_taxable | partiel
+  cnpsStatus   String  @map("cnps_status")   // cotisable | non_cotisable | partiel
+  legalRef     String? @map("legal_ref")
+  sortOrder    Int     @default(0) @map("sort_order")
+  active       Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("salary_elements")
 }
 
 // Fiche paie d'un employé (D-007, incrément 2) — données propres au calcul du

@@ -4398,10 +4398,22 @@ export interface MonthlyDeductions {
   status: "brouillon" | "soumis_dg" | "valide" | null;
   locked: boolean; // true dès que le mois est soumis/validé
   saved: boolean;
+  // Retenue automatique des absences non payées (temps 2) : interrupteur + suggestion.
+  auto_absence_enabled: boolean;
+  suggested_retenue_absence: number;
+  unpaid_absence_days: number;
 }
 
 export function getMonthlyDeductions(employeeId: string, period: string) {
   return request<MonthlyDeductions>(`/api/v1/payroll/employees/${employeeId}/deductions?period=${period}`);
+}
+
+// Interrupteur RH « retenue automatique des absences non payées ».
+export function getAbsenceAutoDeduction() {
+  return request<{ enabled: boolean }>("/api/v1/payroll/absence-auto-deduction");
+}
+export function setAbsenceAutoDeduction(enabled: boolean) {
+  return request<{ enabled: boolean }>("/api/v1/payroll/absence-auto-deduction", { method: "PUT", body: JSON.stringify({ enabled }) });
 }
 
 export function saveMonthlyDeductions(

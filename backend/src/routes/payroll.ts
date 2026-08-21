@@ -7,6 +7,7 @@ import { computePayslip, type Payslip, type PayrollRates, type FormulaOverlay } 
 import { evaluateExpression, FormulaError, FORMULA_BY_CODE, FORMULA_CODES } from "../lib/payrollFormula.js";
 import type { PayrollEmployeeProfile, PayrollMonthlyLine } from "@prisma/client";
 import { buildPayslipEmail } from "../lib/documentEmail.js";
+import { absenceAutoDeductionEnabled, setAbsenceAutoDeduction, computeAbsenceDeduction } from "../lib/absencePayDeduction.js";
 import { sendMail, senderIdentity } from "../lib/mailer.js";
 
 // Module « Paie » natif (D-007) — incrément 1 : barème légal camerounais
@@ -375,6 +376,22 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const line = run
         ? await prisma.payrollMonthlyLine.findUnique({ where: { runId_employeeId: { runId: run.id, employeeId } } })
         : null;
+      // Mode « retenue automatique des absences » : on calcule le montant suggéré
+      // (jours d'absences non payées × salaire journalier) pour le proposer/pré-
+      // remplir. Le RH reste libre de le corriger ou de saisir à la main.
+      const autoEnabled = await absenceAutoDeductionEnabled();
+      let suggested = 0;
+      let suggestedDays = 0;
+      if (autoEnabled) {
+        const profile = await prisma.payrollEmployeeProfile.findUnique({ where: { employeeId } });
+        const confidential = await prisma.employeeConfidential.findUnique({ where: { employeeId }, select: { baseSalary: true } });
+        if (profile) {
+          const { base } = resolveBaseGross(profile, confidential?.baseSalary != null ? num(confidential.baseSalary) : null);
+          const d = await computeAbsenceDeduction(employeeId, period, base);
+          suggested = d.amount;
+          suggestedDays = d.days;
+        }
+      }
       return reply.send({
         period,
         primes: line ? num(line.primes) : 0,
@@ -389,9 +406,40 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         status: run?.status ?? null, // null | brouillon | soumis_dg | valide
         locked: run != null && run.status !== "brouillon",
         saved: line != null,
+        // Retenue automatique des absences (temps 2) : interrupteur + suggestion.
+        auto_absence_enabled: autoEnabled,
+        suggested_retenue_absence: suggested,
+        unpaid_absence_days: suggestedDays,
       });
     },
   );
+
+  // Interrupteur RH « retenue automatique des absences non payées » (temps 2).
+  // OFF (défaut) = saisie manuelle par le RH ; ON = montant calculé et proposé.
+  fastify.get("/api/v1/payroll/absence-auto-deduction", { preHandler: requirePermission("paie", "consultation") }, async (_request, reply) => {
+    return reply.send({ enabled: await absenceAutoDeductionEnabled() });
+  });
+
+  fastify.put("/api/v1/payroll/absence-auto-deduction", { preHandler: requirePermission("paie", "administration") }, async (request, reply) => {
+    const parsed = z.object({ enabled: z.boolean() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Valeur invalide.", details: parsed.error.issues });
+    const enabled = await setAbsenceAutoDeduction(parsed.data.enabled, request.user!.id);
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "setting", entityId: "absence_auto_deduction", newValues: { enabled } as never, ipAddress: request.ip });
+    return reply.send({ enabled });
+  });
+
+  // Aperçu de la retenue d'absence calculée pour un salarié et un mois (jours
+  // d'absences non payées × salaire journalier), quel que soit le mode.
+  fastify.get("/api/v1/payroll/employees/:employeeId/absence-deduction", { preHandler: requirePermission("paie", "consultation") }, async (request, reply) => {
+    const { employeeId } = request.params as { employeeId: string };
+    const period = normalizePeriod((request.query as { period?: string }).period);
+    const profile = await prisma.payrollEmployeeProfile.findUnique({ where: { employeeId } });
+    if (!profile) return reply.code(409).send({ code: "no_profile", message: "Aucune fiche paie pour cet employé." });
+    const confidential = await prisma.employeeConfidential.findUnique({ where: { employeeId }, select: { baseSalary: true } });
+    const { base } = resolveBaseGross(profile, confidential?.baseSalary != null ? num(confidential.baseSalary) : null);
+    const d = await computeAbsenceDeduction(employeeId, period, base);
+    return reply.send({ period, auto_enabled: await absenceAutoDeductionEnabled(), days: d.days, daily: d.daily, amount: d.amount });
+  });
 
   fastify.put(
     "/api/v1/payroll/employees/:employeeId/deductions",

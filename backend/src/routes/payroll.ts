@@ -220,6 +220,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         fiscal_status: r.fiscalStatus, fiscal_label: FISCAL_STATUS_LABELS[r.fiscalStatus as keyof typeof FISCAL_STATUS_LABELS] ?? r.fiscalStatus,
         cnps_status: r.cnpsStatus, cnps_label: CNPS_STATUS_LABELS[r.cnpsStatus as keyof typeof CNPS_STATUS_LABELS] ?? r.cnpsStatus,
         legal_ref: r.legalRef, active: r.active,
+        in_force: r.inForce, effective_from: r.effectiveFrom ? r.effectiveFrom.toISOString().slice(0, 10) : null,
       })),
       fiscal_statuses: Object.entries(FISCAL_STATUS_LABELS).map(([value, label]) => ({ value, label })),
       cnps_statuses: Object.entries(CNPS_STATUS_LABELS).map(([value, label]) => ({ value, label })),
@@ -235,6 +236,9 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         cnps_status: z.enum(["cotisable", "non_cotisable", "partiel"]).optional(),
         legal_ref: z.string().max(500).nullable().optional(),
         active: z.boolean().optional(),
+        // Activation (étape A) : mettre « en vigueur » (avec date d'effet) ou « en attente ».
+        in_force: z.boolean().optional(),
+        effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
       })
       .safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
@@ -249,11 +253,13 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         ...(d.cnps_status !== undefined ? { cnpsStatus: d.cnps_status } : {}),
         ...(d.legal_ref !== undefined ? { legalRef: d.legal_ref } : {}),
         ...(d.active !== undefined ? { active: d.active } : {}),
+        ...(d.in_force !== undefined ? { inForce: d.in_force } : {}),
+        ...(d.effective_from !== undefined ? { effectiveFrom: d.effective_from ? new Date(`${d.effective_from}T00:00:00.000Z`) : null } : {}),
         updatedBy: request.user!.id,
       },
     });
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "salary_element", entityId: code, oldValues: existing as never, newValues: updated as never, ipAddress: request.ip });
-    return reply.send({ code: updated.code, fiscal_status: updated.fiscalStatus, cnps_status: updated.cnpsStatus, active: updated.active });
+    return reply.send({ code: updated.code, fiscal_status: updated.fiscalStatus, cnps_status: updated.cnpsStatus, active: updated.active, in_force: updated.inForce, effective_from: updated.effectiveFrom ? updated.effectiveFrom.toISOString().slice(0, 10) : null });
   });
 
   // ----- Formules de calcul modifiables par le RH (D-007) --------------------

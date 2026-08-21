@@ -47,6 +47,26 @@ describe("catalogue des éléments de salaire (fiscal / CNPS)", () => {
     expect(back.fiscalStatus).toBe("partiel");
   });
 
+  it("une rubrique est « en attente » par défaut et s'active avec une date d'effet", async () => {
+    const before = await app.inject({ method: "GET", url: "/api/v1/payroll/salary-elements", headers: { cookie } });
+    const prime = (before.json().elements as { code: string; in_force: boolean }[]).find((e) => e.code === "prime_technicite");
+    expect(prime?.in_force).toBe(false); // en attente par défaut
+
+    // Mise en vigueur au 1er janvier 2033.
+    const put = await app.inject({ method: "PATCH", url: "/api/v1/payroll/salary-elements/prime_technicite", headers: { cookie }, payload: { in_force: true, effective_from: "2033-01-01" } });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().in_force).toBe(true);
+    expect(put.json().effective_from).toBe("2033-01-01");
+
+    const after = await app.inject({ method: "GET", url: "/api/v1/payroll/salary-elements", headers: { cookie } });
+    const p2 = (after.json().elements as { code: string; in_force: boolean; effective_from: string | null }[]).find((e) => e.code === "prime_technicite");
+    expect(p2).toMatchObject({ in_force: true, effective_from: "2033-01-01" });
+
+    // Remise en attente.
+    const off = await app.inject({ method: "PATCH", url: "/api/v1/payroll/salary-elements/prime_technicite", headers: { cookie }, payload: { in_force: false, effective_from: null } });
+    expect(off.json().in_force).toBe(false);
+  });
+
   it("le barème des avantages en nature est exposé et versionné (défauts légaux)", async () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/payroll/rate-set", headers: { cookie } });
     expect(res.statusCode).toBe(200);

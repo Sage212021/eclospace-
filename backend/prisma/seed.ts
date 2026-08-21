@@ -5,6 +5,7 @@ import argon2 from "argon2";
 import { PrismaClient, PermissionAction, CustomerCategory } from "@prisma/client";
 import { FORMULA_DEFS } from "../src/lib/payrollFormula.js";
 import { DEFAULT_ABSENCE_REASONS } from "../src/lib/absenceReasons.js";
+import { DEFAULT_SALARY_ELEMENTS } from "../src/lib/salaryElements.js";
 
 const prisma = new PrismaClient();
 
@@ -928,6 +929,27 @@ async function main() {
     });
   }
   console.log(`Motifs d'absence : ${DEFAULT_ABSENCE_REASONS.length} référencés.`);
+
+  // Catalogue des éléments de salaire (traitement fiscal/CNPS — doc 21/08/2026).
+  // Idempotent (upsert par code). On ne réécrit QUE le libellé, la catégorie,
+  // la référence juridique et l'ordre : les STATUTS fiscal/CNPS ne sont pas
+  // réécrits au redéploiement pour préserver les ajustements faits par la RH.
+  for (const e of DEFAULT_SALARY_ELEMENTS) {
+    await prisma.salaryElement.upsert({
+      where: { code: e.code },
+      update: { label: e.label, category: e.category, legalRef: e.legalRef, sortOrder: e.sortOrder },
+      create: {
+        code: e.code,
+        label: e.label,
+        category: e.category,
+        fiscalStatus: e.fiscalStatus,
+        cnpsStatus: e.cnpsStatus,
+        legalRef: e.legalRef,
+        sortOrder: e.sortOrder,
+      },
+    });
+  }
+  console.log(`Éléments de salaire : ${DEFAULT_SALARY_ELEMENTS.length} référencés (fiscal + CNPS).`);
 
   // Réparation des identifiants/e-mails « pollués » par un espace parasite
   // (clavier mobile) : un espace de début/fin empêchait la connexion (comparaison

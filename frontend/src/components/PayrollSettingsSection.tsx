@@ -118,6 +118,9 @@ export function PayrollSettingsSection({ canManage, collapsible, defaultOpen }: 
             <div><div style={{ fontSize: 12, color: "var(--muted)" }}>{t("pay.cac", "CAC")}</div><div style={{ fontFamily: "var(--font-mono, monospace)" }}>{pctStr(current.fiscal.cac_pct)}</div></div>
             <div><div style={{ fontSize: 12, color: "var(--muted)" }}>{t("pay.cfc", "CFC (sal./pat.)")}</div><div style={{ fontFamily: "var(--font-mono, monospace)" }}>{pctStr(current.fiscal.cfc_sal_pct)} / {pctStr(current.fiscal.cfc_pat_pct)}</div></div>
             <div><div style={{ fontSize: 12, color: "var(--muted)" }}>{t("pay.irpp_abatement", "Abattement IRPP")}</div><div style={{ fontFamily: "var(--font-mono, monospace)" }}>{pctStr(current.fiscal.abat_pct)} + {fcfa(current.fiscal.abat_fixe)}{t("pay.per_year", "/an")}</div></div>
+            {current.avantages_nature && (
+              <div><div style={{ fontSize: 12, color: "var(--muted)" }}>{t("pay.an_bareme", "Avantages en nature (log./véh./eau…)")}</div><div style={{ fontFamily: "var(--font-mono, monospace)" }}>{pctStr(current.avantages_nature.logement)} · {pctStr(current.avantages_nature.vehicule)} · {pctStr(current.avantages_nature.eau)}</div></div>
+            )}
           </div>
         </>
       ) : (
@@ -152,6 +155,20 @@ export function PayrollSettingsSection({ canManage, collapsible, defaultOpen }: 
                 {numField(t("pay.irpp_t3_ceiling", "IRPP plafond T3"), draft.irpp.t3_ceiling, (n) => setDraft({ ...draft, irpp: { ...draft.irpp, t3_ceiling: n } }))}
                 {numField(t("pay.irpp_t3_pct", "IRPP taux T3 (0-1)"), draft.irpp.t3_pct, (n) => setDraft({ ...draft, irpp: { ...draft.irpp, t3_pct: n } }))}
                 {numField(t("pay.irpp_t4_pct", "IRPP taux T4 (0-1)"), draft.irpp.t4_pct, (n) => setDraft({ ...draft, irpp: { ...draft.irpp, t4_pct: n } }))}
+                {(() => {
+                  const an = draft.avantages_nature ?? { logement: 0.15, electricite: 0.04, eau: 0.02, domestique: 0.05, vehicule: 0.10, nourriture: 0.10 };
+                  const setAn = (patch: Partial<typeof an>) => setDraft({ ...draft, avantages_nature: { ...an, ...patch } });
+                  return (
+                    <>
+                      {numField(t("pay.an_logement", "Av. nature logement (0-1)"), an.logement, (n) => setAn({ logement: n }))}
+                      {numField(t("pay.an_electricite", "Av. nature électricité (0-1)"), an.electricite, (n) => setAn({ electricite: n }))}
+                      {numField(t("pay.an_eau", "Av. nature eau (0-1)"), an.eau, (n) => setAn({ eau: n }))}
+                      {numField(t("pay.an_domestique", "Av. nature domestique (0-1)"), an.domestique, (n) => setAn({ domestique: n }))}
+                      {numField(t("pay.an_vehicule", "Av. nature véhicule (0-1)"), an.vehicule, (n) => setAn({ vehicule: n }))}
+                      {numField(t("pay.an_nourriture", "Av. nature nourriture (0-1)"), an.nourriture, (n) => setAn({ nourriture: n }))}
+                    </>
+                  );
+                })()}
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <Button variant="add" size="sm" type="button" onClick={saveVersion}>{t("pay.save_version", "Enregistrer la version")}</Button>

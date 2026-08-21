@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, submitPayrollMonth, returnPayrollMonth, requestPayrollReopen, listPayrollReopenRequests, decidePayrollReopen, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements, type PayrollExtraLine, type ReopenRequest } from "../api/client";
+import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, submitPayrollMonth, returnPayrollMonth, requestPayrollReopen, listPayrollReopenRequests, decidePayrollReopen, getSalaryElements, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements, type PayrollExtraLine, type ReopenRequest, type SalaryElement } from "../api/client";
 import { downloadPayslipsPdf } from "../lib/payslipPdf";
 import type { PayslipPrintData } from "../lib/print";
 import { Card } from "./Card";
@@ -43,6 +43,9 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
   // Lignes libres par salarié + salarié dont on édite les lignes (modale).
   const [extraDraft, setExtraDraft] = useState<Record<string, PayrollExtraLine[]>>({});
   const [linesFor, setLinesFor] = useState<{ employeeId: string; name: string } | null>(null);
+  // Rubriques « en vigueur » du catalogue (Niveau 2, étape B) : rattachables à une
+  // ligne libre pour appliquer automatiquement leur traitement fiscal/CNPS.
+  const [activeRubriques, setActiveRubriques] = useState<SalaryElement[]>([]);
   // Réouverture exceptionnelle (ch. 23) : demandes + formulaire.
   const [reopenReqs, setReopenReqs] = useState<ReopenRequest[]>([]);
   const [reopenOpen, setReopenOpen] = useState(false);
@@ -77,6 +80,13 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
+
+  // Rubriques activées (« en vigueur ») rattachables à une ligne libre.
+  useEffect(() => {
+    getSalaryElements()
+      .then((cfg) => setActiveRubriques(cfg.elements.filter((e) => e.in_force && e.active)))
+      .catch(() => setActiveRubriques([]));
+  }, []);
 
   async function prepare() {
     setBusy(true);
@@ -206,7 +216,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
     const id = linesFor.employeeId;
     const clean = (extraDraft[id] ?? [])
       .filter((e) => e.label.trim() !== "" && e.amount > 0)
-      .map((e) => ({ label: e.label.trim(), kind: e.kind, amount: Math.max(e.amount, 0) }));
+      .map((e) => ({ label: e.label.trim(), kind: e.kind, amount: Math.max(e.amount, 0), ...(e.element_code ? { element_code: e.element_code } : {}) }));
     const note = month?.lines?.find((l) => l.employee_id === id)?.note ?? null;
     setBusy(true);
     try {
@@ -478,22 +488,53 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
           <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "var(--muted)" }}>
             Ajoutez des lignes personnalisées (indemnité, prime exceptionnelle, retenue particulière…). Un
             <b> gain</b> est imposable (ajouté au brut) ; une <b>retenue</b> est nette (retirée du net à payer).
-            Le net se recalcule à l'enregistrement.
+            {activeRubriques.length > 0 && <> Rattachez une <b>rubrique en vigueur</b> pour appliquer automatiquement son traitement fiscal/CNPS (une indemnité exonérée n'entre alors ni dans l'IRPP ni dans la CNPS).</>}
+            {" "}Le net se recalcule à l'enregistrement.
           </p>
           {(extraDraft[linesFor.employeeId] ?? []).length === 0 && (
             <p style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucune ligne libre. Cliquez sur « + Ajouter une ligne ».</p>
           )}
-          {(extraDraft[linesFor.employeeId] ?? []).map((e, i) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 110px 120px 32px", gap: 6, alignItems: "center", marginBottom: 6 }}>
-              <input placeholder="Libellé (ex. Indemnité transport)" value={e.label} onChange={(ev) => setExtra(linesFor.employeeId, i, { label: ev.target.value })} />
-              <select value={e.kind} onChange={(ev) => setExtra(linesFor.employeeId, i, { kind: ev.target.value as "gain" | "retenue" })}>
-                <option value="gain">Gain</option>
-                <option value="retenue">Retenue</option>
-              </select>
-              <input type="number" min={0} step={100} value={e.amount} onChange={(ev) => setExtra(linesFor.employeeId, i, { amount: Math.max(Number(ev.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", textAlign: "right" }} />
-              <button type="button" onClick={() => removeExtra(linesFor.employeeId, i)} title="Supprimer la ligne" style={{ border: "1px solid var(--line)", background: "#fff", borderRadius: 6, cursor: "pointer", color: "var(--danger, #C24B3A)" }}>✕</button>
+          {(extraDraft[linesFor.employeeId] ?? []).map((e, i) => {
+            const rub = e.element_code ? activeRubriques.find((r) => r.code === e.element_code) : undefined;
+            return (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 120px 32px", gap: 6, alignItems: "center" }}>
+                <input placeholder="Libellé (ex. Indemnité transport)" value={e.label} onChange={(ev) => setExtra(linesFor.employeeId, i, { label: ev.target.value })} />
+                <select value={e.kind} onChange={(ev) => setExtra(linesFor.employeeId, i, { kind: ev.target.value as "gain" | "retenue" })}>
+                  <option value="gain">Gain</option>
+                  <option value="retenue">Retenue</option>
+                </select>
+                <input type="number" min={0} step={100} value={e.amount} onChange={(ev) => setExtra(linesFor.employeeId, i, { amount: Math.max(Number(ev.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", textAlign: "right" }} />
+                <button type="button" onClick={() => removeExtra(linesFor.employeeId, i)} title="Supprimer la ligne" style={{ border: "1px solid var(--line)", background: "#fff", borderRadius: 6, cursor: "pointer", color: "var(--danger, #C24B3A)" }}>✕</button>
+              </div>
+              {activeRubriques.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                  <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Rubrique&nbsp;:</label>
+                  <select
+                    value={e.element_code ?? ""}
+                    onChange={(ev) => {
+                      const code = ev.target.value || undefined;
+                      const picked = code ? activeRubriques.find((r) => r.code === code) : undefined;
+                      // À la sélection d'une rubrique, on pré-remplit le libellé s'il est vide.
+                      setExtra(linesFor.employeeId, i, { element_code: code, ...(picked && !e.label.trim() ? { label: picked.label } : {}) });
+                    }}
+                    style={{ fontSize: 12 }}
+                  >
+                    <option value="">— Ligne libre (imposable) —</option>
+                    {activeRubriques.map((r) => (
+                      <option key={r.code} value={r.code}>{r.label}</option>
+                    ))}
+                  </select>
+                  {rub && (
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                      {rub.fiscal_label} · {rub.cnps_label}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
           <Button variant="edit" size="sm" type="button" onClick={() => addExtra(linesFor.employeeId)}>+ Ajouter une ligne</Button>
         </Modal>
       )}

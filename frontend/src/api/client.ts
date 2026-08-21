@@ -4467,6 +4467,10 @@ export interface PayrollExtraLine {
   label: string;
   kind: "gain" | "retenue";
   amount: number;
+  // Rubrique du catalogue rattachée à cette ligne (Niveau 2, étape B). Quand elle
+  // est « en vigueur », son traitement fiscal/CNPS est appliqué automatiquement ;
+  // sinon la ligne reste un gain/retenue libre classique.
+  element_code?: string;
 }
 export interface PayrollMonthLine {
   employee_id: string;

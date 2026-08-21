@@ -13,6 +13,20 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 21/08/2026 — Paie Niveau 2 : rubriques « en vigueur / en attente » + traitement fiscal/CNPS automatique
+
+**Ce que vous aviez demandé :** ne rien changer à la présentation du bulletin, mais pouvoir **activer une prime, une indemnité ou un avantage seulement quand la direction décide de l'accorder** à un employé — et que les bons taux de taxe et de cotisation s'appliquent alors tout seuls.
+
+**Fait :**
+- **Chaque rubrique reste « en attente » par défaut** : elle n'apparaît sur aucun bulletin tant que le RH ne l'a pas **« mise en vigueur »** (avec sa date d'effet). Un bouton **Mettre en vigueur / Mettre en attente** est ajouté dans le *Guide fiscal & CNPS des éléments de salaire*.
+- **Sur le bulletin, rien ne change dans la structure.** Quand le RH ajoute une ligne libre (comme aujourd'hui), il peut désormais lui **rattacher une rubrique en vigueur** dans un menu déroulant. Le système applique alors **automatiquement** le bon traitement : une **indemnité exonérée** (ex. transport) augmente le salaire brut **mais n'est ni taxée (IRPP) ni cotisée (CNPS)** ; une **prime taxable et cotisable** entre bien dans les trois. Sans rubrique choisie, la ligne reste un gain imposable comme avant.
+- **Aucune paie existante n'est modifiée** : tant qu'aucune rubrique n'est activée, tous les calculs sont identiques au centime près (vérifié : 797 tests automatiques au vert).
+
+**Vérification possible depuis un navigateur :** dans *Moteur de paie → Guide des éléments de salaire*, mettre par exemple **« Prime de transport »** en vigueur ; puis, sur la grille du mois, ajouter une ligne libre, choisir cette rubrique, saisir un montant : le **brut augmente** mais l'**IRPP et la CNPS ne bougent pas**. Remettre la rubrique « en attente » : la même ligne redevient imposable.
+
+**Prochaine étape :** à votre main — étendre, si besoin, le traitement automatique aux avantages en nature saisis directement (barème logement/véhicule…) et à l'aperçu unitaire d'un bulletin.
+
+
 ### 07/08/2026 (suite) — Chantier paie, étape 2b : livre de paie & états CNPS/fiscaux depuis le mois
 
 **Fait :** le **livre de paie**, les **états CNPS/fiscaux** (exports CSV) et le **journal figé à la clôture** reprennent maintenant les **éléments variables du mois** (primes, heures sup, absences, retards, avances, prêts, sanctions) dès que le mois a été préparé — mêmes montants que les bulletins. Sans mois préparé : calcul depuis les fiches (inchangé). Le livre indique la **source des montants** (mois validé / brouillon à valider / fiches). Test : le livre reprend une prime saisie sur la grille.

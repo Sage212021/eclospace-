@@ -35,6 +35,15 @@ export interface PayslipInput {
   applySeniority: boolean; // U
   retenueAbsence: number; // G — retenue absence (issue du module Présences)
   internal: { avance: number; pret: number; retard: number; autres: number }; // V,W,X,Y
+  // Rubriques « à option » activées (Niveau 2) — montants issus de rubriques du
+  // catalogue, ventilés selon leur traitement légal (fiscal/CNPS). Facultatifs :
+  // absents ⇒ comportement historique inchangé (aucun test/appel existant modifié).
+  //  • rubriqueBrut      : rubriques payées en espèces, ajoutées au salaire brut.
+  //  • rubriqueTaxable   : part entrant dans l'assiette FISCALE (IRPP/CFC/FNE).
+  //  • rubriqueCotisable : part entrant dans l'assiette CNPS (avant plafond).
+  rubriqueBrut?: number;
+  rubriqueTaxable?: number;
+  rubriqueCotisable?: number;
 }
 
 export interface Payslip {
@@ -91,18 +100,28 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates, formula
     });
   }
 
-  // H — salaire brut. La retenue d'absence injustifiée réduit le brut (avant
-  // impôt), comme dans le modèle moteur.
-  const brut = evalLeaf("salaire_brut", formulas, Math.max(input.base + input.complements + prime - input.retenueAbsence, 0), {
-    base: input.base, complements: input.complements, prime_anciennete: prime, retenue_absence: input.retenueAbsence,
-  });
+  // Rubriques activées (Niveau 2) — 0 par défaut ⇒ calcul historique inchangé.
+  const rubBrut = input.rubriqueBrut ?? 0;
+  const rubTaxable = input.rubriqueTaxable ?? 0;
+  const rubCotisable = input.rubriqueCotisable ?? 0;
 
-  // I — assiette fiscale (base fiscale + prime − retenue absence).
-  const assietteFiscale = Math.max(input.fiscalBase + prime - input.retenueAbsence, 0);
+  // H — salaire brut. La retenue d'absence injustifiée réduit le brut (avant
+  // impôt), comme dans le modèle moteur. Les rubriques payées en espèces s'y
+  // ajoutent (après la formule de base, pour ne pas casser une éventuelle surcharge).
+  const brut =
+    evalLeaf("salaire_brut", formulas, Math.max(input.base + input.complements + prime - input.retenueAbsence, 0), {
+      base: input.base, complements: input.complements, prime_anciennete: prime, retenue_absence: input.retenueAbsence,
+    }) + rubBrut;
+
+  // I — assiette fiscale : cœur (base fiscale + prime − retenue) + part imposable
+  // des rubriques activées.
+  const assietteFiscaleCore = Math.max(input.fiscalBase + prime - input.retenueAbsence, 0);
+  const assietteFiscale = assietteFiscaleCore + rubTaxable;
 
   // J — salaire cotisable CNPS : montant total (avant plafond) puis plafonné.
-  // Le DIPE mensuel CNPS déclare les deux (« Montant Total » / « Montant Plafonné »).
-  const cnpsCotisableTotal = r(assietteFiscale * rates.coefAssiette);
+  // Le cœur suit le coefficient d'assiette (modèle historique) ; la part
+  // cotisable des rubriques activées s'ajoute explicitement (non re-coefficientée).
+  const cnpsCotisableTotal = r(assietteFiscaleCore * rates.coefAssiette) + rubCotisable;
   const assietteCnps = Math.min(cnpsCotisableTotal, rates.cnpsCeiling);
 
   // K-N — cotisations CNPS sur l'assiette plafonnée.

@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ManuscriptOrigin, EditorialSegment, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission, requireAuth } from "../lib/permissions.js";
+import { canCorrectDeposit, isDeletableStepDoc } from "../lib/stepDocuments.js";
 import { CORRECTION_PHASES, isCorrectionPhase, correctionDocTitle, correctionCycleState } from "../lib/correctionCycle.js";
 import { deliverableDocTitle, stepDeliverableMeta } from "../lib/stepDeliverables.js";
 import { optionalStepMeta } from "../lib/stepRealization.js";
@@ -28,6 +29,16 @@ async function latestStageVersion(manuscriptId: string, category: DocumentCatego
     select: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
   });
   return doc?.versions[0] ?? null;
+}
+
+// Document d'étape « unique » (maquette, BAT, manuscrit corrigé) : id + auteur,
+// pour permettre son retrait (correction d'un dépôt par erreur).
+async function stageDocInfo(manuscriptId: string, category: DocumentCategory, title: string) {
+  const doc = await prisma.document.findFirst({
+    where: { entityType: "manuscript", entityId: manuscriptId, category, title, deletedAt: null },
+    select: { id: true, createdBy: true },
+  });
+  return { doc_id: doc?.id ?? null, uploaded_by: doc?.createdBy ?? null };
 }
 
 // Dépôt d'une nouvelle version d'un document d'étape (versionnage conservé).
@@ -814,7 +825,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     const docs = await prisma.document.findMany({
       where: { entityType: "manuscript", entityId: id, category: "piece_etape", deletedAt: null },
       orderBy: { createdAt: "desc" },
-      select: { id: true, title: true, createdAt: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true, fileSize: true, mimeType: true } } },
+      select: { id: true, title: true, createdAt: true, createdBy: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true, fileSize: true, mimeType: true } } },
     });
     return reply.send(
       docs.map((d) => ({
@@ -824,6 +835,8 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         version_id: d.versions[0]?.id ?? null,
         file_size: d.versions[0]?.fileSize ?? null,
         mime_type: d.versions[0]?.mimeType ?? null,
+        // Peut-on retirer ce fichier déposé par erreur ? (auteur du dépôt ou direction)
+        can_correct: canCorrectDeposit(request, d.createdBy),
       })),
     );
   });
@@ -839,6 +852,25 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     return reply.send(buffer);
   });
 
+  // Retirer un fichier d'étape déposé PAR ERREUR (livrable, pièce d'étape,
+  // maquette, BAT, manuscrit corrigé…). Suppression LOGIQUE (Modèle §13) :
+  // le document est masqué mais conservé ; on peut aussitôt en redéposer un.
+  // Réservé à l'AUTEUR du dépôt et à la DIRECTION (demande opérateur 21/08/2026).
+  fastify.delete("/api/v1/manuscripts/:id/step-documents/:docId", { preHandler: requireAuth }, async (request, reply) => {
+    const { id, docId } = request.params as { id: string; docId: string };
+    const doc = await prisma.document.findFirst({
+      where: { id: docId, entityType: "manuscript", entityId: id, deletedAt: null },
+      select: { id: true, category: true, title: true, createdBy: true },
+    });
+    if (!doc || !isDeletableStepDoc(doc)) return reply.code(404).send({ code: "not_found", message: "Fichier d'étape introuvable." });
+    if (!canCorrectDeposit(request, doc.createdBy)) {
+      return reply.code(403).send({ code: "forbidden", message: "Seuls l'auteur du dépôt et la direction peuvent retirer ce fichier." });
+    }
+    await prisma.document.update({ where: { id: docId }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "document", entityId: docId, newValues: { step_document_removed: true, title: doc.title }, ipAddress: request.ip });
+    return reply.send({ removed: true });
+  });
+
   // --- Correction éditoriale en deux temps (cycle de 4 phases) ---------------
   // Rapport de correction → intégration → 2e relecture → intégration finale.
   // Chaque phase = un dépôt de fichier (pièce d'étape à titre stable). Consultable
@@ -851,7 +883,8 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
       const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
       if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
-      return reply.send(await correctionCycleState(id));
+      const phases = await correctionCycleState(id);
+      return reply.send(phases.map((p) => ({ ...p, can_correct: p.has_file && canCorrectDeposit(request, p.uploaded_by) })));
     },
   );
 
@@ -892,7 +925,8 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       const { id, code } = request.params as { id: string; code: string };
       const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
       if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
-      return reply.send(await stepDeliverableMeta(id, code));
+      const meta = await stepDeliverableMeta(id, code);
+      return reply.send({ ...meta, can_correct: meta.has_file && canCorrectDeposit(request, meta.uploaded_by) });
     },
   );
 
@@ -1083,7 +1117,16 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const corrected = await latestStageVersion(id, "manuscrit", CORRECTED_DOC_TITLE);
     const layout = await latestStageVersion(id, "livre_monte", LAYOUT_DOC_TITLE);
-    return reply.send({ corrected_has_file: Boolean(corrected), layout_has_file: Boolean(layout) });
+    const correctedDoc = await stageDocInfo(id, "manuscrit", CORRECTED_DOC_TITLE);
+    const layoutDoc = await stageDocInfo(id, "livre_monte", LAYOUT_DOC_TITLE);
+    return reply.send({
+      corrected_has_file: Boolean(corrected),
+      layout_has_file: Boolean(layout),
+      corrected_doc_id: correctedDoc.doc_id,
+      corrected_can_correct: Boolean(corrected) && canCorrectDeposit(request, correctedDoc.uploaded_by),
+      layout_doc_id: layoutDoc.doc_id,
+      layout_can_correct: Boolean(layout) && canCorrectDeposit(request, layoutDoc.uploaded_by),
+    });
   });
 
   // SORTIE : la maquette mise en page (reçue ensuite par le BAT et l'infographie).
@@ -1117,7 +1160,13 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const layout = await latestStageVersion(id, "livre_monte", LAYOUT_DOC_TITLE);
     const bat = await latestStageVersion(id, "bat", BAT_DOC_TITLE);
-    return reply.send({ layout_has_file: Boolean(layout), bat_has_file: Boolean(bat) });
+    const batDoc = await stageDocInfo(id, "bat", BAT_DOC_TITLE);
+    return reply.send({
+      layout_has_file: Boolean(layout),
+      bat_has_file: Boolean(bat),
+      bat_doc_id: batDoc.doc_id,
+      bat_can_correct: Boolean(bat) && canCorrectDeposit(request, batDoc.uploaded_by),
+    });
   });
 
   fastify.get("/api/v1/manuscripts/:id/bat-file", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {

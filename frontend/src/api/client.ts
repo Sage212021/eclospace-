@@ -621,6 +621,13 @@ export interface StepAttachment {
   version_id: string | null;
   file_size: number | null;
   mime_type: string | null;
+  can_correct?: boolean;
+}
+
+// Retrait d'un fichier d'étape déposé par erreur (livrable, pièce, maquette,
+// BAT, manuscrit corrigé). Suppression logique côté serveur (auteur/direction).
+export function deleteStepDocument(manuscriptId: string, docId: string) {
+  return request<{ removed: boolean }>(`/api/v1/manuscripts/${manuscriptId}/step-documents/${docId}`, { method: "DELETE" });
 }
 export function listStepAttachments(manuscriptId: string) {
   return request<StepAttachment[]>(`/api/v1/manuscripts/${manuscriptId}/step-attachments`);
@@ -645,6 +652,8 @@ export interface CorrectionPhaseState {
   label: string;
   required: boolean;
   has_file: boolean;
+  doc_id?: string | null;
+  can_correct?: boolean;
   version_id: string | null;
   filename: string | null;
   created_at: string | null;
@@ -666,6 +675,8 @@ export interface StepDeliverableMeta {
   required: boolean;
   label: string;
   has_file: boolean;
+  doc_id?: string | null;
+  can_correct?: boolean;
   version_id: string | null;
   filename: string | null;
   created_at: string | null;
@@ -695,7 +706,7 @@ export function updateWorkflowDeliverableSteps(steps: string[]) {
 
 // Étape Maquette : entrée = manuscrit corrigé, sortie = maquette mise en page.
 export function getManuscriptLayoutMeta(manuscriptId: string) {
-  return request<{ corrected_has_file: boolean; layout_has_file: boolean }>(`/api/v1/manuscripts/${manuscriptId}/layout-file/meta`);
+  return request<{ corrected_has_file: boolean; layout_has_file: boolean; corrected_doc_id: string | null; corrected_can_correct: boolean; layout_doc_id: string | null; layout_can_correct: boolean }>(`/api/v1/manuscripts/${manuscriptId}/layout-file/meta`);
 }
 export function manuscriptCorrectedFileUrl(manuscriptId: string): string {
   return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/corrected-file`;
@@ -713,7 +724,7 @@ export async function uploadManuscriptLayoutFile(manuscriptId: string, file: Fil
 
 // Étape BAT : entrée = maquette, sortie = BAT signé (reçu par l'impression).
 export function getManuscriptBatMeta(manuscriptId: string) {
-  return request<{ layout_has_file: boolean; bat_has_file: boolean }>(`/api/v1/manuscripts/${manuscriptId}/bat-file/meta`);
+  return request<{ layout_has_file: boolean; bat_has_file: boolean; bat_doc_id: string | null; bat_can_correct: boolean }>(`/api/v1/manuscripts/${manuscriptId}/bat-file/meta`);
 }
 export function manuscriptBatFileUrl(manuscriptId: string): string {
   return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/bat-file`;
@@ -1771,10 +1782,16 @@ export interface ImageAsset {
   colorMode: string | null;
   technicalOk: boolean;
   rightsOrigin: RightsOrigin | null;
+  can_correct?: boolean;
 }
 
 export function listImageAssets(manuscriptId: string) {
   return request<ImageAsset[]>(`/api/v1/manuscripts/${manuscriptId}/image-assets`);
+}
+
+// Retrait d'un visuel déposé par erreur (suppression logique ; auteur/direction).
+export function deleteImageAsset(manuscriptId: string, assetId: string) {
+  return request<{ removed: boolean }>(`/api/v1/manuscripts/${manuscriptId}/image-assets/${assetId}`, { method: "DELETE" });
 }
 
 export function createImageAsset(

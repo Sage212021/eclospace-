@@ -15,7 +15,7 @@ export async function checkMaquetteInfographieConvergence(manuscriptId: string):
   if (specs?.spineNeedsRecalc) missing.push("dos_a_recalculer");
 
   const cover = await prisma.imageAsset.findFirst({
-    where: { manuscriptId, type: "couverture_1", technicalOk: true, rightsOrigin: { not: null } },
+    where: { manuscriptId, type: "couverture_1", technicalOk: true, rightsOrigin: { not: null }, deletedAt: null },
   });
   if (!cover) missing.push("couverture_non_conforme_ou_sans_droits");
 

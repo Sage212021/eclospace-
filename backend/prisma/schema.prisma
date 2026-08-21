@@ -2547,9 +2547,12 @@ model ImageAsset {
   documentVersionId String?          @map("document_version_id")
   documentVersion   DocumentVersion? @relation(fields: [documentVersionId], references: [id])
 
-  createdAt DateTime @default(now()) @map("created_at")
-  createdBy String?  @map("created_by")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  // Retrait d'un visuel déposé par erreur (suppression logique — Modèle §13).
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
 
   @@map("image_assets")
 }

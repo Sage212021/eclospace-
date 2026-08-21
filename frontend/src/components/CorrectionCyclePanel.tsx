@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getCorrectionCycle, uploadCorrectionPhase, stepAttachmentDownloadUrl, type CorrectionPhaseState } from "../api/client";
+import { getCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, stepAttachmentDownloadUrl, type CorrectionPhaseState } from "../api/client";
 
 // Correction éditoriale EN DEUX TEMPS (demande opérateur 20/08/2026) :
 //   1. Rapport de correction (vu par l'étape suivante pour l'intégration)
@@ -25,6 +25,20 @@ export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Dépôt impossible.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function remove(key: string, docId: string) {
+    if (!window.confirm("Retirer ce fichier déposé par erreur ? Vous pourrez en redéposer un.")) return;
+    setBusyKey(key);
+    setError(null);
+    try {
+      await deleteStepDocument(manuscriptId, docId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Retrait impossible.");
     } finally {
       setBusyKey(null);
     }
@@ -73,6 +87,11 @@ export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) deposit(p.key, f); e.target.value = ""; }}
                 />
               </label>
+            )}
+            {canManage && p.has_file && p.can_correct && p.doc_id && (
+              <button onClick={() => remove(p.key, p.doc_id!)} disabled={busyKey === p.key} style={{ fontWeight: 600, color: "var(--alert)", background: "#fff", border: "1px solid var(--alert)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5, cursor: busyKey === p.key ? "default" : "pointer" }}>
+                Retirer
+              </button>
             )}
           </div>
         ))}

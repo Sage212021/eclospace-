@@ -4,6 +4,7 @@ import { ImageAssetType, RightsOrigin } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { canCorrectDeposit } from "../lib/stepDocuments.js";
 
 // Seuil de résolution minimal pour l'impression (Ch. 11 §11.7), paramétrable
 // via settings — valeur de départ conforme au texte ("300 dpi").
@@ -206,8 +207,27 @@ export default async function productionRoutes(fastify: FastifyInstance) {
     { preHandler: requirePermission("production", "consultation") },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const assets = await prisma.imageAsset.findMany({ where: { manuscriptId: id }, orderBy: { createdAt: "desc" } });
-      return reply.send(assets);
+      const assets = await prisma.imageAsset.findMany({ where: { manuscriptId: id, deletedAt: null }, orderBy: { createdAt: "desc" } });
+      return reply.send(assets.map((a) => ({ ...a, can_correct: canCorrectDeposit(request, a.createdBy) })));
+    },
+  );
+
+  // Retirer un visuel (couverture, illustration…) déposé PAR ERREUR par
+  // l'infographe. Suppression LOGIQUE (Modèle §13) ; on peut aussitôt en
+  // redéposer un. Réservé à l'auteur du dépôt et à la direction.
+  fastify.delete(
+    "/api/v1/manuscripts/:id/image-assets/:assetId",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const { id, assetId } = request.params as { id: string; assetId: string };
+      const asset = await prisma.imageAsset.findFirst({ where: { id: assetId, manuscriptId: id, deletedAt: null } });
+      if (!asset) return reply.code(404).send({ code: "not_found", message: "Visuel introuvable." });
+      if (!canCorrectDeposit(request, asset.createdBy)) {
+        return reply.code(403).send({ code: "forbidden", message: "Seuls l'auteur du dépôt et la direction peuvent retirer ce visuel." });
+      }
+      await prisma.imageAsset.update({ where: { id: assetId }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "image_asset", entityId: assetId, newValues: { removed: true, type: asset.type }, ipAddress: request.ip });
+      return reply.send({ removed: true });
     },
   );
 

@@ -98,7 +98,7 @@ export function formatFiche(p: SiteFichePayload): string {
 // document téléchargeable, pour que la fiche « site » embarque aussi l'image.
 async function coverFor(manuscriptId: string) {
   const asset = await prisma.imageAsset.findFirst({
-    where: { manuscriptId, type: "couverture_1", documentVersionId: { not: null } },
+    where: { manuscriptId, type: "couverture_1", documentVersionId: { not: null }, deletedAt: null },
     orderBy: { createdAt: "desc" },
     include: { documentVersion: { select: { id: true, mimeType: true } } },
   });
@@ -140,7 +140,7 @@ export async function optimizedCoverForSite(manuscriptId: string): Promise<{
   filename: string;
 } | null> {
   const asset = await prisma.imageAsset.findFirst({
-    where: { manuscriptId, type: "couverture_1", documentVersionId: { not: null } },
+    where: { manuscriptId, type: "couverture_1", documentVersionId: { not: null }, deletedAt: null },
     orderBy: { createdAt: "desc" },
     include: { documentVersion: { select: { id: true, filePath: true, mimeType: true } } },
   });
@@ -161,7 +161,7 @@ export async function optimizedCoverForSite(manuscriptId: string): Promise<{
 // d'un petit aperçu (listes, fiches).
 export async function siteCoverThumbnail(manuscriptId: string): Promise<{ buffer: Buffer; mime: string } | null> {
   const asset = await prisma.imageAsset.findFirst({
-    where: { manuscriptId, type: "couverture_1", documentVersionId: { not: null } },
+    where: { manuscriptId, type: "couverture_1", documentVersionId: { not: null }, deletedAt: null },
     orderBy: { createdAt: "desc" },
     include: { documentVersion: { select: { filePath: true, mimeType: true } } },
   });

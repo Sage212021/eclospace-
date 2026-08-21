@@ -4,6 +4,7 @@ import {
   getPayslip,
   getMonthlyDeductions,
   saveMonthlyDeductions,
+  setAbsenceAutoDeduction,
   getPayrollRateSet,
   previewPayslipEmail,
   savePayrollProfile,
@@ -82,6 +83,9 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   // Retenue d'absence SAISIE PAR LE RH (règle métier 07/08/2026 : le cahier de
   // présence est un simple témoin, jamais relié automatiquement au calcul).
   const [manualRetenue, setManualRetenue] = useState(0);
+  // Temps 2 : retenue automatique des absences non payées (interrupteur RH) et
+  // montant suggéré (jours d'absences non payées × salaire journalier).
+  const [autoAbs, setAutoAbs] = useState<{ enabled: boolean; suggested: number; days: number }>({ enabled: false, suggested: 0, days: 0 });
   // Retenues internes du mois saisies par le RH (prêts, avances, retards…).
   // Modèle moteur : elles réduisent le NET (pas le brut, ni l'assiette d'impôt).
   const [internal, setInternal] = useState({ avance: 0, pret: 0, retard: 0, autres: 0 });
@@ -187,7 +191,10 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
     // Éléments du mois (reliés à la grille mensuelle) : on les re-propose (sinon 0).
     getMonthlyDeductions(employeeId, period)
       .then((d) => {
-        setManualRetenue(d.retenue_absence);
+        setAutoAbs({ enabled: d.auto_absence_enabled, suggested: d.suggested_retenue_absence, days: d.unpaid_absence_days });
+        // Mode automatique : si aucune retenue n'a encore été saisie, on pré-remplit
+        // avec le montant calculé (le RH peut toujours le corriger avant d'enregistrer).
+        setManualRetenue(d.auto_absence_enabled && d.retenue_absence === 0 && !d.saved ? d.suggested_retenue_absence : d.retenue_absence);
         setInternal({ avance: d.avance, pret: d.pret, retard: d.retard, autres: d.autres });
         setGains({ primes: d.primes, heures_sup: d.heures_sup });
         setSanction(d.sanction);
@@ -424,10 +431,33 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
                 impôt) ; les prêts/avances/retards/autres réduisent le NET. Chaque
                 montant recalcule l'aperçu en direct. */}
             <div style={{ marginTop: 10 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>{t("pay.deductions_title", "Retenues du mois (saisie RH)")}</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)" }}>{t("pay.deductions_title", "Retenues du mois (saisie RH)")}</div>
+                {canManage && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)" }} title="Quand c'est activé, la retenue d'absence est calculée à partir des absences non payées validées et pré-remplie ; sinon, saisie manuelle.">
+                    <input
+                      type="checkbox"
+                      checked={autoAbs.enabled}
+                      onChange={async (e) => {
+                        try { const r = await setAbsenceAutoDeduction(e.target.checked); setAutoAbs((a) => ({ ...a, enabled: r.enabled })); }
+                        catch (err) { setError(err instanceof Error ? err.message : "Réglage impossible."); }
+                      }}
+                    />
+                    Retenue des absences automatique
+                  </label>
+                )}
+              </div>
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
-                <Field label={t("pay.manual_deduction", "Absence injustifiée")}>
+                <Field label={t("pay.manual_deduction", "Retenue d'absence")}>
                   <input type="number" min={0} step={100} disabled={dedLocked} value={manualRetenue} onChange={(e) => setManualRetenue(Math.max(Number(e.target.value) || 0, 0))} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
+                  {autoAbs.enabled && (
+                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span>Auto : {autoAbs.suggested.toLocaleString("fr-FR")} F ({autoAbs.days} j non payés)</span>
+                      {!dedLocked && autoAbs.suggested !== manualRetenue && (
+                        <button type="button" onClick={() => setManualRetenue(autoAbs.suggested)} style={{ background: "none", border: "1px solid var(--line)", borderRadius: 5, padding: "1px 7px", fontSize: 11, fontWeight: 600, color: "var(--eclosion-dark, #8A6A12)", cursor: "pointer" }}>Appliquer</button>
+                      )}
+                    </div>
+                  )}
                 </Field>
                 <Field label={t("pay.int_avance", "Avance sur salaire")}>
                   <input type="number" min={0} step={100} disabled={dedLocked} value={internal.avance} onChange={(e) => setInternal({ ...internal, avance: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />

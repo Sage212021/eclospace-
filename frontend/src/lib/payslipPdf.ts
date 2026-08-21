@@ -142,8 +142,9 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   sectionBar("Informations salarié");
   infoRow("Matricule", d.matricule ?? dash, "Département", d.department ?? dash);
   infoRow("Nom & Prénom", d.employee_name, "Date d'entrée", d.hire_date ?? dash);
-  infoRow("N° CNPS", d.cnps_number ?? dash, "Catégorie / Échelon", d.category ?? dash);
-  infoRow("Parts fiscales", d.fiscal_parts != null ? String(d.fiscal_parts) : dash, "Email", d.email ?? dash);
+  infoRow("N° CNPS", d.cnps_number ?? dash, "NIU", d.niu ?? dash);
+  infoRow("Catégorie / Échelon", d.category ?? dash, "Parts fiscales", d.fiscal_parts != null ? String(d.fiscal_parts) : dash);
+  infoRow("Email", d.email ?? dash, "Poste", d.position ?? dash);
   y += 1;
 
   // ---- Éléments de rémunération (Désignation · Base · Taux · Montant) ------

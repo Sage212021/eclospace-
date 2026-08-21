@@ -25,6 +25,8 @@
 
 **Vérification possible depuis un navigateur :** dans *Moteur de paie → Guide des éléments de salaire*, mettre par exemple **« Prime de transport »** en vigueur ; puis, sur la grille du mois, ajouter une ligne libre, choisir cette rubrique, saisir un montant : le **brut augmente** mais l'**IRPP et la CNPS ne bougent pas**. Remettre la rubrique « en attente » : la même ligne redevient imposable. Pour un avantage en nature : mettre **« Avantages en nature »** en vigueur, ajouter une ligne, choisir cette rubrique, sélectionner **Logement** (ou Véhicule × 2…) : l'**IRPP et la CNPS montent** selon le barème, **sans toucher au brut**.
 
+- **NIU du salarié sur le bulletin** : le bloc « Informations salarié » du bulletin affiche désormais le **NIU** (identifiant fiscal du salarié) à côté du N° CNPS — il était déjà saisi sur la fiche paie et utilisé pour le DIPE, mais n'apparaissait pas sur le bulletin. Le NIU de la maison reste en en-tête (inchangé). Aucun montant modifié.
+
 **Prochaine étape :** à votre main — étendre, si besoin, à l'aperçu unitaire d'un bulletin.
 
 

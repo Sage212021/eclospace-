@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   createImageAsset,
+  deleteImageAsset,
   getProductionSpecs,
   listImageAssets,
   updateProductionSpecs,
@@ -164,6 +165,18 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
             </span>
             {!asset.rightsOrigin && (
               <span style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 999, padding: "2px 8px" }}>Sans droits</span>
+            )}
+            {canManage && asset.can_correct && (
+              <button
+                onClick={async () => {
+                  if (!window.confirm("Retirer ce visuel déposé par erreur ? Vous pourrez en déposer un autre.")) return;
+                  try { await deleteImageAsset(manuscriptId, asset.id); await refresh(); }
+                  catch (e) { setError(e instanceof Error ? e.message : "Retrait impossible."); }
+                }}
+                style={{ color: "var(--alert)", background: "none", border: "none", fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0, fontSize: 11 }}
+              >
+                Retirer
+              </button>
             )}
           </span>
         </div>

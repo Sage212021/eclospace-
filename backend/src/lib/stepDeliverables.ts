@@ -59,7 +59,7 @@ export async function stepDeliverableMeta(manuscriptId: string, stepCode: string
   const doc = await prisma.document.findFirst({
     where: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape", deletedAt: null, title: { startsWith: `${TITLE_PREFIX}${stepCode}]` } },
     orderBy: { createdAt: "desc" },
-    select: { title: true, createdAt: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true } } },
+    select: { id: true, title: true, createdAt: true, createdBy: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true } } },
   });
   const v = doc?.versions[0];
   return {
@@ -67,6 +67,8 @@ export async function stepDeliverableMeta(manuscriptId: string, stepCode: string
     required: await isDeliverableRequired(stepCode),
     label: DELIVERABLE_LABELS[stepCode] ?? "Livrable de l'étape",
     has_file: Boolean(v),
+    doc_id: doc?.id ?? null,
+    uploaded_by: doc?.createdBy ?? null,
     version_id: v?.id ?? null,
     filename: doc ? doc.title.replace(/^\[livrable:[A-Z_]+\]\s*/, "") : null,
     created_at: doc?.createdAt ?? null,

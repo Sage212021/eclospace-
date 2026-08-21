@@ -10,6 +10,7 @@ import {
   uploadManuscriptSourceFile,
   listStepAttachments,
   uploadStepAttachment,
+  deleteStepDocument,
   stepAttachmentDownloadUrl,
   type StepAttachment,
   getManuscriptLayoutMeta,
@@ -786,10 +787,25 @@ function MaquetteHandoffBlock({
   onMessage: (m: string) => void;
   onError: (m: string) => void;
 }) {
-  const [meta, setMeta] = useState<{ corrected_has_file: boolean; layout_has_file: boolean } | null>(null);
+  const [meta, setMeta] = useState<Awaited<ReturnType<typeof getManuscriptLayoutMeta>> | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = () => getManuscriptLayoutMeta(manuscriptId).then(setMeta).catch(() => setMeta(null));
+
+  async function removeLayout() {
+    if (!meta?.layout_doc_id) return;
+    if (!window.confirm("Retirer la maquette déposée par erreur ? Vous pourrez en déposer une autre ensuite.")) return;
+    setBusy(true);
+    try {
+      await deleteStepDocument(manuscriptId, meta.layout_doc_id);
+      onMessage("Maquette retirée. Vous pouvez déposer le bon fichier.");
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Retrait impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -863,6 +879,11 @@ function MaquetteHandoffBlock({
             />
           </label>
         )}
+        {canDeposit && meta?.layout_has_file && meta?.layout_can_correct && (
+          <button onClick={removeLayout} disabled={busy} style={{ fontWeight: 600, color: "var(--alert)", background: "#fff", border: "1px solid var(--alert)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5, cursor: busy ? "default" : "pointer" }}>
+            Retirer la maquette
+          </button>
+        )}
         <span style={{ color: "var(--muted)", fontSize: 11.5 }}>→ reçue par le BAT et l'infographie</span>
       </div>
     </div>
@@ -883,7 +904,7 @@ function BatHandoffBlock({
   onMessage: (m: string) => void;
   onError: (m: string) => void;
 }) {
-  const [meta, setMeta] = useState<{ layout_has_file: boolean; bat_has_file: boolean } | null>(null);
+  const [meta, setMeta] = useState<Awaited<ReturnType<typeof getManuscriptBatMeta>> | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = () => getManuscriptBatMeta(manuscriptId).then(setMeta).catch(() => setMeta(null));
@@ -900,6 +921,21 @@ function BatHandoffBlock({
       await load();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Dépôt impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeBat() {
+    if (!meta?.bat_doc_id) return;
+    if (!window.confirm("Retirer le BAT déposé par erreur ? Vous pourrez en déposer un autre ensuite.")) return;
+    setBusy(true);
+    try {
+      await deleteStepDocument(manuscriptId, meta.bat_doc_id);
+      onMessage("BAT retiré. Vous pouvez déposer le bon fichier.");
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Retrait impossible.");
     } finally {
       setBusy(false);
     }
@@ -945,6 +981,11 @@ function BatHandoffBlock({
               }}
             />
           </label>
+        )}
+        {canDeposit && meta?.bat_has_file && meta?.bat_can_correct && (
+          <button onClick={removeBat} disabled={busy} style={{ fontWeight: 600, color: "var(--alert)", background: "#fff", border: "1px solid var(--alert)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5, cursor: busy ? "default" : "pointer" }}>
+            Retirer le BAT
+          </button>
         )}
         <span style={{ color: "var(--muted)", fontSize: 11.5 }}>→ reçu par l'impression</span>
       </div>
@@ -1322,6 +1363,19 @@ function StepAttachments({
     }
   }
 
+  async function removeFile(docId: string) {
+    if (!window.confirm("Retirer ce fichier déposé par erreur ? Les autres fichiers de l'étape sont conservés.")) return;
+    setBusy(true);
+    try {
+      await deleteStepDocument(manuscriptId, docId);
+      await load();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Retrait impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div style={{ border: "1px dashed var(--line)", borderRadius: 8, padding: "10px 13px", marginBottom: 12 }}>
       <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>📎 Documents de l'étape (dépôt de fichiers / scans)</div>
@@ -1339,6 +1393,11 @@ function StepAttachments({
                 <span>{f.title}</span>
               )}
               <span style={{ color: "var(--muted)" }}>{fmtSize(f.file_size)} · {new Date(f.created_at).toLocaleDateString("fr-FR")}</span>
+              {f.can_correct && (
+                <button type="button" onClick={() => removeFile(f.id)} disabled={busy} style={{ color: "var(--alert)", background: "none", border: "none", fontSize: 12, fontWeight: 600, cursor: busy ? "default" : "pointer", textDecoration: "underline", padding: 0 }}>
+                  Retirer
+                </button>
+              )}
             </li>
           ))}
         </ul>

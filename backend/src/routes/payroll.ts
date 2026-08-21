@@ -106,22 +106,52 @@ const monthlyLineSchema = z.object({
   retard: money, avance: money, pret: money, sanction: money, autres: money,
   // Lignes libres ajoutées par le RH (aucune codée en dur) : gains imposables
   // ou retenues nettes, avec un libellé et un montant.
-  extra_lines: z.array(z.object({ label: z.string().min(1).max(80), kind: z.enum(["gain", "retenue"]), amount: money })).max(30).optional(),
+  extra_lines: z.array(z.object({ label: z.string().min(1).max(80), kind: z.enum(["gain", "retenue"]), amount: money, element_code: z.string().max(60).optional() })).max(30).optional(),
   note: z.string().max(500).nullable().optional(),
 });
 
-type ExtraLine = { label: string; kind: "gain" | "retenue"; amount: number };
+// `element_code` (facultatif) : rattache une ligne libre à une rubrique du
+// catalogue (Niveau 2). Quand la rubrique est activée, son traitement fiscal/CNPS
+// s'applique automatiquement à la place du choix binaire gain/retenue.
+type ExtraLine = { label: string; kind: "gain" | "retenue"; amount: number; element_code?: string };
 function parseExtraLines(v: unknown): ExtraLine[] {
   if (!Array.isArray(v)) return [];
   return v.flatMap((x) => {
     if (x && typeof x === "object") {
       const o = x as Record<string, unknown>;
       if (typeof o.label === "string" && (o.kind === "gain" || o.kind === "retenue") && typeof o.amount === "number") {
-        return [{ label: o.label, kind: o.kind, amount: Math.max(o.amount, 0) }];
+        return [{ label: o.label, kind: o.kind, amount: Math.max(o.amount, 0), ...(typeof o.element_code === "string" ? { element_code: o.element_code } : {}) }];
       }
     }
     return [];
   });
+}
+
+// Rubriques du catalogue ACTIVÉES (in_force) : code → traitement légal. Sert à
+// ventiler les lignes typées d'un bulletin (base fiscale / base CNPS / brut).
+type RubriqueInfo = { category: string; fiscal: string; cnps: string };
+async function activeRubriqueMap(): Promise<Map<string, RubriqueInfo>> {
+  const rows = await prisma.salaryElement.findMany({ where: { inForce: true, active: true }, select: { code: true, category: true, fiscalStatus: true, cnpsStatus: true } });
+  return new Map(rows.map((r) => [r.code, { category: r.category, fiscal: r.fiscalStatus, cnps: r.cnpsStatus }]));
+}
+
+// Ventile les lignes libres d'un bulletin : celles rattachées à une rubrique
+// ACTIVE suivent son traitement (brut / fiscal / CNPS) ; les autres restent des
+// lignes libres classiques (gain imposable+cotisable ou retenue nette).
+function splitExtraLines(extras: ExtraLine[], map: Map<string, RubriqueInfo> | undefined) {
+  let rubriqueBrut = 0, rubriqueTaxable = 0, rubriqueCotisable = 0;
+  const untyped: ExtraLine[] = [];
+  for (const e of extras) {
+    const info = e.element_code && map ? map.get(e.element_code) : undefined;
+    if (!info) { untyped.push(e); continue; }
+    const isAvantageNature = info.category === "avantage_nature";
+    if (!isAvantageNature) rubriqueBrut += e.amount; // avantage en nature = non payé en espèces
+    if (info.fiscal === "taxable" || info.fiscal === "partiel") rubriqueTaxable += e.amount;
+    if (info.cnps === "cotisable" || info.cnps === "partiel") rubriqueCotisable += e.amount;
+  }
+  const extraGains = untyped.filter((e) => e.kind === "gain").reduce((s, e) => s + e.amount, 0);
+  const extraRetenues = untyped.filter((e) => e.kind === "retenue").reduce((s, e) => s + e.amount, 0);
+  return { rubriqueBrut, rubriqueTaxable, rubriqueCotisable, extraGains, extraRetenues };
 }
 
 export default async function payrollRoutes(fastify: FastifyInstance) {
@@ -882,12 +912,13 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         orderBy: { employee: { lastName: "asc" } },
       });
 
+      const rubriques = await activeRubriqueMap();
       const rows = lines
         .filter((l) => l.employee.payrollProfile)
         .map((l) => {
           const p = l.employee.payrollProfile!;
           const confBase = l.employee.confidential?.baseSalary != null ? num(l.employee.confidential.baseSalary) : null;
-          const slip = computeMonthlyLine(p, rates, l, confBase, formulas);
+          const slip = computeMonthlyLine(p, rates, l, confBase, formulas, rubriques);
           return {
             employee_id: l.employeeId,
             employee_name: `${l.employee.firstName} ${l.employee.lastName}`,
@@ -1321,6 +1352,7 @@ async function computeAnomalies(period: string): Promise<{ blocking: PayrollAnom
     where: { runId: run.id },
     include: { employee: { select: { firstName: true, lastName: true, payrollProfile: true, confidential: { select: { baseSalary: true } } } } },
   });
+  const rubriques = await activeRubriqueMap();
   for (const l of lines) {
     const p = l.employee.payrollProfile;
     const name = `${l.employee.firstName} ${l.employee.lastName}`;
@@ -1331,7 +1363,7 @@ async function computeAnomalies(period: string): Promise<{ blocking: PayrollAnom
     const confBase = l.employee.confidential?.baseSalary != null ? num(l.employee.confidential.baseSalary) : null;
     const { base } = resolveBaseGross(p, confBase);
     if (base <= 0) blocking.push({ employee_id: l.employeeId, employee_name: name, message: "Salaire de base manquant ou nul : renseignez-le (bloc confidentiel ou fiche paie)." });
-    const slip = computeMonthlyLine(p, rates, l, confBase, formulas);
+    const slip = computeMonthlyLine(p, rates, l, confBase, formulas, rubriques);
     if (slip.net_a_payer < 0) blocking.push({ employee_id: l.employeeId, employee_name: name, message: `Net à payer négatif (${Math.round(slip.net_a_payer).toLocaleString("fr-FR")} FCFA) : les retenues dépassent le salaire.` });
     if (!p.cnpsNumber) warnings.push({ employee_id: l.employeeId, employee_name: name, message: "N° CNPS non renseigné (requis pour la déclaration CNPS)." });
     if (!p.niu) warnings.push({ employee_id: l.employeeId, employee_name: name, message: "NIU non renseigné (requis pour la déclaration fiscale)." });
@@ -1351,12 +1383,11 @@ function monthlyElements(l: PayrollMonthlyLine) {
 // Imposables (primes, heures sup) → ajoutés au brut ET à l'assiette. Avant impôt :
 // retenue d'absence. Retenues nettes internes : retard, avance, prêt, sanction,
 // autres. (Formules ajustables ensuite par l'opérateur.)
-function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine, confBase: number | null = null, formulas?: FormulaOverlay): Payslip {
+function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine, confBase: number | null = null, formulas?: FormulaOverlay, rubriques?: Map<string, RubriqueInfo>): Payslip {
   const { base, gross } = resolveBaseGross(p, confBase);
-  // Lignes libres : les gains s'ajoutent au brut imposable, les retenues au net.
-  const extras = parseExtraLines(l.extraLines);
-  const extraGains = extras.filter((e) => e.kind === "gain").reduce((s, e) => s + e.amount, 0);
-  const extraRetenues = extras.filter((e) => e.kind === "retenue").reduce((s, e) => s + e.amount, 0);
+  // Lignes libres : les typées (rubrique active) suivent leur traitement légal,
+  // les autres restent gain imposable+cotisable / retenue nette (historique).
+  const { rubriqueBrut, rubriqueTaxable, rubriqueCotisable, extraGains, extraRetenues } = splitExtraLines(parseExtraLines(l.extraLines), rubriques);
   const extraTaxable = num(l.primes) + num(l.heuresSup) + extraGains;
   return computePayslip(
     {
@@ -1371,6 +1402,7 @@ function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: P
       applySeniority: p.applySeniority,
       retenueAbsence: num(l.retenueAbsence),
       internal: { avance: num(l.avance), pret: num(l.pret), retard: num(l.retard), autres: num(l.autres) + num(l.sanction) + extraRetenues },
+      rubriqueBrut, rubriqueTaxable, rubriqueCotisable,
     },
     rates,
     formulas,
@@ -1472,6 +1504,7 @@ async function computeRegister(period: string): Promise<
     for (const l of await prisma.payrollMonthlyLine.findMany({ where: { runId: run.id } })) lineByEmp.set(l.employeeId, l);
   }
 
+  const rubriques = await activeRubriqueMap();
   const lines: RegisterLine[] = [];
   const totals = { brut: 0, net: 0, charges_pat: 0 };
   for (const p of profiles) {
@@ -1479,7 +1512,7 @@ async function computeRegister(period: string): Promise<
     const { base, gross } = resolveBaseGross(p, confBase);
     const monthLine = lineByEmp.get(p.employeeId);
     const ps = monthLine
-      ? computeMonthlyLine(p, rates, monthLine, confBase, formulas)
+      ? computeMonthlyLine(p, rates, monthLine, confBase, formulas, rubriques)
       : computePayslip(
           {
             base,

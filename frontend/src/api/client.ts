@@ -4377,7 +4377,7 @@ export function savePayrollProfile(employeeId: string, input: PayrollProfileInpu
 // Calcul du bulletin (D-007, incrément 3).
 export interface Payslip {
   base: number; complements: number; prime_anciennete: number; retenue_absence: number;
-  salaire_brut: number; assiette_fiscale: number; cnps_cotisable_total: number; assiette_cnps: number;
+  salaire_brut: number; assiette_fiscale: number; avantages_nature?: number; cnps_cotisable_total: number; assiette_cnps: number;
   pvid_salarie: number; pvid_patronal: number; prestations_familiales: number; accidents_travail: number;
   cfc_salarie: number; cfc_patronal: number; fne: number; taxe_communale: number; rav: number;
   base_irpp_annuelle: number; irpp: number; irpp_cac: number;
@@ -4388,6 +4388,9 @@ export interface Payslip {
 export interface PayslipRates {
   vid_sal: number; vid_pat: number; pf: number; at: number;
   cfc_sal: number; cfc_pat: number; fne: number; cac: number;
+  // Barème des avantages en nature (fractions du brut taxable) — présent sur la
+  // réponse du mois, sert à l'évaluation automatique des lignes « avantage en nature ».
+  avantages_nature?: { logement: number; electricite: number; eau: number; domestique: number; vehicule: number; nourriture: number };
 }
 export interface PayslipResult {
   employee: { id: string; name: string };
@@ -4471,6 +4474,10 @@ export interface PayrollExtraLine {
   // est « en vigueur », son traitement fiscal/CNPS est appliqué automatiquement ;
   // sinon la ligne reste un gain/retenue libre classique.
   element_code?: string;
+  // Avantage en nature évalué au barème (logement 15 %, véhicule 10 %/véh…) :
+  // le montant est calculé par le moteur (% du brut taxable), non saisi à la main.
+  bareme_type?: "logement" | "electricite" | "eau" | "domestique" | "vehicule" | "nourriture";
+  quantity?: number;
 }
 export interface PayrollMonthLine {
   employee_id: string;

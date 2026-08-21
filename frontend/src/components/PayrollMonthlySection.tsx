@@ -21,6 +21,18 @@ function currentPeriod(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+// Types d'avantages en nature évaluables au barème (CGI art. 33). Le pourcentage
+// réel vient du barème versionné (réponse du mois) ; ces libellés servent l'UI.
+type BaremeType = "logement" | "electricite" | "eau" | "domestique" | "vehicule" | "nourriture";
+const AN_BAREME: { value: BaremeType; label: string; parUnite?: string }[] = [
+  { value: "logement", label: "Logement" },
+  { value: "electricite", label: "Électricité" },
+  { value: "eau", label: "Eau" },
+  { value: "domestique", label: "Domestique", parUnite: "par personne" },
+  { value: "vehicule", label: "Véhicule", parUnite: "par véhicule" },
+  { value: "nourriture", label: "Nourriture" },
+];
+
 const COLS: { key: keyof PayrollMonthElements; label: string; hint: string }[] = [
   { key: "primes", label: "Primes", hint: "Primes exceptionnelles (imposable)" },
   { key: "heures_sup", label: "H. sup", hint: "Heures supplémentaires — montant (imposable)" },
@@ -215,8 +227,14 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
     if (!linesFor) return;
     const id = linesFor.employeeId;
     const clean = (extraDraft[id] ?? [])
-      .filter((e) => e.label.trim() !== "" && e.amount > 0)
-      .map((e) => ({ label: e.label.trim(), kind: e.kind, amount: Math.max(e.amount, 0), ...(e.element_code ? { element_code: e.element_code } : {}) }));
+      // On garde une ligne si elle a un libellé ET (un montant > 0 OU un avantage en
+      // nature au barème, dont le montant est calculé par le moteur).
+      .filter((e) => e.label.trim() !== "" && (e.amount > 0 || e.bareme_type != null))
+      .map((e) => ({
+        label: e.label.trim(), kind: e.kind, amount: Math.max(e.amount, 0),
+        ...(e.element_code ? { element_code: e.element_code } : {}),
+        ...(e.bareme_type ? { bareme_type: e.bareme_type, quantity: e.quantity ?? 1 } : {}),
+      }));
     const note = month?.lines?.find((l) => l.employee_id === id)?.note ?? null;
     setBusy(true);
     try {
@@ -228,6 +246,11 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
     } finally {
       setBusy(false);
     }
+  }
+  // Barème (%) d'un avantage en nature, issu de la réponse du mois. Null si absent.
+  function anBaremePct(t: BaremeType): number | null {
+    const b = month?.rates?.avantages_nature;
+    return b ? (b[t] ?? null) : null;
   }
   function setExtra(id: string, idx: number, patch: Partial<PayrollExtraLine>) {
     setExtraDraft((cur) => ({ ...cur, [id]: (cur[id] ?? []).map((e, i) => (i === idx ? { ...e, ...patch } : e)) }));
@@ -488,7 +511,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
           <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "var(--muted)" }}>
             Ajoutez des lignes personnalisées (indemnité, prime exceptionnelle, retenue particulière…). Un
             <b> gain</b> est imposable (ajouté au brut) ; une <b>retenue</b> est nette (retirée du net à payer).
-            {activeRubriques.length > 0 && <> Rattachez une <b>rubrique en vigueur</b> pour appliquer automatiquement son traitement fiscal/CNPS (une indemnité exonérée n'entre alors ni dans l'IRPP ni dans la CNPS).</>}
+            {activeRubriques.length > 0 && <> Rattachez une <b>rubrique en vigueur</b> pour appliquer automatiquement son traitement fiscal/CNPS (une indemnité exonérée n'entre alors ni dans l'IRPP ni dans la CNPS). Pour un <b>avantage en nature</b> (logement, véhicule…), le montant est <b>évalué au barème</b> (% du salaire brut taxable) — inutile de le calculer à la main.</>}
             {" "}Le net se recalcule à l'enregistrement.
           </p>
           {(extraDraft[linesFor.employeeId] ?? []).length === 0 && (
@@ -496,27 +519,40 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
           )}
           {(extraDraft[linesFor.employeeId] ?? []).map((e, i) => {
             const rub = e.element_code ? activeRubriques.find((r) => r.code === e.element_code) : undefined;
+            const isAN = rub?.category === "avantage_nature"; // évaluation au barème
+            const anPct = isAN && e.bareme_type ? anBaremePct(e.bareme_type) : null;
             return (
             <div key={i} style={{ marginBottom: 8 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 120px 32px", gap: 6, alignItems: "center" }}>
                 <input placeholder="Libellé (ex. Indemnité transport)" value={e.label} onChange={(ev) => setExtra(linesFor.employeeId, i, { label: ev.target.value })} />
-                <select value={e.kind} onChange={(ev) => setExtra(linesFor.employeeId, i, { kind: ev.target.value as "gain" | "retenue" })}>
+                <select value={e.kind} onChange={(ev) => setExtra(linesFor.employeeId, i, { kind: ev.target.value as "gain" | "retenue" })} disabled={isAN}>
                   <option value="gain">Gain</option>
                   <option value="retenue">Retenue</option>
                 </select>
-                <input type="number" min={0} step={100} value={e.amount} onChange={(ev) => setExtra(linesFor.employeeId, i, { amount: Math.max(Number(ev.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", textAlign: "right" }} />
+                {isAN ? (
+                  <input value="au barème" disabled title="Montant évalué automatiquement au barème (voir ci-dessous)" style={{ textAlign: "right", color: "var(--muted)", fontStyle: "italic" }} />
+                ) : (
+                  <input type="number" min={0} step={100} value={e.amount} onChange={(ev) => setExtra(linesFor.employeeId, i, { amount: Math.max(Number(ev.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", textAlign: "right" }} />
+                )}
                 <button type="button" onClick={() => removeExtra(linesFor.employeeId, i)} title="Supprimer la ligne" style={{ border: "1px solid var(--line)", background: "#fff", borderRadius: 6, cursor: "pointer", color: "var(--danger, #C24B3A)" }}>✕</button>
               </div>
               {activeRubriques.length > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
                   <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Rubrique&nbsp;:</label>
                   <select
                     value={e.element_code ?? ""}
                     onChange={(ev) => {
                       const code = ev.target.value || undefined;
                       const picked = code ? activeRubriques.find((r) => r.code === code) : undefined;
+                      const nowAN = picked?.category === "avantage_nature";
                       // À la sélection d'une rubrique, on pré-remplit le libellé s'il est vide.
-                      setExtra(linesFor.employeeId, i, { element_code: code, ...(picked && !e.label.trim() ? { label: picked.label } : {}) });
+                      // Un avantage en nature démarre au barème « logement » par défaut ;
+                      // changer de rubrique non-AN efface le barème.
+                      setExtra(linesFor.employeeId, i, {
+                        element_code: code,
+                        ...(picked && !e.label.trim() ? { label: picked.label } : {}),
+                        ...(nowAN ? { bareme_type: e.bareme_type ?? "logement", quantity: e.quantity ?? 1, kind: "gain" as const } : { bareme_type: undefined, quantity: undefined }),
+                      });
                     }}
                     style={{ fontSize: 12 }}
                   >
@@ -528,6 +564,21 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
                   {rub && (
                     <span style={{ fontSize: 11, color: "var(--muted)" }}>
                       {rub.fiscal_label} · {rub.cnps_label}
+                    </span>
+                  )}
+                </div>
+              )}
+              {isAN && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap", paddingLeft: 12 }}>
+                  <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Avantage&nbsp;:</label>
+                  <select value={e.bareme_type ?? "logement"} onChange={(ev) => setExtra(linesFor.employeeId, i, { bareme_type: ev.target.value as BaremeType })} style={{ fontSize: 12 }}>
+                    {AN_BAREME.map((b) => <option key={b.value} value={b.value}>{b.label}{b.parUnite ? ` (${b.parUnite})` : ""}</option>)}
+                  </select>
+                  <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Nombre&nbsp;:</label>
+                  <input type="number" min={1} step={1} value={e.quantity ?? 1} onChange={(ev) => setExtra(linesFor.employeeId, i, { quantity: Math.max(Math.floor(Number(ev.target.value) || 1), 1) })} style={{ width: 56, fontFamily: "var(--font-mono, monospace)", textAlign: "right" }} />
+                  {anPct != null && (
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                      {(anPct * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} % du brut taxable × {e.quantity ?? 1} — évalué à l'enregistrement
                     </span>
                   )}
                 </div>

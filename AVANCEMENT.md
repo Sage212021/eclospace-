@@ -20,11 +20,12 @@
 **Fait :**
 - **Chaque rubrique reste « en attente » par défaut** : elle n'apparaît sur aucun bulletin tant que le RH ne l'a pas **« mise en vigueur »** (avec sa date d'effet). Un bouton **Mettre en vigueur / Mettre en attente** est ajouté dans le *Guide fiscal & CNPS des éléments de salaire*.
 - **Sur le bulletin, rien ne change dans la structure.** Quand le RH ajoute une ligne libre (comme aujourd'hui), il peut désormais lui **rattacher une rubrique en vigueur** dans un menu déroulant. Le système applique alors **automatiquement** le bon traitement : une **indemnité exonérée** (ex. transport) augmente le salaire brut **mais n'est ni taxée (IRPP) ni cotisée (CNPS)** ; une **prime taxable et cotisable** entre bien dans les trois. Sans rubrique choisie, la ligne reste un gain imposable comme avant.
-- **Aucune paie existante n'est modifiée** : tant qu'aucune rubrique n'est activée, tous les calculs sont identiques au centime près (vérifié : 797 tests automatiques au vert).
+- **Avantages en nature évalués au barème** (ajout) : quand la ligne est un **avantage en nature** (logement, électricité, eau, domestique, véhicule, nourriture), plus besoin de calculer le montant à la main. Le RH choisit le **type d'avantage** et le **nombre** (véhicules/domestiques) ; le système applique le **barème légal** (logement 15 %, véhicule 10 %/véhicule…) sur le salaire brut taxable. L'avantage **augmente l'IRPP et la CNPS** (comme la loi l'exige) **sans être versé en espèces** : le salaire brut et le net en argent ne changent pas.
+- **Aucune paie existante n'est modifiée** : tant qu'aucune rubrique n'est activée, tous les calculs sont identiques au centime près (vérifié : 799 tests automatiques au vert).
 
-**Vérification possible depuis un navigateur :** dans *Moteur de paie → Guide des éléments de salaire*, mettre par exemple **« Prime de transport »** en vigueur ; puis, sur la grille du mois, ajouter une ligne libre, choisir cette rubrique, saisir un montant : le **brut augmente** mais l'**IRPP et la CNPS ne bougent pas**. Remettre la rubrique « en attente » : la même ligne redevient imposable.
+**Vérification possible depuis un navigateur :** dans *Moteur de paie → Guide des éléments de salaire*, mettre par exemple **« Prime de transport »** en vigueur ; puis, sur la grille du mois, ajouter une ligne libre, choisir cette rubrique, saisir un montant : le **brut augmente** mais l'**IRPP et la CNPS ne bougent pas**. Remettre la rubrique « en attente » : la même ligne redevient imposable. Pour un avantage en nature : mettre **« Avantages en nature »** en vigueur, ajouter une ligne, choisir cette rubrique, sélectionner **Logement** (ou Véhicule × 2…) : l'**IRPP et la CNPS montent** selon le barème, **sans toucher au brut**.
 
-**Prochaine étape :** à votre main — étendre, si besoin, le traitement automatique aux avantages en nature saisis directement (barème logement/véhicule…) et à l'aperçu unitaire d'un bulletin.
+**Prochaine étape :** à votre main — étendre, si besoin, à l'aperçu unitaire d'un bulletin.
 
 
 ### 07/08/2026 (suite) — Chantier paie, étape 2b : livre de paie & états CNPS/fiscaux depuis le mois

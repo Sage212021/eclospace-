@@ -21,6 +21,9 @@ export interface PayrollRates {
   ancDefPct: number;
   irpp: { p1: number; t1: number; p2: number; t2: number; p3: number; t3: number; t4: number };
   tcRav: { seuil1: number; tc1: number; rav1: number; seuil2: number; tc2: number; rav2: number; tc3: number; rav3: number };
+  // Barème des avantages en nature (CGI art. 33), fractions du brut taxable.
+  // Facultatif : absent ⇒ pas d'évaluation automatique (comportement historique).
+  avantagesNature?: { logement: number; electricite: number; eau: number; domestique: number; vehicule: number; nourriture: number };
 }
 
 export interface PayslipInput {
@@ -44,6 +47,16 @@ export interface PayslipInput {
   rubriqueBrut?: number;
   rubriqueTaxable?: number;
   rubriqueCotisable?: number;
+  // Avantages en nature évalués AU BARÈME (CGI art. 33) — exprimés en FRACTION du
+  // salaire brut taxable (assiette fiscale « cœur »), car le barème est un % de ce
+  // brut. Le moteur multiplie par sa propre assiette (autoritaire) : logement 15 %,
+  // véhicule 10 %/véhicule, etc. L'avantage en nature n'est PAS payé en espèces : il
+  // n'augmente donc pas le brut, seulement les assiettes fiscale et CNPS.
+  //  • avantageNatureTaxablePct   : fraction entrant dans l'assiette FISCALE ;
+  //  • avantageNatureCotisablePct : fraction entrant dans l'assiette CNPS.
+  // Facultatifs, 0 par défaut ⇒ comportement historique strictement inchangé.
+  avantageNatureTaxablePct?: number;
+  avantageNatureCotisablePct?: number;
 }
 
 export interface Payslip {
@@ -53,6 +66,7 @@ export interface Payslip {
   retenue_absence: number;
   salaire_brut: number;
   assiette_fiscale: number;
+  avantages_nature: number;
   cnps_cotisable_total: number;
   assiette_cnps: number;
   pvid_salarie: number;
@@ -113,15 +127,23 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates, formula
       base: input.base, complements: input.complements, prime_anciennete: prime, retenue_absence: input.retenueAbsence,
     }) + rubBrut;
 
+  // Avantages en nature évalués au barème (Niveau 2) — fraction du brut taxable.
+  // Non payés en espèces ⇒ n'entrent pas dans le brut, seulement dans les assiettes.
+  const anTaxPct = input.avantageNatureTaxablePct ?? 0;
+  const anCotPct = input.avantageNatureCotisablePct ?? 0;
+
   // I — assiette fiscale : cœur (base fiscale + prime − retenue) + part imposable
-  // des rubriques activées.
+  // des rubriques activées + avantages en nature au barème.
   const assietteFiscaleCore = Math.max(input.fiscalBase + prime - input.retenueAbsence, 0);
-  const assietteFiscale = assietteFiscaleCore + rubTaxable;
+  const anTaxable = r(assietteFiscaleCore * anTaxPct);
+  const anCotisable = r(assietteFiscaleCore * anCotPct);
+  const assietteFiscale = assietteFiscaleCore + rubTaxable + anTaxable;
 
   // J — salaire cotisable CNPS : montant total (avant plafond) puis plafonné.
   // Le cœur suit le coefficient d'assiette (modèle historique) ; la part
-  // cotisable des rubriques activées s'ajoute explicitement (non re-coefficientée).
-  const cnpsCotisableTotal = r(assietteFiscaleCore * rates.coefAssiette) + rubCotisable;
+  // cotisable des rubriques activées et des avantages en nature s'ajoute
+  // explicitement (non re-coefficientée).
+  const cnpsCotisableTotal = r(assietteFiscaleCore * rates.coefAssiette) + rubCotisable + anCotisable;
   const assietteCnps = Math.min(cnpsCotisableTotal, rates.cnpsCeiling);
 
   // K-N — cotisations CNPS sur l'assiette plafonnée.
@@ -162,6 +184,7 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates, formula
     retenue_absence: input.retenueAbsence,
     salaire_brut: brut,
     assiette_fiscale: assietteFiscale,
+    avantages_nature: anTaxable,
     cnps_cotisable_total: cnpsCotisableTotal,
     assiette_cnps: assietteCnps,
     pvid_salarie: pvidSal,

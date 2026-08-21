@@ -106,21 +106,36 @@ const monthlyLineSchema = z.object({
   retard: money, avance: money, pret: money, sanction: money, autres: money,
   // Lignes libres ajoutées par le RH (aucune codée en dur) : gains imposables
   // ou retenues nettes, avec un libellé et un montant.
-  extra_lines: z.array(z.object({ label: z.string().min(1).max(80), kind: z.enum(["gain", "retenue"]), amount: money, element_code: z.string().max(60).optional() })).max(30).optional(),
+  extra_lines: z.array(z.object({
+    label: z.string().min(1).max(80), kind: z.enum(["gain", "retenue"]), amount: money, element_code: z.string().max(60).optional(),
+    // Avantage en nature évalué au barème (Niveau 2, étape B+) : type de barème
+    // (logement, véhicule…) + quantité (véhicules/domestiques). Le montant est
+    // alors calculé par le moteur (% du brut taxable), non saisi à la main.
+    bareme_type: z.enum(["logement", "electricite", "eau", "domestique", "vehicule", "nourriture"]).optional(),
+    quantity: z.number().int().min(1).max(20).optional(),
+  })).max(30).optional(),
   note: z.string().max(500).nullable().optional(),
 });
 
 // `element_code` (facultatif) : rattache une ligne libre à une rubrique du
 // catalogue (Niveau 2). Quand la rubrique est activée, son traitement fiscal/CNPS
 // s'applique automatiquement à la place du choix binaire gain/retenue.
-type ExtraLine = { label: string; kind: "gain" | "retenue"; amount: number; element_code?: string };
+type BaremeType = "logement" | "electricite" | "eau" | "domestique" | "vehicule" | "nourriture";
+const BAREME_TYPES: BaremeType[] = ["logement", "electricite", "eau", "domestique", "vehicule", "nourriture"];
+type ExtraLine = { label: string; kind: "gain" | "retenue"; amount: number; element_code?: string; bareme_type?: BaremeType; quantity?: number };
 function parseExtraLines(v: unknown): ExtraLine[] {
   if (!Array.isArray(v)) return [];
   return v.flatMap((x) => {
     if (x && typeof x === "object") {
       const o = x as Record<string, unknown>;
       if (typeof o.label === "string" && (o.kind === "gain" || o.kind === "retenue") && typeof o.amount === "number") {
-        return [{ label: o.label, kind: o.kind, amount: Math.max(o.amount, 0), ...(typeof o.element_code === "string" ? { element_code: o.element_code } : {}) }];
+        const baremeType = typeof o.bareme_type === "string" && (BAREME_TYPES as string[]).includes(o.bareme_type) ? (o.bareme_type as BaremeType) : undefined;
+        return [{
+          label: o.label, kind: o.kind, amount: Math.max(o.amount, 0),
+          ...(typeof o.element_code === "string" ? { element_code: o.element_code } : {}),
+          ...(baremeType ? { bareme_type: baremeType } : {}),
+          ...(typeof o.quantity === "number" && o.quantity >= 1 ? { quantity: Math.floor(o.quantity) } : {}),
+        }];
       }
     }
     return [];
@@ -138,20 +153,30 @@ async function activeRubriqueMap(): Promise<Map<string, RubriqueInfo>> {
 // Ventile les lignes libres d'un bulletin : celles rattachées à une rubrique
 // ACTIVE suivent son traitement (brut / fiscal / CNPS) ; les autres restent des
 // lignes libres classiques (gain imposable+cotisable ou retenue nette).
-function splitExtraLines(extras: ExtraLine[], map: Map<string, RubriqueInfo> | undefined) {
+function splitExtraLines(extras: ExtraLine[], map: Map<string, RubriqueInfo> | undefined, anBareme?: PayrollRates["avantagesNature"]) {
   let rubriqueBrut = 0, rubriqueTaxable = 0, rubriqueCotisable = 0;
+  // Avantages en nature évalués au barème : on cumule des FRACTIONS du brut
+  // taxable (pct × quantité), le moteur les multipliera par son assiette.
+  let anTaxablePct = 0, anCotisablePct = 0;
   const untyped: ExtraLine[] = [];
   for (const e of extras) {
     const info = e.element_code && map ? map.get(e.element_code) : undefined;
     if (!info) { untyped.push(e); continue; }
     const isAvantageNature = info.category === "avantage_nature";
+    // Avantage en nature « au barème » : montant non saisi mais évalué (% du brut).
+    if (isAvantageNature && e.bareme_type && anBareme) {
+      const frac = (anBareme[e.bareme_type] ?? 0) * (e.quantity && e.quantity >= 1 ? e.quantity : 1);
+      if (info.fiscal === "taxable" || info.fiscal === "partiel") anTaxablePct += frac;
+      if (info.cnps === "cotisable" || info.cnps === "partiel") anCotisablePct += frac;
+      continue; // pas de montant espèces ni de part fixe : tout passe par le barème
+    }
     if (!isAvantageNature) rubriqueBrut += e.amount; // avantage en nature = non payé en espèces
     if (info.fiscal === "taxable" || info.fiscal === "partiel") rubriqueTaxable += e.amount;
     if (info.cnps === "cotisable" || info.cnps === "partiel") rubriqueCotisable += e.amount;
   }
   const extraGains = untyped.filter((e) => e.kind === "gain").reduce((s, e) => s + e.amount, 0);
   const extraRetenues = untyped.filter((e) => e.kind === "retenue").reduce((s, e) => s + e.amount, 0);
-  return { rubriqueBrut, rubriqueTaxable, rubriqueCotisable, extraGains, extraRetenues };
+  return { rubriqueBrut, rubriqueTaxable, rubriqueCotisable, extraGains, extraRetenues, avantageNatureTaxablePct: anTaxablePct, avantageNatureCotisablePct: anCotisablePct };
 }
 
 export default async function payrollRoutes(fastify: FastifyInstance) {
@@ -1310,6 +1335,12 @@ function rateDisplay(r: Record<string, unknown>) {
   return {
     vid_sal: num(r.vidSalPct), vid_pat: num(r.vidPatPct), pf: num(r.pfPct), at: num(r.atPct),
     cfc_sal: num(r.cfcSalPct), cfc_pat: num(r.cfcPatPct), fne: num(r.fnePct), cac: num(r.cacPct),
+    // Barème des avantages en nature (fractions du brut taxable), pour l'évaluation
+    // automatique des lignes « avantage en nature » saisies sur la grille.
+    avantages_nature: {
+      logement: num(r.anLogementPct), electricite: num(r.anElectricitePct), eau: num(r.anEauPct),
+      domestique: num(r.anDomestiquePct), vehicule: num(r.anVehiculePct), nourriture: num(r.anNourriturePct),
+    },
   };
 }
 
@@ -1321,6 +1352,10 @@ function ratesFrom(r: Record<string, unknown>): PayrollRates {
     cfcSal: num(r.cfcSalPct), cfcPat: num(r.cfcPatPct), fne: num(r.fnePct), ancDefPct: num(r.ancDefPct),
     irpp: { p1: num(r.irppT1Ceiling), t1: num(r.irppT1Pct), p2: num(r.irppT2Ceiling), t2: num(r.irppT2Pct), p3: num(r.irppT3Ceiling), t3: num(r.irppT3Pct), t4: num(r.irppT4Pct) },
     tcRav: { seuil1: num(r.tcRavSeuil1), tc1: num(r.tc1), rav1: num(r.rav1), seuil2: num(r.tcRavSeuil2), tc2: num(r.tc2), rav2: num(r.rav2), tc3: num(r.tc3), rav3: num(r.rav3) },
+    avantagesNature: {
+      logement: num(r.anLogementPct), electricite: num(r.anElectricitePct), eau: num(r.anEauPct),
+      domestique: num(r.anDomestiquePct), vehicule: num(r.anVehiculePct), nourriture: num(r.anNourriturePct),
+    },
   };
 }
 
@@ -1387,7 +1422,7 @@ function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: P
   const { base, gross } = resolveBaseGross(p, confBase);
   // Lignes libres : les typées (rubrique active) suivent leur traitement légal,
   // les autres restent gain imposable+cotisable / retenue nette (historique).
-  const { rubriqueBrut, rubriqueTaxable, rubriqueCotisable, extraGains, extraRetenues } = splitExtraLines(parseExtraLines(l.extraLines), rubriques);
+  const { rubriqueBrut, rubriqueTaxable, rubriqueCotisable, extraGains, extraRetenues, avantageNatureTaxablePct, avantageNatureCotisablePct } = splitExtraLines(parseExtraLines(l.extraLines), rubriques, rates.avantagesNature);
   const extraTaxable = num(l.primes) + num(l.heuresSup) + extraGains;
   return computePayslip(
     {
@@ -1403,6 +1438,7 @@ function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: P
       retenueAbsence: num(l.retenueAbsence),
       internal: { avance: num(l.avance), pret: num(l.pret), retard: num(l.retard), autres: num(l.autres) + num(l.sanction) + extraRetenues },
       rubriqueBrut, rubriqueTaxable, rubriqueCotisable,
+      avantageNatureTaxablePct, avantageNatureCotisablePct,
     },
     rates,
     formulas,

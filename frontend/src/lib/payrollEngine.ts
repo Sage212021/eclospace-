@@ -26,6 +26,13 @@ export interface PayslipInput {
   applySeniority: boolean;
   retenueAbsence: number;
   internal: { avance: number; pret: number; retard: number; autres: number };
+  // Rubriques activées / avantages en nature (Niveau 2) — facultatifs, 0 par
+  // défaut ⇒ calcul historique inchangé. Doivent rester jumeaux du moteur serveur.
+  rubriqueBrut?: number;
+  rubriqueTaxable?: number;
+  rubriqueCotisable?: number;
+  avantageNatureTaxablePct?: number;
+  avantageNatureCotisablePct?: number;
 }
 
 const r = Math.round;
@@ -44,9 +51,17 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
     const rate = input.seniorityRate && input.seniorityRate > 0 ? input.seniorityRate : rates.ancDefPct;
     prime = r(input.base * rate);
   }
-  const brut = Math.max(input.base + input.complements + prime - input.retenueAbsence, 0);
-  const assietteFiscale = Math.max(input.fiscalBase + prime - input.retenueAbsence, 0);
-  const cnpsCotisableTotal = r(assietteFiscale * rates.coefAssiette);
+  const rubBrut = input.rubriqueBrut ?? 0;
+  const rubTaxable = input.rubriqueTaxable ?? 0;
+  const rubCotisable = input.rubriqueCotisable ?? 0;
+  const anTaxPct = input.avantageNatureTaxablePct ?? 0;
+  const anCotPct = input.avantageNatureCotisablePct ?? 0;
+  const brut = Math.max(input.base + input.complements + prime - input.retenueAbsence, 0) + rubBrut;
+  const assietteFiscaleCore = Math.max(input.fiscalBase + prime - input.retenueAbsence, 0);
+  const anTaxable = r(assietteFiscaleCore * anTaxPct);
+  const anCotisable = r(assietteFiscaleCore * anCotPct);
+  const assietteFiscale = assietteFiscaleCore + rubTaxable + anTaxable;
+  const cnpsCotisableTotal = r(assietteFiscaleCore * rates.coefAssiette) + rubCotisable + anCotisable;
   const assietteCnps = Math.min(cnpsCotisableTotal, rates.cnpsCeiling);
   const pvidSal = r(assietteCnps * rates.vidSal);
   const pvidPat = r(assietteCnps * rates.vidPat);
@@ -72,6 +87,7 @@ export function computePayslip(input: PayslipInput, rates: PayrollRates): Paysli
     retenue_absence: input.retenueAbsence,
     salaire_brut: brut,
     assiette_fiscale: assietteFiscale,
+    avantages_nature: anTaxable,
     cnps_cotisable_total: cnpsCotisableTotal,
     assiette_cnps: assietteCnps,
     pvid_salarie: pvidSal,

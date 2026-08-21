@@ -4258,6 +4258,8 @@ export interface SalaryElement {
   cnps_label: string;
   legal_ref: string | null;
   active: boolean;
+  in_force: boolean;
+  effective_from: string | null;
 }
 export interface SalaryElementsConfig {
   elements: SalaryElement[];
@@ -4267,8 +4269,8 @@ export interface SalaryElementsConfig {
 export function getSalaryElements(all = false) {
   return request<SalaryElementsConfig>(`/api/v1/payroll/salary-elements${all ? "?all=1" : ""}`);
 }
-export function updateSalaryElement(code: string, patch: Partial<{ label: string; fiscal_status: string; cnps_status: string; legal_ref: string | null; active: boolean }>) {
-  return request<{ code: string; fiscal_status: string; cnps_status: string; active: boolean }>(`/api/v1/payroll/salary-elements/${code}`, { method: "PATCH", body: JSON.stringify(patch) });
+export function updateSalaryElement(code: string, patch: Partial<{ label: string; fiscal_status: string; cnps_status: string; legal_ref: string | null; active: boolean; in_force: boolean; effective_from: string | null }>) {
+  return request<{ code: string; fiscal_status: string; cnps_status: string; active: boolean; in_force: boolean; effective_from: string | null }>(`/api/v1/payroll/salary-elements/${code}`, { method: "PATCH", body: JSON.stringify(patch) });
 }
 
 export function getPayrollConfig() {

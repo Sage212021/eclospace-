@@ -800,6 +800,12 @@ model SalaryElement {
   sortOrder    Int     @default(0) @map("sort_order")
   active       Boolean @default(true)
 
+  // Activation (Niveau 2, étape A) : une rubrique reste EN ATTENTE (inForce=false)
+  // tant que la direction n'a pas décidé de l'intégrer. Le RH la met « en vigueur »
+  // à une date d'effet ; elle devient alors utilisable sur les bulletins.
+  inForce       Boolean   @default(false) @map("in_force")
+  effectiveFrom DateTime? @map("effective_from") @db.Date
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedBy String?  @map("updated_by")
 

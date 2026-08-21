@@ -28,6 +28,22 @@ export function SalaryElementsGuide({ canManage }: { canManage: boolean }) {
     }
   }
 
+  // Activation : mettre « en vigueur » (avec date d'effet = aujourd'hui par
+  // défaut) ou remettre « en attente ».
+  async function toggleInForce(code: string, next: boolean) {
+    setBusy(code);
+    setError(null);
+    try {
+      const effective_from = next ? new Date().toISOString().slice(0, 10) : null;
+      const r = await updateSalaryElement(code, { in_force: next, effective_from });
+      setCfg((c) => (c ? { ...c, elements: c.elements.map((e) => (e.code === code ? { ...e, in_force: r.in_force, effective_from: r.effective_from } : e)) } : c));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Activation impossible.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const byCat = groupByCategory(cfg?.elements ?? []);
 
   return (
@@ -41,6 +57,7 @@ export function SalaryElementsGuide({ canManage }: { canManage: boolean }) {
             Classification d'après la procédure fiscale officielle (CGI art. 30/31/33, Ordonnance CNPS 73/17…). Elle sert de
             repère au calcul de la base IRPP (salaire brut taxable) et de la base CNPS (salaire cotisable).
             {canManage && " Vous pouvez ajuster un statut ; le changement est tracé."} <strong>À faire valider par votre comptable/juriste</strong> (conformité sous la responsabilité de la maison).
+            {" "}Chaque rubrique reste <strong>« en attente »</strong> tant que la direction ne l'a pas mise <strong>« en vigueur »</strong> : une rubrique en attente n'apparaît sur aucun bulletin. (Le traitement automatique sur le bulletin arrive à l'étape suivante.)
           </p>
           {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, margin: "8px 0" }}>{error}</div>}
           {!cfg ? (
@@ -53,6 +70,7 @@ export function SalaryElementsGuide({ canManage }: { canManage: boolean }) {
                     <th style={{ padding: "5px 8px" }}>Élément</th>
                     <th style={{ padding: "5px 8px" }}>Fiscal (IRPP)</th>
                     <th style={{ padding: "5px 8px" }}>CNPS</th>
+                    <th style={{ padding: "5px 8px" }}>État</th>
                     <th style={{ padding: "5px 8px" }}>Référence</th>
                   </tr>
                 </thead>
@@ -60,7 +78,7 @@ export function SalaryElementsGuide({ canManage }: { canManage: boolean }) {
                   {byCat.map(([cat, items]) => (
                     <>
                       <tr key={cat}>
-                        <td colSpan={4} style={{ padding: "8px 8px 3px", fontSize: 11.5, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", textTransform: "uppercase", letterSpacing: 0.3 }}>{items[0].category_label}</td>
+                        <td colSpan={5} style={{ padding: "8px 8px 3px", fontSize: 11.5, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", textTransform: "uppercase", letterSpacing: 0.3 }}>{items[0].category_label}</td>
                       </tr>
                       {items.map((e) => (
                         <tr key={e.code} style={{ borderTop: "1px solid var(--line)", opacity: e.active ? 1 : 0.5 }}>
@@ -81,6 +99,18 @@ export function SalaryElementsGuide({ canManage }: { canManage: boolean }) {
                               </select>
                             ) : (
                               <Chip label={e.cnps_label} tone={e.cnps_status === "cotisable" ? "warn" : e.cnps_status === "partiel" ? "muted" : "ok"} />
+                            )}
+                          </td>
+                          <td style={{ padding: "5px 8px" }}>
+                            {e.in_force ? (
+                              <span title={e.effective_from ? `En vigueur depuis le ${e.effective_from}` : "En vigueur"}><Chip label="En vigueur" tone="ok" /></span>
+                            ) : (
+                              <Chip label="En attente" tone="muted" />
+                            )}
+                            {canManage && (
+                              <button onClick={() => toggleInForce(e.code, !e.in_force)} disabled={busy === e.code} style={{ marginLeft: 6, background: "none", border: "1px solid var(--line)", borderRadius: 5, padding: "1px 7px", fontSize: 11, fontWeight: 600, cursor: busy === e.code ? "default" : "pointer", color: e.in_force ? "var(--alert)" : "var(--eclosion-dark, #8A6A12)" }}>
+                                {e.in_force ? "Mettre en attente" : "Mettre en vigueur"}
+                              </button>
                             )}
                           </td>
                           <td style={{ padding: "5px 8px", color: "var(--muted)", fontSize: 11.5 }}>{e.legal_ref ?? "—"}</td>

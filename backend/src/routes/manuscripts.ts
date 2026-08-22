@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAnyPermission, requireAuth } from "../lib/permissions.js";
 import { canCorrectDeposit, isDeletableStepDoc } from "../lib/stepDocuments.js";
 import { CORRECTION_PHASES, isCorrectionPhase, correctionDocTitle, correctionCycleState, currentCorrectionActor, nextActorAfterPhase } from "../lib/correctionCycle.js";
+import { VC1_SLOTS, isVc1Slot, vc1DocTitle, vc1State } from "../lib/startingProof.js";
 import { deliverableDocTitle, stepDeliverableMeta } from "../lib/stepDeliverables.js";
 import { optionalStepMeta } from "../lib/stepRealization.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -930,6 +931,47 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         }
       }
       return reply.code(201).send({ version_id: version.id, phase, label });
+    },
+  );
+
+  // --- « Version à corriger » (VC1) — dossier de départ déposé à la Décision
+  // éditoriale : fichier manuscrit + textes de couverture (1ère/dos/4ème). C'est
+  // la matière que le correcteur travaillera à l'étape suivante. Mêmes pièces
+  // d'étape que le cycle de correction (aucune migration).
+  fastify.get(
+    "/api/v1/manuscripts/:id/vc1",
+    { preHandler: requireAnyPermission([{ module: "decision_editoriale", action: "consultation" }, { module: "manuscripts", action: "consultation" }, { module: "tasks", action: "consultation" }]) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const slots = await vc1State(id);
+      return reply.send(slots.map((s) => ({ ...s, can_correct: s.has_file && canCorrectDeposit(request, s.uploaded_by) })));
+    },
+  );
+
+  fastify.post(
+    "/api/v1/manuscripts/:id/vc1/:slot",
+    { preHandler: requireAnyPermission([{ module: "decision_editoriale", action: "saisie" }, { module: "manuscripts", action: "saisie" }]) },
+    async (request, reply) => {
+      const { id, slot } = request.params as { id: string; slot: string };
+      if (!isVc1Slot(slot)) return reply.code(400).send({ code: "invalid_slot", message: "Emplacement VC1 inconnu." });
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const file = await request.file();
+      if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+      const buffer = await file.toBuffer();
+      if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+      const label = VC1_SLOTS.find((s) => s.key === slot)!.label;
+      const stored = await storeFile(buffer, `vc1-${slot}-${id}-${file.filename}`);
+      const doc = await prisma.document.create({
+        data: { entityType: "manuscript", entityId: id, category: "piece_etape", confidentiality: "interne", title: vc1DocTitle(slot, file.filename), createdBy: request.user!.id, updatedBy: request.user!.id },
+      });
+      const version = await prisma.documentVersion.create({
+        data: { documentId: doc.id, versionNumber: 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: file.mimetype, sha256Hash: stored.sha256Hash, changeSummary: `Version à corriger (VC1) — ${label}`, uploadedBy: request.user!.id },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { vc1_slot: slot }, ipAddress: request.ip });
+      return reply.code(201).send({ version_id: version.id, slot, label });
     },
   );
 

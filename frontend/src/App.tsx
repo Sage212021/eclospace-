@@ -767,6 +767,7 @@ export function App() {
             user={user}
             onOpenAnnouncement={openAnnouncement}
             onOpenCalendar={permissions.has("communication:consultation") ? () => setView({ kind: "leaf", key: "cm-calendrier" }) : undefined}
+            onNavigate={(key) => setView({ kind: "leaf", key })}
           />
         )}
         {leaf && "page" in leaf && leaf.page === "manuscripts" && (

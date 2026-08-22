@@ -969,3 +969,11 @@ Demande opérateur : des ~100 ouvrages importés au catalogue ont des fiches inc
 - **Mécanisme** : réutilise les documents « pièce d'étape » à titre stable (`lib/startingProof.ts`, préfixe `[vc1:<slot>]`) — **aucune migration**. Endpoints `GET /manuscripts/:id/vc1` et `POST /manuscripts/:id/vc1/:slot` (permission `decision_editoriale:saisie` ou `manuscripts:saisie`), déposables/remplaçables librement, retrait par l'auteur du dépôt (règle d'or). Frontend : `StartingProofPanel` affiché sur la fiche à l'étape Décision éditoriale.
 - Le vrai **BAT** reste unique (étape 12) ; VC1 = jeu de départ, VCF = sortie de correction (voir incrément 1).
 - **Tests** : `vc1-starting-proof.test.ts` (4 emplacements, dépôt manuscrit + couverture, refus d'emplacement inconnu). Suite : 805/805.
+
+## Accueil orienté rôle + message chaleureux (22/08/2026)
+
+- **Constat opérateur** : l'accueil d'un opérationnel (correcteur, relecteur…) n'affichait que « Ma session » — aucune orientation. L'accueil doit répondre à « que dois-je faire aujourd'hui ? ».
+- **Message d'accueil selon l'heure** : « Bonjour / Bon après-midi / Bonsoir » + prénom + emoji (`timeGreeting()`), à la place du « Bienvenue » figé.
+- **Tuiles « Mon travail du jour »** (frontend `Dashboard.tsx`) : *Mes lectures*, *Mes corrections* (à faire), *Mes dossiers à traiter*, avec compteur et raccourci direct vers la page. Chaque tuile n'apparaît que si l'utilisateur a accès à la file (appel réussi ; 403 = tuile absente), via `Promise.allSettled` sur les endpoints existants (`/my-corrections`, `/my-dossiers`, `/reading-assignments?reader=me`). Nav par `onNavigate(leafKey)` câblé dans `App.tsx`.
+- **Correctif libellés de rôle** : `RESP_QUALITE` (affiché en code brut) et `DIR_EDITORIAL` (clé erronée `DIR_EDITORIALE`) corrigés dans la carte « Ma session ».
+- Purement frontend (aucun backend, aucune migration). `tsc` + build OK.

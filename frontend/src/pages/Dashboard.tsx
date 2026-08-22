@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getDashboardStats, getTodayBirthdays, getUpcomingEvents, type CalendarEvent, type DashboardStats, type EffectiveUser } from "../api/client";
+import { getDashboardStats, getTodayBirthdays, getUpcomingEvents, listMyCorrections, getMyDossiers, listMyReadingAssignments, type CalendarEvent, type DashboardStats, type EffectiveUser } from "../api/client";
 import { useI18n } from "../i18n";
 import { AnnouncementBanner } from "../components/AnnouncementBanner";
 
@@ -7,7 +7,22 @@ interface DashboardProps {
   user: EffectiveUser;
   onOpenAnnouncement?: (id: string) => void;
   onOpenCalendar?: () => void;
+  onNavigate?: (leafKey: string) => void;
 }
+
+// Accueil chaleureux selon l'heure locale de l'utilisateur.
+function timeGreeting(): { hello: string; emoji: string } {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return { hello: "Bonjour", emoji: "☀️" };
+  if (h >= 12 && h < 18) return { hello: "Bon après-midi", emoji: "🌤️" };
+  if (h >= 18 && h < 23) return { hello: "Bonsoir", emoji: "🌙" };
+  return { hello: "Bonsoir", emoji: "🌙" };
+}
+
+// Tuiles « Mon travail » : ce que l'utilisateur doit traiter aujourd'hui. Chaque
+// tuile n'apparaît que si l'utilisateur a accès à la file correspondante (l'appel
+// réussit) ; elle mène directement à la page concernée.
+interface WorkTile { key: string; label: string; icon: string; count: number; leaf: string; }
 
 // Grands indicateurs affichés en tête du tableau de bord. Chacun n'apparaît que
 // si le serveur en renvoie la valeur (permission de consultation accordée).
@@ -28,12 +43,14 @@ const KPI_CARDS: { key: keyof DashboardStats; label: string; icon: string; money
 // Page d'accueil : grands indicateurs de synthèse + rappel de la session.
 // L'audit RBAC détaillé (badges de permissions) a été déplacé dans l'écran
 // « Diagnostics système » (Administration), réservé à l'administrateur général.
-export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar }: DashboardProps) {
+export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar, onNavigate }: DashboardProps) {
   const { t, lang } = useI18n();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [birthdays, setBirthdays] = useState<{ id: string; name: string }[]>([]);
   const [upcoming, setUpcoming] = useState<CalendarEvent[]>([]);
+  const [work, setWork] = useState<WorkTile[]>([]);
   const canSeeAnnouncements = user.permissions.includes("communication:consultation");
+  const greet = timeGreeting();
 
   useEffect(() => {
     getDashboardStats().then(setStats).catch(() => setStats(null));
@@ -41,6 +58,15 @@ export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar }: Dashboar
       getTodayBirthdays().then(setBirthdays).catch(() => setBirthdays([]));
       getUpcomingEvents(7).then(setUpcoming).catch(() => setUpcoming([]));
     }
+    // « Mon travail du jour » : on interroge chaque file ; une tuile n'apparaît
+    // que si l'utilisateur y a accès (appel réussi). Les autres échouent en
+    // silence (403) et sont simplement absentes.
+    const active = (s: string) => s !== "terminee" && s !== "validee";
+    Promise.allSettled([
+      listMyReadingAssignments().then((rows) => ({ key: "readings", label: "Mes lectures", icon: "👓", count: rows.length, leaf: "ed-mes-lectures" } as WorkTile)),
+      listMyCorrections().then((rows) => ({ key: "corrections", label: "Mes corrections", icon: "✍️", count: rows.filter((r) => active(r.status)).length, leaf: "ed-mes-corrections" } as WorkTile)),
+      getMyDossiers().then((rows) => ({ key: "dossiers", label: "Mes dossiers à traiter", icon: "📁", count: rows.length, leaf: "mes-dossiers" } as WorkTile)),
+    ]).then((res) => setWork(res.filter((r): r is PromiseFulfilledResult<WorkTile> => r.status === "fulfilled").map((r) => r.value)));
   }, [canSeeAnnouncements]);
 
   const visibleKpis = stats ? KPI_CARDS.filter((c) => stats[c.key] !== null) : [];
@@ -81,8 +107,34 @@ export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar }: Dashboar
           </div>
         </div>
       )}
-      <h1 style={{ fontFamily: "var(--font-title)", fontSize: 22, marginBottom: 4 }}>{t("dash.welcome", "Bienvenue")}, {user.username}</h1>
+      <h1 style={{ fontFamily: "var(--font-title)", fontSize: 22, marginBottom: 4 }}>{greet.hello}, {user.username} {greet.emoji}</h1>
       <p style={{ color: "var(--muted)", marginTop: 0 }}>{t("dash.subtitle", "Vue d'ensemble de votre maison d'édition.")}</p>
+
+      {/* Mon travail du jour : files personnelles actionnables (lectures,
+          corrections, dossiers confiés). N'apparaît que si l'utilisateur y a accès. */}
+      {work.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Mon travail du jour</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+            {work.map((w) => (
+              <button
+                key={w.key}
+                onClick={() => onNavigate?.(w.leaf)}
+                style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: "var(--card)", border: "1px solid var(--line)", borderRadius: 14, padding: "14px 16px", cursor: onNavigate ? "pointer" : "default", boxShadow: "0 1px 3px rgba(30,36,48,0.06)" }}
+              >
+                <span aria-hidden style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 12, background: w.count > 0 ? "var(--eclosion-soft)" : "var(--paper)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 21 }}>{w.icon}</span>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: 24, fontWeight: 700, color: w.count > 0 ? "var(--ink)" : "var(--muted)", lineHeight: 1.1 }}>{w.count}</span>
+                  <span style={{ display: "block", fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>{w.label} {w.count > 0 ? "→" : ""}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          {work.every((w) => w.count === 0) && (
+            <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8 }}>Rien à traiter pour l'instant — bonne journée !</p>
+          )}
+        </div>
+      )}
 
       {visibleKpis.length > 0 && (
         <div
@@ -244,12 +296,13 @@ function Pipeline({ stages, totalSteps }: { stages: { code: string; label: strin
 const ROLE_LABELS: Record<string, string> = {
   ADMIN_GENERAL: "Administrateur général",
   DIR_GENERAL: "Directeur général",
-  DIR_EDITORIALE: "Direction éditoriale",
+  DIR_EDITORIAL: "Directeur éditorial",
   RESP_FINANCE: "Responsable administratif et financier",
   RESP_RH: "Responsable RH",
   RESP_COMMERCIAL: "Responsable commercial",
   RESP_IMPRESSION: "Responsable production/impression",
   RESP_INFOGRAPHIE: "Responsable infographie",
+  RESP_QUALITE: "Responsable contrôle qualité",
   MAGASINIER: "Magasinier",
   CORRECTEUR: "Correcteur",
   MEMBRE_COMITE_LECTURE: "Membre du comité de lecture",

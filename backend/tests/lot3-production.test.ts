@@ -80,6 +80,38 @@ describe("maquette et infographie (Lot 3)", () => {
     expect(changedBody.spineWidthMm).toBeCloseTo(240 * 80 * 0.0012, 2);
   });
 
+  it("enregistre les caractéristiques d'écriture (typographie) et les laisse modifiables (Ch. 11 §11.4)", async () => {
+    const manuscript = await createManuscript("Manuscrit Typographie");
+
+    // Saisie initiale de la composition sur la fiche technique (étape 9).
+    const first = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/manuscripts/${manuscript.id}/production-specs`,
+      headers: { cookie: adminCookie },
+      payload: { paper_interior: "Bouffant", typeface: "Garamond", font_size_pt: "11", leading: "14 pt", margins: "H20/B20", layout_name: "Roman — Éclats" },
+    });
+    expect(first.statusCode).toBe(200);
+    const a = first.json();
+    expect(a.typeface).toBe("Garamond");
+    expect(a.fontSizePt).toBe("11");
+    expect(a.leading).toBe("14 pt");
+    expect(a.layoutName).toBe("Roman — Éclats");
+
+    // Règle d'or : une information mal saisie reste corrigeable. On modifie la
+    // police et le corps sans toucher au papier déjà renseigné.
+    const fixed = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/manuscripts/${manuscript.id}/production-specs`,
+      headers: { cookie: adminCookie },
+      payload: { typeface: "Sabon", font_size_pt: "10,5" },
+    });
+    const b = fixed.json();
+    expect(b.typeface).toBe("Sabon");
+    expect(b.fontSizePt).toBe("10,5");
+    expect(b.paperInterior).toBe("Bouffant"); // fabrication préservée
+    expect(b.leading).toBe("14 pt"); // typographie non modifiée préservée
+  });
+
   it("détecte un visuel non conforme (résolution/mode couleur, Ch. 11 §11.7, Ch. 12 §12.5) et notifie", async () => {
     const manuscript = await createManuscript("Manuscrit Visuels");
 

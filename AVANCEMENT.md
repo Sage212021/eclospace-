@@ -13,6 +13,17 @@
 ## Journal des sessions
 (Claude Code complète à chaque session : date, ce qui a été fait, prochaine étape)
 
+### 22/08/2026 — Caractéristiques d'écriture (typographie) sur la fiche technique (étape 9)
+
+**Vérification demandée :** où sont enregistrées, dans le workflow, les caractéristiques de fabrication (papier, écriture…) ?
+
+**Constat :** à l'étape 9 (Mise en page), le **papier et le façonnage** étaient déjà saisissables et modifiables ; les **métadonnées** (poids, descriptif) le sont à l'étape 11. En revanche, les **caractéristiques d'écriture** (police, corps, interlignage, marges, gabarit) **n'étaient pas saisissables sur la fiche de l'ouvrage** — elles n'existaient que dans une bibliothèque de modèles générale.
+
+**Fait :** ajout, sur la **fiche technique de l'étape 9**, d'un bloc **« Composition / typographie »** : gabarit/collection, police, corps de texte, interlignage, marges. Champs **facultatifs**, **sans aucun blocage** ajouté, et **toujours modifiables** (on peut corriger une valeur mal saisie sans toucher au reste) — conformément à votre règle d'or. Rien de l'existant n'a été modifié (ajout purement additif). Vérifié par test ; suite complète **800/800** au vert.
+
+**Récapitulatif de « qui saisit quoi » :** étape 9 = papier/façonnage **+** typographie ; étape 11 = ISBN/dépôt légal/code-barres **+** métadonnées (poids, descriptif) ; étapes 12 (BAT) et 14 (Impression) **relisent** ces fiches sans les recréer.
+
+
 ### 21/08/2026 — Paie Niveau 2 : rubriques « en vigueur / en attente » + traitement fiscal/CNPS automatique
 
 **Ce que vous aviez demandé :** ne rien changer à la présentation du bulletin, mais pouvoir **activer une prime, une indemnité ou un avantage seulement quand la direction décide de l'accorder** à un employé — et que les bons taux de taxe et de cotisation s'appliquent alors tout seuls.

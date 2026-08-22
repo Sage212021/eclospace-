@@ -2511,6 +2511,14 @@ model ProductionSpecs {
   lamination       String?
   spineWidthMm     Decimal?   @map("spine_width_mm") @db.Decimal(6, 2)
   spineNeedsRecalc Boolean    @default(false) @map("spine_needs_recalc")
+  // Caractéristiques d'écriture / composition (Ch. 11 §11.4) — saisies à la
+  // Mise en page (étape 9). Toutes facultatives : n'ajoutent aucun blocage à
+  // l'existant, restent librement modifiables (règle : corriger une info mal saisie).
+  typeface         String?    // police(s) principale(s), ex. « Garamond »
+  fontSizePt       String?    @map("font_size_pt") // corps de texte, ex. « 11 » ou « 11/14 »
+  leading          String?    // interlignage, ex. « 14 pt » / « 1,2 »
+  margins          String?    // marges, ex. « H 20 / B 20 / int 18 / ext 15 mm »
+  layoutName       String?    @map("layout_name") // gabarit / collection de référence (texte libre)
 
   updatedAt DateTime @updatedAt @map("updated_at")
   updatedBy String?  @map("updated_by")

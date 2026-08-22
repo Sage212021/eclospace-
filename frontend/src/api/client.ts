@@ -1754,6 +1754,12 @@ export interface ProductionSpecs {
   lamination: string | null;
   spineWidthMm: string | null;
   spineNeedsRecalc: boolean;
+  // Composition / typographie (Ch. 11 §11.4) — facultatif, modifiable à volonté.
+  typeface: string | null;
+  fontSizePt: string | null;
+  leading: string | null;
+  margins: string | null;
+  layoutName: string | null;
 }
 
 export function getProductionSpecs(manuscriptId: string) {
@@ -1768,6 +1774,11 @@ export function updateProductionSpecs(manuscriptId: string, input: Partial<{
   paper_cover: string;
   binding: string;
   lamination: string;
+  typeface: string;
+  font_size_pt: string;
+  leading: string;
+  margins: string;
+  layout_name: string;
 }>) {
   return request<ProductionSpecs>(`/api/v1/manuscripts/${manuscriptId}/production-specs`, { method: "PATCH", body: JSON.stringify(input) });
 }

@@ -21,6 +21,12 @@ const productionSpecsSchema = z.object({
   paper_cover: z.string().optional(),
   binding: z.string().optional(),
   lamination: z.string().optional(),
+  // Composition / typographie (Ch. 11 §11.4) — facultatif, modifiable à volonté.
+  typeface: z.string().max(120).optional(),
+  font_size_pt: z.string().max(40).optional(),
+  leading: z.string().max(40).optional(),
+  margins: z.string().max(120).optional(),
+  layout_name: z.string().max(120).optional(),
 });
 
 // Approximation documentée (docs/JOURNAL_TECHNIQUE.md) : le cahier des
@@ -107,6 +113,11 @@ export default async function productionRoutes(fastify: FastifyInstance) {
           paperCover: body.paper_cover,
           binding: body.binding,
           lamination: body.lamination,
+          typeface: body.typeface,
+          fontSizePt: body.font_size_pt,
+          leading: body.leading,
+          margins: body.margins,
+          layoutName: body.layout_name,
           spineWidthMm,
           spineNeedsRecalc: pagesOrPaperChanged,
           updatedBy: request.user!.id,
@@ -120,6 +131,11 @@ export default async function productionRoutes(fastify: FastifyInstance) {
           paperCover: body.paper_cover,
           binding: body.binding,
           lamination: body.lamination,
+          typeface: body.typeface,
+          fontSizePt: body.font_size_pt,
+          leading: body.leading,
+          margins: body.margins,
+          layoutName: body.layout_name,
           spineWidthMm,
           spineNeedsRecalc: pagesOrPaperChanged,
           updatedBy: request.user!.id,

@@ -31,7 +31,7 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
   const [specs, setSpecs] = useState<ProductionSpecs | null>(null);
   const [assets, setAssets] = useState<ImageAsset[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ trim_format: "", final_pages: "", paper_interior: "", paper_interior_gsm: "", paper_cover: "", binding: "", lamination: "" });
+  const [form, setForm] = useState({ trim_format: "", final_pages: "", paper_interior: "", paper_interior_gsm: "", paper_cover: "", binding: "", lamination: "", typeface: "", font_size_pt: "", leading: "", margins: "", layout_name: "" });
 
   const refresh = async () => {
     const [s, a] = await Promise.all([getProductionSpecs(manuscriptId), listImageAssets(manuscriptId)]);
@@ -46,6 +46,11 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
         paper_cover: s.paperCover ?? "",
         binding: s.binding ?? "",
         lamination: s.lamination ?? "",
+        typeface: s.typeface ?? "",
+        font_size_pt: s.fontSizePt ?? "",
+        leading: s.leading ?? "",
+        margins: s.margins ?? "",
+        layout_name: s.layoutName ?? "",
       });
     }
   };
@@ -65,6 +70,11 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
         paper_cover: form.paper_cover || undefined,
         binding: form.binding || undefined,
         lamination: form.lamination || undefined,
+        typeface: form.typeface || undefined,
+        font_size_pt: form.font_size_pt || undefined,
+        leading: form.leading || undefined,
+        margins: form.margins || undefined,
+        layout_name: form.layout_name || undefined,
       });
       await refresh();
     } catch (err) {
@@ -126,6 +136,32 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
           <label style={{ fontSize: 12 }}>
             Pelliculage
             <input disabled={!canManage} value={form.lamination} onChange={(e) => setForm({ ...form, lamination: e.target.value })} style={inputStyle} />
+          </label>
+        </div>
+
+        {/* Composition / typographie (Ch. 11 §11.4) — caractéristiques d'écriture,
+            facultatives et toujours modifiables. */}
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", margin: "14px 0 8px" }}>Composition / typographie</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+          <label style={{ fontSize: 12 }}>
+            Gabarit / collection
+            <input disabled={!canManage} placeholder="ex. Roman — collection Éclats" value={form.layout_name} onChange={(e) => setForm({ ...form, layout_name: e.target.value })} style={inputStyle} />
+          </label>
+          <label style={{ fontSize: 12 }}>
+            Police
+            <input disabled={!canManage} placeholder="ex. Garamond" value={form.typeface} onChange={(e) => setForm({ ...form, typeface: e.target.value })} style={inputStyle} />
+          </label>
+          <label style={{ fontSize: 12 }}>
+            Corps de texte
+            <input disabled={!canManage} placeholder="ex. 11 pt" value={form.font_size_pt} onChange={(e) => setForm({ ...form, font_size_pt: e.target.value })} style={inputStyle} />
+          </label>
+          <label style={{ fontSize: 12 }}>
+            Interlignage
+            <input disabled={!canManage} placeholder="ex. 14 pt" value={form.leading} onChange={(e) => setForm({ ...form, leading: e.target.value })} style={inputStyle} />
+          </label>
+          <label style={{ fontSize: 12, gridColumn: "span 2" }}>
+            Marges
+            <input disabled={!canManage} placeholder="ex. H 20 / B 20 / int 18 / ext 15 mm" value={form.margins} onChange={(e) => setForm({ ...form, margins: e.target.value })} style={inputStyle} />
           </label>
         </div>
         {canManage && (

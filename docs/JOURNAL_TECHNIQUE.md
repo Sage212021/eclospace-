@@ -962,3 +962,10 @@ Demande opérateur : des ~100 ouvrages importés au catalogue ont des fiches inc
 - **Libellés (langage clair, plus « épreuve »)** : *1re correction* · *Version intégrée* · *2e correction (relecture)* · **Version corrigée finale (VCF)**. (À venir, incrément 2 : dépôt **Version à corriger (VC1)** — manuscrit + couverture — à l'étape Décision éditoriale.)
 - **Frontend** : `CorrectionCyclePanel` — sélecteur d'intégrateur + pastille **« Balle à… »** + intro réécrite.
 - **Tests** : `correction-cycle.test.ts` (désignation, refus hors pôle, passage de main + notification) ; libellés de blocage réalignés. Suite : 802/802.
+
+## « Version à corriger » (VC1) à la Décision éditoriale (incrément 2, 22/08/2026)
+
+- **Besoin** : donner au correcteur, dès l'étape suivante, la matière de départ. À la **Décision éditoriale**, on dépose désormais la **« Version à corriger (VC1) »** en 4 emplacements : **fichier manuscrit** + **couverture 1ère / dos / 4ème** (les textes de couverture se relisent aussi).
+- **Mécanisme** : réutilise les documents « pièce d'étape » à titre stable (`lib/startingProof.ts`, préfixe `[vc1:<slot>]`) — **aucune migration**. Endpoints `GET /manuscripts/:id/vc1` et `POST /manuscripts/:id/vc1/:slot` (permission `decision_editoriale:saisie` ou `manuscripts:saisie`), déposables/remplaçables librement, retrait par l'auteur du dépôt (règle d'or). Frontend : `StartingProofPanel` affiché sur la fiche à l'étape Décision éditoriale.
+- Le vrai **BAT** reste unique (étape 12) ; VC1 = jeu de départ, VCF = sortie de correction (voir incrément 1).
+- **Tests** : `vc1-starting-proof.test.ts` (4 emplacements, dépôt manuscrit + couverture, refus d'emplacement inconnu). Suite : 805/805.

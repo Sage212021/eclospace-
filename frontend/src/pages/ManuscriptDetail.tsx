@@ -48,6 +48,7 @@ import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
 import { TasksSection } from "../components/TasksSection";
 import { CorrectionSection } from "../components/CorrectionSection";
 import { CorrectionCyclePanel } from "../components/CorrectionCyclePanel";
+import { StartingProofPanel } from "../components/StartingProofPanel";
 import { StepDeliverableBlock } from "../components/StepDeliverableBlock";
 import { ProductionSection } from "../components/ProductionSection";
 import { IsbnSection } from "../components/IsbnSection";
@@ -419,6 +420,10 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             onDecided={(msg) => handle(async () => {}, msg)}
             onError={setError}
           />
+        )}
+
+        {manuscript.status.code === "DECISION_EDITORIALE" && (
+          <StartingProofPanel manuscriptId={manuscript.id} canManage={permissions.has("decision_editoriale:saisie") || permissions.has("manuscripts:saisie")} />
         )}
 
         {manuscript.status.code === "CORRECTION" && (

@@ -669,6 +669,28 @@ export async function uploadCorrectionPhase(manuscriptId: string, phase: string,
   return response.json() as Promise<{ version_id: string; phase: string; label: string }>;
 }
 
+// « Version à corriger » (VC1) — dossier de départ déposé à la Décision
+// éditoriale (manuscrit + couverture 1ère/dos/4ème).
+export interface Vc1SlotState {
+  key: string;
+  label: string;
+  has_file: boolean;
+  doc_id?: string | null;
+  can_correct?: boolean;
+  version_id: string | null;
+  filename: string | null;
+}
+export function getVc1(manuscriptId: string) {
+  return request<Vc1SlotState[]>(`/api/v1/manuscripts/${manuscriptId}/vc1`);
+}
+export async function uploadVc1(manuscriptId: string, slot: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/manuscripts/${manuscriptId}/vc1/${slot}`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Dépôt impossible.");
+  return response.json() as Promise<{ version_id: string; slot: string; label: string }>;
+}
+
 // Intégrateur des corrections (relais du cycle) : liste des désignables, état
 // courant (intégrateur + « à qui la main »), et désignation.
 export interface CorrectionIntegratorState {

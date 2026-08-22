@@ -15,11 +15,14 @@ export interface CorrectionPhase {
   required: boolean; // bloque la validation de l'étape Correction tant qu'absent
 }
 
-export const CORRECTION_PHASES: CorrectionPhase[] = [
-  { key: "rapport_1", label: "Rapport de correction (1er passage)", required: true },
-  { key: "integration_1", label: "Version intégrée (1er passage)", required: false },
-  { key: "relecture_2", label: "Rapport de 2e relecture", required: false },
-  { key: "integration_finale", label: "Version finale intégrée (après 2e relecture)", required: true },
+// Acteur attendu pour chaque phase : le CORRECTEUR corrige (1re et 2e passages),
+// l'ÉDITEUR intègre (versions intégrées). Sert au relais « à qui la main ».
+export type CorrectionActor = "correcteur" | "integrateur";
+export const CORRECTION_PHASES: (CorrectionPhase & { actor: CorrectionActor })[] = [
+  { key: "rapport_1", label: "1re correction", required: true, actor: "correcteur" },
+  { key: "integration_1", label: "Version intégrée", required: false, actor: "integrateur" },
+  { key: "relecture_2", label: "2e correction (relecture)", required: false, actor: "correcteur" },
+  { key: "integration_finale", label: "Version corrigée finale (VCF)", required: true, actor: "integrateur" },
 ];
 
 const PHASE_KEYS = new Set(CORRECTION_PHASES.map((p) => p.key));
@@ -72,4 +75,23 @@ export async function correctionCycleState(manuscriptId: string) {
 export async function missingRequiredCorrectionPhases(manuscriptId: string): Promise<string[]> {
   const state = await correctionCycleState(manuscriptId);
   return state.filter((p) => p.required && !p.has_file).map((p) => p.label);
+}
+
+// « À qui la main » : premier maillon du relais dont le fichier manque encore.
+// Correcteur → Intégrateur → Correcteur → Intégrateur → terminé.
+export async function currentCorrectionActor(manuscriptId: string): Promise<CorrectionActor | "termine"> {
+  const state = await correctionCycleState(manuscriptId);
+  for (const phase of CORRECTION_PHASES) {
+    const s = state.find((x) => x.key === phase.key);
+    if (!s?.has_file) return phase.actor;
+  }
+  return "termine";
+}
+
+// À qui passe la balle APRÈS le dépôt de `phaseKey` : l'acteur de la phase
+// suivante, ou null si le cycle est terminé (dernière phase déposée).
+export function nextActorAfterPhase(phaseKey: string): CorrectionActor | null {
+  const idx = CORRECTION_PHASES.findIndex((p) => p.key === phaseKey);
+  if (idx < 0 || idx + 1 >= CORRECTION_PHASES.length) return null;
+  return CORRECTION_PHASES[idx + 1].actor;
 }

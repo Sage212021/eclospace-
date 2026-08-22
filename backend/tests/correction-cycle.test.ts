@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie } from "./helpers.js";
 
 // Correction éditoriale en deux temps : rapport de correction → intégration →
 // 2e relecture → intégration finale. On ne valide pas l'étape tant que le
@@ -57,7 +57,7 @@ describe("correction éditoriale en deux temps", () => {
     const blocked = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/CORRECTION/validate`, headers: { cookie }, payload: {} });
     expect(blocked.statusCode).toBe(409);
     expect(blocked.json().code).toBe("correction_cycle_incomplete");
-    expect(blocked.json().message).toContain("Rapport de correction");
+    expect(blocked.json().message).toContain("1re correction");
 
     // Dépôt du rapport seul → toujours refusé (version finale manquante).
     const up1 = multipart("file", "rapport.txt", "Rapport de correction.");
@@ -65,7 +65,7 @@ describe("correction éditoriale en deux temps", () => {
     expect(r1.statusCode).toBe(201);
     const stillBlocked = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/CORRECTION/validate`, headers: { cookie }, payload: {} });
     expect(stillBlocked.statusCode).toBe(409);
-    expect(stillBlocked.json().message).toContain("Version finale intégrée");
+    expect(stillBlocked.json().message).toContain("Version corrigée finale");
 
     // Dépôt de la version finale intégrée → validation possible.
     const up2 = multipart("file", "final.txt", "Version finale intégrée.");
@@ -80,6 +80,39 @@ describe("correction éditoriale en deux temps", () => {
     const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/CORRECTION/validate`, headers: { cookie }, payload: {} });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().advanced).toBe(true);
+  });
+
+  it("relais : désignation de l'intégrateur (Direction/Assistant éditorial) + passage de main + notifications", async () => {
+    const integ = await createUserWithRole(`integ_${rnd()}`, "DIR_EDITORIAL", "Integ123!");
+    const m = await manuscriptAtCorrection();
+
+    // La liste des intégrateurs inclut ce Directeur éditorial.
+    const list = await app.inject({ method: "GET", url: "/api/v1/correction-integrators", headers: { cookie } });
+    expect((list.json() as { id: string }[]).some((u) => u.id === integ.id)).toBe(true);
+
+    // Un utilisateur hors pôle éditorial est refusé comme intégrateur.
+    const corr = await createUserWithRole(`corr_${rnd()}`, "CORRECTEUR", "Corr123!");
+    const bad = await app.inject({ method: "PUT", url: `/api/v1/manuscripts/${m.id}/correction-integrator`, headers: { cookie }, payload: { user_id: corr.id } });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().code).toBe("invalid_integrator");
+
+    // Désignation valide.
+    const set = await app.inject({ method: "PUT", url: `/api/v1/manuscripts/${m.id}/correction-integrator`, headers: { cookie }, payload: { user_id: integ.id } });
+    expect(set.statusCode).toBe(200);
+
+    // État initial : balle au correcteur.
+    const s0 = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/correction-integrator`, headers: { cookie } });
+    expect(s0.json().integrator.id).toBe(integ.id);
+    expect(s0.json().current_actor).toBe("correcteur");
+
+    // 1re correction déposée → la balle passe à l'intégrateur, qui est notifié.
+    const up = multipart("file", "corr1.txt", "1re correction");
+    const dep = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/rapport_1`, headers: { cookie, ...up.headers }, payload: up.body });
+    expect(dep.statusCode).toBe(201);
+    const s1 = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/correction-integrator`, headers: { cookie } });
+    expect(s1.json().current_actor).toBe("integrateur");
+    const notif = await prisma.notification.count({ where: { userId: integ.id, entityType: "manuscript", entityId: m.id } });
+    expect(notif).toBeGreaterThan(0);
   });
 
   it("refuse une phase inconnue (400)", async () => {

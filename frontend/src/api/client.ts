@@ -669,6 +669,22 @@ export async function uploadCorrectionPhase(manuscriptId: string, phase: string,
   return response.json() as Promise<{ version_id: string; phase: string; label: string }>;
 }
 
+// Intégrateur des corrections (relais du cycle) : liste des désignables, état
+// courant (intégrateur + « à qui la main »), et désignation.
+export interface CorrectionIntegratorState {
+  integrator: { id: string; name: string } | null;
+  current_actor: "correcteur" | "integrateur" | "termine";
+}
+export function getCorrectionIntegrators() {
+  return request<{ id: string; name: string }[]>(`/api/v1/correction-integrators`);
+}
+export function getCorrectionIntegrator(manuscriptId: string) {
+  return request<CorrectionIntegratorState>(`/api/v1/manuscripts/${manuscriptId}/correction-integrator`);
+}
+export function setCorrectionIntegrator(manuscriptId: string, userId: string | null) {
+  return request<{ ok: boolean }>(`/api/v1/manuscripts/${manuscriptId}/correction-integrator`, { method: "PUT", body: JSON.stringify({ user_id: userId }) });
+}
+
 // Livrable de sortie d'une étape (verrou « pas d'avancement sans le fichier »).
 export interface StepDeliverableMeta {
   step_code: string;

@@ -9,6 +9,7 @@ import { storeFile, readStoredFile } from "../lib/storage.js";
 // Tâches relevant de la correction éditoriale (Ch. 10 §10.3) et titre réservé
 // au dépôt de la version corrigée (sortie du correcteur → entrée de la Maquette).
 const CORRECTION_TASK_TYPES: TaskType[] = [
+  "correction",
   "correction_ortho",
   "correction_gramm",
   "correction_typo",
@@ -147,8 +148,34 @@ export default async function taskRoutes(fastify: FastifyInstance) {
   // (la version corrigée à déposer, reçue par la Maquette). On indique si le
   // fichier source et la version corrigée existent, pour afficher les bons accès.
   fastify.get("/api/v1/my-corrections", { preHandler: requirePermission("tasks", "consultation") }, async (request, reply) => {
+    const me = request.user!.id;
+
+    // Cohérence « Mes dossiers à traiter » ↔ « Mes corrections » : un manuscrit
+    // CONFIÉ à l'étape « Correction éditoriale » (responsable de l'étape) doit
+    // apparaître ici avec ses actions « À corriger / À remettre ». L'affectation
+    // d'étape ne créait pas de tâche de correction → la boîte restait vide. On
+    // provisionne donc paresseusement une tâche « Correction éditoriale » pour
+    // chaque étape de correction qui m'est confiée et n'en a pas encore (existants
+    // ET futurs corrigés d'un coup ; idempotent : jamais de doublon).
+    const myCorrectionSteps = await prisma.manuscriptStep.findMany({
+      where: { responsibleId: me, validatedAt: null, status: { code: "CORRECTION" }, manuscript: { deletedAt: null } },
+      include: { manuscript: { select: { id: true, statusId: true } } },
+    });
+    for (const s of myCorrectionSteps) {
+      if (s.manuscript.statusId !== s.statusId) continue; // le manuscrit n'est plus à cette étape
+      const already = await prisma.task.findFirst({
+        where: { deletedAt: null, manuscriptId: s.manuscriptId, assigneeId: me, type: { in: CORRECTION_TASK_TYPES } },
+        select: { id: true },
+      });
+      if (!already) {
+        await prisma.task.create({
+          data: { manuscriptId: s.manuscriptId, stepId: s.id, title: "Correction éditoriale", type: "correction", assigneeId: me, createdBy: me, updatedBy: me },
+        });
+      }
+    }
+
     const tasks = await prisma.task.findMany({
-      where: { deletedAt: null, assigneeId: request.user!.id, type: { in: CORRECTION_TASK_TYPES } },
+      where: { deletedAt: null, assigneeId: me, type: { in: CORRECTION_TASK_TYPES } },
       include: { manuscript: { select: { id: true, manuscriptNumber: true, title: true } } },
       orderBy: { plannedEnd: "asc" },
     });

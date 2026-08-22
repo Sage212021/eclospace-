@@ -2386,6 +2386,10 @@ enum TaskType {
   expertise
   rewrite
   autre
+  // Tâche de correction générique (Correction éditoriale) créée automatiquement
+  // quand l'étape est confiée à un correcteur, pour que « Mes corrections »
+  // reste cohérent avec « Mes dossiers à traiter ».
+  correction
 }
 
 enum TaskPriority {

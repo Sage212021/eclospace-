@@ -13,6 +13,7 @@ const WORKFLOW_TARGET_DAYS_KEY = "workflow.step_target_days";
 
 // Types de tâches relevant de la correction éditoriale (Ch. 10 §10.3).
 const CORRECTION_TASK_TYPES: TaskType[] = [
+  "correction",
   "correction_ortho",
   "correction_gramm",
   "correction_typo",

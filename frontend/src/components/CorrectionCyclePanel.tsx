@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { getCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, stepAttachmentDownloadUrl, type CorrectionPhaseState } from "../api/client";
+import { getCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, stepAttachmentDownloadUrl, getCorrectionIntegrator, getCorrectionIntegrators, setCorrectionIntegrator, type CorrectionPhaseState, type CorrectionIntegratorState } from "../api/client";
+
+const ACTOR_LABEL: Record<string, string> = { correcteur: "au correcteur", integrateur: "à l'intégrateur (éditeur)", termine: "— cycle terminé" };
 
 // Correction éditoriale EN DEUX TEMPS (demande opérateur 20/08/2026) :
 //   1. Rapport de correction (vu par l'étape suivante pour l'intégration)
@@ -13,9 +15,24 @@ export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [integ, setInteg] = useState<CorrectionIntegratorState | null>(null);
+  const [candidates, setCandidates] = useState<{ id: string; name: string }[]>([]);
 
-  const load = () => getCorrectionCycle(manuscriptId).then(setPhases).catch(() => setPhases([]));
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [manuscriptId]);
+  const load = () => Promise.all([
+    getCorrectionCycle(manuscriptId).then(setPhases).catch(() => setPhases([])),
+    getCorrectionIntegrator(manuscriptId).then(setInteg).catch(() => setInteg(null)),
+  ]);
+  useEffect(() => { load(); getCorrectionIntegrators().then(setCandidates).catch(() => setCandidates([])); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [manuscriptId]);
+
+  async function chooseInteg(userId: string) {
+    setError(null);
+    try {
+      await setCorrectionIntegrator(manuscriptId, userId || null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Désignation impossible.");
+    }
+  }
 
   async function deposit(key: string, file: File) {
     setBusyKey(key);
@@ -50,10 +67,31 @@ export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId
     <section style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 12 }}>
       <h3 style={{ fontSize: 15, margin: "0 0 4px", color: "var(--ink)" }}>Correction en deux temps</h3>
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
-        Le correcteur rend d'abord un <strong>rapport de correction</strong>, puis les corrections sont <strong>intégrées</strong> ;
-        une <strong>2e relecture</strong> et une <strong>intégration finale</strong> closent le cycle. Le passage à la mise en page
-        est bloqué tant que le rapport et la version finale intégrée ne sont pas déposés.
+        Relais correcteur ↔ intégrateur : <strong>1re correction</strong> → <strong>version intégrée</strong> →
+        <strong> 2e correction (relecture)</strong> → <strong>Version corrigée finale (VCF)</strong>, transmise à la mise en page.
+        Le passage à la mise en page est bloqué tant que la 1re correction et la version corrigée finale ne sont pas déposées.
       </p>
+
+      {/* Intégrateur des corrections + « à qui la main » */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 12px", margin: "6px 0 10px" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600 }}>Intégrateur (éditeur) :</span>
+        {canManage ? (
+          <select value={integ?.integrator?.id ?? ""} onChange={(e) => chooseInteg(e.target.value)} style={{ fontSize: 12.5 }}>
+            <option value="">— À désigner —</option>
+            {candidates.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        ) : (
+          <span style={{ fontSize: 12.5 }}>{integ?.integrator?.name ?? "— non désigné —"}</span>
+        )}
+        {integ && (
+          <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 600, background: integ.current_actor === "termine" ? "var(--eclosion-soft)" : "rgba(196,102,31,0.12)", color: integ.current_actor === "termine" ? "var(--eclosion)" : "#C4661F", borderRadius: 999, padding: "3px 10px" }}>
+            Balle {ACTOR_LABEL[integ.current_actor] ?? ""}
+          </span>
+        )}
+      </div>
+      {!integ?.integrator && (
+        <p style={{ fontSize: 12, color: "var(--eclosion-retard, #C4661F)", marginTop: 0 }}>Désignez l'intégrateur pour que les corrections lui parviennent automatiquement.</p>
+      )}
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{error}</div>}
 
       <div style={{ display: "grid", gap: 8 }}>

@@ -951,3 +951,14 @@ Demande opérateur : des ~100 ouvrages importés au catalogue ont des fiches inc
 - **Correctif (auto-cicatrisant, existants + futurs)** : `GET /api/v1/my-corrections` **provisionne paresseusement** une tâche générique **« Correction éditoriale »** (nouveau `TaskType = correction`) pour chaque étape de code `CORRECTION` qui m'est confiée (`responsibleId = moi`, non validée, manuscrit encore à cette étape) et qui n'a pas déjà une tâche de correction. Idempotent (jamais de doublon). Cohérent avec la philosophie « mécanismes paresseux » du projet (voir 04/07/2026). Le type `correction` est ajouté à `CORRECTION_TASK_TYPES` (routes + `correctionDashboard`) et libellé « Correction éditoriale » côté UI.
 - **Migration** : `20260822110000_task_type_correction` — `ALTER TYPE "TaskType" ADD VALUE 'correction'` (additive, aucune donnée touchée ; PG16, valeur non utilisée dans la même transaction).
 - **Tests** : `my-corrections.test.ts` — un manuscrit confié sans tâche apparaît bien dans « Mes corrections » (type `correction`), et un second appel ne duplique pas. Suite : 801/801.
+
+## Cycle de correction : relais correcteur ↔ intégrateur (incrément 1, 22/08/2026)
+
+- **Besoin (opérateur)** : le cycle de correction en 4 phases existait comme 4 emplacements de fichiers sur une seule étape confiée à une seule personne → aucun **passage de main** entre le **correcteur** et l'**éditeur qui intègre**. Le 1er livrable « ne tombait nulle part ».
+- **Relais (incrément 1)** : chaque dépôt fait passer la balle à l'acteur de la phase suivante et le **notifie** :
+  - Correcteur → *1re correction* → **Intégrateur** ; Intégrateur → *Version intégrée* → **Correcteur** ; Correcteur → *2e correction (relecture)* → **Intégrateur** ; Intégrateur → *Version corrigée finale (VCF)* → Mise en page.
+  - `lib/correctionCycle.ts` : chaque phase porte son `actor` ; helpers `currentCorrectionActor` (« à qui la main ») et `nextActorAfterPhase`.
+- **Intégrateur par ouvrage** : nouvelle colonne `manuscripts.correction_integrator_id` (FK users, additive). Liste des désignables = **Directeur éditorial (`DIR_EDITORIAL`) + Assistant éditorial (`ASSISTANT_EDITORIAL`)**. Endpoints : `GET /correction-integrators`, `GET/PUT /manuscripts/:id/correction-integrator` (rejette un désigné hors pôle éditorial). Notification à la désignation.
+- **Libellés (langage clair, plus « épreuve »)** : *1re correction* · *Version intégrée* · *2e correction (relecture)* · **Version corrigée finale (VCF)**. (À venir, incrément 2 : dépôt **Version à corriger (VC1)** — manuscrit + couverture — à l'étape Décision éditoriale.)
+- **Frontend** : `CorrectionCyclePanel` — sélecteur d'intégrateur + pastille **« Balle à… »** + intro réécrite.
+- **Tests** : `correction-cycle.test.ts` (désignation, refus hors pôle, passage de main + notification) ; libellés de blocage réalignés. Suite : 802/802.

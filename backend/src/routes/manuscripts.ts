@@ -4,7 +4,7 @@ import { ManuscriptOrigin, EditorialSegment, type Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAnyPermission, requireAuth } from "../lib/permissions.js";
 import { canCorrectDeposit, isDeletableStepDoc } from "../lib/stepDocuments.js";
-import { CORRECTION_PHASES, isCorrectionPhase, correctionDocTitle, correctionCycleState } from "../lib/correctionCycle.js";
+import { CORRECTION_PHASES, isCorrectionPhase, correctionDocTitle, correctionCycleState, currentCorrectionActor, nextActorAfterPhase } from "../lib/correctionCycle.js";
 import { deliverableDocTitle, stepDeliverableMeta } from "../lib/stepDeliverables.js";
 import { optionalStepMeta } from "../lib/stepRealization.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -909,7 +909,74 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         data: { documentId: doc.id, versionNumber: 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: file.mimetype, sha256Hash: stored.sha256Hash, changeSummary: `Correction — ${label}`, uploadedBy: request.user!.id },
       });
       await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { correction_phase: phase }, ipAddress: request.ip });
+
+      // Relais : la balle passe à l'acteur de la phase suivante. Le correcteur
+      // (responsable de l'étape) et l'intégrateur (Direction/Assistant éditorial)
+      // se renvoient le dossier ; chaque dépôt notifie l'autre.
+      const nextActor = nextActorAfterPhase(phase);
+      if (nextActor) {
+        let targetId: string | null = null;
+        let message = "";
+        if (nextActor === "integrateur") {
+          targetId = manuscript.correctionIntegratorId ?? null;
+          message = phase === "rapport_1" ? "Corrections à intégrer (1er passage)" : "Dernières corrections à intégrer";
+        } else {
+          const step = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "CORRECTION" }, validatedAt: null }, select: { responsibleId: true } });
+          targetId = step?.responsibleId ?? null;
+          message = "Version intégrée à relire (2e passage)";
+        }
+        if (targetId && targetId !== request.user!.id) {
+          await notifyUsers({ userIds: [targetId], type: "affectation", priority: "medium", title: `Correction — ${manuscript.manuscriptNumber}`, body: `${message} — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
+        }
+      }
       return reply.code(201).send({ version_id: version.id, phase, label });
+    },
+  );
+
+  // Intégrateur des corrections : la liste des personnes désignables (Direction
+  // éditoriale + Assistant éditorial), et la désignation par ouvrage. C'est cet
+  // intégrateur qui reçoit le relais après chaque passage du correcteur.
+  fastify.get("/api/v1/correction-integrators", { preHandler: requireAuth }, async (_request, reply) => {
+    const users = await prisma.user.findMany({
+      where: { status: "active", deletedAt: null, userRoles: { some: { revokedAt: null, role: { code: { in: ["DIR_EDITORIAL", "ASSISTANT_EDITORIAL"] } } } } },
+      select: { id: true, username: true },
+      orderBy: { username: "asc" },
+    });
+    return reply.send(users.map((u) => ({ id: u.id, name: u.username })));
+  });
+
+  fastify.get(
+    "/api/v1/manuscripts/:id/correction-integrator",
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "consultation" }, { module: "manuscripts", action: "consultation" }]) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const m = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { correctionIntegrator: { select: { id: true, username: true } } } });
+      if (!m) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const current_actor = await currentCorrectionActor(id);
+      return reply.send({ integrator: m.correctionIntegrator ? { id: m.correctionIntegrator.id, name: m.correctionIntegrator.username } : null, current_actor });
+    },
+  );
+
+  fastify.put(
+    "/api/v1/manuscripts/:id/correction-integrator",
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "saisie" }, { module: "manuscripts", action: "saisie" }]) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z.object({ user_id: z.string().uuid().nullable() }).safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides." });
+      const m = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!m) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const userId = parsed.data.user_id;
+      if (userId) {
+        const ok = await prisma.user.findFirst({ where: { id: userId, status: "active", deletedAt: null, userRoles: { some: { revokedAt: null, role: { code: { in: ["DIR_EDITORIAL", "ASSISTANT_EDITORIAL"] } } } } }, select: { id: true } });
+        if (!ok) return reply.code(400).send({ code: "invalid_integrator", message: "L'intégrateur doit faire partie de la Direction éditoriale ou être Assistant éditorial." });
+      }
+      await prisma.manuscript.update({ where: { id }, data: { correctionIntegratorId: userId, updatedBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "manuscript", entityId: id, newValues: { correction_integrator_id: userId }, ipAddress: request.ip });
+      if (userId && userId !== request.user!.id) {
+        await notifyUsers({ userIds: [userId], type: "affectation", priority: "medium", title: `Intégration des corrections — ${m.manuscriptNumber}`, body: `Vous êtes désigné intégrateur des corrections du manuscrit « ${m.title} ».`, entityType: "manuscript", entityId: id });
+      }
+      return reply.send({ ok: true });
     },
   );
 

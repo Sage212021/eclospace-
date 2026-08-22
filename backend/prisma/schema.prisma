@@ -1239,6 +1239,7 @@ model User {
 
   ownedManuscripts   Manuscript[]        @relation("ManuscriptOwner")
   managedManuscripts Manuscript[]        @relation("ManuscriptProjectManager")
+  correctionIntegrations Manuscript[]    @relation("ManuscriptCorrectionIntegrator")
   manuscriptSteps    ManuscriptStep[]
   readingAssignments ReadingAssignment[]
   editorialDecisions EditorialDecision[]
@@ -1793,6 +1794,10 @@ model Manuscript {
   owner            User    @relation("ManuscriptOwner", fields: [ownerId], references: [id])
   projectManagerId String? @map("project_manager_id")
   projectManager   User?   @relation("ManuscriptProjectManager", fields: [projectManagerId], references: [id])
+  // Intégrateur des corrections (Direction éditoriale / Assistant éditorial) :
+  // reçoit le relais après chaque passage du correcteur (cycle de correction).
+  correctionIntegratorId String? @map("correction_integrator_id")
+  correctionIntegrator   User?   @relation("ManuscriptCorrectionIntegrator", fields: [correctionIntegratorId], references: [id])
 
   receivedAt        DateTime  @map("received_at")
   // Date de parution réelle de l'ouvrage (spéc. fonctionnelle §5/§8). Nulle

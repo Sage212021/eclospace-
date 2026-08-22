@@ -49,4 +49,12 @@ describe("indicateurs éditoriaux de l'accueil réservés à l'éditorial/direct
     expect(b.pipeline).not.toBeNull();
     expect(typeof b.ouvrages).toBe("number");
   });
+
+  it("NE montre PAS le chiffre d'affaires au pôle éditorial (donnée financière)", async () => {
+    // Le directeur éditorial a direction:consultation (pilotage) mais PAS
+    // finance:consultation → le CA d'entreprise doit rester masqué.
+    const b = (await app.inject({ method: "GET", url: "/api/v1/dashboard/stats", headers: { cookie: edCookie } })).json();
+    expect(b.chiffre_affaires).toBeNull();
+    expect(b.chiffre_affaires_scope).toBeNull();
+  });
 });

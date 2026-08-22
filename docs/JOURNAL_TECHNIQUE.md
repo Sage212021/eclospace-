@@ -982,3 +982,9 @@ Demande opérateur : des ~100 ouvrages importés au catalogue ont des fiches inc
 
 - **Constat opérateur** : la vue Manuscrits regroupait la production sous « Acceptés & en production » (fourre-tout de ~12 étapes) → la direction ne voyait pas OÙ étaient les ouvrages.
 - **Correctif (frontend seul)** : la section « Répartition par étape » de `ManuscriptsDashboard` affiche désormais **les 20 étapes** (y compris à 0, estompées), **regroupées par phase** avec sous-totaux : *Éditorial (1–8)*, *Fabrication (9–16)*, *Diffusion (17–20)*. La donnée `by_status` renvoyée par `manuscriptsDashboard` contenait déjà toutes les étapes (construite à partir de la liste complète des `workflowStatus`) — aucun changement backend. `tsc` + build OK.
+
+## Confidentialité : le chiffre d'affaires n'est plus visible du pôle éditorial (22/08/2026)
+
+- **Fuite signalée** : le CA d'entreprise s'affichait sur l'accueil pour le pôle éditorial. Cause : la lecture du CA global (`canSeeCompanyRevenue`) était accordée à `direction:consultation`, permission que détient aussi la **Direction éditoriale** (pilotage éditorial).
+- **Correctif** : le CA est une donnée **financière** → sa lecture globale exige désormais **uniquement `finance:consultation`** (DG + Responsable financier + Comptable), conformément à l'intention documentée (§5.2, §18). `direction:consultation` reste réservé aux indicateurs de pilotage (ouvrages, tâches en retard), non financiers.
+- **Test** : `dashboard-editorial-confidential.test.ts` — le directeur éditorial voit ouvrages+pipeline mais **PAS** `chiffre_affaires` (null). Suite : 806/806.

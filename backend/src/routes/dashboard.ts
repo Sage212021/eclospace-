@@ -57,10 +57,13 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
     const canStock = perms.has("stock:consultation");
     const canDirection = perms.has("direction:consultation");
     // Trois niveaux de lecture du « chiffre d'affaires » sur l'accueil :
-    //  - company : CA GLOBAL de l'entreprise (DG, Finance, Administrateur) ;
+    //  - company : CA GLOBAL de l'entreprise (DG, Finance) ;
     //  - team    : total des ventes de TOUS les commerciaux (responsable commercial) ;
     //  - own     : uniquement les ventes du commercial connecté (commercial simple).
-    const canSeeCompanyRevenue = canDirection || perms.has("finance:consultation");
+    // Le CA est une donnée FINANCIÈRE : sa lecture globale exige finance:consultation
+    // (§5.2, §18) — et NON direction:consultation, que détient aussi la Direction
+    // éditoriale (le pôle éditorial ne doit pas voir le chiffre d'affaires).
+    const canSeeCompanyRevenue = perms.has("finance:consultation");
     const canSeeTeamRevenue = !canSeeCompanyRevenue && (perms.has("commercial:validation") || perms.has("commercial:administration"));
     const isPlainCommercial = canCommercial && !canSeeCompanyRevenue && !canSeeTeamRevenue;
 

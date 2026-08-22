@@ -943,3 +943,11 @@ Demande opérateur : des ~100 ouvrages importés au catalogue ont des fiches inc
 - **Frontend** : bloc « Composition / typographie » ajouté à `ProductionSection` (mêmes règles de permission `production:saisie`).
 - **Localisation confirmée des 3 fiches** : (a) typographie **+** (b) papier/façonnage → **étape 9** (`ProductionSpecs`) ; (c) métadonnées commerciales/poids → **étape 11** (`WorkMetadata`, versionnée) ; le BAT (étape 12) et l'Impression (étape 14) **consomment** ces fiches sans les recréer.
 - **Tests** : `lot3-production.test.ts` — saisie + re-modification de la typographie, fabrication préservée. Suite complète : 800/800.
+
+## Correctif cohérence « Mes dossiers à traiter » ↔ « Mes corrections » (22/08/2026)
+
+- **Symptôme (signalé opérateur)** : un manuscrit confié à l'étape **Correction éditoriale** apparaît dans « Mes dossiers à traiter » mais **pas** dans « Mes corrections » (À faire = 0), rendant inaccessibles les actions « À corriger / À remettre ».
+- **Cause** : les deux écrans lisent des sources différentes. `my-dossiers` = `manuscriptStep.responsibleId` (affectation d'étape) ; `my-corrections` = **tâches** `Task` de type correction. L'affectation nominative d'une étape (workflow) ne créait **aucune tâche** de correction → la boîte du correcteur restait vide.
+- **Correctif (auto-cicatrisant, existants + futurs)** : `GET /api/v1/my-corrections` **provisionne paresseusement** une tâche générique **« Correction éditoriale »** (nouveau `TaskType = correction`) pour chaque étape de code `CORRECTION` qui m'est confiée (`responsibleId = moi`, non validée, manuscrit encore à cette étape) et qui n'a pas déjà une tâche de correction. Idempotent (jamais de doublon). Cohérent avec la philosophie « mécanismes paresseux » du projet (voir 04/07/2026). Le type `correction` est ajouté à `CORRECTION_TASK_TYPES` (routes + `correctionDashboard`) et libellé « Correction éditoriale » côté UI.
+- **Migration** : `20260822110000_task_type_correction` — `ALTER TYPE "TaskType" ADD VALUE 'correction'` (additive, aucune donnée touchée ; PG16, valeur non utilisée dans la même transaction).
+- **Tests** : `my-corrections.test.ts` — un manuscrit confié sans tâche apparaît bien dans « Mes corrections » (type `correction`), et un second appel ne duplique pas. Suite : 801/801.

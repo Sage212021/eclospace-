@@ -85,4 +85,29 @@ describe("Mes corrections — entrée/sortie du correcteur", () => {
     const res = await app.inject({ method: "GET", url: `/api/v1/tasks/${taskId}/manuscript-file` });
     expect(res.statusCode).toBe(401);
   });
+
+  it("cohérence : un manuscrit CONFIÉ à l'étape Correction (sans tâche) apparaît dans Mes corrections", async () => {
+    const u = `corr3_${rnd()}`;
+    const user = await createUserWithRole(u, "CORRECTEUR", PWD);
+    const cookie = await login(app, u);
+    const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "CORRECTION" } });
+    const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+    const m = await prisma.manuscript.create({
+      data: { manuscriptNumber: `MS-CONF-${rnd()}`, title: `Confié ${rnd()}`, statusId: status.id, ownerId: admin.id, origin: "soumission", language: "fr", receivedAt: new Date() },
+    });
+    // Étape confiée nominativement (comme « Mes dossiers à traiter »), mais AUCUNE tâche.
+    await prisma.manuscriptStep.create({ data: { manuscriptId: m.id, statusId: status.id, responsibleId: user.id } });
+    expect(await prisma.task.count({ where: { manuscriptId: m.id, assigneeId: user.id } })).toBe(0);
+
+    const res = await app.inject({ method: "GET", url: "/api/v1/my-corrections", headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const mine = res.json().find((t: { manuscript: { id: string } | null }) => t.manuscript?.id === m.id);
+    expect(mine).toBeTruthy();
+    expect(mine.type).toBe("correction");
+    expect(mine.title).toBe("Correction éditoriale");
+
+    // Idempotent : un second appel ne crée pas de doublon.
+    await app.inject({ method: "GET", url: "/api/v1/my-corrections", headers: { cookie } });
+    expect(await prisma.task.count({ where: { manuscriptId: m.id, assigneeId: user.id, type: "correction" } })).toBe(1);
+  });
 });

@@ -16,6 +16,7 @@ import { GuidanceNote } from "../components/GuidanceNote";
 // module. Le correcteur travaille sans détenir le droit large « documents ».
 
 const TYPE_LABELS: Record<string, string> = {
+  correction: "Correction éditoriale",
   correction_ortho: "Orthographe",
   correction_gramm: "Grammaire",
   correction_typo: "Typographie",

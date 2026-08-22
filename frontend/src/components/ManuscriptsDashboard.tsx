@@ -40,8 +40,19 @@ export function ManuscriptsDashboard() {
     { label: "Dossiers en retard", value: String(data.en_retard), tone: data.en_retard > 0 ? "warn" : undefined },
   ];
 
-  const withCount = data.by_status.filter((s) => s.count > 0);
-  const maxCount = Math.max(1, ...withCount.map((s) => s.count));
+  // Répartition par étape : on montre TOUTES les étapes (y compris à 0) pour un
+  // suivi complet, regroupées par grande phase du circuit. « Acceptés & en
+  // production » n'est plus une boîte fourre-tout : on voit où sont les ouvrages.
+  const maxCount = Math.max(1, ...data.by_status.map((s) => s.count));
+  const PHASES: { label: string; min: number; max: number }[] = [
+    { label: "Éditorial (réception → réécriture)", min: 1, max: 8 },
+    { label: "Fabrication (mise en page → stock)", min: 9, max: 16 },
+    { label: "Diffusion (commercialisation → archivage)", min: 17, max: 20 },
+  ];
+  const phases = PHASES.map((p) => {
+    const steps = data.by_status.filter((s) => s.step_order >= p.min && s.step_order <= p.max).sort((a, b) => a.step_order - b.step_order);
+    return { ...p, steps, subtotal: steps.reduce((n, s) => n + s.count, 0) };
+  }).filter((p) => p.steps.length > 0);
 
   return (
     <section className="ecl-card" style={{ marginTop: 4, marginBottom: 8 }}>
@@ -60,23 +71,32 @@ export function ManuscriptsDashboard() {
         })}
       </div>
 
-      {/* Répartition par étape (où sont les manuscrits). */}
-      {withCount.length > 0 && (
+      {/* Répartition par étape — TOUTES les étapes (0 compris), par phase, pour
+          que la direction voie exactement où sont les ouvrages en production. */}
+      {phases.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
-            Répartition par étape
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>
+            Répartition par étape (les 20 étapes)
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {withCount.map((s) => (
-              <div key={s.code} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 }}>
-                <span style={{ minWidth: 190, color: "var(--ink)" }}>{s.label}</span>
-                <span style={{ flex: 1, height: 10, background: "var(--line)", borderRadius: 999, overflow: "hidden" }}>
-                  <span style={{ display: "block", height: "100%", width: `${Math.round((s.count / maxCount) * 100)}%`, background: "linear-gradient(90deg, var(--eclosion-dark, #a87d14), var(--eclosion, #C89A1B))" }} />
-                </span>
-                <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", minWidth: 28, textAlign: "right" }}>{s.count}</span>
+          {phases.map((p) => (
+            <div key={p.label} style={{ marginTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)" }}>{p.label}</span>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>sous-total <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{p.subtotal}</strong></span>
               </div>
-            ))}
-          </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {p.steps.map((s) => (
+                  <div key={s.code} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, opacity: s.count > 0 ? 1 : 0.5 }}>
+                    <span style={{ minWidth: 190, color: "var(--ink)" }}>{s.step_order}. {s.label}</span>
+                    <span style={{ flex: 1, height: 10, background: "var(--line)", borderRadius: 999, overflow: "hidden" }}>
+                      <span style={{ display: "block", height: "100%", width: `${Math.round((s.count / maxCount) * 100)}%`, background: "linear-gradient(90deg, var(--eclosion-dark, #a87d14), var(--eclosion, #C89A1B))" }} />
+                    </span>
+                    <span style={{ fontFamily: "var(--font-mono)", color: s.count > 0 ? "var(--ink)" : "var(--muted)", minWidth: 28, textAlign: "right", fontWeight: s.count > 0 ? 700 : 400 }}>{s.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </section>

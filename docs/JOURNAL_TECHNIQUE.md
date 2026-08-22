@@ -977,3 +977,8 @@ Demande opérateur : des ~100 ouvrages importés au catalogue ont des fiches inc
 - **Tuiles « Mon travail du jour »** (frontend `Dashboard.tsx`) : *Mes lectures*, *Mes corrections* (à faire), *Mes dossiers à traiter*, avec compteur et raccourci direct vers la page. Chaque tuile n'apparaît que si l'utilisateur a accès à la file (appel réussi ; 403 = tuile absente), via `Promise.allSettled` sur les endpoints existants (`/my-corrections`, `/my-dossiers`, `/reading-assignments?reader=me`). Nav par `onNavigate(leafKey)` câblé dans `App.tsx`.
 - **Correctif libellés de rôle** : `RESP_QUALITE` (affiché en code brut) et `DIR_EDITORIAL` (clé erronée `DIR_EDITORIALE`) corrigés dans la carte « Ma session ».
 - Purement frontend (aucun backend, aucune migration). `tsc` + build OK.
+
+## Tableau de bord Manuscrits : répartition sur les 20 étapes (22/08/2026)
+
+- **Constat opérateur** : la vue Manuscrits regroupait la production sous « Acceptés & en production » (fourre-tout de ~12 étapes) → la direction ne voyait pas OÙ étaient les ouvrages.
+- **Correctif (frontend seul)** : la section « Répartition par étape » de `ManuscriptsDashboard` affiche désormais **les 20 étapes** (y compris à 0, estompées), **regroupées par phase** avec sous-totaux : *Éditorial (1–8)*, *Fabrication (9–16)*, *Diffusion (17–20)*. La donnée `by_status` renvoyée par `manuscriptsDashboard` contenait déjà toutes les étapes (construite à partir de la liste complète des `workflowStatus`) — aucun changement backend. `tsc` + build OK.

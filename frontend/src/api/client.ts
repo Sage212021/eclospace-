@@ -2743,6 +2743,12 @@ export function markInvoicePrinted(id: string) {
   return request<{ ok: true; printed_at: string | null }>(`/api/v1/invoices/${id}/mark-printed`, { method: "POST" });
 }
 
+// Correction avant impression : annule directement une facture non encore tirée
+// (la Finance peut alors la réémettre depuis la source corrigée).
+export function cancelInvoiceBeforePrint(id: string, reason: string) {
+  return request<{ ok: true; status: string }>(`/api/v1/invoices/${id}/cancel-before-print`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
 export function listInvoices(filters?: { customer_id?: string; type?: string }) {
   const params = new URLSearchParams();
   if (filters?.customer_id) params.set("customer_id", filters.customer_id);

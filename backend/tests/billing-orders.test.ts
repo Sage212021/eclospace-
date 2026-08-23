@@ -390,6 +390,30 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(req.statusCode).toBe(400);
   });
 
+  it("correction avant impression : la Finance annule DIRECTEMENT une facture non tirée", async () => {
+    const invId = await issueInvoice(115_000);
+    const res = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/cancel-before-print`, headers: { cookie: admin }, payload: { reason: "Erreur de montant" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("cancelled");
+    const inv = await prisma.invoice.findUnique({ where: { id: invId } });
+    expect(inv?.status).toBe("cancelled");
+    expect(inv?.cancellationReason).toBe("Erreur de montant");
+  });
+
+  it("correction avant impression : motif obligatoire (400 si absent)", async () => {
+    const invId = await issueInvoice(116_000);
+    const res = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/cancel-before-print`, headers: { cookie: admin }, payload: {} });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("correction avant impression : refusée une fois la facture tirée (409 already_printed)", async () => {
+    const invId = await issueInvoice(117_000);
+    await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/mark-printed`, headers: { cookie: admin } });
+    const res = await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/cancel-before-print`, headers: { cookie: admin }, payload: { reason: "Trop tard" } });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe("already_printed");
+  });
+
   it("établit un avoir sur une facture (neutralisation) ; un seul avoir possible", async () => {
     const invId = await issueInvoice(160_000);
     // Une facture tirée n'est plus annulable → l'avoir est la voie légale.

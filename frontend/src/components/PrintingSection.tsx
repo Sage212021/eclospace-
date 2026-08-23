@@ -1,17 +1,25 @@
 import { useEffect, useState } from "react";
 import {
+  correctGoodsReceipt,
+  createGoodsReceiptClaim,
   createPurchaseOrder,
   listPrintQuotes,
   listPrinters,
   listPurchaseOrders,
+  listQcChecklistItems,
   recordGoodsReceipt,
   recordPrintQuoteAmounts,
   requestPrintQuote,
   selectPrintQuote,
+  setGoodsReceiptQc,
   updatePurchaseOrderStatus,
+  type GoodsReceipt,
   type PrintQuote,
   type Printer,
   type PurchaseOrder,
+  type QcChecklistEntry,
+  type QcChecklistItem,
+  type QcVerdict,
 } from "../api/client";
 import { printPurchaseOrder } from "../lib/print";
 import { DocPrintMenu } from "./DocPrintMenu";
@@ -28,6 +36,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [quotes, setQuotes] = useState<PrintQuote[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [qcItems, setQcItems] = useState<QcChecklistItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
@@ -36,6 +45,12 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
     setQuotes(quoteData.quotes);
     setOrders(orderList);
   };
+
+  useEffect(() => {
+    listQcChecklistItems()
+      .then((r) => setQcItems(r.items))
+      .catch(() => setQcItems([]));
+  }, []);
 
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
@@ -192,6 +207,25 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
               Enregistrer une réception
             </button>
           )}
+
+          {(po.goodsReceipts ?? []).length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                Réceptions &amp; contrôle qualité
+              </div>
+              {(po.goodsReceipts ?? []).map((r) => (
+                <ReceiptCard
+                  key={r.id}
+                  receipt={r}
+                  qcItems={qcItems}
+                  canManage={canManage}
+                  canValidate={canValidate}
+                  onDone={refresh}
+                  onError={setError}
+                />
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -207,3 +241,199 @@ const secondaryButtonStyle: React.CSSProperties = {
   cursor: "pointer",
   marginTop: 6,
 };
+
+// Charte Éclospace : or = conforme (positif), orange = réserves, rouge = critique.
+const VERDICTS: { value: QcVerdict; label: string; color: string }[] = [
+  { value: "conform", label: "Conforme", color: "#C89A1B" },
+  { value: "with_reserves", label: "Conforme avec réserves", color: "#C4661F" },
+  { value: "non_conform", label: "Non conforme", color: "#C24B3A" },
+];
+
+function verdictOf(v?: QcVerdict | null) {
+  return VERDICTS.find((x) => x.value === v);
+}
+
+function VerdictBadge({ verdict }: { verdict?: QcVerdict | null }) {
+  const def = verdictOf(verdict);
+  if (!def) return <span style={{ fontSize: 11, color: "var(--muted)" }}>Verdict à saisir</span>;
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: def.color, borderRadius: 999, padding: "2px 8px" }}>
+      {def.label}
+    </span>
+  );
+}
+
+interface ReceiptCardProps {
+  receipt: GoodsReceipt;
+  qcItems: QcChecklistItem[];
+  canManage: boolean;
+  canValidate: boolean;
+  onDone: () => Promise<void>;
+  onError: (message: string) => void;
+}
+
+// Bloc « une réception » : quantité + verdict qualité (3 choix colorés) +
+// checklist des points vérifiés + commentaire + réclamation. Corrigible.
+function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError }: ReceiptCardProps) {
+  const [open, setOpen] = useState(false);
+  const [verdict, setVerdict] = useState<QcVerdict | null>(receipt.qcVerdict ?? null);
+  const [checks, setChecks] = useState<Record<string, boolean>>(() => {
+    const base: Record<string, boolean> = {};
+    for (const entry of receipt.qcChecklist ?? []) base[entry.code] = entry.ok;
+    return base;
+  });
+  const [comment, setComment] = useState(receipt.qcComment ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function saveQc() {
+    if (!verdict) {
+      onError("Choisissez un verdict de contrôle qualité (conforme, avec réserves ou non conforme).");
+      return;
+    }
+    setSaving(true);
+    try {
+      const checklist: QcChecklistEntry[] = qcItems.map((it) => ({ code: it.code, ok: !!checks[it.code] }));
+      await setGoodsReceiptQc(receipt.id, { verdict, checklist, comment: comment.trim() || undefined });
+      setOpen(false);
+      await onDone();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de l'enregistrement du contrôle qualité.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function correctQuantity() {
+    const value = Number(window.prompt("Corriger la quantité reçue", String(receipt.quantityReceived)) ?? "");
+    if (!Number.isFinite(value) || value < 0) return;
+    try {
+      await correctGoodsReceipt(receipt.id, value);
+      await onDone();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de la correction de la quantité.");
+    }
+  }
+
+  async function addClaim() {
+    const description = window.prompt("Décrire la non-conformité (réclamation à l'imprimeur)")?.trim();
+    if (!description) return;
+    try {
+      await createGoodsReceiptClaim(receipt.id, description);
+      await onDone();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de l'ouverture de la réclamation.");
+    }
+  }
+
+  const checkedCount = qcItems.filter((it) => checks[it.code]).length;
+
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, marginTop: 8, background: "var(--card)" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 12 }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>{receipt.quantityReceived}</span> ex. reçus
+          {receipt.variance !== 0 && (
+            <span style={{ marginLeft: 6, color: receipt.variance < 0 ? "#C24B3A" : "#C4661F", fontFamily: "var(--font-mono)" }}>
+              (écart {receipt.variance > 0 ? "+" : ""}
+              {receipt.variance})
+            </span>
+          )}
+          {canManage && (
+            <button onClick={correctQuantity} style={{ ...secondaryButtonStyle, marginTop: 0, marginLeft: 8, padding: "2px 8px" }}>
+              Corriger
+            </button>
+          )}
+        </div>
+        <VerdictBadge verdict={receipt.qcVerdict} />
+      </div>
+
+      {(receipt.qcChecklist ?? []).length > 0 && (
+        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+          Points vérifiés : {(receipt.qcChecklist ?? []).filter((c) => c.ok).length}/{(receipt.qcChecklist ?? []).length}
+        </div>
+      )}
+      {receipt.qcComment && <div style={{ fontSize: 12, marginTop: 4, fontStyle: "italic" }}>« {receipt.qcComment} »</div>}
+
+      {(receipt.claims ?? []).length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          {(receipt.claims ?? []).map((c) => (
+            <div key={c.id} style={{ fontSize: 11, color: "#C24B3A" }}>
+              ⚠ Réclamation : {c.description}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+        {canValidate && (
+          <button onClick={() => setOpen((o) => !o)} style={{ ...secondaryButtonStyle, marginTop: 0 }}>
+            {open ? "Fermer" : receipt.qcVerdict ? "Modifier le contrôle qualité" : "Saisir le contrôle qualité"}
+          </button>
+        )}
+        {canManage && (
+          <button onClick={addClaim} style={{ ...secondaryButtonStyle, marginTop: 0 }}>
+            Ouvrir une réclamation
+          </button>
+        )}
+      </div>
+
+      {open && canValidate && (
+        <div style={{ marginTop: 10, borderTop: "1px dashed var(--line)", paddingTop: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Verdict</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {VERDICTS.map((v) => (
+              <button
+                key={v.value}
+                onClick={() => setVerdict(v.value)}
+                style={{
+                  border: `1.5px solid ${v.color}`,
+                  background: verdict === v.value ? v.color : "#fff",
+                  color: verdict === v.value ? "#fff" : v.color,
+                  borderRadius: 999,
+                  padding: "4px 12px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 600, margin: "12px 0 6px" }}>
+            Points à vérifier <span style={{ color: "var(--muted)", fontWeight: 400 }}>({checkedCount}/{qcItems.length})</span>
+          </div>
+          {qcItems.map((it) => (
+            <label key={it.code} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, marginBottom: 4, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={!!checks[it.code]}
+                onChange={(e) => setChecks((prev) => ({ ...prev, [it.code]: e.target.checked }))}
+                style={{ marginTop: 2 }}
+              />
+              <span>{it.label}</span>
+            </label>
+          ))}
+
+          <div style={{ fontSize: 12, fontWeight: 600, margin: "10px 0 4px" }}>Observations (facultatif)</div>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={2}
+            style={{ width: "100%", fontSize: 12, borderRadius: 6, border: "1px solid var(--line)", padding: 6, boxSizing: "border-box" }}
+            placeholder="Ex. : léger défaut de massicot sur 3 exemplaires, acceptable."
+          />
+
+          <button
+            onClick={saveQc}
+            disabled={saving}
+            style={{ ...secondaryButtonStyle, background: "var(--eclosion, #C89A1B)", color: "#fff", border: "none", fontWeight: 600 }}
+          >
+            {saving ? "Enregistrement…" : "Enregistrer le contrôle qualité"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

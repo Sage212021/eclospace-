@@ -6,6 +6,7 @@ import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { nextPoNumber } from "../lib/poNumber.js";
+import { QC_CHECKLIST_ITEMS, QC_CHECKLIST_CODES } from "../lib/qcChecklist.js";
 
 async function purchaseOrderDelegationThreshold(): Promise<number> {
   const setting = await prisma.setting.findUnique({ where: { key: "purchase_order_delegation_threshold" } });
@@ -48,7 +49,20 @@ const milestoneSchema = z.object({
 });
 
 const goodsReceiptSchema = z.object({ quantity_received: z.number().int().nonnegative() });
-const qcVerdictSchema = z.object({ verdict: z.nativeEnum(QcVerdict) });
+const qcChecklistSchema = z
+  .array(
+    z.object({
+      code: z.enum(QC_CHECKLIST_CODES as [string, ...string[]]),
+      ok: z.boolean(),
+      note: z.string().max(500).optional(),
+    }),
+  )
+  .optional();
+const qcVerdictSchema = z.object({
+  verdict: z.nativeEnum(QcVerdict),
+  checklist: qcChecklistSchema,
+  comment: z.string().max(2000).optional(),
+});
 const claimSchema = z.object({ description: z.string().min(1) });
 const claimResolveSchema = z.object({ resolution: z.string().min(1) });
 
@@ -338,7 +352,7 @@ export default async function printingRoutes(fastify: FastifyInstance) {
         where: { quote: { manuscriptId: id } },
         include: {
           milestones: true,
-          goodsReceipts: true,
+          goodsReceipts: { include: { claims: { orderBy: { createdAt: "desc" } } }, orderBy: { receivedAt: "desc" } },
           printer: { include: { partner: true } },
           quote: { include: { manuscript: { select: { title: true, manuscriptNumber: true } } } },
           deliveryLocation: { select: { label: true } },
@@ -470,6 +484,49 @@ export default async function printingRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Catalogue des points de contrôle qualité (Ch. 14 §14.7) : affiché en cases à
+  // cocher sur l'écran de réception.
+  fastify.get(
+    "/api/v1/qc-checklist-items",
+    { preHandler: requirePermission("printing", "consultation") },
+    async (_request, reply) => {
+      return reply.send({ items: QC_CHECKLIST_ITEMS });
+    },
+  );
+
+  // Rectification d'une réception mal saisie (règle d'or : toujours pouvoir
+  // corriger). On recalcule l'écart avec la quantité commandée.
+  fastify.patch(
+    "/api/v1/goods-receipts/:id",
+    { preHandler: requirePermission("printing", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = goodsReceiptSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const receipt = await prisma.goodsReceipt.findUnique({ where: { id }, include: { po: true } });
+      if (!receipt) {
+        return reply.code(404).send({ code: "not_found", message: "Réception introuvable." });
+      }
+      const variance = parsed.data.quantity_received - receipt.po.orderedQuantity;
+      const updated = await prisma.goodsReceipt.update({
+        where: { id },
+        data: { quantityReceived: parsed.data.quantity_received, variance },
+        include: { claims: true },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "goods_receipt",
+        entityId: id,
+        newValues: { quantityReceived: parsed.data.quantity_received, variance },
+        ipAddress: request.ip,
+      });
+      return reply.send(updated);
+    },
+  );
+
   fastify.patch(
     "/api/v1/goods-receipts/:id/qc",
     { preHandler: requirePermission("printing", "validation") },
@@ -479,13 +536,24 @@ export default async function printingRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
       }
-      const updated = await prisma.goodsReceipt.update({ where: { id }, data: { qcVerdict: parsed.data.verdict } });
+      const updated = await prisma.goodsReceipt.update({
+        where: { id },
+        data: {
+          qcVerdict: parsed.data.verdict,
+          // On ne remplace la checklist / le commentaire que s'ils sont fournis,
+          // pour ne pas effacer une saisie précédente lors d'une simple
+          // rectification du verdict.
+          ...(parsed.data.checklist !== undefined ? { qcChecklist: parsed.data.checklist } : {}),
+          ...(parsed.data.comment !== undefined ? { qcComment: parsed.data.comment } : {}),
+        },
+        include: { claims: true },
+      });
       await writeAuditLog({
         userId: request.user!.id,
         action: "update",
         entityType: "goods_receipt",
         entityId: id,
-        newValues: { qcVerdict: parsed.data.verdict },
+        newValues: { qcVerdict: parsed.data.verdict, qcChecklist: parsed.data.checklist, qcComment: parsed.data.comment },
         ipAddress: request.ip,
       });
       return reply.send(updated);

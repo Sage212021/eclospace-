@@ -2987,6 +2987,10 @@ model GoodsReceipt {
   quantityReceived Int           @map("quantity_received")
   variance         Int           @default(0)
   qcVerdict        QcVerdict?    @map("qc_verdict")
+  // Checklist de contrôle qualité des exemplaires imprimés (Ch. 14 §14.7) :
+  // liste de points vérifiés [{ code, ok, note? }], tracée à chaque réception.
+  qcChecklist      Json?         @map("qc_checklist")
+  qcComment        String?       @map("qc_comment")
 
   claims SupplierClaim[]
 

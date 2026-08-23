@@ -2079,6 +2079,37 @@ export function selectPrintQuote(quoteId: string, selectionMotive: string, chose
   });
 }
 
+export type QcVerdict = "conform" | "with_reserves" | "non_conform";
+
+export interface GoodsReceiptClaim {
+  id: string;
+  description: string;
+  resolution?: string | null;
+  createdAt: string;
+}
+
+export interface QcChecklistEntry {
+  code: string;
+  ok: boolean;
+  note?: string;
+}
+
+export interface GoodsReceipt {
+  id: string;
+  quantityReceived: number;
+  variance: number;
+  receivedAt: string;
+  qcVerdict?: QcVerdict | null;
+  qcChecklist?: QcChecklistEntry[] | null;
+  qcComment?: string | null;
+  claims?: GoodsReceiptClaim[];
+}
+
+export interface QcChecklistItem {
+  code: string;
+  label: string;
+}
+
 export interface PurchaseOrder {
   id: string;
   poNumber: string;
@@ -2091,6 +2122,7 @@ export interface PurchaseOrder {
   printer?: { partner: { firstName: string; lastName: string } };
   quote?: { manuscript?: { title: string; manuscriptNumber: string } | null };
   deliveryLocation?: { label: string } | null;
+  goodsReceipts?: GoodsReceipt[];
 }
 
 export function createPurchaseOrder(quoteId: string, input: { delivery_due?: string; delivery_location_id?: string; quantity_tolerance_pct?: number }) {
@@ -2109,6 +2141,29 @@ export function recordGoodsReceipt(poId: string, quantityReceived: number) {
   return request<{ id: string; variance: number; within_tolerance: boolean }>(`/api/v1/purchase-orders/${poId}/goods-receipts`, {
     method: "POST",
     body: JSON.stringify({ quantity_received: quantityReceived }),
+  });
+}
+
+// Contrôle qualité des exemplaires reçus (Ch. 14 §14.7).
+export function listQcChecklistItems() {
+  return request<{ items: QcChecklistItem[] }>(`/api/v1/qc-checklist-items`);
+}
+
+export function setGoodsReceiptQc(receiptId: string, input: { verdict: QcVerdict; checklist?: QcChecklistEntry[]; comment?: string }) {
+  return request<GoodsReceipt>(`/api/v1/goods-receipts/${receiptId}/qc`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function correctGoodsReceipt(receiptId: string, quantityReceived: number) {
+  return request<GoodsReceipt>(`/api/v1/goods-receipts/${receiptId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ quantity_received: quantityReceived }),
+  });
+}
+
+export function createGoodsReceiptClaim(receiptId: string, description: string) {
+  return request<GoodsReceiptClaim>(`/api/v1/goods-receipts/${receiptId}/claims`, {
+    method: "POST",
+    body: JSON.stringify({ description }),
   });
 }
 

@@ -12,6 +12,7 @@ import {
   listExpenses,
   listInvoices,
   markInvoicePrinted,
+  cancelInvoiceBeforePrint,
   requestInvoiceCancellation,
   forceCancelInvoice,
   getPendingCancellationInvoices,
@@ -200,15 +201,52 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
   // totaux) puis on ouvre la fenêtre d'impression du navigateur.
   async function handlePrintInvoice(invoiceId: string, opts?: PrintOpts) {
     try {
-      printInvoice(await getInvoice(invoiceId), opts);
-      // Une facture imprimée est « tirée » : on la verrouille (plus annulable).
-      // Au meilleur effort et sans bloquer l'impression ; on rafraîchit pour
-      // masquer le bouton d'annulation devenu caduc.
+      const detail = await getInvoice(invoiceId);
+      // Rappel AVANT le premier tirage (demande opérateur) : l'original fait foi
+      // et la facture ne pourra plus être corrigée par simple annulation ensuite.
+      const firstAuthoritativePrint = detail.type === "invoice" && !detail.printedAt;
+      if (firstAuthoritativePrint) {
+        const ok = window.confirm(
+          `Imprimer l'ORIGINAL de la facture ${detail.invoiceNumber} ?\n\n` +
+            `Cet original fait foi. Vérifiez bien les montants et le client : après impression, la facture ne pourra plus être corrigée par une simple annulation ` +
+            `(il faudra un avoir ou une annulation validée par la direction).\n\n` +
+            `Confirmer l'impression ?`,
+        );
+        if (!ok) return;
+      }
+      printInvoice(detail, opts);
+      // Une facture imprimée est « tirée » : on la verrouille (plus annulable
+      // directement). Au meilleur effort ; on rafraîchit pour actualiser les boutons.
       markInvoicePrinted(invoiceId)
         .then(() => refresh())
         .catch(() => {});
     } catch (err) {
       fail(err, "Échec de l'ouverture de la facture.");
+    }
+  }
+
+  // Correction avant impression (demande opérateur) : tant qu'une facture n'a pas
+  // été tirée, la Finance peut l'annuler directement pour la réémettre corrigée.
+  async function handleCancelBeforePrint(invoice: Invoice) {
+    const reason = window.prompt(
+      `Corriger la facture ${invoice.invoiceNumber} (${invoice.customer.name}) avant impression ?\n\n` +
+        `Elle n'a pas encore été imprimée : elle sera annulée (retirée du chiffre d'affaires, tracée) et vous pourrez la refaire depuis la source corrigée.\n\n` +
+        `Motif (obligatoire — ex. erreur de montant, mauvais client) :`,
+      "",
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("Un motif de correction est requis.");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    try {
+      await cancelInvoiceBeforePrint(invoice.id, reason.trim());
+      setMessage(`Facture ${invoice.invoiceNumber} annulée avant impression — vous pouvez la réémettre corrigée.`);
+      await refresh();
+    } catch (err) {
+      fail(err, "Correction avant impression impossible.");
     }
   }
 
@@ -510,6 +548,9 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
                   <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, tenders: [{ method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: String(invoice.totalTtc) }] })}>
                     {t("fin.collect", "Encaisser")}
                   </Button>
+                  {/* Correction AVANT impression : tant que la facture n'a pas été
+                      tirée, la Finance l'annule directement pour la réémettre corrigée. */}
+                  {!invoice.printedAt && <Button variant="view" size="sm" onClick={() => handleCancelBeforePrint(invoice)}>{t("fin.correct_before_print", "Corriger avant impression")}</Button>}
                   {/* Demande d'annulation (soumise au DG) : erreur de saisie, essai,
                       désistement. Impossible une fois la facture imprimée (« tirée »). */}
                   {!invoice.printedAt && <Button variant="view" size="sm" onClick={() => handleRequestCancel(invoice)}>{t("fin.request_cancel", "Demander l'annulation")}</Button>}

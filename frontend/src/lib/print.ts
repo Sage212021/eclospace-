@@ -339,12 +339,12 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
   const body = `
     ${
       isDuplicate
-        ? `<div aria-hidden="true" style="position:fixed; left:50%; top:50%; transform:translate(-50%,-50%) rotate(-30deg); font-family:ui-monospace,'IBM Plex Mono',monospace; font-size:110px; font-weight:800; letter-spacing:8px; color:#C24B3A; opacity:.09; z-index:-1; pointer-events:none; white-space:nowrap; -webkit-print-color-adjust:exact; print-color-adjust:exact">DUPLICATA</div>`
+        ? `<div aria-hidden="true" style="position:fixed; left:50%; top:50%; transform:translate(-50%,-50%) rotate(-30deg); font-family:ui-monospace,'IBM Plex Mono',monospace; font-size:52px; font-weight:500; letter-spacing:5px; color:#8a93a6; opacity:.05; z-index:-1; pointer-events:none; white-space:nowrap; -webkit-print-color-adjust:exact; print-color-adjust:exact">Duplicata</div>`
         : ""
     }
     <div class="doc__title">${docName}${
       isDuplicate
-        ? ` <span style="font-family:ui-monospace,'IBM Plex Mono',monospace; font-size:13px; color:#C24B3A; border:1.5px solid #C24B3A; border-radius:6px; padding:1px 9px; vertical-align:middle; letter-spacing:1.5px; font-weight:700">DUPLICATA</span>`
+        ? ` <span style="font-family:ui-monospace,'IBM Plex Mono',monospace; font-size:11px; color:#6b7280; border:1px solid #d3d8e0; border-radius:5px; padding:1px 7px; vertical-align:middle; letter-spacing:1px; font-weight:600">Duplicata</span>`
         : ""
     }</div>
     <div class="meta">
@@ -355,8 +355,8 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
     </div>
     ${
       isDuplicate
-        ? `<div style="margin:0 0 18px; border:1px solid #C24B3A; background:#f7e2de; color:#8f2f22; border-radius:6px; padding:8px 12px; font-size:12px; font-weight:700">
-             ${tr("DUPLICATA", "DUPLICATE")} — ${tr("copie conforme d'une facture déjà imprimée", "true copy of an already-printed invoice")}${firstPrinted ? ` (${tr("original tiré le", "original printed on")} <span class="num">${escapeHtml(firstPrinted)}</span>)` : ""}. ${tr("Seul l'original fait foi.", "Only the original is authoritative.")}
+        ? `<div style="margin:0 0 16px; color:#6b7280; font-size:11px; font-style:italic; border-left:2px solid #d3d8e0; padding-left:9px">
+             ${tr("Duplicata", "Duplicate")} — ${tr("copie conforme d'une facture déjà imprimée", "true copy of an already-printed invoice")}${firstPrinted ? ` (${tr("original tiré le", "original printed on")} <span class="num">${escapeHtml(firstPrinted)}</span>)` : ""}. ${tr("Seul l'original fait foi.", "Only the original is authoritative.")}
            </div>`
         : ""
     }
@@ -408,7 +408,7 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
       </div>
     </div>`;
 
-  openPrintWindow(`${docName} ${invoice.invoiceNumber}${isDuplicate ? " (DUPLICATA)" : ""}`, body, opts);
+  openPrintWindow(`${docName} ${invoice.invoiceNumber}${isDuplicate ? " (duplicata)" : ""}`, body, opts);
 }
 
 function statusLabel(status: string): string {

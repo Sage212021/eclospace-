@@ -445,6 +445,42 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Correction AVANT la première impression (demande opérateur 23/08/2026) : tant
+  // qu'une facture n'a pas été tirée, elle n'a « pas fait foi » — la Finance peut
+  // donc l'annuler DIRECTEMENT (sans validation DG, sans avoir) pour la réémettre
+  // depuis la source corrigée. Strictement borné : facture émise, NON imprimée.
+  // Après le premier tirage, on repasse par la demande d'annulation (DG) ou l'avoir.
+  fastify.post("/api/v1/invoices/:id/cancel-before-print", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ reason: z.string().min(1).max(500) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Un motif de correction est requis." });
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    if (invoice.type !== "invoice") return reply.code(409).send({ code: "not_an_invoice", message: "Seule une facture peut être annulée (un avoir ou une proforma, non)." });
+    if (invoice.status === "cancelled") return reply.code(409).send({ code: "already_cancelled", message: "Cette facture est déjà annulée." });
+    if (invoice.status !== "issued" && invoice.status !== "cancellation_requested") {
+      return reply.code(409).send({ code: "not_cancellable", message: "Seule une facture émise (non réglée) peut être annulée avant impression." });
+    }
+    if (invoice.printedAt) {
+      return reply.code(409).send({ code: "already_printed", message: "Cette facture a déjà été imprimée : elle fait foi. Passez par la demande d'annulation (DG) ou émettez un avoir." });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.schoolRoyaltyEntry.deleteMany({ where: { invoiceId: id } });
+      // Facture issue d'un devis éditorial (compte d'auteur) : on rouvre le devis
+      // pour permettre de le corriger puis de réémettre la facture.
+      if (invoice.sourceType.endsWith("_quote")) {
+        await tx.editorialQuote.updateMany({ where: { id: invoice.sourceId, invoiceId: id }, data: { status: "accepted", invoiceId: null } });
+      }
+      await tx.invoice.update({
+        where: { id },
+        data: { status: "cancelled", cancellationReason: parsed.data.reason.trim(), cancellationRequestedAt: new Date(), cancellationRequestedBy: request.user!.id },
+      });
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "invoice", entityId: id, oldValues: { status: invoice.status, printed: false }, newValues: { status: "cancelled", beforePrint: true, reason: parsed.data.reason.trim() }, ipAddress: request.ip });
+    return reply.send({ ok: true, status: "cancelled" });
+  });
+
   // Marque une facture comme « tirée » (imprimée) à sa première impression :
   // elle ne pourra plus être annulée. Idempotent (ne réécrit pas la date).
   fastify.post("/api/v1/invoices/:id/mark-printed", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {

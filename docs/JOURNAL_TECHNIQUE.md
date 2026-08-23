@@ -988,3 +988,11 @@ Demande opérateur : des ~100 ouvrages importés au catalogue ont des fiches inc
 - **Fuite signalée** : le CA d'entreprise s'affichait sur l'accueil pour le pôle éditorial. Cause : la lecture du CA global (`canSeeCompanyRevenue`) était accordée à `direction:consultation`, permission que détient aussi la **Direction éditoriale** (pilotage éditorial).
 - **Correctif** : le CA est une donnée **financière** → sa lecture globale exige désormais **uniquement `finance:consultation`** (DG + Responsable financier + Comptable), conformément à l'intention documentée (§5.2, §18). `direction:consultation` reste réservé aux indicateurs de pilotage (ouvrages, tâches en retard), non financiers.
 - **Test** : `dashboard-editorial-confidential.test.ts` — le directeur éditorial voit ouvrages+pipeline mais **PAS** `chiffre_affaires` (null). Suite : 806/806.
+
+## Workflow — Expertise & Réécriture placées avant la Correction éditoriale (22/08/2026, D-014)
+
+- **Demande opérateur** : « planification projet, expertise scientifique, réécriture devraient être avant correction éditoriale ». Ordre logique : le fond et la structure (expertise, réécriture) se décident **avant** le travail de correction sur un texte quasi définitif.
+- **Ancien ordre** : Planification (5) → Correction (6) → Expertise (7) → Réécriture (8) → Mise en page (9).
+- **Nouvel ordre (D-014)** : Planification (5) → **Expertise (6) → Réécriture (7) → Correction (8)** → Mise en page (9).
+- **Réalisation** : `workflow_statuses.step_order` est la source de vérité unique (frise, tableaux de bord, transitions, filtres en dérivent). Migration additive `20260822160000_reorder_expertise_rewrite_before_correction` = 3 `UPDATE step_order` (EXPERTISE→6, REECRITURE→7, CORRECTION→8) ; seed aligné. Aucun code d'étape, id ou historique de manuscrit touché. Les deux étapes restent « à option » (Réaliser/Passer, D-011). Après validation de la Planification, le manuscrit passe désormais à l'**Expertise** (et non plus à la Correction).
+- **Tests** : `workflow-order.test.ts` verrouille la séquence Planification→Expertise→Réécriture→Correction→Mise en page ; flux de production (`lot2`, `lot3-workflow`, `lot4-workflow`, `step-deliverable`, `step-assignment`) réalignés sur le nouvel ordre. Suite complète au vert (**807/807**) ; tsc (front+back) + build au vert.

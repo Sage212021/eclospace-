@@ -34,7 +34,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
     await prisma.$disconnect();
   });
 
-  async function createManuscriptAtCorrection(title: string) {
+  async function createManuscriptAtExpertise(title: string) {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/v1/manuscripts",
@@ -101,8 +101,8 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
     }
 
     // D-010 : après la décision éditoriale, le manuscrit est à la PLANIFICATION.
-    // On la valide pour l'amener à la CORRECTION (la contractualisation
-    // n'intervient plus ici, mais après la validation du BAT).
+    // On la valide → le manuscrit atteint l'EXPERTISE (D-014 : Expertise et
+    // Réécriture précèdent désormais la Correction éditoriale).
     await seedStepDeliverable(manuscript.id, "PLANIFICATION");
     await app.inject({
       method: "POST",
@@ -110,6 +110,22 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       headers: { cookie: adminCookie },
       payload: realizationPayload("PLANIFICATION"),
     });
+    return manuscript;
+  }
+
+  async function createManuscriptAtCorrection(title: string) {
+    const manuscript = await createManuscriptAtExpertise(title);
+    // D-014 : franchir l'Expertise puis la Réécriture (toutes deux avant la
+    // Correction éditoriale) pour amener le manuscrit à la CORRECTION.
+    for (const step of ["EXPERTISE", "REECRITURE"]) {
+      await seedStepDeliverable(manuscript.id, step);
+      await app.inject({
+        method: "POST",
+        url: `/api/v1/manuscripts/${manuscript.id}/steps/${step}/validate`,
+        headers: { cookie: adminCookie },
+        payload: realizationPayload(step),
+      });
+    }
 
     // Livrables obligatoires du cycle de correction (rapport + version finale
     // intégrée) pour pouvoir valider l'étape CORRECTION.
@@ -260,7 +276,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
     expect(afterDecision.status.code).toBe("PLANIFICATION");
 
     // La production démarre SANS contrat : valider la planification réussit et
-    // mène à la correction (l'ancien verrou « contrat requis » est supprimé).
+    // mène à l'expertise (D-014 ; l'ancien verrou « contrat requis » est supprimé).
     await seedStepDeliverable(manuscript.id, "PLANIFICATION");
     const attempt = await app.inject({
       method: "POST",
@@ -269,23 +285,18 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       payload: realizationPayload("PLANIFICATION"),
     });
     expect(attempt.statusCode).toBe(200);
-    expect(attempt.json().status).toBe("CORRECTION");
+    expect(attempt.json().status).toBe("EXPERTISE");
   });
 
   it("l'étape EXPERTISE est un point de décision : on peut la PASSER (facultative par défaut)", async () => {
     // Nouveau modèle (demande opérateur 20/08/2026) : le manuscrit s'arrête à
     // l'Expertise, l'opérateur choisit « Réaliser » ou « Passer ». Facultative
     // par défaut : on peut la passer avec un motif.
-    const manuscript = await createManuscriptAtCorrection("Manuscrit Sans Expertise");
+    const manuscript = await createManuscriptAtExpertise("Manuscrit Sans Expertise");
 
-    const afterCorrection = await app.inject({
-      method: "POST",
-      url: `/api/v1/manuscripts/${manuscript.id}/steps/CORRECTION/validate`,
-      headers: { cookie: adminCookie },
-      payload: {},
-    });
-    expect(afterCorrection.statusCode).toBe(200);
-    expect(afterCorrection.json().status).toBe("EXPERTISE");
+    // D-014 : le manuscrit s'arrête à l'EXPERTISE juste après la planification.
+    const atExpertise = await prisma.manuscript.findUniqueOrThrow({ where: { id: manuscript.id }, include: { status: true } });
+    expect(atExpertise.status.code).toBe("EXPERTISE");
 
     // Passer l'Expertise sans motif → refusé.
     const noReason = await app.inject({
@@ -309,8 +320,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
   });
 
   it("réaliser l'Expertise exige les éléments (expert + avis + rapport), puis passe à la Réécriture", async () => {
-    const manuscript = await createManuscriptAtCorrection("Manuscrit Expertise Réalisée");
-    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/CORRECTION/validate`, headers: { cookie: adminCookie }, payload: {} });
+    const manuscript = await createManuscriptAtExpertise("Manuscrit Expertise Réalisée");
 
     // Réaliser sans les éléments → refusé.
     const incomplete = await app.inject({

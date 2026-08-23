@@ -92,9 +92,14 @@ const workflowStatuses: {
   // Ch. 9 §9.12 (qui plaçait le contrat avant la production) : cf. registre des
   // décisions et docs/JOURNAL_TECHNIQUE.md.
   { code: "PLANIFICATION", label: "Planification du projet", stepOrder: 5, departmentCode: "DIRED" },
-  { code: "CORRECTION", label: "Correction éditoriale", stepOrder: 6, departmentCode: "CORR" },
-  { code: "EXPERTISE", label: "Expertise scientifique", stepOrder: 7, departmentCode: "EXPERT", isConditional: true },
-  { code: "REECRITURE", label: "Réécriture éditoriale", stepOrder: 8, departmentCode: "CORR", isConditional: true },
+  // Décision opérateur (22/08/2026, D-014) : l'EXPERTISE scientifique et la
+  // RÉÉCRITURE éditoriale passent AVANT la Correction éditoriale — on valide le
+  // fond puis on réécrit la substance AVANT le polissage fin de la langue
+  // (corriger avant de réécrire = corriger deux fois). Enchaînement :
+  // Planification → Expertise → Réécriture → Correction → Mise en page.
+  { code: "EXPERTISE", label: "Expertise scientifique", stepOrder: 6, departmentCode: "EXPERT", isConditional: true },
+  { code: "REECRITURE", label: "Réécriture éditoriale", stepOrder: 7, departmentCode: "CORR", isConditional: true },
+  { code: "CORRECTION", label: "Correction éditoriale", stepOrder: 8, departmentCode: "CORR" },
   { code: "MISE_EN_PAGE", label: "Mise en page", stepOrder: 9, departmentCode: "MAQ" },
   { code: "INFOGRAPHIE", label: "Infographie", stepOrder: 10, departmentCode: "INFOG" },
   // Ordre corrigé (Lot 3) par rapport au Lot 1 : Ch. 13 §13.9 et Ch. 14 §14.2

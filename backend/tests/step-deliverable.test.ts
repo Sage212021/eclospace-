@@ -64,7 +64,7 @@ describe("verrou « livrable de sortie » d'étape", () => {
     // Validation possible.
     const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: realizationPayload("PLANIFICATION") });
     expect(ok.statusCode).toBe(200);
-    expect(ok.json().status).toBe("CORRECTION");
+    expect(ok.json().status).toBe("EXPERTISE");
   });
 
   it("le paramètre expose la liste des étapes verrouillées (défaut)", async () => {

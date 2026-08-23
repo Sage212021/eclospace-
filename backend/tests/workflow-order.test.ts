@@ -37,6 +37,16 @@ describe("ordre de référence du workflow (D-010)", () => {
     expect(planning.stepOrder).toBe(decision.stepOrder + 1);
   });
 
+  it("l'Expertise et la Réécriture précèdent la Correction éditoriale (D-014)", async () => {
+    const all = await prisma.workflowStatus.findMany({ orderBy: { stepOrder: "asc" } });
+    const codesByOrder = all.map((s) => s.code);
+    const planIdx = codesByOrder.indexOf("PLANIFICATION");
+    // Planification → Expertise → Réécriture → Correction → Mise en page.
+    expect(codesByOrder.slice(planIdx, planIdx + 5)).toEqual([
+      "PLANIFICATION", "EXPERTISE", "REECRITURE", "CORRECTION", "MISE_EN_PAGE",
+    ]);
+  });
+
   it("l'ordre reste contigu de 1 à 20, sans doublon de stepOrder", async () => {
     const all = await prisma.workflowStatus.findMany({ orderBy: { stepOrder: "asc" } });
     const orders = all.map((s) => s.stepOrder);

@@ -44,7 +44,7 @@ describe("affectation nominative de l'étape suivante", () => {
   });
 
   it("liste les candidats du service suivant (correcteurs pour la correction)", async () => {
-    const m = await manuscriptAt("PLANIFICATION"); // suivant = CORRECTION (service CORR)
+    const m = await manuscriptAt("REECRITURE"); // suivant = CORRECTION (service CORR)
     const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/next-assignees`, headers: { cookie: adminCookie } });
     expect(res.statusCode).toBe(200);
     expect(res.json().next_step.code).toBe("CORRECTION");
@@ -54,14 +54,14 @@ describe("affectation nominative de l'étape suivante", () => {
   });
 
   it("confie le dossier à une personne : elle seule est notifiée et devient responsable", async () => {
-    const m = await manuscriptAt("PLANIFICATION");
+    const m = await manuscriptAt("REECRITURE");
     const before = await prisma.notification.count({ where: { userId: correcteurId, entityId: m.id } });
 
     const res = await app.inject({
       method: "POST",
-      url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`,
+      url: `/api/v1/manuscripts/${m.id}/steps/REECRITURE/validate`,
       headers: { cookie: adminCookie },
-      payload: { ...realizationPayload("PLANIFICATION"), assignee_id: correcteurId },
+      payload: { ...realizationPayload("REECRITURE"), assignee_id: correcteurId },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe("CORRECTION");
@@ -79,31 +79,31 @@ describe("affectation nominative de l'étape suivante", () => {
   });
 
   it("refuse une personne étrangère au service suivant (400)", async () => {
-    const m = await manuscriptAt("PLANIFICATION");
+    const m = await manuscriptAt("REECRITURE");
     const res = await app.inject({
       method: "POST",
-      url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`,
+      url: `/api/v1/manuscripts/${m.id}/steps/REECRITURE/validate`,
       headers: { cookie: adminCookie },
-      payload: { ...realizationPayload("PLANIFICATION"), assignee_id: magasinierId },
+      payload: { ...realizationPayload("REECRITURE"), assignee_id: magasinierId },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe("invalid_assignee");
     // Le manuscrit n'a pas avancé.
     const still = await prisma.manuscript.findUniqueOrThrow({ where: { id: m.id }, include: { status: true } });
-    expect(still.status.code).toBe("PLANIFICATION");
+    expect(still.status.code).toBe("REECRITURE");
   });
 
   it("« Mes dossiers à traiter » liste les manuscrits confiés à l'utilisateur connecté", async () => {
     const login = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { username: (await prisma.user.findUniqueOrThrow({ where: { id: correcteurId } })).username, password: "Corr123!" } });
     const corrCookie = extractSessionCookie(login.cookies.map((c) => `${c.name}=${c.value}`));
 
-    const m = await manuscriptAt("PLANIFICATION");
+    const m = await manuscriptAt("REECRITURE");
     // Avant affectation : absent de mes dossiers.
     const before = await app.inject({ method: "GET", url: "/api/v1/my-dossiers", headers: { cookie: corrCookie } });
     expect((before.json() as { manuscript_id: string }[]).some((d) => d.manuscript_id === m.id)).toBe(false);
 
     // On confie le dossier au correcteur.
-    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie: adminCookie }, payload: { ...realizationPayload("PLANIFICATION"), assignee_id: correcteurId } });
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/REECRITURE/validate`, headers: { cookie: adminCookie }, payload: { ...realizationPayload("REECRITURE"), assignee_id: correcteurId } });
 
     const after = await app.inject({ method: "GET", url: "/api/v1/my-dossiers", headers: { cookie: corrCookie } });
     expect(after.statusCode).toBe(200);
@@ -113,8 +113,8 @@ describe("affectation nominative de l'étape suivante", () => {
   });
 
   it("sans désignation, l'affectation reste facultative (le service est notifié)", async () => {
-    const m = await manuscriptAt("PLANIFICATION");
-    const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie: adminCookie }, payload: realizationPayload("PLANIFICATION") });
+    const m = await manuscriptAt("REECRITURE");
+    const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/REECRITURE/validate`, headers: { cookie: adminCookie }, payload: realizationPayload("REECRITURE") });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe("CORRECTION");
     // Le service correction (dont le correcteur) est notifié « Nouveau dossier ».

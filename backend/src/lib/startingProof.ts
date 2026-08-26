@@ -1,10 +1,11 @@
 import { prisma } from "./prisma.js";
 
-// « Version à corriger » (VC1) — le dossier de départ déposé à l'étape Décision
-// éditoriale, sur lequel le correcteur travaillera : le fichier manuscrit + les
-// textes de couverture (1ère, dos, 4ème). Chaque emplacement = un document
-// « pièce d'étape » à titre stable, comme le cycle de correction — aucune
-// migration, aucune colonne dédiée.
+// « Version à corriger » (VC1) — le dossier de départ déposé à l'étape
+// Planification du projet, sur lequel le correcteur travaillera. Deux points
+// seulement (demande opérateur 26/08/2026) : le manuscrit à corriger, et les
+// couvertures à corriger réunies en UN SEUL fichier (1ère + dos + 4ème). Chaque
+// emplacement = un document « pièce d'étape » à titre stable, comme le cycle de
+// correction — aucune migration, aucune colonne dédiée.
 
 export interface Vc1Slot {
   key: string;
@@ -12,10 +13,8 @@ export interface Vc1Slot {
 }
 
 export const VC1_SLOTS: Vc1Slot[] = [
-  { key: "manuscrit", label: "Fichier manuscrit (à corriger)" },
-  { key: "couv_1", label: "Couverture — 1ère" },
-  { key: "couv_dos", label: "Couverture — dos" },
-  { key: "couv_4", label: "Couverture — 4ème" },
+  { key: "manuscrit", label: "Manuscrit à corriger" },
+  { key: "couvertures", label: "Couvertures à corriger (1ère, dos, 4ème — un seul fichier)" },
 ];
 
 const KEYS = new Set(VC1_SLOTS.map((s) => s.key));

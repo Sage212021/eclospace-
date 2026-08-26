@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { getVc1, uploadVc1, deleteStepDocument, stepAttachmentDownloadUrl, type Vc1SlotState } from "../api/client";
 
-// « Version à corriger » (VC1) — dossier de départ déposé à la Décision
-// éditoriale : le fichier manuscrit + les textes de couverture (1ère/dos/4ème).
-// C'est la matière que le correcteur travaillera à l'étape suivante.
+// « Version à corriger » (VC1) — dossier de départ déposé à la Planification du
+// projet, en deux points : le manuscrit à corriger et les couvertures à corriger
+// (1ère + dos + 4ème réunies en un seul fichier). C'est la matière que le
+// correcteur travaillera aux étapes suivantes.
 export function StartingProofPanel({ manuscriptId, canManage }: { manuscriptId: string; canManage: boolean }) {
   const [slots, setSlots] = useState<Vc1SlotState[]>([]);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -44,8 +45,9 @@ export function StartingProofPanel({ manuscriptId, canManage }: { manuscriptId: 
     <section style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 12 }}>
       <h3 style={{ fontSize: 15, margin: "0 0 4px", color: "var(--ink)" }}>Version à corriger (VC1)</h3>
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
-        Dossier de départ transmis à la correction : le <strong>fichier manuscrit</strong> et les <strong>textes de couverture</strong>
-        (1ère, dos, 4ème) — à relire eux aussi. Facultatif ; se dépose et se remplace librement.
+        Dossier de départ transmis à la correction, en deux points : le <strong>manuscrit à corriger</strong> et les
+        <strong> couvertures à corriger</strong> — 1ère, dos et 4ème réunies en <strong>un seul fichier</strong>. Facultatif ;
+        se dépose et se remplace librement.
       </p>
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{error}</div>}
 

@@ -124,6 +124,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
     const [m, t] = await Promise.all([getManuscript(manuscriptId), getManuscriptTimeline(manuscriptId)]);
     setManuscript(m);
     setTimeline(t);
+    return m;
   };
 
   useEffect(() => {
@@ -158,6 +159,49 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
     successMessage: string,
   ) {
     if (await confirm(opts)) await handle(action, successMessage);
+  }
+
+  function scrollToActions() {
+    window.requestAnimationFrame(() =>
+      document.getElementById("fiche-actions")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  }
+
+  // Enchaînement des étapes (demande opérateur) : après une validation qui fait
+  // AVANCER le manuscrit, si l'étape suivante n'a PAS été confiée à quelqu'un
+  // d'autre, on enchaîne directement — on lève la « vue centrée » et on amène
+  // l'utilisateur sur l'action suivante, sans repasser par le menu. Si l'étape
+  // a été confiée à un tiers, on ne force pas : on l'informe simplement.
+  async function advanceAfterValidation(confided: boolean) {
+    const previous = manuscript?.status.code;
+    const m = await refresh();
+    const advanced = m.status.code !== previous;
+    if (confided) {
+      setMessage("Étape validée et confiée : la personne désignée est notifiée.");
+    } else if (advanced) {
+      setShowAll(true); // on lève la vue centrée pour que l'action suivante soit visible
+      setMessage(`Étape validée. Étape suivante : « ${m.status.label} » — continuez ci-dessous.`);
+      scrollToActions();
+    } else {
+      setMessage("Étape validée.");
+    }
+  }
+
+  // Comme confirmThen, mais enchaîne sur l'étape suivante après une validation.
+  async function confirmThenAdvance(
+    opts: { title: string; message: string; detail?: string; confirmLabel?: string; tone?: "default" | "danger" },
+    action: () => Promise<unknown>,
+    confided = false,
+  ) {
+    if (!(await confirm(opts))) return;
+    setError(null);
+    setMessage(null);
+    try {
+      await action();
+      await advanceAfterValidation(confided);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de la validation.");
+    }
   }
 
   return (
@@ -315,7 +359,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           <div style={{ display: "flex", gap: 8 }}>
             <ActionButton
               onClick={() =>
-                confirmThen(
+                confirmThenAdvance(
                   {
                     title: "Valider la réception",
                     message: "Confirmer la réception de ce manuscrit ?",
@@ -323,7 +367,6 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
                     confirmLabel: "Réception confirmée",
                   },
                   () => validateStep(manuscript.id, "RECEPTION", { outcome: "conforme" }),
-                  "Réception confirmée : passage à la vérification administrative.",
                 )
               }
             >
@@ -336,7 +379,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           <div style={{ display: "flex", gap: 8 }}>
             <ActionButton
               onClick={() =>
-                confirmThen(
+                confirmThenAdvance(
                   {
                     title: "Valider l'étape",
                     message: "Confirmer que le dossier est conforme ?",
@@ -344,7 +387,6 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
                     confirmLabel: "Dossier conforme",
                   },
                   () => validateStep(manuscript.id, "VERIF_ADMIN", { outcome: "conforme" }),
-                  "Dossier conforme : passage au comité de lecture.",
                 )
               }
             >
@@ -417,13 +459,13 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           <EditorialDecisionForm
             manuscriptId={manuscript.id}
             confirm={confirm}
-            onDecided={(msg) => handle(async () => {}, msg)}
+            onDecided={() => advanceAfterValidation(false)}
             onError={setError}
           />
         )}
 
-        {manuscript.status.code === "DECISION_EDITORIALE" && (
-          <StartingProofPanel manuscriptId={manuscript.id} canManage={permissions.has("decision_editoriale:saisie") || permissions.has("manuscripts:saisie")} />
+        {manuscript.status.code === "PLANIFICATION" && (
+          <StartingProofPanel manuscriptId={manuscript.id} canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")} />
         )}
 
         {manuscript.status.code === "CORRECTION" && (
@@ -459,9 +501,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             manuscriptId={manuscript.id}
             stepCode={manuscript.status.code}
             confirm={confirm}
-            onValidated={(status) =>
-              handle(async () => {}, status ? `Étape validée : passage à « ${status} ».` : "Étape validée.")
-            }
+            onValidated={(_status, opts) => advanceAfterValidation(opts?.confided ?? false)}
             onError={setError}
           />
         )}
@@ -1438,7 +1478,7 @@ function GenericStepValidation({
   manuscriptId: string;
   stepCode: string;
   confirm: (opts: { title: string; message: string; detail?: string; confirmLabel?: string }) => Promise<boolean>;
-  onValidated: (status: string | null) => void;
+  onValidated: (status: string | null, opts?: { confided?: boolean }) => void;
   onError: (message: string) => void;
 }) {
   const [requiresRewrite, setRequiresRewrite] = useState(false);
@@ -1493,7 +1533,9 @@ function GenericStepValidation({
             : { step_decision: "realise", realization }
           : {}),
       });
-      onValidated(result.status);
+      // Confié à un tiers = une personne précise a été désignée pour l'étape
+      // suivante → on n'enchaîne pas automatiquement côté validateur.
+      onValidated(result.status, { confided: Boolean(assigneeId) });
     } catch (err) {
       onError(err instanceof Error ? err.message : "Échec de la validation.");
     }

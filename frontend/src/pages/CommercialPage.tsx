@@ -39,6 +39,7 @@ import { useConfirm } from "../components/ConfirmProvider";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconCommercial } from "../components/icons";
+import { IsbnCombobox } from "../components/IsbnCombobox";
 
 const CATEGORY_LABELS: Record<CustomerCategory, string> = {
   librairie: "Librairie",
@@ -303,12 +304,15 @@ function NewOrderForm({
 
   useEffect(() => {
     if (!customerId && customers[0]) setCustomerId(customers[0].id);
-    if (!isbnId && isbns[0]) setIsbnId(isbns[0].id);
     if (!locationId && locations[0]) setLocationId(locations[0].id);
   }, [customers, isbns, locations]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (!isbnId) {
+      onError("Choisissez un ouvrage : tapez son ISBN ou le début de son titre.");
+      return;
+    }
     try {
       // Client non catalogué : on crée d'abord sa fiche (identifiant unique,
       // réutilisable partout ensuite), puis la commande — jamais bloquant.
@@ -358,9 +362,7 @@ function NewOrderForm({
             </select>
           </Field>
           <Field label={t("com.ref_isbn", "Référence (ISBN)")}>
-            <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)}>
-              {isbns.map((isbn) => <option key={isbn.id} value={isbn.id}>{isbn.isbn13} — {isbn.manuscript?.title}</option>)}
-            </select>
+            <IsbnCombobox isbns={isbns} value={isbnId} onChange={setIsbnId} />
           </Field>
           <Field label={t("com.ship_location", "Lieu d'expédition")}>
             <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
@@ -450,7 +452,6 @@ function PosSaleForm({
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isbnId && isbns[0]) setIsbnId(isbns[0].id);
     if (!locationId && locations[0]) setLocationId(locations[0].id);
   }, [isbns, locations]);
 
@@ -532,9 +533,7 @@ function PosSaleForm({
           {bookMode === "catalogue" ? (
             <>
               <Field label={t("com.ref_isbn", "Référence (ISBN)")}>
-                <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)}>
-                  {isbns.map((isbn) => <option key={isbn.id} value={isbn.id}>{isbn.isbn13} — {isbn.manuscript?.title}</option>)}
-                </select>
+                <IsbnCombobox isbns={isbns} value={isbnId} onChange={setIsbnId} />
               </Field>
               <Field label={t("com.location", "Lieu")}>
                 <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>

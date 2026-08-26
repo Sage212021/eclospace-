@@ -19,6 +19,7 @@ import {
 } from "../api/client";
 import { Card } from "../components/Card";
 import { StockInventorySection } from "../components/StockInventorySection";
+import { IsbnCombobox } from "../components/IsbnCombobox";
 import { CommercialStockSection } from "../components/CommercialStockSection";
 import { StockConsolidatedSection } from "../components/StockConsolidatedSection";
 import { StockInitialImportSection } from "../components/StockInitialImportSection";
@@ -385,7 +386,8 @@ function MovementForm({
   const [condition, setCondition] = useState<"vendable" | "declasse">("vendable");
 
   useEffect(() => {
-    if (!isbnId && isbns[0]) setIsbnId(isbns[0].id);
+    // On ne présélectionne plus d'ouvrage : le champ de recherche invite à taper
+    // l'ISBN ou le titre. Le lieu par défaut reste pré-rempli (confort).
     if (!toLocationId && locations[0]) setToLocationId(locations[0].id);
   }, [isbns, locations]);
 
@@ -408,6 +410,10 @@ function MovementForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (!isbnId) {
+      onError("Choisissez un ouvrage : tapez son ISBN ou le début de son titre.");
+      return;
+    }
     // « Autre retour » : le magasinier DOIT préciser la nature dans le motif.
     if (type === "other_return" && !reason.trim()) {
       onError("Précisez la nature de ce retour dans le champ « Motif ».");
@@ -440,9 +446,7 @@ function MovementForm({
             </select>
           </Field>
           <Field label={t("stock.ref_isbn", "Référence (ISBN)")}>
-            <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)}>
-              {isbns.map((isbn) => <option key={isbn.id} value={isbn.id}>{isbn.isbn13} — {isbn.manuscript?.title}</option>)}
-            </select>
+            <IsbnCombobox isbns={isbns} value={isbnId} onChange={setIsbnId} />
           </Field>
           <Field label={t("stock.quantity", "Quantité")}>
             <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} />

@@ -5,6 +5,11 @@ import {
   getPayrollRateSet,
   getMonthlyAnomalies,
   getPayrollDipe,
+  getPayrollHandoff,
+  updatePayrollHandoff,
+  closePayrollHandoff,
+  reopenPayrollHandoff,
+  type PayrollHandoff,
   getPublisherIdentity,
   listAuditLog,
   listPayrollFormulas,
@@ -580,6 +585,130 @@ function DeclarationsCard({ kind }: { kind: "cnps" | "fiscal" }) {
   );
 }
 
+// ── Suivi de prise en charge par le DAF + fil de validation (Temps 2) ─────────
+function HandoffCard({ canManage }: { canManage: boolean }) {
+  const [period, setPeriod] = useState(() => new Date().toISOString().slice(0, 7));
+  const [h, setH] = useState<PayrollHandoff | null>(null);
+  const [cnpsRef, setCnpsRef] = useState("");
+  const [taxRef, setTaxRef] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = () =>
+    getPayrollHandoff(period)
+      .then((d) => { setH(d); setCnpsRef(d.items.find((i) => i.key === "cnps_declared")?.ref ?? ""); setTaxRef(d.items.find((i) => i.key === "tax_declared")?.ref ?? ""); setErr(null); })
+      .catch((e) => { setH(null); setErr(e instanceof Error ? e.message : "Mois non préparé."); });
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [period]);
+
+  const fdt = (s: string) => new Date(s).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+
+  async function apply(input: Parameters<typeof updatePayrollHandoff>[1]) {
+    setBusy(true); setErr(null);
+    try { await updatePayrollHandoff(period, input); await load(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Échec de l'enregistrement."); }
+    finally { setBusy(false); }
+  }
+  async function doClose() {
+    if (!window.confirm("Clôturer le suivi de ce mois ? Vous pourrez le rouvrir si besoin.")) return;
+    setBusy(true); setErr(null);
+    try { await closePayrollHandoff(period); await load(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Clôture impossible."); }
+    finally { setBusy(false); }
+  }
+  async function doReopen() {
+    setBusy(true); setErr(null);
+    try { await reopenPayrollHandoff(period); await load(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Réouverture impossible."); }
+    finally { setBusy(false); }
+  }
+
+  const editable = canManage && !!h?.validated && !h?.closed;
+
+  return (
+    <Card title="Suivi de la paie (prise en charge DAF)" icon={<span aria-hidden>🧾</span>} subtitle="Après validation du DG : décaissement, déclarations CNPS/impôts, archivage — et clôture du cycle." collapsible>
+      <label style={{ fontSize: 13 }}>Mois : <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono)" }} /></label>
+      {err && <p style={{ fontSize: 13, color: "var(--alert)", marginTop: 8 }}>{err}</p>}
+
+      {h && !h.validated && (
+        <p style={{ fontSize: 12.5, color: "#8a4712", background: "#f8e7d6", border: "1px solid #C4661F", borderRadius: 8, padding: "8px 12px", marginTop: 10 }}>
+          🟠 Paie non encore validée par le Directeur général — le suivi DAF s'ouvrira dès la validation.
+        </p>
+      )}
+
+      {h && h.closed && (
+        <p style={{ fontSize: 12.5, fontWeight: 600, color: "var(--eclosion-dark, #8a6d12)", background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 8, padding: "8px 12px", marginTop: 10 }}>
+          ✅ Cycle de paie de {h.period} clôturé — salaires décaissés, déclarations faites, bulletins archivés.
+        </p>
+      )}
+
+      {h && (
+        <>
+          {/* Fil de validation daté : préparé → soumis → validé → pris en charge → clôturé. */}
+          <div style={{ marginTop: 14, fontSize: 12.5, fontWeight: 600 }}>Fil de validation</div>
+          <ol style={{ listStyle: "none", padding: 0, margin: "6px 0 0", display: "grid", gap: 6 }}>
+            {h.timeline.map((s, i) => (
+              <li key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 12.5 }}>
+                <span aria-hidden style={{ color: "var(--eclosion, #C89A1B)" }}>●</span>
+                <span style={{ flex: 1 }}>
+                  <b>{s.label}</b> — <span style={{ fontFamily: "var(--font-mono)" }}>{fdt(s.at)}</span>
+                  {s.by && <span style={{ color: "var(--muted)" }}> · {s.by}</span>}
+                  {s.note && <span style={{ color: "var(--muted)", fontStyle: "italic" }}> — « {s.note} »</span>}
+                </span>
+              </li>
+            ))}
+          </ol>
+
+          {/* Check-list de prise en charge. */}
+          <div style={{ marginTop: 16, fontSize: 12.5, fontWeight: 600 }}>Prise en charge</div>
+          <div style={{ display: "grid", gap: 8, marginTop: 6 }}>
+            {h.items.map((it) => (
+              <div key={it.key} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px" }}>
+                <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, cursor: editable ? "pointer" : "default" }}>
+                  <input
+                    type="checkbox"
+                    checked={it.done}
+                    disabled={!editable || busy}
+                    onChange={(e) => apply({ [it.key]: e.target.checked, ...(it.key === "cnps_declared" ? { cnps_ref: cnpsRef || null } : {}), ...(it.key === "tax_declared" ? { tax_ref: taxRef || null } : {}) })}
+                    style={{ marginTop: 2 }}
+                  />
+                  <span style={{ flex: 1 }}>
+                    <b>{it.label}</b>
+                    {it.done && it.at && <span style={{ color: "var(--muted)" }}> — le {fdt(it.at)}{it.by ? ` par ${it.by}` : ""}</span>}
+                  </span>
+                </label>
+                {(it.key === "cnps_declared" || it.key === "tax_declared") && (
+                  <div style={{ marginTop: 6, marginLeft: 26 }}>
+                    <input
+                      type="text"
+                      placeholder={it.key === "cnps_declared" ? "Référence / accusé CNPS (facultatif)" : "Référence déclaration impôt (facultatif)"}
+                      value={it.key === "cnps_declared" ? cnpsRef : taxRef}
+                      disabled={!editable || busy}
+                      onChange={(e) => (it.key === "cnps_declared" ? setCnpsRef(e.target.value) : setTaxRef(e.target.value))}
+                      onBlur={() => editable && apply(it.key === "cnps_declared" ? { cnps_ref: cnpsRef || null } : { tax_ref: taxRef || null })}
+                      style={{ width: "100%", maxWidth: 340, fontSize: 12.5, padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 6, boxSizing: "border-box" }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {canManage && h.validated && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+              {!h.closed && (
+                <Button variant="add" size="sm" type="button" disabled={busy || !h.all_items_done} onClick={doClose}>
+                  {h.all_items_done ? "Clôturer le suivi" : "Clôturer le suivi (tout cocher d'abord)"}
+                </Button>
+              )}
+              {h.closed && <Button variant="view" size="sm" type="button" disabled={busy} onClick={doReopen}>Rouvrir le suivi</Button>}
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 // ── DIPE mensuel CNPS : le livre de paie aux colonnes du formulaire officiel ──
 // de télédéclaration (e-services CNPS). Aperçu à l'écran + impression/PDF (mise
 // en forme officielle) + export CSV pour saisie/import sur le portail.
@@ -773,13 +902,14 @@ function InternesCard() {
 }
 
 export function PayrollEngineHub({
-  employees, canEditPayroll, canValidatePayrollDg, canManagePayroll, canClosePayroll,
+  employees, canEditPayroll, canValidatePayrollDg, canManagePayroll, canClosePayroll, canHandoffDaf,
 }: {
   employees: Employee[];
   canEditPayroll: boolean;
   canValidatePayrollDg: boolean;
   canManagePayroll: boolean;
   canClosePayroll: boolean;
+  canHandoffDaf: boolean;
 }) {
   return (
     <section style={{ marginTop: 8 }}>
@@ -800,6 +930,7 @@ export function PayrollEngineHub({
         <InternesCard />
         <PayrollRegisterSection canClose={canClosePayroll} collapsible />
         <PayrollMonthlySection canManage={canEditPayroll} canValidateDg={canValidatePayrollDg} collapsible />
+        <HandoffCard canManage={canHandoffDaf} />
         <JournalCard />
         <DeclarationsCard kind="cnps" />
         <DeclarationsCard kind="fiscal" />

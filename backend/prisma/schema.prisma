@@ -887,6 +887,32 @@ model PayrollMonthlyRun {
   @@map("payroll_monthly_runs")
 }
 
+// Suivi de prise en charge par le DAF après validation DG (Temps 2, 26/08/2026) :
+// une fois la paie du mois entérinée, le DAF pilote l'après — décaissement des
+// salaires, déclarations CNPS/DIPE et fiscales, archivage — puis clôture le
+// suivi. Table dédiée (séparée du livre de paie clôturé, PayrollClosure) : le DG
+// valide la paie, le DAF exécute et suit. Chaque coche est datée et tracée.
+model PayrollHandoff {
+  id             String    @id @default(uuid())
+  periodKey      String    @unique @map("period_key") // AAAA-MM
+  salariesPaidAt DateTime? @map("salaries_paid_at")
+  salariesPaidBy String?   @map("salaries_paid_by")
+  cnpsDeclaredAt DateTime? @map("cnps_declared_at")
+  cnpsDeclaredBy String?   @map("cnps_declared_by")
+  cnpsRef        String?   @map("cnps_ref")
+  taxDeclaredAt  DateTime? @map("tax_declared_at")
+  taxDeclaredBy  String?   @map("tax_declared_by")
+  taxRef         String?   @map("tax_ref")
+  archivedAt     DateTime? @map("archived_at")
+  archivedBy     String?   @map("archived_by")
+  closedAt       DateTime? @map("closed_at")
+  closedBy       String?   @map("closed_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@map("payroll_handoffs")
+}
+
 // Éléments variables du mois pour un salarié (saisis par le RH). Imposables :
 // primes, heures sup. Avant impôt : retenue d'absence. Retenues nettes internes :
 // retard, avance, prêt, sanction, autres. Le net est recalculé par le moteur.

@@ -102,6 +102,7 @@ interface HrPageProps {
   canClosePayroll: boolean;
   // Validation définitive du mois de paie — réservée au Directeur général.
   canValidatePayrollDg: boolean;
+  canHandoffDaf: boolean;
 }
 
 type HrModal =
@@ -136,7 +137,7 @@ type HrModal =
 
 // Ch. 19 : Ressources humaines — dossier collaborateur, cycle de vie du
 // compte, absences, revue des accès (couche transverse du Lot 6).
-export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence, canOverseePresence, canViewPayroll, canManagePayroll, canEditPayroll, canClosePayroll, canValidatePayrollDg }: HrPageProps) {
+export function HrPage({ canManage, canAdminister, canValidateAbsence, canManageUsers, canReadConfidential, canWriteConfidential, canAdministerPresence, canValidatePresence, canOverseePresence, canViewPayroll, canManagePayroll, canEditPayroll, canClosePayroll, canValidatePayrollDg, canHandoffDaf }: HrPageProps) {
   const { t } = useI18n();
   const confirm = useConfirm();
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -400,6 +401,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
           canValidatePayrollDg={canValidatePayrollDg}
           canManagePayroll={canManagePayroll}
           canClosePayroll={canClosePayroll}
+          canHandoffDaf={canHandoffDaf}
         />
       )}
 

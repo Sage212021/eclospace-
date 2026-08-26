@@ -1186,6 +1186,138 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // ===== Suivi de prise en charge par le DAF + fil de validation (Temps 2) =====
+  // Après validation DG, le DAF pilote l'après : décaissement + déclarations +
+  // archivage, puis clôture le suivi. Lecture ouverte à la paie (DG/RH/DAF) ;
+  // écriture réservée au DAF (finance:validation) — le RH ne l'a pas.
+
+  // État du suivi + fil de validation daté (préparé → soumis → validé → pris en
+  // charge → clôturé).
+  fastify.get(
+    "/api/v1/payroll/monthly/:period/handoff",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+      if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
+      const h = await prisma.payrollHandoff.findUnique({ where: { periodKey: period } });
+
+      const ids = [run.preparedBy, run.submittedBy, run.validatedBy, run.returnedBy, h?.salariesPaidBy, h?.cnpsDeclaredBy, h?.taxDeclaredBy, h?.archivedBy, h?.closedBy].filter((x): x is string => Boolean(x));
+      const users = ids.length ? await prisma.user.findMany({ where: { id: { in: [...new Set(ids)] } }, select: { id: true, username: true } }) : [];
+      const name = (id: string | null | undefined) => (id ? users.find((u) => u.id === id)?.username ?? null : null);
+
+      const items = [
+        { key: "salaries_paid", label: "Salaires décaissés", done: Boolean(h?.salariesPaidAt), at: h?.salariesPaidAt ?? null, by: name(h?.salariesPaidBy), ref: null as string | null },
+        { key: "cnps_declared", label: "CNPS / DIPE déclarée", done: Boolean(h?.cnpsDeclaredAt), at: h?.cnpsDeclaredAt ?? null, by: name(h?.cnpsDeclaredBy), ref: h?.cnpsRef ?? null },
+        { key: "tax_declared", label: "Impôts (IRPP/CAC) déclarés", done: Boolean(h?.taxDeclaredAt), at: h?.taxDeclaredAt ?? null, by: name(h?.taxDeclaredBy), ref: h?.taxRef ?? null },
+        { key: "archived", label: "Bulletins archivés", done: Boolean(h?.archivedAt), at: h?.archivedAt ?? null, by: name(h?.archivedBy), ref: null as string | null },
+      ];
+      const timeline = [
+        { step: "prepare", label: "Paie préparée", at: run.createdAt, by: name(run.preparedBy), note: null as string | null },
+        run.submittedAt ? { step: "submit", label: "Soumise au Directeur général", at: run.submittedAt, by: name(run.submittedBy), note: null } : null,
+        run.returnedAt ? { step: "return", label: "Retournée pour correction", at: run.returnedAt, by: name(run.returnedBy), note: run.returnReason } : null,
+        run.validatedAt ? { step: "validate", label: "Validée par le Directeur général", at: run.validatedAt, by: name(run.validatedBy), note: null } : null,
+        h?.salariesPaidAt ? { step: "paid", label: "Salaires décaissés", at: h.salariesPaidAt, by: name(h.salariesPaidBy), note: null } : null,
+        h?.cnpsDeclaredAt ? { step: "cnps", label: "CNPS / DIPE déclarée", at: h.cnpsDeclaredAt, by: name(h.cnpsDeclaredBy), note: h.cnpsRef } : null,
+        h?.taxDeclaredAt ? { step: "tax", label: "Impôts déclarés", at: h.taxDeclaredAt, by: name(h.taxDeclaredBy), note: h.taxRef } : null,
+        h?.archivedAt ? { step: "archived", label: "Bulletins archivés", at: h.archivedAt, by: name(h.archivedBy), note: null } : null,
+        h?.closedAt ? { step: "closed", label: "Suivi clôturé par le DAF", at: h.closedAt, by: name(h.closedBy), note: null } : null,
+      ].filter((x): x is NonNullable<typeof x> => x !== null);
+
+      return reply.send({
+        period,
+        run_status: run.status,
+        validated: run.status === "valide",
+        closed: Boolean(h?.closedAt),
+        all_items_done: items.every((i) => i.done),
+        items,
+        timeline,
+      });
+    },
+  );
+
+  // Le DAF coche/décoche les étapes de prise en charge (avec réf. CNPS / impôt).
+  fastify.put(
+    "/api/v1/payroll/monthly/:period/handoff",
+    { preHandler: requirePermission("finance", "validation") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const parsed = z
+        .object({
+          salaries_paid: z.boolean().optional(),
+          cnps_declared: z.boolean().optional(),
+          cnps_ref: z.string().max(120).nullable().optional(),
+          tax_declared: z.boolean().optional(),
+          tax_ref: z.string().max(120).nullable().optional(),
+          archived: z.boolean().optional(),
+        })
+        .safeParse(request.body ?? {});
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+      if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
+      if (run.status !== "valide") return reply.code(409).send({ code: "not_validated", message: "La paie doit être validée par le Directeur général avant le suivi du DAF." });
+      const existing = await prisma.payrollHandoff.findUnique({ where: { periodKey: period } });
+      if (existing?.closedAt) return reply.code(409).send({ code: "handoff_closed", message: "Le suivi de ce mois est clôturé : rouvrez-le avant de le modifier." });
+
+      const now = new Date();
+      const uid = request.user!.id;
+      const b = parsed.data;
+      const data: Record<string, unknown> = {};
+      if (b.salaries_paid !== undefined) { data.salariesPaidAt = b.salaries_paid ? now : null; data.salariesPaidBy = b.salaries_paid ? uid : null; }
+      if (b.cnps_declared !== undefined) { data.cnpsDeclaredAt = b.cnps_declared ? now : null; data.cnpsDeclaredBy = b.cnps_declared ? uid : null; }
+      if (b.tax_declared !== undefined) { data.taxDeclaredAt = b.tax_declared ? now : null; data.taxDeclaredBy = b.tax_declared ? uid : null; }
+      if (b.archived !== undefined) { data.archivedAt = b.archived ? now : null; data.archivedBy = b.archived ? uid : null; }
+      if (b.cnps_ref !== undefined) data.cnpsRef = b.cnps_ref;
+      if (b.tax_ref !== undefined) data.taxRef = b.tax_ref;
+
+      const h = await prisma.payrollHandoff.upsert({ where: { periodKey: period }, update: data, create: { periodKey: period, ...data } });
+      await writeAuditLog({ userId: uid, action: "update", entityType: "payroll_handoff", entityId: period, newValues: b, ipAddress: request.ip });
+      return reply.send({ period, closed: Boolean(h.closedAt) });
+    },
+  );
+
+  // Clôture du suivi par le DAF : possible seulement si les quatre étapes sont
+  // faites. Notifie le DG que le cycle de paie du mois est bouclé.
+  fastify.post(
+    "/api/v1/payroll/monthly/:period/handoff/close",
+    { preHandler: requirePermission("finance", "validation") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+      if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
+      if (run.status !== "valide") return reply.code(409).send({ code: "not_validated", message: "La paie doit être validée par le Directeur général avant de clôturer le suivi." });
+      const h = await prisma.payrollHandoff.findUnique({ where: { periodKey: period } });
+      const done = Boolean(h?.salariesPaidAt) && Boolean(h?.cnpsDeclaredAt) && Boolean(h?.taxDeclaredAt) && Boolean(h?.archivedAt);
+      if (!done) return reply.code(409).send({ code: "handoff_incomplete", message: "Suivi incomplet : décaissement, déclarations CNPS et impôts, et archivage doivent être faits avant la clôture." });
+      if (h?.closedAt) return reply.code(409).send({ code: "already_closed", message: "Le suivi de ce mois est déjà clôturé." });
+      await prisma.payrollHandoff.update({ where: { periodKey: period }, data: { closedAt: new Date(), closedBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "payroll_handoff", entityId: period, newValues: { closed: true }, ipAddress: request.ip });
+      for (const roleCode of DG_ROLES) {
+        await notifyRole({
+          roleCode, type: "validation", priority: "medium",
+          title: `Paie de ${period} — cycle bouclé`,
+          body: `Le DAF a clôturé le suivi de la paie de ${period} : salaires décaissés, CNPS et impôts déclarés, bulletins archivés.`,
+          entityType: "payroll_handoff", entityId: period,
+        }).catch(() => {});
+      }
+      return reply.send({ period, closed: true });
+    },
+  );
+
+  // Réouverture du suivi (règle d'or : toujours pouvoir corriger).
+  fastify.post(
+    "/api/v1/payroll/monthly/:period/handoff/reopen",
+    { preHandler: requirePermission("finance", "validation") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const h = await prisma.payrollHandoff.findUnique({ where: { periodKey: period } });
+      if (!h?.closedAt) return reply.code(409).send({ code: "not_closed", message: "Le suivi de ce mois n'est pas clôturé." });
+      await prisma.payrollHandoff.update({ where: { periodKey: period }, data: { closedAt: null, closedBy: null } });
+      await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "payroll_handoff", entityId: period, newValues: { reopened: true }, ipAddress: request.ip });
+      return reply.send({ period, closed: false });
+    },
+  );
+
   // ----- Réouverture EXCEPTIONNELLE d'une paie verrouillée (ch. 23) -----------
 
   // Le RH DEMANDE la réouverture d'un mois VALIDÉ (verrouillé) : il ne peut plus

@@ -4686,6 +4686,39 @@ export interface DipeMonth {
 export function getPayrollDipe(period: string, irppMode: DipeIrppMode = "irpp_cac") {
   return request<DipeMonth>(`/api/v1/payroll/dipe?period=${encodeURIComponent(period)}&irpp_mode=${irppMode}`);
 }
+
+// Suivi de prise en charge de la paie par le DAF (Temps 2).
+export interface PayrollHandoffItem { key: string; label: string; done: boolean; at: string | null; by: string | null; ref: string | null }
+export interface PayrollTimelineStep { step: string; label: string; at: string; by: string | null; note: string | null }
+export interface PayrollHandoff {
+  period: string;
+  run_status: "brouillon" | "soumis_dg" | "valide" | null;
+  validated: boolean;
+  closed: boolean;
+  all_items_done: boolean;
+  items: PayrollHandoffItem[];
+  timeline: PayrollTimelineStep[];
+}
+export interface PayrollHandoffInput {
+  salaries_paid?: boolean;
+  cnps_declared?: boolean;
+  cnps_ref?: string | null;
+  tax_declared?: boolean;
+  tax_ref?: string | null;
+  archived?: boolean;
+}
+export function getPayrollHandoff(period: string) {
+  return request<PayrollHandoff>(`/api/v1/payroll/monthly/${encodeURIComponent(period)}/handoff`);
+}
+export function updatePayrollHandoff(period: string, input: PayrollHandoffInput) {
+  return request<{ period: string; closed: boolean }>(`/api/v1/payroll/monthly/${encodeURIComponent(period)}/handoff`, { method: "PUT", body: JSON.stringify(input) });
+}
+export function closePayrollHandoff(period: string) {
+  return request<{ period: string; closed: boolean }>(`/api/v1/payroll/monthly/${encodeURIComponent(period)}/handoff/close`, { method: "POST" });
+}
+export function reopenPayrollHandoff(period: string) {
+  return request<{ period: string; closed: boolean }>(`/api/v1/payroll/monthly/${encodeURIComponent(period)}/handoff/reopen`, { method: "POST" });
+}
 export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null, extraLines?: PayrollExtraLine[]) {
   return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...elements, note: note ?? null, extra_lines: extraLines ?? [] }) });
 }

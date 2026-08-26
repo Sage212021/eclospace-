@@ -820,6 +820,7 @@ export function App() {
             canEditPayroll={permissions.has("paie:saisie")}
             canClosePayroll={permissions.has("paie:validation")}
             canValidatePayrollDg={roles.has("DIR_GENERAL") || roles.has("ADMIN_GENERAL")}
+            canHandoffDaf={permissions.has("finance:validation")}
           />
         )}
         {leaf && "page" in leaf && leaf.page === "users-roles" && (

@@ -4678,6 +4678,9 @@ export interface DipeMonth {
   effectif: number;
   rows: DipeRow[];
   totals: { salaire_brut: number; salaire_taxable: number; cotisable_total: number; cotisable_plafonne: number; irpp: number };
+  run_status?: "brouillon" | "soumis_dg" | "valide" | null;
+  official?: boolean;
+  official_label?: string;
   closed: boolean;
 }
 export function getPayrollDipe(period: string, irppMode: DipeIrppMode = "irpp_cac") {

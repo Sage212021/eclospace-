@@ -645,6 +645,18 @@ function DipeCard() {
       {state === "none" && <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>Aucun salarié avec fiche paie pour ce mois — préparez la paie dans « Bulletins de paie ».</p>}
       {state === "ok" && dipe && (
         <>
+          {/* Provisoire tant que la paie du mois n'est pas validée par le DG ;
+              définitif (bon pour dépôt CNPS) une fois la paie entérinée. */}
+          <div
+            style={{
+              marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+              border: `1px solid ${dipe.official ? "var(--eclosion)" : "#C4661F"}`,
+              background: dipe.official ? "var(--eclosion-soft)" : "#f8e7d6",
+              color: dipe.official ? "var(--eclosion-dark, #8a6d12)" : "#8a4712",
+            }}
+          >
+            {dipe.official ? "✅ DIPE définitif" : "🟠 DIPE provisoire"} — {dipe.official_label ?? ""}
+          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 10, fontSize: 12.5 }}>
             <span>N° DIPE : <b className="num" style={{ fontFamily: "var(--font-mono)" }}>{dipe.n_dipe || "— (à renseigner dans Paramètres)"}</b></span>
             <span>Clé : <b style={{ fontFamily: "var(--font-mono)" }}>{dipe.cle || "—"}</b></span>

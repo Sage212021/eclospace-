@@ -22,15 +22,21 @@ describe("paie mensuelle : machine à états (soumission RH → validation/retou
   let dgCookie: string; // admin (ADMIN_GENERAL) : joue le DG
   let rhCookie: string; // RESP_RH : saisie, mais pas la validation DG
   let emp: string;
+  let rhId: string; // le RH qui soumet (destinataire des notifs retour/validation)
+  let dafUsername: string; // RESP_FINANCE : notifié à la validation pour le suivi
   const createdUsernames: string[] = [];
 
   beforeAll(async () => {
     app = await buildApp();
     dgCookie = await loginCookie(app, "admin", ADMIN_PASSWORD);
     const rhU = `rhsm_${Math.random().toString(36).slice(2, 7)}`;
-    await createUserWithRole(rhU, "RESP_RH", ADMIN_PASSWORD);
+    rhId = (await createUserWithRole(rhU, "RESP_RH", ADMIN_PASSWORD)).id;
     createdUsernames.push(rhU);
     rhCookie = await loginCookie(app, rhU, ADMIN_PASSWORD);
+    // DAF (Responsable administratif et financier) : notifié à la validation.
+    dafUsername = `dafsm_${Math.random().toString(36).slice(2, 7)}`;
+    await createUserWithRole(dafUsername, "RESP_FINANCE", ADMIN_PASSWORD);
+    createdUsernames.push(dafUsername);
 
     // Repartir propre sur la période dédiée.
     const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: PERIOD } });
@@ -79,6 +85,11 @@ describe("paie mensuelle : machine à états (soumission RH → validation/retou
     expect(sub.statusCode).toBe(200);
     expect(sub.json().status).toBe("soumis_dg");
 
+    // Le DG (admin, ADMIN_GENERAL) est notifié « à valider ».
+    const dg = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+    const dgNotif = await prisma.notification.findFirst({ where: { userId: dg.id, entityType: "payroll_monthly_run", entityId: PERIOD, title: { contains: "à valider" } } });
+    expect(dgNotif).toBeTruthy();
+
     const patch = await app.inject({
       method: "PATCH", url: `/api/v1/payroll/monthly/${PERIOD}/lines/${emp}`, headers: { cookie: rhCookie },
       payload: { primes: 5000, heures_sup: 0, retenue_absence: 0, retard: 0, avance: 0, pret: 0, sanction: 0, autres: 0 },
@@ -110,6 +121,10 @@ describe("paie mensuelle : machine à états (soumission RH → validation/retou
     expect(month.status).toBe("brouillon");
     expect(month.return_reason).toContain("Vérifier le salaire de base");
 
+    // Le RH qui a soumis est notifié du retour, avec le motif.
+    const rhNotif = await prisma.notification.findFirst({ where: { userId: rhId, entityType: "payroll_monthly_run", entityId: PERIOD, title: { contains: "retournée" } } });
+    expect(rhNotif).toBeTruthy();
+
     // Redevenue modifiable.
     const patch = await app.inject({
       method: "PATCH", url: `/api/v1/payroll/monthly/${PERIOD}/lines/${emp}`, headers: { cookie: rhCookie },
@@ -120,9 +135,25 @@ describe("paie mensuelle : machine à états (soumission RH → validation/retou
 
   it("Test 8 & 9 — le DG valide après re-soumission ; la paie est verrouillée", async () => {
     await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/submit`, headers: { cookie: rhCookie } });
+
+    // Avant validation, le DIPE est « provisoire ».
+    const dipeBefore = (await app.inject({ method: "GET", url: `/api/v1/payroll/dipe?period=${PERIOD}`, headers: { cookie: dgCookie } })).json();
+    expect(dipeBefore.official).toBe(false);
+
     const val = await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/validate`, headers: { cookie: dgCookie } });
     expect(val.statusCode).toBe(200);
     expect(val.json().status).toBe("valide");
+
+    // À la validation : le RH est informé, et le DAF est notifié pour le suivi.
+    const rhOk = await prisma.notification.findFirst({ where: { userId: rhId, entityType: "payroll_monthly_run", entityId: PERIOD, title: { contains: "validée" } } });
+    expect(rhOk).toBeTruthy();
+    const daf = await prisma.user.findFirstOrThrow({ where: { username: dafUsername } });
+    const dafNotif = await prisma.notification.findFirst({ where: { userId: daf.id, entityType: "payroll_monthly_run", entityId: PERIOD, title: { contains: "à prendre en charge" } } });
+    expect(dafNotif).toBeTruthy();
+
+    // Après validation, le DIPE devient « définitif ».
+    const dipeAfter = (await app.inject({ method: "GET", url: `/api/v1/payroll/dipe?period=${PERIOD}`, headers: { cookie: dgCookie } })).json();
+    expect(dipeAfter.official).toBe(true);
 
     const patch = await app.inject({
       method: "PATCH", url: `/api/v1/payroll/monthly/${PERIOD}/lines/${emp}`, headers: { cookie: rhCookie },

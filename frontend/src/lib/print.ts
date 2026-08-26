@@ -356,7 +356,7 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
     ${
       isDuplicate
         ? `<div style="margin:0 0 16px; color:#6b7280; font-size:11px; font-style:italic; border-left:2px solid #d3d8e0; padding-left:9px">
-             ${tr("Duplicata", "Duplicate")} — ${tr("copie conforme d'une facture déjà imprimée", "true copy of an already-printed invoice")}${firstPrinted ? ` (${tr("original tiré le", "original printed on")} <span class="num">${escapeHtml(firstPrinted)}</span>)` : ""}. ${tr("Seul l'original fait foi.", "Only the original is authoritative.")}
+             ${tr("Duplicata", "Duplicate")} — ${tr("copie conforme d'une facture déjà imprimée", "true copy of an already-printed invoice")}${firstPrinted ? ` (${tr("original tiré le", "original printed on")} <span class="num">${escapeHtml(firstPrinted)}</span>)` : ""}.
            </div>`
         : ""
     }

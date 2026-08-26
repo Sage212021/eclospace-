@@ -10,6 +10,14 @@ import { buildPayslipEmail } from "../lib/documentEmail.js";
 import { absenceAutoDeductionEnabled, setAbsenceAutoDeduction, computeAbsenceDeduction } from "../lib/absencePayDeduction.js";
 import { SALARY_ELEMENT_CATEGORY_LABELS, FISCAL_STATUS_LABELS, CNPS_STATUS_LABELS } from "../lib/salaryElements.js";
 import { sendMail, senderIdentity } from "../lib/mailer.js";
+import { notifyRole, notifyUsers } from "../lib/notify.js";
+
+// Circuit de validation de la paie (Temps 1) : le DG est prévenu à la soumission,
+// le RH au retour/validation, et le DAF est notifié à la validation pour le suivi
+// (décaissement + déclarations). Rôles destinataires.
+const DG_ROLES = ["DIR_GENERAL", "ADMIN_GENERAL"] as const;
+const DAF_ROLE = "RESP_FINANCE";
+const RH_ROLE = "RESP_RH";
 
 // Module « Paie » natif (D-007) — incrément 1 : barème légal camerounais
 // PARAMÉTRABLE et VERSIONNÉ, et interrupteur d'internalisation (oui/non).
@@ -758,6 +766,10 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const idRow = await prisma.setting.findUnique({ where: { key: "publisher_identity" } });
       const identity = (idRow?.value ?? {}) as Record<string, unknown>;
       const [year, month] = period.split("-");
+      // DIPE officiel (définitif) uniquement si la paie du mois est validée par le
+      // DG ; sinon c'est un aperçu de travail « provisoire » à ne pas déposer.
+      const runStatus = (await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period }, select: { status: true } }))?.status ?? null;
+      const official = runStatus === "valide";
 
       const rows = reg.lines.map((l) => ({
         matricule_assure: l.cnps_number ?? "",
@@ -794,6 +806,11 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         effectif: rows.length,
         rows,
         totals,
+        run_status: runStatus,
+        official,
+        official_label: official
+          ? "Définitif — paie validée par le Directeur général"
+          : "Provisoire — en attente de validation du Directeur général",
         closed: Boolean(await prisma.payrollClosure.findUnique({ where: { periodKey: period }, select: { closedAt: true } })),
       });
     },
@@ -1062,6 +1079,16 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       }
       await prisma.payrollMonthlyRun.update({ where: { id: run.id }, data: { status: "soumis_dg", submittedBy: request.user!.id, submittedAt: new Date(), returnReason: null } });
       await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "payroll_monthly_run", entityId: period, newValues: { status: "soumis_dg" }, ipAddress: request.ip });
+      // Le DG est prévenu qu'une paie l'attend. Sans montants nominatifs (données
+      // confidentielles) : juste le mois et le nombre de bulletins.
+      for (const roleCode of DG_ROLES) {
+        await notifyRole({
+          roleCode, type: "validation", priority: "high",
+          title: `Paie de ${period} à valider`,
+          body: `Le RH a soumis la paie de ${period} (${run._count.lines} bulletin(s)). À valider ou à retourner pour correction.`,
+          entityType: "payroll_monthly_run", entityId: period,
+        }).catch(() => {});
+      }
       return reply.send({ period, status: "soumis_dg" });
     },
   );
@@ -1081,11 +1108,21 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
       if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
       if (run.status !== "soumis_dg") return reply.code(409).send({ code: "not_submitted", message: "Seule une paie soumise au DG peut être retournée pour correction." });
+      const submitter = run.submittedBy; // capturé avant remise à null
       await prisma.payrollMonthlyRun.update({
         where: { id: run.id },
         data: { status: "brouillon", returnReason: parsed.data.reason, returnedBy: request.user!.id, returnedAt: new Date(), submittedBy: null, submittedAt: null },
       });
       await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "payroll_monthly_run", entityId: period, newValues: { status: "brouillon", returned: true, reason: parsed.data.reason }, ipAddress: request.ip });
+      // Le RH qui a soumis (à défaut, le service RH) est prévenu, avec le motif.
+      const returnNotif = {
+        type: "autre" as const, priority: "high" as const,
+        title: `Paie de ${period} retournée pour correction`,
+        body: `Le Directeur général a retourné la paie de ${period}. Motif : ${parsed.data.reason}. La grille est de nouveau modifiable.`,
+        entityType: "payroll_monthly_run", entityId: period,
+      };
+      if (submitter) await notifyUsers({ userIds: [submitter], ...returnNotif }).catch(() => {});
+      else await notifyRole({ roleCode: RH_ROLE, ...returnNotif }).catch(() => {});
       return reply.send({ period, status: "brouillon", return_reason: parsed.data.reason });
     },
   );
@@ -1105,8 +1142,26 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
       if (run.status === "valide") return reply.code(409).send({ code: "already_validated", message: "Ce mois est déjà validé." });
       if (run._count.lines === 0) return reply.code(409).send({ code: "empty_run", message: "Aucun salarié dans ce mois : rien à valider." });
+      const submitter = run.submittedBy;
       await prisma.payrollMonthlyRun.update({ where: { id: run.id }, data: { status: "valide", validatedBy: request.user!.id, validatedAt: new Date() } });
       await writeAuditLog({ userId: request.user!.id, action: "validate", entityType: "payroll_monthly_run", entityId: period, ipAddress: request.ip });
+      // Le RH est informé de la validation (entérinement).
+      const rhNotif = {
+        type: "validation" as const, priority: "medium" as const,
+        title: `Paie de ${period} validée`,
+        body: `Le Directeur général a validé (entériné) la paie de ${period}. Les bulletins peuvent être édités et transmis.`,
+        entityType: "payroll_monthly_run", entityId: period,
+      };
+      if (submitter) await notifyUsers({ userIds: [submitter], ...rhNotif }).catch(() => {});
+      else await notifyRole({ roleCode: RH_ROLE, ...rhNotif }).catch(() => {});
+      // Le DAF est mis dans la boucle pour le SUIVI : décaissement + déclarations
+      // (CNPS/DIPE, impôts). Sans montants nominatifs (confidentialité).
+      await notifyRole({
+        roleCode: DAF_ROLE, type: "validation", priority: "high",
+        title: `Paie de ${period} validée — à prendre en charge`,
+        body: `La paie de ${period} (${run._count.lines} bulletin(s)) est validée par le Directeur général. À décaisser et à déclarer (CNPS/DIPE, impôts).`,
+        entityType: "payroll_monthly_run", entityId: period,
+      }).catch(() => {});
       return reply.send({ period, status: "valide" });
     },
   );

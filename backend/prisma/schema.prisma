@@ -4847,3 +4847,94 @@ model AnnualEvent {
   @@index([startDate])
   @@map("annual_events")
 }
+
+// ============================================================
+// Stock & magasin — pièces officielles imprimables (revue opérateur du
+// 27/08/2026) : Bon de réception de livres (entrée fournisseur/imprimeur) et
+// Retrait d'ouvrage auteur (décharge de remise à l'auteur). Ce sont des
+// DOCUMENTS numérotés, tracés et réimprimables — ils N'AFFECTENT PAS les
+// quantités en stock (l'entrée réelle reste le mouvement de réception, la
+// remise reste l'écriture du compte auteur). Suppression logique (Modèle §13).
+// ============================================================
+
+model BookReceiptCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("book_receipt_counters")
+}
+
+model BookReceiptVoucher {
+  id             String            @id @default(uuid())
+  number         String            @unique // BR-AAAA-NNNN
+  receivedAt     DateTime          @map("received_at")
+  supplier       String?
+  orderNumber    String?           @map("order_number")
+  deliveryNote   String?           @map("delivery_note") // N° de bordereau de livraison
+  carrier        String?
+  receivedByName String?           @map("received_by_name")
+  receivedByRole String?           @map("received_by_role")
+  remarks        String?
+  lines          BookReceiptLine[]
+  createdById    String            @map("created_by")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  deletedAt      DateTime?         @map("deleted_at")
+
+  @@index([receivedAt])
+  @@map("book_receipt_vouchers")
+}
+
+model BookReceiptLine {
+  id          String             @id @default(uuid())
+  voucherId   String             @map("voucher_id")
+  voucher     BookReceiptVoucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  isbnId      String?            @map("isbn_id") // lien facultatif au catalogue
+  title       String
+  author      String?
+  qtyOrdered  Int?               @map("qty_ordered")
+  qtyReceived Int?               @map("qty_received")
+  qtyGood     Int?               @map("qty_good") // reçue en bon état
+  qtyDamaged  Int?               @map("qty_damaged") // reçue endommagée
+  position    Int                @default(0)
+
+  @@index([voucherId])
+  @@map("book_receipt_lines")
+}
+
+enum AuthorWithdrawalMotive {
+  contractuel // Exemplaires d'auteur (contractuels)
+  achat_remise // Achat d'exemplaires avec remise auteur
+  restitution_stock // Restitution de stock après paiement
+  autre
+}
+
+model AuthorWithdrawalCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("author_withdrawal_counters")
+}
+
+model AuthorWithdrawalVoucher {
+  id            String                 @id @default(uuid())
+  number        String                 @unique // RA-AAAA-NNNN
+  issuedAt      DateTime               @map("issued_at")
+  place         String?
+  authorName    String                 @map("author_name")
+  authorAddress String?                @map("author_address")
+  authorPhone   String?                @map("author_phone")
+  authorEmail   String?                @map("author_email")
+  workTitle     String                 @map("work_title")
+  isbnId        String?                @map("isbn_id") // lien facultatif au catalogue
+  quantity      Int
+  motive        AuthorWithdrawalMotive
+  motiveOther   String?                @map("motive_other")
+  createdById   String                 @map("created_by")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+  deletedAt     DateTime?              @map("deleted_at")
+
+  @@index([issuedAt])
+  @@map("author_withdrawal_vouchers")
+}

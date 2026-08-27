@@ -2264,6 +2264,108 @@ export function listIsbnRefs(format?: IsbnFormat) {
   return request<IsbnRef[]>(`/api/v1/isbns${query}`);
 }
 
+// --- Pièces du pôle Stock & magasin (documents imprimables) ---
+
+export interface BookReceiptLine {
+  id?: string;
+  isbn_id?: string | null;
+  title: string;
+  author?: string | null;
+  qty_ordered?: number | null;
+  qty_received?: number | null;
+  qty_good?: number | null;
+  qty_damaged?: number | null;
+}
+export interface BookReceiptVoucher {
+  id: string;
+  number: string;
+  receivedAt: string;
+  supplier: string | null;
+  orderNumber: string | null;
+  deliveryNote: string | null;
+  carrier: string | null;
+  receivedByName: string | null;
+  receivedByRole: string | null;
+  remarks: string | null;
+  lines: {
+    id: string;
+    isbnId: string | null;
+    title: string;
+    author: string | null;
+    qtyOrdered: number | null;
+    qtyReceived: number | null;
+    qtyGood: number | null;
+    qtyDamaged: number | null;
+  }[];
+  createdAt: string;
+}
+export interface BookReceiptInput {
+  received_at: string;
+  supplier?: string | null;
+  order_number?: string | null;
+  delivery_note?: string | null;
+  carrier?: string | null;
+  received_by_name?: string | null;
+  received_by_role?: string | null;
+  remarks?: string | null;
+  lines: BookReceiptLine[];
+}
+export function listBookReceipts() {
+  return request<BookReceiptVoucher[]>(`/api/v1/book-receipts`);
+}
+export function createBookReceipt(input: BookReceiptInput) {
+  return request<BookReceiptVoucher>(`/api/v1/book-receipts`, { method: "POST", body: JSON.stringify(input) });
+}
+export function updateBookReceipt(id: string, input: BookReceiptInput) {
+  return request<BookReceiptVoucher>(`/api/v1/book-receipts/${id}`, { method: "PUT", body: JSON.stringify(input) });
+}
+export function deleteBookReceipt(id: string) {
+  return request<{ ok: true }>(`/api/v1/book-receipts/${id}`, { method: "DELETE" });
+}
+
+export type AuthorWithdrawalMotive = "contractuel" | "achat_remise" | "restitution_stock" | "autre";
+export interface AuthorWithdrawalVoucher {
+  id: string;
+  number: string;
+  issuedAt: string;
+  place: string | null;
+  authorName: string;
+  authorAddress: string | null;
+  authorPhone: string | null;
+  authorEmail: string | null;
+  workTitle: string;
+  isbnId: string | null;
+  quantity: number;
+  motive: AuthorWithdrawalMotive;
+  motiveOther: string | null;
+  createdAt: string;
+}
+export interface AuthorWithdrawalInput {
+  issued_at: string;
+  place?: string | null;
+  author_name: string;
+  author_address?: string | null;
+  author_phone?: string | null;
+  author_email?: string | null;
+  work_title: string;
+  isbn_id?: string | null;
+  quantity: number;
+  motive: AuthorWithdrawalMotive;
+  motive_other?: string | null;
+}
+export function listAuthorWithdrawals() {
+  return request<AuthorWithdrawalVoucher[]>(`/api/v1/author-withdrawals`);
+}
+export function createAuthorWithdrawal(input: AuthorWithdrawalInput) {
+  return request<AuthorWithdrawalVoucher>(`/api/v1/author-withdrawals`, { method: "POST", body: JSON.stringify(input) });
+}
+export function updateAuthorWithdrawal(id: string, input: AuthorWithdrawalInput) {
+  return request<AuthorWithdrawalVoucher>(`/api/v1/author-withdrawals/${id}`, { method: "PUT", body: JSON.stringify(input) });
+}
+export function deleteAuthorWithdrawal(id: string) {
+  return request<{ ok: true }>(`/api/v1/author-withdrawals/${id}`, { method: "DELETE" });
+}
+
 export type StockLocationType = "entrepot" | "depot" | "depot_vente" | "emplacement" | "stock_commercial";
 
 export interface StockLocation {

@@ -193,6 +193,31 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       // (Ch. 9 §9.12) est retiré en conséquence. Le contrat est signé une fois le
       // BAT validé par l'auteur, à l'étape Contractualisation, avant l'impression.
 
+      // Audit éditorial, point n°2 : un manuscrit accepté SOUS CONDITIONS ne
+      // peut pas entrer en production (mise en page). La correction est la
+      // dernière étape éditoriale (obligatoire, franchie par tout manuscrit) :
+      // on y bloque le passage tant que toutes les conditions posées par le
+      // comité n'ont pas été LEVÉES par la direction éditoriale. Un dossier
+      // accepté sous conditions mais sans condition listée (données anciennes)
+      // n'est pas piégé : rien à lever, rien à bloquer.
+      if (targetStatus.code === "CORRECTION") {
+        const lastDecision = await prisma.editorialDecision.findFirst({ where: { manuscriptId: id }, orderBy: { decidedAt: "desc" } });
+        if (lastDecision?.decision === "acceptation_conditions") {
+          const remaining = await prisma.editorialAcceptanceCondition.findMany({
+            where: { manuscriptId: id, deletedAt: null, liftedAt: null },
+            orderBy: { createdAt: "asc" },
+            select: { label: true },
+          });
+          if (remaining.length > 0) {
+            return reply.code(409).send({
+              code: "conditions_not_lifted",
+              message: `Acceptation sous conditions : ${remaining.length} condition(s) non levée(s) — impossible d'entrer en production (mise en page) tant qu'elles ne sont pas levées : ${remaining.map((c) => c.label).join(" ; ")}.`,
+              missing: remaining.map((c) => c.label),
+            });
+          }
+        }
+      }
+
       // Ch. 10 §10.7 : un point bloquant non levé empêche la validation de
       // l'étape de correction.
       if (targetStatus.code === "CORRECTION") {

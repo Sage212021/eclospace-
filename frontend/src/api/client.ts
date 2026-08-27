@@ -1039,11 +1039,46 @@ export function submitEditorialDecision(
   manuscriptId: string,
   decision: "acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus",
   motivation: string,
+  conditions?: string[],
 ) {
   return request<{ authorNotifiedTo?: string | null }>(`/api/v1/manuscripts/${manuscriptId}/editorial-decision`, {
     method: "POST",
-    body: JSON.stringify({ decision, motivation }),
+    body: JSON.stringify({ decision, motivation, ...(conditions && conditions.length ? { conditions } : {}) }),
   });
+}
+
+// Suivi des acceptations « sous conditions » (audit éditorial, point n°2).
+export interface AcceptanceCondition {
+  id: string;
+  label: string;
+  created_at: string;
+  created_by: string | null;
+  lifted: boolean;
+  lifted_at: string | null;
+  lifted_by: string | null;
+  lift_note: string | null;
+}
+export interface AcceptanceConditions {
+  items: AcceptanceCondition[];
+  total: number;
+  lifted: number;
+  remaining: number;
+  conditional: boolean;
+}
+export function getAcceptanceConditions(manuscriptId: string) {
+  return request<AcceptanceConditions>(`/api/v1/manuscripts/${manuscriptId}/acceptance-conditions`);
+}
+export function addAcceptanceCondition(manuscriptId: string, label: string) {
+  return request<{ id: string; label: string }>(`/api/v1/manuscripts/${manuscriptId}/acceptance-conditions`, { method: "POST", body: JSON.stringify({ label }) });
+}
+export function liftAcceptanceCondition(condId: string, note?: string) {
+  return request<{ ok: true }>(`/api/v1/acceptance-conditions/${condId}/lift`, { method: "POST", body: JSON.stringify({ note }) });
+}
+export function reopenAcceptanceCondition(condId: string) {
+  return request<{ ok: true }>(`/api/v1/acceptance-conditions/${condId}/reopen`, { method: "POST" });
+}
+export function deleteAcceptanceCondition(condId: string) {
+  return request<{ ok: true }>(`/api/v1/acceptance-conditions/${condId}`, { method: "DELETE" });
 }
 
 // Modèles de lettres de décision éditoriale (réponse à l'auteur).

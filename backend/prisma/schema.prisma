@@ -2140,6 +2140,27 @@ model EditorialDecision {
   @@map("editorial_decisions")
 }
 
+// Suivi des acceptations « sous conditions » (audit éditorial, point n°2) : les
+// conditions posées par le comité ne doivent plus se perdre dans le texte libre
+// de la motivation. Chaque condition est listée, puis « levée » (datée, tracée)
+// quand elle est remplie. Le passage en production (mise en page) est bloqué
+// tant qu'il reste des conditions non levées. Suppression logique (Modèle §13).
+model EditorialAcceptanceCondition {
+  id           String    @id @default(uuid())
+  manuscriptId String    @map("manuscript_id")
+  decisionId   String?   @map("decision_id")
+  label        String
+  createdById  String    @map("created_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  liftedAt     DateTime? @map("lifted_at")
+  liftedById   String?   @map("lifted_by")
+  liftNote     String?   @map("lift_note")
+  deletedAt    DateTime? @map("deleted_at")
+
+  @@index([manuscriptId])
+  @@map("editorial_acceptance_conditions")
+}
+
 // ============================================================
 // Lot 2 — Contrats (Ch. 9, hors moteur de droits connecté aux ventes : Lot 5),
 // tâches et Gantt (Ch. 8 §8.4-8.12), correction éditoriale (Ch. 10 — réutilise

@@ -35,6 +35,9 @@ const evaluationSchema = z.object({
 const editorialDecisionSchema = z.object({
   decision: z.nativeEnum(EditorialDecisionType),
   motivation: z.string().min(1),
+  // Acceptation « sous conditions » (audit éditorial, point n°2) : la liste des
+  // conditions à lever avant production. Ignorée pour les autres décisions.
+  conditions: z.array(z.string().min(1)).optional(),
 });
 
 async function ratingThresholds() {
@@ -634,6 +637,17 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
           },
         });
 
+        // Acceptation sous conditions (point n°2) : on enregistre les conditions
+        // posées comme des éléments à lever, un par un, avant la production.
+        if (parsed.data.decision === "acceptation_conditions" && parsed.data.conditions?.length) {
+          await tx.editorialAcceptanceCondition.createMany({
+            data: parsed.data.conditions
+              .map((c) => c.trim())
+              .filter((c) => c.length > 0)
+              .map((label) => ({ manuscriptId: id, decisionId: created.id, label, createdById: request.user!.id })),
+          });
+        }
+
         const isTerminalDecision = ["acceptation", "acceptation_conditions", "refus"].includes(parsed.data.decision);
         if (isTerminalDecision) {
           await tx.manuscriptStep.upsert({
@@ -756,6 +770,94 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       maison,
     });
     return reply.send({ decision: decision.decision, subject: rendered.subject, body: rendered.body, author_email: contributor?.partner.email ?? null, notified_at: decision.authorNotifiedAt, notified_to: decision.authorNotifiedTo });
+  });
+
+  // === Suivi des acceptations « sous conditions » (audit éditorial, point n°2) ===
+  // Les conditions posées par le comité sont listées, puis « levées » (datées,
+  // tracées) au fur et à mesure. Le passage en mise en page (production) est
+  // bloqué tant qu'il en reste (contrôle dans workflow.ts).
+
+  // Résout les noms des auteurs de dépôt/levée pour l'affichage.
+  async function decorateConditions(rows: { createdById: string; liftedById: string | null }[]) {
+    const ids = [...new Set(rows.flatMap((r) => [r.createdById, r.liftedById]).filter((v): v is string => !!v))];
+    const users = ids.length
+      ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, username: true, employee: { select: { firstName: true, lastName: true } } } })
+      : [];
+    const byId = new Map(users.map((u) => [u.id, `${u.employee?.firstName ?? ""} ${u.employee?.lastName ?? ""}`.trim() || u.username]));
+    return byId;
+  }
+
+  fastify.get("/api/v1/manuscripts/:id/acceptance-conditions", { preHandler: requirePermission("decision_editoriale", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [rows, lastDecision] = await Promise.all([
+      prisma.editorialAcceptanceCondition.findMany({ where: { manuscriptId: id, deletedAt: null }, orderBy: { createdAt: "asc" } }),
+      prisma.editorialDecision.findFirst({ where: { manuscriptId: id }, orderBy: { decidedAt: "desc" }, select: { decision: true } }),
+    ]);
+    const names = await decorateConditions(rows);
+    const items = rows.map((r) => ({
+      id: r.id,
+      label: r.label,
+      created_at: r.createdAt,
+      created_by: names.get(r.createdById) ?? null,
+      lifted: !!r.liftedAt,
+      lifted_at: r.liftedAt,
+      lifted_by: r.liftedById ? names.get(r.liftedById) ?? null : null,
+      lift_note: r.liftNote,
+    }));
+    const remaining = items.filter((i) => !i.lifted).length;
+    return reply.send({ items, total: items.length, lifted: items.length - remaining, remaining, conditional: lastDecision?.decision === "acceptation_conditions" });
+  });
+
+  // Ajoute une condition à l'acceptation sous conditions en cours.
+  fastify.post("/api/v1/manuscripts/:id/acceptance-conditions", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ label: z.string().min(1).max(500) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Intitulé de condition manquant." });
+    const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+    const decision = await prisma.editorialDecision.findFirst({ where: { manuscriptId: id }, orderBy: { decidedAt: "desc" } });
+    if (!decision || decision.decision !== "acceptation_conditions") {
+      return reply.code(409).send({ code: "not_conditional", message: "La dernière décision de ce manuscrit n'est pas une acceptation sous conditions." });
+    }
+    const created = await prisma.editorialAcceptanceCondition.create({
+      data: { manuscriptId: id, decisionId: decision.id, label: parsed.data.label.trim(), createdById: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "editorial_acceptance_condition", entityId: created.id, newValues: { manuscript_id: id, label: created.label }, ipAddress: request.ip });
+    return reply.code(201).send({ id: created.id, label: created.label });
+  });
+
+  // Lève une condition (elle est remplie) — datée et tracée.
+  fastify.post("/api/v1/acceptance-conditions/:condId/lift", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+    const { condId } = request.params as { condId: string };
+    const parsed = z.object({ note: z.string().max(1000).optional() }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides." });
+    const cond = await prisma.editorialAcceptanceCondition.findFirst({ where: { id: condId, deletedAt: null } });
+    if (!cond) return reply.code(404).send({ code: "not_found", message: "Condition introuvable." });
+    if (cond.liftedAt) return reply.code(409).send({ code: "already_lifted", message: "Cette condition est déjà levée." });
+    await prisma.editorialAcceptanceCondition.update({ where: { id: condId }, data: { liftedAt: new Date(), liftedById: request.user!.id, liftNote: parsed.data.note?.trim() || null } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "editorial_acceptance_condition", entityId: condId, newValues: { lifted: true, note: parsed.data.note ?? null }, ipAddress: request.ip });
+    return reply.send({ ok: true });
+  });
+
+  // Rouvre une condition levée par erreur (règle d'or : réversible, tracé).
+  fastify.post("/api/v1/acceptance-conditions/:condId/reopen", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+    const { condId } = request.params as { condId: string };
+    const cond = await prisma.editorialAcceptanceCondition.findFirst({ where: { id: condId, deletedAt: null } });
+    if (!cond) return reply.code(404).send({ code: "not_found", message: "Condition introuvable." });
+    if (!cond.liftedAt) return reply.code(409).send({ code: "not_lifted", message: "Cette condition n'est pas levée." });
+    await prisma.editorialAcceptanceCondition.update({ where: { id: condId }, data: { liftedAt: null, liftedById: null, liftNote: null } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "editorial_acceptance_condition", entityId: condId, newValues: { lifted: false }, ipAddress: request.ip });
+    return reply.send({ ok: true });
+  });
+
+  // Retire une condition ajoutée par erreur (suppression logique, Modèle §13).
+  fastify.delete("/api/v1/acceptance-conditions/:condId", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+    const { condId } = request.params as { condId: string };
+    const cond = await prisma.editorialAcceptanceCondition.findFirst({ where: { id: condId, deletedAt: null } });
+    if (!cond) return reply.code(404).send({ code: "not_found", message: "Condition introuvable." });
+    await prisma.editorialAcceptanceCondition.update({ where: { id: condId }, data: { deletedAt: new Date() } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "editorial_acceptance_condition", entityId: condId, newValues: { deleted: true }, ipAddress: request.ip });
+    return reply.send({ ok: true });
   });
 }
 

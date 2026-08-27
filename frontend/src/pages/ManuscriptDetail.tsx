@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   assignReader,
   closeReadingCommittee,
@@ -28,12 +28,18 @@ import {
   setManuscriptSegment,
   setPublicationDate,
   submitEditorialDecision,
+  getAcceptanceConditions,
+  addAcceptanceCondition,
+  liftAcceptanceCondition,
+  reopenAcceptanceCondition,
+  deleteAcceptanceCondition,
   updateManuscriptRegistration,
   validateStep,
   getNextAssignees,
   getOptionalStep,
   listGenres,
   listUsers,
+  type AcceptanceConditions,
   type EditorialSegment,
   type Genre,
   type ManuscriptDetail as ManuscriptDetailData,
@@ -506,6 +512,12 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
 
         {manuscript.status.code === "PLANIFICATION" && (
           <StartingProofPanel manuscriptId={manuscript.id} canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")} />
+        )}
+
+        {/* Acceptation sous conditions (audit éditorial, point n°2) : suivi des
+            conditions à lever avant l'entrée en production (mise en page). */}
+        {manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && manuscript.status.stepOrder < MISE_EN_PAGE_STEP_ORDER && (
+          <AcceptanceConditionsPanel manuscriptId={manuscript.id} canManage={canDecide} confirm={confirm} onError={setError} />
         )}
 
         {manuscript.status.code === "CORRECTION" && (
@@ -1294,6 +1306,158 @@ const DECISION_LABELS: Record<string, string> = {
   refus: "Refus motivé",
 };
 
+function AcceptanceConditionsPanel({
+  manuscriptId,
+  canManage,
+  confirm,
+  onError,
+}: {
+  manuscriptId: string;
+  canManage: boolean;
+  confirm: (opts: { title: string; message: string; detail?: string; confirmLabel?: string; tone?: "default" | "danger" }) => Promise<boolean>;
+  onError: (message: string) => void;
+}) {
+  const [data, setData] = useState<AcceptanceConditions | null>(null);
+  const [newLabel, setNewLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      setData(await getAcceptanceConditions(manuscriptId));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Échec du chargement des conditions.");
+    }
+  };
+  useEffect(() => {
+    load().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manuscriptId]);
+
+  // N'apparaît que pour une acceptation sous conditions (ou s'il reste des
+  // conditions tracées) : aucune pollution pour les autres décisions.
+  if (!data || (!data.conditional && data.total === 0)) return null;
+
+  const add = async () => {
+    const label = newLabel.trim();
+    if (!label) return;
+    setBusy(true);
+    try {
+      await addAcceptanceCondition(manuscriptId, label);
+      setNewLabel("");
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Échec de l'ajout.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const lift = async (id: string, label: string) => {
+    const ok = await confirm({ title: "Lever la condition", message: `Confirmer que la condition est remplie ?`, detail: label, confirmLabel: "Lever la condition" });
+    if (!ok) return;
+    try {
+      await liftAcceptanceCondition(id);
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Échec.");
+    }
+  };
+  const reopen = async (id: string) => {
+    try {
+      await reopenAcceptanceCondition(id);
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Échec.");
+    }
+  };
+  const remove = async (id: string, label: string) => {
+    const ok = await confirm({ title: "Retirer la condition", message: "Retirer cette condition de la liste ?", detail: label, tone: "danger", confirmLabel: "Retirer" });
+    if (!ok) return;
+    try {
+      await deleteAcceptanceCondition(id);
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Échec.");
+    }
+  };
+
+  const allLifted = data.remaining === 0 && data.total > 0;
+  return (
+    <div style={{ background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 8, padding: "10px 13px", fontSize: 12.5, color: "var(--ink)", marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+        <strong>Acceptation sous conditions — conditions à lever</strong>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            padding: "2px 8px",
+            borderRadius: 999,
+            background: allLifted ? "rgba(200,154,27,0.15)" : data.remaining > 0 ? "rgba(196,102,31,0.15)" : "transparent",
+            color: allLifted ? "var(--eclosion)" : data.remaining > 0 ? "#C4661F" : "var(--muted)",
+          }}
+        >
+          {data.total === 0 ? "aucune condition" : allLifted ? "toutes levées" : `${data.remaining} à lever / ${data.total}`}
+        </span>
+      </div>
+      {data.remaining > 0 && (
+        <p style={{ margin: "0 0 8px", color: "#C4661F", fontSize: 11.5 }}>
+          Le manuscrit ne pourra pas entrer en mise en page tant que toutes les conditions ne sont pas levées.
+        </p>
+      )}
+      {data.total === 0 ? (
+        <p style={{ margin: "0 0 8px", color: "var(--muted)", fontSize: 11.5 }}>Aucune condition listée. Ajoutez celles posées par le comité pour en assurer le suivi.</p>
+      ) : (
+        <ul style={{ listStyle: "none", margin: "0 0 8px", padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+          {data.items.map((c) => (
+            <li key={c.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 8px", background: "var(--surface, #fff)", border: "1px solid var(--line)", borderRadius: 6 }}>
+              <span style={{ fontSize: 14, lineHeight: "18px" }}>{c.lifted ? "✅" : "⏳"}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ textDecoration: c.lifted ? "line-through" : "none", opacity: c.lifted ? 0.7 : 1 }}>{c.label}</div>
+                {c.lifted && (
+                  <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                    Levée{c.lifted_by ? ` par ${c.lifted_by}` : ""}{c.lifted_at ? ` le ${new Date(c.lifted_at).toLocaleDateString("fr-FR")}` : ""}
+                  </div>
+                )}
+              </div>
+              {canManage && (
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  {c.lifted ? (
+                    <button type="button" onClick={() => reopen(c.id)} style={smallBtnStyle}>Rouvrir</button>
+                  ) : (
+                    <button type="button" onClick={() => lift(c.id, c.label)} style={{ ...smallBtnStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)" }}>Lever</button>
+                  )}
+                  <button type="button" onClick={() => remove(c.id, c.label)} style={{ ...smallBtnStyle, color: "#C24B3A", borderColor: "#C24B3A" }}>Retirer</button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canManage && data.conditional && (
+        <div style={{ display: "flex", gap: 6 }}>
+          <input
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+            placeholder="Ajouter une condition…"
+            style={{ flex: 1, padding: "6px 8px", fontSize: 12, border: "1px solid var(--line)", borderRadius: 6 }}
+          />
+          <button type="button" onClick={add} disabled={busy || !newLabel.trim()} style={{ ...smallBtnStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)" }}>Ajouter</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const smallBtnStyle: CSSProperties = {
+  fontSize: 11,
+  padding: "3px 8px",
+  borderRadius: 6,
+  border: "1px solid var(--line)",
+  background: "transparent",
+  cursor: "pointer",
+  color: "var(--ink)",
+};
+
 function EditorialDecisionForm({
   manuscriptId,
   confirm,
@@ -1307,8 +1471,13 @@ function EditorialDecisionForm({
 }) {
   const [decision, setDecision] = useState<"acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus">("acceptation");
   const [motivation, setMotivation] = useState("");
+  const [conditionsText, setConditionsText] = useState("");
 
   async function submit() {
+    const conditions =
+      decision === "acceptation_conditions"
+        ? conditionsText.split("\n").map((c) => c.trim()).filter((c) => c.length > 0)
+        : [];
     const terminal = ["acceptation", "acceptation_conditions", "refus"].includes(decision);
     const ok = await confirm({
       title: "Décision éditoriale",
@@ -1316,14 +1485,16 @@ function EditorialDecisionForm({
       detail: terminal
         ? decision === "refus"
           ? "Un refus clôt le circuit (archivage)."
-          : "Une acceptation fait passer le manuscrit à la contractualisation."
+          : decision === "acceptation_conditions"
+            ? `Une acceptation fait passer le manuscrit à la planification.${conditions.length ? ` ${conditions.length} condition(s) à lever avant la mise en page.` : ""}`
+            : "Une acceptation fait passer le manuscrit à la planification."
         : "Le manuscrit reste à l'étape de décision.",
       tone: decision === "refus" ? "danger" : "default",
       confirmLabel: "Enregistrer la décision",
     });
     if (!ok) return;
     try {
-      const res = await submitEditorialDecision(manuscriptId, decision, motivation);
+      const res = await submitEditorialDecision(manuscriptId, decision, motivation, conditions);
       const notified = (res as { authorNotifiedTo?: string | null } | undefined)?.authorNotifiedTo;
       onDecided(
         `Décision enregistrée : ${DECISION_LABELS[decision]}.` +
@@ -1365,6 +1536,21 @@ function EditorialDecisionForm({
           style={{ display: "block", width: "100%", padding: 8, marginTop: 4, fontFamily: "inherit", fontSize: 13 }}
         />
       </label>
+      {decision === "acceptation_conditions" && (
+        <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
+          Conditions à lever (une par ligne)
+          <textarea
+            value={conditionsText}
+            onChange={(e) => setConditionsText(e.target.value)}
+            rows={3}
+            placeholder={"Ex. : Revoir le chapitre 4 (longueur)\nFournir l'autorisation de reproduction des illustrations"}
+            style={{ display: "block", width: "100%", padding: 8, marginTop: 4, fontFamily: "inherit", fontSize: 13 }}
+          />
+          <span style={{ display: "block", marginTop: 4, color: "var(--muted, #667)", fontSize: 11 }}>
+            Chaque condition devra être « levée » avant que le manuscrit puisse entrer en mise en page (production). Vous pourrez aussi en ajouter plus tard.
+          </span>
+        </label>
+      )}
       <ActionButton onClick={() => {}}>Enregistrer la décision</ActionButton>
     </form>
   );

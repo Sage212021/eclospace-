@@ -4,6 +4,8 @@ import {
   closeReadingCommittee,
   createExternalReviewer,
   deleteManuscript,
+  sealManuscript,
+  unsealManuscript,
   getManuscript,
   getManuscriptSourceFileMeta,
   manuscriptSourceFileUrl,
@@ -204,6 +206,25 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
     }
   }
 
+  // Archivage définitif (scellé) : verrouille le dossier en lecture seule ; seule
+  // l'administration peut le rouvrir (motif obligatoire).
+  async function handleSeal() {
+    const ok = await confirm({
+      title: "Sceller le dossier (archivage définitif)",
+      message: `Archiver définitivement et verrouiller « ${manuscript!.title} » ?`,
+      detail: "Le dossier passera en LECTURE SEULE : plus aucune modification ni retrait de document. Seul un administrateur pourra le rouvrir (avec motif).",
+      confirmLabel: "Sceller le dossier",
+    });
+    if (!ok) return;
+    await handle(() => sealManuscript(manuscript!.id), "Dossier scellé : archivé définitivement, en lecture seule.");
+  }
+  async function handleUnseal() {
+    const reason = window.prompt(`Rouvrir le dossier scellé « ${manuscript!.title} » ?\n\nMotif obligatoire (ce que vous allez corriger) :`, "");
+    if (reason === null) return;
+    if (!reason.trim()) { setError("Motif de réouverture obligatoire."); return; }
+    await handle(() => unsealManuscript(manuscript!.id, reason.trim()), "Dossier rouvert : modifications possibles. Pensez à le re-sceller une fois corrigé.");
+  }
+
   return (
     <div style={{ padding: "clamp(16px, 4vw, 32px)", maxWidth: 760 }}>
       {/* Barre d'actions standard — toujours visible en haut de la fiche, pour
@@ -246,6 +267,16 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             ✎ Modifier la fiche
           </button>
         )}
+        {canValidate && manuscript.status.code === "ARCHIVAGE" && !manuscript.sealed && (
+          <button onClick={handleSeal} style={barBtn()} title="Archiver définitivement : verrouille le dossier en lecture seule.">
+            🔒 Sceller le dossier
+          </button>
+        )}
+        {manuscript.sealed && permissions.has("manuscripts:administration") && (
+          <button onClick={handleUnseal} style={barBtn()} title="Rouvrir le dossier scellé (motif obligatoire, tracé).">
+            🔓 Rouvrir le dossier
+          </button>
+        )}
         <span style={{ flex: 1 }} />
         {permissions.has("manuscripts:administration") && (
           <button
@@ -271,6 +302,15 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           </button>
         )}
       </div>
+
+      {manuscript.sealed && (
+        <div style={{ background: "var(--eclosion-soft, #eef1f7)", border: "1px solid var(--ink, #16233D)", color: "var(--ink, #16233D)", borderRadius: 8, padding: "10px 14px", fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+          🔒 Dossier scellé — archivé définitivement, en lecture seule. Aucune modification ni retrait de document n'est possible.{" "}
+          {permissions.has("manuscripts:administration")
+            ? "Utilisez « Rouvrir le dossier » (motif requis) pour corriger."
+            : "Seul un administrateur peut le rouvrir."}
+        </div>
+      )}
 
       {editFiche && (
         <EditFicheModal

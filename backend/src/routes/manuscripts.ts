@@ -706,6 +706,35 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     return reply.send({ archived_count: archived.length, archived, skipped });
   });
 
+  // Archivage définitif — SCELLER un dossier (lecture seule totale). Réservé à la
+  // validation éditoriale ; possible seulement quand le manuscrit est à
+  // l'Archivage (parcours complet, ou refusé/abandonné — le refus mène aussi à
+  // l'Archivage). Un dossier encore incomplet n'est donc jamais scellé.
+  fastify.post("/api/v1/manuscripts/:id/seal", { preHandler: requirePermission("manuscripts", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const m = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, include: { status: { select: { code: true } } } });
+    if (!m) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+    if (m.sealedAt) return reply.code(409).send({ code: "already_sealed", message: "Ce dossier est déjà scellé." });
+    if (m.status.code !== "ARCHIVAGE") return reply.code(409).send({ code: "not_archived", message: "Seul un dossier arrivé à l'Archivage peut être scellé. Terminez d'abord le parcours jusqu'à l'archivage réel." });
+    await prisma.manuscript.update({ where: { id }, data: { sealedAt: new Date(), sealedBy: request.user!.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "manuscript", entityId: id, newValues: { sealed: true }, ipAddress: request.ip });
+    return reply.send({ id, sealed: true });
+  });
+
+  // Réouverture d'un dossier scellé : réservée à l'administration, MOTIF obligatoire,
+  // tracée au journal. (Cette route est exemptée du verrou de scellé.)
+  fastify.post("/api/v1/manuscripts/:id/unseal", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ reason: z.string().min(3).max(500) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "reason_required", message: "Motif de réouverture obligatoire (au moins 3 caractères)." });
+    const m = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+    if (!m) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+    if (!m.sealedAt) return reply.code(409).send({ code: "not_sealed", message: "Ce dossier n'est pas scellé." });
+    await prisma.manuscript.update({ where: { id }, data: { sealedAt: null, sealedBy: null } });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "manuscript", entityId: id, newValues: { unsealed: true, reason: parsed.data.reason }, ipAddress: request.ip });
+    return reply.send({ id, sealed: false });
+  });
+
   fastify.get("/api/v1/manuscripts/:id", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const manuscript = await prisma.manuscript.findFirst({
@@ -725,7 +754,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     }
     // Verrou de la fiche : figée dès qu'un contrat est signé (voir édition fiche).
     const signed = await prisma.contract.findFirst({ where: { manuscriptId: id, deletedAt: null, OR: [{ signedAt: { not: null } }, { status: "active" }] }, select: { id: true } });
-    return reply.send({ ...manuscript, registrationLocked: Boolean(signed) });
+    return reply.send({ ...manuscript, registrationLocked: Boolean(signed), sealed: Boolean(manuscript.sealedAt) });
   });
 
   // Dépôt à la RÉCEPTION : le fichier source du manuscrit. C'est l'entrée du

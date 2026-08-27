@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listSettings, updateSetting, getPublisherIdentity, updatePublisherIdentity, getWorkflowDeliverableSteps, updateWorkflowDeliverableSteps, getWorkflowStepModes, updateWorkflowStepModes, type AppSetting, type EffectiveUser, type PublisherIdentity, type WorkflowDeliverableConfig, type WorkflowStepModesConfig } from "../api/client";
+import { listSettings, updateSetting, getPublisherIdentity, updatePublisherIdentity, getWorkflowDeliverableSteps, updateWorkflowDeliverableSteps, getWorkflowStepModes, updateWorkflowStepModes, getEditorialDecisionLetters, updateEditorialDecisionLetters, type AppSetting, type EffectiveUser, type PublisherIdentity, type WorkflowDeliverableConfig, type WorkflowStepModesConfig, type EditorialLetters, type EditorialLetterKey } from "../api/client";
 import { AccountSecurity } from "../components/AccountSecurity";
 import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -108,6 +108,9 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
 
       {/* Étapes « à option » : facultative (on peut passer) / obligatoire (à réaliser). */}
       <WorkflowStepModesCard canAdminister={canAdminister} />
+
+      {/* Lettres de réponse à l'auteur à la décision éditoriale (modèles éditables). */}
+      <DecisionLettersCard canAdminister={canAdminister} />
 
       {/* Diagnostic de persistance : vérifier que les données sont bien conservées en base. */}
       <SystemDiagnosticCard />
@@ -371,6 +374,89 @@ function WorkflowStepModesCard({ canAdminister }: { canAdminister: boolean }) {
         <div style={{ marginTop: 12 }}>
           <button onClick={save} disabled={saving || !dirty} style={{ border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: saving || !dirty ? "default" : "pointer", opacity: saving || !dirty ? 0.55 : 1 }}>
             {saving ? "Enregistrement…" : "Enregistrer les modes d'étape"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DecisionLettersCard({ canAdminister }: { canAdminister: boolean }) {
+  const [data, setData] = useState<EditorialLetters | null>(null);
+  const [draft, setDraft] = useState<EditorialLetters["templates"] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    getEditorialDecisionLetters()
+      .then((d) => { setData(d); setDraft(d.templates); })
+      .catch(() => setErr("Chargement des modèles de lettres impossible."));
+  }, []);
+
+  function set(key: EditorialLetterKey, field: "subject" | "body", value: string) {
+    setNote(null);
+    setDraft((d) => (d ? { ...d, [key]: { ...d[key], [field]: value } } : d));
+  }
+  async function save() {
+    if (!draft) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      await updateEditorialDecisionLetters(draft);
+      setData((x) => (x ? { ...x, templates: draft } : x));
+      setNote("Modèles enregistrés. Ils s'appliquent aux prochaines décisions éditoriales.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Échec de l'enregistrement.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  const dirty = data && draft ? JSON.stringify(draft) !== JSON.stringify(data.templates) : false;
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 14 }}>Lettres de décision éditoriale (réponse à l'auteur)</div>
+      <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "4px 0 10px", lineHeight: 1.6 }}>
+        À chaque décision (acceptation, sous conditions, refus), une lettre est adressée automatiquement à l'auteur.
+        Personnalisez l'objet et le texte.{" "}
+        {data && (
+          <>Balises : {data.placeholders.map((p) => (
+            <code key={p} style={{ background: "var(--panel, #f4f5f8)", borderRadius: 4, padding: "1px 5px", marginRight: 4, fontSize: 11.5 }}>{p}</code>
+          ))}</>
+        )}
+      </p>
+      {err && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+      {note && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{note}</div>}
+      {!data || !draft ? (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
+      ) : (
+        <div style={{ display: "grid", gap: 14 }}>
+          {data.keys.map((k) => (
+            <div key={k} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>{data.labels[k]}</div>
+              <input
+                value={draft[k].subject}
+                disabled={!canAdminister}
+                onChange={(e) => set(k, "subject", e.target.value)}
+                placeholder="Objet de la lettre"
+                style={{ width: "100%", fontSize: 12.5, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, boxSizing: "border-box", marginBottom: 6 }}
+              />
+              <textarea
+                value={draft[k].body}
+                disabled={!canAdminister}
+                onChange={(e) => set(k, "body", e.target.value)}
+                rows={8}
+                style={{ width: "100%", fontSize: 12.5, padding: 8, border: "1px solid var(--line)", borderRadius: 6, boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.5 }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      {canAdminister && data && (
+        <div style={{ marginTop: 12 }}>
+          <button onClick={save} disabled={saving || !dirty} style={{ border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: saving || !dirty ? "default" : "pointer", opacity: saving || !dirty ? 0.55 : 1 }}>
+            {saving ? "Enregistrement…" : "Enregistrer les modèles"}
           </button>
         </div>
       )}

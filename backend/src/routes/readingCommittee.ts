@@ -7,7 +7,8 @@ import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
-import { isMailConfigured, sendMail } from "../lib/mailer.js";
+import { isMailConfigured, sendMail, senderIdentity } from "../lib/mailer.js";
+import { resolveLetterTemplates, renderLetter, letterHtml, houseName, LETTER_KEYS, LETTER_LABELS, DEFAULT_LETTERS, type EditorialLetterKey } from "../lib/editorialLetters.js";
 import { createHash } from "node:crypto";
 
 const DEFAULT_RATING_THRESHOLDS = { excellent: 8.5, very_good: 7, good: 5, to_rework: 3 };
@@ -669,18 +670,93 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
         return created;
       });
 
+      // Réponse à l'auteur (audit éditorial, point n°1) : pour toute décision
+      // terminale, on adresse une lettre à l'auteur (acceptation / sous
+      // conditions / refus courtois), à partir de modèles éditables, et on trace
+      // l'envoi sur la décision. Au meilleur effort : n'échoue jamais la décision.
+      let authorNotifiedTo: string | null = null;
+      if (["acceptation", "acceptation_conditions", "refus"].includes(parsed.data.decision)) {
+        try {
+          const contributor = await prisma.workContributor.findFirst({
+            where: { manuscriptId: id, role: "author" },
+            include: { partner: { select: { firstName: true, lastName: true, email: true } } },
+          });
+          const email = contributor?.partner.email?.trim();
+          if (email) {
+            const templates = await resolveLetterTemplates();
+            const maison = await houseName();
+            const rendered = renderLetter(templates[parsed.data.decision as EditorialLetterKey], {
+              auteur: `${contributor!.partner.firstName ?? ""} ${contributor!.partner.lastName ?? ""}`.trim(),
+              titre: manuscript.title,
+              numero: manuscript.manuscriptNumber,
+              motivation: parsed.data.motivation,
+              maison,
+            });
+            const sender = senderIdentity(request.user!);
+            await sendMail({ to: email, subject: rendered.subject, text: rendered.body, html: letterHtml(rendered.subject, rendered.body, maison), ...sender }).catch(() => false);
+            authorNotifiedTo = email;
+            await prisma.editorialDecision.update({ where: { id: decision.id }, data: { authorNotifiedTo: email, authorNotifiedAt: new Date() } });
+          }
+        } catch {
+          /* l'envoi de la lettre ne doit jamais bloquer la décision */
+        }
+      }
+
       await writeAuditLog({
         userId: request.user!.id,
         action: "validate",
         entityType: "manuscript",
         entityId: id,
-        newValues: { decision: parsed.data.decision, scoreGapFlag },
+        newValues: { decision: parsed.data.decision, scoreGapFlag, author_notified_to: authorNotifiedTo, mail_configured: isMailConfigured() },
         ipAddress: request.ip,
       });
 
-      return reply.code(201).send(decision);
+      return reply.code(201).send({ ...decision, authorNotifiedTo });
     },
   );
+
+  // Modèles de lettres de décision (éditables). Lecture : éditorial ; édition :
+  // administration (config à l'échelle de la maison).
+  fastify.get("/api/v1/editorial-decision-letters", { preHandler: requirePermission("decision_editoriale", "consultation") }, async (_request, reply) => {
+    return reply.send({
+      templates: await resolveLetterTemplates(),
+      keys: LETTER_KEYS,
+      labels: LETTER_LABELS,
+      defaults: DEFAULT_LETTERS,
+      placeholders: ["{{auteur}}", "{{titre}}", "{{numero}}", "{{motivation}}", "{{maison}}"],
+    });
+  });
+
+  fastify.put("/api/v1/editorial-decision-letters", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const tpl = z.object({ subject: z.string().min(1).max(300), body: z.string().min(1).max(8000) });
+    const parsed = z.object({ acceptation: tpl.optional(), acceptation_conditions: tpl.optional(), refus: tpl.optional() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    await prisma.setting.upsert({ where: { key: "editorial_decision_letters" }, update: { value: parsed.data }, create: { key: "editorial_decision_letters", value: parsed.data } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "setting", entityId: "editorial_decision_letters", ipAddress: request.ip });
+    return reply.send({ ok: true, templates: await resolveLetterTemplates() });
+  });
+
+  // Aperçu / réimpression de la lettre de la dernière décision d'un manuscrit.
+  fastify.get("/api/v1/manuscripts/:id/decision-letter", { preHandler: requirePermission("decision_editoriale", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const decision = await prisma.editorialDecision.findFirst({ where: { manuscriptId: id }, orderBy: { decidedAt: "desc" } });
+    if (!decision) return reply.code(404).send({ code: "not_found", message: "Aucune décision pour ce manuscrit." });
+    if (!(["acceptation", "acceptation_conditions", "refus"] as string[]).includes(decision.decision)) {
+      return reply.code(409).send({ code: "not_terminal", message: "La dernière décision n'est pas terminale : pas de lettre." });
+    }
+    const m = await prisma.manuscript.findUniqueOrThrow({ where: { id }, select: { title: true, manuscriptNumber: true } });
+    const contributor = await prisma.workContributor.findFirst({ where: { manuscriptId: id, role: "author" }, include: { partner: { select: { firstName: true, lastName: true, email: true } } } });
+    const templates = await resolveLetterTemplates();
+    const maison = await houseName();
+    const rendered = renderLetter(templates[decision.decision as EditorialLetterKey], {
+      auteur: `${contributor?.partner.firstName ?? ""} ${contributor?.partner.lastName ?? ""}`.trim() || "l'auteur",
+      titre: m.title,
+      numero: m.manuscriptNumber,
+      motivation: decision.motivation,
+      maison,
+    });
+    return reply.send({ decision: decision.decision, subject: rendered.subject, body: rendered.body, author_email: contributor?.partner.email ?? null, notified_at: decision.authorNotifiedAt, notified_to: decision.authorNotifiedTo });
+  });
 }
 
 async function completeReadingCommitteeStep(manuscriptId: string, userId: string): Promise<boolean> {

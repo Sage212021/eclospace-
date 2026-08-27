@@ -1323,8 +1323,16 @@ function EditorialDecisionForm({
     });
     if (!ok) return;
     try {
-      await submitEditorialDecision(manuscriptId, decision, motivation);
-      onDecided(`Décision enregistrée : ${DECISION_LABELS[decision]}.`);
+      const res = await submitEditorialDecision(manuscriptId, decision, motivation);
+      const notified = (res as { authorNotifiedTo?: string | null } | undefined)?.authorNotifiedTo;
+      onDecided(
+        `Décision enregistrée : ${DECISION_LABELS[decision]}.` +
+          (["acceptation", "acceptation_conditions", "refus"].includes(decision)
+            ? notified
+              ? ` Une lettre de réponse a été adressée à l'auteur (${notified}).`
+              : " ⚠ Aucune adresse e-mail auteur : pensez à répondre à l'auteur manuellement."
+            : ""),
+      );
     } catch (err) {
       onError(err instanceof Error ? err.message : "Échec de l'enregistrement de la décision.");
     }

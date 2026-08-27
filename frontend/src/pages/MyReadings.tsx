@@ -3,6 +3,7 @@ import {
   listEvaluationCriteria,
   listMyReadingAssignments,
   submitEvaluation,
+  getReadingCommitteeRules,
   uploadReadingReportFile,
   readingReportFileUrl,
   readingManuscriptFileUrl,
@@ -225,12 +226,17 @@ function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; o
   const [comment, setComment] = useState("");
   const [recommendation, setRecommendation] = useState<"accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject">("accept");
   const [error, setError] = useState<string | null>(null);
+  // Conflit d'intérêt (point n°3) : demandé seulement si la règle est activée.
+  const [conflictRequired, setConflictRequired] = useState(false);
+  const [conflictChoice, setConflictChoice] = useState<"none" | "conflict" | "">("");
+  const [conflictDetails, setConflictDetails] = useState("");
 
   useEffect(() => {
     listEvaluationCriteria().then((c) => {
       setCriteria(c);
       setScores(Object.fromEntries(c.map((crit) => [crit.id, 5])));
     });
+    getReadingCommitteeRules().then((r) => setConflictRequired(r.rules.conflictEnabled)).catch(() => {});
   }, []);
 
   const totalCoefficient = criteria.reduce((sum, c) => sum + Number(c.coefficient), 0);
@@ -242,11 +248,22 @@ function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; o
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    if (conflictRequired && conflictChoice === "") {
+      setError("Déclarez d'abord l'absence de conflit d'intérêt, ou signalez-en un.");
+      return;
+    }
+    if (conflictRequired && conflictChoice === "conflict" && !conflictDetails.trim()) {
+      setError("Précisez la nature du conflit d'intérêt signalé.");
+      return;
+    }
     try {
       await submitEvaluation(assignmentId, {
         scores: criteria.map((c) => ({ criterion_id: c.id, score: scores[c.id] ?? 0 })),
         overall_comment: comment,
         recommendation,
+        ...(conflictRequired
+          ? { conflict_declaration: { has_conflict: conflictChoice === "conflict", details: conflictChoice === "conflict" ? conflictDetails.trim() : undefined } }
+          : {}),
       });
       onSubmitted();
     } catch (err) {
@@ -297,6 +314,29 @@ function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; o
           <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} />
         </Field>
       </div>
+
+      {conflictRequired && (
+        <div style={{ marginTop: 12, padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 8, background: "var(--paper)" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>Déclaration de conflit d'intérêt</div>
+          <label style={{ display: "block", fontSize: 12.5, marginBottom: 4 }}>
+            <input type="radio" name="conflict" checked={conflictChoice === "none"} onChange={() => setConflictChoice("none")} style={{ marginRight: 6 }} />
+            Je déclare n'avoir aucun lien d'intérêt avec l'auteur.
+          </label>
+          <label style={{ display: "block", fontSize: 12.5 }}>
+            <input type="radio" name="conflict" checked={conflictChoice === "conflict"} onChange={() => setConflictChoice("conflict")} style={{ marginRight: 6 }} />
+            Je signale un conflit d'intérêt (à préciser).
+          </label>
+          {conflictChoice === "conflict" && (
+            <textarea
+              value={conflictDetails}
+              onChange={(e) => setConflictDetails(e.target.value)}
+              rows={2}
+              placeholder="Nature du lien (parenté, relation professionnelle, différend…)"
+              style={{ width: "100%", marginTop: 6, padding: 8, fontFamily: "inherit", fontSize: 12.5 }}
+            />
+          )}
+        </div>
+      )}
 
       {error && <p style={{ color: "var(--alert)", fontSize: 12.5, marginTop: 10 }}>{error}</p>}
 

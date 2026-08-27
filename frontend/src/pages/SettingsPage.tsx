@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listSettings, updateSetting, getPublisherIdentity, updatePublisherIdentity, getWorkflowDeliverableSteps, updateWorkflowDeliverableSteps, getWorkflowStepModes, updateWorkflowStepModes, getEditorialDecisionLetters, updateEditorialDecisionLetters, type AppSetting, type EffectiveUser, type PublisherIdentity, type WorkflowDeliverableConfig, type WorkflowStepModesConfig, type EditorialLetters, type EditorialLetterKey } from "../api/client";
+import { listSettings, updateSetting, getPublisherIdentity, updatePublisherIdentity, getWorkflowDeliverableSteps, updateWorkflowDeliverableSteps, getWorkflowStepModes, updateWorkflowStepModes, getEditorialDecisionLetters, updateEditorialDecisionLetters, getReadingCommitteeRules, updateReadingCommitteeRules, type AppSetting, type EffectiveUser, type PublisherIdentity, type WorkflowDeliverableConfig, type WorkflowStepModesConfig, type EditorialLetters, type EditorialLetterKey, type ReadingCommitteeRules } from "../api/client";
 import { AccountSecurity } from "../components/AccountSecurity";
 import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -111,6 +111,8 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
 
       {/* Lettres de réponse à l'auteur à la décision éditoriale (modèles éditables). */}
       <DecisionLettersCard canAdminister={canAdminister} />
+
+      <ReadingCommitteeRulesCard canAdminister={canAdminister} />
 
       {/* Diagnostic de persistance : vérifier que les données sont bien conservées en base. */}
       <SystemDiagnosticCard />
@@ -374,6 +376,94 @@ function WorkflowStepModesCard({ canAdminister }: { canAdminister: boolean }) {
         <div style={{ marginTop: 12 }}>
           <button onClick={save} disabled={saving || !dirty} style={{ border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: saving || !dirty ? "default" : "pointer", opacity: saving || !dirty ? 0.55 : 1 }}>
             {saving ? "Enregistrement…" : "Enregistrer les modes d'étape"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReadingCommitteeRulesCard({ canAdminister }: { canAdminister: boolean }) {
+  const [rules, setRules] = useState<ReadingCommitteeRules | null>(null);
+  const [draft, setDraft] = useState<ReadingCommitteeRules | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    getReadingCommitteeRules()
+      .then((r) => { setRules(r.rules); setDraft(r.rules); })
+      .catch(() => setErr("Chargement des règles du comité impossible."));
+  }, []);
+
+  function patch(p: Partial<ReadingCommitteeRules>) {
+    setNote(null);
+    setDraft((d) => (d ? { ...d, ...p } : d));
+  }
+
+  async function save() {
+    if (!draft) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      const saved = await updateReadingCommitteeRules({ ...draft, quorum: Math.max(1, Math.min(10, Math.round(draft.quorum) || 2)) });
+      setRules(saved.rules);
+      setDraft(saved.rules);
+      setNote("Règles du comité enregistrées. Elles s'appliquent dès la prochaine lecture.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Échec de l'enregistrement.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const dirty = rules && draft ? JSON.stringify(draft) !== JSON.stringify(rules) : false;
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 14 }}>Règles du comité de lecture (à activer au besoin)</div>
+      <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "4px 0 12px", lineHeight: 1.6 }}>
+        Réglages « comité professionnel », <strong>désactivés par défaut</strong> : le comité fonctionne comme aujourd'hui
+        (un seul rapport suffit, aucune déclaration demandée). Activez-les le jour où la Maison grandit.
+      </p>
+      {err && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+      {note && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{note}</div>}
+      {!draft ? (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
+      ) : (
+        <div style={{ display: "grid", gap: 10 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "9px 11px", border: "1px solid var(--line)", borderRadius: 6, cursor: canAdminister ? "pointer" : "default" }}>
+            <input type="checkbox" checked={draft.quorumEnabled} disabled={!canAdminister} onChange={(e) => patch({ quorumEnabled: e.target.checked })} />
+            <span>
+              <strong>Quorum de lecteurs</strong> — exiger un nombre minimal de rapports remis avant de pouvoir décider.
+            </span>
+          </label>
+          {draft.quorumEnabled && (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, paddingLeft: 11 }}>
+              Nombre de lecteurs requis :
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={draft.quorum}
+                disabled={!canAdminister}
+                onChange={(e) => patch({ quorum: Number(e.target.value) })}
+                style={{ width: 64, padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 6, fontFamily: "var(--font-mono)" }}
+              />
+            </label>
+          )}
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "9px 11px", border: "1px solid var(--line)", borderRadius: 6, cursor: canAdminister ? "pointer" : "default" }}>
+            <input type="checkbox" checked={draft.conflictEnabled} disabled={!canAdminister} onChange={(e) => patch({ conflictEnabled: e.target.checked })} />
+            <span>
+              <strong>Déclaration de conflit d'intérêt</strong> — chaque lecteur déclare, à la remise, l'absence de lien avec l'auteur (ou signale un conflit).
+            </span>
+          </label>
+        </div>
+      )}
+      {canAdminister && draft && (
+        <div style={{ marginTop: 12 }}>
+          <button onClick={save} disabled={saving || !dirty} style={{ border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: saving || !dirty ? "default" : "pointer", opacity: saving || !dirty ? 0.55 : 1 }}>
+            {saving ? "Enregistrement…" : "Enregistrer les règles du comité"}
           </button>
         </div>
       )}

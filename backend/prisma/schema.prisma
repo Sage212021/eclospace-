@@ -351,21 +351,21 @@ enum AbsenceStatus {
 // Circuit demandeur → responsable (Ch. 19 §19.5) ; seul le type "conge"
 // décrémente le solde de congés à la validation.
 model Absence {
-  id         String        @id @default(uuid())
-  employeeId String        @map("employee_id")
-  employee   Employee      @relation(fields: [employeeId], references: [id])
+  id         String         @id @default(uuid())
+  employeeId String         @map("employee_id")
+  employee   Employee       @relation(fields: [employeeId], references: [id])
   type       AbsenceType
   // Motif précis (mariage, décès, maternité, mise à pied…) porteur des règles
   // (payé, justificatif, retenue, faute). Facultatif pour compatibilité avec
   // les absences déjà saisies avant l'enrichissement du catalogue.
   reasonCode String?        @map("reason_code")
   reasonRef  AbsenceReason? @relation(fields: [reasonCode], references: [code])
-  fromDate   DateTime      @map("from_date")
-  toDate     DateTime      @map("to_date")
-  status     AbsenceStatus @default(en_attente)
+  fromDate   DateTime       @map("from_date")
+  toDate     DateTime       @map("to_date")
+  status     AbsenceStatus  @default(en_attente)
   reason     String?
-  approvedBy String?       @map("approved_by")
-  approvedAt DateTime?     @map("approved_at")
+  approvedBy String?        @map("approved_by")
+  approvedAt DateTime?      @map("approved_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
@@ -795,7 +795,7 @@ model SalaryElement {
   // avantage_nature | indemnite_rupture | prestation_diverse
   category     String
   fiscalStatus String  @map("fiscal_status") // taxable | non_taxable | partiel
-  cnpsStatus   String  @map("cnps_status")   // cotisable | non_cotisable | partiel
+  cnpsStatus   String  @map("cnps_status") // cotisable | non_cotisable | partiel
   legalRef     String? @map("legal_ref")
   sortOrder    Int     @default(0) @map("sort_order")
   active       Boolean @default(true)
@@ -1263,27 +1263,27 @@ model User {
   identifierChangeRequests IdentifierChangeRequest[]
   salesTargets             SalesTarget[]
 
-  ownedManuscripts   Manuscript[]        @relation("ManuscriptOwner")
-  managedManuscripts Manuscript[]        @relation("ManuscriptProjectManager")
-  correctionIntegrations Manuscript[]    @relation("ManuscriptCorrectionIntegrator")
-  manuscriptSteps    ManuscriptStep[]
-  readingAssignments ReadingAssignment[]
-  editorialDecisions EditorialDecision[]
-  assignedTasks      Task[]
-  taskComments       TaskComment[]
-  batSignatures      BatSignature[]
-  contractSignatures ContractSignature[]
-  objectives         Objective[]         @relation("UserObjectives")
-  weeklyReports      WeeklyReport[]      @relation("UserWeeklyReports")
-  validatedReports   WeeklyReport[]      @relation("WeeklyReportValidator")
-  attendanceEvents   AttendanceEvent[]
+  ownedManuscripts       Manuscript[]        @relation("ManuscriptOwner")
+  managedManuscripts     Manuscript[]        @relation("ManuscriptProjectManager")
+  correctionIntegrations Manuscript[]        @relation("ManuscriptCorrectionIntegrator")
+  manuscriptSteps        ManuscriptStep[]
+  readingAssignments     ReadingAssignment[]
+  editorialDecisions     EditorialDecision[]
+  assignedTasks          Task[]
+  taskComments           TaskComment[]
+  batSignatures          BatSignature[]
+  contractSignatures     ContractSignature[]
+  objectives             Objective[]         @relation("UserObjectives")
+  weeklyReports          WeeklyReport[]      @relation("UserWeeklyReports")
+  validatedReports       WeeklyReport[]      @relation("WeeklyReportValidator")
+  attendanceEvents       AttendanceEvent[]
 
-  authoredAnnouncements  Announcement[]          @relation("AnnouncementAuthor")
-  announcementReceipts   AnnouncementReceipt[]   @relation("AnnouncementReceipts")
-  notificationPreference NotificationPreference? @relation("UserNotificationPreference")
-  commercialStockLocations StockLocation[]       @relation("CommercialStock")
-  authoredEvents         CalendarEvent[]         @relation("CalendarEventAuthor")
-  authoredNewsletters    Newsletter[]            @relation("NewsletterAuthor")
+  authoredAnnouncements    Announcement[]          @relation("AnnouncementAuthor")
+  announcementReceipts     AnnouncementReceipt[]   @relation("AnnouncementReceipts")
+  notificationPreference   NotificationPreference? @relation("UserNotificationPreference")
+  commercialStockLocations StockLocation[]         @relation("CommercialStock")
+  authoredEvents           CalendarEvent[]         @relation("CalendarEventAuthor")
+  authoredNewsletters      Newsletter[]            @relation("NewsletterAuthor")
 
   conversationsAsA  Conversation[]     @relation("ConversationUserA")
   conversationsAsB  Conversation[]     @relation("ConversationUserB")
@@ -1823,10 +1823,10 @@ model Manuscript {
   priorityOverride              Decimal?       @map("priority_override") @db.Decimal(6, 2)
   priorityOverrideJustification String?        @map("priority_override_justification")
 
-  ownerId          String  @map("owner_id")
-  owner            User    @relation("ManuscriptOwner", fields: [ownerId], references: [id])
-  projectManagerId String? @map("project_manager_id")
-  projectManager   User?   @relation("ManuscriptProjectManager", fields: [projectManagerId], references: [id])
+  ownerId                String  @map("owner_id")
+  owner                  User    @relation("ManuscriptOwner", fields: [ownerId], references: [id])
+  projectManagerId       String? @map("project_manager_id")
+  projectManager         User?   @relation("ManuscriptProjectManager", fields: [projectManagerId], references: [id])
   // Intégrateur des corrections (Direction éditoriale / Assistant éditorial) :
   // reçoit le relais après chaque passage du correcteur (cycle de correction).
   correctionIntegratorId String? @map("correction_integrator_id")
@@ -1976,9 +1976,9 @@ model ManuscriptStep {
   // la décision opérateur au moment de valider — soit l'étape est RÉALISÉE (avec
   // ses éléments renseignés dans realizationData), soit elle est PASSÉE (motif
   // obligatoire dans skipReason). Nul pour les étapes ordinaires.
-  realizationMode String?  @map("realization_mode") // "realise" | "passe"
-  skipReason      String?  @map("skip_reason")
-  realizationData Json?    @map("realization_data")
+  realizationMode String? @map("realization_mode") // "realise" | "passe"
+  skipReason      String? @map("skip_reason")
+  realizationData Json?   @map("realization_data")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2123,15 +2123,19 @@ model ManuscriptNumberCounter {
 }
 
 model EditorialDecision {
-  id           String                @id @default(uuid())
-  manuscriptId String                @map("manuscript_id")
-  manuscript   Manuscript            @relation(fields: [manuscriptId], references: [id])
-  decision     EditorialDecisionType
-  decidedById  String                @map("decided_by")
-  decidedBy    User                  @relation(fields: [decidedById], references: [id])
-  decidedAt    DateTime              @default(now()) @map("decided_at")
-  motivation   String
-  scoreGapFlag Boolean               @default(false) @map("score_gap_flag")
+  id               String                @id @default(uuid())
+  manuscriptId     String                @map("manuscript_id")
+  manuscript       Manuscript            @relation(fields: [manuscriptId], references: [id])
+  decision         EditorialDecisionType
+  decidedById      String                @map("decided_by")
+  decidedBy        User                  @relation(fields: [decidedById], references: [id])
+  decidedAt        DateTime              @default(now()) @map("decided_at")
+  motivation       String
+  scoreGapFlag     Boolean               @default(false) @map("score_gap_flag")
+  // Réponse à l'auteur (26/08/2026) : date d'envoi de la lettre de décision et
+  // adresse destinataire — trace au dossier.
+  authorNotifiedAt DateTime?             @map("author_notified_at")
+  authorNotifiedTo String?               @map("author_notified_to")
 
   @@map("editorial_decisions")
 }
@@ -2187,25 +2191,25 @@ model Contract {
   parentContract   Contract?  @relation("ContractAmendments", fields: [parentContractId], references: [id])
   amendments       Contract[] @relation("ContractAmendments")
 
-  signedAt       DateTime?
+  signedAt           DateTime?
   // Date à laquelle le contrat a passé la validation (entrée en « attente de
   // signature ») — distincte de la signature. Alimente la fiche et le PDF.
-  validatedAt    DateTime?      @map("validated_at")
-  effectiveAt    DateTime?      @map("effective_at")
+  validatedAt        DateTime?      @map("validated_at")
+  effectiveAt        DateTime?      @map("effective_at")
   // Anti-doublon des alertes d'échéance : horodatage du dernier envoi d'alerte
   // « contrat arrivant à terme » à la Direction. Remis à null quand les termes
   // changent (nouvelle période) — pour ré-alerter au cycle suivant.
-  renewalAlertSentAt DateTime?  @map("renewal_alert_sent_at")
-  durationMonths Int?           @map("duration_months")
-  territories    String[]       @default([])
-  languages      String[]       @default([])
-  formats        String[]       @default([])
-  financialTerms Json           @map("financial_terms")
+  renewalAlertSentAt DateTime?      @map("renewal_alert_sent_at")
+  durationMonths     Int?           @map("duration_months")
+  territories        String[]       @default([])
+  languages          String[]       @default([])
+  formats            String[]       @default([])
+  financialTerms     Json           @map("financial_terms")
   // Articles additionnels propres à ce contrat (clauses ajoutées après les 15
   // articles du modèle) : tableau JSON [{ title, body }]. Repris en fin de
   // contrat imprimé / PDF. Modifiables tant que le contrat n'est pas signé.
-  customClauses  Json?          @map("custom_clauses")
-  status         ContractStatus @default(preparation)
+  customClauses      Json?          @map("custom_clauses")
+  status             ContractStatus @default(preparation)
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -2556,10 +2560,10 @@ model ProductionSpecs {
   // Caractéristiques d'écriture / composition (Ch. 11 §11.4) — saisies à la
   // Mise en page (étape 9). Toutes facultatives : n'ajoutent aucun blocage à
   // l'existant, restent librement modifiables (règle : corriger une info mal saisie).
-  typeface         String?    // police(s) principale(s), ex. « Garamond »
+  typeface         String? // police(s) principale(s), ex. « Garamond »
   fontSizePt       String?    @map("font_size_pt") // corps de texte, ex. « 11 » ou « 11/14 »
-  leading          String?    // interlignage, ex. « 14 pt » / « 1,2 »
-  margins          String?    // marges, ex. « H 20 / B 20 / int 18 / ext 15 mm »
+  leading          String? // interlignage, ex. « 14 pt » / « 1,2 »
+  margins          String? // marges, ex. « H 20 / B 20 / int 18 / ext 15 mm »
   layoutName       String?    @map("layout_name") // gabarit / collection de référence (texte libre)
 
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3058,17 +3062,17 @@ enum StockLocationType {
 }
 
 model StockLocation {
-  id         String            @id @default(uuid())
-  type       StockLocationType
-  label      String
-  parentId   String?           @map("parent_id")
-  parent     StockLocation?    @relation("StockLocationHierarchy", fields: [parentId], references: [id])
-  children   StockLocation[]   @relation("StockLocationHierarchy")
-  customerId String?           @map("customer_id")
-  customer   Customer?         @relation(fields: [customerId], references: [id])
+  id               String            @id @default(uuid())
+  type             StockLocationType
+  label            String
+  parentId         String?           @map("parent_id")
+  parent           StockLocation?    @relation("StockLocationHierarchy", fields: [parentId], references: [id])
+  children         StockLocation[]   @relation("StockLocationHierarchy")
+  customerId       String?           @map("customer_id")
+  customer         Customer?         @relation(fields: [customerId], references: [id])
   // Stock commercial individuel (§10) : lieu rattaché au compte du commercial.
-  commercialUserId String?     @map("commercial_user_id")
-  commercialUser   User?       @relation("CommercialStock", fields: [commercialUserId], references: [id])
+  commercialUserId String?           @map("commercial_user_id")
+  commercialUser   User?             @relation("CommercialStock", fields: [commercialUserId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
 

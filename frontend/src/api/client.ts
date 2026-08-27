@@ -1040,10 +1040,30 @@ export function submitEditorialDecision(
   decision: "acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus",
   motivation: string,
 ) {
-  return request(`/api/v1/manuscripts/${manuscriptId}/editorial-decision`, {
+  return request<{ authorNotifiedTo?: string | null }>(`/api/v1/manuscripts/${manuscriptId}/editorial-decision`, {
     method: "POST",
     body: JSON.stringify({ decision, motivation }),
   });
+}
+
+// Modèles de lettres de décision éditoriale (réponse à l'auteur).
+export interface EditorialLetterTemplate { subject: string; body: string }
+export type EditorialLetterKey = "acceptation" | "acceptation_conditions" | "refus";
+export interface EditorialLetters {
+  templates: Record<EditorialLetterKey, EditorialLetterTemplate>;
+  keys: EditorialLetterKey[];
+  labels: Record<EditorialLetterKey, string>;
+  defaults: Record<EditorialLetterKey, EditorialLetterTemplate>;
+  placeholders: string[];
+}
+export function getEditorialDecisionLetters() {
+  return request<EditorialLetters>(`/api/v1/editorial-decision-letters`);
+}
+export function updateEditorialDecisionLetters(templates: Partial<Record<EditorialLetterKey, EditorialLetterTemplate>>) {
+  return request<{ ok: true }>(`/api/v1/editorial-decision-letters`, { method: "PUT", body: JSON.stringify(templates) });
+}
+export function getManuscriptDecisionLetter(manuscriptId: string) {
+  return request<{ decision: string; subject: string; body: string; author_email: string | null; notified_at: string | null; notified_to: string | null }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter`);
 }
 
 // --- Lot 2 : contrats, tâches/Gantt, correction et comparateur ---

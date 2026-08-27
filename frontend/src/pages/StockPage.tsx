@@ -21,6 +21,7 @@ import { Card } from "../components/Card";
 import { StockInventorySection } from "../components/StockInventorySection";
 import { IsbnCombobox } from "../components/IsbnCombobox";
 import { CommercialStockSection } from "../components/CommercialStockSection";
+import { BookReceiptSection, AuthorWithdrawalSection } from "../components/StockVouchersSection";
 import { StockConsolidatedSection } from "../components/StockConsolidatedSection";
 import { StockInitialImportSection } from "../components/StockInitialImportSection";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -339,6 +340,10 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
         onMessage={(m) => { setMessage(m); refresh(); bumpMovements(); }}
         onError={setError}
       />
+
+      {/* Pièces officielles imprimables (documents, sans impact stock). */}
+      <BookReceiptSection isbns={isbns} canManage={canManage} onError={setError} />
+      <AuthorWithdrawalSection isbns={isbns} canManage={canManage} onError={setError} />
 
       {newLocation && (
         <Modal

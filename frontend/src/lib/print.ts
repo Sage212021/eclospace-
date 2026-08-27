@@ -5,7 +5,7 @@
 // **« Enregistrer au format PDF »** (option native de tous les navigateurs).
 // Aucune bibliothèque PDF lourde, fonctionne avec une connexion modeste.
 
-import type { ContractDetail, EditorialQuote, InvoiceDetail, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
+import type { AuthorWithdrawalVoucher, BookReceiptVoucher, ContractDetail, EditorialQuote, InvoiceDetail, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
 
 // Coordonnées officielles de la maison — source unique pour tous les documents
 // imprimés (facture, avoir, et à venir : relevés, bons de commande, contrats).
@@ -1250,4 +1250,107 @@ export function printReadingReport(d: ReadingReportData, opts?: PrintOpts): void
     }`;
 
   openPrintWindow(`${tr("Rapport de lecture", "Reading report")} — ${d.manuscriptTitle}`, body, opts);
+}
+
+// === Pièces du pôle Stock & magasin (revue opérateur du 27/08/2026) ===
+
+function signatureZone(labelFr: string, labelEn: string): string {
+  return `<div style="flex:1; min-width:170px"><div class="party__label">${tr(labelFr, labelEn)}</div><div style="border-top:1px solid #16233d; margin-top:46px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Nom, date et signature", "Name, date and signature")}</div></div>`;
+}
+
+// Bon de réception de livres : constate la livraison d'exemplaires par un
+// fournisseur/imprimeur (détail commandé / reçu / bon état / endommagé).
+export function printBookReceipt(v: BookReceiptVoucher, opts?: PrintOpts): void {
+  const n = (x: number | null | undefined) => (x == null ? "—" : `<span class="num">${x}</span>`);
+  const rows = v.lines
+    .map(
+      (l) => `<tr>
+        <td>${escapeHtml(l.title)}</td>
+        <td>${escapeHtml(l.author ?? "—")}</td>
+        <td class="r">${n(l.qtyOrdered)}</td>
+        <td class="r">${n(l.qtyReceived)}</td>
+        <td class="r">${n(l.qtyGood)}</td>
+        <td class="r">${n(l.qtyDamaged)}</td>
+      </tr>`,
+    )
+    .join("");
+  const body = `
+    <div class="doc__title">${tr("Bon de réception de livres", "Book reception voucher")}</div>
+    <div class="meta">
+      <span>${tr("N° de bon", "Voucher no.")} <b class="num">${escapeHtml(v.number)}</b></span>
+      <span>${tr("Date de réception", "Reception date")} <b class="num">${escapeHtml(fdate(v.receivedAt))}</b></span>
+    </div>
+    <div class="meta" style="margin-top:8px">
+      <span>${tr("Fournisseur", "Supplier")} : <b>${escapeHtml(v.supplier ?? "—")}</b></span>
+      <span>${tr("N° commande", "Order no.")} : <b>${escapeHtml(v.orderNumber ?? "—")}</b></span>
+      <span>${tr("N° bordereau (BL)", "Delivery note")} : <b>${escapeHtml(v.deliveryNote ?? "—")}</b></span>
+      <span>${tr("Transporteur", "Carrier")} : <b>${escapeHtml(v.carrier ?? "—")}</b></span>
+    </div>
+    <table class="lines" style="margin-top:14px">
+      <thead><tr>
+        <th>${tr("Titre du livre", "Title")}</th><th>${tr("Auteur", "Author")}</th>
+        <th class="r">${tr("Qté cmd.", "Qty ord.")}</th><th class="r">${tr("Qté reçue", "Qty rcvd")}</th>
+        <th class="r">${tr("Bon état", "Good")}</th><th class="r">${tr("Endommagée", "Damaged")}</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${
+      v.remarks
+        ? `<div style="margin-top:14px"><div class="party__label">${tr("Remarques et réserves", "Remarks and reservations")}</div><div style="font-size:12.5px;color:#1f2937;white-space:pre-wrap;margin-top:4px">${escapeHtml(v.remarks)}</div></div>`
+        : ""
+    }
+    <div class="meta" style="margin-top:14px">
+      <span>${tr("Réceptionné par", "Received by")} : <b>${escapeHtml(v.receivedByName ?? "—")}</b></span>
+      <span>${tr("Poste / service", "Role")} : <b>${escapeHtml(v.receivedByRole ?? "—")}</b></span>
+    </div>
+    <div style="display:flex; gap:24px; margin-top:30px">
+      ${signatureZone("Signature du livreur", "Deliverer's signature")}
+      ${signatureZone("Signature de la Direction générale", "General management signature")}
+    </div>`;
+  openPrintWindow(`${tr("Bon de réception", "Book reception")} ${v.number}`, body, opts);
+}
+
+const WITHDRAWAL_MOTIVE_LABELS: Record<string, [string, string]> = {
+  contractuel: ["Exemplaires d'auteur (contractuels)", "Author copies (contractual)"],
+  achat_remise: ["Achat d'exemplaires avec remise auteur", "Purchase with author discount"],
+  restitution_stock: ["Restitution de stock après paiement", "Stock restitution after payment"],
+  autre: ["Autre", "Other"],
+};
+
+// Retrait d'ouvrage auteur : décharge signée de la remise d'exemplaires à un
+// auteur (motif + « Lu et approuvé » + signatures).
+export function printAuthorWithdrawal(v: AuthorWithdrawalVoucher, opts?: PrintOpts): void {
+  const motive = label(WITHDRAWAL_MOTIVE_LABELS, v.motive) + (v.motive === "autre" && v.motiveOther ? ` — ${escapeHtml(v.motiveOther)}` : "");
+  const body = `
+    <div class="doc__title">${tr("Retrait d'ouvrage auteur", "Author book withdrawal")}</div>
+    <div class="meta">
+      <span>${tr("N°", "No.")} <b class="num">${escapeHtml(v.number)}</b></span>
+      <span>${tr("Fait à", "Place")} <b>${escapeHtml(v.place ?? "—")}</b> ${tr("le", "on")} <b class="num">${escapeHtml(fdate(v.issuedAt))}</b></span>
+    </div>
+    <div class="party" style="margin-top:12px">
+      <div class="party__label">${tr("Auteur", "Author")}</div>
+      <div class="party__name">${escapeHtml(v.authorName)}</div>
+      <div style="font-size:12px;color:#4b5563;margin-top:2px">
+        ${v.authorAddress ? escapeHtml(v.authorAddress) + " · " : ""}${v.authorPhone ? escapeHtml(v.authorPhone) + " · " : ""}${v.authorEmail ? escapeHtml(v.authorEmail) : ""}
+      </div>
+    </div>
+    <table class="lines" style="margin-top:14px">
+      <thead><tr><th>${tr("Ouvrage", "Work")}</th><th class="r">${tr("Nombre d'exemplaires", "Copies")}</th><th>${tr("Motif de la remise", "Reason")}</th></tr></thead>
+      <tbody><tr><td>${escapeHtml(v.workTitle)}</td><td class="r num">${v.quantity}</td><td>${motive}</td></tr></tbody>
+    </table>
+    <div style="margin-top:16px; font-size:12px; color:#374151">
+      ${tr(
+        "En signant ce document, l'auteur confirme avoir réceptionné les ouvrages ci-dessus en parfait état et conformes à la commande. Cette remise décharge la maison de toute réclamation ultérieure concernant le nombre et l'état des exemplaires reçus ce jour.",
+        "By signing this document, the author confirms receipt of the above works in perfect condition and in accordance with the order.",
+      )}
+    </div>
+    <div style="display:flex; gap:24px; margin-top:24px">
+      <div style="flex:1; min-width:170px"><div class="party__label">${tr("Signature de l'auteur", "Author's signature")}</div><div style="font-size:10.5px;color:#6b7280">${tr("précédée de « Lu et approuvé »", "preceded by “Read and approved”")}</div><div style="border-top:1px solid #16233d; margin-top:40px"></div></div>
+      ${signatureZone("Signature direction éditoriale", "Editorial management signature")}
+      ${signatureZone("Signature comptable", "Accountant's signature")}
+    </div>
+    <div style="display:flex; gap:24px; margin-top:20px">
+      ${signatureZone("Signature logistique", "Logistics signature")}
+    </div>`;
+  openPrintWindow(`${tr("Retrait d'ouvrage", "Book withdrawal")} ${v.number}`, body, opts);
 }

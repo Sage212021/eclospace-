@@ -2031,6 +2031,12 @@ model ReadingAssignment {
   reportFileMime String? @map("report_file_mime")
   reportFileSize Int?    @map("report_file_size")
 
+  // Déclaration de conflit d'intérêt (audit éditorial, point n°3) : renseignée
+  // par le lecteur à la remise de son rapport, quand la règle est activée.
+  conflictDeclaredAt  DateTime? @map("conflict_declared_at")
+  conflictHasConflict Boolean?  @map("conflict_has_conflict")
+  conflictDetails     String?   @map("conflict_details")
+
   evaluation Evaluation?
 
   @@map("reading_assignments")

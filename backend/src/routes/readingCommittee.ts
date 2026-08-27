@@ -9,6 +9,7 @@ import { storeFile, readStoredFile } from "../lib/storage.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { isMailConfigured, sendMail, senderIdentity } from "../lib/mailer.js";
 import { resolveLetterTemplates, renderLetter, letterHtml, houseName, LETTER_KEYS, LETTER_LABELS, DEFAULT_LETTERS, type EditorialLetterKey } from "../lib/editorialLetters.js";
+import { readingCommitteeRules, DEFAULT_READING_COMMITTEE_RULES, READING_COMMITTEE_RULES_KEY } from "../lib/readingCommitteeRules.js";
 import { createHash } from "node:crypto";
 
 const DEFAULT_RATING_THRESHOLDS = { excellent: 8.5, very_good: 7, good: 5, to_rework: 3 };
@@ -30,6 +31,9 @@ const evaluationSchema = z.object({
   overall_comment: z.string().optional(),
   recommendation: z.nativeEnum(EvaluationRecommendation),
   visibility: z.enum(["confidentiel", "direction_seule", "comite", "dossier_editorial"]).default("comite"),
+  // Déclaration de conflit d'intérêt (point n°3) : exigée seulement si la règle
+  // est activée ; sinon ignorée. `details` requis si un conflit est signalé.
+  conflict_declaration: z.object({ has_conflict: z.boolean(), details: z.string().optional() }).optional(),
 });
 
 const editorialDecisionSchema = z.object({
@@ -548,6 +552,23 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Déclaration de conflit d'intérêt (point n°3) — seulement si la règle est
+      // activée par la maison. Le lecteur déclare « aucun lien » ou signale un
+      // conflit (motif obligatoire). Sinon, le champ est facultatif.
+      const rules = await readingCommitteeRules();
+      const declaration = parsed.data.conflict_declaration;
+      if (rules.conflictEnabled) {
+        if (!declaration) {
+          return reply.code(409).send({
+            code: "conflict_declaration_required",
+            message: "Déclaration de conflit d'intérêt requise : indiquez « aucun lien avec l'auteur » ou signalez un conflit avant de remettre votre rapport.",
+          });
+        }
+        if (declaration.has_conflict && !declaration.details?.trim()) {
+          return reply.code(400).send({ code: "conflict_details_required", message: "Précisez la nature du conflit d'intérêt signalé." });
+        }
+      }
+
       const coefficientById = new Map(activeCriteria.map((c) => [c.id, Number(c.coefficient)]));
       const totalCoefficient = activeCriteria.reduce((sum, c) => sum + Number(c.coefficient), 0);
       const weightedSum = parsed.data.scores.reduce((sum, s) => sum + s.score * (coefficientById.get(s.criterion_id) ?? 0), 0);
@@ -570,7 +591,16 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
             },
           },
         });
-        await tx.readingAssignment.update({ where: { id }, data: { status: "submitted", submittedAt: now } });
+        await tx.readingAssignment.update({
+          where: { id },
+          data: {
+            status: "submitted",
+            submittedAt: now,
+            ...(declaration
+              ? { conflictDeclaredAt: now, conflictHasConflict: declaration.has_conflict, conflictDetails: declaration.has_conflict ? declaration.details?.trim() ?? null : null }
+              : {}),
+          },
+        });
         return created;
       });
 
@@ -750,6 +780,23 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
     return reply.send({ ok: true, templates: await resolveLetterTemplates() });
   });
 
+  // Règles « comité professionnel » (audit éditorial, point n°3) : quorum de
+  // lecteurs + déclaration de conflit d'intérêt, activables au choix. Lecture :
+  // comité ; édition : administration.
+  fastify.get("/api/v1/reading-committee-rules", { preHandler: requirePermission("comite_lecture", "consultation") }, async (_request, reply) => {
+    return reply.send({ rules: await readingCommitteeRules(), defaults: DEFAULT_READING_COMMITTEE_RULES });
+  });
+
+  fastify.put("/api/v1/reading-committee-rules", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const parsed = z
+      .object({ quorumEnabled: z.boolean(), quorum: z.number().int().min(1).max(10), conflictEnabled: z.boolean() })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    await prisma.setting.upsert({ where: { key: READING_COMMITTEE_RULES_KEY }, update: { value: parsed.data }, create: { key: READING_COMMITTEE_RULES_KEY, value: parsed.data } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "setting", entityId: READING_COMMITTEE_RULES_KEY, newValues: parsed.data, ipAddress: request.ip });
+    return reply.send({ ok: true, rules: await readingCommitteeRules() });
+  });
+
   // Aperçu / réimpression de la lettre de la dernière décision d'un manuscrit.
   fastify.get("/api/v1/manuscripts/:id/decision-letter", { preHandler: requirePermission("decision_editoriale", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -870,6 +917,17 @@ async function completeReadingCommitteeStep(manuscriptId: string, userId: string
   // lecture (évite un double passage si l'étape a déjà avancé).
   const current = await prisma.manuscript.findUniqueOrThrow({ where: { id: manuscriptId }, select: { statusId: true } });
   if (current.statusId !== comiteStatus.id) return false;
+
+  // Quorum (audit éditorial, point n°3), si activé : ne transmettre à la
+  // Direction éditoriale qu'une fois le nombre minimal de rapports remis
+  // atteint. Sinon le dossier reste au comité — le coordinateur peut alors
+  // affecter d'autres lecteurs (aucun blocage définitif). Désactivé par
+  // défaut : un seul rapport suffit, comme aujourd'hui.
+  const rules = await readingCommitteeRules();
+  if (rules.quorumEnabled) {
+    const submitted = await prisma.readingAssignment.count({ where: { manuscriptId, status: "submitted" } });
+    if (submitted < rules.quorum) return false;
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.manuscriptStep.upsert({

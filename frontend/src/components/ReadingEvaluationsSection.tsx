@@ -99,6 +99,15 @@ export function ReadingEvaluationsSection({
               ) : (
                 <span style={{ color: "var(--muted)", marginLeft: 8, fontStyle: "italic" }}>évaluation en attente</span>
               )}
+              {a.conflictDeclaredAt && (
+                a.conflictHasConflict ? (
+                  <div style={{ marginTop: 3, fontSize: 11.5, color: "#C4661F" }}>
+                    ⚠ Conflit d'intérêt signalé{a.conflictDetails ? ` : ${a.conflictDetails}` : ""}
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--muted)" }}>✓ Aucun conflit d'intérêt déclaré</div>
+                )
+              )}
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               {a.evaluation && (

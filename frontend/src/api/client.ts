@@ -814,6 +814,10 @@ export interface ReadingAssignment {
   // déposé sur l'ouvrage (téléchargeable via readingManuscriptFileUrl).
   manuscriptHasFile?: boolean;
   manuscriptFileTitle?: string | null;
+  // Déclaration de conflit d'intérêt (point n°3), si renseignée à la remise.
+  conflictDeclaredAt?: string | null;
+  conflictHasConflict?: boolean | null;
+  conflictDetails?: string | null;
 }
 
 // Candidats à l'affectation d'une lecture/correction : comptes internes
@@ -883,9 +887,23 @@ export function submitEvaluation(
     scores: { criterion_id: string; score: number; comment?: string }[];
     overall_comment?: string;
     recommendation: "accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject";
+    conflict_declaration?: { has_conflict: boolean; details?: string };
   },
 ) {
   return request(`/api/v1/reading-assignments/${assignmentId}/evaluation`, { method: "POST", body: JSON.stringify(input) });
+}
+
+// Règles « comité professionnel » (audit éditorial, point n°3), activables.
+export interface ReadingCommitteeRules {
+  quorumEnabled: boolean;
+  quorum: number;
+  conflictEnabled: boolean;
+}
+export function getReadingCommitteeRules() {
+  return request<{ rules: ReadingCommitteeRules; defaults: ReadingCommitteeRules }>(`/api/v1/reading-committee-rules`);
+}
+export function updateReadingCommitteeRules(rules: ReadingCommitteeRules) {
+  return request<{ ok: true; rules: ReadingCommitteeRules }>(`/api/v1/reading-committee-rules`, { method: "PUT", body: JSON.stringify(rules) });
 }
 
 // Missions de lecture d'un manuscrit (comité / direction) — avec évaluations.

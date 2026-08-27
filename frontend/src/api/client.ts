@@ -388,11 +388,21 @@ export type ManuscriptDetail = Manuscript & {
   evaluationFeeChoice?: "non_defini" | "a_payer" | "sans_frais";
   authorResponseDelayDays?: number | null;
   registrationLocked?: boolean;
+  sealed?: boolean;
+  sealedAt?: string | null;
   workContributors: { role?: string; partner: ManuscriptAuthorPartner }[];
   owner: UserSummary;
 };
 export function getManuscript(id: string) {
   return request<ManuscriptDetail>(`/api/v1/manuscripts/${id}`);
+}
+
+// Scellé d'archivage définitif : verrouille le dossier en lecture seule.
+export function sealManuscript(id: string) {
+  return request<{ id: string; sealed: boolean }>(`/api/v1/manuscripts/${id}/seal`, { method: "POST" });
+}
+export function unsealManuscript(id: string, reason: string) {
+  return request<{ id: string; sealed: boolean }>(`/api/v1/manuscripts/${id}/unseal`, { method: "POST", body: JSON.stringify({ reason }) });
 }
 
 // Correction de la fiche d'enregistrement (ouvrage + auteur + frais/délai) tant

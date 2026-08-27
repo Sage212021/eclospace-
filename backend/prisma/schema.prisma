@@ -1812,6 +1812,13 @@ model Manuscript {
 
   statusId                      String         @map("status_id")
   status                        WorkflowStatus @relation(fields: [statusId], references: [id])
+  // Scellé d'archivage définitif (26/08/2026) : un dossier arrivé à l'Archivage
+  // (parcours complet, ou refusé/abandonné) peut être SCELLÉ → lecture seule
+  // totale (aucune modification/retrait de document). Seul un administrateur peut
+  // le rouvrir (motif obligatoire, tracé). Absence de scellé = dossier modifiable
+  // (les archivages incomplets ne sont donc jamais piégés).
+  sealedAt                      DateTime?      @map("sealed_at")
+  sealedBy                      String?        @map("sealed_by")
   priorityScore                 Decimal        @default(0) @map("priority_score") @db.Decimal(6, 2)
   priorityOverride              Decimal?       @map("priority_override") @db.Decimal(6, 2)
   priorityOverrideJustification String?        @map("priority_override_justification")

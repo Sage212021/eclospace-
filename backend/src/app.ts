@@ -8,6 +8,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import staticFiles from "@fastify/static";
+import { prisma } from "./lib/prisma.js";
 import authPlugin from "./plugins/auth.js";
 import authRoutes from "./routes/auth.js";
 import documentRoutes from "./routes/documents.js";
@@ -107,6 +108,27 @@ export async function buildApp() {
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024 } });
   await app.register(authPlugin);
+
+  // Verrou d'archivage définitif (« scellé ») : un dossier manuscrit scellé est en
+  // LECTURE SEULE. Toute écriture sous /api/v1/manuscripts/:id/… est refusée (409),
+  // quel que soit le rôle — SEULE la réouverture (…/unseal) reste permise (réservée
+  // à l'administrateur). Les lectures (GET/HEAD) et téléchargements restent ouverts.
+  app.addHook("preHandler", async (request, reply) => {
+    const method = request.method;
+    if (method === "GET" || method === "HEAD" || method === "OPTIONS") return;
+    const path = request.url.split("?")[0];
+    const m = /^\/api\/v1\/manuscripts\/([0-9a-fA-F-]{36})(\/.*)?$/.exec(path);
+    if (!m) return;
+    const sub = m[2] ?? "";
+    if (/\/unseal$/.test(sub)) return; // la réouverture par l'administrateur reste possible
+    const ms = await prisma.manuscript.findUnique({ where: { id: m[1] }, select: { sealedAt: true } });
+    if (ms?.sealedAt) {
+      return reply.code(409).send({
+        code: "manuscript_sealed",
+        message: "Dossier scellé (archivé définitivement) : verrouillé en lecture seule. Un administrateur doit le rouvrir pour le modifier.",
+      });
+    }
+  });
 
   // Les réponses de l'API portent des données vivantes : on interdit tout cache
   // (navigateur ET proxy intermédiaire). Sans cela, une lecture juste après une

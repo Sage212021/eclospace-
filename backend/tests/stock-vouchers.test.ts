@@ -45,12 +45,13 @@ describe("pièces stock & magasin (bon de réception + retrait auteur)", () => {
       },
     });
     expect(create.statusCode).toBe(201);
-    expect(create.json().number).toMatch(/^BR-\d{4}-0001$/);
+    expect(create.json().number).toMatch(/^BR-\d{4}-\d{4}$/);
     expect(create.json().lines).toHaveLength(2);
+    const firstSeq = Number(create.json().number.slice(-4));
 
-    // Numérotation continue.
+    // Numérotation continue (la pièce initiale du seed occupe déjà 0001).
     const second = await app.inject({ method: "POST", url: "/api/v1/book-receipts", headers: { cookie }, payload: { received_at: "2026-08-27T00:00:00.000Z", lines: [{ title: "Autre" }] } });
-    expect(second.json().number).toMatch(/^BR-\d{4}-0002$/);
+    expect(Number(second.json().number.slice(-4))).toBe(firstSeq + 1);
 
     const id = create.json().id;
     // Édition : change le fournisseur et remplace les lignes.
@@ -58,7 +59,7 @@ describe("pièces stock & magasin (bon de réception + retrait auteur)", () => {
     expect(edit.statusCode).toBe(200);
     expect(edit.json().supplier).toBe("GLC SARL (corrigé)");
     expect(edit.json().lines).toHaveLength(1);
-    expect(edit.json().number).toMatch(/^BR-\d{4}-0001$/); // numéro conservé
+    expect(edit.json().number).toBe(create.json().number); // numéro conservé
 
     // Aucune écriture de stock créée par ces documents.
     expect(await prisma.stockMovement.count()).toBe(stockBefore);
@@ -75,7 +76,7 @@ describe("pièces stock & magasin (bon de réception + retrait auteur)", () => {
       payload: { issued_at: "2026-08-27T00:00:00.000Z", place: "Yaoundé", author_name: "Zang Zang Elie Denis", author_phone: "656 09 78 07", work_title: "Paternité charnelle", quantity: 15, motive: "restitution_stock" },
     });
     expect(create.statusCode).toBe(201);
-    expect(create.json().number).toMatch(/^RA-\d{4}-0001$/);
+    expect(create.json().number).toMatch(/^RA-\d{4}-\d{4}$/);
     expect(create.json().quantity).toBe(15);
 
     // Motif « autre » sans précision : refusé.

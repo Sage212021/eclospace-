@@ -1372,6 +1372,55 @@ async function main() {
     console.log(`Liste officielle : ${officialList.length} ouvrages traités (${created} ajoutés, ${corrected} ISBN corrigés, ${priced} prix renseignés).`);
   }
 
+  // Pièces du pôle Stock & magasin déjà émises par la maison (revue opérateur
+  // du 27/08/2026) : on enregistre les deux premières pièces réelles pour que la
+  // numérotation reparte ensuite à 0002 dans chaque série. Idempotent : garde
+  // par numéro ; le compteur de l'année est initialisé à 1.
+  if (!(await prisma.bookReceiptVoucher.findUnique({ where: { number: "BR-2026-0001" } }))) {
+    await prisma.bookReceiptVoucher.create({
+      data: {
+        number: "BR-2026-0001",
+        receivedAt: new Date("2026-08-26T00:00:00.000Z"),
+        supplier: "GLC SARL",
+        orderNumber: "0081",
+        deliveryNote: "0063",
+        carrier: "GLC SARL",
+        receivedByName: "NDI SANAMA EVRARD WILFRIED",
+        receivedByRole: "Responsable logistique et des stocks",
+        remarks:
+          "Dans la commande N° 0063 reçue le 26 août 2026 : sur 400 livres réceptionnés, 223 sont en état conforme aux exigences exprimées par l'auteur, tandis que 177 livres sont endommagés du fait de leur encollage.",
+        createdById: adminUser.id,
+        lines: {
+          create: [
+            { position: 0, title: "Les clés d'une retraite épanouie", author: "Olga Lona", qtyOrdered: null, qtyReceived: 400, qtyGood: 223, qtyDamaged: 177 },
+            { position: 1, title: "Et dieu de plus en plus haut", author: "Emile Kwegueng", qtyOrdered: null, qtyReceived: 30, qtyGood: 20, qtyDamaged: 10 },
+            { position: 2, title: "Je suis nègre mais les noirs ne m'aiment pas", author: null, qtyOrdered: null, qtyReceived: 30, qtyGood: 24, qtyDamaged: 6 },
+          ],
+        },
+      },
+    });
+  }
+  await prisma.bookReceiptCounter.upsert({ where: { year: 2026 }, create: { year: 2026, lastValue: 1 }, update: {} });
+
+  if (!(await prisma.authorWithdrawalVoucher.findUnique({ where: { number: "RA-2026-0001" } }))) {
+    await prisma.authorWithdrawalVoucher.create({
+      data: {
+        number: "RA-2026-0001",
+        issuedAt: new Date("2026-08-27T00:00:00.000Z"),
+        place: "Yaoundé",
+        authorName: "M. Zang Zang Elie Denis",
+        authorAddress: "Yaoundé",
+        authorPhone: "656 09 78 07",
+        authorEmail: "zangzangeliedenis@gmail.com",
+        workTitle: "Paternité charnelle",
+        quantity: 15,
+        motive: "restitution_stock",
+        createdById: adminUser.id,
+      },
+    });
+  }
+  await prisma.authorWithdrawalCounter.upsert({ where: { year: 2026 }, create: { year: 2026, lastValue: 1 }, update: {} });
+
   console.log("Seed Lot 0 terminé.");
   console.log(`Compte administrateur : admin / ${adminPassword} (à changer immédiatement)`);
 }

@@ -1,35 +1,37 @@
-/* Identité visuelle Éclospace — bleu marine (confiance) · blanc (clarté) ·
-   or (prestige, accent ~10%). Palette officielle validée par l'opérateur
-   (09/07/2026), remplaçant les teintes de départ du guide §2-3.
-   Toute l'application lit ces jetons : les modifier ici reskin l'ensemble. */
+/* Identité visuelle Éclospace — OR / NOIR / BLANC (charte officielle Éclosion).
+   Relookage « Noir souverain » (Direction A, validé le 28/08/2026) : le blanc
+   aère, le noir porte le texte et la structure, l'or signe la marque. Aucun
+   bleu. Toute l'application lit ces jetons : les modifier ici reskin l'ensemble.
+   Les noms historiques (--navy, --chrome) sont conservés pour ne rien casser,
+   mais portent désormais du noir. */
 :root {
-  /* Bleu marine */
-  --navy: #16233d; /* fond principal / titres */
-  --chrome: #1e2a44; /* barre latérale */
-  --chrome-2: #223252; /* en-tête, survols et bandeaux navy */
+  /* Noir (structure) — ex-« marine » */
+  --navy: #0b0b0c; /* texte structurant / surfaces sombres */
+  --chrome: #000000; /* barre latérale (Noir souverain) */
+  --chrome-2: #1c1b17; /* survols et bandeaux sombres */
 
-  /* Blanc / gris clairs */
-  --paper: #f8f9fb; /* fond général */
+  /* Blanc / gris chauds */
+  --paper: #faf8f2; /* fond général (ivoire) */
   --card: #ffffff; /* cartes */
-  --line: #e6e9ef; /* lignes et bordures (gris bleuté clair) */
+  --line: #e7e2d4; /* lignes et bordures (gris chaud) */
 
   /* Texte */
-  --ink: #16233d; /* texte principal / titres, en bleu marine */
-  --muted: #6b7280; /* texte secondaire */
+  --ink: #0b0b0c; /* texte principal / titres, en noir */
+  --muted: #5f5a4e; /* texte secondaire (gris chaud) */
 
-  /* Or (accent d'identité) */
-  --eclosion: #c89a1b; /* or principal */
-  --eclosion-light: #d9b24c; /* or clair (dégradés, survols) */
-  --eclosion-dark: #a87d14; /* or foncé (états actifs) */
-  --eclosion-soft: #f6efd8; /* fond or très clair (badges, sélection) */
+  /* Or (accent d'identité) — charte officielle Éclosion */
+  --eclosion: #d9b21a; /* or principal #D9B21A */
+  --eclosion-light: #e6c64c; /* or clair (survols) */
+  --eclosion-dark: #9a7a12; /* or foncé (texte/liens/états actifs sur blanc) */
+  --eclosion-soft: #fbf3d6; /* fond or très clair (badges, sélection) */
 
-  /* Sémantique métier (inchangée) */
-  --amber: #c4661f; /* retard */
-  --amber-soft: #f9e9db;
-  --alert: #c24b3a; /* critique / suppression */
-  --alert-soft: #f9e9e6;
-  --success: #2f8f52; /* validation / export */
-  --success-soft: #e7f3ec;
+  /* Sémantique métier (statuts uniquement, jamais comme accent de marque) */
+  --amber: #b87400; /* retard */
+  --amber-soft: #fbf1dc;
+  --alert: #b23a2e; /* critique / suppression (rouge sobre) */
+  --alert-soft: #faece9;
+  --success: #2f7d4a; /* validation / export (vert sobre) */
+  --success-soft: #e7f1ea;
 
   --font-title: Georgia, serif;
   --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -64,7 +66,7 @@ select:not([disabled]):focus,
 textarea:not([disabled]):focus {
   outline: none;
   border-color: var(--eclosion) !important;
-  box-shadow: 0 0 0 3px rgba(200, 154, 27, 0.18);
+  box-shadow: 0 0 0 3px rgba(217, 178, 26, 0.2);
 }
 
 /* Garde-fou anti-débordement : aucun champ de formulaire ne dépasse la largeur
@@ -201,12 +203,12 @@ textarea {
 /* Ajouter / action principale : or */
 .ecl-btn--add {
   background: linear-gradient(180deg, var(--eclosion-light) 0%, var(--eclosion) 100%);
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(200, 154, 27, 0.28);
+  color: #000; /* texte noir sur l'or : contraste et lisibilité (charte) */
+  box-shadow: 0 4px 12px rgba(217, 178, 26, 0.3);
 }
 .ecl-btn--add:not(:disabled):hover {
-  filter: brightness(1.06);
-  box-shadow: 0 6px 16px rgba(200, 154, 27, 0.38);
+  filter: brightness(1.05);
+  box-shadow: 0 6px 16px rgba(217, 178, 26, 0.42);
 }
 
 /* Modifier : bleu marine */
@@ -226,7 +228,7 @@ textarea {
 }
 .ecl-btn--view:not(:disabled):hover {
   border-color: var(--navy);
-  background: #f4f6fa;
+  background: var(--paper);
 }
 
 /* Supprimer : rouge discret (contour, se remplit au survol) */

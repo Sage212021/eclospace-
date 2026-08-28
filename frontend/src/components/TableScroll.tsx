@@ -60,7 +60,7 @@ export function TableScroll({ children, style }: { children: ReactNode; style?: 
       {edges.right && (
         <>
           <div aria-hidden style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: 30, pointerEvents: "none", background: "linear-gradient(to left, var(--card, #fff), transparent)" }} />
-          <div aria-hidden style={{ position: "absolute", top: "50%", right: 5, transform: "translateY(-50%)", pointerEvents: "none", fontSize: 18, color: "var(--eclosion-dark, #8A6A12)", fontWeight: 800 }}>›</div>
+          <div aria-hidden style={{ position: "absolute", top: "50%", right: 5, transform: "translateY(-50%)", pointerEvents: "none", fontSize: 18, color: "var(--eclosion-dark, #9a7a12)", fontWeight: 800 }}>›</div>
         </>
       )}
 

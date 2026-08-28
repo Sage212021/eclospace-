@@ -39,7 +39,7 @@ const STATUS_LABELS: Record<AnomalyStatus, string> = {
 const MOTIFS = ["Mission", "Autorisation exceptionnelle", "Congé", "Permission", "Maladie", "Formation", "Déplacement professionnel", "Panne informatique", "Panne Internet", "Cas de force majeure", "Autre"];
 
 function statusColor(s: AnomalyStatus): string {
-  if (s === "validee" || s === "corrigee") return "var(--eclosion, #C89A1B)";
+  if (s === "validee" || s === "corrigee") return "var(--eclosion, #d9b21a)";
   if (s === "rejetee") return "var(--danger, #C24B3A)";
   if (s === "en_attente") return "var(--retard, #C4661F)";
   return "var(--muted)";

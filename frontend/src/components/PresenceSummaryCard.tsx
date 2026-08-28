@@ -15,7 +15,7 @@ function fmt(minutes: number): string {
 }
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "warn" | "over" }) {
-  const color = tone === "warn" ? "var(--retard, #C4661F)" : tone === "over" ? "var(--eclosion, #C89A1B)" : "var(--ink)";
+  const color = tone === "warn" ? "var(--retard, #C4661F)" : tone === "over" ? "var(--eclosion, #d9b21a)" : "var(--ink)";
   return (
     <div style={{ minWidth: 120 }}>
       <div style={{ fontSize: 12, color: "var(--muted)" }}>{label}</div>

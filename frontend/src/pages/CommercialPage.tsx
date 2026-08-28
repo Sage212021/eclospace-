@@ -635,7 +635,7 @@ function PosSaleForm({
         )}
         <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <Button variant="add" size="md" type="submit">{t("com.checkout", "Enregistrer la vente")}</Button>
-          {savedMsg && <span style={{ color: "var(--eclosion, #C89A1B)", fontSize: 13, fontWeight: 600 }}>✓ {savedMsg}</span>}
+          {savedMsg && <span style={{ color: "var(--eclosion, #d9b21a)", fontSize: 13, fontWeight: 600 }}>✓ {savedMsg}</span>}
         </div>
       </form>
     </Card>

@@ -156,7 +156,7 @@ export function Sidebar({
                 padding: "10px 20px",
                 background: "transparent",
                 border: "none",
-                color: accent ? "#fff" : "#a9b0c2",
+                color: accent ? "#fff" : "#9a9484",
                 fontSize: 11,
                 fontWeight: 700,
                 letterSpacing: 0.6,
@@ -165,7 +165,7 @@ export function Sidebar({
               }}
             >
               <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                <span style={{ color: accent ? "var(--eclosion-light)" : "#8891a8", display: "inline-flex" }}>
+                <span style={{ color: accent ? "var(--eclosion-light)" : "#7d7869", display: "inline-flex" }}>
                   {poleIcon(pole.label)}
                 </span>
                 {t(`pole.${pole.label}`, pole.label)}
@@ -212,7 +212,7 @@ export function Sidebar({
         );
       })}
 
-      <div style={{ position: "absolute", bottom: 20, padding: "0 20px", fontSize: 11, color: "#a9b0c2" }}>
+      <div style={{ position: "absolute", bottom: 20, padding: "0 20px", fontSize: 11, color: "#9a9484" }}>
         {t("sidebar.connected", "Connecté")} : {username}
       </div>
     </nav>
@@ -259,7 +259,7 @@ function LeafButton({
           borderRight: "none",
           borderBottom: "none",
           // Module hors périmètre : texte atténué (mais toujours cliquable).
-          color: locked ? "#8891a8" : "#fff",
+          color: locked ? "#7d7869" : "#fff",
           fontSize: 13,
           fontWeight: active ? 600 : 400,
           cursor: "pointer",
@@ -267,7 +267,7 @@ function LeafButton({
       >
         <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
           {icon && (
-            <span style={{ color: active ? "var(--eclosion-light)" : "#8891a8", display: "inline-flex" }}>{icon}</span>
+            <span style={{ color: active ? "var(--eclosion-light)" : "#7d7869", display: "inline-flex" }}>{icon}</span>
           )}
           {t(`nav.${item.key}`, item.label)}
         </span>
@@ -286,7 +286,7 @@ function LeafButton({
 // Cadenas discret : signale un module visible mais hors du périmètre de l'employé.
 function LockIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7186" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8a8474" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
       <rect x="5" y="11" width="14" height="10" rx="2" />
       <path d="M8 11V7a4 4 0 0 1 8 0v4" />
     </svg>

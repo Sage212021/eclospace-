@@ -81,7 +81,7 @@ export function CommercialPerformancePage({ canManage }: { canManage: boolean })
         <p style={{ color: "var(--muted)", fontSize: 14 }}>Chargement…</p>
       ) : (
         <>
-          {consolidated && <div style={{ fontSize: 12.5, color: "var(--eclosion-dark, #8A6A12)", fontWeight: 600, marginBottom: 8 }}>Vue consolidée — ensemble de l'équipe commerciale.</div>}
+          {consolidated && <div style={{ fontSize: 12.5, color: "var(--eclosion-dark, #9a7a12)", fontWeight: 600, marginBottom: 8 }}>Vue consolidée — ensemble de l'équipe commerciale.</div>}
 
           {/* Objectif annuel + taux de réalisation */}
           {data.objective && (
@@ -89,7 +89,7 @@ export function CommercialPerformancePage({ canManage }: { canManage: boolean })
               <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, fontSize: 13.5 }}>
                 <span style={{ fontWeight: 600 }}>Objectif {data.objective.year}</span>
                 <span style={{ fontFamily: "var(--font-mono)" }}>
-                  {fcfa(data.objective.ytd_revenue)} / {fcfa(data.objective.target_revenue)} · <strong style={{ color: data.objective.realization_pct >= 100 ? "#2E6B4F" : "var(--eclosion-dark, #8A6A12)" }}>{data.objective.realization_pct} %</strong>
+                  {fcfa(data.objective.ytd_revenue)} / {fcfa(data.objective.target_revenue)} · <strong style={{ color: data.objective.realization_pct >= 100 ? "#2E6B4F" : "var(--eclosion-dark, #9a7a12)" }}>{data.objective.realization_pct} %</strong>
                 </span>
               </div>
               <div style={{ height: 10, background: "var(--paper)", borderRadius: 999, overflow: "hidden", marginTop: 8, border: "1px solid var(--line)" }}>
@@ -226,7 +226,7 @@ function SalesChart({ series }: { series: { month: string; revenue: number }[] }
           const y = pad.top + (chartH - h);
           return (
             <g key={s.month}>
-              <rect x={x} y={y} width={bw * 0.64} height={h} rx={3} fill="var(--eclosion, #C89A1B)">
+              <rect x={x} y={y} width={bw * 0.64} height={h} rx={3} fill="var(--eclosion, #d9b21a)">
                 <title>{`${monthLabel(s.month)} : ${fmt(s.revenue)}`}</title>
               </rect>
               <text x={pad.left + i * bw + bw / 2} y={H - 9} textAnchor="middle" fontSize="10" fill="var(--muted, #5A6478)">{monthLabel(s.month)}</text>
@@ -239,7 +239,7 @@ function SalesChart({ series }: { series: { month: string; revenue: number }[] }
 }
 
 function Kpi({ label, value, tone, small }: { label: string; value: string; tone?: "gold" | "green" | "red"; small?: boolean }) {
-  const color = tone === "gold" ? "var(--eclosion-dark, #8A6A12)" : tone === "green" ? "#2E6B4F" : tone === "red" ? "var(--alert)" : "var(--ink)";
+  const color = tone === "gold" ? "var(--eclosion-dark, #9a7a12)" : tone === "green" ? "#2E6B4F" : tone === "red" ? "var(--alert)" : "var(--ink)";
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: small ? "10px 12px" : "14px 16px" }}>
       <div style={{ fontSize: 11.5, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 }}>{label}</div>

@@ -9,7 +9,7 @@ import { IconFinance } from "./icons";
 
 const DECISION_LABEL: Record<string, { text: string; color: string }> = {
   pending: { text: "À traiter", color: "var(--muted)" },
-  requested: { text: "Demandé par l'éditorial", color: "var(--eclosion-dark, #8A6A12)" },
+  requested: { text: "Demandé par l'éditorial", color: "var(--eclosion-dark, #9a7a12)" },
   deferred: { text: "Reporté", color: "var(--muted)" },
 };
 

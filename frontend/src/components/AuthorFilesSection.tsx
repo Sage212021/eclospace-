@@ -62,7 +62,7 @@ export function AuthorFilesSection({ manuscriptId, canManage }: { manuscriptId: 
               <div style={{ fontWeight: 600, color: "var(--ink)", fontSize: 13.5 }}>📎 {f.label || f.name} <span style={{ color: "var(--muted)", fontWeight: 400 }}>{f.size ? `(${humanSize(f.size)})` : ""}</span></div>
               <div style={{ fontSize: 11, marginTop: 2 }}>
                 {f.from_house
-                  ? <span style={{ color: "var(--eclosion-dark, #8A6A12)", fontWeight: 700 }}>→ Partagé à l'auteur</span>
+                  ? <span style={{ color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700 }}>→ Partagé à l'auteur</span>
                   : <span style={{ color: "var(--muted)", fontWeight: 700 }}>← Déposé par l'auteur</span>}
               </div>
             </div>

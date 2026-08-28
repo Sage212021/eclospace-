@@ -75,7 +75,7 @@ export function ManuscriptsDashboard() {
           que la direction voie exactement où sont les ouvrages en production. */}
       {phases.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>
             Répartition par étape (les 20 étapes)
           </div>
           {phases.map((p) => (
@@ -89,7 +89,7 @@ export function ManuscriptsDashboard() {
                   <div key={s.code} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, opacity: s.count > 0 ? 1 : 0.5 }}>
                     <span style={{ minWidth: 190, color: "var(--ink)" }}>{s.step_order}. {s.label}</span>
                     <span style={{ flex: 1, height: 10, background: "var(--line)", borderRadius: 999, overflow: "hidden" }}>
-                      <span style={{ display: "block", height: "100%", width: `${Math.round((s.count / maxCount) * 100)}%`, background: "linear-gradient(90deg, var(--eclosion-dark, #a87d14), var(--eclosion, #C89A1B))" }} />
+                      <span style={{ display: "block", height: "100%", width: `${Math.round((s.count / maxCount) * 100)}%`, background: "linear-gradient(90deg, var(--eclosion-dark, #9a7a12), var(--eclosion, #d9b21a))" }} />
                     </span>
                     <span style={{ fontFamily: "var(--font-mono)", color: s.count > 0 ? "var(--ink)" : "var(--muted)", minWidth: 28, textAlign: "right", fontWeight: s.count > 0 ? 700 : 400 }}>{s.count}</span>
                   </div>

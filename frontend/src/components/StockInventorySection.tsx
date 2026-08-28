@@ -203,7 +203,7 @@ export function StockInventorySection({
                     <td style={{ padding: "5px 8px", minWidth: 160 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <div style={{ flex: 1, height: 6, background: "#e6e9f0", borderRadius: 4, overflow: "hidden" }}>
-                          <div style={{ width: `${pct}%`, height: "100%", background: "var(--eclosion, #C89A1B)" }} />
+                          <div style={{ width: `${pct}%`, height: "100%", background: "var(--eclosion, #d9b21a)" }} />
                         </div>
                         <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5 }}>{inv.counted_lines}/{inv.total_lines}</span>
                       </div>
@@ -213,7 +213,7 @@ export function StockInventorySection({
                       {inv.damaged_lines > 0 && <span title="Lignes avec exemplaires abîmés" style={{ color: "var(--alert, #C4661F)", marginLeft: 6 }}>⚠{inv.damaged_lines}</span>}
                       {inv.recount_lines > 0 && <span style={{ color: "var(--danger, #C24B3A)", marginLeft: 6 }}>↻{inv.recount_lines}</span>}
                     </td>
-                    <td style={{ padding: "5px 8px" }}>{inv.status === "closed" ? <span style={{ color: "var(--muted)" }}>Clôturé</span> : <span style={{ color: "var(--eclosion-dark, #8A6A12)", fontWeight: 600 }}>Ouvert</span>}</td>
+                    <td style={{ padding: "5px 8px" }}>{inv.status === "closed" ? <span style={{ color: "var(--muted)" }}>Clôturé</span> : <span style={{ color: "var(--eclosion-dark, #9a7a12)", fontWeight: 600 }}>Ouvert</span>}</td>
                     <td style={{ padding: "5px 8px" }}><Button variant="view" size="sm" type="button" onClick={() => openInventory(inv.id)}>Ouvrir</Button></td>
                   </tr>
                 );
@@ -288,7 +288,7 @@ export function StockInventorySection({
                       {!closed && !l.adjustmentMovementId && !l.recountRequired && canValidate && ((l.variance != null && l.variance !== 0) || (l.countedDamaged ?? 0) > 0) && (
                         <Button variant="edit" size="sm" type="button" onClick={() => adjust(l.id)}>Régulariser</Button>
                       )}
-                      {l.adjustmentMovementId && <span style={{ color: "var(--eclosion-dark, #8A6A12)", fontSize: 11.5 }}>✓ régularisé</span>}
+                      {l.adjustmentMovementId && <span style={{ color: "var(--eclosion-dark, #9a7a12)", fontSize: 11.5 }}>✓ régularisé</span>}
                     </td>
                   </tr>
                 ))}

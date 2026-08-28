@@ -5,9 +5,9 @@ import { listWorkflowStatuses, type WorkflowStatusRef } from "../api/client";
 // avec des voyants (fait / en cours / à venir). Pensé pour que chacun —
 // commercial, assistante éditoriale — situe l'ouvrage sans connaître le détail.
 
-const DONE = "var(--eclosion-dark, #a87d14)";
+const DONE = "var(--eclosion-dark, #9a7a12)";
 const DONE_BG = "var(--eclosion-soft, #f6efd8)";
-const CURRENT = "var(--eclosion, #C89A1B)";
+const CURRENT = "var(--eclosion, #d9b21a)";
 const TODO = "var(--line, #e6e9ef)";
 
 export function ManuscriptProgress({ stepOrder }: { stepOrder: number }) {

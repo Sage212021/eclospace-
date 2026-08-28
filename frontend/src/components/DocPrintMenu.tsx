@@ -22,7 +22,7 @@ export function DocPrintMenu({ onPrint, label = "Imprimer / PDF", extras }: { on
         {extras && extras.length > 0 && (
           <div style={{ borderTop: "2px solid var(--line)" }}>
             {extras.map((e) => (
-              <button key={e.label} style={{ ...itemStyle, fontWeight: 600, color: "var(--eclosion-dark, #8A6A12)" }} onClick={() => { e.onSelect(); close(); }}>{e.label}</button>
+              <button key={e.label} style={{ ...itemStyle, fontWeight: 600, color: "var(--eclosion-dark, #9a7a12)" }} onClick={() => { e.onSelect(); close(); }}>{e.label}</button>
             ))}
           </div>
         )}

@@ -60,7 +60,7 @@ export function Login({ onAuthenticated }: LoginProps) {
         alignItems: "center",
         justifyContent: "center",
         padding: 20,
-        background: "linear-gradient(155deg, #16233d 0%, #1e2a44 55%, #223252 100%)",
+        background: "linear-gradient(155deg, #0b0b0c 0%, #000000 55%, #1c1b17 100%)",
       }}
     >
       <div

@@ -30,7 +30,7 @@ export function HrTrashSection({ canRestore, collapsible }: { canRestore: boolea
   return (
     <Card title="Corbeille RH — fiches supprimées" icon={<IconAdmin />} subtitle="Restaurez une fiche supprimée par erreur (rien n'est perdu)." collapsible={collapsible} defaultOpen={(rows?.length ?? 0) > 0}>
       {error && <div style={{ fontSize: 13, color: "var(--alert, #C4661F)", marginBottom: 8 }}>{error}</div>}
-      {message && <div style={{ fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginBottom: 8 }}>{message}</div>}
+      {message && <div style={{ fontSize: 13, color: "var(--eclosion-dark, #9a7a12)", marginBottom: 8 }}>{message}</div>}
       {!rows && !error && <div style={{ fontSize: 13, color: "var(--muted)" }}>Chargement…</div>}
       {rows && rows.length === 0 && <div style={{ fontSize: 13, color: "var(--muted)" }}>Aucune fiche supprimée.</div>}
       {rows && rows.length > 0 && (

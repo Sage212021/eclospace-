@@ -60,7 +60,7 @@ export function ErpConnectionsSection({ employees }: { employees: Employee[] }) 
       .map((d) => `<tr${d.has_connection ? "" : ' style="color:#8a94a6"'}><td>${d.date}</td><td>${WEEKDAYS[d.weekday]}</td><td>${d.first_login ?? "—"}</td><td>${d.last_logout ?? "—"}</td><td style="text-align:right">${d.nb_logins}</td><td style="text-align:right">${d.nb_logouts}</td></tr>`)
       .join("");
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relevé connexions ERP — ${record.employee.name} — ${record.month}</title>
-      <style>body{font-family:Georgia,serif;color:#16233D;padding:24px}h1{font-size:18px;margin-bottom:2px}p.note{font-size:11px;color:#555;max-width:640px}table{width:100%;border-collapse:collapse;font-size:12px;font-family:monospace;margin-top:12px}th,td{border:1px solid #ccc;padding:4px 6px}th{background:#16233D;color:#fff;text-align:left}</style>
+      <style>body{font-family:Georgia,serif;color:#0b0b0c;padding:24px}h1{font-size:18px;margin-bottom:2px}p.note{font-size:11px;color:#555;max-width:640px}table{width:100%;border-collapse:collapse;font-size:12px;font-family:monospace;margin-top:12px}th,td{border:1px solid #ccc;padding:4px 6px}th{background:#0b0b0c;color:#fff;text-align:left}</style>
       </head><body><h1>Relevé des connexions ERP</h1>
       <div style="font-size:13px">${record.employee.name} — ${record.month} · ${record.recap.days_with_connection}/${record.recap.days_in_month} jour(s) avec connexion · ${record.recap.total_logins} connexion(s), ${record.recap.total_logouts} déconnexion(s)</div>
       <p class="note">${record.notice}</p>

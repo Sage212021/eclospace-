@@ -141,7 +141,7 @@ export function PayrollConsolidationSection({ canAdminister, collapsible, defaul
           <div style={{ fontSize: 13, marginBottom: 8 }}>
             {t("pay.status", "Statut :")} <strong>{t("pay.pst." + period.status, STATUS_LABELS[period.status] ?? period.status)}</strong> · {period.lines.length} {t("pay.employees_count", "employés")} ·
             {" "}{t("pay.proposed_deductions", "Retenues proposées :")} <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 700 }}>{fcfa(period.totals.deduction_total)}</span>
-            {period.transmitted_at && <span style={{ color: "var(--eclosion, #C89A1B)" }}> · {t("pay.transmitted_on", "transmise le")} {period.transmitted_at.slice(0, 10)}</span>}
+            {period.transmitted_at && <span style={{ color: "var(--eclosion, #d9b21a)" }}> · {t("pay.transmitted_on", "transmise le")} {period.transmitted_at.slice(0, 10)}</span>}
           </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -161,7 +161,7 @@ export function PayrollConsolidationSection({ canAdminister, collapsible, defaul
                     <td style={{ padding: "5px 8px", fontFamily: "inherit" }}>{l.employee_name}</td>
                     <td style={{ padding: "5px 8px", textAlign: "right" }}>{fmt(l.worked_minutes)}</td>
                     <td style={{ padding: "5px 8px", textAlign: "right", color: l.late_minutes > 0 ? "var(--retard, #C4661F)" : undefined }}>{fmt(l.late_minutes)}</td>
-                    <td style={{ padding: "5px 8px", textAlign: "right", color: l.overtime_minutes > 0 ? "var(--eclosion, #C89A1B)" : undefined }}>{fmt(l.overtime_minutes)}</td>
+                    <td style={{ padding: "5px 8px", textAlign: "right", color: l.overtime_minutes > 0 ? "var(--eclosion, #d9b21a)" : undefined }}>{fmt(l.overtime_minutes)}</td>
                     <td style={{ padding: "5px 8px", textAlign: "right" }}>{l.days_absent_unjustified}</td>
                     <td style={{ padding: "5px 8px", textAlign: "right" }}>{fcfa(l.deduction_proposed)}</td>
                   </tr>

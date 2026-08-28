@@ -95,7 +95,7 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
         <label style={{ fontSize: 12, color: "var(--muted)" }}>{t("comm.to", "Au")}<input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={inp} /></label>
         <div style={{ display: "inline-flex", border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden" }}>
           {GRANULARITIES.map((g) => (
-            <button key={g.key} onClick={() => setGranularity(g.key)} style={{ border: "none", padding: "8px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", background: granularity === g.key ? "var(--eclosion, #C89A1B)" : "transparent", color: granularity === g.key ? "#fff" : "var(--muted)" }}>
+            <button key={g.key} onClick={() => setGranularity(g.key)} style={{ border: "none", padding: "8px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", background: granularity === g.key ? "var(--eclosion, #d9b21a)" : "transparent", color: granularity === g.key ? "#fff" : "var(--muted)" }}>
               {t(`comm.gran_${g.key}`, g.label)}
             </button>
           ))}

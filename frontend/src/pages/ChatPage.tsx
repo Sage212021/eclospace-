@@ -316,7 +316,7 @@ export function ChatPage() {
       <p className="ecl-page__lead">{t("chat.lead", "Échangez en privé avec vos collègues. Vous pouvez joindre un fichier.")}</p>
 
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
-      {notice && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12, fontWeight: 600 }}>{notice}</div>}
+      {notice && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12, fontWeight: 600 }}>{notice}</div>}
 
       <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 14, alignItems: "stretch", height: isMobile ? "72vh" : "62vh", minHeight: 380 }}>
         {/* Colonne gauche : conversations (masquée sur mobile quand un fil est ouvert) */}
@@ -364,7 +364,7 @@ export function ChatPage() {
                     onClick={() => setConvMenuOpen((v) => !v)}
                     aria-label={t("chat.conv_actions", "Options de la discussion")}
                     title={t("chat.conv_actions", "Options de la discussion")}
-                    style={{ border: "1px solid var(--line)", background: "var(--card, #fff)", color: "var(--eclosion-dark, #8A6A12)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "4px 10px", borderRadius: 999, fontWeight: 800 }}
+                    style={{ border: "1px solid var(--line)", background: "var(--card, #fff)", color: "var(--eclosion-dark, #9a7a12)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "4px 10px", borderRadius: 999, fontWeight: 800 }}
                   >
                     ⋯
                   </button>
@@ -407,7 +407,7 @@ export function ChatPage() {
                         <span
                           title={m.read ? t("chat.read", "Lu") : t("chat.sent", "Envoyé")}
                           aria-label={m.read ? t("chat.read", "Lu") : t("chat.sent", "Envoyé")}
-                          style={{ fontWeight: 700, letterSpacing: -2, color: m.read ? "var(--or, #C89A1B)" : "var(--muted)" }}
+                          style={{ fontWeight: 700, letterSpacing: -2, color: m.read ? "var(--or, #d9b21a)" : "var(--muted)" }}
                         >
                           {m.read ? "✓✓" : "✓"}
                         </span>
@@ -420,7 +420,7 @@ export function ChatPage() {
                             onClick={() => setMenuFor((v) => (v === m.id ? null : m.id))}
                             aria-label={t("chat.actions", "Options du message")}
                             title={t("chat.actions", "Options du message")}
-                            style={{ border: "1px solid var(--line)", background: "var(--card, #fff)", color: "var(--eclosion-dark, #8A6A12)", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "3px 9px", borderRadius: 999, fontWeight: 800 }}
+                            style={{ border: "1px solid var(--line)", background: "var(--card, #fff)", color: "var(--eclosion-dark, #9a7a12)", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "3px 9px", borderRadius: 999, fontWeight: 800 }}
                           >
                             ⋯
                           </button>
@@ -446,7 +446,7 @@ export function ChatPage() {
                 {replyTo && (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, background: "var(--eclosion-soft)", borderLeft: "3px solid var(--eclosion)", borderRadius: 6, padding: "6px 10px", marginBottom: 6, fontSize: 12 }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)" }}>↩ {t("chat.reply_to", "Réponse à")} {replyTo.sender_name}</div>
+                      <div style={{ fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)" }}>↩ {t("chat.reply_to", "Réponse à")} {replyTo.sender_name}</div>
                       <div style={{ color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{replyTo.deleted ? "" : replyTo.body || (replyTo.file ? `📎 ${replyTo.file.name}` : "")}</div>
                     </div>
                     <button onClick={cancelCompose} style={{ border: "none", background: "none", color: "var(--alert)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
@@ -454,8 +454,8 @@ export function ChatPage() {
                 )}
                 {/* Bandeau modification */}
                 {editing && (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, background: "var(--eclosion-soft)", borderLeft: "3px solid var(--or, #C89A1B)", borderRadius: 6, padding: "6px 10px", marginBottom: 6, fontSize: 12 }}>
-                    <div style={{ fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)" }}>✎ {t("chat.editing", "Modification du message")}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, background: "var(--eclosion-soft)", borderLeft: "3px solid var(--or, #d9b21a)", borderRadius: 6, padding: "6px 10px", marginBottom: 6, fontSize: 12 }}>
+                    <div style={{ fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)" }}>✎ {t("chat.editing", "Modification du message")}</div>
                     <button onClick={cancelCompose} style={{ border: "none", background: "none", color: "var(--alert)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
                   </div>
                 )}

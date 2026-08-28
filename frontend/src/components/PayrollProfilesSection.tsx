@@ -65,7 +65,7 @@ function SlipRow({ label, value, strong, tone }: { label: string; value: number;
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "4px 8px", background: "var(--paper)", borderRadius: 6 }}>
       <span style={{ color: "var(--muted)" }}>{label}</span>
-      <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: strong ? 700 : 400, color: tone === "gold" ? "var(--eclosion, #C89A1B)" : "var(--ink)" }}>{fcfa(value)}</span>
+      <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: strong ? 700 : 400, color: tone === "gold" ? "var(--eclosion, #d9b21a)" : "var(--ink)" }}>{fcfa(value)}</span>
     </div>
   );
 }
@@ -409,7 +409,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
               <Field label={t("pay.period_field", "Mois du bulletin (AAAA-MM)")}><input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
               <Button variant="edit" size="sm" type="button" onClick={computeSlip}>{t("pay.compute_slip", "Actualiser (barème)")}</Button>
               {liveSlip && (
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", background: "var(--eclosion-soft)", borderRadius: 999, padding: "3px 10px" }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", background: "var(--eclosion-soft)", borderRadius: 999, padding: "3px 10px" }}>
                   ● {t("pay.live", "Aperçu en direct")}
                 </span>
               )}
@@ -454,7 +454,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
                     <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       <span>Auto : {autoAbs.suggested.toLocaleString("fr-FR")} F ({autoAbs.days} j non payés)</span>
                       {!dedLocked && autoAbs.suggested !== manualRetenue && (
-                        <button type="button" onClick={() => setManualRetenue(autoAbs.suggested)} style={{ background: "none", border: "1px solid var(--line)", borderRadius: 5, padding: "1px 7px", fontSize: 11, fontWeight: 600, color: "var(--eclosion-dark, #8A6A12)", cursor: "pointer" }}>Appliquer</button>
+                        <button type="button" onClick={() => setManualRetenue(autoAbs.suggested)} style={{ background: "none", border: "1px solid var(--line)", borderRadius: 5, padding: "1px 7px", fontSize: 11, fontWeight: 600, color: "var(--eclosion-dark, #9a7a12)", cursor: "pointer" }}>Appliquer</button>
                       )}
                     </div>
                   )}

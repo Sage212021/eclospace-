@@ -79,7 +79,7 @@ export function ContractsModal({ employeeId, employeeName, canManage, onClose }:
                   </div>
                 </div>
               ) : (
-                <button type="button" onClick={() => setAmendFor(c.id)} style={{ marginTop: 8, background: "none", border: "none", color: "var(--eclosion-dark, #8A6A12)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>+ Ajouter un avenant</button>
+                <button type="button" onClick={() => setAmendFor(c.id)} style={{ marginTop: 8, background: "none", border: "none", color: "var(--eclosion-dark, #9a7a12)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>+ Ajouter un avenant</button>
               ))}
             </div>
           ))}

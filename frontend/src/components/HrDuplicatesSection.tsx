@@ -43,7 +43,7 @@ export function HrDuplicatesSection({ canDelete, collapsible, defaultOpen }: { c
   return (
     <Card title="Doublons détectés" icon={<IconAdmin />} subtitle="Fiches désignant probablement la même personne — à fusionner/nettoyer." collapsible={collapsible} defaultOpen={defaultOpen}>
       {error && <div style={{ fontSize: 13, color: "var(--alert, #C4661F)", marginBottom: 8 }}>{error}</div>}
-      {message && <div style={{ fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginBottom: 8 }}>{message}</div>}
+      {message && <div style={{ fontSize: 13, color: "var(--eclosion-dark, #9a7a12)", marginBottom: 8 }}>{message}</div>}
       {!groups && !error && <div style={{ fontSize: 13, color: "var(--muted)" }}>Analyse en cours…</div>}
       {groups && groups.length === 0 && <div style={{ fontSize: 13, color: "var(--muted)" }}>Aucun doublon détecté. ✅</div>}
       {groups && groups.length > 0 && (

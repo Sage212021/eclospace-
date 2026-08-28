@@ -12,7 +12,7 @@ import { ECLOSION_LOGO_PNG, ECLOSION_LOGO_RATIO, ECLOSION_FILIGRANE_PNG, ECLOSIO
 // Le moteur reste la source de vérité : ce rendu N'EFFECTUE AUCUN CALCUL, il
 // met en page les montants déjà calculés (aperçu = PDF = impression).
 
-const NAVY = [27, 42, 74] as const; // #1B2A4A (bandeaux de section)
+const NAVY = [27, 42, 74] as const; // #0b0b0c (bandeaux de section)
 const BEIGE = [242, 240, 234] as const; // #F2F0EA (sous-totaux, labels)
 const GOLD = [201, 168, 76] as const; // #C9A84C (bandeau NET À PAYER)
 const INK = [40, 40, 40] as const;

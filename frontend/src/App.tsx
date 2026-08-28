@@ -28,6 +28,7 @@ const CommercialPage = lazy(() => import("./pages/CommercialPage").then((m) => (
 const FinancePage = lazy(() => import("./pages/FinancePage").then((m) => ({ default: m.FinancePage })));
 const HrPage = lazy(() => import("./pages/HrPage").then((m) => ({ default: m.HrPage })));
 const DirectionPage = lazy(() => import("./pages/DirectionPage").then((m) => ({ default: m.DirectionPage })));
+const PayrollSuiviPage = lazy(() => import("./pages/PayrollSuiviPage").then((m) => ({ default: m.PayrollSuiviPage })));
 const ReportsPage = lazy(() => import("./pages/ReportsPage").then((m) => ({ default: m.ReportsPage })));
 const WeeklyReportsPage = lazy(() => import("./pages/WeeklyReportsPage").then((m) => ({ default: m.WeeklyReportsPage })));
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
@@ -70,6 +71,7 @@ import { playNotificationSound } from "./lib/notificationSound";
 // manuscrits filtrée sur une étape du workflow (option « liste filtrée »).
 type PageId =
   | "dashboard"
+  | "payroll-suivi"
   | "annual-events"
   | "weekly-reports"
   | "manuscripts"
@@ -236,6 +238,7 @@ const NAV_POLES: NavPole[] = [
     label: "Pilotage",
     items: [
       { key: "pi-direction", label: "Direction générale", permission: "direction:consultation" },
+      { key: "pi-paie-suivi", label: "Paie — validation & suivi", anyPermission: ["finance:validation", "paie:consultation"] },
       { key: "pi-rapports", label: "Rapports & statistiques", permission: "rapports:consultation" },
       { key: "pi-journal", label: "Journal d'activité", permission: "direction:consultation" },
     ],
@@ -283,6 +286,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "cm-calendrier": { page: "calendar" },
   "cm-bulletin": { page: "newsletters" },
   "pi-direction": { page: "direction" },
+  "pi-paie-suivi": { page: "payroll-suivi" },
   "pi-rapports": { page: "reports" },
   "pi-journal": { page: "audit" },
 };
@@ -827,6 +831,7 @@ export function App() {
           <UsersRolesPage canAdminister={permissions.has("users:administration")} />
         )}
         {leaf && "page" in leaf && leaf.page === "direction" && <DirectionPage canTreatRecommendations={permissions.has("pilotage:saisie")} canInitiateOrder={canInitiateOrder} canValidateCancellation={permissions.has("pilotage:administration")} canValidatePayrollDg={roles.has("DIR_GENERAL") || roles.has("ADMIN_GENERAL")} />}
+        {leaf && "page" in leaf && leaf.page === "payroll-suivi" && <PayrollSuiviPage canValidatePayrollDg={roles.has("DIR_GENERAL") || roles.has("ADMIN_GENERAL")} canHandoffDaf={permissions.has("finance:validation")} />}
         {leaf && "page" in leaf && leaf.page === "reports" && (
           <ReportsPage canCreateAnalysis={permissions.has("rapports:saisie")} canPromoteAnalysis={permissions.has("rapports:administration")} />
         )}

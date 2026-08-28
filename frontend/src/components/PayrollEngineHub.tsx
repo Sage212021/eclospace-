@@ -586,7 +586,8 @@ function DeclarationsCard({ kind }: { kind: "cnps" | "fiscal" }) {
 }
 
 // ── Suivi de prise en charge par le DAF + fil de validation (Temps 2) ─────────
-function HandoffCard({ canManage }: { canManage: boolean }) {
+// Exporté : réutilisé tel quel dans la page dédiée « Paie — validation & suivi ».
+export function HandoffCard({ canManage, defaultOpen }: { canManage: boolean; defaultOpen?: boolean }) {
   const [period, setPeriod] = useState(() => new Date().toISOString().slice(0, 7));
   const [h, setH] = useState<PayrollHandoff | null>(null);
   const [cnpsRef, setCnpsRef] = useState("");
@@ -625,7 +626,7 @@ function HandoffCard({ canManage }: { canManage: boolean }) {
   const editable = canManage && !!h?.validated && !h?.closed;
 
   return (
-    <Card title="Suivi de la paie (prise en charge DAF)" icon={<span aria-hidden>🧾</span>} subtitle="Après validation du DG : décaissement, déclarations CNPS/impôts, archivage — et clôture du cycle." collapsible>
+    <Card title="Suivi de la paie (prise en charge DAF)" icon={<span aria-hidden>🧾</span>} subtitle="Après validation du DG : décaissement, déclarations CNPS/impôts, archivage — et clôture du cycle." collapsible defaultOpen={defaultOpen}>
       <label style={{ fontSize: 13 }}>Mois : <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono)" }} /></label>
       {err && <p style={{ fontSize: 13, color: "var(--alert)", marginTop: 8 }}>{err}</p>}
 
@@ -712,7 +713,7 @@ function HandoffCard({ canManage }: { canManage: boolean }) {
 // ── DIPE mensuel CNPS : le livre de paie aux colonnes du formulaire officiel ──
 // de télédéclaration (e-services CNPS). Aperçu à l'écran + impression/PDF (mise
 // en forme officielle) + export CSV pour saisie/import sur le portail.
-function DipeCard() {
+export function DipeCard({ defaultOpen }: { defaultOpen?: boolean } = {}) {
   const [period, setPeriod] = useState(currentPeriod());
   const [irppMode, setIrppMode] = useState<"irpp_cac" | "irpp">("irpp_cac");
   const [dipe, setDipe] = useState<DipeMonth | null>(null);
@@ -753,7 +754,7 @@ function DipeCard() {
   ] as const;
 
   return (
-    <Card title="DIPE mensuel (CNPS)" icon={<span aria-hidden>🏛️</span>} subtitle="Déclaration mensuelle CNPS aux colonnes du formulaire officiel — aperçu, impression/PDF et export CSV." collapsible>
+    <Card title="DIPE mensuel (CNPS)" icon={<span aria-hidden>🏛️</span>} subtitle="Déclaration mensuelle CNPS aux colonnes du formulaire officiel — aperçu, impression/PDF et export CSV." collapsible defaultOpen={defaultOpen}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
         <label style={{ fontSize: 13 }}>Mois : <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono)" }} /></label>
         <label style={{ fontSize: 13 }}>Colonne IRPP :{" "}

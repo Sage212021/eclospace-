@@ -40,6 +40,7 @@ import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconCommercial } from "../components/icons";
 import { IsbnCombobox } from "../components/IsbnCombobox";
+import { PeriodFilter, currentPeriod, inPeriod, type Period } from "../components/PeriodFilter";
 
 const CATEGORY_LABELS: Record<CustomerCategory, string> = {
   librairie: "Librairie",
@@ -724,12 +725,16 @@ function MySalesRegister({ refreshKey }: { refreshKey: number }) {
   const [err, setErr] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
+  // Filtre par période (D-023) : ouvert par défaut sur le mois en cours.
+  const [period, setPeriod] = useState<Period>(currentPeriod());
+
   const load = () => { setLoading(true); listMyPosSales().then(setSales).catch(() => setSales([])).finally(() => setLoading(false)); };
   useEffect(() => { load(); }, [refreshKey]);
 
-  // Le total ne compte QUE les ventes actives (une vente annulée ne pèse plus).
-  const total = sales.reduce((s, r) => s + (r.cancelled ? 0 : r.total), 0);
-  const activeCount = sales.filter((s) => !s.cancelled).length;
+  const filtered = sales.filter((s) => inPeriod(s.sold_at, period));
+  // Le total ne compte QUE les ventes actives de la période (une vente annulée ne pèse plus).
+  const total = filtered.reduce((s, r) => s + (r.cancelled ? 0 : r.total), 0);
+  const activeCount = filtered.filter((s) => !s.cancelled).length;
 
   function openCancel(s: PosSaleRow) { setTarget(s); setReason(""); setErr(null); }
 
@@ -760,6 +765,11 @@ function MySalesRegister({ refreshKey }: { refreshKey: number }) {
       ) : sales.length === 0 ? (
         <Empty>Aucune vente enregistrée pour l'instant. Enregistrez une vente ci-dessus, elle apparaîtra ici.</Empty>
       ) : (
+        <>
+        <PeriodFilter dates={sales.map((s) => s.sold_at)} value={period} onChange={setPeriod} resultCount={filtered.length} />
+        {filtered.length === 0 ? (
+          <Empty>Aucune vente pour cette période.</Empty>
+        ) : (
         <TableScroll>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 720 }}>
             <thead>
@@ -775,7 +785,7 @@ function MySalesRegister({ refreshKey }: { refreshKey: number }) {
               </tr>
             </thead>
             <tbody style={{ fontFamily: "var(--font-mono, monospace)" }}>
-              {sales.map((s) => (
+              {filtered.map((s) => (
                 <tr key={s.id} style={{ borderTop: "1px solid var(--line)", opacity: s.cancelled ? 0.55 : 1, textDecoration: s.cancelled ? "line-through" : "none" }}>
                   <td style={{ padding: "6px 8px" }}>{s.sold_at.slice(0, 10)}</td>
                   <td style={{ padding: "6px 8px", fontFamily: "inherit" }}>
@@ -808,6 +818,8 @@ function MySalesRegister({ refreshKey }: { refreshKey: number }) {
             </tfoot>
           </table>
         </TableScroll>
+        )}
+        </>
       )}
 
       {target && (

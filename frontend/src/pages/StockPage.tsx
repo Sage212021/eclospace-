@@ -325,6 +325,7 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
         <MovementHistory
           canManage={canManage}
           version={movVersion}
+          isbns={isbns}
           filterIsbnId={focusIsbn?.id ?? null}
           filterLabel={focusIsbn?.title ?? null}
           onClearFilter={() => setFocusIsbn(null)}
@@ -505,6 +506,7 @@ function MovementForm({
 function MovementHistory({
   canManage,
   version,
+  isbns,
   filterIsbnId,
   filterLabel,
   onClearFilter,
@@ -514,6 +516,7 @@ function MovementHistory({
 }: {
   canManage: boolean;
   version: number;
+  isbns: IsbnRef[];
   filterIsbnId?: string | null;
   filterLabel?: string | null;
   onClearFilter?: () => void;
@@ -525,7 +528,13 @@ function MovementHistory({
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [editing, setEditing] = useState<StockMovement | null>(null);
   const [period, setPeriod] = useState<Period>(currentPeriod);
-  const filtered = movements.filter((m) => inPeriod(m.movedAt, period));
+  const [search, setSearch] = useState("");
+  // Recherche par ouvrage (titre) ou ISBN : on retrouve le titre via le catalogue.
+  const titleByIsbn = new Map(isbns.map((i) => [i.id, i.manuscript?.title ?? ""]));
+  const q = search.trim().toLowerCase();
+  const filtered = movements
+    .filter((m) => inPeriod(m.movedAt, period))
+    .filter((m) => !q || (m.isbn13 ?? "").toLowerCase().includes(q) || (titleByIsbn.get(m.isbnId) ?? "").toLowerCase().includes(q));
 
   useEffect(() => {
     listStockMovements(filterIsbnId ?? undefined).then(setMovements).catch((e) => onError(e instanceof Error ? e.message : "Chargement des mouvements impossible."));
@@ -567,10 +576,20 @@ function MovementHistory({
         </div>
       )}
       {movements.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher un ouvrage (titre) ou un ISBN…"
+            style={{ width: "100%", maxWidth: 360, padding: "7px 11px", fontSize: 13, border: "1px solid var(--line)", borderRadius: 8, background: "var(--card)", color: "var(--ink)" }}
+          />
+        </div>
+      )}
+      {movements.length > 0 && (
         <PeriodFilter dates={movements.map((m) => m.movedAt)} value={period} onChange={setPeriod} resultCount={filtered.length} />
       )}
       {filtered.length === 0 ? (
-        <Empty>{movements.length === 0 ? t("stock.no_movement", "Aucun mouvement enregistré.") : "Aucun mouvement pour cette période."}</Empty>
+        <Empty>{movements.length === 0 ? t("stock.no_movement", "Aucun mouvement enregistré.") : "Aucun mouvement pour cette période ou cette recherche."}</Empty>
       ) : (
         <div className="ecl-list">
           {filtered.map((m) => {

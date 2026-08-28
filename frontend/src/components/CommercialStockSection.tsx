@@ -162,17 +162,25 @@ function HandoverDialog({ mode, commercials, isbns, magasins, onClose, onDone, o
   const [locationId, setLocationId] = useState(magasins[0]?.id ?? "");
   const [quantity, setQuantity] = useState(1);
   const [reason, setReason] = useState("");
+  const today = new Date().toISOString().slice(0, 10);
+  const [movedAt, setMovedAt] = useState(today);
   const [busy, setBusy] = useState(false);
   const isReturn = mode === "return";
 
   async function submit() {
     if (!userId || !isbnId || !locationId || quantity <= 0) { onError("Renseignez le commercial, l'ouvrage, le magasin et une quantité."); return; }
+    if (!isReturn && movedAt && movedAt > today) { onError("La date de remise ne peut pas être postérieure à aujourd'hui."); return; }
     setBusy(true);
     try {
       const payload = { isbn_id: isbnId, quantity, location_id: locationId, reason: reason.trim() || undefined };
       const name = commercials.find((c) => c.id === userId)?.name ?? "commercial";
       if (isReturn) { await returnFromCommercial(userId, payload); onDone(`Retour de ${quantity} exemplaire(s) de ${name} enregistré.`); }
-      else { await handoverToCommercial(userId, payload); onDone(`Remise de ${quantity} exemplaire(s) à ${name} enregistrée.`); }
+      else {
+        // La date de remise peut être antérieure au jour en cours (remise saisie a posteriori).
+        const moved_at = movedAt && movedAt !== today ? new Date(movedAt + "T12:00:00").toISOString() : undefined;
+        await handoverToCommercial(userId, { ...payload, moved_at });
+        onDone(`Remise de ${quantity} exemplaire(s) à ${name} enregistrée.`);
+      }
     } catch (e) {
       onError(e instanceof Error ? e.message : "Opération impossible.");
     } finally {
@@ -213,6 +221,14 @@ function HandoverDialog({ mode, commercials, isbns, magasins, onClose, onDone, o
       <Field label="Quantité">
         <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} />
       </Field>
+      {!isReturn && (
+        <Field label="Date de remise">
+          <input type="date" max={today} value={movedAt} onChange={(e) => setMovedAt(e.target.value)} />
+          <p style={{ fontSize: 11, color: "var(--muted)", margin: "4px 0 0" }}>
+            Par défaut aujourd'hui. Une date antérieure est possible si la remise a déjà eu lieu.
+          </p>
+        </Field>
+      )}
       <Field label="Motif (facultatif)">
         <input value={reason} onChange={(e) => setReason(e.target.value)} />
       </Field>

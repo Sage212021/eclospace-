@@ -141,7 +141,7 @@ export function StockConsolidatedSection({ collapsible, defaultOpen, canCorrect,
                 <td style={cell(data.totals.declasse, data.totals.declasse ? "var(--alert, #C4661F)" : undefined, 700)}>{num(data.totals.declasse)}</td>
                 <td style={cell(data.totals.perdu, data.totals.perdu ? "var(--alert, #C4661F)" : "var(--muted)", 700)}>{num(data.totals.perdu)}</td>
                 <td style={cell(data.totals.detruit, data.totals.detruit ? "var(--danger, #C24B3A)" : "var(--muted)", 700)}>{num(data.totals.detruit)}</td>
-                <td style={cell(data.totals.total, "var(--eclosion, #C89A1B)", 700)}>{num(data.totals.total)}</td>
+                <td style={cell(data.totals.total, "var(--eclosion, #d9b21a)", 700)}>{num(data.totals.total)}</td>
                 {canCorrect && <td></td>}
               </tr>
             </tfoot>

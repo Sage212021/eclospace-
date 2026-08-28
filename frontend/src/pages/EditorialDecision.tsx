@@ -210,7 +210,7 @@ function HistoryTable({ items, onOpen }: { items: DecisionHistoryItem[]; onOpen:
     d === "refus"
       ? { bg: "#F6D9D3", fg: "var(--alert, #C24B3A)" }
       : d === "acceptation" || d === "acceptation_conditions"
-        ? { bg: "var(--eclosion-soft)", fg: "var(--eclosion-dark, #8A6A12)" }
+        ? { bg: "var(--eclosion-soft)", fg: "var(--eclosion-dark, #9a7a12)" }
         : { bg: "var(--amber-soft, #F6E7D2)", fg: "var(--amber, #C4661F)" };
   return (
     <div style={{ overflowX: "auto" }}>
@@ -272,7 +272,7 @@ function AccordionSection({
         <span style={{ fontSize: 16 }}>{icon}</span>
         <span style={{ flex: 1 }}>{label}</span>
         {count !== undefined && (
-          <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontFamily: "var(--font-mono)" }}>{count}</span>
+          <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontFamily: "var(--font-mono)" }}>{count}</span>
         )}
         <span style={{ color: "var(--muted)", display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
       </button>

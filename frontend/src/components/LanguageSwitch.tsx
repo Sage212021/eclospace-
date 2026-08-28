@@ -11,7 +11,7 @@ export function LanguageSwitch() {
       aria-pressed={lang === code}
       style={{
         border: "none",
-        background: lang === code ? "var(--eclosion, #C89A1B)" : "transparent",
+        background: lang === code ? "var(--eclosion, #d9b21a)" : "transparent",
         color: lang === code ? "#fff" : "var(--muted)",
         borderRadius: 6,
         padding: "3px 9px",

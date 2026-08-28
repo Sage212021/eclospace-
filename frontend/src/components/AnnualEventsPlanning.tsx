@@ -24,7 +24,7 @@ import { useI18n } from "../i18n";
 //  - color/bg : pour les puces et les boutons (fond clair, texte teinté) ;
 //  - fill/on  : pour les cases pleines du calendrier (fond franc, texte contrasté).
 const STATUS: Record<AnnualEventStatus, { label: string; color: string; bg: string; fill: string; on: string }> = {
-  a_venir: { label: "À venir", color: "var(--eclosion-dark)", bg: "var(--eclosion-soft)", fill: "var(--eclosion)", on: "#16233D" },
+  a_venir: { label: "À venir", color: "var(--eclosion-dark)", bg: "var(--eclosion-soft)", fill: "var(--eclosion)", on: "#0b0b0c" },
   a_confirmer: { label: "À confirmer", color: "var(--amber)", bg: "var(--amber-soft, #f9e9db)", fill: "var(--amber)", on: "#FFFFFF" },
   tenu: { label: "Tenu", color: "var(--ink)", bg: "#e7ecf5", fill: "var(--ink)", on: "#FFFFFF" },
   non_tenu: { label: "Non tenu", color: "var(--alert)", bg: "var(--alert-soft, #f9e9e6)", fill: "var(--alert)", on: "#FFFFFF" },

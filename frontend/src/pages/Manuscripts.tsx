@@ -298,7 +298,7 @@ function HistoryByDay({ onOpenManuscript }: { onOpenManuscript: (id: string) => 
                       {m.title}
                     </button>
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--muted)" }}>{m.manuscript_number}</span>
-                    <span style={{ marginLeft: "auto", fontSize: 11, background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 999, padding: "1px 9px", fontWeight: 600 }}>{m.status_label}</span>
+                    <span style={{ marginLeft: "auto", fontSize: 11, background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 9px", fontWeight: 600 }}>{m.status_label}</span>
                   </div>
                 ))}
               </div>
@@ -336,7 +336,7 @@ function AccordionSection({
         <span style={{ fontSize: 16 }}>{icon}</span>
         <span style={{ flex: 1 }}>{label}</span>
         {count !== undefined && (
-          <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontFamily: "var(--font-mono)" }}>{count}</span>
+          <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontFamily: "var(--font-mono)" }}>{count}</span>
         )}
         <span style={{ color: "var(--muted)", display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
       </button>
@@ -560,7 +560,7 @@ const EMPTY_AUTHOR = {
 };
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <div style={{ gridColumn: "1 / -1", fontSize: 12.5, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", textTransform: "uppercase", letterSpacing: 0.4, marginTop: 6, borderBottom: "1px solid var(--line)", paddingBottom: 4 }}>{children}</div>;
+  return <div style={{ gridColumn: "1 / -1", fontSize: 12.5, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", textTransform: "uppercase", letterSpacing: 0.4, marginTop: 6, borderBottom: "1px solid var(--line)", paddingBottom: 4 }}>{children}</div>;
 }
 
 // Fiche d'enregistrement du manuscrit — digne d'une grande maison d'édition :
@@ -669,7 +669,7 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
             <label style={{ display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}><input type="radio" name="evalfee" checked={evalFee === "sans_frais"} onChange={() => setEvalFee("sans_frais")} style={{ width: "auto" }} /> Sans frais</label>
             <label style={{ display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}><input type="radio" name="evalfee" checked={evalFee === "non_defini"} onChange={() => setEvalFee("non_defini")} style={{ width: "auto" }} /> À décider plus tard</label>
           </div>
-          {evalFee === "a_payer" && <div style={{ fontSize: 11.5, color: "var(--eclosion-dark, #8A6A12)", marginTop: 6 }}>→ Une demande de facture de frais de dépôt sera transmise automatiquement à la Finance à l'enregistrement.</div>}
+          {evalFee === "a_payer" && <div style={{ fontSize: 11.5, color: "var(--eclosion-dark, #9a7a12)", marginTop: 6 }}>→ Une demande de facture de frais de dépôt sera transmise automatiquement à la Finance à l'enregistrement.</div>}
         </div>
         <LabeledInput label="Délai de réponse à l'auteur (jours)"><input type="number" min={0} value={responseDelay} onChange={(e) => setResponseDelay(e.target.value)} placeholder="Ex. 60" /></LabeledInput>
       </div>

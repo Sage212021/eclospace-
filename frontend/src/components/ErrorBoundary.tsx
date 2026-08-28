@@ -58,7 +58,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     if (this.state.error) {
       const chunk = isChunkLoadError(this.state.error);
       return (
-        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "#F8F9FB", color: "#16233D", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "#F8F9FB", color: "#0b0b0c", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
           <div style={{ maxWidth: 460, textAlign: "center", background: "#fff", border: "1px solid #e6e9ef", borderRadius: 14, padding: "28px 24px", boxShadow: "0 6px 24px rgba(22,35,61,0.08)" }}>
             <div style={{ fontSize: 40, marginBottom: 8 }}>⚡</div>
             <h1 style={{ fontSize: 19, margin: "0 0 8px" }}>Éclospace doit être rechargé</h1>
@@ -67,7 +67,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
                 ? "Une nouvelle version de l'application a été déployée. Cliquez sur « Recharger » pour la récupérer — aucune donnée n'est perdue."
                 : "Un incident d'affichage est survenu. Cliquez sur « Recharger » pour repartir sur une page saine — aucune donnée n'est perdue."}
             </p>
-            <button onClick={this.reload} style={{ border: "none", background: "#16233D", color: "#fff", borderRadius: 10, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            <button onClick={this.reload} style={{ border: "none", background: "#0b0b0c", color: "#fff", borderRadius: 10, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
               Recharger l'application
             </button>
           </div>

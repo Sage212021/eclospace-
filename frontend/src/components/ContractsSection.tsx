@@ -1305,7 +1305,7 @@ function NewContractForm({
       {/* Termes financiers VARIABLES par auteur : base, paliers de droits,
           périodicités, retenue fiscale. Chaque contrat peut différer. */}
       <div style={{ marginTop: 12, border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8, color: "var(--eclosion-dark, #8A6A12)" }}>Termes financiers (propres à cet auteur / cet ouvrage)</div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8, color: "var(--eclosion-dark, #9a7a12)" }}>Termes financiers (propres à cet auteur / cet ouvrage)</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <label style={{ fontSize: 12 }}>Base de calcul
             <select value={base} onChange={(e) => setBase(e.target.value as typeof base)} style={inputStyle}>

@@ -282,7 +282,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
                   padding: "10px 14px",
                   cursor: "pointer",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#f4f6fa")}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--paper)")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               >
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>{r.title}</div>
@@ -597,7 +597,7 @@ function MenuItem({ children, onClick, danger }: { children: React.ReactNode; on
         cursor: "pointer",
         color: danger ? "var(--alert)" : "var(--ink)",
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = danger ? "var(--alert-soft)" : "#f4f6fa")}
+      onMouseEnter={(e) => (e.currentTarget.style.background = danger ? "var(--alert-soft)" : "var(--paper)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
       {children}

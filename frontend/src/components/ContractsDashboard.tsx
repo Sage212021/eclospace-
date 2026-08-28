@@ -72,7 +72,7 @@ export function ContractsDashboard({ canRestore }: { canRestore: boolean }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8 }}>
             {STATUS_ORDER.map((s) => {
               const n = data.by_status[s] ?? 0;
-              const accent = s === "active" ? "var(--eclosion, #C89A1B)" : s === "expired" ? "var(--alert, #C4661F)" : s === "terminated" ? "var(--danger, #C24B3A)" : "var(--ink)";
+              const accent = s === "active" ? "var(--eclosion, #d9b21a)" : s === "expired" ? "var(--alert, #C4661F)" : s === "terminated" ? "var(--danger, #C24B3A)" : "var(--ink)";
               return (
                 <div key={s} style={{ border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", background: "var(--card, #fff)" }}>
                   <div style={{ fontFamily: "var(--font-mono)", fontSize: 24, fontWeight: 700, color: accent, lineHeight: 1 }}>{n}</div>

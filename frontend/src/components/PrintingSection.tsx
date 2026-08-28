@@ -244,7 +244,7 @@ const secondaryButtonStyle: React.CSSProperties = {
 
 // Charte Éclospace : or = conforme (positif), orange = réserves, rouge = critique.
 const VERDICTS: { value: QcVerdict; label: string; color: string }[] = [
-  { value: "conform", label: "Conforme", color: "#C89A1B" },
+  { value: "conform", label: "Conforme", color: "#d9b21a" },
   { value: "with_reserves", label: "Conforme avec réserves", color: "#C4661F" },
   { value: "non_conform", label: "Non conforme", color: "#C24B3A" },
 ];
@@ -428,7 +428,7 @@ function ReceiptCard({ receipt, qcItems, canManage, canValidate, onDone, onError
           <button
             onClick={saveQc}
             disabled={saving}
-            style={{ ...secondaryButtonStyle, background: "var(--eclosion, #C89A1B)", color: "#fff", border: "none", fontWeight: 600 }}
+            style={{ ...secondaryButtonStyle, background: "var(--eclosion, #d9b21a)", color: "#fff", border: "none", fontWeight: 600 }}
           >
             {saving ? "Enregistrement…" : "Enregistrer le contrôle qualité"}
           </button>

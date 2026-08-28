@@ -69,7 +69,7 @@ export function ManuscriptCleanupSection({ canAdminister, onOpenManuscript }: { 
                     <td style={{ padding: "5px 8px" }}>{m.title} <span style={{ color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{m.manuscript_number}</span></td>
                     <td style={{ padding: "5px 8px" }}>
                       {m.missing.map((x) => (
-                        <span key={x} style={{ display: "inline-block", background: "var(--gold-soft, #f6efdc)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 999, padding: "1px 8px", fontSize: 11.5, marginRight: 4, marginBottom: 2 }}>{x}</span>
+                        <span key={x} style={{ display: "inline-block", background: "var(--gold-soft, #f6efdc)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 8px", fontSize: 11.5, marginRight: 4, marginBottom: 2 }}>{x}</span>
                       ))}
                     </td>
                     <td style={{ padding: "5px 8px", textAlign: "right" }}><Button variant="edit" size="sm" type="button" onClick={() => onOpenManuscript(m.id)}>Compléter</Button></td>
@@ -119,7 +119,7 @@ export function ManuscriptCleanupSection({ canAdminister, onOpenManuscript }: { 
                         <td style={{ padding: "5px 8px", color: "var(--muted)" }}>{c.stage ?? "—"}</td>
                         <td style={{ padding: "5px 8px" }}>
                           {c.safe ? (
-                            <span style={{ color: "var(--eclosion-dark, #8A6A12)", fontSize: 12 }}>essai — sûr à archiver</span>
+                            <span style={{ color: "var(--eclosion-dark, #9a7a12)", fontSize: 12 }}>essai — sûr à archiver</span>
                           ) : (
                             <span style={{ color: "var(--alert, #C4661F)", fontSize: 12 }}>🔒 protégé : {c.blockers.join(", ")}</span>
                           )}

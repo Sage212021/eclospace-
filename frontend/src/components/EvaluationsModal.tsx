@@ -48,8 +48,8 @@ export function EvaluationsModal({ employeeId, employeeName, canManage, onClose 
           {rows.map((ev) => (
             <div key={ev.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, alignItems: "baseline" }}>
-                <div style={{ fontWeight: 600, fontSize: 13.5 }}>Année {ev.year} · <span style={{ color: "var(--eclosion-dark, #8A6A12)" }}>{stars(ev.rating)}</span> ({ev.rating}/5)</div>
-                {canManage && <button type="button" onClick={() => edit(ev)} style={{ background: "none", border: "none", color: "var(--eclosion-dark, #8A6A12)", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Modifier</button>}
+                <div style={{ fontWeight: 600, fontSize: 13.5 }}>Année {ev.year} · <span style={{ color: "var(--eclosion-dark, #9a7a12)" }}>{stars(ev.rating)}</span> ({ev.rating}/5)</div>
+                {canManage && <button type="button" onClick={() => edit(ev)} style={{ background: "none", border: "none", color: "var(--eclosion-dark, #9a7a12)", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Modifier</button>}
               </div>
               {ev.strengths && <div style={{ fontSize: 12.5, marginTop: 4 }}><b>Points forts :</b> {ev.strengths}</div>}
               {ev.areasToImprove && <div style={{ fontSize: 12.5, marginTop: 2 }}><b>Axes de progrès :</b> {ev.areasToImprove}</div>}

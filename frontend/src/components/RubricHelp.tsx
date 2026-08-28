@@ -47,7 +47,7 @@ export function RubricHelp({ helpKey }: { helpKey: string }) {
           cursor: "pointer",
           fontSize: 12.5,
           fontWeight: 600,
-          color: "var(--eclosion-dark, #a87d14)",
+          color: "var(--eclosion-dark, #9a7a12)",
         }}
       >
         <span aria-hidden>❓</span>
@@ -132,7 +132,7 @@ function EntryBody({ entry, t }: { entry: HelpEntry; t: (k: string, d: string) =
             cursor: "pointer",
             fontSize: 12.5,
             fontWeight: 700,
-            color: "var(--eclosion-dark, #a87d14)",
+            color: "var(--eclosion-dark, #9a7a12)",
           }}
         >
           {t("help.more", "Voir la marche à suivre")} ▾

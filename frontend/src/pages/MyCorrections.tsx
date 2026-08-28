@@ -184,7 +184,7 @@ function AccordionSection({
         <span style={{ fontSize: 16 }}>{icon}</span>
         <span style={{ flex: 1 }}>{label}</span>
         {count !== undefined && (
-          <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontFamily: "var(--font-mono)" }}>{count}</span>
+          <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontFamily: "var(--font-mono)" }}>{count}</span>
         )}
         <span style={{ color: "var(--muted)", display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
       </button>
@@ -208,7 +208,7 @@ function handoffTag(dir: "in" | "out"): React.CSSProperties {
     fontWeight: 700,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-    color: dir === "in" ? "var(--eclosion-dark, #8A6A12)" : "#2E6B4F",
+    color: dir === "in" ? "var(--eclosion-dark, #9a7a12)" : "#2E6B4F",
     background: dir === "in" ? "var(--eclosion-soft)" : "#DDF0E5",
     borderRadius: 999,
     padding: "2px 9px",

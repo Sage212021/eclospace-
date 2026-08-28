@@ -78,7 +78,7 @@ export function SalaryElementsGuide({ canManage }: { canManage: boolean }) {
                   {byCat.map(([cat, items]) => (
                     <>
                       <tr key={cat}>
-                        <td colSpan={5} style={{ padding: "8px 8px 3px", fontSize: 11.5, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", textTransform: "uppercase", letterSpacing: 0.3 }}>{items[0].category_label}</td>
+                        <td colSpan={5} style={{ padding: "8px 8px 3px", fontSize: 11.5, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", textTransform: "uppercase", letterSpacing: 0.3 }}>{items[0].category_label}</td>
                       </tr>
                       {items.map((e) => (
                         <tr key={e.code} style={{ borderTop: "1px solid var(--line)", opacity: e.active ? 1 : 0.5 }}>
@@ -108,7 +108,7 @@ export function SalaryElementsGuide({ canManage }: { canManage: boolean }) {
                               <Chip label="En attente" tone="muted" />
                             )}
                             {canManage && (
-                              <button onClick={() => toggleInForce(e.code, !e.in_force)} disabled={busy === e.code} style={{ marginLeft: 6, background: "none", border: "1px solid var(--line)", borderRadius: 5, padding: "1px 7px", fontSize: 11, fontWeight: 600, cursor: busy === e.code ? "default" : "pointer", color: e.in_force ? "var(--alert)" : "var(--eclosion-dark, #8A6A12)" }}>
+                              <button onClick={() => toggleInForce(e.code, !e.in_force)} disabled={busy === e.code} style={{ marginLeft: 6, background: "none", border: "1px solid var(--line)", borderRadius: 5, padding: "1px 7px", fontSize: 11, fontWeight: 600, cursor: busy === e.code ? "default" : "pointer", color: e.in_force ? "var(--alert)" : "var(--eclosion-dark, #9a7a12)" }}>
                                 {e.in_force ? "Mettre en attente" : "Mettre en vigueur"}
                               </button>
                             )}

@@ -83,7 +83,7 @@ export function QuoteSignPage({ token }: { token: string }) {
             />
             <div style={{ display: "none" }}>
               <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700 }}>Éclosion Édition</div>
-              <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#C89A1B" }}>L'avenir du livre</div>
+              <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#d9b21a" }}>L'avenir du livre</div>
             </div>
           </div>
           <div style={{ textAlign: "right", fontSize: 10.5, color: "#4b5563", lineHeight: 1.7, maxWidth: 300 }}>
@@ -132,7 +132,7 @@ export function QuoteSignPage({ token }: { token: string }) {
               <div style={{ textAlign: "right", marginTop: 14, fontSize: 15 }}>
                 <div style={{ color: "#4b5563" }}>Total HT&nbsp;: {money(quote.total_ht, quote.currency)}</div>
                 <div style={{ color: "#4b5563" }}>TVA&nbsp;: {money(quote.total_tax, quote.currency)}</div>
-                <div style={{ fontWeight: 700, fontSize: 18, borderTop: "2px solid #16233D", paddingTop: 6, marginTop: 6 }}>
+                <div style={{ fontWeight: 700, fontSize: 18, borderTop: "2px solid #0b0b0c", paddingTop: 6, marginTop: 6 }}>
                   Total TTC&nbsp;: {money(quote.total_ttc, quote.currency)}
                 </div>
               </div>
@@ -176,7 +176,7 @@ export function QuoteSignPage({ token }: { token: string }) {
         </div>
 
         <div style={footer}>
-          <div style={{ color: "#16233D", fontWeight: 700 }}>{HOUSE.legalName}</div>
+          <div style={{ color: "#0b0b0c", fontWeight: 700 }}>{HOUSE.legalName}</div>
           RCCM : {HOUSE.rccm} · NIU : {HOUSE.niu} · N° Affil. CNPS : {HOUSE.cnps}
           <br />
           {HOUSE.address} · {HOUSE.poBox} · Tél. {HOUSE.phone}
@@ -186,14 +186,14 @@ export function QuoteSignPage({ token }: { token: string }) {
   );
 }
 
-const page: React.CSSProperties = { minHeight: "100vh", background: "#eef1f6", display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "24px 12px", fontFamily: "Arial, Helvetica, sans-serif", color: "#16233D" };
+const page: React.CSSProperties = { minHeight: "100vh", background: "#eef1f6", display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "24px 12px", fontFamily: "Arial, Helvetica, sans-serif", color: "#0b0b0c" };
 const card: React.CSSProperties = { width: "100%", maxWidth: 640, background: "#fff", border: "1px solid #e6e9ef", borderRadius: 12, overflow: "hidden", boxShadow: "0 8px 30px rgba(22,35,61,.08)" };
-const header: React.CSSProperties = { padding: "20px 26px", borderBottom: "3px solid #16233D", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" };
+const header: React.CSSProperties = { padding: "20px 26px", borderBottom: "3px solid #0b0b0c", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" };
 const footer: React.CSSProperties = { padding: "14px 26px", borderTop: "1px solid #e6e9ef", fontSize: 11, color: "#6b7280" };
 const table: React.CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: 13.5 };
-const thL: React.CSSProperties = { textAlign: "left", background: "#16233D", color: "#fff", padding: "8px 10px" };
-const thR: React.CSSProperties = { textAlign: "right", background: "#16233D", color: "#fff", padding: "8px 10px" };
+const thL: React.CSSProperties = { textAlign: "left", background: "#0b0b0c", color: "#fff", padding: "8px 10px" };
+const thR: React.CSSProperties = { textAlign: "right", background: "#0b0b0c", color: "#fff", padding: "8px 10px" };
 const td: React.CSSProperties = { padding: "8px 10px", borderBottom: "1px solid #e6e9ef" };
 const tdR: React.CSSProperties = { padding: "8px 10px", borderBottom: "1px solid #e6e9ef", textAlign: "right", fontVariantNumeric: "tabular-nums" };
 const input: React.CSSProperties = { display: "block", width: "100%", padding: "9px 10px", marginTop: 5, fontSize: 14, border: "1px solid #cfd5e0", borderRadius: 8, boxSizing: "border-box" };
-const button: React.CSSProperties = { background: "#16233D", color: "#fff", border: "none", borderRadius: 9, padding: "12px 22px", fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%" };
+const button: React.CSSProperties = { background: "#0b0b0c", color: "#fff", border: "none", borderRadius: 9, padding: "12px 22px", fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%" };

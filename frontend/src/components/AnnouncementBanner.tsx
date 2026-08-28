@@ -25,7 +25,7 @@ export function AnnouncementBanner({ onOpen }: { onOpen: (id: string) => void })
       role="region"
       aria-label={t("cm.banner_label", "Annonces importantes")}
       style={{
-        background: "var(--navy, #16233D)",
+        background: "var(--navy, #0b0b0c)",
         color: "#fff",
         borderRadius: 10,
         overflow: "hidden",

@@ -30,7 +30,7 @@ function firstOfMonth(): string {
 }
 
 function Indicator({ label, value, tone }: { label: string; value: string; tone?: "warn" | "over" | "ok" }) {
-  const color = tone === "warn" ? "var(--retard, #C4661F)" : tone === "over" ? "var(--eclosion, #C89A1B)" : tone === "ok" ? "var(--eclosion, #C89A1B)" : "var(--ink)";
+  const color = tone === "warn" ? "var(--retard, #C4661F)" : tone === "over" ? "var(--eclosion, #d9b21a)" : tone === "ok" ? "var(--eclosion, #d9b21a)" : "var(--ink)";
   return (
     <div style={{ minWidth: 110 }}>
       <div style={{ fontSize: 12, color: "var(--muted)" }}>{label}</div>
@@ -92,7 +92,7 @@ export function AttendanceReportSection() {
       ? ["Employee", "Department", "Worked", "Lateness", "Early dep.", "Overtime", "Unjust. abs.", "Deduction"]
       : ["Employé", "Département", "Travaillé", "Retards", "Départs ant.", "Heures sup", "Abs. injust.", "Retenue"];
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title} ${report.from} → ${report.to}</title>
-      <style>body{font-family:Georgia,serif;color:#16233D;padding:24px}h1{font-size:18px}table{width:100%;border-collapse:collapse;font-size:12px;font-family:monospace}th,td{border:1px solid #ccc;padding:4px 6px}th{background:#16233D;color:#fff;text-align:left}</style>
+      <style>body{font-family:Georgia,serif;color:#0b0b0c;padding:24px}h1{font-size:18px}table{width:100%;border-collapse:collapse;font-size:12px;font-family:monospace}th,td{border:1px solid #ccc;padding:4px 6px}th{background:#0b0b0c;color:#fff;text-align:left}</style>
       </head><body><h1>${title} — ${report.from} ${lang === "en" ? "to" : "au"} ${report.to}</h1>
       <table><thead><tr>${th.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
       <tbody>${rowsHtml}</tbody></table></body></html>`;
@@ -154,7 +154,7 @@ export function AttendanceReportSection() {
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>{fmt(r.worked_minutes)}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right", color: r.late_minutes > 0 ? "var(--retard, #C4661F)" : undefined }}>{fmt(r.late_minutes)}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right", color: r.early_leave_minutes > 0 ? "var(--retard, #C4661F)" : undefined }}>{fmt(r.early_leave_minutes)}</td>
-                  <td style={{ padding: "6px 8px", textAlign: "right", color: r.overtime_minutes > 0 ? "var(--eclosion, #C89A1B)" : undefined }}>{fmt(r.overtime_minutes)}</td>
+                  <td style={{ padding: "6px 8px", textAlign: "right", color: r.overtime_minutes > 0 ? "var(--eclosion, #d9b21a)" : undefined }}>{fmt(r.overtime_minutes)}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>{r.days_absent_unjustified}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>{fcfa(r.deduction_proposed)}</td>
                 </tr>

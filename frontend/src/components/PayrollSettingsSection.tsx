@@ -102,7 +102,7 @@ export function PayrollSettingsSection({ canManage, collapsible, defaultOpen }: 
       {/* Interrupteur d'internalisation */}
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid var(--line)" }}>
         <div style={{ fontSize: 13 }}>
-          {t("pay.internal", "Paie internalisée :")} <strong style={{ color: internal ? "var(--eclosion, #C89A1B)" : "var(--muted)" }}>{internal == null ? "…" : internal ? t("pay.internal_yes", "OUI (l'ERP calcule les bulletins)") : t("pay.internal_no", "NON (export externe)")}</strong>
+          {t("pay.internal", "Paie internalisée :")} <strong style={{ color: internal ? "var(--eclosion, #d9b21a)" : "var(--muted)" }}>{internal == null ? "…" : internal ? t("pay.internal_yes", "OUI (l'ERP calcule les bulletins)") : t("pay.internal_no", "NON (export externe)")}</strong>
         </div>
         {canManage && internal != null && <Button variant="edit" size="sm" type="button" onClick={toggleInternal}>{t("pay.toggle", "Basculer")}</Button>}
       </div>
@@ -196,7 +196,7 @@ export function PayrollSettingsSection({ canManage, collapsible, defaultOpen }: 
                   <tr key={v.id} style={{ borderTop: "1px solid var(--line)" }}>
                     <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono, monospace)", whiteSpace: "nowrap" }}>
                       {v.effective_from}
-                      {current && v.id === current.id && <span style={{ marginLeft: 6, color: "var(--eclosion, #C89A1B)", fontWeight: 700 }}>● en vigueur</span>}
+                      {current && v.id === current.id && <span style={{ marginLeft: 6, color: "var(--eclosion, #d9b21a)", fontWeight: 700 }}>● en vigueur</span>}
                     </td>
                     <td style={{ padding: "4px 8px" }}>{v.label ?? "—"}</td>
                     <td style={{ padding: "4px 8px", color: "var(--muted)" }}>{v.change_reason ?? "—"}</td>

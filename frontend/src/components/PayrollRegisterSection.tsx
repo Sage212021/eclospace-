@@ -109,14 +109,14 @@ export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: {
         <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 13, marginBottom: 8 }}>
             {reg.closed ? (
-              <span style={{ color: "var(--eclosion, #C89A1B)", fontWeight: 700 }}>{t("pay.period_closed", "Période clôturée (journal figé)")}{reg.closed_at ? `${t("pay.on", " le ")}${reg.closed_at.slice(0, 10)}` : ""}</span>
+              <span style={{ color: "var(--eclosion, #d9b21a)", fontWeight: 700 }}>{t("pay.period_closed", "Période clôturée (journal figé)")}{reg.closed_at ? `${t("pay.on", " le ")}${reg.closed_at.slice(0, 10)}` : ""}</span>
             ) : (
               <span>{reg.lines.length} {t("pay.employees_count", "salarié(s)")} · {t("pay.scale_since", "barème depuis le")} {reg.rate_effective_from}</span>
             )}
             {" · "}{t("pay.net_total", "Net total :")} <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 700 }}>{fcfa(reg.totals.net)}</span> ·
             {" "}{t("pay.employer_cost", "Coût employeur :")} <span style={{ fontFamily: "var(--font-mono, monospace)" }}>{fcfa(reg.totals.brut + reg.totals.charges_pat)}</span>
             {reg.monthly_status && (
-              <span style={{ display: "block", marginTop: 4, fontSize: 12, color: reg.monthly_status === "valide" ? "var(--eclosion-dark, #8A6A12)" : "var(--muted)" }}>
+              <span style={{ display: "block", marginTop: 4, fontSize: 12, color: reg.monthly_status === "valide" ? "var(--eclosion-dark, #9a7a12)" : "var(--muted)" }}>
                 {reg.monthly_status === "valide"
                   ? t("pay.reg_from_validated", "Montants issus du mois de paie validé (éléments variables inclus).")
                   : t("pay.reg_from_draft", "Montants issus du mois de paie préparé (brouillon — à valider par la Direction avant clôture).")}
@@ -145,7 +145,7 @@ export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: {
                       <td style={{ padding: "5px 8px", textAlign: "right" }}>{fcfa(l.salaire_brut)}</td>
                       <td style={{ padding: "5px 8px", textAlign: "right" }}>{fcfa(l.total_retenues_salariales)}</td>
                       <td style={{ padding: "5px 8px", textAlign: "right" }}>{fcfa(l.total_charges_patronales)}</td>
-                      <td style={{ padding: "5px 8px", textAlign: "right", color: "var(--eclosion, #C89A1B)", fontWeight: 700 }}>{fcfa(l.net_a_payer)}</td>
+                      <td style={{ padding: "5px 8px", textAlign: "right", color: "var(--eclosion, #d9b21a)", fontWeight: 700 }}>{fcfa(l.net_a_payer)}</td>
                       <td style={{ padding: "5px 8px", textAlign: "right" }}>{fcfa(l.cout_employeur)}</td>
                     </tr>
                   ))}

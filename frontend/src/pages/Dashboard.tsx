@@ -114,7 +114,7 @@ export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar, onNavigate
           corrections, dossiers confiés). N'apparaît que si l'utilisateur y a accès. */}
       {work.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--eclosion-dark, #8A6A12)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Mon travail du jour</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Mon travail du jour</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
             {work.map((w) => (
               <button

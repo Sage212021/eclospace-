@@ -66,7 +66,7 @@ export function TeamPerformanceSection() {
                 <td style={{ padding: "6px 10px", fontWeight: 800 }}>TOTAL ÉQUIPE</td>
                 <td style={{ ...td, fontWeight: 800 }}>{data.total.pos_count}</td>
                 <td style={{ ...td, fontWeight: 800 }}>{data.total.orders_count}</td>
-                <td style={{ ...td, fontWeight: 800, color: "var(--eclosion, #C89A1B)" }}>{fcfa(data.total.revenue)}</td>
+                <td style={{ ...td, fontWeight: 800, color: "var(--eclosion, #d9b21a)" }}>{fcfa(data.total.revenue)}</td>
               </tr>
             </tfoot>
           </table>

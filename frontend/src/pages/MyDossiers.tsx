@@ -48,7 +48,7 @@ export function MyDossiers({ onOpenManuscript, canOpen }: { onOpenManuscript: (i
                   <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>
                     <span style={{ fontFamily: "var(--font-mono)" }}>{d.manuscript_number}</span>
                     {" · "}
-                    <span style={{ display: "inline-block", background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 999, padding: "1px 9px", fontWeight: 600 }}>{d.step_label}</span>
+                    <span style={{ display: "inline-block", background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 9px", fontWeight: 600 }}>{d.step_label}</span>
                     {" · "}confié {days === 0 ? "aujourd'hui" : `il y a ${days} j`}
                   </div>
                 </div>

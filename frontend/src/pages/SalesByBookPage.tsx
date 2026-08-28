@@ -74,7 +74,7 @@ export function SalesByBookPage() {
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
-                background: granularity === g ? "var(--eclosion, #C89A1B)" : "transparent",
+                background: granularity === g ? "var(--eclosion, #d9b21a)" : "transparent",
                 color: granularity === g ? "#fff" : "var(--muted)",
               }}
             >

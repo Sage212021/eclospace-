@@ -243,7 +243,7 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
 
       {/* Rapprochement automatique depuis le rapport d'inventaire */}
       <div style={{ border: "1px dashed var(--line)", borderRadius: 8, padding: 10, marginBottom: 12 }}>
-        <button type="button" onClick={() => setPasteOpen((o) => !o)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--eclosion-dark, #8A6A12)", padding: 0 }}>
+        <button type="button" onClick={() => setPasteOpen((o) => !o)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--eclosion-dark, #9a7a12)", padding: 0 }}>
           {pasteOpen ? "▾" : "▸"} Rapprochement automatique depuis le rapport (titre + quantité)
         </button>
         {pasteOpen && (
@@ -261,7 +261,7 @@ export function StockInitialImportSection({ canManage, collapsible, defaultOpen 
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "2px 0", borderTop: i ? "1px solid var(--line)" : undefined }}>
                     <span style={{ color: "var(--muted)" }}>{r.label} <strong style={{ fontFamily: "var(--font-mono)" }}>({r.quantity})</strong>{r.damaged > 0 && <span style={{ color: "var(--alert, #C4661F)" }}> · {r.damaged} touché(s)</span>}</span>
                     {r.isbn_id ? (
-                      <span style={{ color: r.score >= 75 ? "var(--eclosion-dark, #8A6A12)" : "var(--alert, #C4661F)", textAlign: "right" }}>→ {r.matched_title} <span style={{ fontFamily: "var(--font-mono)" }}>({r.score}%)</span></span>
+                      <span style={{ color: r.score >= 75 ? "var(--eclosion-dark, #9a7a12)" : "var(--alert, #C4661F)", textAlign: "right" }}>→ {r.matched_title} <span style={{ fontFamily: "var(--font-mono)" }}>({r.score}%)</span></span>
                     ) : (
                       <span style={{ color: "var(--danger, #C24B3A)" }}>non trouvé — à saisir manuellement</span>
                     )}

@@ -310,7 +310,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
       </div>
 
       {manuscript.sealed && (
-        <div style={{ background: "var(--eclosion-soft, #eef1f7)", border: "1px solid var(--ink, #16233D)", color: "var(--ink, #16233D)", borderRadius: 8, padding: "10px 14px", fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+        <div style={{ background: "var(--eclosion-soft, #eef1f7)", border: "1px solid var(--ink, #0b0b0c)", color: "var(--ink, #0b0b0c)", borderRadius: 8, padding: "10px 14px", fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
           🔒 Dossier scellé — archivé définitivement, en lecture seule. Aucune modification ni retrait de document n'est possible.{" "}
           {permissions.has("manuscripts:administration")
             ? "Utilisez « Rouvrir le dossier » (motif requis) pour corriger."
@@ -602,7 +602,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           <span style={{ color: "var(--ink)" }}>
             {activeFocus ? <>Vue centrée sur <strong>{FOCUS_LABELS[focus]}</strong> — seules les tâches de cette étape sont affichées.</> : <>Vous voyez <strong>toute la fiche</strong>.</>}
           </span>
-          <button onClick={() => setShowAll((v) => !v)} style={{ marginLeft: "auto", background: "#fff", border: "1px solid var(--eclosion)", color: "var(--eclosion-dark, #8A6A12)", borderRadius: 6, padding: "4px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+          <button onClick={() => setShowAll((v) => !v)} style={{ marginLeft: "auto", background: "#fff", border: "1px solid var(--eclosion)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 6, padding: "4px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             {showAll ? `↩ Revenir à « ${FOCUS_LABELS[focus]} »` : "Voir toute la fiche"}
           </button>
         </div>
@@ -833,7 +833,7 @@ function SourceFileBlock({
 
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-      <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--eclosion-dark, #8A6A12)", background: "var(--eclosion-soft)", borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--eclosion-dark, #9a7a12)", background: "var(--eclosion-soft)", borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>
         Manuscrit (source)
       </span>
       {hasFile ? (
@@ -926,7 +926,7 @@ function MaquetteHandoffBlock({
     fontWeight: 700,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-    color: dir === "in" ? "var(--eclosion-dark, #8A6A12)" : "#2E6B4F",
+    color: dir === "in" ? "var(--eclosion-dark, #9a7a12)" : "#2E6B4F",
     background: dir === "in" ? "var(--eclosion-soft)" : "#DDF0E5",
     borderRadius: 999,
     padding: "2px 9px",
@@ -1135,7 +1135,7 @@ function handoffTag(dir: "in" | "out"): React.CSSProperties {
     fontWeight: 700,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-    color: dir === "in" ? "var(--eclosion-dark, #8A6A12)" : "#2E6B4F",
+    color: dir === "in" ? "var(--eclosion-dark, #9a7a12)" : "#2E6B4F",
     background: dir === "in" ? "var(--eclosion-soft)" : "#DDF0E5",
     borderRadius: 999,
     padding: "2px 9px",
@@ -1274,7 +1274,7 @@ function AssignReaderForm({
         {!showExternal ? (
           <button
             onClick={() => setShowExternal(true)}
-            style={{ background: "none", border: "none", color: "var(--eclosion, #C89A1B)", cursor: "pointer", fontSize: 12.5, padding: 0, textDecoration: "underline" }}
+            style={{ background: "none", border: "none", color: "var(--eclosion, #d9b21a)", cursor: "pointer", fontSize: 12.5, padding: 0, textDecoration: "underline" }}
           >
             + Relecteur externe (compte dédié)
           </button>
@@ -1665,7 +1665,7 @@ function StepAttachments({
           {files.map((f) => (
             <li key={f.id} style={{ fontSize: 12.5, padding: "3px 0", borderTop: "1px solid var(--line)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               {f.version_id ? (
-                <a href={stepAttachmentDownloadUrl(manuscriptId, f.version_id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark, #8A6A12)", textDecoration: "underline", fontWeight: 600 }}>
+                <a href={stepAttachmentDownloadUrl(manuscriptId, f.version_id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark, #9a7a12)", textDecoration: "underline", fontWeight: 600 }}>
                   📄 {f.title}
                 </a>
               ) : (
@@ -1688,7 +1688,7 @@ function StepAttachments({
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={busy}
-            style={{ background: "#fff", color: "var(--eclosion-dark, #8A6A12)", border: "1px solid var(--eclosion)", borderRadius: 6, padding: "6px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
+            style={{ background: "#fff", color: "var(--eclosion-dark, #9a7a12)", border: "1px solid var(--eclosion)", borderRadius: 6, padding: "6px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
           >
             {busy ? "Envoi…" : "＋ Déposer un fichier / scan"}
           </button>
@@ -1984,14 +1984,14 @@ function EditFicheModal({
         </p>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginTop: 2 }}>Ouvrage</div>
+          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #9a7a12)", marginTop: 2 }}>Ouvrage</div>
           <FField label="Titre *"><input style={FICHE_INPUT} value={form.title} onChange={(e) => setF("title", e.target.value)} /></FField>
           <FField label="Sous-titre"><input style={FICHE_INPUT} value={form.subtitle} onChange={(e) => setF("subtitle", e.target.value)} /></FField>
           <FField label="Langue *"><input style={FICHE_INPUT} value={form.language} onChange={(e) => setF("language", e.target.value)} /></FField>
           <FField label="Domaine"><select style={FICHE_INPUT} value={form.genre_id} onChange={(e) => setF("genre_id", e.target.value)}>{genres.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}</select></FField>
           <FField label="Responsable du dossier"><select style={FICHE_INPUT} value={form.owner_id} onChange={(e) => setF("owner_id", e.target.value)}>{users.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}</select></FField>
 
-          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginTop: 8 }}>Auteur — état civil</div>
+          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #9a7a12)", marginTop: 8 }}>Auteur — état civil</div>
           <FField label="Prénom *"><input style={FICHE_INPUT} value={a.first_name} onChange={(e) => set("first_name", e.target.value)} /></FField>
           <FField label="Nom *"><input style={FICHE_INPUT} value={a.last_name} onChange={(e) => set("last_name", e.target.value)} /></FField>
           <FField label="Pseudonyme"><input style={FICHE_INPUT} value={a.pen_name} onChange={(e) => set("pen_name", e.target.value)} /></FField>
@@ -2000,7 +2000,7 @@ function EditFicheModal({
           <FField label="Lieu de naissance"><input style={FICHE_INPUT} value={a.birth_place} onChange={(e) => set("birth_place", e.target.value)} /></FField>
           <FField label="Travail / emploi"><input style={FICHE_INPUT} value={a.profession} onChange={(e) => set("profession", e.target.value)} /></FField>
 
-          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginTop: 8 }}>Auteur — pièce d'identité</div>
+          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #9a7a12)", marginTop: 8 }}>Auteur — pièce d'identité</div>
           <FField label="Type de pièce">
             <select style={FICHE_INPUT} value={a.id_type} onChange={(e) => set("id_type", e.target.value)}>
               <option value="">—</option>
@@ -2017,7 +2017,7 @@ function EditFicheModal({
           <FField label="Délivrée à"><input style={FICHE_INPUT} value={a.id_issued_place} onChange={(e) => set("id_issued_place", e.target.value)} /></FField>
           <FField label="NIU (identifiant fiscal)"><input style={FICHE_INPUT} value={a.niu} onChange={(e) => set("niu", e.target.value)} /></FField>
 
-          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginTop: 8 }}>Auteur — coordonnées & résidence</div>
+          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #9a7a12)", marginTop: 8 }}>Auteur — coordonnées & résidence</div>
           <FField label="Pays"><input style={FICHE_INPUT} value={a.country} onChange={(e) => set("country", e.target.value)} /></FField>
           <FField label="Ville"><input style={FICHE_INPUT} value={a.city} onChange={(e) => set("city", e.target.value)} /></FField>
           <FField label="Quartier"><input style={FICHE_INPUT} value={a.quartier} onChange={(e) => set("quartier", e.target.value)} /></FField>
@@ -2028,7 +2028,7 @@ function EditFicheModal({
           <FField label="WhatsApp"><input style={FICHE_INPUT} value={a.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} /></FField>
           <FField label="Autre moyen de contact"><input style={FICHE_INPUT} value={a.other_contact} onChange={(e) => set("other_contact", e.target.value)} /></FField>
 
-          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #8A6A12)", marginTop: 8 }}>Traitement éditorial</div>
+          <div style={{ gridColumn: "1 / -1", fontWeight: 700, fontSize: 13, color: "var(--eclosion-dark, #9a7a12)", marginTop: 8 }}>Traitement éditorial</div>
           <FField label="Frais de dépôt pour évaluation">
             <select style={FICHE_INPUT} value={form.evaluation_fee_choice} onChange={(e) => setF("evaluation_fee_choice", e.target.value)}>
               <option value="non_defini">À décider plus tard</option>

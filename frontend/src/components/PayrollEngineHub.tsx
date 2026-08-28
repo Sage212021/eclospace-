@@ -236,7 +236,7 @@ function JournalCard() {
                     <td style={{ textAlign: "left", padding: "4px 8px", fontFamily: "inherit" }}>{l.employee_name}</td>
                     <td style={{ textAlign: "right", padding: "4px 8px" }}>{fcfa(l.salaire_brut)}</td>
                     <td style={{ textAlign: "right", padding: "4px 8px" }}>{fcfa(l.total_retenues_salariales)}</td>
-                    <td style={{ textAlign: "right", padding: "4px 8px", fontWeight: 700, color: "var(--eclosion, #C89A1B)" }}>{fcfa(l.net_a_payer)}</td>
+                    <td style={{ textAlign: "right", padding: "4px 8px", fontWeight: 700, color: "var(--eclosion, #d9b21a)" }}>{fcfa(l.net_a_payer)}</td>
                     <td style={{ textAlign: "right", padding: "4px 8px" }}>{fcfa(l.cout_employeur)}</td>
                   </tr>
                 ))}
@@ -273,7 +273,7 @@ function FormulasCard() {
       {rs && (
         <div style={{ fontSize: 12.5, margin: "0 0 8px", color: "var(--muted)" }}>
           Période d'application : effet le <b style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{rs.effective_from}</b> ·
-          statut <b style={{ color: rs.active ? "var(--eclosion, #C89A1B)" : "var(--muted)" }}>{rs.active ? "actif" : "inactif"}</b>
+          statut <b style={{ color: rs.active ? "var(--eclosion, #d9b21a)" : "var(--muted)" }}>{rs.active ? "actif" : "inactif"}</b>
           {rs.change_reason ? <> · motif : {rs.change_reason}</> : null}
           {rs.label ? <> · {rs.label}</> : null}
         </div>
@@ -355,7 +355,7 @@ function FormulaEditorRow({ f, canManage, onSaved }: { f: PayrollFormula; canMan
         <div style={{ fontWeight: 700 }}>
           {f.label}
           {f.custom
-            ? <span style={{ marginLeft: 8, fontSize: 11, color: "var(--eclosion, #C89A1B)", fontWeight: 700 }}>● personnalisée</span>
+            ? <span style={{ marginLeft: 8, fontSize: 11, color: "var(--eclosion, #d9b21a)", fontWeight: 700 }}>● personnalisée</span>
             : <span style={{ marginLeft: 8, fontSize: 11, color: "var(--muted)" }}>par défaut</span>}
         </div>
         {canManage && (
@@ -384,7 +384,7 @@ function FormulaEditorRow({ f, canManage, onSaved }: { f: PayrollFormula; canMan
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
             <Button variant="view" size="sm" type="button" onClick={runTest} disabled={!expr.trim()}>Tester</Button>
             {test && (test.ok
-              ? <span style={{ fontSize: 12.5, fontFamily: "var(--font-mono)" }}>Sur un exemple : <b>{Math.round(test.default_result).toLocaleString("fr-FR")}</b> → <b style={{ color: "var(--eclosion, #C89A1B)" }}>{Math.round(test.result ?? 0).toLocaleString("fr-FR")}</b> FCFA</span>
+              ? <span style={{ fontSize: 12.5, fontFamily: "var(--font-mono)" }}>Sur un exemple : <b>{Math.round(test.default_result).toLocaleString("fr-FR")}</b> → <b style={{ color: "var(--eclosion, #d9b21a)" }}>{Math.round(test.result ?? 0).toLocaleString("fr-FR")}</b> FCFA</span>
               : <span style={{ fontSize: 12.5, color: "var(--critical, #C24B3A)" }}>{test.error}</span>)}
           </div>
           <label style={{ display: "block", fontSize: 12, marginTop: 8, fontWeight: 600 }}>
@@ -407,7 +407,7 @@ function FormulaEditorRow({ f, canManage, onSaved }: { f: PayrollFormula; canMan
           )}
         </div>
       )}
-      {msg && <div style={{ fontSize: 12.5, marginTop: 6, color: msg.startsWith("Échec") || msg.startsWith("Indiquez") ? "var(--critical, #C24B3A)" : "var(--eclosion, #C89A1B)" }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 12.5, marginTop: 6, color: msg.startsWith("Échec") || msg.startsWith("Indiquez") ? "var(--critical, #C24B3A)" : "var(--eclosion, #d9b21a)" }}>{msg}</div>}
     </div>
   );
 }
@@ -648,7 +648,7 @@ function HandoffCard({ canManage }: { canManage: boolean }) {
           <ol style={{ listStyle: "none", padding: 0, margin: "6px 0 0", display: "grid", gap: 6 }}>
             {h.timeline.map((s, i) => (
               <li key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 12.5 }}>
-                <span aria-hidden style={{ color: "var(--eclosion, #C89A1B)" }}>●</span>
+                <span aria-hidden style={{ color: "var(--eclosion, #d9b21a)" }}>●</span>
                 <span style={{ flex: 1 }}>
                   <b>{s.label}</b> — <span style={{ fontFamily: "var(--font-mono)" }}>{fdt(s.at)}</span>
                   {s.by && <span style={{ color: "var(--muted)" }}> · {s.by}</span>}
@@ -890,7 +890,7 @@ function InternesCard() {
                 <tr style={{ borderTop: "2px solid var(--line)", fontFamily: "var(--font-mono)", fontWeight: 700 }}>
                   <td style={{ textAlign: "left", padding: "4px 8px", fontFamily: "inherit" }}>TOTAL</td>
                   {cols.map((c) => <td key={c.k} style={{ textAlign: "right", padding: "4px 8px" }}>{fcfa(sum(c.k))}</td>)}
-                  <td style={{ textAlign: "right", padding: "4px 8px", color: "var(--eclosion, #C89A1B)" }}>{fcfa(totalAll)}</td>
+                  <td style={{ textAlign: "right", padding: "4px 8px", color: "var(--eclosion, #d9b21a)" }}>{fcfa(totalAll)}</td>
                 </tr>
               </tbody>
             </table>

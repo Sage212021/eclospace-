@@ -95,7 +95,7 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
   <style>
     @page { size: A4; margin: ${pageMargin}; }
     * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #16233d; margin: 0; font-size: 12.5px; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #0b0b0c; margin: 0; font-size: 12.5px; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .doc { max-width: 720px; margin: 0 auto; padding: 8px; position: relative; z-index: 1; }
     /* Filigrane ampoule Éclosion : image de contenu, derrière le texte, centrée
        sur la page (position fixe → se répète sur chaque page d'un document long). */
@@ -111,28 +111,28 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     .lh__logo { height: 88px; width: auto; image-rendering: -webkit-optimize-contrast; }
     .lh__contact { text-align: right; font-size: 10.5px; color: #4b5563; line-height: 1.7; max-width: 340px; }
     .lh__contact a { color: #4b5563; text-decoration: none; }
-    .lh__rule { height: 3px; background: linear-gradient(90deg, #16233d 62%, #c89a1b 62%); border-radius: 2px; margin: 10px 0 4px; }
+    .lh__rule { height: 3px; background: linear-gradient(90deg, #0b0b0c 62%, #d9b21a 62%); border-radius: 2px; margin: 10px 0 4px; }
     .doc__title { font-family: Georgia, serif; font-size: 22px; margin: 20px 0 2px; }
     .num { font-family: ui-monospace, "IBM Plex Mono", monospace; }
     .meta { display: flex; gap: 28px; flex-wrap: wrap; margin: 6px 0 20px; font-size: 12px; color: #444; }
-    .meta b { color: #16233d; }
+    .meta b { color: #0b0b0c; }
     .party { margin: 0 0 18px; }
     .party__label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: #6b7280; margin-bottom: 3px; }
     .party__name { font-size: 14px; font-weight: 600; }
     table.lines { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    table.lines th { background: #16233d; color: #fff; text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+    table.lines th { background: #0b0b0c; color: #fff; text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
     table.lines th.r, table.lines td.r { text-align: right; }
     table.lines td { padding: 8px 10px; border-bottom: 1px solid #e6e9ef; }
     table.lines tr:nth-child(even) td { background: #f8f9fb; }
     .totals { margin-top: 14px; margin-left: auto; width: 280px; }
     .totals div { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
-    .totals .ttc { border-top: 2px solid #16233d; margin-top: 6px; padding-top: 8px; font-size: 15px; font-weight: 700; }
-    .totals .ttc .num { color: #16233d; }
-    .badge { display: inline-block; border: 1px solid #c89a1b; color: #a87d14; border-radius: 999px; padding: 1px 10px; font-size: 11px; font-weight: 600; }
+    .totals .ttc { border-top: 2px solid #0b0b0c; margin-top: 6px; padding-top: 8px; font-size: 15px; font-weight: 700; }
+    .totals .ttc .num { color: #0b0b0c; }
+    .badge { display: inline-block; border: 1px solid #d9b21a; color: #9a7a12; border-radius: 999px; padding: 1px 10px; font-size: 11px; font-weight: 600; }
     .foot { margin-top: 34px; border-top: 1px solid #e6e9ef; padding-top: 10px; font-size: 10px; color: #6b7280; line-height: 1.6; }
-    .foot__legal { color: #16233d; font-weight: 600; }
+    .foot__legal { color: #0b0b0c; font-weight: 600; }
     .actions { text-align: center; margin: 18px 0 4px; }
-    .actions button { font: inherit; background: #16233d; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; cursor: pointer; }
+    .actions button { font: inherit; background: #0b0b0c; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; cursor: pointer; }
     @media print { .actions { display: none; } ${embed ? "" : ".doc { padding: 0; }"} }
   </style></head>
   <body>
@@ -404,7 +404,7 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
       <div style="min-width:240px">
         <div class="party__label">${tr("Pour", "For")} ${escapeHtml(HOUSE.legalName)}</div>
         <div style="font-size:11px; color:#6b7280; margin-top:2px">${tr("Le responsable — signature &amp; cachet", "The manager — signature &amp; stamp")}</div>
-        <div style="border-top:1px solid #16233d; margin-top:46px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Nom, date et signature", "Name, date and signature")}</div>
+        <div style="border-top:1px solid #0b0b0c; margin-top:46px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Nom, date et signature", "Name, date and signature")}</div>
       </div>
     </div>`;
 
@@ -619,8 +619,8 @@ export function printAuthorRoyaltyStatement(d: AuthorRoyaltyStatementData, opts?
       )}
     </div>
     <div style="margin-top:32px; display:flex; gap:60px; flex-wrap:wrap">
-      <div style="flex:1; min-width:200px"><div class="party__label">${tr("L'éditeur", "The publisher")}</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature &amp; cachet", "Signature &amp; stamp")}</div></div>
-      <div style="flex:1; min-width:200px"><div class="party__label">${tr("L'auteur", "The author")}</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Reçu — signature", "Received — signature")}</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">${tr("L'éditeur", "The publisher")}</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature &amp; cachet", "Signature &amp; stamp")}</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">${tr("L'auteur", "The author")}</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Reçu — signature", "Received — signature")}</div></div>
     </div>`;
 
   openPrintWindow(`${tr("État annuel des droits", "Annual royalty statement")} — ${d.authorName} — ${d.year}`, body, opts);
@@ -691,7 +691,7 @@ export function printDipe(d: DipePrintData): void {
         <th class="r">${escapeHtml(d.irpp_label)}</th><th>Matricule interne</th><th>Nom et Prénom</th>
       </tr></thead>
       <tbody>${rows || `<tr><td colspan="10">Aucun salarié avec fiche paie pour ce mois.</td></tr>`}</tbody>
-      <tfoot><tr style="font-weight:700; border-top:2px solid #16233d">
+      <tfoot><tr style="font-weight:700; border-top:2px solid #0b0b0c">
         <td>TOTAL (${d.effectif})</td><td></td>
         <td class="r num">${fnum(d.totals.salaire_brut)}</td><td></td>
         <td class="r num">${fnum(d.totals.salaire_taxable)}</td>
@@ -861,8 +861,8 @@ export function printContract(c: ContractDetail, opts?: PrintOpts): void {
     </div>
     ${royaltyBlock}
     <div style="margin-top:40px; display:flex; gap:60px; flex-wrap:wrap">
-      <div style="flex:1; min-width:200px"><div class="party__label">${tr("L'éditeur", "The publisher")}</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature &amp; cachet", "Signature &amp; stamp")}</div></div>
-      <div style="flex:1; min-width:200px"><div class="party__label">${tr("Le cocontractant", "The counterparty")}</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature", "Signature")}</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">${tr("L'éditeur", "The publisher")}</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature &amp; cachet", "Signature &amp; stamp")}</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">${tr("Le cocontractant", "The counterparty")}</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature", "Signature")}</div></div>
     </div>`;
 
   openPrintWindow(`${tr("Contrat", "Contract")} ${c.contractNumber}`, body, opts);
@@ -929,7 +929,7 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publish
     : `${BL(6)} années`;
 
   const art = (n: number, titre: string, corps: string) => `
-    <h3 style="font-family:Georgia,serif;font-size:14px;margin:20px 0 6px;color:#16233d;border-bottom:1px solid #e6e9ef;padding-bottom:3px">ARTICLE ${n} — ${titre}</h3>
+    <h3 style="font-family:Georgia,serif;font-size:14px;margin:20px 0 6px;color:#0b0b0c;border-bottom:1px solid #e6e9ef;padding-bottom:3px">ARTICLE ${n} — ${titre}</h3>
     ${corps}`;
   const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
   const li = (items: string[]) => `<ul style="margin:6px 0 6px 4px;padding-left:16px;font-size:12px;line-height:1.5">${items.map((i) => `<li style="margin:3px 0">${i}</li>`).join("")}</ul>`;
@@ -1008,8 +1008,8 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publish
     <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
     <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap">
-      <div style="flex:1; min-width:200px"><div class="party__label">L'auteur</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
-      <div style="flex:1; min-width:200px"><div class="party__label">L'éditeur</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature &amp; cachet</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">L'auteur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">L'éditeur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature &amp; cachet</div></div>
     </div>`;
 
   openPrintWindow(`Contrat d'édition ${c.contractNumber}`, body, opts);
@@ -1184,8 +1184,8 @@ export function printCommissionStatement(d: CommissionStatementData, opts?: Prin
       )}
     </div>
     <div style="margin-top:34px; display:flex; gap:60px; flex-wrap:wrap">
-      <div style="flex:1; min-width:200px"><div class="party__label">${tr("La direction financière", "The finance department")}</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature &amp; cachet", "Signature &amp; stamp")}</div></div>
-      <div style="flex:1; min-width:200px"><div class="party__label">${tr("Le commercial", "The salesperson")}</div><div style="border-top:1px solid #16233d; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Reçu — signature", "Received — signature")}</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">${tr("La direction financière", "The finance department")}</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature &amp; cachet", "Signature &amp; stamp")}</div></div>
+      <div style="flex:1; min-width:200px"><div class="party__label">${tr("Le commercial", "The salesperson")}</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Reçu — signature", "Received — signature")}</div></div>
     </div>`;
 
   openPrintWindow(`${tr("État de commission", "Commission statement")} — ${d.agentName}`, body, opts);
@@ -1256,11 +1256,11 @@ export function printReadingReport(d: ReadingReportData, opts?: PrintOpts): void
 // Mise en page fidèle aux imprimés maison (revue de fidélité du 27/08/2026).
 
 function signatureZone(labelFr: string, labelEn: string): string {
-  return `<div style="flex:1; min-width:170px"><div class="party__label">${tr(labelFr, labelEn)}</div><div style="border-top:1px solid #16233d; margin-top:46px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Nom, date et signature", "Name, date and signature")}</div></div>`;
+  return `<div style="flex:1; min-width:170px"><div class="party__label">${tr(labelFr, labelEn)}</div><div style="border-top:1px solid #0b0b0c; margin-top:46px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Nom, date et signature", "Name, date and signature")}</div></div>`;
 }
 
 function docSection(text: string): string {
-  return `<div style="font-weight:700; font-size:11.5px; letter-spacing:.05em; text-transform:uppercase; color:#16233d; border-bottom:1px solid #16233d; margin:16px 0 8px; padding-bottom:3px">${text}</div>`;
+  return `<div style="font-weight:700; font-size:11.5px; letter-spacing:.05em; text-transform:uppercase; color:#0b0b0c; border-bottom:1px solid #0b0b0c; margin:16px 0 8px; padding-bottom:3px">${text}</div>`;
 }
 
 // Ligne « Libellé : valeur » (les zones vides sont rendues par un trait
@@ -1272,7 +1272,7 @@ function docField(labelHtml: string, valueHtml: string | null): string {
 
 // Case à cocher fidèle : carrée, marquée d'une croix quand elle est retenue.
 function docCheckbox(checked: boolean, text: string): string {
-  return `<div style="margin:3px 0; font-size:12.5px"><span style="display:inline-block; width:12px; height:12px; border:1.2px solid #16233d; margin-right:8px; vertical-align:-2px; text-align:center; line-height:11px; font-size:11px; font-weight:700; color:#16233d">${checked ? "✕" : ""}</span>${text}</div>`;
+  return `<div style="margin:3px 0; font-size:12.5px"><span style="display:inline-block; width:12px; height:12px; border:1.2px solid #0b0b0c; margin-right:8px; vertical-align:-2px; text-align:center; line-height:11px; font-size:11px; font-weight:700; color:#0b0b0c">${checked ? "✕" : ""}</span>${text}</div>`;
 }
 
 // Bon de réception de livres : constate la livraison d'exemplaires par un
@@ -1374,7 +1374,7 @@ export function printAuthorWithdrawal(v: AuthorWithdrawalVoucher, opts?: PrintOp
     <div style="margin-top:16px; font-size:12.5px">${tr("Fait à", "Done at")} <b>${escapeHtml(v.place ?? "…………………")}</b> ${tr("le", "on")} <b class="num">${escapeHtml(fdate(v.issuedAt))}</b></div>
 
     <div style="display:flex; gap:24px; margin-top:22px">
-      <div style="flex:1; min-width:170px"><div class="party__label">${tr("Signature de l'auteur", "Author's signature")}</div><div style="font-size:10.5px;color:#6b7280">${tr("précédée de la mention « Lu et approuvé »", "preceded by “Read and approved”")}</div><div style="border-top:1px solid #16233d; margin-top:40px"></div></div>
+      <div style="flex:1; min-width:170px"><div class="party__label">${tr("Signature de l'auteur", "Author's signature")}</div><div style="font-size:10.5px;color:#6b7280">${tr("précédée de la mention « Lu et approuvé »", "preceded by “Read and approved”")}</div><div style="border-top:1px solid #0b0b0c; margin-top:40px"></div></div>
       ${signatureZone("Signature direction éditoriale", "Editorial management signature")}
       ${signatureZone("Signature comptable", "Accountant's signature")}
     </div>

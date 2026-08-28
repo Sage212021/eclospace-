@@ -341,7 +341,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
           <Button variant="add" size="sm" type="button" disabled={busy} onClick={prepare}>{busy ? "…" : "Préparer le mois de paie"}</Button>
         )}
         {month?.exists && (
-          <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 10px", ...(locked ? { background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #8A6A12)" } : submitted ? { background: "#fdeede", color: "var(--alert, #C4661F)" } : { background: "#eef1f6", color: "var(--muted)" }) }}>
+          <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 10px", ...(locked ? { background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)" } : submitted ? { background: "#fdeede", color: "var(--alert, #C4661F)" } : { background: "#eef1f6", color: "var(--muted)" }) }}>
             {locked ? `✓ Validé${month.validated_at ? ` le ${month.validated_at.slice(0, 10)}` : ""}` : submitted ? "⏳ Soumis au DG (en attente de validation)" : "● Brouillon (modifiable)"}
           </span>
         )}
@@ -389,7 +389,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
             const chip = r.status === "en_attente"
               ? { bg: "#fdeede", fg: "var(--alert, #C4661F)", label: "En attente DG" }
               : r.status === "autorisee"
-                ? { bg: "var(--eclosion-soft, #f3efdc)", fg: "var(--eclosion-dark, #8A6A12)", label: "Autorisée" }
+                ? { bg: "var(--eclosion-soft, #f3efdc)", fg: "var(--eclosion-dark, #9a7a12)", label: "Autorisée" }
                 : { bg: "#eef1f6", fg: "var(--muted)", label: "Refusée" };
             return (
               <div key={r.id} style={{ borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 12.5 }}>
@@ -419,7 +419,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
         <>
           <div style={{ marginTop: 10, fontSize: 13 }}>
             {month.lines.length} salarié(s) · barème depuis le {month.rate_effective_from} · Net total :{" "}
-            <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--eclosion, #C89A1B)" }}>{fcfa(month.totals?.net ?? 0)}</span> · Coût employeur :{" "}
+            <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--eclosion, #d9b21a)" }}>{fcfa(month.totals?.net ?? 0)}</span> · Coût employeur :{" "}
             <span style={{ fontFamily: "var(--font-mono)" }}>{fcfa(month.totals?.cout ?? 0)}</span>
           </div>
           {editable && <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>Saisissez les montants (FCFA) : chaque case s'enregistre en la quittant, et le net se met à jour. Vous pouvez aussi cliquer <b>« Enregistrer la saisie »</b> pour tout enregistrer d'un coup avant de soumettre.</p>}
@@ -476,7 +476,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
                         />
                       </td>
                     ))}
-                    <td style={{ padding: "4px 8px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "var(--eclosion, #C89A1B)", whiteSpace: "nowrap" }}>{fcfa(l.net_a_payer)}</td>
+                    <td style={{ padding: "4px 8px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "var(--eclosion, #d9b21a)", whiteSpace: "nowrap" }}>{fcfa(l.net_a_payer)}</td>
                   </tr>
                 ))}
               </tbody>

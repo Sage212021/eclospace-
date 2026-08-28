@@ -110,7 +110,7 @@ export function ServiceDeskPage({ canReply, canBrowseWorks, onOpenManuscript }: 
                     <span style={{ fontFamily: "var(--font-mono, monospace)" }}>{w.manuscriptNumber}</span> · {w.status.label}
                   </div>
                 </div>
-                <span style={{ color: "var(--eclosion-dark, #8A6A12)", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>Échange de fichiers →</span>
+                <span style={{ color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>Échange de fichiers →</span>
               </button>
             ))}
           </div>
@@ -132,7 +132,7 @@ export function ServiceDeskPage({ canReply, canBrowseWorks, onOpenManuscript }: 
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 700, color: "var(--ink)", fontSize: 14.5 }}>{th.subject}</div>
               <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>
-                <span style={{ color: "var(--eclosion-dark, #8A6A12)", fontWeight: 700 }}>{th.service_label}</span> · {th.author_name} · {th.last_message}
+                <span style={{ color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700 }}>{th.service_label}</span> · {th.author_name} · {th.last_message}
               </div>
             </div>
             {th.unread > 0 && <span style={{ background: "var(--alert)", color: "#fff", borderRadius: 999, fontSize: 11, fontWeight: 700, padding: "1px 8px", flexShrink: 0 }}>{th.unread}</span>}
@@ -149,7 +149,7 @@ export function ServiceDeskPage({ canReply, canBrowseWorks, onOpenManuscript }: 
               <div>
                 <div style={{ fontWeight: 700, color: "var(--ink)", fontSize: 16 }}>{active.subject}</div>
                 <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>
-                  <span style={{ color: "var(--eclosion-dark, #8A6A12)", fontWeight: 700 }}>{active.service_label}</span> · {active.author_name}
+                  <span style={{ color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700 }}>{active.service_label}</span> · {active.author_name}
                 </div>
               </div>
               <button onClick={() => setActive(null)} aria-label="Fermer" style={{ border: "none", background: "none", fontSize: 24, cursor: "pointer", color: "var(--muted)", lineHeight: 1 }}>×</button>

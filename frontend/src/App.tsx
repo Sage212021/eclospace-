@@ -206,7 +206,7 @@ const NAV_POLES: NavPole[] = [
       // affichée à deux endroits — le juridique la retrouve comme auparavant.
       { key: "jf-contrats", label: "Contrats & droits d'auteur", permission: "manuscripts:consultation" },
       { key: "jf-finance", label: "Finance & comptabilité", permission: "finance:consultation" },
-      { key: "jf-paie-suivi", label: "Paie — validation & suivi", anyPermission: ["finance:validation", "paie:consultation"] },
+      { key: "jf-paie-suivi", label: "Paie — validation (DG) & suivi (DAF)", anyPermission: ["finance:validation", "paie:consultation"] },
       // Stock & magasin rattaché au pôle Finance (décision opérateur 13/08/2026) :
       // la gestion des stocks quitte le Commercial pour la Finance.
       { key: "co-stock", label: "Stock & magasin", permission: "stock:consultation" },

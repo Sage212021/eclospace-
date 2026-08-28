@@ -8,7 +8,7 @@ import { listWorkflowStatuses, type WorkflowStatusRef } from "../api/client";
 const DONE = "var(--eclosion-dark, #9a7a12)";
 const DONE_BG = "var(--eclosion-soft, #f6efd8)";
 const CURRENT = "var(--eclosion, #d9b21a)";
-const TODO = "var(--line, #e6e9ef)";
+const TODO = "var(--line, #e7e2d4)";
 
 export function ManuscriptProgress({ stepOrder }: { stepOrder: number }) {
   const [steps, setSteps] = useState<WorkflowStatusRef[] | null>(null);

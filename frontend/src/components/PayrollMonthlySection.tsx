@@ -341,7 +341,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
           <Button variant="add" size="sm" type="button" disabled={busy} onClick={prepare}>{busy ? "…" : "Préparer le mois de paie"}</Button>
         )}
         {month?.exists && (
-          <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 10px", ...(locked ? { background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)" } : submitted ? { background: "#fdeede", color: "var(--alert, #C4661F)" } : { background: "#eef1f6", color: "var(--muted)" }) }}>
+          <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 10px", ...(locked ? { background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)" } : submitted ? { background: "#fdeede", color: "var(--alert, #C4661F)" } : { background: "#f3efe4", color: "var(--muted)" }) }}>
             {locked ? `✓ Validé${month.validated_at ? ` le ${month.validated_at.slice(0, 10)}` : ""}` : submitted ? "⏳ Soumis au DG (en attente de validation)" : "● Brouillon (modifiable)"}
           </span>
         )}
@@ -390,7 +390,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
               ? { bg: "#fdeede", fg: "var(--alert, #C4661F)", label: "En attente DG" }
               : r.status === "autorisee"
                 ? { bg: "var(--eclosion-soft, #f3efdc)", fg: "var(--eclosion-dark, #9a7a12)", label: "Autorisée" }
-                : { bg: "#eef1f6", fg: "var(--muted)", label: "Refusée" };
+                : { bg: "#f3efe4", fg: "var(--muted)", label: "Refusée" };
             return (
               <div key={r.id} style={{ borderTop: "1px solid var(--line)", padding: "6px 0", fontSize: 12.5 }}>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>

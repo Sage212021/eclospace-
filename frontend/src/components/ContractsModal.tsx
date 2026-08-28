@@ -35,7 +35,7 @@ export function ContractsModal({ employeeId, employeeName, canManage, onClose }:
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }} onClick={onClose}>
       <div style={{ background: "var(--card, #fff)", borderRadius: 12, padding: 18, maxWidth: 620, width: "100%", maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
           <div style={{ fontFamily: "var(--font-title)", fontSize: 16 }}>Contrats de travail — {employeeName}</div>

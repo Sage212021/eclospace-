@@ -122,7 +122,7 @@ const bubbleStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   cursor: "grab",
-  boxShadow: "0 6px 18px rgba(22,35,61,.30)",
+  boxShadow: "0 6px 18px rgba(11,11,12,.30)",
   touchAction: "none",
 };
 
@@ -161,5 +161,5 @@ const closeStyle: React.CSSProperties = {
   fontSize: 13,
   cursor: "pointer",
   padding: 0,
-  boxShadow: "0 1px 4px rgba(22,35,61,.2)",
+  boxShadow: "0 1px 4px rgba(11,11,12,.2)",
 };

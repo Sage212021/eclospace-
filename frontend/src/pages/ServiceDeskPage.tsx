@@ -143,7 +143,7 @@ export function ServiceDeskPage({ canReply, canBrowseWorks, onOpenManuscript }: 
       )}
 
       {active && (
-        <div onClick={() => setActive(null)} style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
+        <div onClick={() => setActive(null)} style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, width: 640, maxWidth: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
               <div>

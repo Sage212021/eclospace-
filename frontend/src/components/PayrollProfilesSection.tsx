@@ -381,7 +381,7 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
 
           {/* Fenêtre « Modifier » : motif obligatoire, justificatif facultatif. */}
           {modifyOpen && (
-            <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }} onClick={() => setModifyOpen(false)}>
+            <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }} onClick={() => setModifyOpen(false)}>
               <div style={{ background: "var(--card, #fff)", borderRadius: 12, padding: 18, maxWidth: 460, width: "100%" }} onClick={(e) => e.stopPropagation()}>
                 <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>{t("pay.modify_title", "Modifier la fiche paie")}</div>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 12px" }}>{t("pay.modify_sub", "Indiquez le motif de la modification. Vous pouvez joindre un justificatif (facultatif).")}</p>

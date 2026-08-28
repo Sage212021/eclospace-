@@ -756,7 +756,7 @@ function TransferDocDialog({ title, fileName, getFile, partnerWhatsapp, contract
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
       <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 440, width: "100%" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Transférer le document</div>
         <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>{title}</div>
@@ -854,7 +854,7 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
       <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 460, width: "100%" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Modifier le contrat {contract.contractNumber}</div>
         <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Modification possible tant que le contrat n'est pas signé. Enregistrée et tracée.</div>
@@ -909,7 +909,7 @@ function AmendmentModal({ parent, manuscriptId, onClose, onCreated, onError }: {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
       <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 460, width: "100%" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Avenant au contrat {parent.contractNumber}</div>
         <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Nouveau contrat rattaché au contrat d'origine, avec les termes révisés (même auteur, même ouvrage).</div>
@@ -948,7 +948,7 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
       <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 480, width: "100%" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Ajouter un article — contrat {contract.contractNumber}</div>
         <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Clause additionnelle reprise à la fin du contrat imprimé / PDF (numérotée après l'article 15).</div>

@@ -141,7 +141,7 @@ export function QuoteSignPage({ token }: { token: string }) {
                 <p style={{ fontSize: 12, color: "#6b7280", fontStyle: "italic", marginTop: 14 }}>{quote.exclusions_note}</p>
               )}
 
-              <hr style={{ border: 0, borderTop: "1px solid #e6e9ef", margin: "22px 0" }} />
+              <hr style={{ border: 0, borderTop: "1px solid #e7e2d4", margin: "22px 0" }} />
 
               {signed ? (
                 <div style={{ background: "#eef7ee", border: "1px solid #cfe6cf", borderRadius: 10, padding: "16px 18px" }}>
@@ -186,14 +186,14 @@ export function QuoteSignPage({ token }: { token: string }) {
   );
 }
 
-const page: React.CSSProperties = { minHeight: "100vh", background: "#eef1f6", display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "24px 12px", fontFamily: "Arial, Helvetica, sans-serif", color: "#0b0b0c" };
-const card: React.CSSProperties = { width: "100%", maxWidth: 640, background: "#fff", border: "1px solid #e6e9ef", borderRadius: 12, overflow: "hidden", boxShadow: "0 8px 30px rgba(22,35,61,.08)" };
+const page: React.CSSProperties = { minHeight: "100vh", background: "#f3efe4", display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "24px 12px", fontFamily: "Arial, Helvetica, sans-serif", color: "#0b0b0c" };
+const card: React.CSSProperties = { width: "100%", maxWidth: 640, background: "#fff", border: "1px solid #e7e2d4", borderRadius: 12, overflow: "hidden", boxShadow: "0 8px 30px rgba(11,11,12,.08)" };
 const header: React.CSSProperties = { padding: "20px 26px", borderBottom: "3px solid #0b0b0c", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" };
-const footer: React.CSSProperties = { padding: "14px 26px", borderTop: "1px solid #e6e9ef", fontSize: 11, color: "#6b7280" };
+const footer: React.CSSProperties = { padding: "14px 26px", borderTop: "1px solid #e7e2d4", fontSize: 11, color: "#6b7280" };
 const table: React.CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: 13.5 };
 const thL: React.CSSProperties = { textAlign: "left", background: "#0b0b0c", color: "#fff", padding: "8px 10px" };
 const thR: React.CSSProperties = { textAlign: "right", background: "#0b0b0c", color: "#fff", padding: "8px 10px" };
-const td: React.CSSProperties = { padding: "8px 10px", borderBottom: "1px solid #e6e9ef" };
-const tdR: React.CSSProperties = { padding: "8px 10px", borderBottom: "1px solid #e6e9ef", textAlign: "right", fontVariantNumeric: "tabular-nums" };
+const td: React.CSSProperties = { padding: "8px 10px", borderBottom: "1px solid #e7e2d4" };
+const tdR: React.CSSProperties = { padding: "8px 10px", borderBottom: "1px solid #e7e2d4", textAlign: "right", fontVariantNumeric: "tabular-nums" };
 const input: React.CSSProperties = { display: "block", width: "100%", padding: "9px 10px", marginTop: 5, fontSize: 14, border: "1px solid #cfd5e0", borderRadius: 8, boxSizing: "border-box" };
 const button: React.CSSProperties = { background: "#0b0b0c", color: "#fff", border: "none", borderRadius: 9, padding: "12px 22px", fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%" };

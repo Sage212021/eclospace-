@@ -60,7 +60,7 @@ function AuthorHeader({ name, onLogout }: { name: string; onLogout: () => void }
 function stageColor(published: boolean, current: boolean): { bg: string; fg: string } {
   if (published) return { bg: "var(--eclosion-soft, #F3E9CC)", fg: "var(--or-dark, #9a7a12)" };
   if (current) return { bg: "var(--eclosion, #0b0b0c)", fg: "#fff" };
-  return { bg: "#EEF1F6", fg: "#4A5568" };
+  return { bg: "#f3efe4", fg: "#5f5a4e" };
 }
 
 export function AuthorPortal({ userName, onLogout }: { userName: string; onLogout: () => void }) {
@@ -208,7 +208,7 @@ export function AuthorPortal({ userName, onLogout }: { userName: string; onLogou
 
       {/* Détail d'un ouvrage : fil d'avancement */}
       {detail && (
-        <div onClick={() => setDetail(null)} style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100 }}>
+        <div onClick={() => setDetail(null)} style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 640, maxHeight: "85vh", overflowY: "auto", padding: "20px 22px 30px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
               <div>

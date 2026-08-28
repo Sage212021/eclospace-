@@ -281,14 +281,21 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
   }
 
   async function reopen() {
-    if (!window.confirm(`Rouvrir la paie de ${period} pour correction ?`)) return;
+    // Le DG rouvre une paie validée pour la renvoyer au RH : motif obligatoire,
+    // enregistré et notifié au RH (il saura quoi corriger).
+    const reason = window.prompt("Renvoyer la paie au RH pour correction.\nMotif (obligatoire) — précisez ce qui doit être corrigé :");
+    if (reason == null) return;
+    if (reason.trim().length < 3) {
+      setError("Le motif du renvoi est obligatoire (au moins quelques mots).");
+      return;
+    }
     setBusy(true);
     try {
-      await reopenPayrollMonth(period);
-      setMessage(`Paie de ${period} rouverte (brouillon).`);
+      await reopenPayrollMonth(period, reason.trim());
+      setMessage(`Paie de ${period} renvoyée au RH pour correction.`);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Réouverture impossible.");
+      setError(err instanceof Error ? err.message : "Renvoi impossible.");
     } finally {
       setBusy(false);
     }
@@ -365,7 +372,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
           <Button variant="view" size="sm" type="button" onClick={printAll}>🖨 Imprimer tous les bulletins</Button>
         )}
         {month?.exists && locked && canValidateDg && (
-          <Button variant="edit" size="sm" type="button" disabled={busy} onClick={reopen}>↩ Rouvrir (DG)</Button>
+          <Button variant="edit" size="sm" type="button" disabled={busy} onClick={reopen}>↩ Renvoyer au RH pour correction (motif)</Button>
         )}
         {/* RH : demande de réouverture exceptionnelle d'un mois verrouillé. */}
         {month?.exists && locked && canManage && (

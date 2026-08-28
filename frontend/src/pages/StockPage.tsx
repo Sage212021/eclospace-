@@ -21,6 +21,7 @@ import { Card } from "../components/Card";
 import { StockInventorySection } from "../components/StockInventorySection";
 import { IsbnCombobox } from "../components/IsbnCombobox";
 import { CommercialStockSection } from "../components/CommercialStockSection";
+import { PeriodFilter, currentPeriod, inPeriod, type Period } from "../components/PeriodFilter";
 import { BookReceiptSection, AuthorWithdrawalSection } from "../components/StockVouchersSection";
 import { StockConsolidatedSection } from "../components/StockConsolidatedSection";
 import { StockInitialImportSection } from "../components/StockInitialImportSection";
@@ -523,10 +524,19 @@ function MovementHistory({
   const { t } = useI18n();
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [editing, setEditing] = useState<StockMovement | null>(null);
+  const [period, setPeriod] = useState<Period>(currentPeriod);
+  const filtered = movements.filter((m) => inPeriod(m.movedAt, period));
 
   useEffect(() => {
     listStockMovements(filterIsbnId ?? undefined).then(setMovements).catch((e) => onError(e instanceof Error ? e.message : "Chargement des mouvements impossible."));
   }, [version, filterIsbnId]);
+
+  // Par défaut on ouvre sur le mois en cours ; mais quand on cible un ouvrage
+  // précis (« Corriger » un stock négatif), l'anomalie peut dater d'un mois
+  // passé — on affiche alors tout l'historique de l'ouvrage pour ne rien cacher.
+  useEffect(() => {
+    setPeriod(filterIsbnId ? { year: "all", month: "all" } : currentPeriod());
+  }, [filterIsbnId]);
 
   async function cancel(m: StockMovement) {
     const reason = window.prompt("Annuler ce mouvement saisi par erreur ?\nMotif (facultatif) :", "");
@@ -556,11 +566,14 @@ function MovementHistory({
           <button onClick={() => onClearFilter?.()} style={{ fontSize: 12, cursor: "pointer", border: "1px solid var(--line)", background: "#fff", borderRadius: 6, padding: "3px 10px", fontWeight: 600 }}>Tout afficher</button>
         </div>
       )}
-      {movements.length === 0 ? (
-        <Empty>{t("stock.no_movement", "Aucun mouvement enregistré.")}</Empty>
+      {movements.length > 0 && (
+        <PeriodFilter dates={movements.map((m) => m.movedAt)} value={period} onChange={setPeriod} resultCount={filtered.length} />
+      )}
+      {filtered.length === 0 ? (
+        <Empty>{movements.length === 0 ? t("stock.no_movement", "Aucun mouvement enregistré.") : "Aucun mouvement pour cette période."}</Empty>
       ) : (
         <div className="ecl-list">
-          {movements.map((m) => {
+          {filtered.map((m) => {
             const cancelled = m.status === "cancelled";
             return (
               <div key={m.id} className="ecl-row" style={{ alignItems: "flex-start", opacity: cancelled ? 0.55 : 1 }}>

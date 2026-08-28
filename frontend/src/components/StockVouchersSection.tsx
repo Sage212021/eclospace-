@@ -20,6 +20,7 @@ import { Field } from "./Modal";
 import { DocPrintMenu } from "./DocPrintMenu";
 import { IsbnCombobox } from "./IsbnCombobox";
 import { printBookReceipt, printAuthorWithdrawal } from "../lib/print";
+import { PeriodFilter, currentPeriod, inPeriod, type Period } from "./PeriodFilter";
 import { useConfirm } from "./ConfirmProvider";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -33,6 +34,7 @@ const emptyLine = (): LineDraft => ({ isbn_id: null, title: "", author: "", qty_
 export function BookReceiptSection({ isbns, canManage, onError }: { isbns: IsbnRef[]; canManage: boolean; onError: (m: string) => void }) {
   const confirm = useConfirm();
   const [rows, setRows] = useState<BookReceiptVoucher[] | null>(null);
+  const [period, setPeriod] = useState<Period>(currentPeriod);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -139,13 +141,18 @@ export function BookReceiptSection({ isbns, canManage, onError }: { isbns: IsbnR
         </div>
       )}
 
+      {rows && rows.length > 0 && (
+        <PeriodFilter dates={rows.map((v) => v.receivedAt)} value={period} onChange={setPeriod} resultCount={rows.filter((v) => inPeriod(v.receivedAt, period)).length} />
+      )}
       {rows === null ? (
         <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
       ) : rows.length === 0 ? (
         <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun bon de réception enregistré.</p>
+      ) : rows.filter((v) => inPeriod(v.receivedAt, period)).length === 0 ? (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun bon de réception pour cette période.</p>
       ) : (
         <div className="ecl-list">
-          {rows.map((v) => (
+          {rows.filter((v) => inPeriod(v.receivedAt, period)).map((v) => (
             <div key={v.id} className="ecl-row" style={{ alignItems: "center" }}>
               <div className="ecl-row__main">
                 <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{v.number}</span>
@@ -176,6 +183,7 @@ const MOTIVE_LABELS: Record<AuthorWithdrawalMotive, string> = {
 export function AuthorWithdrawalSection({ isbns, canManage, onError }: { isbns: IsbnRef[]; canManage: boolean; onError: (m: string) => void }) {
   const confirm = useConfirm();
   const [rows, setRows] = useState<AuthorWithdrawalVoucher[] | null>(null);
+  const [period, setPeriod] = useState<Period>(currentPeriod);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -254,13 +262,18 @@ export function AuthorWithdrawalSection({ isbns, canManage, onError }: { isbns: 
         </div>
       )}
 
+      {rows && rows.length > 0 && (
+        <PeriodFilter dates={rows.map((v) => v.issuedAt)} value={period} onChange={setPeriod} resultCount={rows.filter((v) => inPeriod(v.issuedAt, period)).length} />
+      )}
       {rows === null ? (
         <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
       ) : rows.length === 0 ? (
         <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun retrait d'ouvrage enregistré.</p>
+      ) : rows.filter((v) => inPeriod(v.issuedAt, period)).length === 0 ? (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun retrait d'ouvrage pour cette période.</p>
       ) : (
         <div className="ecl-list">
-          {rows.map((v) => (
+          {rows.filter((v) => inPeriod(v.issuedAt, period)).map((v) => (
             <div key={v.id} className="ecl-row" style={{ alignItems: "center" }}>
               <div className="ecl-row__main">
                 <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{v.number}</span>

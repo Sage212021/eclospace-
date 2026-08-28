@@ -104,7 +104,7 @@ export function AuthorMessages() {
 
       {/* Nouveau message */}
       {composing && (
-        <div onClick={() => setComposing(false)} style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 14 }}>
+        <div onClick={() => setComposing(false)} style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 14 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, width: 480, maxWidth: "100%", padding: 20 }}>
             <h3 style={{ margin: "0 0 12px", fontFamily: "Georgia, serif", color: "var(--marine, #0b0b0c)" }}>{t("author.new_message", "Nouveau message")}</h3>
             {error && <div style={{ background: "var(--alert-soft, #F6E3DF)", color: "var(--alert, #C24B3A)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{error}</div>}
@@ -128,7 +128,7 @@ export function AuthorMessages() {
 
       {/* Fil de discussion */}
       {active && (
-        <div onClick={() => setActive(null)} style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100 }}>
+        <div onClick={() => setActive(null)} style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 640, maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--line, #E3E8EF)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
               <div>

@@ -70,13 +70,15 @@ export function Login({ onAuthenticated }: LoginProps) {
           padding: "44px 40px",
           width: 380,
           maxWidth: "100%",
-          boxShadow: "0 24px 70px rgba(9, 16, 33, 0.45)",
+          boxShadow: "0 24px 70px rgba(0, 0, 0, 0.5)",
+          borderTop: "3px solid var(--eclosion)",
         }}
       >
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
           <LanguageSwitch />
         </div>
-        <img src="/eclospace-logo.jpg" alt="Eclospace" style={{ width: "88%", display: "block", margin: "0 auto 28px" }} />
+        <img src="/eclospace-logo.jpg" alt="Eclospace" style={{ width: "88%", display: "block", margin: "0 auto 18px" }} />
+        <div style={{ width: 54, height: 2, background: "var(--eclosion)", margin: "0 auto 26px", borderRadius: 2 }} />
 
         {step.kind === "credentials" ? (
           <form onSubmit={handleCredentialsSubmit}>
@@ -184,15 +186,15 @@ function PrimaryButton({ children, disabled }: { children: React.ReactNode; disa
       style={{
         width: "100%",
         background: "linear-gradient(180deg, var(--eclosion-light) 0%, var(--eclosion) 100%)",
-        color: "#fff",
+        color: "#000",
         border: "none",
         borderRadius: 9,
         padding: "12px 16px",
         fontSize: 14,
-        fontWeight: 600,
+        fontWeight: 700,
         cursor: disabled ? "default" : "pointer",
         opacity: disabled ? 0.6 : 1,
-        boxShadow: "0 8px 20px rgba(200, 154, 27, 0.35)",
+        boxShadow: "0 8px 20px rgba(217, 178, 26, 0.38)",
         transition: "filter 120ms ease, box-shadow 120ms ease, transform 60ms ease",
       }}
     >

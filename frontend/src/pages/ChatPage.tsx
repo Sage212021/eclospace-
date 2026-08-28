@@ -493,7 +493,7 @@ export function ChatPage() {
 
       {/* Sélecteur de correspondant (annuaire) */}
       {pickerOpen && (
-        <div onClick={() => setPickerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+        <div onClick={() => setPickerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, width: 380, maxWidth: "92vw", maxHeight: "70vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: 14, borderBottom: "1px solid var(--line)", fontWeight: 700 }}>{t("chat.choose", "Écrire à un collègue")}</div>
             <div style={{ padding: 10 }}>
@@ -511,7 +511,7 @@ export function ChatPage() {
 
       {/* Transférer : choisir le collègue destinataire */}
       {forwardFor && (
-        <div onClick={() => setForwardFor(null)} style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+        <div onClick={() => setForwardFor(null)} style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, width: 380, maxWidth: "92vw", maxHeight: "70vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: 14, borderBottom: "1px solid var(--line)", fontWeight: 700 }}>↪ {t("chat.forward_to", "Transférer à…")}</div>
             <div style={{ padding: "8px 12px", fontSize: 12.5, color: "var(--muted)", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -532,7 +532,7 @@ export function ChatPage() {
 
       {/* Infos d'un message */}
       {infoFor && (
-        <div onClick={() => setInfoFor(null)} style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+        <div onClick={() => setInfoFor(null)} style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, width: 360, maxWidth: "92vw", overflow: "hidden" }}>
             <div style={{ padding: 14, borderBottom: "1px solid var(--line)", fontWeight: 700 }}>ℹ {t("chat.info", "Infos")}</div>
             <div style={{ padding: 14, fontSize: 13, display: "grid", gap: 8 }}>

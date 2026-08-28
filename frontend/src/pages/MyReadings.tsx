@@ -514,7 +514,7 @@ function FinalReportDialog({ assignment, onClose, onMessage }: { assignment: Rea
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
       <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 460, width: "100%" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Version finale du rapport</div>
         <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 10 }}>Rapport officiel à en-tête Éclosion + rapport déposé, réunis en un seul PDF.</div>
@@ -614,7 +614,7 @@ function TransferDialog({ assignment, onClose, onMessage }: { assignment: Readin
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(22,35,61,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
       <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 420, width: "100%" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 10 }}>Transférer mon rapport</div>
         <Field label="Destinataire">
@@ -642,7 +642,7 @@ function TransferDialog({ assignment, onClose, onMessage }: { assignment: Readin
 }
 
 const menuSummaryStyle: React.CSSProperties = { listStyle: "none", background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer", userSelect: "none" };
-const menuBoxStyle: React.CSSProperties = { position: "absolute", right: 0, zIndex: 20, marginTop: 4, background: "#fff", border: "1px solid var(--line)", borderRadius: 8, boxShadow: "0 8px 24px rgba(22,35,61,.14)", minWidth: 240, overflow: "hidden" };
+const menuBoxStyle: React.CSSProperties = { position: "absolute", right: 0, zIndex: 20, marginTop: 4, background: "#fff", border: "1px solid var(--line)", borderRadius: 8, boxShadow: "0 8px 24px rgba(11,11,12,.14)", minWidth: 240, overflow: "hidden" };
 const menuHeadStyle: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", padding: "8px 12px 2px" };
 const menuItemStyle: React.CSSProperties = { display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "8px 12px", fontSize: 13, color: "var(--ink)", cursor: "pointer", textDecoration: "none" };
 const menuSepStyle: React.CSSProperties = { height: 1, background: "var(--line)", margin: "4px 0" };

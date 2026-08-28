@@ -229,7 +229,7 @@ function MiniMonth({ year, month, dayMap, weekdays, locale, onDay }: {
   const hasAny = Object.keys(dayMap).some((k) => k.startsWith(`${month}-`));
 
   return (
-    <div style={{ border: "1px solid var(--line)", borderRadius: 12, padding: "10px 9px", background: "var(--card)", boxShadow: hasAny ? "0 1px 3px rgba(22,35,61,0.06)" : "none" }}>
+    <div style={{ border: "1px solid var(--line)", borderRadius: 12, padding: "10px 9px", background: "var(--card)", boxShadow: hasAny ? "0 1px 3px rgba(11,11,12,0.06)" : "none" }}>
       <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--ink)", textTransform: "capitalize", marginBottom: 8, textAlign: "center", letterSpacing: 0.2 }}>{monthName}</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
         {weekdays.map((w, i) => (

@@ -49,7 +49,7 @@ const menuStyle: React.CSSProperties = {
   background: "#fff",
   border: "1px solid var(--line)",
   borderRadius: 8,
-  boxShadow: "0 8px 24px rgba(22,35,61,.14)",
+  boxShadow: "0 8px 24px rgba(11,11,12,.14)",
   minWidth: 230,
   overflow: "hidden",
 };

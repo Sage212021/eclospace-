@@ -59,7 +59,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
       const chunk = isChunkLoadError(this.state.error);
       return (
         <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "#F8F9FB", color: "#0b0b0c", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
-          <div style={{ maxWidth: 460, textAlign: "center", background: "#fff", border: "1px solid #e6e9ef", borderRadius: 14, padding: "28px 24px", boxShadow: "0 6px 24px rgba(22,35,61,0.08)" }}>
+          <div style={{ maxWidth: 460, textAlign: "center", background: "#fff", border: "1px solid #e7e2d4", borderRadius: 14, padding: "28px 24px", boxShadow: "0 6px 24px rgba(11,11,12,0.08)" }}>
             <div style={{ fontSize: 40, marginBottom: 8 }}>⚡</div>
             <h1 style={{ fontSize: 19, margin: "0 0 8px" }}>Éclospace doit être rechargé</h1>
             <p style={{ fontSize: 14, color: "#5b6472", lineHeight: 1.5, margin: "0 0 18px" }}>

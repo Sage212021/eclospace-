@@ -120,16 +120,16 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     .party__label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: #6b7280; margin-bottom: 3px; }
     .party__name { font-size: 14px; font-weight: 600; }
     table.lines { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    table.lines th { background: #0b0b0c; color: #fff; text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+    table.lines th { background: #0b0b0c; color: #fff; text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; border-bottom: 3px solid #d9b21a; }
     table.lines th.r, table.lines td.r { text-align: right; }
-    table.lines td { padding: 8px 10px; border-bottom: 1px solid #e6e9ef; }
-    table.lines tr:nth-child(even) td { background: #f8f9fb; }
+    table.lines td { padding: 8px 10px; border-bottom: 1px solid #e7e2d4; }
+    table.lines tr:nth-child(even) td { background: #faf8f2; }
     .totals { margin-top: 14px; margin-left: auto; width: 280px; }
     .totals div { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
-    .totals .ttc { border-top: 2px solid #0b0b0c; margin-top: 6px; padding-top: 8px; font-size: 15px; font-weight: 700; }
-    .totals .ttc .num { color: #0b0b0c; }
+    .totals .ttc { border-top: 2px solid #d9b21a; margin-top: 6px; padding-top: 8px; font-size: 15px; font-weight: 700; }
+    .totals .ttc .num { color: #9a7a12; }
     .badge { display: inline-block; border: 1px solid #d9b21a; color: #9a7a12; border-radius: 999px; padding: 1px 10px; font-size: 11px; font-weight: 600; }
-    .foot { margin-top: 34px; border-top: 1px solid #e6e9ef; padding-top: 10px; font-size: 10px; color: #6b7280; line-height: 1.6; }
+    .foot { margin-top: 34px; border-top: 1px solid #e7e2d4; padding-top: 10px; font-size: 10px; color: #6b7280; line-height: 1.6; }
     .foot__legal { color: #0b0b0c; font-weight: 600; }
     .actions { text-align: center; margin: 18px 0 4px; }
     .actions button { font: inherit; background: #0b0b0c; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; cursor: pointer; }
@@ -929,7 +929,7 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publish
     : `${BL(6)} années`;
 
   const art = (n: number, titre: string, corps: string) => `
-    <h3 style="font-family:Georgia,serif;font-size:14px;margin:20px 0 6px;color:#0b0b0c;border-bottom:1px solid #e6e9ef;padding-bottom:3px">ARTICLE ${n} — ${titre}</h3>
+    <h3 style="font-family:Georgia,serif;font-size:14px;margin:20px 0 6px;color:#0b0b0c;border-bottom:1px solid #e7e2d4;padding-bottom:3px">ARTICLE ${n} — ${titre}</h3>
     ${corps}`;
   const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
   const li = (items: string[]) => `<ul style="margin:6px 0 6px 4px;padding-left:16px;font-size:12px;line-height:1.5">${items.map((i) => `<li style="margin:3px 0">${i}</li>`).join("")}</ul>`;
@@ -1032,7 +1032,7 @@ const EMP_STATUS_LABELS: Record<string, [string, string]> = {
   parti: ["Parti", "Departed"],
 };
 export function printEmployeeFiche(e: EmployeeFichePrint, opts?: PrintOpts): void {
-  const row = (l: string, v: string) => v ? `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid #eef1f6;font-size:13px"><div style="width:200px;color:#6b7280">${escapeHtml(l)}</div><div style="font-weight:600">${escapeHtml(v)}</div></div>` : "";
+  const row = (l: string, v: string) => v ? `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid #f3efe4;font-size:13px"><div style="width:200px;color:#6b7280">${escapeHtml(l)}</div><div style="font-weight:600">${escapeHtml(v)}</div></div>` : "";
   const body = `
     <div class="doc__title">${tr("Fiche collaborateur", "Employee record")}</div>
     <div class="meta"><span>${escapeHtml(`${e.firstName} ${e.lastName}`)}</span><span><span class="badge">${escapeHtml(label(EMP_STATUS_LABELS, e.status))}</span></span></div>
@@ -1063,7 +1063,7 @@ const CUSTOMER_CAT_LABELS: Record<string, [string, string]> = {
   plateforme: ["Plateforme", "Platform"], auteur: ["Auteur", "Author"],
 };
 export function printCustomerFiche(c: CustomerFichePrint, opts?: PrintOpts): void {
-  const row = (l: string, v: string) => v ? `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid #eef1f6;font-size:13px"><div style="width:200px;color:#6b7280">${escapeHtml(l)}</div><div style="font-weight:600">${escapeHtml(v)}</div></div>` : "";
+  const row = (l: string, v: string) => v ? `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid #f3efe4;font-size:13px"><div style="width:200px;color:#6b7280">${escapeHtml(l)}</div><div style="font-weight:600">${escapeHtml(v)}</div></div>` : "";
   const body = `
     <div class="doc__title">${tr("Fiche client", "Customer record")}</div>
     <div class="meta"><span>${escapeHtml(c.name)}</span><span><span class="badge">${escapeHtml(label(CUSTOMER_CAT_LABELS, c.category))}</span></span></div>

@@ -47,7 +47,10 @@ export function TableScroll({ children, style }: { children: ReactNode; style?: 
           width: "100%",
           overflowX: "auto",
           overflowY: "hidden",
-          touchAction: "pan-x",
+          // pan-x pan-y : glissé horizontal → défile le tableau ; glissé
+          // vertical → laisse la PAGE défiler (sinon, le doigt posé sur un
+          // tableau bloquait tout le défilement vertical de la page, ex. Stock).
+          touchAction: "pan-x pan-y",
           WebkitOverflowScrolling: "touch" as React.CSSProperties["WebkitOverflowScrolling"],
         }}
       >

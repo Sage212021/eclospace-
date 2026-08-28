@@ -1176,13 +1176,35 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         return reply.code(403).send({ code: "dg_only", message: "Réouverture réservée au Directeur général." });
       }
       const period = normalizePeriod((request.params as { period: string }).period);
+      // Motif facultatif : quand le DG rouvre une paie validée pour la renvoyer
+      // au RH « pour correction », il précise ce qui doit être corrigé — c'est
+      // enregistré comme motif de retour (le RH voit alors ce qu'il doit reprendre).
+      const parsed = z.object({ reason: z.string().trim().min(1).optional() }).safeParse(request.body ?? {});
+      const reason = parsed.success ? parsed.data.reason : undefined;
       const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
       if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
       const closure = await prisma.payrollClosure.findUnique({ where: { periodKey: period }, select: { id: true } });
       if (closure) return reply.code(409).send({ code: "already_closed", message: "Livre de paie clôturé : le mois est définitif et ne peut plus être rouvert." });
-      await prisma.payrollMonthlyRun.update({ where: { id: run.id }, data: { status: "brouillon", validatedBy: null, validatedAt: null } });
-      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payroll_monthly_run", entityId: period, newValues: { reopened: true }, ipAddress: request.ip });
-      return reply.send({ period, status: "brouillon" });
+      await prisma.payrollMonthlyRun.update({
+        where: { id: run.id },
+        data: reason
+          ? { status: "brouillon", validatedBy: null, validatedAt: null, returnReason: reason, returnedBy: request.user!.id, returnedAt: new Date() }
+          : { status: "brouillon", validatedBy: null, validatedAt: null },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payroll_monthly_run", entityId: period, newValues: { reopened: true, ...(reason ? { returned: true, reason } : {}) }, ipAddress: request.ip });
+      // Réouverture « pour correction » : le RH (celui qui a préparé, à défaut le
+      // service RH) est prévenu avec le motif.
+      if (reason) {
+        const reopenNotif = {
+          type: "autre" as const, priority: "high" as const,
+          title: `Paie de ${period} renvoyée pour correction`,
+          body: `Le Directeur général a rouvert la paie de ${period} pour correction. Motif : ${reason}. La grille est de nouveau modifiable.`,
+          entityType: "payroll_monthly_run", entityId: period,
+        };
+        if (run.submittedBy) await notifyUsers({ userIds: [run.submittedBy], ...reopenNotif }).catch(() => {});
+        else await notifyRole({ roleCode: RH_ROLE, ...reopenNotif }).catch(() => {});
+      }
+      return reply.send({ period, status: "brouillon", return_reason: reason ?? null });
     },
   );
 

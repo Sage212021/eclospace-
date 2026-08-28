@@ -162,4 +162,23 @@ describe("paie mensuelle : machine à états (soumission RH → validation/retou
     expect(patch.statusCode).toBe(409);
     expect(patch.json().code).toBe("run_locked");
   });
+
+  it("Test 10 — le DG renvoie une paie validée au RH pour correction (motif) ; RH notifié", async () => {
+    // Réservé au DG.
+    const byRh = await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/reopen`, headers: { cookie: rhCookie }, payload: { reason: "x" } });
+    expect(byRh.statusCode).toBe(403);
+
+    const res = await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/reopen`, headers: { cookie: dgCookie }, payload: { reason: "Corriger la prime de M. X" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("brouillon");
+    expect(res.json().return_reason).toContain("Corriger la prime");
+
+    const month = (await app.inject({ method: "GET", url: `/api/v1/payroll/monthly/${PERIOD}`, headers: { cookie: dgCookie } })).json();
+    expect(month.status).toBe("brouillon");
+    expect(month.return_reason).toContain("Corriger la prime"); // le RH voit le motif
+
+    // Le RH (qui avait soumis) est notifié du renvoi pour correction.
+    const notif = await prisma.notification.findFirst({ where: { userId: rhId, entityType: "payroll_monthly_run", entityId: PERIOD, title: { contains: "renvoyée pour correction" } } });
+    expect(notif).toBeTruthy();
+  });
 });

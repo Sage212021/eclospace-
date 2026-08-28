@@ -4911,8 +4911,11 @@ export function savePayrollMonthLine(period: string, employeeId: string, element
 export function validatePayrollMonth(period: string) {
   return request<{ period: string; status: "valide" }>(`/api/v1/payroll/monthly/${period}/validate`, { method: "POST" });
 }
-export function reopenPayrollMonth(period: string) {
-  return request<{ period: string; status: "brouillon" }>(`/api/v1/payroll/monthly/${period}/reopen`, { method: "POST" });
+export function reopenPayrollMonth(period: string, reason?: string) {
+  return request<{ period: string; status: "brouillon"; return_reason: string | null }>(`/api/v1/payroll/monthly/${period}/reopen`, {
+    method: "POST",
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
 }
 
 // Réouverture EXCEPTIONNELLE d'une paie verrouillée (ch. 23) : demande RH → décision DG.

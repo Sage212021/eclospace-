@@ -956,6 +956,9 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     quantity: z.number().int().positive(),
     location_id: z.string().uuid(), // magasin source (remise) ou destination (retour)
     reason: z.string().optional(),
+    // Date de la remise/retour (facultatif) : peut être antérieure au jour en
+    // cours (saisie a posteriori d'une remise déjà faite). Jamais dans le futur.
+    moved_at: z.coerce.date().optional(),
   });
 
   // Lieu de stock d'un commercial, créé à la première remise.
@@ -968,13 +971,13 @@ export default async function stockRoutes(fastify: FastifyInstance) {
 
   // Déplace des exemplaires entre un magasin et le lieu du commercial (les deux
   // côtés ajustés dans une même transaction, effet immédiat, refus si négatif).
-  async function moveBetween(isbnId: string, printRun: number, quantity: number, fromId: string, toId: string, type: StockMovementType, userId: string, reason: string, ip: string) {
+  async function moveBetween(isbnId: string, printRun: number, quantity: number, fromId: string, toId: string, type: StockMovementType, userId: string, reason: string, ip: string, movedAt?: Date) {
     return prisma.$transaction(async (tx) => {
       const debited = await adjustStockItem(tx, isbnId, fromId, printRun, -quantity, 0, "vendable");
       if (debited.quantityPhysical < 0) throw new StockWouldGoNegativeError(fromId, debited.quantityPhysical);
       await adjustStockItem(tx, isbnId, toId, printRun, quantity, 0, "vendable");
       const mv = await tx.stockMovement.create({
-        data: { type, isbnId, printRun, fromLocationId: fromId, toLocationId: toId, quantity, reason, status: "completed", condition: "vendable", movedBy: userId },
+        data: { type, isbnId, printRun, fromLocationId: fromId, toLocationId: toId, quantity, reason, status: "completed", condition: "vendable", movedBy: userId, ...(movedAt ? { movedAt } : {}) },
       });
       await writeAuditLog({ userId, action: "create", entityType: "stock_movement", entityId: mv.id, newValues: { type, isbnId, quantity, from: fromId, to: toId }, ipAddress: ip });
       return mv;
@@ -1009,9 +1012,12 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
     const target = await prisma.user.findUnique({ where: { id: userId } });
     if (!target) return reply.code(404).send({ code: "not_found", message: "Commercial introuvable." });
+    if (parsed.data.moved_at && parsed.data.moved_at.getTime() > Date.now()) {
+      return reply.code(400).send({ code: "date_future", message: "La date de remise ne peut pas être dans le futur." });
+    }
     const loc = await getOrCreateCommercialLocation(userId);
     try {
-      const mv = await moveBetween(parsed.data.isbn_id, parsed.data.print_run, parsed.data.quantity, parsed.data.location_id, loc.id, "transfer", request.user!.id, parsed.data.reason || "Remise au commercial", request.ip);
+      const mv = await moveBetween(parsed.data.isbn_id, parsed.data.print_run, parsed.data.quantity, parsed.data.location_id, loc.id, "transfer", request.user!.id, parsed.data.reason || "Remise au commercial", request.ip, parsed.data.moved_at);
       return reply.code(201).send(mv);
     } catch (e) {
       if (e instanceof StockWouldGoNegativeError) return reply.code(409).send({ code: "stock_negative", message: `Remise impossible : le magasin ne détient pas ${parsed.data.quantity} exemplaire(s) disponible(s).` });

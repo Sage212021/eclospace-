@@ -2635,7 +2635,7 @@ export function getCommercialStockAll() {
 export function getMyCommercialStock() {
   return request<CommercialStockReport & { location_id: string | null }>("/api/v1/commercial-stock/mine");
 }
-export function handoverToCommercial(userId: string, input: { isbn_id: string; quantity: number; location_id: string; print_run?: number; reason?: string }) {
+export function handoverToCommercial(userId: string, input: { isbn_id: string; quantity: number; location_id: string; print_run?: number; reason?: string; moved_at?: string }) {
   return request(`/api/v1/commercial-stock/${userId}/handover`, { method: "POST", body: JSON.stringify(input) });
 }
 export function returnFromCommercial(userId: string, input: { isbn_id: string; quantity: number; location_id: string; print_run?: number; reason?: string }) {

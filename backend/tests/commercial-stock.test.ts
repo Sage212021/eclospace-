@@ -107,4 +107,20 @@ describe("stock commercial individuel (Lot 3)", () => {
     expect(res.statusCode).toBe(409);
     expect(res.json().code).toBe("stock_negative");
   });
+
+  it("accepte une date de remise antérieure au jour en cours (saisie a posteriori)", async () => {
+    const passe = new Date(Date.now() - 5 * 24 * 3600 * 1000); // il y a 5 jours
+    const res = await app.inject({ method: "POST", url: `/api/v1/commercial-stock/${commercial.id}/handover`, headers: { cookie }, payload: { isbn_id: isbnId, quantity: 3, location_id: warehouseId, moved_at: passe.toISOString() } });
+    expect(res.statusCode).toBe(201);
+    const mv = await prisma.stockMovement.findUniqueOrThrow({ where: { id: res.json().id } });
+    // La date de mouvement enregistrée est bien la date renseignée, pas « maintenant ».
+    expect(Math.abs(mv.movedAt.getTime() - passe.getTime())).toBeLessThan(1000);
+  });
+
+  it("refuse une date de remise dans le futur", async () => {
+    const futur = new Date(Date.now() + 3 * 24 * 3600 * 1000);
+    const res = await app.inject({ method: "POST", url: `/api/v1/commercial-stock/${commercial.id}/handover`, headers: { cookie }, payload: { isbn_id: isbnId, quantity: 1, location_id: warehouseId, moved_at: futur.toISOString() } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe("date_future");
+  });
 });

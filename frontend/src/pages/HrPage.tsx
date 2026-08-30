@@ -47,6 +47,7 @@ import { printEmployeeFiche } from "../lib/print";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
+import { PeriodFilter, currentPeriod, inPeriod, type Period } from "../components/PeriodFilter";
 import { IconAdmin } from "../components/icons";
 import { ErpConnectionsSection } from "../components/ErpConnectionsSection";
 import { HrDashboardSection } from "../components/HrDashboardSection";
@@ -143,6 +144,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [absenceReasons, setAbsenceReasons] = useState<AbsenceReason[]>([]);
+  // Filtre par période (D-023) sur le registre des absences : mois en cours par défaut,
+  // sur la date de début de l'absence.
+  const [absencePeriod, setAbsencePeriod] = useState<Period>(currentPeriod());
   const [departments, setDepartments] = useState<Department[]>([]);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [anomalies, setAnomalies] = useState<AccessAnomaly[]>([]);
@@ -512,9 +516,18 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
       >
         {absences.length === 0 ? (
           <Empty>{t("hr.no_absence", "Aucune demande.")}</Empty>
-        ) : (
+        ) : (() => {
+          const filteredAbsences = absences.filter((a) => inPeriod(a.fromDate, absencePeriod));
+          return (
+          <>
+          <div style={{ marginBottom: 10 }}>
+            <PeriodFilter dates={absences.map((a) => a.fromDate)} value={absencePeriod} onChange={setAbsencePeriod} resultCount={filteredAbsences.length} />
+          </div>
+          {filteredAbsences.length === 0 ? (
+            <Empty>{t("hr.no_absence_period", "Aucune absence pour cette période.")}</Empty>
+          ) : (
           <div className="ecl-list">
-            {absences.map((absence) => (
+            {filteredAbsences.map((absence) => (
               <div key={absence.id} className="ecl-row">
                 <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span className="ecl-row__title">{absence.reasonRef?.label ?? t("hr.abs." + absence.type, ABSENCE_TYPE_LABELS[absence.type])}</span>
@@ -533,7 +546,10 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
               </div>
             ))}
           </div>
-        )}
+          )}
+          </>
+          );
+        })()}
       </Card>
 
       {/* Paramétrage des motifs d'absence (RH/DG — administration). */}

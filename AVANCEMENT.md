@@ -1,5 +1,7 @@
 # Eclospace — Avancement du développement
 
+**IA éditoriale — Lot IA-0a : fondations backend (D-025).** Début du branchement de Claude sur le pôle éditorial. Backend posé, SANS analyse de manuscrit encore : bibliothèque de **prompts** (4 types — évaluation, 1ʳᵉ/2ᵉ correction, couverture ; « rapport de stage » retiré), **modèles de rapport imposés** (repris fidèlement de vos exemples), **configuration** (clé API **chiffrée** et masquée, compte changeable, modèle par type), **test de connexion** réel, et **journal de traçabilité** `AiReadingJob`. L'IA agira toujours **au nom du relecteur d'Éclosion**. Migration additive, seed idempotent (n'écrase pas vos personnalisations). Tests `ai-editorial.test.ts` (7) ; suite **846/846** ; tsc + build au vert. Décision **D-025**. Reste : IA-0b (écran de configuration) puis IA-1 (bouton « Lancer avec Claude » à chaque étape).
+
 | Lot | Contenu | Statut |
 |---|---|---|
 | Lot 0 | Fondations (sécurité, rôles, audit, GED, notifications) | En cours — socle backend/frontend fonctionnel |

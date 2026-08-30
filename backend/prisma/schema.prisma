@@ -4938,3 +4938,64 @@ model AuthorWithdrawalVoucher {
   @@index([issuedAt])
   @@map("author_withdrawal_vouchers")
 }
+
+// ============================================================
+// IA éditoriale — relecture assistée (Lot IA-0). L'IA agit toujours AU NOM du
+// relecteur d'Éclosion Édition ; elle ne prend aucune décision et ne fait
+// avancer aucune étape. La configuration (clé API chiffrée, modèles) vit dans
+// la table settings ; ici : la bibliothèque de prompts et le journal des jobs.
+// ============================================================
+
+enum AiWorkType {
+  evaluation
+  correction_1
+  correction_2
+  couverture
+}
+
+enum AiJobStatus {
+  en_attente
+  en_cours
+  termine
+  erreur
+}
+
+// Bibliothèque de prompts + modèle de rapport imposé, éditable et versionnée.
+model AiPrompt {
+  id             String     @id @default(uuid())
+  workType       AiWorkType @unique @map("work_type")
+  label          String
+  systemPrompt   String     @map("system_prompt")
+  userTemplate   String     @map("user_template")
+  reportTemplate Json       @map("report_template")
+  version        Int        @default(1)
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  updatedBy      String?    @map("updated_by")
+
+  @@map("ai_prompts")
+}
+
+// Journal de traçabilité des exécutions IA (créé en IA-0, rempli en IA-1).
+model AiReadingJob {
+  id                   String      @id @default(uuid())
+  manuscriptId         String      @map("manuscript_id")
+  workType             AiWorkType  @map("work_type")
+  stepCode             String?     @map("step_code")
+  manuscriptVersionRef String?     @map("manuscript_version_ref")
+  promptKey            String      @map("prompt_key")
+  promptVersion        Int         @map("prompt_version")
+  model                String
+  editorRecommendation String?     @map("editor_recommendation")
+  status               AiJobStatus @default(en_attente)
+  costEstimate         Decimal?    @map("cost_estimate") @db.Decimal(12, 2)
+  reportVersion        Int?        @map("report_version")
+  producedDocumentIds  Json?       @map("produced_document_ids")
+  errorMessage         String?     @map("error_message")
+  launchedBy           String?     @map("launched_by")
+  launchedAt           DateTime    @default(now()) @map("launched_at")
+  finishedAt           DateTime?   @map("finished_at")
+
+  @@index([manuscriptId])
+  @@index([workType])
+  @@map("ai_reading_jobs")
+}

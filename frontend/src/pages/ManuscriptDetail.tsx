@@ -68,6 +68,7 @@ import { AuthorFilesSection } from "../components/AuthorFilesSection";
 import { FundingCheckpoint } from "../components/FundingCheckpoint";
 import { FinanceRequestCard } from "../components/FinanceRequestCard";
 import { EditorialQuotesInbox } from "../components/EditorialQuotesInbox";
+import { AiReadingLauncher } from "../components/AiReadingLauncher";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 import { ManuscriptStockSection } from "../components/ManuscriptStockSection";
 
@@ -463,6 +464,10 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             onAssigned={() => handle(async () => {}, "Lecteur affecté.")}
             onError={setError}
           />
+        )}
+
+        {manuscript.status.code === "COMITE_LECTURE" && canAssignReader && (
+          <AiReadingLauncher manuscriptId={manuscript.id} workType="evaluation" stepCode="COMITE_LECTURE" title="Relecture IA — Rapport d'évaluation" />
         )}
 
         {manuscript.status.code === "COMITE_LECTURE" && canCloseCommittee && (

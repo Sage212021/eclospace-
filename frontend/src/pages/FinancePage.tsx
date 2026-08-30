@@ -67,6 +67,7 @@ import { AnnualSummarySection } from "../components/AnnualSummarySection";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { useConfirm } from "../components/ConfirmProvider";
 import { GuidanceNote } from "../components/GuidanceNote";
+import { PeriodFilter, currentPeriod, inPeriod, type Period } from "../components/PeriodFilter";
 import { Modal, Field } from "../components/Modal";
 import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
@@ -142,6 +143,8 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
   const [openEmises, setOpenEmises] = useState(false);
   const [openReglees, setOpenReglees] = useState(false);
   const [openAutres, setOpenAutres] = useState(false);
+  // Filtre par période (D-023) sur les historiques de factures : mois en cours par défaut.
+  const [invoicePeriod, setInvoicePeriod] = useState<Period>(currentPeriod());
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [royaltyStatements, setRoyaltyStatements] = useState<RoyaltyStatement[]>([]);
@@ -565,9 +568,12 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
             </div>
           </div>
         );
-        const emises = invoices.filter((i) => i.type === "invoice" && (i.status === "issued" || i.status === "pending_validation" || i.status === "cancellation_requested"));
-        const reglees = invoices.filter((i) => i.type === "invoice" && i.status === "paid");
-        const autres = invoices.filter((i) => !emises.includes(i) && !reglees.includes(i)); // proforma, avoirs, annulées
+        // Restreint les trois historiques (factures émises / réglées / avoirs & proforma)
+        // à la période choisie — sur la date d'émission du document (createdAt).
+        const periodInvoices = invoices.filter((i) => inPeriod(i.createdAt, invoicePeriod));
+        const emises = periodInvoices.filter((i) => i.type === "invoice" && (i.status === "issued" || i.status === "pending_validation" || i.status === "cancellation_requested"));
+        const reglees = periodInvoices.filter((i) => i.type === "invoice" && i.status === "paid");
+        const autres = periodInvoices.filter((i) => !emises.includes(i) && !reglees.includes(i)); // proforma, avoirs, annulées
         // Bouton « dérouler / masquer » (compteur + chevron) pour le repli.
         const toggle = (count: number, open: boolean, onToggle: () => void) => (
           <button
@@ -582,6 +588,19 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
         );
         return (
           <>
+            <Card
+              title={t("fin.hist_period", "Factures & avoirs par période")}
+              icon={<IconFinance />}
+              subtitle={t("fin.hist_period_sub", "Choisissez le mois et l'année ; les trois historiques ci-dessous suivent la période.")}
+            >
+              <PeriodFilter
+                dates={invoices.map((i) => i.createdAt)}
+                value={invoicePeriod}
+                onChange={setInvoicePeriod}
+                resultCount={periodInvoices.length}
+              />
+            </Card>
+
             <Card
               title={t("fin.hist_emises", "Historique des factures émises")}
               icon={<IconFinance />}

@@ -78,6 +78,8 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder, canSe
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerQuery, setCustomerQuery] = useState("");
   const [orders, setOrders] = useState<SalesOrder[]>([]);
+  // Filtre par période (D-023) sur les commandes : mois en cours par défaut, sur la date de commande.
+  const [ordersPeriod, setOrdersPeriod] = useState<Period>(currentPeriod());
   const [isbns, setIsbns] = useState<IsbnRef[]>([]);
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -223,23 +225,34 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder, canSe
       <Card title={t("com.orders", "Commandes")} icon={<IconCommercial />} subtitle={t("com.orders_sub", "Suivi et déblocage des commandes.")}>
         {orders.length === 0 ? (
           <Empty>{t("com.no_order", "Aucune commande.")}</Empty>
-        ) : (
-          <div className="ecl-list">
-            {orders.map((order) => (
-              <div key={order.id} className="ecl-row">
-                <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{order.orderNumber}</span>
-                  <span className="ecl-row__desc" style={{ margin: 0 }}>{order.customer.name}</span>
-                  <StatusChip label={order.status} />
-                  {order.blockReason && <span style={{ color: "var(--alert)", fontSize: 12 }}>{order.blockReason}</span>}
+        ) : (() => {
+          const filteredOrders = orders.filter((o) => inPeriod(o.createdAt, ordersPeriod));
+          return (
+          <>
+            <PeriodFilter dates={orders.map((o) => o.createdAt)} value={ordersPeriod} onChange={setOrdersPeriod} resultCount={filteredOrders.length} />
+            {filteredOrders.length === 0 ? (
+              <Empty>{t("com.no_order_period", "Aucune commande pour cette période.")}</Empty>
+            ) : (
+            <div className="ecl-list">
+              {filteredOrders.map((order) => (
+                <div key={order.id} className="ecl-row">
+                  <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{order.orderNumber}</span>
+                    <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{order.createdAt.slice(0, 10)}</span>
+                    <span className="ecl-row__desc" style={{ margin: 0 }}>{order.customer.name}</span>
+                    <StatusChip label={order.status} />
+                    {order.blockReason && <span style={{ color: "var(--alert)", fontSize: 12 }}>{order.blockReason}</span>}
+                  </div>
+                  {canValidate && order.status === "blocked_credit" && (
+                    <Button variant="add" size="sm" onClick={() => handleApprove(order)}>{t("com.unblock", "Débloquer")}</Button>
+                  )}
                 </div>
-                {canValidate && order.status === "blocked_credit" && (
-                  <Button variant="add" size="sm" onClick={() => handleApprove(order)}>{t("com.unblock", "Débloquer")}</Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+            )}
+          </>
+          );
+        })()}
       </Card>
 
       {canManage && (

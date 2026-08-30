@@ -2686,6 +2686,7 @@ export interface SalesOrder {
   status: string;
   channel: string;
   blockReason: string | null;
+  createdAt: string;
   customer: { name: string };
   lines: { isbnId: string; quantity: number; unitPrice: string; discountPct: string }[];
 }

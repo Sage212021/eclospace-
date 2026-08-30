@@ -25,6 +25,9 @@ describe("IA éditoriale — configuration & prompts (Lot IA-0)", () => {
     adminCookie = await login("admin", ADMIN_PASSWORD);
     await createUserWithRole(`com_${s}`, "COMMERCIAL", "Com1pass!");
     outsiderCookie = await login(`com_${s}`, "Com1pass!");
+    // La config IA est un singleton partagé : on repart d'un état vierge pour que
+    // les assertions « par défaut » soient indépendantes de l'ordre des fichiers.
+    await prisma.setting.deleteMany({ where: { key: "ai_editorial_config" } });
   });
 
   afterAll(async () => {

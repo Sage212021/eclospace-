@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAnyRole, requirePermission } from "../lib/permissions.js";
+import { requireAnyRole, requirePermission, requireAnyPermission } from "../lib/permissions.js";
+import { runAiReading, AiRunError } from "../lib/aiRunner.js";
 import { writeAuditLog } from "../lib/audit.js";
 import {
   loadConfig,
@@ -153,4 +154,56 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
     });
     return reply.send(updated);
   });
+
+  // — Lancement d'une relecture IA (Lot IA-1) —
+  const runSchema = z.object({
+    manuscript_id: z.string().uuid(),
+    work_type: z.enum(WORK_TYPES),
+    step_code: z.string().max(40).optional(),
+    editor_recommendation: z.string().max(4000).optional(),
+  });
+  fastify.post(
+    "/api/v1/ai-editorial/run",
+    { preHandler: requireAnyPermission([{ module: "comite_lecture", action: "saisie" }, { module: "manuscripts", action: "validation" }, { module: "manuscripts", action: "administration" }]) },
+    async (request, reply) => {
+      const parsed = runSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "invalid_body", message: "Requête invalide.", details: parsed.error.flatten() });
+      }
+      // IA-1 : seul le rapport d'évaluation est branché ; les autres types
+      // arriveront aux lots suivants (correction, couverture).
+      if (parsed.data.work_type !== "evaluation") {
+        return reply.code(400).send({ code: "not_yet_available", message: "Ce type de relecture IA n'est pas encore branché (à venir)." });
+      }
+      try {
+        const result = await runAiReading({
+          manuscriptId: parsed.data.manuscript_id,
+          workType: parsed.data.work_type,
+          editorRecommendation: parsed.data.editor_recommendation,
+          stepCode: parsed.data.step_code,
+          userId: request.user!.id,
+          ip: request.ip,
+        });
+        return reply.code(201).send(result);
+      } catch (e) {
+        if (e instanceof AiRunError) {
+          const status = e.code === "not_found" || e.code === "no_manuscript_file" || e.code === "no_prompt" ? 404 : e.code === "ai_disabled" || e.code === "no_api_key" ? 400 : 502;
+          return reply.code(status).send({ code: e.code, message: e.message });
+        }
+        return reply.code(500).send({ code: "run_failed", message: e instanceof Error ? e.message : "Échec." });
+      }
+    },
+  );
+
+  // — Journal des relectures IA d'un manuscrit (traçabilité + progression) —
+  fastify.get(
+    "/api/v1/ai-editorial/jobs",
+    { preHandler: requireAnyPermission([{ module: "comite_lecture", action: "consultation" }, { module: "manuscripts", action: "consultation" }]) },
+    async (request, reply) => {
+      const manuscriptId = (request.query as { manuscript?: string }).manuscript;
+      if (!manuscriptId) return reply.code(400).send({ code: "manuscript_required", message: "Paramètre « manuscript » requis." });
+      const jobs = await prisma.aiReadingJob.findMany({ where: { manuscriptId }, orderBy: { launchedAt: "desc" } });
+      return reply.send({ jobs });
+    },
+  );
 }

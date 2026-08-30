@@ -41,7 +41,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as ApiError | null;
-    throw new Error(error?.message ?? `Erreur ${response.status}`);
+    const err = new Error(error?.message ?? `Erreur ${response.status}`) as Error & { status?: number };
+    err.status = response.status;
+    throw err;
   }
   return response.json() as Promise<T>;
 }
@@ -904,6 +906,51 @@ export function getReadingCommitteeRules() {
 }
 export function updateReadingCommitteeRules(rules: ReadingCommitteeRules) {
   return request<{ ok: true; rules: ReadingCommitteeRules }>(`/api/v1/reading-committee-rules`, { method: "PUT", body: JSON.stringify(rules) });
+}
+
+// — IA éditoriale (Lot IA-0) : configuration + bibliothèque de prompts —
+export type AiModelPreset = "leger" | "intermediaire" | "premium";
+export type AiWorkType = "evaluation" | "correction_1" | "correction_2" | "couverture";
+export interface AiEditorialConfigView {
+  enabled: boolean;
+  accountLabel: string;
+  models: Record<AiWorkType, AiModelPreset>;
+  allowedConfidentiality: string[];
+  apiKeyConfigured: boolean;
+  apiKeyLast4: string | null;
+  modelPresets: Record<AiModelPreset, { id: string; label: string }>;
+}
+export interface AiConfigInput {
+  enabled: boolean;
+  account_label: string;
+  models: Record<AiWorkType, AiModelPreset>;
+  allowed_confidentiality: string[];
+  api_key?: string;
+}
+export interface AiPrompt {
+  id: string;
+  workType: AiWorkType;
+  label: string;
+  systemPrompt: string;
+  userTemplate: string;
+  reportTemplate: unknown;
+  version: number;
+  updatedAt: string;
+}
+export function getAiEditorialConfig() {
+  return request<AiEditorialConfigView>(`/api/v1/ai-editorial/config`);
+}
+export function saveAiEditorialConfig(input: AiConfigInput) {
+  return request<AiEditorialConfigView>(`/api/v1/ai-editorial/config`, { method: "PUT", body: JSON.stringify(input) });
+}
+export function testAiEditorialConnection() {
+  return request<{ ok: true; model: string }>(`/api/v1/ai-editorial/test-connection`, { method: "POST", body: "{}" });
+}
+export function listAiPrompts() {
+  return request<{ prompts: AiPrompt[]; work_types: AiWorkType[]; model_presets: Record<AiModelPreset, { id: string; label: string }> }>(`/api/v1/ai-editorial/prompts`);
+}
+export function saveAiPrompt(workType: AiWorkType, input: { label: string; system_prompt: string; user_template: string; report_template: unknown }) {
+  return request<AiPrompt>(`/api/v1/ai-editorial/prompts/${workType}`, { method: "PUT", body: JSON.stringify(input) });
 }
 
 // Missions de lecture d'un manuscrit (comité / direction) — avec évaluations.

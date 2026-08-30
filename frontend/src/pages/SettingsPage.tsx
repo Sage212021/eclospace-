@@ -4,6 +4,7 @@ import { AccountSecurity } from "../components/AccountSecurity";
 import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { SettingCard } from "../components/SettingCard";
+import { AiEditorialConfigCard, AiPromptsCard } from "../components/AiEditorialCard";
 
 interface SettingsPageProps {
   canAdminister: boolean;
@@ -113,6 +114,10 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
       <DecisionLettersCard canAdminister={canAdminister} />
 
       <ReadingCommitteeRulesCard canAdminister={canAdminister} />
+
+      <AiEditorialConfigCard canAdminister={canAdminister} />
+
+      <AiPromptsCard canAdminister={canAdminister} />
 
       {/* Diagnostic de persistance : vérifier que les données sont bien conservées en base. */}
       <SystemDiagnosticCard />

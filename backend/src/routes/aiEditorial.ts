@@ -164,16 +164,18 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
   });
   fastify.post(
     "/api/v1/ai-editorial/run",
-    { preHandler: requireAnyPermission([{ module: "comite_lecture", action: "saisie" }, { module: "manuscripts", action: "validation" }, { module: "manuscripts", action: "administration" }]) },
+    { preHandler: requireAnyPermission([
+      { module: "comite_lecture", action: "saisie" },
+      { module: "manuscripts", action: "validation" },
+      { module: "manuscripts", action: "saisie" },
+      { module: "manuscripts", action: "administration" },
+      { module: "tasks", action: "saisie" },
+      { module: "bat", action: "saisie" },
+    ]) },
     async (request, reply) => {
       const parsed = runSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.code(400).send({ code: "invalid_body", message: "Requête invalide.", details: parsed.error.flatten() });
-      }
-      // IA-1 : seul le rapport d'évaluation est branché ; les autres types
-      // arriveront aux lots suivants (correction, couverture).
-      if (parsed.data.work_type !== "evaluation") {
-        return reply.code(400).send({ code: "not_yet_available", message: "Ce type de relecture IA n'est pas encore branché (à venir)." });
       }
       try {
         const result = await runAiReading({

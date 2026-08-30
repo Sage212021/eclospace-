@@ -96,12 +96,13 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect((res.json().jobs as unknown[]).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("les autres types de relecture ne sont pas encore branchés (400)", async () => {
+  it("la relecture de couverture est branchée et classée en pièce d'étape", async () => {
     const res = await app.inject({
       method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
-      payload: { manuscript_id: manuscriptId, work_type: "couverture" },
+      payload: { manuscript_id: manuscriptId, work_type: "couverture", step_code: "CORRECTION" },
     });
-    expect(res.statusCode).toBe(400);
-    expect(res.json().code).toBe("not_yet_available");
+    expect(res.statusCode).toBe(201);
+    const piece = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape" } });
+    expect(piece).not.toBeNull();
   });
 });

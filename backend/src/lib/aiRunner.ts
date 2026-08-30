@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "./prisma.js";
 import { storeFile } from "./storage.js";
 import { writeAuditLog } from "./audit.js";
-import { loadConfig, readApiKey, resolveModelId, MODEL_PRESETS, type WorkType } from "./aiConfig.js";
+import { loadConfig, readApiKey, resolveModelId, type WorkType } from "./aiConfig.js";
 
 // Moteur de relecture assistée (Lot IA-1). Orchestration : préparer le manuscrit,
 // appeler Claude AU NOM du relecteur d'Éclosion, générer le rapport .docx, le
@@ -202,15 +202,20 @@ export async function runAiReading(params: {
     const costUsd = (usage.input_tokens * price.in + usage.output_tokens * price.out) / 1_000_000;
     const costEstimate = Math.round(costUsd * 600 * 100) / 100; // ≈ FCFA (1 USD ≈ 600 XAF)
 
-    const title = `${MODEL_PRESETS[cfg.models[params.workType]] ? "" : ""}Rapport — ${manuscript.title}`;
-    const docxBuffer = await renderReportDocx(String((prompt.reportTemplate as { title?: string })?.title ?? "RAPPORT"), reportText);
+    const reportTitle = String((prompt.reportTemplate as { title?: string })?.title ?? "RAPPORT");
+    const title = `${prompt.label} — ${manuscript.title}`;
+    // Classement dans la GED : le rapport d'évaluation est un « rapport de
+    // lecture » ; les relectures de correction/couverture sont des pièces
+    // rattachées à leur étape.
+    const category = params.workType === "evaluation" ? "rapport_lecture" : "piece_etape";
+    const docxBuffer = await renderReportDocx(reportTitle, reportText);
     const stored = await storeFile(docxBuffer, `${params.workType}_${manuscript.manuscriptNumber}.docx`);
 
     const created = await prisma.document.create({
       data: {
         entityType: "manuscript",
         entityId: manuscript.id,
-        category: "rapport_lecture",
+        category,
         title,
         createdBy: params.userId,
         versions: {

@@ -10,6 +10,7 @@ import { printEditorialQuote } from "../lib/print";
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
+import { PeriodFilter, currentPeriod, inPeriod, type Period } from "./PeriodFilter";
 
 // Circuit devis → Éditorial → client → facture (côté Éditorial). Les devis
 // transmis par la Finance : le responsable / la direction éditoriale les
@@ -32,6 +33,10 @@ export function EditorialQuotesInbox({ heading = true, manuscriptId }: { heading
   const [validating, setValidating] = useState<string | null>(null);
   const [signer, setSigner] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  // Filtre par période (D-023) — seulement dans la vue globale (registre des
+  // devis) ; sur la fiche d'un manuscrit, on affiche tous ses devis sans filtre.
+  const [period, setPeriod] = useState<Period>(currentPeriod());
+  const filtered = manuscriptId ? rows : rows.filter((r) => inPeriod(r.handed_at, period));
 
   const load = () => getEditorialQuotesInbox(manuscriptId).then(setRows).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [manuscriptId]);
@@ -72,9 +77,18 @@ export function EditorialQuotesInbox({ heading = true, manuscriptId }: { heading
     <>
       {error && <div style={{ background: "#f8e3df", color: "var(--danger, #C24B3A)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{error}</div>}
       {info && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{info}</div>}
-      {rows.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucun devis transmis par la Finance pour le moment.</p>}
+      {!manuscriptId && rows.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <PeriodFilter dates={rows.map((r) => r.handed_at)} value={period} onChange={setPeriod} resultCount={filtered.length} />
+        </div>
+      )}
+      {rows.length === 0 ? (
+        <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucun devis transmis par la Finance pour le moment.</p>
+      ) : filtered.length === 0 ? (
+        <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucun devis pour cette période.</p>
+      ) : null}
       <div style={{ display: "grid", gap: 8 }}>
-        {rows.map((r) => {
+        {filtered.map((r) => {
           const s = STATUS[r.status] ?? STATUS.draft;
           return (
             <div key={r.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 12 }}>

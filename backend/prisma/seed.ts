@@ -126,6 +126,24 @@ const genres = [
   { code: "POESIE", label: "Poésie" },
   { code: "MANUEL", label: "Manuel scolaire ou pratique" },
   { code: "JEUNESSE", label: "Jeunesse" },
+  // Enrichissement du 30/08/2026 (D-024) : domaines réellement présents dans les
+  // catalogues Éclosion (analyse des collections Source et Canari & les Héritiers).
+  { code: "CONTE", label: "Conte & légende" },
+  { code: "DOCUMENT", label: "Document & actualité" },
+  { code: "TEMOIGNAGE", label: "Témoignage & biographie" },
+  { code: "DEV_PERSO", label: "Développement personnel" },
+  { code: "SPIRITUALITE", label: "Spiritualité" },
+  { code: "SCIENCES_HUMAINES", label: "Sciences humaines & économie" },
+  { code: "THEATRE", label: "Théâtre" },
+];
+
+// Référentiel des collections de la maison (D-024, 30/08/2026). Les deux
+// collections réelles portées par le catalogue général d'Éclosion. Le libellé
+// « code » est repris tel quel du catalogue (subtitle/keywords) pour le
+// rattachement automatique des ouvrages.
+const collections = [
+  { code: "SOURCE", label: "Collection Source" },
+  { code: "CANARI", label: "Collection Canari & les Héritiers" },
 ];
 
 // Grille d'évaluation du comité de lecture (Ch. 7 §7.4). Coefficients : les
@@ -662,6 +680,12 @@ async function main() {
   // Référentiel des genres (Ch. 6 §6.2).
   for (const genre of genres) {
     await prisma.genre.upsert({ where: { code: genre.code }, update: { label: genre.label }, create: genre });
+  }
+
+  // Référentiel des collections (D-024). Les ouvrages du catalogue général y
+  // sont rattachés plus bas (collectionId), d'après leur collection d'origine.
+  for (const collection of collections) {
+    await prisma.collection.upsert({ where: { code: collection.code }, update: { label: collection.label }, create: collection });
   }
 
   // Seuils du comité de lecture (Ch. 7 §7.5 : "seuils paramétrables") —
@@ -1243,15 +1267,22 @@ async function main() {
         await prisma.isbn.update({ where: { id: row.id }, data: { isbn13: `TMP-LGCAT-${String(tmp++).padStart(5, "0")}` } });
       }
     }
+    // Correspondance libellé de collection → identifiant (D-024), pour rattacher
+    // chaque ouvrage du catalogue général à sa collection.
+    const collectionsByLabel = new Map(
+      (await prisma.collection.findMany({ select: { id: true, label: true } })).map((c) => [c.label, c.id]),
+    );
     for (const b of generalCatalogue) {
+      const collectionId = collectionsByLabel.get(b.collection) ?? null;
       const ms = await prisma.manuscript.upsert({
         where: { manuscriptNumber: b.num },
-        update: { title: b.title, subtitle: b.collection, editorialSegment: "general", isBackCatalogue: true, keywords: [b.collection] },
+        update: { title: b.title, subtitle: b.collection, editorialSegment: "general", isBackCatalogue: true, keywords: [b.collection], collectionId },
         create: {
           manuscriptNumber: b.num,
           title: b.title,
           subtitle: b.collection,
           keywords: [b.collection],
+          collectionId,
           language: "fr",
           statusId: catStatus.id,
           ownerId: adminUser.id,

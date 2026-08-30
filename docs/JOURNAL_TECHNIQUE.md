@@ -1119,3 +1119,14 @@ Demande opérateur : des ~100 ouvrages importés au catalogue ont des fiches inc
   - Frontend (`components/CommercialStockSection.tsx`) : champ `type="date"` (défaut aujourd'hui, `max` = aujourd'hui) visible **en mode remise seulement** ; `moved_at` (ISO, midi local pour éviter le décalage de fuseau) inclus au payload uniquement s'il diffère d'aujourd'hui ; refus écran si date future.
   - Client (`api/client.ts`) : `handoverToCommercial(..., { … moved_at?: string })`.
 - **Tests** : `commercial-stock.test.ts` (+2) — date antérieure acceptée et **tracée** sur le mouvement (`movedAt` = date renseignée, pas « maintenant ») ; date future refusée (`date_future`). Suite complète **839/839** ; tsc (front+back) + build au vert.
+
+## Domaines & collections alignés sur le catalogue réel (30/08/2026, D-024)
+
+- **Demande opérateur** : analyser tous les styles d'ouvrage déjà présents dans les catalogues et mettre à jour les **domaines** (genres) et **collections** de la maison dans le pôle « Domaines & collections ». Choix retenu : **enrichissement complet** des domaines.
+- **Analyse des catalogues** (`prisma/seed.ts`) :
+  - *Catalogue scolaire* (11) : manuels (Latin, Grec, Informatique) + littérature au programme (CM1 → Terminale).
+  - *Catalogue général* (100) réparti en 2 collections : **Collection Source** (~41 : essais, économie/gestion, société/actualité, développement personnel, spiritualité, droit) et **Collection Canari & les Héritiers** (~59 : romans, nouvelles, jeunesse/albums, contes & fables, poésie, témoignages/récits de vie).
+- **Domaines (genres)** : les 5 existants conservés, **+7** ajoutés au seed (`genres`) : `CONTE` Conte & légende, `DOCUMENT` Document & actualité, `TEMOIGNAGE` Témoignage & biographie, `DEV_PERSO` Développement personnel, `SPIRITUALITE` Spiritualité, `SCIENCES_HUMAINES` Sciences humaines & économie, `THEATRE` Théâtre → **12 domaines**.
+- **Collections** : nouveau référentiel `collections` dans le seed (upsert par `code`) — `SOURCE` « Collection Source », `CANARI` « Collection Canari & les Héritiers ». Les manuscrits `LG-CAT-*` sont **rattachés** via `collectionId` (correspondance libellé → id, d'après la collection d'origine déjà portée par chaque ligne du catalogue).
+- **Aucun changement de schéma ni de migration** : les modèles `Genre`/`Collection` et le champ `Manuscript.collectionId` préexistaient ; seules les **données de référence** (seed idempotent) changent. Les endpoints `GET /api/v1/genres` et `GET /api/v1/collections` (triés par libellé) exposent déjà ces listes à la page « Domaines & collections », et l'administration éditoriale peut toujours en ajouter/retirer (suppression logique).
+- **Vérification** après reset + seed : `genres = 12`, `collections = 2`, `ouvrages rattachés = 100`. Suite complète **839/839** ; tsc (front+back) + build au vert. Décision **D-024**.

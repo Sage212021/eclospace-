@@ -18,6 +18,7 @@ import workflowRoutes from "./routes/workflow.js";
 import readingCommitteeRoutes from "./routes/readingCommittee.js";
 import userRoutes from "./routes/users.js";
 import referenceRoutes from "./routes/reference.js";
+import aiEditorialRoutes from "./routes/aiEditorial.js";
 import contractRoutes from "./routes/contracts.js";
 import partnerRoutes from "./routes/partners.js";
 import taskRoutes from "./routes/tasks.js";
@@ -190,6 +191,7 @@ export async function buildApp() {
   await app.register(readingCommitteeRoutes);
   await app.register(userRoutes);
   await app.register(referenceRoutes);
+  await app.register(aiEditorialRoutes);
   await app.register(contractRoutes);
   await app.register(partnerRoutes);
   await app.register(taskRoutes);

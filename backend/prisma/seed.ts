@@ -688,6 +688,128 @@ async function main() {
     await prisma.collection.upsert({ where: { code: collection.code }, update: { label: collection.label }, create: collection });
   }
 
+  // Bibliothèque de prompts IA (Lot IA-0). Ces prompts sont ÉDITABLES ensuite
+  // dans l'ERP (Paramètres) ; on ne fait que poser des valeurs de départ. Règle
+  // d'or commune : l'IA écrit AU NOM du relecteur d'Éclosion Édition, ne dit
+  // jamais qu'elle est une IA, et remplit la structure imposée sans l'inventer.
+  // `upsert` avec `update: {}` : on ne PIÉTINE PAS les modifications de
+  // l'opérateur au re-seed ; on ne crée que ce qui manque.
+  const REGLE_DOR =
+    "Tu rédiges au nom du Service de relecture d'Éclosion Édition. Tu ne mentionnes JAMAIS que tu es une intelligence artificielle ni aucun outil ; tu écris comme le relecteur professionnel de la maison, en français sobre et professionnel, sous l'en-tête « ÉCLOSION ÉDITION ». Tu remplis EXACTEMENT la structure de rapport fournie, sans ajouter ni retirer de rubrique. La « recommandation spéciale de l'éditeur » éventuelle est une consigne prioritaire. Tu n'es qu'un avis de relecteur : tu ne prends aucune décision éditoriale.";
+  const aiPrompts: {
+    workType: "evaluation" | "correction_1" | "correction_2" | "couverture";
+    label: string;
+    systemPrompt: string;
+    userTemplate: string;
+    reportTemplate: unknown;
+  }[] = [
+    {
+      workType: "evaluation",
+      label: "Rapport d'évaluation (Comité de lecture)",
+      systemPrompt:
+        REGLE_DOR +
+        " Pour le critère « Adéquation avec la ligne éditoriale », tu t'appuies STRICTEMENT sur la liste des domaines et collections d'Éclosion fournie ci-dessous : un ouvrage éloigné du catalogue réel est pénalisé sur ce critère, avec commentaire argumenté. La grille (critères, coefficients) est celle de la maison ; tu ne la modifies pas.",
+      userTemplate:
+        "Domaines et collections actuels d'Éclosion Édition :\n{{domaines_collections}}\n\nOuvrage soumis — titre : {{titre}} · auteur : {{auteur}} · domaine/collection déclaré : {{domaine}}.\nRecommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit à évaluer :\n{{manuscrit}}",
+      reportTemplate: {
+        title: "RAPPORT D'ÉVALUATION DE MANUSCRIT",
+        sections: [
+          { key: "A", title: "Identification du manuscrit" },
+          { key: "B", title: "Synthèse générale (sujet, intrigue, intention, positionnement éditorial)" },
+          { key: "C", title: "Grille d'évaluation (critère · coefficient · note /10 · commentaire argumenté)" },
+          { key: "D", title: "Calcul du score global" },
+          { key: "E", title: "Analyse qualitative" },
+          { key: "F", title: "Analyse structurelle" },
+          { key: "G", title: "Points forts" },
+          { key: "H", title: "Points à améliorer (localisation · gravité · recommandation)" },
+          { key: "I", title: "Points de vigilance éditoriaux" },
+          { key: "J", title: "Vérification des métadonnées" },
+          { key: "K", title: "Recommandation du relecteur" },
+          { key: "L", title: "Conditions éventuelles" },
+          { key: "M", title: "Avis final du relecteur" },
+        ],
+        footer: "Ce rapport constitue un avis argumenté de relecteur et ne représente pas une décision éditoriale finale.",
+      },
+    },
+    {
+      workType: "correction_1",
+      label: "Relecture / 1ʳᵉ correction (Correction éditoriale)",
+      systemPrompt:
+        REGLE_DOR +
+        " Tu produis (1) un rapport de relecture professionnelle et (2) les annotations de correction permettant d'obtenir le manuscrit corrigé V1. Chaque annotation précise : numéro, page, type, texte original, correction proposée, explication.",
+      userTemplate:
+        "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit à relire (1ʳᵉ correction) :\n{{manuscrit}}",
+      reportTemplate: {
+        title: "RAPPORT DE RELECTURE PROFESSIONNELLE",
+        sections: [
+          { key: "1", title: "Évaluation globale (synthèse · scores par critère /20 · note globale /100 · verdict)" },
+          { key: "2", title: "Points forts de l'œuvre" },
+          { key: "3", title: "Annotations de correction (par type : orthographe/accords, syntaxe, ponctuation/typographie, style/répétitions, cohérence/références)" },
+          { key: "4", title: "Observations structurelles et stylistiques" },
+          { key: "5", title: "Corrections prioritaires avant publication" },
+          { key: "6", title: "Recommandations éditoriales générales" },
+        ],
+        deliverables: ["Rapport_relecture", "Manuscrit_corrige_V1"],
+      },
+    },
+    {
+      workType: "correction_2",
+      label: "2ᵉ correction (Correction éditoriale)",
+      systemPrompt:
+        REGLE_DOR +
+        " Il s'agit d'un contrôle APRÈS la 1ʳᵉ correction : tu vérifies d'abord que les corrections précédentes ont bien été appliquées, puis tu traques les erreurs résiduelles. Tu produis un rapport et les annotations pour le manuscrit corrigé V2.",
+      userTemplate:
+        "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit après 1ʳᵉ correction (à contrôler) :\n{{manuscrit}}",
+      reportTemplate: {
+        title: "RAPPORT DE 2ᵉ CORRECTION",
+        sections: [
+          { key: "0", title: "Vérification des corrections précédentes (appliquées / non appliquées / nouvelles)" },
+          { key: "1", title: "Évaluation globale (scores /20 · note globale /100 · verdict)" },
+          { key: "2", title: "Points forts de l'œuvre" },
+          { key: "3", title: "Annotations de correction (erreurs résiduelles)" },
+          { key: "4", title: "Observations structurelles et stylistiques" },
+          { key: "5", title: "Corrections prioritaires avant publication" },
+          { key: "6", title: "Recommandations éditoriales générales" },
+        ],
+        deliverables: ["Rapport_deuxieme_correction", "Manuscrit_corrige_V2"],
+      },
+    },
+    {
+      workType: "couverture",
+      label: "Relecture de couverture (Correction éditoriale et BAT)",
+      systemPrompt:
+        REGLE_DOR +
+        " Tu relis la couverture (1ʳᵉ, dos, 4ᵉ). Tu vérifies impérativement la COHÉRENCE couverture ↔ intérieur (titre, sous-titre, auteur, collection) et l'ISBN. Tu produis les annotations (zone · élément · original · correction · explication) et un verdict de publication.",
+      userTemplate:
+        "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nTextes de couverture / fichier de couverture à relire :\n{{manuscrit}}",
+      reportTemplate: {
+        title: "RAPPORT DE RELECTURE DE COUVERTURE",
+        sections: [
+          { key: "0", title: "Identification (titre, sous-titre, auteur, ISBN couverture, éditeur/collection, fichier analysé, date)" },
+          { key: "1", title: "Synthèse et grille de notation (note globale pondérée /20)" },
+          { key: "2", title: "Analyse par zone (1ʳᵉ de couverture · dos · 4ᵉ de couverture)" },
+          { key: "3", title: "Vérifications factuelles (ISBN, cohérence couverture ↔ intérieur, mentions)" },
+          { key: "4", title: "Tableau d'annotations (zone · élément · original · correction · explication)" },
+          { key: "5", title: "Verdict de publication" },
+        ],
+        deliverables: ["Rapport_couverture"],
+      },
+    },
+  ];
+  for (const p of aiPrompts) {
+    await prisma.aiPrompt.upsert({
+      where: { workType: p.workType },
+      update: {}, // ne pas écraser les personnalisations de l'opérateur
+      create: {
+        workType: p.workType,
+        label: p.label,
+        systemPrompt: p.systemPrompt,
+        userTemplate: p.userTemplate,
+        reportTemplate: p.reportTemplate as object,
+      },
+    });
+  }
+
   // Seuils du comité de lecture (Ch. 7 §7.5 : "seuils paramétrables") —
   // valeurs de départ sur une échelle de 0 à 10, à confirmer avec la
   // Direction éditoriale et ajustables ensuite via la table settings.

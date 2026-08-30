@@ -952,6 +952,24 @@ export function listAiPrompts() {
 export function saveAiPrompt(workType: AiWorkType, input: { label: string; system_prompt: string; user_template: string; report_template: unknown }) {
   return request<AiPrompt>(`/api/v1/ai-editorial/prompts/${workType}`, { method: "PUT", body: JSON.stringify(input) });
 }
+// — IA éditoriale (Lot IA-1) : lancement d'une relecture + journal —
+export interface AiJob {
+  id: string;
+  workType: AiWorkType;
+  status: "en_attente" | "en_cours" | "termine" | "erreur";
+  model: string;
+  costEstimate: string | null;
+  editorRecommendation: string | null;
+  errorMessage: string | null;
+  launchedAt: string;
+  finishedAt: string | null;
+}
+export function runAiEditorial(input: { manuscript_id: string; work_type: AiWorkType; step_code?: string; editor_recommendation?: string }) {
+  return request<{ jobId: string; documentId: string; costEstimate: number }>(`/api/v1/ai-editorial/run`, { method: "POST", body: JSON.stringify(input) });
+}
+export function listAiJobs(manuscriptId: string) {
+  return request<{ jobs: AiJob[] }>(`/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`);
+}
 
 // Missions de lecture d'un manuscrit (comité / direction) — avec évaluations.
 export function listManuscriptReadingAssignments(manuscriptId: string) {

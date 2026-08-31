@@ -5,6 +5,7 @@ import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { SettingCard } from "../components/SettingCard";
 import { AiEditorialConfigCard, AiPromptsCard } from "../components/AiEditorialCard";
+import { StepConsistencyCard } from "../components/StepConsistencyCard";
 
 interface SettingsPageProps {
   canAdminister: boolean;
@@ -118,6 +119,8 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
       <AiEditorialConfigCard canAdminister={canAdminister} />
 
       <AiPromptsCard canAdminister={canAdminister} />
+
+      <StepConsistencyCard canAdminister={canAdminister} />
 
       {/* Diagnostic de persistance : vérifier que les données sont bien conservées en base. */}
       <SystemDiagnosticCard />

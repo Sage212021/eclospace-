@@ -14,6 +14,7 @@ import {
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { Field } from "./Modal";
+import { printJobApplications } from "../lib/print";
 
 // Recrutement (module amont RH) : postes à pourvoir et candidatures. Un poste
 // ouvert reçoit des candidatures ; chaque candidature suit le circuit
@@ -134,7 +135,7 @@ export function RecruitmentSection({ canManage, canValidate, departments }: { ca
                 {canValidate && o.status !== "ouvert" && <Button variant="subtle" size="sm" onClick={() => changeStatus(o.id, "ouvert")}>Rouvrir</Button>}
               </div>
             </div>
-            {expanded === o.id && <ApplicationsPanel openingId={o.id} canManage={canManage} onChanged={load} />}
+            {expanded === o.id && <ApplicationsPanel openingId={o.id} openingTitle={o.title} department={o.department ?? null} canManage={canManage} onChanged={load} />}
           </div>
         ))}
       </div>
@@ -142,7 +143,7 @@ export function RecruitmentSection({ canManage, canValidate, departments }: { ca
   );
 }
 
-function ApplicationsPanel({ openingId, canManage, onChanged }: { openingId: string; canManage: boolean; onChanged: () => void }) {
+function ApplicationsPanel({ openingId, openingTitle, department, canManage, onChanged }: { openingId: string; openingTitle: string; department: string | null; canManage: boolean; onChanged: () => void }) {
   const [apps, setApps] = useState<JobApplication[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -185,11 +186,10 @@ function ApplicationsPanel({ openingId, canManage, onChanged }: { openingId: str
   return (
     <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
       {error && <div style={{ background: "#f8e3df", color: "var(--danger, #C24B3A)", borderRadius: 8, padding: "6px 10px", fontSize: 12.5, marginBottom: 8 }}>{error}</div>}
-      {canManage && (
-        <div style={{ marginBottom: 10 }}>
-          <Button variant="add" size="sm" onClick={() => setShowForm((v) => !v)}>{showForm ? "Fermer" : "+ Candidature"}</Button>
-        </div>
-      )}
+      <div style={{ marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {canManage && <Button variant="add" size="sm" onClick={() => setShowForm((v) => !v)}>{showForm ? "Fermer" : "+ Candidature"}</Button>}
+        <Button variant="view" size="sm" disabled={apps.length === 0} onClick={() => printJobApplications({ openingTitle, department, apps })}>🖨 Imprimer la liste</Button>
+      </div>
       {showForm && canManage && (
         <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, marginBottom: 10 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>

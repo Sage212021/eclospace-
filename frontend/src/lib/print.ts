@@ -1383,3 +1383,60 @@ export function printAuthorWithdrawal(v: AuthorWithdrawalVoucher, opts?: PrintOp
     </div>`;
   openPrintWindow(`${tr("Retrait d'ouvrage", "Book withdrawal")} ${v.number}`, body, opts);
 }
+
+// Liste des candidatures d'un poste (recrutement RH) : tableau imprimable —
+// candidats enregistrés, coordonnées, source, statut et date de candidature.
+export interface JobApplicationsPrint {
+  openingTitle: string;
+  department?: string | null;
+  apps: {
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+    source: string | null;
+    status: string;
+    appliedAt: string;
+  }[];
+}
+const APPLICATION_STATUS_FR: Record<string, string> = {
+  recue: "Reçue",
+  entretien: "Entretien",
+  retenue: "Retenue",
+  refusee: "Refusée",
+};
+export function printJobApplications(d: JobApplicationsPrint, opts?: PrintOpts): void {
+  const rows = d.apps
+    .map(
+      (a, i) => `<tr>
+        <td class="r num">${i + 1}</td>
+        <td>${escapeHtml(`${a.lastName} ${a.firstName}`.trim())}</td>
+        <td>${escapeHtml(a.email ?? "—")}</td>
+        <td>${escapeHtml(a.phone ?? "—")}</td>
+        <td>${escapeHtml(a.source ?? "—")}</td>
+        <td>${escapeHtml(APPLICATION_STATUS_FR[a.status] ?? a.status)}</td>
+        <td class="num">${escapeHtml(fdate(a.appliedAt))}</td>
+      </tr>`,
+    )
+    .join("");
+  const body = `
+    <div class="doc__title">${tr("Liste des candidatures", "Applications list")}</div>
+    <div class="meta">
+      <span>${tr("Poste", "Position")} <b>${escapeHtml(d.openingTitle)}</b></span>
+      ${d.department ? `<span>${tr("Département", "Department")} <b>${escapeHtml(d.department)}</b></span>` : ""}
+      <span>${tr("Total", "Total")} <b class="num">${d.apps.length}</b></span>
+    </div>
+    <table class="lines">
+      <thead><tr>
+        <th class="r">${tr("N°", "No.")}</th>
+        <th>${tr("Nom &amp; Prénom", "Full name")}</th>
+        <th>${tr("E-mail", "Email")}</th>
+        <th>${tr("Téléphone", "Phone")}</th>
+        <th>${tr("Source", "Source")}</th>
+        <th>${tr("Statut", "Status")}</th>
+        <th>${tr("Date de candidature", "Application date")}</th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="7" style="text-align:center;color:#6b7280">${tr("Aucune candidature.", "No application.")}</td></tr>`}</tbody>
+    </table>`;
+  openPrintWindow(tr("Liste des candidatures", "Applications list"), body, opts);
+}

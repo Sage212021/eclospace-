@@ -1,5 +1,7 @@
 # Eclospace — Avancement du développement
 
+**RH — impression de la liste des candidatures.** Le recrutement peut désormais **imprimer la liste des candidatures** d'un poste : bouton « 🖨 Imprimer la liste » dans les candidatures d'un poste ouvert → document maison (poste, département, total) avec un tableau Nom & Prénom · e-mail · téléphone · source · statut · date de candidature. Purement frontend (`printJobApplications` dans `lib/print`) ; tsc + build au vert.
+
 **IA éditoriale — Lot IA-0a : fondations backend (D-025).** Début du branchement de Claude sur le pôle éditorial. Backend posé, SANS analyse de manuscrit encore : bibliothèque de **prompts** (4 types — évaluation, 1ʳᵉ/2ᵉ correction, couverture ; « rapport de stage » retiré), **modèles de rapport imposés** (repris fidèlement de vos exemples), **configuration** (clé API **chiffrée** et masquée, compte changeable, modèle par type), **test de connexion** réel, et **journal de traçabilité** `AiReadingJob`. L'IA agira toujours **au nom du relecteur d'Éclosion**. Migration additive, seed idempotent (n'écrase pas vos personnalisations). Tests `ai-editorial.test.ts` (7) ; suite **846/846** ; tsc + build au vert. Décision **D-025**. Lot IA-0b (écran de configuration + éditeur de prompts) livré. IA-1 livré pour le rapport d'évaluation (bouton « Lancer avec Claude » au Comité de lecture). Chaîne IA complète : évaluation, 1ʳᵉ/2ᵉ correction (rapport + manuscrit corrigé V1/V2, réécriture par tranches), couverture (Correction + BAT).
 
 | Lot | Contenu | Statut |

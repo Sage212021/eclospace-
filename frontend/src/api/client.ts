@@ -971,6 +971,24 @@ export function listAiJobs(manuscriptId: string) {
   return request<{ jobs: AiJob[] }>(`/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`);
 }
 
+// — Cohérence des dossiers (maintenance workflow) —
+export interface IncoherentManuscript {
+  id: string;
+  number: string;
+  title: string;
+  current: { code: string; label: string; order: number };
+  stray_steps: { code: string; label: string; order: number; responsible: string | null }[];
+}
+export function getStepConsistency() {
+  return request<{ manuscripts: IncoherentManuscript[] }>(`/api/v1/maintenance/step-consistency`);
+}
+export function realignStepConsistency(manuscriptIds?: string[]) {
+  return request<{ realigned: number; steps_reset: number; tasks_cancelled: number }>(`/api/v1/maintenance/step-consistency/realign`, {
+    method: "POST",
+    body: JSON.stringify(manuscriptIds ? { manuscript_ids: manuscriptIds } : {}),
+  });
+}
+
 // Missions de lecture d'un manuscrit (comité / direction) — avec évaluations.
 export function listManuscriptReadingAssignments(manuscriptId: string) {
   return request<ReadingAssignment[]>(`/api/v1/reading-assignments?manuscript=${manuscriptId}`);

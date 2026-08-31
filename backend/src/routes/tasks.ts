@@ -174,8 +174,21 @@ export default async function taskRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // Cohérence : on n'affiche une correction que si l'ouvrage est ENCORE à
+    // l'étape « Correction éditoriale » — sauf une tâche déjà terminée/validée,
+    // qu'on conserve dans l'historique. Ainsi, un ouvrage qu'on a fait reculer
+    // (ex. retour en Décision éditoriale) ne laisse plus de tâche-fantôme ici ;
+    // elle réapparaît si l'ouvrage revient réellement à la Correction.
     const tasks = await prisma.task.findMany({
-      where: { deletedAt: null, assigneeId: me, type: { in: CORRECTION_TASK_TYPES } },
+      where: {
+        deletedAt: null,
+        assigneeId: me,
+        type: { in: CORRECTION_TASK_TYPES },
+        OR: [
+          { manuscript: { status: { code: "CORRECTION" } } },
+          { status: { in: ["terminee", "validee"] } },
+        ],
+      },
       include: { manuscript: { select: { id: true, manuscriptNumber: true, title: true } } },
       orderBy: { plannedEnd: "asc" },
     });

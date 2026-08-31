@@ -661,8 +661,8 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           <CorrectionCyclePanel manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")} />
           {(permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")) && (
             <>
-              <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — 1ʳᵉ correction" />
-              <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — 2ᵉ correction" />
+              <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — 1ʳᵉ correction" hint="Produit aussi le manuscrit corrigé V1 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
+              <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — 2ᵉ correction" hint="Produit aussi le manuscrit corrigé V2 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
               <AiReadingLauncher manuscriptId={manuscript.id} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" />
             </>
           )}

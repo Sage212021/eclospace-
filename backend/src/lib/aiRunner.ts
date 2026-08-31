@@ -155,13 +155,21 @@ export async function runAiReading(params: {
   });
 
   try {
-    // Récupère le fichier manuscrit (dernière version déposée).
-    const doc = await prisma.document.findFirst({
-      where: { entityType: "manuscript", entityId: manuscript.id, category: "manuscrit", deletedAt: null },
-      select: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
-    });
-    const version = doc?.versions[0];
-    if (!version) throw new AiRunError("no_manuscript_file", "Aucun fichier manuscrit n'a été déposé pour cet ouvrage.");
+    // Récupère le fichier source (dernière version déposée). Pour la couverture,
+    // on privilégie le fichier de couverture s'il existe (BAT), sinon le manuscrit
+    // (où vivent les textes de couverture à l'étape Correction).
+    const categories = params.workType === "couverture" ? ["couverture", "manuscrit"] : ["manuscrit"];
+    let version: { filePath: string; mimeType: string; versionNumber: number } | undefined;
+    for (const cat of categories) {
+      const doc = await prisma.document.findFirst({
+        where: { entityType: "manuscript", entityId: manuscript.id, category: cat as never, deletedAt: null },
+        select: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+      });
+      if (doc?.versions[0]) { version = doc.versions[0]; break; }
+    }
+    if (!version) {
+      throw new AiRunError("no_manuscript_file", params.workType === "couverture" ? "Aucun fichier de couverture ni manuscrit n'a été déposé pour cet ouvrage." : "Aucun fichier manuscrit n'a été déposé pour cet ouvrage.");
+    }
     const { readStoredFile } = await import("./storage.js");
     const buffer = await readStoredFile(version.filePath);
     const prepared = prepareManuscript(version.mimeType, `f${version.versionNumber}`, buffer);

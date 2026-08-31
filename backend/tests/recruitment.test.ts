@@ -85,4 +85,27 @@ describe("recrutement — postes & candidatures", () => {
     const res = await app.inject({ method: "POST", url: "/api/v1/job-openings", headers: { cookie: plainCookie }, payload: { title: "Poste interdit" } });
     expect(res.statusCode).toBe(403);
   });
+
+  it("liste globale des candidatures (tous postes) + filtre par statut", async () => {
+    const title = `Poste global ${rnd()}`;
+    const opening = await app.inject({ method: "POST", url: "/api/v1/job-openings", headers: { cookie: adminCookie }, payload: { title } });
+    const openingId = opening.json().id as string;
+    const applied = await app.inject({ method: "POST", url: `/api/v1/job-openings/${openingId}/applications`, headers: { cookie: adminCookie }, payload: { first_name: "Aria", last_name: "Global" } });
+    const appId = applied.json().id as string;
+    await app.inject({ method: "PATCH", url: `/api/v1/job-applications/${appId}/status`, headers: { cookie: adminCookie }, payload: { status: "retenue" } });
+
+    // Vue globale : la candidature apparaît avec le poste d'origine.
+    const all = await app.inject({ method: "GET", url: "/api/v1/job-applications", headers: { cookie: adminCookie } });
+    expect(all.statusCode).toBe(200);
+    const rows = all.json() as { id: string; openingTitle: string; status: string }[];
+    const mine = rows.find((r) => r.id === appId)!;
+    expect(mine).toBeTruthy();
+    expect(mine.openingTitle).toBe(title);
+
+    // Filtre par statut : « retenue » l'inclut, « refusee » l'exclut.
+    const retenue = await app.inject({ method: "GET", url: "/api/v1/job-applications?status=retenue", headers: { cookie: adminCookie } });
+    expect((retenue.json() as { id: string }[]).some((r) => r.id === appId)).toBe(true);
+    const refusee = await app.inject({ method: "GET", url: "/api/v1/job-applications?status=refusee", headers: { cookie: adminCookie } });
+    expect((refusee.json() as { id: string }[]).some((r) => r.id === appId)).toBe(false);
+  });
 });

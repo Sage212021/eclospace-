@@ -3649,6 +3649,23 @@ export function setJobOpeningStatus(id: string, status: JobOpeningStatus) {
 export function getJobApplications(openingId: string) {
   return request<JobApplication[]>(`/api/v1/job-openings/${openingId}/applications`);
 }
+// Toutes les candidatures, tous postes confondus (impression RH globale).
+export interface JobApplicationGlobalRow {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  source: string | null;
+  status: JobApplicationStatus;
+  appliedAt: string;
+  openingTitle: string;
+  department: string | null;
+}
+export function listAllJobApplications(status?: string) {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<JobApplicationGlobalRow[]>(`/api/v1/job-applications${q}`);
+}
 export function createJobApplication(openingId: string, input: { first_name: string; last_name: string; email?: string; phone?: string; source?: string; notes?: string }) {
   return request<JobApplication>(`/api/v1/job-openings/${openingId}/applications`, { method: "POST", body: JSON.stringify(input) });
 }

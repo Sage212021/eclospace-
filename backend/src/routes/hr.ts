@@ -782,6 +782,32 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     return reply.send(rows);
   });
 
+  // Vue globale : toutes les candidatures, tous postes confondus (impression RH),
+  // avec le poste et le département d'origine ; filtre facultatif par statut.
+  fastify.get("/api/v1/job-applications", { preHandler: requirePermission("rh", "consultation") }, async (request, reply) => {
+    const q = request.query as { status?: string };
+    const status = q.status && (Object.values(JobApplicationStatus) as string[]).includes(q.status) ? (q.status as JobApplicationStatus) : undefined;
+    const rows = await prisma.jobApplication.findMany({
+      where: status ? { status } : {},
+      orderBy: [{ appliedAt: "desc" }],
+      include: { jobOpening: { select: { title: true, department: { select: { name: true } } } } },
+    });
+    return reply.send(
+      rows.map((r) => ({
+        id: r.id,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        email: r.email,
+        phone: r.phone,
+        source: r.source,
+        status: r.status,
+        appliedAt: r.appliedAt,
+        openingTitle: r.jobOpening.title,
+        department: r.jobOpening.department?.name ?? null,
+      })),
+    );
+  });
+
   // Avancement d'une candidature dans le circuit (entretien, retenue, refusée).
   fastify.patch("/api/v1/job-applications/:id/status", { preHandler: requirePermission("rh", "saisie") }, async (request, reply) => {
     const { id } = request.params as { id: string };

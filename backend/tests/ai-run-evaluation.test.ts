@@ -96,6 +96,19 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect((res.json().jobs as unknown[]).length).toBeGreaterThanOrEqual(1);
   });
 
+  it("la 1ʳᵉ correction produit AUSSI un manuscrit corrigé (V1) en plus du rapport", async () => {
+    const res = await app.inject({
+      method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
+      payload: { manuscript_id: manuscriptId, work_type: "correction_1", step_code: "CORRECTION" },
+    });
+    expect(res.statusCode).toBe(201);
+    const job = await prisma.aiReadingJob.findUniqueOrThrow({ where: { id: res.json().jobId } });
+    // Deux documents produits : le rapport + le manuscrit corrigé.
+    expect((job.producedDocumentIds as string[]).length).toBe(2);
+    const corrected = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, title: { contains: "Manuscrit corrigé (IA) — V1" } } });
+    expect(corrected).not.toBeNull();
+  });
+
   it("la relecture de couverture est branchée et classée en pièce d'étape", async () => {
     const res = await app.inject({
       method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },

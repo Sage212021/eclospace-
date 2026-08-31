@@ -17,7 +17,7 @@ const STATUS_COLORS: Record<AiJob["status"], string> = {
   erreur: "var(--alert, #B23A2E)",
 };
 
-export function AiReadingLauncher({ manuscriptId, workType, stepCode, title }: { manuscriptId: string; workType: AiWorkType; stepCode: string; title: string }) {
+export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hint }: { manuscriptId: string; workType: AiWorkType; stepCode: string; title: string; hint?: string }) {
   const [jobs, setJobs] = useState<AiJob[]>([]);
   const [reco, setReco] = useState("");
   const [busy, setBusy] = useState(false);
@@ -46,6 +46,7 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title }: {
         Le relecteur d'Éclosion analyse le manuscrit déposé et rédige le rapport, classé automatiquement dans les Documents de
         l'ouvrage. Vous pouvez ajouter une consigne particulière ci-dessous.
       </p>
+      {hint && <p style={{ color: "var(--eclosion-dark, #9A7A12)", fontSize: 12, margin: "-4px 0 10px", fontWeight: 600 }}>{hint}</p>}
       {err && <div style={{ background: "var(--alert-soft, #F6E2DE)", color: "var(--alert, #B23A2E)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
       {note && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{note}</div>}
       <textarea

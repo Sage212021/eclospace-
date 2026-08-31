@@ -114,6 +114,40 @@ async function renderReportDocx(reportTitle: string, body: string): Promise<Buff
   return Packer.toBuffer(doc);
 }
 
+// Rendu .docx d'un manuscrit corrigé : titre + le texte tel quel, paragraphe
+// par paragraphe (pas d'interprétation « markdown »).
+async function renderManuscriptDocx(docTitle: string, body: string): Promise<Buffer> {
+  const children: Paragraph[] = [new Paragraph({ children: [new TextRun({ text: docTitle, bold: true, size: 26 })] }), new Paragraph({ text: "" })];
+  for (const line of body.split("\n")) {
+    children.push(new Paragraph({ text: line }));
+  }
+  const doc = new Document({ sections: [{ children }] });
+  return Packer.toBuffer(doc);
+}
+
+// Découpe un texte en tranches d'au plus maxChars, sur des frontières de
+// paragraphe (pour ne pas couper une phrase au milieu). Permet de corriger un
+// gros manuscrit chapitre par chapitre sans dépasser les limites de l'API.
+function chunkText(text: string, maxChars: number): string[] {
+  const paras = text.split(/\n/);
+  const chunks: string[] = [];
+  let cur = "";
+  for (const p of paras) {
+    if (cur.length + p.length + 1 > maxChars && cur) {
+      chunks.push(cur);
+      cur = "";
+    }
+    // Un paragraphe unique plus long que la tranche : on le coupe brutalement.
+    if (p.length > maxChars) {
+      for (let i = 0; i < p.length; i += maxChars) chunks.push(p.slice(i, i + maxChars));
+      continue;
+    }
+    cur += (cur ? "\n" : "") + p;
+  }
+  if (cur) chunks.push(cur);
+  return chunks;
+}
+
 // Point d'entrée : exécute une relecture IA et retourne le job à jour.
 export async function runAiReading(params: {
   manuscriptId: string;
@@ -206,9 +240,9 @@ export async function runAiReading(params: {
       || "Le relecteur n'a produit aucun texte.";
 
     const price = PRICES[modelId] ?? PRICES["claude-haiku-4-5"];
-    const usage = res.usage;
-    const costUsd = (usage.input_tokens * price.in + usage.output_tokens * price.out) / 1_000_000;
-    const costEstimate = Math.round(costUsd * 600 * 100) / 100; // ≈ FCFA (1 USD ≈ 600 XAF)
+    // Coût cumulé sur tous les appels (rapport + éventuelle réécriture).
+    let totalInput = res.usage.input_tokens;
+    let totalOutput = res.usage.output_tokens;
 
     const reportTitle = String((prompt.reportTemplate as { title?: string })?.title ?? "RAPPORT");
     const title = `${prompt.label} — ${manuscript.title}`;
@@ -241,9 +275,63 @@ export async function runAiReading(params: {
       },
     });
 
+    const producedIds: string[] = [created.id];
+
+    // Régénération du manuscrit corrigé (Lot IA-3b) — uniquement 1ʳᵉ/2ᵉ
+    // correction et si le texte est exploitable (pas un PDF image). Le livre est
+    // corrigé PAR TRANCHES pour tenir sur les gros volumes. L'IA renvoie le texte
+    // corrigé seul ; le correcteur reste maître de l'intégration.
+    if ((params.workType === "correction_1" || params.workType === "correction_2") && prepared.kind === "text" && prepared.text.trim()) {
+      const versionLabel = params.workType === "correction_1" ? "V1" : "V2";
+      const rewriteSystem =
+        "Tu es le correcteur du Service de relecture d'Éclosion Édition. On te confie un passage de manuscrit. Renvoie UNIQUEMENT le texte corrigé (orthographe, grammaire, syntaxe, ponctuation, typographie, répétitions), sans aucun commentaire, sans balise, sans note. Conserve strictement le sens, le style de l'auteur, la mise en paragraphes et la structure. Tu ne mentionnes jamais que tu es une intelligence artificielle.";
+      const recoPrefix = params.editorRecommendation?.trim() ? `Consigne particulière de l'éditeur : ${params.editorRecommendation.trim()}\n\n` : "";
+      const chunks = chunkText(prepared.text, 12000);
+      const correctedParts: string[] = [];
+      for (const ch of chunks) {
+        const cr = await client.messages.create({
+          model: modelId,
+          max_tokens: 16000,
+          system: rewriteSystem,
+          messages: [{ role: "user", content: recoPrefix + ch }],
+        });
+        totalInput += cr.usage.input_tokens;
+        totalOutput += cr.usage.output_tokens;
+        correctedParts.push(cr.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join(""));
+      }
+      const correctedText = correctedParts.join("\n");
+      const correctedDocx = await renderManuscriptDocx(`Manuscrit corrigé (${versionLabel}) — ${manuscript.title}`, correctedText);
+      const storedC = await storeFile(correctedDocx, `manuscrit_corrige_${versionLabel}_${manuscript.manuscriptNumber}.docx`);
+      const correctedDoc = await prisma.document.create({
+        data: {
+          entityType: "manuscript",
+          entityId: manuscript.id,
+          category: "piece_etape",
+          title: `Manuscrit corrigé (IA) — ${versionLabel}`,
+          createdBy: params.userId,
+          versions: {
+            create: {
+              versionNumber: 1,
+              filePath: storedC.filePath,
+              fileSize: storedC.fileSize,
+              mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              sha256Hash: storedC.sha256Hash,
+              status: "draft",
+              changeSummary: `Manuscrit corrigé ${versionLabel} généré par le service de relecture Éclosion (à intégrer par le correcteur).`,
+              uploadedBy: params.userId,
+            },
+          },
+        },
+      });
+      producedIds.push(correctedDoc.id);
+    }
+
+    const costUsd = (totalInput * price.in + totalOutput * price.out) / 1_000_000;
+    const costEstimate = Math.round(costUsd * 600 * 100) / 100; // ≈ FCFA (1 USD ≈ 600 XAF)
+
     await prisma.aiReadingJob.update({
       where: { id: job.id },
-      data: { status: "termine", finishedAt: new Date(), producedDocumentIds: [created.id], reportVersion: 1, costEstimate },
+      data: { status: "termine", finishedAt: new Date(), producedDocumentIds: producedIds, reportVersion: 1, costEstimate },
     });
     await writeAuditLog({
       userId: params.userId,

@@ -14,7 +14,8 @@ import {
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { Field } from "./Modal";
-import { printJobApplications } from "../lib/print";
+import { printJobApplications, printAllJobApplications } from "../lib/print";
+import { listAllJobApplications } from "../api/client";
 
 // Recrutement (module amont RH) : postes à pourvoir et candidatures. Un poste
 // ouvert reçoit des candidatures ; chaque candidature suit le circuit
@@ -43,6 +44,20 @@ export function RecruitmentSection({ canManage, canValidate, departments }: { ca
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: "", department_id: "", contract_type: "", description: "" });
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Impression globale de toutes les candidatures, avec filtre facultatif par statut.
+  const [printStatus, setPrintStatus] = useState("");
+  const [printingAll, setPrintingAll] = useState(false);
+
+  const STATUS_FR: Record<string, string> = { recue: "Reçue", entretien: "Entretien", retenue: "Retenue", refusee: "Refusée" };
+  async function printAll() {
+    setPrintingAll(true); setError(null);
+    try {
+      const apps = await listAllJobApplications(printStatus || undefined);
+      printAllJobApplications({ filterLabel: printStatus ? `Statut : ${STATUS_FR[printStatus] ?? printStatus}` : undefined, apps });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Impression impossible.");
+    } finally { setPrintingAll(false); }
+  }
 
   const load = () => getJobOpenings().then(setOpenings).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
@@ -108,6 +123,18 @@ export function RecruitmentSection({ canManage, canValidate, departments }: { ca
           </div>
         </div>
       )}
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "4px 0 12px" }}>
+        <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Toutes les candidatures :</span>
+        <select value={printStatus} onChange={(e) => setPrintStatus(e.target.value)} style={{ padding: "6px 9px", fontSize: 13, border: "1px solid var(--line)", borderRadius: 8, background: "var(--card)", color: "var(--ink)" }}>
+          <option value="">Tous les statuts</option>
+          <option value="recue">Reçue</option>
+          <option value="entretien">Entretien</option>
+          <option value="retenue">Retenue</option>
+          <option value="refusee">Refusée</option>
+        </select>
+        <Button variant="view" size="sm" disabled={printingAll} onClick={printAll}>{printingAll ? "Préparation…" : "🖨 Imprimer toutes les candidatures"}</Button>
+      </div>
 
       {openings.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucun poste ouvert.</p>}
 

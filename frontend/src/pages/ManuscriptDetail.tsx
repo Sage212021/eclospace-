@@ -699,6 +699,9 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             canManage={permissions.has("bat:saisie")}
             canValidate={permissions.has("bat:validation")}
           />
+          {permissions.has("bat:saisie") && (
+            <AiReadingLauncher manuscriptId={manuscript.id} workType="couverture" stepCode="VALIDATION_BAT" title="Relecture IA — Couverture (contrôle BAT)" />
+          )}
         </>
       )}
 

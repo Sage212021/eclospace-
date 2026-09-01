@@ -1281,6 +1281,7 @@ model User {
   authoredAnnouncements    Announcement[]          @relation("AnnouncementAuthor")
   announcementReceipts     AnnouncementReceipt[]   @relation("AnnouncementReceipts")
   notificationPreference   NotificationPreference? @relation("UserNotificationPreference")
+  pushSubscriptions        PushSubscription[]
   commercialStockLocations StockLocation[]         @relation("CommercialStock")
   authoredEvents           CalendarEvent[]         @relation("CalendarEventAuthor")
   authoredNewsletters      Newsletter[]            @relation("NewsletterAuthor")
@@ -4723,6 +4724,29 @@ model NotificationPreference {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("notification_preferences")
+}
+
+// Abonnement « Web Push » d'un appareil (téléphone / navigateur) pour recevoir
+// les notifications même application fermée. Un enregistrement par appareil
+// accepté ; `endpoint` est l'adresse unique fournie par le service du
+// navigateur (Google / Apple / Mozilla). `p256dh`/`auth` sont les clés de
+// chiffrement du message. Le ciblage suit strictement les notifications
+// nominatives existantes : on n'envoie qu'aux appareils de l'utilisateur
+// concerné (annonces = à tous, tâches/missions = à la personne affectée).
+model PushSubscription {
+  id        String  @id @default(uuid())
+  userId    String  @map("user_id")
+  user      User    @relation(fields: [userId], references: [id])
+  endpoint  String  @unique
+  p256dh    String
+  auth      String
+  userAgent String? @map("user_agent")
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastSeenAt DateTime? @map("last_seen_at")
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

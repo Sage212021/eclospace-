@@ -239,6 +239,8 @@ Couche transverse du projet : contrairement aux lots précédents, ce lot ne sai
 | `ADMIN_INITIAL_PASSWORD` | À définir manuellement **avant le premier déploiement**, valeur forte | Mot de passe du compte `admin` créé par le seed. Sans effet une fois le mot de passe changé depuis l'interface. À défaut, une valeur par défaut connue (`ChangeMoiImmediatement!`) est utilisée — à éviter. |
 | `FRONTEND_ORIGIN` | Optionnelle, sans effet utile en production (même origine) | Peut rester non définie |
 | `UPLOAD_DIR` | Optionnelle | Voir point bloquant ci-dessus avant toute donnée réelle |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | À générer une fois (`npx web-push generate-vapid-keys`), identiques recette/production tant que les abonnements existent | Notifications push (voir section dédiée). Le **privé est un secret**. Absentes → push inactif (bouton masqué), la cloche et le badge d'icône fonctionnent toujours. |
+| `VAPID_SUBJECT` | Optionnelle, `mailto:` de contact (défaut `mailto:contact@eclosionedition.com`) | Adresse jointe aux envois push, exigée par la norme Web Push |
 
 ## Envoi d'e-mails « documents » et identité de l'expéditeur (Phase A — 10/07/2026)
 
@@ -637,6 +639,28 @@ notifications de tout niveau restent visibles dans la cloche de l'application.
 - Build servi en HTTP puis inspecté dans Chromium : manifeste détecté, 3 icônes,
   `display: standalone`, **service worker actif (« activated »), portée racine** —
   critères d'installabilité réunis. Aucune erreur console.
+
+## Notifications « push » — alerte téléphone application fermée (01/09/2026)
+
+**Besoin opérateur :** que les utilisateurs soient alertés (bandeau + son) sur leur téléphone **même quand Eclospace est fermé**, à la manière d'une messagerie — le badge d'icône seul ne se rafraîchissant qu'à la réouverture.
+
+| Décision | Choix | Raison |
+|---|---|---|
+| Technologie | **Web Push standard** (`web-push` + clés **VAPID**), pas de service tiers payant | Gratuit, standard, cohérent avec la règle « stack éprouvée et économe » ; aucun compte externe à administrer. |
+| Point de branchement | **Unique**, dans `lib/notify.ts` (`notifyRole` + `notifyUsers`), après la création des notifications in-app | Le push **hérite du ciblage nominatif existant** sans le réinventer : annonces du Babillard = à tous (une notif par destinataire), tâches/missions/étapes = à la personne concernée. Impossible de recevoir l'alerte d'autrui. |
+| Robustesse | Envoi **au meilleur effort** (`void … .catch()`), erreurs journalisées, abonnement 404/410 **purgé** automatiquement | Une panne du service push (Google/Apple) ne doit jamais interrompre l'opération métier qui a émis l'alerte (vente, BAT, affectation…). |
+| Sonnerie | Réutilise la préférence existante `NotificationPreference.soundEnabled` → `silent` du message | Répond au « son discret, chacun peut le couper » sans nouvelle colonne. |
+| Service désactivable | Si `VAPID_*` absentes, `isPushConfigured()` = false : routes renvoient `configured:false`, le bouton frontend se masque | Déploiement sûr : l'app fonctionne identiquement tant que l'opérateur n'a pas posé les clés. |
+
+**Modèle :** `push_subscriptions` (un enregistrement par appareil accepté ; `endpoint` unique ; `p256dh`/`auth` = clés de chiffrement ; FK `user_id`). Migration additive `20260901120000_push_subscriptions`.
+
+**Backend :** `lib/pushWeb.ts` (`isPushConfigured`, `getVapidPublicKey`, `sendWebPushToUsers`) ; routes `GET /api/v1/push/public-key`, `POST /api/v1/push/subscribe` (upsert idempotent par endpoint), `POST /api/v1/push/unsubscribe`.
+
+**Frontend :** `lib/pushClient.ts` (permission + `PushManager.subscribe` avec la clé VAPID + enregistrement serveur) ; contrôle « Activer sur ce téléphone » dans *Mes préférences de notification* ; `public/sw.js` enrichi des gestionnaires `push` (affiche la notification) et `notificationclick` (ramène l'onglet Eclospace au premier plan). Cache du service worker passé `v3` → `v4`.
+
+**Limites connues :** iPhone exige l'app **installée** sur l'écran d'accueil (iOS 16.4+) ; l'utilisateur doit **accepter** l'autorisation ; hors ligne, la notification arrive au retour du réseau (ce n'est pas un SMS). Présence temps réel et push restent en mémoire mono-instance côté Socket.IO (le push, lui, n'a pas cette contrainte : il lit les abonnements en base).
+
+**Vérification :** test `push.test.ts` (état du service, abonnement idempotent, désabonnement, 400 sur corps invalide, 401 sans session) ; suite complète au vert ; tsc + build (backend & frontend) au vert. Le push effectif se vérifie depuis un téléphone une fois les clés VAPID posées sur Scalingo.
 
 ## Durcissement de l'architecture — frontières entre couches (16/07/2026)
 

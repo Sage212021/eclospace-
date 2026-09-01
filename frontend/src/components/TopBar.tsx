@@ -99,6 +99,25 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
       .catch(() => setUnreadCount(0));
   }, [refreshSignal]);
 
+  // Report du nombre de non-lus sur l'ICÔNE de l'application installée (écran
+  // d'accueil du téléphone), à la manière d'un badge Play Store / WhatsApp.
+  // API « Badging » : n'agit que sur l'app INSTALLÉE (PWA) et les navigateurs
+  // qui la gèrent (Chrome/Edge Android, Safari iOS ≥ 16.4) ; ailleurs l'appel
+  // est ignoré sans effet. La valeur posée PERSISTE sur l'icône même après
+  // fermeture de l'application, jusqu'à ce que les notifications soient lues.
+  useEffect(() => {
+    const nav = navigator as Navigator & {
+      setAppBadge?: (n?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    try {
+      if (unreadCount > 0) void nav.setAppBadge?.(unreadCount)?.catch(() => {});
+      else void nav.clearAppBadge?.()?.catch(() => {});
+    } catch {
+      /* API indisponible : sans effet, l'icône reste normale */
+    }
+  }, [unreadCount]);
+
   // Charge la liste complète à l'ouverture du panneau (et sur signal si ouvert),
   // pour rester à jour.
   useEffect(() => {

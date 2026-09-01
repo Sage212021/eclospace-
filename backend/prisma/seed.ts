@@ -1379,13 +1379,12 @@ async function main() {
       { num: "LG-CAT-0099", title: "Matricule E.C.I", collection: "Collection Canari & les Héritiers", authors: ["Ibrahim Fioko"], isbn: "9789956078288", year: 2024 },
       { num: "LG-CAT-0100", title: "Nkobi et Djobi", collection: "Collection Canari & les Héritiers", authors: ["Muriel Menye"], isbn: "9789956078295", year: 2024 },
       // Ajouts opérateur (01/09/2026) : 2 essais (Collection Source) et 2 romans
-      // (Collection Canari & les Héritiers). ISBN officiels fournis par la maison.
-      // L'année n'ayant pas été précisée, on retient 2025 (cohérent avec la série
-      // d'ISBN 978-9956-078/079-… déjà de 2025) ; à corriger si besoin.
-      { num: "LG-CAT-0109", title: "Les clés d'une retraite épanouie", collection: "Collection Source", authors: ["Olga Lona"], isbn: "9789956079421", year: 2025, genre: "ESSAI" },
-      { num: "LG-CAT-0110", title: "Rêver en Afrique", collection: "Collection Source", authors: ["Avom Paul"], isbn: "9789956079452", year: 2025, genre: "ESSAI" },
-      { num: "LG-CAT-0111", title: "Paternité charnelle", collection: "Collection Canari & les Héritiers", authors: ["Zang Zang Elie Denis"], isbn: "9789956078615", year: 2025, genre: "ROMAN" },
-      { num: "LG-CAT-0112", title: "Le bal des vampires", collection: "Collection Canari & les Héritiers", authors: ["Emile Kweguem"], isbn: "9789956078547", year: 2025, genre: "ROMAN" },
+      // (Collection Canari & les Héritiers). ISBN officiels et année de parution
+      // (2026) fournis par la maison.
+      { num: "LG-CAT-0109", title: "Les clés d'une retraite épanouie", collection: "Collection Source", authors: ["Olga Lona"], isbn: "9789956079421", year: 2026, genre: "ESSAI" },
+      { num: "LG-CAT-0110", title: "Rêver en Afrique", collection: "Collection Source", authors: ["Avom Paul"], isbn: "9789956079452", year: 2026, genre: "ESSAI" },
+      { num: "LG-CAT-0111", title: "Paternité charnelle", collection: "Collection Canari & les Héritiers", authors: ["Zang Zang Elie Denis"], isbn: "9789956078615", year: 2026, genre: "ROMAN" },
+      { num: "LG-CAT-0112", title: "Le bal des vampires", collection: "Collection Canari & les Héritiers", authors: ["Emile Kweguem"], isbn: "9789956078547", year: 2026, genre: "ROMAN" },
     ];
     // Réorganisation idempotente : au re-seed, on repart d'ISBN temporaires pour
     // les manuscrits du catalogue général, afin d'éviter tout conflit d'unicité

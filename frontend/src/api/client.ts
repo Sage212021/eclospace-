@@ -5269,6 +5269,24 @@ export function setNotificationPreferences(input: Partial<NotificationPreference
   return request<{ ok: true }>("/api/v1/me/notification-preferences", { method: "PUT", body: JSON.stringify(input) });
 }
 
+// ── Notifications « push » sur l'appareil (téléphone) ────────────────────────
+export interface PushPublicKey {
+  configured: boolean;
+  publicKey: string | null;
+}
+
+export function getPushPublicKey() {
+  return request<PushPublicKey>("/api/v1/push/public-key");
+}
+
+export function subscribePush(sub: { endpoint: string; keys: { p256dh: string; auth: string } }) {
+  return request<{ ok: true }>("/api/v1/push/subscribe", { method: "POST", body: JSON.stringify(sub) });
+}
+
+export function unsubscribePush(endpoint: string) {
+  return request<{ ok: true }>("/api/v1/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) });
+}
+
 // ── Calendrier partagé & événements ──────────────────────────────────────────
 export type CalendarEventType = "reunion" | "echeance" | "formation" | "sortie" | "ceremonie" | "autre";
 

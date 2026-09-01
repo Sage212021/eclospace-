@@ -28,6 +28,7 @@ import { Card } from "../components/Card";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
+import { getPushState, enablePush, disablePush, type PushState } from "../lib/pushClient";
 import { RichTextEditor } from "../components/RichTextEditor";
 import { IconPilotage } from "../components/icons";
 import { useI18n } from "../i18n";
@@ -545,6 +546,67 @@ export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementI
   );
 }
 
+// Activation des notifications « push » sur CET appareil (téléphone) : alerte
+// même application fermée. Bouton simple, avec message clair selon l'état
+// (non compatible, refusé dans les réglages du téléphone, activé, désactivé).
+function DevicePushControl() {
+  const { t } = useI18n();
+  const [state, setState] = useState<PushState | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void getPushState().then((s) => { if (alive) setState(s); });
+    return () => { alive = false; };
+  }, []);
+
+  if (state === null || state === "not_configured") return null; // service non activé sur le serveur → on masque.
+
+  async function toggle(on: boolean) {
+    setBusy(true);
+    try {
+      setState(on ? await enablePush() : await disablePush());
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const line: React.CSSProperties = { marginTop: 12, borderTop: "1px solid var(--line)", paddingTop: 12 };
+  if (state === "unsupported") {
+    return (
+      <div style={line}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{t("cm.push_title", "Notifications sur cet appareil")}</div>
+        <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>
+          {t("cm.push_unsupported", "Ce navigateur ne gère pas les notifications sur l'appareil. Sur iPhone, installez d'abord Eclospace sur l'écran d'accueil (Partager → Sur l'écran d'accueil).")}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div style={line}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{t("cm.push_title", "Notifications sur cet appareil")}</div>
+        {state === "enabled" ? (
+          <Button variant="danger" size="sm" disabled={busy} onClick={() => toggle(false)}>
+            {busy ? "…" : t("cm.push_disable", "Désactiver sur ce téléphone")}
+          </Button>
+        ) : (
+          <Button variant="add" size="sm" disabled={busy || state === "denied"} onClick={() => toggle(true)}>
+            {busy ? "…" : t("cm.push_enable", "🔔 Activer sur ce téléphone")}
+          </Button>
+        )}
+      </div>
+      <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>
+        {state === "enabled"
+          ? t("cm.push_on", "Vous recevrez les alertes qui vous concernent même l'application fermée. La sonnerie suit votre réglage ci-dessus.")
+          : state === "denied"
+            ? t("cm.push_denied", "Les notifications sont bloquées dans les réglages du téléphone pour Eclospace. Autorisez-les dans les réglages du navigateur, puis réessayez.")
+            : t("cm.push_off", "Activez pour être averti (bandeau + son) sur ce téléphone même quand l'application est fermée.")}
+      </p>
+    </div>
+  );
+}
+
 // Préférences de notification par utilisateur (sonnerie, volume, visuel,
 // e-mail, catégories). Une case « toutes les catégories » (categories = null) ;
 // décochée, l'utilisateur choisit finement celles qui le notifient.
@@ -638,6 +700,7 @@ function NotificationPrefsCard({
           </div>
         )}
       </div>
+      <DevicePushControl />
       <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>
         {t("cm.pref_sound_note", "La sonnerie ne peut retentir qu'après une première action de votre part sur la page (règle des navigateurs).")}
       </p>

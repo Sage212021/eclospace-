@@ -13,6 +13,7 @@ import authPlugin from "./plugins/auth.js";
 import authRoutes from "./routes/auth.js";
 import documentRoutes from "./routes/documents.js";
 import notificationRoutes from "./routes/notifications.js";
+import pushRoutes from "./routes/push.js";
 import manuscriptRoutes from "./routes/manuscripts.js";
 import workflowRoutes from "./routes/workflow.js";
 import readingCommitteeRoutes from "./routes/readingCommittee.js";
@@ -187,6 +188,7 @@ export async function buildApp() {
   await app.register(authRoutes);
   await app.register(documentRoutes);
   await app.register(notificationRoutes);
+  await app.register(pushRoutes);
   await app.register(manuscriptRoutes);
   await app.register(workflowRoutes);
   await app.register(readingCommitteeRoutes);

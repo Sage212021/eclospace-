@@ -8,7 +8,7 @@
 //   • le reste → comportement navigateur par défaut.
 // Incrémenter la version ci-dessous force le remplacement de l'ancien cache.
 
-const CACHE = "eclospace-shell-v3";
+const CACHE = "eclospace-shell-v4";
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -26,6 +26,42 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
+  );
+});
+
+// ── Notifications « Web Push » ───────────────────────────────────────────────
+// Réception d'une notification envoyée par le serveur, MÊME application fermée.
+// Le contenu (titre, corps) est déjà ciblé côté serveur sur le bon destinataire.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+  const title = data.title || "Eclospace";
+  const options = {
+    body: data.body || "",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    tag: data.entityType && data.entityId ? `${data.entityType}:${data.entityId}` : undefined,
+    silent: data.silent === true,
+    data: { entityType: data.entityType || null, entityId: data.entityId || null, category: data.category || null },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Clic sur la notification : ouvre Eclospace (ou ramène l'onglet déjà ouvert au
+// premier plan) plutôt que d'ouvrir une nouvelle page à chaque fois.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if (client.url.startsWith(self.location.origin) && "focus" in client) return client.focus();
+      }
+      return self.clients.openWindow("/");
+    }),
   );
 });
 

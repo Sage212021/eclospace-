@@ -3,6 +3,7 @@ import type { NotificationPriority, NotificationType } from "@prisma/client";
 import { isMailConfigured, sendMail } from "./mailer.js";
 import { buildNotificationEmail } from "./documentEmail.js";
 import { emitToUsers } from "./realtime.js";
+import { sendWebPushToUsers } from "./pushWeb.js";
 
 // Priorité interne → priorité d'affichage (toast/sonnerie côté frontend).
 const PUSH_PRIORITY: Record<NotificationPriority, "normale" | "importante" | "urgente" | "critique"> = {
@@ -107,7 +108,11 @@ export async function notifyRole(input: RoleNotificationInput): Promise<void> {
   });
 
   // Alerte temps réel (son + pop-up) aux titulaires du rôle — pas en sourdine.
-  pushRealtime(userRoles.map((ur) => ur.userId), input);
+  const roleUserIds = userRoles.map((ur) => ur.userId);
+  pushRealtime(roleUserIds, input);
+  // Push sur les appareils (téléphone), même application fermée — au meilleur
+  // effort, sur les mêmes destinataires que la notification in-app.
+  void sendWebPushToUsers(roleUserIds, input).catch(() => {});
 
   // N'envoie qu'aux comptes actifs, non supprimés (on ne notifie pas par e-mail
   // un compte désactivé ou clos).
@@ -149,6 +154,9 @@ export async function notifyUsers(input: UsersNotificationInput): Promise<void> 
 
   // Alerte temps réel (son + pop-up) à chaque destinataire — pas en sourdine.
   pushRealtime(ids, input);
+  // Push sur les appareils (téléphone), même application fermée — au meilleur
+  // effort, sur les mêmes destinataires que la notification in-app.
+  void sendWebPushToUsers(ids, input).catch(() => {});
 
   if (!sendByEmail) return;
 

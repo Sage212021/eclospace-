@@ -1277,7 +1277,7 @@ async function main() {
     // le bon ISBN (cf. rapport `docs/RAPPORT_ISBN_LIVRES_GENERAUX.md`), pour
     // respecter la contrainte « ISBN jamais réutilisé ». Pas de prix catalogue :
     // il est saisi à la commande.
-    const generalCatalogue: { num: string; title: string; collection: string; authors: string[]; isbn: string; year: number; provisional?: boolean }[] = [
+    const generalCatalogue: { num: string; title: string; collection: string; authors: string[]; isbn: string; year: number; provisional?: boolean; genre?: string }[] = [
       { num: "LG-CAT-0001", title: "06 Étapes à suivre pour trouver le travail", collection: "Collection Source", authors: ["Olive Ndjabi"], isbn: "9789956996179", year: 2022 },
       { num: "LG-CAT-0002", title: "Institutions de Bretton Woods et changement des paradigmes du discours sur l'économie", collection: "Collection Source", authors: ["Alphonse Joseph Tonye"], isbn: "9789956996278", year: 2021 },
       { num: "LG-CAT-0003", title: "Cas Pratique de Gestion", collection: "Collection Source", authors: ["Philippe Mouangue Mbale"], isbn: "9782001900015", year: 2021, provisional: true },
@@ -1378,6 +1378,14 @@ async function main() {
       { num: "LG-CAT-0098", title: "Ronoowo", collection: "Collection Canari & les Héritiers", authors: ["Nadine Ndjomo"], isbn: "9789956078271", year: 2024 },
       { num: "LG-CAT-0099", title: "Matricule E.C.I", collection: "Collection Canari & les Héritiers", authors: ["Ibrahim Fioko"], isbn: "9789956078288", year: 2024 },
       { num: "LG-CAT-0100", title: "Nkobi et Djobi", collection: "Collection Canari & les Héritiers", authors: ["Muriel Menye"], isbn: "9789956078295", year: 2024 },
+      // Ajouts opérateur (01/09/2026) : 2 essais (Collection Source) et 2 romans
+      // (Collection Canari & les Héritiers). ISBN officiels fournis par la maison.
+      // L'année n'ayant pas été précisée, on retient 2025 (cohérent avec la série
+      // d'ISBN 978-9956-078/079-… déjà de 2025) ; à corriger si besoin.
+      { num: "LG-CAT-0109", title: "Les clés d'une retraite épanouie", collection: "Collection Source", authors: ["Olga Lona"], isbn: "9789956079421", year: 2025, genre: "ESSAI" },
+      { num: "LG-CAT-0110", title: "Rêver en Afrique", collection: "Collection Source", authors: ["Avom Paul"], isbn: "9789956079452", year: 2025, genre: "ESSAI" },
+      { num: "LG-CAT-0111", title: "Paternité charnelle", collection: "Collection Canari & les Héritiers", authors: ["Zang Zang Elie Denis"], isbn: "9789956078615", year: 2025, genre: "ROMAN" },
+      { num: "LG-CAT-0112", title: "Le bal des vampires", collection: "Collection Canari & les Héritiers", authors: ["Emile Kweguem"], isbn: "9789956078547", year: 2025, genre: "ROMAN" },
     ];
     // Réorganisation idempotente : au re-seed, on repart d'ISBN temporaires pour
     // les manuscrits du catalogue général, afin d'éviter tout conflit d'unicité
@@ -1394,17 +1402,24 @@ async function main() {
     const collectionsByLabel = new Map(
       (await prisma.collection.findMany({ select: { id: true, label: true } })).map((c) => [c.label, c.id]),
     );
+    // Correspondance code de domaine → identifiant (essai, roman…), pour classer
+    // les ouvrages qui précisent leur domaine.
+    const genresByCode = new Map(
+      (await prisma.genre.findMany({ select: { id: true, code: true } })).map((g) => [g.code, g.id]),
+    );
     for (const b of generalCatalogue) {
       const collectionId = collectionsByLabel.get(b.collection) ?? null;
+      const genreId = b.genre ? genresByCode.get(b.genre) ?? null : null;
       const ms = await prisma.manuscript.upsert({
         where: { manuscriptNumber: b.num },
-        update: { title: b.title, subtitle: b.collection, editorialSegment: "general", isBackCatalogue: true, keywords: [b.collection], collectionId },
+        update: { title: b.title, subtitle: b.collection, editorialSegment: "general", isBackCatalogue: true, keywords: [b.collection], collectionId, genreId },
         create: {
           manuscriptNumber: b.num,
           title: b.title,
           subtitle: b.collection,
           keywords: [b.collection],
           collectionId,
+          genreId,
           language: "fr",
           statusId: catStatus.id,
           ownerId: adminUser.id,

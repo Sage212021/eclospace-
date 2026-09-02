@@ -52,14 +52,14 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   doc.saveGraphicsState();
   // @ts-expect-error — GState est fourni par jsPDF à l'exécution.
   doc.setGState(new doc.GState({ opacity: 0.55 }));
-  doc.addImage(ECLOSION_FILIGRANE_PNG, "PNG", (210 - filW) / 2, (297 - filH) / 2, filW, filH, "eclFil", "FAST");
+  doc.addImage(ECLOSION_FILIGRANE_PNG, "PNG", (210 - filW) / 2, (297 - filH) / 2, filW, filH, "eclFil", "SLOW");
   doc.restoreGraphicsState();
 
   let y = 12;
 
   // ---- En-tête : logo réel Éclosion + titre -------------------------------
   const logoW = 40, logoH = logoW / ECLOSION_LOGO_RATIO;
-  doc.addImage(ECLOSION_LOGO_PNG, "PNG", LEFT, y, logoW, logoH, "eclLogo", "FAST");
+  doc.addImage(ECLOSION_LOGO_PNG, "PNG", LEFT, y, logoW, logoH, "eclLogo", "SLOW");
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...NAVY);
   doc.setFontSize(13);

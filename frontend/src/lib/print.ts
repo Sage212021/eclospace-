@@ -106,9 +106,10 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     .lh-foot-space { height: 40mm; }
     ${embedStyle}
     .lh { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
-    /* Logo d'en-tête : agrandi et rendu net à l'impression (la source est en
-       haute définition). image-rendering: high-quality évite tout lissage mou. */
-    .lh__logo { height: 88px; width: auto; image-rendering: -webkit-optimize-contrast; }
+    /* Logo d'en-tête : source haute définition (1653×827) réduite proprement.
+       image-rendering: auto → réduction lissée de qualité (évite l'effet
+       « crénelé / pixélisé » que produit -webkit-optimize-contrast à la réduction). */
+    .lh__logo { height: 88px; width: auto; image-rendering: auto; }
     .lh__contact { text-align: right; font-size: 10.5px; color: #4b5563; line-height: 1.7; max-width: 340px; }
     .lh__contact a { color: #4b5563; text-decoration: none; }
     .lh__rule { height: 3px; background: linear-gradient(90deg, #0b0b0c 62%, #d9b21a 62%); border-radius: 2px; margin: 10px 0 4px; }

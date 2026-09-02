@@ -1014,16 +1014,26 @@ async function main() {
   }
 
   // ── Centre de Communication Interne — Babillard d'annonces (évolution) ──────
-  // Tout le personnel consulte les annonces qui le ciblent (consultation, bornée
-  // à soi côté serveur) ; la publication et l'administration sont réservées aux
-  // profils de direction et transverses (DG, RH, Administration/Finances,
-  // Direction éditoriale). L'administrateur général a déjà tout.
+  // RBAC strict (décision opérateur D-027, 01/09/2026) : tout le personnel
+  // CONSULTE les annonces qui le ciblent (consultation, bornée à soi côté
+  // serveur), mais l'ADMINISTRATION du babillard (créer, modifier, supprimer,
+  // publier/dépublier, programmer, catégories, paramètres) est réservée à
+  // TROIS profils seulement : DG, RH et l'Administrateur général. Tous les
+  // autres rôles — Direction éditoriale et Finance INCLUS — sont en lecture
+  // seule. L'administrateur général a déjà toutes les permissions (plus haut).
   for (const [roleCode] of roleByCode) {
     if (roleCode === "ADMIN_GENERAL") continue;
     await grant(roleCode, ["communication:consultation"]);
   }
-  for (const publisher of ["DIR_GENERAL", "RESP_RH", "RESP_FINANCE", "DIR_EDITORIAL"]) {
+  for (const publisher of ["DIR_GENERAL", "RESP_RH"]) {
     await grant(publisher, ["communication:saisie", "communication:administration"]);
+  }
+  // Retrait sur les bases déjà semées : Finance et Direction éditoriale avaient
+  // reçu l'administration du babillard ; D-027 la leur retire (lecture seule).
+  // N'affecte QUE le babillard (permissions `communication:*`) — leurs autres
+  // droits métier (finance, éditorial, service auteurs…) sont intacts.
+  for (const demoted of ["RESP_FINANCE", "DIR_EDITORIAL"]) {
+    await revoke(demoted, ["communication:saisie", "communication:administration"]);
   }
 
   // ── Espace Auteur : guichets Service Éducation / Service Client (inc. 2b) ────

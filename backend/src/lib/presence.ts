@@ -106,6 +106,18 @@ export function poleForUser(departmentCode: string | null | undefined, roleCodes
 // temps réel, lui, ne diffuse jamais d'identités (voir broadcast ci-dessous).
 let liveStates: Map<string, SocketState> | null = null;
 
+// Une personne a-t-elle un onglet ERP AU PREMIER PLAN en ce moment ? Sert à
+// décider s'il faut pousser une notification (push) : inutile si elle est déjà
+// active devant l'écran (la livraison temps réel suffit), utile si elle est en
+// arrière-plan ou hors ligne.
+export function isUserActive(userId: string): boolean {
+  if (!liveStates) return false;
+  for (const s of liveStates.values()) {
+    if (s.userId === userId && s.activity === "active") return true;
+  }
+  return false;
+}
+
 export interface PolePresenceUser {
   name: string;
   // « active » si au moins un onglet de la personne est au premier plan ;

@@ -20,6 +20,9 @@ interface TopBarProps {
   poles: { label: string; count: number; status: "active" | "away" | null }[];
   // Profil habilité à voir les identités des connectés (DG, super-admin).
   canSeePresenceNames?: boolean;
+  // Messages non lus (Messagerie interne) : additionnés aux notifications de la
+  // cloche pour le badge de l'icône de l'application (écran d'accueil).
+  chatUnread?: number;
   // Sur mobile : ouvre le menu latéral escamotable (bouton ☰ à gauche).
   onMenu?: () => void;
   // Profil courant + actions du menu (déconnexion, accès aux paramètres).
@@ -52,7 +55,7 @@ function initials(username: string): string {
 
 // Barre supérieure (guide §6) : recherche globale + présence + notifications +
 // menu de profil (avatar) à droite, façon Microsoft 365 / Notion.
-export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, user, onLogout, onOpenSettings, onOpenManuscript, onOpenAnnouncement, onOpenCalendar, refreshSignal }: TopBarProps) {
+export function TopBar({ connectedTotal, poles, canSeePresenceNames, chatUnread = 0, onMenu, user, onLogout, onOpenSettings, onOpenManuscript, onOpenAnnouncement, onOpenCalendar, refreshSignal }: TopBarProps) {
   const { t, lang } = useI18n();
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -114,13 +117,15 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
       setAppBadge?: (n?: number) => Promise<void>;
       clearAppBadge?: () => Promise<void>;
     };
+    // Badge de l'icône = notifications de la cloche + messages non lus.
+    const total = unreadCount + chatUnread;
     try {
-      if (unreadCount > 0) void nav.setAppBadge?.(unreadCount)?.catch(() => {});
+      if (total > 0) void nav.setAppBadge?.(total)?.catch(() => {});
       else void nav.clearAppBadge?.()?.catch(() => {});
     } catch {
       /* API indisponible : sans effet, l'icône reste normale */
     }
-  }, [unreadCount]);
+  }, [unreadCount, chatUnread]);
 
   // Charge la liste complète à l'ouverture du panneau (et sur signal si ouvert),
   // pour rester à jour.

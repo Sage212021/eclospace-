@@ -695,6 +695,7 @@ export function App() {
           connectedTotal={presence.total}
           poles={POLE_LABELS.map((label) => ({ label, count: presence.byPole[label] ?? 0, status: presence.poleStatus[label] ?? null }))}
           canSeePresenceNames={permissions.has("direction:consultation") || roles.has("CHEF_DEPARTEMENT")}
+          chatUnread={chatUnread}
           onMenu={() => setNavOpen(true)}
           user={{ username: user.username, email: user.email }}
           onLogout={handleLogout}

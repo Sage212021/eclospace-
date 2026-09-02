@@ -148,32 +148,41 @@ function chunkText(text: string, maxChars: number): string[] {
   return chunks;
 }
 
-// Point d'entrée : exécute une relecture IA et retourne le job à jour.
-export async function runAiReading(params: {
+export interface AiRunParams {
   manuscriptId: string;
   workType: WorkType;
   editorRecommendation?: string;
   stepCode?: string;
   userId: string;
   ip?: string;
-}): Promise<{ jobId: string; documentId: string; costEstimate: number }> {
+}
+
+// PRÉ-VOL (rapide, sans appel IA) : valide la configuration et crée le job
+// « en cours ». Les erreurs (IA désactivée, pas de clé, manuscrit/fichier/prompt
+// manquant) reviennent IMMÉDIATEMENT à l'utilisateur. L'analyse elle-même, qui
+// peut être longue, est lancée séparément par executeAiReading — en arrière-plan
+// — pour ne pas dépasser le délai de la requête web (cause des erreurs 504).
+export async function startAiReading(params: AiRunParams): Promise<{ jobId: string }> {
   const cfg = await loadConfig();
   if (!cfg.enabled) throw new AiRunError("ai_disabled", "L'IA éditoriale est désactivée. Activez-la dans Paramètres.");
-  const apiKey = readApiKey(cfg);
-  if (!apiKey) throw new AiRunError("no_api_key", "Aucune clé API configurée.");
+  if (!readApiKey(cfg)) throw new AiRunError("no_api_key", "Aucune clé API configurée.");
 
-  const manuscript = await prisma.manuscript.findFirst({
-    where: { id: params.manuscriptId, deletedAt: null },
-    include: { genre: true, collection: true, workContributors: { include: { partner: true }, orderBy: { displayOrder: "asc" } } },
-  });
+  const manuscript = await prisma.manuscript.findFirst({ where: { id: params.manuscriptId, deletedAt: null }, select: { id: true } });
   if (!manuscript) throw new AiRunError("not_found", "Manuscrit introuvable.");
 
   const prompt = await prisma.aiPrompt.findUnique({ where: { workType: params.workType } });
   if (!prompt) throw new AiRunError("no_prompt", "Aucun prompt configuré pour ce type de travail.");
 
-  const modelId = resolveModelId(cfg.models[params.workType]);
+  // Vérifie tout de suite qu'un fichier source existe (requête légère).
+  const categories = params.workType === "couverture" ? ["couverture", "manuscrit"] : ["manuscrit"];
+  let hasFile = false;
+  for (const cat of categories) {
+    const doc = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscript.id, category: cat as never, deletedAt: null, versions: { some: {} } }, select: { id: true } });
+    if (doc) { hasFile = true; break; }
+  }
+  if (!hasFile) throw new AiRunError("no_manuscript_file", params.workType === "couverture" ? "Aucun fichier de couverture ni manuscrit n'a été déposé pour cet ouvrage." : "Aucun fichier manuscrit n'a été déposé pour cet ouvrage.");
 
-  // Journal : on ouvre le job « en cours » avant l'appel (traçabilité même en cas d'échec).
+  const modelId = resolveModelId(cfg.models[params.workType]);
   const job = await prisma.aiReadingJob.create({
     data: {
       manuscriptId: manuscript.id,
@@ -187,8 +196,31 @@ export async function runAiReading(params: {
       launchedBy: params.userId,
     },
   });
+  return { jobId: job.id };
+}
 
+// EXÉCUTION (longue) — à lancer en arrière-plan après startAiReading. Ne relance
+// JAMAIS d'exception : succès comme échec sont consignés sur le job (que le
+// lanceur suit par rafraîchissement). Un PDF de plus de 100 pages (refusé par
+// l'API) donne un message clair invitant à déposer un .docx.
+export async function executeAiReading(jobId: string, params: AiRunParams): Promise<void> {
   try {
+    const cfg = await loadConfig();
+    const apiKey = readApiKey(cfg);
+    if (!apiKey) throw new AiRunError("no_api_key", "Aucune clé API configurée.");
+
+    const manuscript = await prisma.manuscript.findFirst({
+      where: { id: params.manuscriptId, deletedAt: null },
+      include: { genre: true, collection: true, workContributors: { include: { partner: true }, orderBy: { displayOrder: "asc" } } },
+    });
+    if (!manuscript) throw new AiRunError("not_found", "Manuscrit introuvable.");
+
+    const prompt = await prisma.aiPrompt.findUnique({ where: { workType: params.workType } });
+    if (!prompt) throw new AiRunError("no_prompt", "Aucun prompt configuré pour ce type de travail.");
+
+    const modelId = resolveModelId(cfg.models[params.workType]);
+    const job = { id: jobId };
+
     // Récupère le fichier source (dernière version déposée). Pour la couverture,
     // on privilégie le fichier de couverture s'il existe (BAT), sinon le manuscrit
     // (où vivent les textes de couverture à l'étape Correction).
@@ -341,11 +373,12 @@ export async function runAiReading(params: {
       newValues: { workType: params.workType, manuscriptId: manuscript.id, documentId: created.id, model: modelId, costEstimate },
       ipAddress: params.ip ?? null,
     });
-    return { jobId: job.id, documentId: created.id, costEstimate };
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Échec de la relecture IA.";
-    await prisma.aiReadingJob.update({ where: { id: job.id }, data: { status: "erreur", finishedAt: new Date(), errorMessage: message } });
-    if (e instanceof AiRunError) throw e;
-    throw new AiRunError("run_failed", message);
+    let message = e instanceof Error ? e.message : "Échec de la relecture IA.";
+    // Message clair pour la limite PDF de l'API (100 pages) : orienter vers .docx.
+    if (/100 PDF pages/i.test(message)) {
+      message = "Le manuscrit PDF dépasse 100 pages, refusé par l'IA. Déposez le manuscrit au format Word (.docx) : il sera analysé intégralement.";
+    }
+    await prisma.aiReadingJob.update({ where: { id: jobId }, data: { status: "erreur", finishedAt: new Date(), errorMessage: message } }).catch(() => {});
   }
 }

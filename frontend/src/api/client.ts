@@ -969,8 +969,10 @@ export interface AiJob {
   launchedAt: string;
   finishedAt: string | null;
 }
+// L'analyse est désormais lancée EN ARRIÈRE-PLAN : la requête répond aussitôt
+// avec l'identifiant du job (statut suivi via listAiJobs). Fini les erreurs 504.
 export function runAiEditorial(input: { manuscript_id: string; work_type: AiWorkType; step_code?: string; editor_recommendation?: string }) {
-  return request<{ jobId: string; documentId: string; costEstimate: number }>(`/api/v1/ai-editorial/run`, { method: "POST", body: JSON.stringify(input) });
+  return request<{ jobId: string; started: boolean }>(`/api/v1/ai-editorial/run`, { method: "POST", body: JSON.stringify(input) });
 }
 export function listAiJobs(manuscriptId: string) {
   return request<{ jobs: AiJob[] }>(`/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`);

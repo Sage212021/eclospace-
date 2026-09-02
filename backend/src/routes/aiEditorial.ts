@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAnyRole, requirePermission, requireAnyPermission } from "../lib/permissions.js";
-import { runAiReading, AiRunError } from "../lib/aiRunner.js";
+import { startAiReading, executeAiReading, AiRunError } from "../lib/aiRunner.js";
 import { writeAuditLog } from "../lib/audit.js";
 import {
   loadConfig,
@@ -178,15 +178,22 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({ code: "invalid_body", message: "Requête invalide.", details: parsed.error.flatten() });
       }
       try {
-        const result = await runAiReading({
+        const runParams = {
           manuscriptId: parsed.data.manuscript_id,
           workType: parsed.data.work_type,
           editorRecommendation: parsed.data.editor_recommendation,
           stepCode: parsed.data.step_code,
           userId: request.user!.id,
           ip: request.ip,
+        };
+        // Pré-vol synchrone (validation + création du job) : les erreurs de
+        // configuration reviennent tout de suite. L'analyse (longue) part ensuite
+        // EN ARRIÈRE-PLAN — la requête répond aussitôt (fin des erreurs 504).
+        const { jobId } = await startAiReading(runParams);
+        void executeAiReading(jobId, runParams).catch(() => {
+          /* l'échec éventuel est déjà consigné sur le job (statut « erreur ») */
         });
-        return reply.code(201).send(result);
+        return reply.code(202).send({ jobId, started: true });
       } catch (e) {
         if (e instanceof AiRunError) {
           const status = e.code === "not_found" || e.code === "no_manuscript_file" || e.code === "no_prompt" ? 404 : e.code === "ai_disabled" || e.code === "no_api_key" ? 400 : 502;

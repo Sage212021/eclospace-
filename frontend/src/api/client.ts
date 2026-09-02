@@ -5357,6 +5357,40 @@ export function getCalendarEvent(id: string) {
   return request<CalendarEventDetail>(`/api/v1/calendar/events/${id}`);
 }
 
+// ── Bandeau « Programme à venir » du Hall (rappel discret) ───────────────────
+export interface HallAgendaConfig {
+  enabled: boolean;
+  reappearMinutes: number;
+  capsuleSeconds: number;
+  horizonDays: number;
+  urgentMinutes: number;
+}
+
+export interface AgendaBannerEvent {
+  id: string;
+  title: string;
+  type: string;
+  starts_at: string;
+  all_day: boolean;
+  location: string | null;
+  birthday: boolean;
+  person: string | null;
+  minutes_until: number | null;
+  priority: "urgent" | "today" | "month" | "later";
+}
+
+export function getAgendaBanner() {
+  return request<{ config: HallAgendaConfig; events: AgendaBannerEvent[] }>("/api/v1/calendar/agenda-banner");
+}
+
+export function getBannerConfig() {
+  return request<HallAgendaConfig>("/api/v1/calendar/banner-config");
+}
+
+export function setBannerConfig(input: HallAgendaConfig) {
+  return request<HallAgendaConfig>("/api/v1/calendar/banner-config", { method: "PUT", body: JSON.stringify(input) });
+}
+
 export function createCalendarEvent(input: CalendarEventInput) {
   return request<{ id: string }>("/api/v1/calendar/events", { method: "POST", body: JSON.stringify(input) });
 }

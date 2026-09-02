@@ -61,6 +61,7 @@ import { ContractsDashboard } from "./components/ContractsDashboard";
 import { GuidanceNote } from "./components/GuidanceNote";
 import { Sidebar, type NavPole } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
+import { AgendaBanner } from "./components/AgendaBanner";
 import { PresenceToasts } from "./components/PresenceToasts";
 import { MessageBubble } from "./components/MessageBubble";
 import { AnnouncementToasts, type ToastItem } from "./components/AnnouncementToasts";
@@ -702,6 +703,11 @@ export function App() {
           onOpenAnnouncement={openAnnouncement}
           onOpenCalendar={() => permissions.has("communication:consultation") && setView({ kind: "leaf", key: "cm-calendrier" })}
           refreshSignal={notifTick}
+        />
+
+        <AgendaBanner
+          enabled={permissions.has("communication:consultation")}
+          onOpenCalendar={() => permissions.has("communication:consultation") && setView({ kind: "leaf", key: "cm-calendrier" })}
         />
 
         {user.impersonating && (

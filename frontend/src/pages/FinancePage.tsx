@@ -73,6 +73,7 @@ import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
 import { IconFinance } from "../components/icons";
 import { printInvoice, printRoyaltyStatement, type PrintOpts } from "../lib/print";
+import { downloadInvoicePdf } from "../lib/financePdf";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { AccountingExportSection } from "../components/AccountingExportSection";
 
@@ -202,7 +203,7 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
 
   // Impression / export PDF d'une facture : on récupère son détail (lignes,
   // totaux) puis on ouvre la fenêtre d'impression du navigateur.
-  async function handlePrintInvoice(invoiceId: string, opts?: PrintOpts) {
+  async function handlePrintInvoice(invoiceId: string, opts?: PrintOpts, asPdf = false) {
     try {
       const detail = await getInvoice(invoiceId);
       // Rappel AVANT le premier tirage (demande opérateur) : l'original fait foi
@@ -217,7 +218,8 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
         );
         if (!ok) return;
       }
-      printInvoice(detail, opts);
+      if (asPdf) downloadInvoicePdf(detail);
+      else printInvoice(detail, opts);
       // Une facture imprimée est « tirée » : on la verrouille (plus annulable
       // directement). Au meilleur effort ; on rafraîchit pour actualiser les boutons.
       markInvoicePrinted(invoiceId)
@@ -538,7 +540,7 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
               <StatusChip label={t("fin.st." + invoice.status, STATUS_LABELS[invoice.status] ?? invoice.status)} />
             </div>
             <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
-              <DocPrintMenu onPrint={(o) => handlePrintInvoice(invoice.id, o)} />
+              <DocPrintMenu onPrint={(o) => handlePrintInvoice(invoice.id, o)} onDownloadPdf={() => handlePrintInvoice(invoice.id, {}, true)} />
               <Button variant="view" size="sm" onClick={() => setEmailInvoice(invoice)}>{t("fin.send_email", "Envoyer par e-mail")}</Button>
               {/* Avoir (note de crédit) : voie légale de correction — utile
                   quand la facture est déjà tirée ou réglée (annulation impossible). */}

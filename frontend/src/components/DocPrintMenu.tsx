@@ -8,7 +8,7 @@ import type { PrintOpts } from "../lib/print";
 // `extras` : actions supplémentaires propres au document (ex. contrat d'édition :
 // « Transférer », « Modifier / enregistrer »), affichées sous les présentations
 // d'impression, après un séparateur.
-export function DocPrintMenu({ onPrint, label = "Imprimer / PDF", extras }: { onPrint: (opts: PrintOpts) => void; label?: string; extras?: { label: string; onSelect: () => void }[] }) {
+export function DocPrintMenu({ onPrint, label = "Imprimer / PDF", extras, onDownloadPdf }: { onPrint: (opts: PrintOpts) => void; label?: string; extras?: { label: string; onSelect: () => void }[]; onDownloadPdf?: () => void }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const close = () => { if (ref.current) ref.current.open = false; };
   const choose = (opts: PrintOpts) => { onPrint(opts); close(); };
@@ -16,6 +16,14 @@ export function DocPrintMenu({ onPrint, label = "Imprimer / PDF", extras }: { on
     <details ref={ref} style={{ position: "relative", display: "inline-block" }}>
       <summary style={summaryStyle}>{label} ▾</summary>
       <div style={menuStyle}>
+        {/* PDF vectoriel (net sur tout appareil, téléphone compris) : action mise
+            en avant, à privilégier — les autres passent par l'impression du
+            navigateur (rasterisée sur mobile). */}
+        {onDownloadPdf && (
+          <button style={{ ...itemStyle, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", background: "var(--paper, #faf8f2)" }} onClick={() => { onDownloadPdf(); close(); }}>
+            📄 Télécharger le PDF (net)
+          </button>
+        )}
         <button style={itemStyle} onClick={() => choose({})}>Numérique / PDF</button>
         <button style={itemStyle} onClick={() => choose({ embed: true })}>Avec papier à en-tête intégré</button>
         <button style={itemStyle} onClick={() => choose({ letterhead: true })}>Sur papier à en-tête vierge</button>

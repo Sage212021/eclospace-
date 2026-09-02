@@ -22,6 +22,7 @@ import {
   type QcVerdict,
 } from "../api/client";
 import { printPurchaseOrder } from "../lib/print";
+import { downloadPurchaseOrderPdf } from "../lib/financePdf";
 import { DocPrintMenu } from "./DocPrintMenu";
 
 interface PrintingSectionProps {
@@ -196,7 +197,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
           <div>
             {po.status} — {po.orderedQuantity} ex. — {po.amount}
           </div>
-          <DocPrintMenu onPrint={(o) => printPurchaseOrder(po, o)} />
+          <DocPrintMenu onPrint={(o) => printPurchaseOrder(po, o)} onDownloadPdf={() => downloadPurchaseOrderPdf(po)} />
           {canValidate && ["draft", "approved", "sent", "in_production"].includes(po.status) && (
             <button onClick={() => handleAdvancePo(po)} style={secondaryButtonStyle}>
               Faire avancer →

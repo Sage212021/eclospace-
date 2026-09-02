@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import { ECLOSION_LOGO_PNG, ECLOSION_LOGO_RATIO } from "./payslipAssets";
-import { HOUSE } from "./print";
-import type { InvoiceDetail, EditorialQuote } from "../api/client";
+import { HOUSE, type AuthorRoyaltyStatementData, type CommissionStatementData } from "./print";
+import type { InvoiceDetail, EditorialQuote, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Génération de PDF VECTORIELS (jsPDF) pour les documents Finance & commercial.
@@ -115,9 +115,47 @@ interface HouseDocSpec {
   columns: Column[];
   rows: string[][]; // aligné sur columns
   totals: TotalRow[];
+  // Bloc de totaux secondaire (ex. récapitulatif fiscal de l'état annuel).
+  secondaryTitle?: string;
+  secondaryTotals?: TotalRow[];
+  // Lignes d'information sous le tableau (ex. lieu de livraison, tolérance).
+  infoLines?: string[];
   notes?: string[];
-  signatureFor?: string; // ex. HOUSE.legalName
+  signatureFor?: string; // signature unique maison (facture, devis)
+  signatures?: string[]; // signatures côte à côte (ex. « L'éditeur », « L'auteur »)
   watermark?: string; // ex. « Duplicata »
+}
+
+// Bloc de totaux aligné à droite ; renvoie la nouvelle position verticale.
+function drawTotals(doc: jsPDF, rows: TotalRow[], startY: number): number {
+  const tW = 82;
+  const tX = R - tW;
+  let y = startY;
+  for (const t of rows) {
+    if (t.strong) {
+      doc.setDrawColor(...GOLD);
+      doc.setLineWidth(0.6);
+      doc.line(tX, y, R, y);
+      y += 5;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(...INK);
+      doc.text(t.label, tX, y);
+      doc.setFont("courier", "bold");
+      doc.setTextColor(...GOLD_DARK);
+      doc.text(t.value, R, y, { align: "right" });
+      y += 6;
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      doc.setTextColor(...INK);
+      doc.text(t.label, tX, y);
+      doc.setFont("courier", "normal");
+      doc.text(t.value, R, y, { align: "right" });
+      y += 5.2;
+    }
+  }
+  return y;
 }
 
 // Filigrane diagonal discret (ex. « Duplicata »).
@@ -247,41 +285,46 @@ function renderHouseDoc(spec: HouseDocSpec): jsPDF {
     y += rowH;
     even = !even;
   }
-  y += 8;
+  y += 6;
+
+  // Lignes d'information sous le tableau (lieu de livraison, tolérance…).
+  if (spec.infoLines?.length) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...INK);
+    for (const info of spec.infoLines) {
+      doc.text(info, L, y);
+      y += 4.6;
+    }
+    y += 3;
+  }
 
   // Totaux (bloc aligné à droite).
-  const tW = 82;
-  const tX = R - tW;
   if (y > PAGE_H - 60) {
     footer(doc);
     doc.addPage();
     y = houseHeader(doc);
   }
-  for (const t of spec.totals) {
-    if (t.strong) {
-      doc.setDrawColor(...GOLD);
-      doc.setLineWidth(0.6);
-      doc.line(tX, y, R, y);
-      y += 5;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(...INK);
-      doc.text(t.label, tX, y);
-      doc.setFont("courier", "bold");
-      doc.setTextColor(...GOLD_DARK);
-      doc.text(t.value, R, y, { align: "right" });
-      y += 6;
-    } else {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9.5);
-      doc.setTextColor(...INK);
-      doc.text(t.label, tX, y);
-      doc.setFont("courier", "normal");
-      doc.text(t.value, R, y, { align: "right" });
-      y += 5.2;
-    }
-  }
+  y = drawTotals(doc, spec.totals, y);
   y += 4;
+
+  // Bloc de totaux secondaire (ex. récapitulatif fiscal).
+  if (spec.secondaryTotals?.length) {
+    if (y > PAGE_H - 55) {
+      footer(doc);
+      doc.addPage();
+      y = houseHeader(doc);
+    }
+    if (spec.secondaryTitle) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(...MUTED);
+      doc.text(spec.secondaryTitle.toUpperCase(), L, y);
+      y += 5;
+    }
+    y = drawTotals(doc, spec.secondaryTotals, y);
+    y += 4;
+  }
 
   // Notes (mentions, exclusions…).
   if (spec.notes?.length) {
@@ -303,8 +346,29 @@ function renderHouseDoc(spec: HouseDocSpec): jsPDF {
     }
   }
 
-  // Zone de signature maison.
-  if (spec.signatureFor) {
+  // Signatures côte à côte (ex. « L'éditeur » / « L'auteur »).
+  if (spec.signatures?.length) {
+    if (y < PAGE_H - 50) y = Math.max(y + 6, PAGE_H - 50);
+    else {
+      footer(doc);
+      doc.addPage();
+      y = houseHeader(doc) + 20;
+    }
+    const n = spec.signatures.length;
+    const colW = (CONTENT_W - (n - 1) * 10) / n;
+    doc.setFontSize(8);
+    spec.signatures.forEach((labelTxt, i) => {
+      const cx = L + i * (colW + 10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...MUTED);
+      doc.text(labelTxt.toUpperCase(), cx, y);
+      doc.setDrawColor(...INK);
+      doc.setLineWidth(0.3);
+      doc.line(cx, y + 20, cx + colW, y + 20);
+      doc.text("Signature & cachet", cx, y + 24);
+    });
+  } else if (spec.signatureFor) {
+    // Signature unique maison (facture, devis).
     if (y < PAGE_H - 55) y = Math.max(y + 8, PAGE_H - 55);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
@@ -445,4 +509,152 @@ export function editorialQuotePdf(quote: EditorialQuote): jsPDF {
 
 export function downloadEditorialQuotePdf(quote: EditorialQuote): void {
   editorialQuotePdf(quote).save(`Devis-${quote.quoteNumber}.pdf`);
+}
+
+// ── Bon de commande (imprimeur) ──────────────────────────────────────────────
+const PO_STATUS: Record<string, string> = {
+  draft: "Brouillon", approved: "Approuvé", sent: "Transmis", in_production: "En production",
+  received: "Reçu", closed: "Clôturé", cancelled: "Annulé",
+};
+
+export function purchaseOrderPdf(po: PurchaseOrder): jsPDF {
+  const cur = po.currency || "XAF";
+  const printer = po.printer ? `${po.printer.partner.firstName} ${po.printer.partner.lastName}` : "—";
+  const book = po.quote?.manuscript;
+  const due = po.deliveryDue ? new Date(po.deliveryDue).toLocaleDateString("fr-FR") : "—";
+  const tolerance = po.quantityTolerancePct != null && String(po.quantityTolerancePct) !== "" ? `± ${Number(po.quantityTolerancePct)} %` : "—";
+  const location = po.deliveryLocation?.label ?? "—";
+  const desc = `Impression — ${book?.title ?? "Ouvrage"}${book?.manuscriptNumber ? ` (${book.manuscriptNumber})` : ""}`;
+
+  return renderHouseDoc({
+    docName: "Bon de commande",
+    fileName: `Bon de commande ${po.poNumber}`,
+    number: po.poNumber,
+    meta: [{ label: "Livraison attendue", value: due }],
+    badge: PO_STATUS[po.status] ?? po.status,
+    partyLabel: "Fournisseur (imprimeur)",
+    partyName: printer,
+    columns: [
+      { label: "Désignation", width: 118, align: "left" },
+      { label: "Quantité", width: 24, align: "right" },
+      { label: "Montant", width: CONTENT_W - 118 - 24, align: "right" },
+    ],
+    rows: [[desc, String(po.orderedQuantity), money(po.amount, cur)]],
+    infoLines: [`Lieu de livraison : ${location}`, `Tolérance de quantité : ${tolerance}`],
+    totals: [{ label: "Total commande", value: money(po.amount, cur), strong: true }],
+    signatureFor: HOUSE.legalName,
+  });
+}
+export function downloadPurchaseOrderPdf(po: PurchaseOrder): void {
+  purchaseOrderPdf(po).save(`Bon-de-commande-${po.poNumber}.pdf`);
+}
+
+// ── Relevé de droits d'auteur (par contrat, sur une période) ─────────────────
+const ROYALTY_SOURCE: Record<string, string> = {
+  sales_order_line: "Vente", delivery: "Livraison", return_line: "Retour",
+  consignment_statement: "Dépôt-vente", pos_sale: "Vente au comptoir",
+};
+
+export function royaltyStatementPdf(st: RoyaltyStatementDetail): jsPDF {
+  const cur = "XAF";
+  const author = `${st.contract.partner.firstName} ${st.contract.partner.lastName}`;
+  const start = new Date(st.periodStart).toLocaleDateString("fr-FR");
+  const end = new Date(st.periodEnd).toLocaleDateString("fr-FR");
+  const remaining = st.remaining_balance ?? Number(st.balanceDue);
+  const pctFmt = (r: number) => `${(r * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %`;
+
+  return renderHouseDoc({
+    docName: "Relevé de droits d'auteur",
+    fileName: `Relevé de droits ${st.contract.contractNumber}`,
+    number: st.contract.contractNumber,
+    meta: [{ label: "Période", value: `${start} → ${end}` }],
+    partyLabel: "Bénéficiaire",
+    partyName: author,
+    columns: [
+      { label: "Nature", width: 66, align: "left" },
+      { label: "Qté", width: 20, align: "right" },
+      { label: "Base unitaire", width: 36, align: "right" },
+      { label: "Taux", width: 22, align: "right" },
+      { label: "Droits", width: CONTENT_W - 66 - 20 - 36 - 22, align: "right" },
+    ],
+    rows: st.entries.map((e) => [ROYALTY_SOURCE[e.sourceType] ?? e.sourceType, String(e.quantity), money(e.unitBaseAmount, cur), pctFmt(Number(e.rateApplied)), money(e.amount, cur)]),
+    totals: [
+      { label: "Droits acquis", value: money(st.totalEarned, cur) },
+      { label: "À-valoir amorti", value: `− ${money(st.advanceRecouped, cur)}` },
+      { label: "Solde du relevé", value: money(st.balanceDue, cur) },
+      { label: "Restant à payer", value: money(remaining, cur), strong: true },
+    ],
+  });
+}
+export function downloadRoyaltyStatementPdf(st: RoyaltyStatementDetail): void {
+  royaltyStatementPdf(st).save(`Releve-droits-${st.contract.contractNumber}.pdf`);
+}
+
+// ── État ANNUEL des droits d'un auteur (récapitulatif fiscal) ────────────────
+export function authorRoyaltyStatementPdf(d: AuthorRoyaltyStatementData): jsPDF {
+  const cur = "XAF";
+  const pctFmt = (r: number) => `${(r * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %`;
+  const secondary: TotalRow[] = [
+    { label: "Droits versés (brut)", value: money(d.paidGross, cur) },
+    ...(d.taxWithheld > 0 ? [{ label: "Retenue à la source", value: `− ${money(d.taxWithheld, cur)}` }] : []),
+    { label: "Net versé à l'auteur", value: money(d.paidNet, cur), strong: true },
+    ...(d.remaining != null && d.remaining > 0 ? [{ label: "Reste à verser (indicatif)", value: money(d.remaining, cur) }] : []),
+  ];
+  const note = `« Droits acquis » : droits générés par les ventes de l'année, par ouvrage, au taux contractuel propre à chaque livre. « Droits versés » : montants effectivement payés à l'auteur dans l'année${d.taxWithheld > 0 ? ", après retenue à la source" : " (aucune retenue à la source appliquée)"}. Document établi au titre de la réglementation camerounaise sur le droit d'auteur ; à conserver pour la déclaration fiscale.`;
+
+  return renderHouseDoc({
+    docName: "État annuel des droits d'auteur",
+    fileName: `État annuel droits ${d.authorName} ${d.year}`,
+    number: String(d.year),
+    meta: [{ label: "Édité le", value: new Date().toLocaleDateString("fr-FR") }],
+    partyLabel: "Auteur",
+    partyName: d.authorName,
+    columns: [
+      { label: "Ouvrage", width: 86, align: "left" },
+      { label: "Exempl.", width: 22, align: "right" },
+      { label: "Assiette", width: 30, align: "right" },
+      { label: "Taux", width: 18, align: "right" },
+      { label: "Droits acquis", width: CONTENT_W - 86 - 22 - 30 - 18, align: "right" },
+    ],
+    rows: d.books.map((b) => [`${b.title}${b.contractNumber ? ` (${b.contractNumber})` : ""}`, b.units.toLocaleString("fr-FR"), money(b.base, cur), pctFmt(b.rate), money(b.earned, cur)]),
+    totals: [{ label: "Droits acquis dans l'année", value: money(d.earned, cur), strong: true }],
+    secondaryTitle: "Récapitulatif fiscal de l'année",
+    secondaryTotals: secondary,
+    notes: [note],
+    signatures: ["L'éditeur", "L'auteur (reçu)"],
+  });
+}
+export function downloadAuthorRoyaltyStatementPdf(d: AuthorRoyaltyStatementData): void {
+  authorRoyaltyStatementPdf(d).save(`Etat-annuel-droits-${d.authorName}-${d.year}.pdf`);
+}
+
+// ── État de commission (commercial, sur une période) ─────────────────────────
+export function commissionStatementPdf(d: CommissionStatementData): jsPDF {
+  const cur = "XAF";
+  const rateStr = `${d.ratePct.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %`;
+  return renderHouseDoc({
+    docName: "État de commission",
+    fileName: `État de commission ${d.agentName}`,
+    number: d.periodLabel,
+    meta: [{ label: "Taux", value: rateStr }, { label: "Édité le", value: new Date().toLocaleDateString("fr-FR") }],
+    partyLabel: "Commercial",
+    partyName: d.agentName,
+    columns: [
+      { label: "Ouvrage", width: 88, align: "left" },
+      { label: "Exempl. vendus", width: 32, align: "right" },
+      { label: "Montant vendu", width: 32, align: "right" },
+      { label: "Commission", width: CONTENT_W - 88 - 32 - 32, align: "right" },
+    ],
+    rows: d.books.map((b) => [b.title, b.units.toLocaleString("fr-FR"), money(b.amount, cur), money(b.commission, cur)]),
+    totals: [
+      { label: "Exemplaires vendus", value: d.totals.units.toLocaleString("fr-FR") },
+      { label: "Montant vendu", value: money(d.totals.amount, cur) },
+      { label: "Commission due", value: money(d.totals.commission, cur), strong: true },
+    ],
+    notes: [`Commission calculée à ${rateStr} du montant vendu sur la période. Montant dû ; le versement effectif au commercial est constaté séparément.`],
+    signatures: ["La direction financière", "Le commercial (reçu)"],
+  });
+}
+export function downloadCommissionStatementPdf(d: CommissionStatementData): void {
+  commissionStatementPdf(d).save(`Etat-commission-${d.agentName}.pdf`);
 }

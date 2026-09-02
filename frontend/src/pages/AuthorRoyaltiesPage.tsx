@@ -13,6 +13,7 @@ import { SchoolRoyaltiesSection } from "../components/SchoolRoyaltiesSection";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printAuthorRoyaltyStatement } from "../lib/print";
+import { downloadAuthorRoyaltyStatementPdf } from "../lib/financePdf";
 import { useI18n } from "../i18n";
 
 // État annuel des droits d'auteur PAR AUTEUR : tous les ouvrages d'un auteur sur
@@ -215,16 +216,19 @@ export function AuthorRoyaltiesPage({ canConfigure = false, canGenerate = false 
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
                                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--eclosion-dark)", textTransform: "uppercase", letterSpacing: 0.4 }}>{t("roy.detail", "Détail par ouvrage")}</div>
                                 <div onClick={(e) => e.stopPropagation()}>
-                                  <DocPrintMenu label={t("roy.print", "Imprimer l'état annuel / PDF")} onPrint={(o) => printAuthorRoyaltyStatement({
-                                    authorName: r.author_name,
-                                    year: data.year,
-                                    books: r.books.map((b) => ({ title: b.title, contractNumber: b.contract_number, units: b.units, base: b.base, rate: b.rate, earned: b.earned })),
-                                    earned: r.earned,
-                                    paidGross: r.paid_gross,
-                                    taxWithheld: r.tax_withheld,
-                                    paidNet: r.paid_net,
-                                    remaining: r.remaining,
-                                  }, o)} />
+                                  {(() => {
+                                    const annual = {
+                                      authorName: r.author_name,
+                                      year: data.year,
+                                      books: r.books.map((b) => ({ title: b.title, contractNumber: b.contract_number, units: b.units, base: b.base, rate: b.rate, earned: b.earned })),
+                                      earned: r.earned,
+                                      paidGross: r.paid_gross,
+                                      taxWithheld: r.tax_withheld,
+                                      paidNet: r.paid_net,
+                                      remaining: r.remaining,
+                                    };
+                                    return <DocPrintMenu label={t("roy.print", "Imprimer l'état annuel / PDF")} onPrint={(o) => printAuthorRoyaltyStatement(annual, o)} onDownloadPdf={() => downloadAuthorRoyaltyStatementPdf(annual)} />;
+                                  })()}
                                 </div>
                               </div>
                               <table style={{ ...tbl, minWidth: 460 }}>

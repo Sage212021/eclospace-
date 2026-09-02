@@ -5293,7 +5293,7 @@ export function unsubscribePush(endpoint: string) {
 }
 
 // ── Calendrier partagé & événements ──────────────────────────────────────────
-export type CalendarEventType = "reunion" | "echeance" | "formation" | "sortie" | "ceremonie" | "autre";
+export type CalendarEventType = "reunion" | "echeance" | "formation" | "sortie" | "ceremonie" | "autre" | "dedicace" | "salon" | "lancement";
 
 export interface CalendarEvent {
   id: string;
@@ -5307,6 +5307,7 @@ export interface CalendarEvent {
   author: { id: string; username: string } | null;
   can_manage: boolean;
   birthday?: boolean;
+  person?: string | null;
 }
 
 export interface CalendarEventDetail extends CalendarEvent {

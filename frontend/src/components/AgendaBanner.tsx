@@ -16,6 +16,9 @@ const ICONS: Record<string, string> = {
   ceremonie: "🎉",
   autre: "📌",
   anniversaire: "🎂",
+  dedicace: "✍️",
+  salon: "🎪",
+  lancement: "🎊",
 };
 
 // Couleurs charte « Noir souverain » : rouge = urgent, ambre = ce mois, or =

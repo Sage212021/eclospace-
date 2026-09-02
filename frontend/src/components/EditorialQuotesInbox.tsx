@@ -7,6 +7,7 @@ import {
   type EditorialQuoteInboxRow,
 } from "../api/client";
 import { printEditorialQuote } from "../lib/print";
+import { downloadEditorialQuotePdf } from "../lib/financePdf";
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
@@ -106,7 +107,7 @@ export function EditorialQuotesInbox({ heading = true, manuscriptId }: { heading
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
-                <DocPrintMenu label="Imprimer le devis" onPrint={(o) => getEditorialQuote(r.id).then((q) => printEditorialQuote(q, o)).catch((e) => setError(e.message))} />
+                <DocPrintMenu label="Imprimer le devis" onPrint={(o) => getEditorialQuote(r.id).then((q) => printEditorialQuote(q, o)).catch((e) => setError(e.message))} onDownloadPdf={() => getEditorialQuote(r.id).then((q) => downloadEditorialQuotePdf(q)).catch((e) => setError(e.message))} />
                 {(r.status === "draft" || r.status === "sent") && (
                   <>
                     <Button variant="view" size="sm" disabled={busy === r.id} onClick={() => sendEmail(r.id)}>{r.status === "sent" ? "Renvoyer par e-mail" : "Envoyer par e-mail"}</Button>

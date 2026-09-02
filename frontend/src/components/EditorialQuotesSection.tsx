@@ -16,6 +16,7 @@ import {
   type ServiceType,
 } from "../api/client";
 import { printEditorialQuote, printInvoice } from "../lib/print";
+import { downloadEditorialQuotePdf } from "../lib/financePdf";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
@@ -224,7 +225,7 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
             <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 999, padding: "2px 10px", fontSize: 11 }}>
               {STATUS_LABELS[q.status]}
             </span>
-            <DocPrintMenu onPrint={(o) => getEditorialQuote(q.id).then((quote) => printEditorialQuote(quote, o)).catch((e) => setError(e.message))} />
+            <DocPrintMenu onPrint={(o) => getEditorialQuote(q.id).then((quote) => printEditorialQuote(quote, o)).catch((e) => setError(e.message))} onDownloadPdf={() => getEditorialQuote(q.id).then((quote) => downloadEditorialQuotePdf(quote)).catch((e) => setError(e.message))} />
             {canCreate && q.status === "draft" && (
               <button onClick={() => handleHandToEditorial(q)} style={{ ...secondaryButtonStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)", fontWeight: 600 }} title="Remettre le devis au responsable éditorial, qui l'enverra au client">
                 → Transmettre à l'éditorial

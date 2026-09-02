@@ -11,6 +11,12 @@ import { setRealtimeServer, userRoom } from "./realtime.js";
 // partagé (@socket.io/redis-adapter + addon Redis) pour synchroniser la
 // présence entre instances (voir docs/JOURNAL_TECHNIQUE.md).
 
+// Activité réelle d'un onglet : « active » = ERP au premier plan et visible ;
+// « away » = onglet en arrière-plan / écran rabattu (toujours connecté mais
+// plus devant l'ERP). Le « non connecté » n'existe pas ici : une socket fermée
+// est simplement retirée du registre (voyant gris = personne).
+type PresenceActivity = "active" | "away";
+
 interface SocketState {
   userId: string;
   username: string;
@@ -20,6 +26,8 @@ interface SocketState {
   // employé), fixe pour la session — sert à regrouper les noms révélés par grand
   // pôle, indépendamment de la navigation courante.
   pole: string | null;
+  // Activité de cet onglet précis (premier plan vs arrière-plan).
+  activity: PresenceActivity;
 }
 
 // Rattachement de chaque département (code de la fiche employé) à l'un des 6
@@ -98,9 +106,16 @@ export function poleForUser(departmentCode: string | null | undefined, roleCodes
 // temps réel, lui, ne diffuse jamais d'identités (voir broadcast ci-dessous).
 let liveStates: Map<string, SocketState> | null = null;
 
+export interface PolePresenceUser {
+  name: string;
+  // « active » si au moins un onglet de la personne est au premier plan ;
+  // « away » si elle est connectée mais tous ses onglets sont en arrière-plan.
+  activity: PresenceActivity;
+}
+
 export interface PolePresence {
   pole: string;
-  users: string[];
+  users: PolePresenceUser[];
 }
 
 // Noms des personnes connectées, regroupés par GRAND PÔLE (déduit du département
@@ -112,7 +127,9 @@ export function getPresenceNamesByPole(onlyPole?: string | null): {
   total: number;
   poles: PolePresence[];
 } {
-  const byPole = new Map<string, Map<string, string>>();
+  // Par pôle → par personne : nom + activité agrégée (active si un onglet est
+  // au premier plan, sinon away).
+  const byPole = new Map<string, Map<string, PolePresenceUser>>();
   const everyone = new Set<string>();
   const UNASSIGNED = "__none__";
   if (liveStates) {
@@ -124,7 +141,10 @@ export function getPresenceNamesByPole(onlyPole?: string | null): {
         users = new Map();
         byPole.set(key, users);
       }
-      users.set(s.userId, s.username);
+      const existing = users.get(s.userId);
+      // Une personne est « active » dès qu'UN de ses onglets l'est.
+      const activity: PresenceActivity = existing?.activity === "active" || s.activity === "active" ? "active" : "away";
+      users.set(s.userId, { name: s.username, activity });
     }
   }
 
@@ -139,7 +159,7 @@ export function getPresenceNamesByPole(onlyPole?: string | null): {
     .filter(([key]) => key !== UNASSIGNED)
     .map(([key, users]) => ({
       pole: key,
-      users: [...users.values()].sort((a, b) => a.localeCompare(b, "fr")),
+      users: [...users.values()].sort((a, b) => a.name.localeCompare(b.name, "fr")),
     }))
     .sort((a, b) => a.pole.localeCompare(b.pole, "fr"));
 
@@ -220,6 +240,9 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
     const connectedUserIds = new Set<string>();
     const byPole: Record<string, Set<string>> = {};
     const byModule: Record<string, Set<string>> = {};
+    // Pôle « actif » (vert) dès qu'un de ses membres a un onglet au premier
+    // plan ; sinon « away » (orange) : connecté mais tout en arrière-plan.
+    const poleActive: Record<string, boolean> = {};
 
     for (const s of states.values()) {
       connectedUserIds.add(s.userId);
@@ -228,7 +251,10 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
       // Effectif par grand pôle = appartenance (fiche employé), pour rester
       // cohérent avec les noms révélés dans le Hall (même regroupement). Le
       // voyant par module, lui, reflète l'activité en cours (navigation).
-      if (s.pole) (byPole[s.pole] ??= new Set()).add(s.userId);
+      if (s.pole) {
+        (byPole[s.pole] ??= new Set()).add(s.userId);
+        poleActive[s.pole] = poleActive[s.pole] || s.activity === "active";
+      }
       if (s.moduleId) (byModule[s.moduleId] ??= new Set()).add(s.userId);
     }
 
@@ -239,10 +265,17 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
           .sort(([a], [b]) => a.localeCompare(b)),
       );
 
+    const poleStatus = Object.fromEntries(
+      Object.entries(poleActive)
+        .map(([k, active]) => [k, active ? "active" : "away"] as const)
+        .sort(([a], [b]) => a.localeCompare(b)),
+    );
+
     return {
       total: connectedUserIds.size,
       byPole: toCounts(byPole),
       byModule: toCounts(byModule),
+      poleStatus,
     };
   }
 
@@ -270,6 +303,7 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
       poleId: null,
       moduleId: null,
       pole: socket.data.pole ?? null,
+      activity: "active",
     });
     // Salle par utilisateur : permet de pousser une notification ciblée (ex.
     // nouvelle annonce du Babillard) au seul destinataire concerné.
@@ -285,6 +319,17 @@ export function attachPresence(httpServer: HttpServer): SocketIOServer {
       if (!state) return;
       state.poleId = payload?.poleId ?? null;
       state.moduleId = payload?.moduleId ?? null;
+      broadcast();
+    });
+
+    // Activité de l'onglet (premier plan / arrière-plan), signalée par le
+    // navigateur (Page Visibility + focus). Met à jour le voyant en temps réel.
+    socket.on("presence:state", (payload: { active?: boolean }) => {
+      const state = states.get(socket.id);
+      if (!state) return;
+      const next: PresenceActivity = payload?.active ? "active" : "away";
+      if (state.activity === next) return;
+      state.activity = next;
       broadcast();
     });
 

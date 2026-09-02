@@ -12,9 +12,12 @@ export interface PresenceState {
   total: number;
   byPole: Record<string, number>;
   byModule: Record<string, number>;
+  // Activité agrégée par grand pôle : « active » (au moins un membre au premier
+  // plan) ou « away » (connectés mais tous en arrière-plan). Absent = personne.
+  poleStatus: Record<string, "active" | "away">;
 }
 
-const EMPTY: PresenceState = { total: 0, byPole: {}, byModule: {} };
+const EMPTY: PresenceState = { total: 0, byPole: {}, byModule: {}, poleStatus: {} };
 
 // Présence temps réel via Socket.IO (Ch. 5). Connecte une socket authentifiée
 // par le cookie de session, écoute l'état de présence diffusé, et expose une
@@ -62,7 +65,23 @@ export function usePresence(enabled: boolean, onAnnouncement?: (a: AnnouncementP
     socket.on("announcement:new", (a: AnnouncementPush) => annHandler.current?.(a));
     // Alerte temps réel générale (info renvoyée par un autre pôle) : son + pop-up.
     socket.on("notification:new", (n: AnnouncementPush) => notifHandler.current?.(n));
+
+    // Activité de l'onglet : « actif » (au premier plan et visible) vs « en
+    // arrière-plan » (écran rabattu, autre appli, onglet caché). Signalé au
+    // serveur pour le voyant vert/orange du Hall, en temps réel.
+    const sendActivity = () => {
+      socket.emit("presence:state", { active: document.visibilityState === "visible" });
+    };
+    sendActivity(); // état initial dès la connexion
+    document.addEventListener("visibilitychange", sendActivity);
+    window.addEventListener("focus", sendActivity);
+    window.addEventListener("blur", sendActivity);
+    socket.on("connect", sendActivity); // resignale après une reconnexion
+
     return () => {
+      document.removeEventListener("visibilitychange", sendActivity);
+      window.removeEventListener("focus", sendActivity);
+      window.removeEventListener("blur", sendActivity);
       socket.disconnect();
       socketRef.current = null;
     };

@@ -15,7 +15,9 @@ interface TopBarProps {
   // Nombre de personnes connectées (présence temps réel, sans identités).
   connectedTotal: number;
   // Effectif présent par pôle (compteurs seuls) pour la fenêtre « Hall ».
-  poles: { label: string; count: number }[];
+  // `status` = activité agrégée du pôle : « active » (vert), « away » (orange),
+  // null (personne = gris).
+  poles: { label: string; count: number; status: "active" | "away" | null }[];
   // Profil habilité à voir les identités des connectés (DG, super-admin).
   canSeePresenceNames?: boolean;
   // Sur mobile : ouvre le menu latéral escamotable (bouton ☰ à gauche).
@@ -63,7 +65,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
   const swipedRef = useRef(false);
   // Noms par grand pôle, chargés à la demande à l'ouverture du Hall, pour les
   // seuls profils habilités. Rechargés à chaque ouverture pour rester à jour.
-  const [namesByPole, setNamesByPole] = useState<Record<string, string[]>>({});
+  const [namesByPole, setNamesByPole] = useState<Record<string, { name: string; activity: "active" | "away" }[]>>({});
 
   useEffect(() => {
     if (!hallOpen || !canSeePresenceNames) return;
@@ -71,7 +73,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
     getPresenceNames()
       .then((data) => {
         if (cancelled) return;
-        const map: Record<string, string[]> = {};
+        const map: Record<string, { name: string; activity: "active" | "away" }[]> = {};
         for (const p of data.poles) map[p.pole] = p.users;
         setNamesByPole(map);
       })
@@ -81,7 +83,9 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
     return () => {
       cancelled = true;
     };
-  }, [hallOpen, canSeePresenceNames, connectedTotal]);
+    // Recharge aussi quand une activité bascule (actif↔arrière-plan), pas
+    // seulement quand l'effectif change, pour recolorer les noms en temps réel.
+  }, [hallOpen, canSeePresenceNames, connectedTotal, poles.map((p) => `${p.label}:${p.status ?? "-"}`).join("|")]);
 
   // Recherche rapide : requête saisie, résultats et état d'ouverture du menu
   // déroulant. La recherche part après une courte pause de frappe (anti-rebond)
@@ -355,6 +359,10 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
               <div style={{ maxHeight: 320, overflowY: "auto" }}>
                 {poles.map((p) => {
                   const active = p.count > 0;
+                  // Voyant à 3 états : vert = au moins un membre actif (premier
+                  // plan) ; orange = connecté(s) mais tout en arrière-plan ;
+                  // gris = personne. (charte : ambre pour l'attente/arrière-plan.)
+                  const dotColor = p.status === "active" ? "var(--success)" : p.status === "away" ? "#B87400" : "var(--line)";
                   // Noms révélés pour ce pôle (profils habilités uniquement) :
                   // un chef ne reçoit que son propre pôle, la DG les reçoit tous.
                   const names = canSeePresenceNames ? namesByPole[p.label] ?? [] : [];
@@ -363,11 +371,13 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                         <span style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: "var(--ink)" }}>
                           <span
+                            title={p.status === "active" ? "Actif" : p.status === "away" ? "Connecté (arrière-plan)" : "Personne"}
                             style={{
                               width: 9,
                               height: 9,
                               borderRadius: 999,
-                              background: active ? "var(--success)" : "var(--line)",
+                              background: dotColor,
+                              border: p.status ? "none" : "1px solid var(--line)",
                               display: "inline-block",
                               flexShrink: 0,
                             }}
@@ -378,6 +388,7 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
                           {active ? (
                             <>
                               <span style={{ fontFamily: "var(--font-mono)" }}>{p.count}</span> présent{p.count > 1 ? "s" : ""}
+                              {p.status === "away" ? " · en arrière-plan" : ""}
                             </>
                           ) : (
                             "personne"
@@ -385,8 +396,16 @@ export function TopBar({ connectedTotal, poles, canSeePresenceNames, onMenu, use
                         </span>
                       </div>
                       {names.length > 0 && (
-                        <div style={{ marginTop: 4, marginLeft: 18, fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
-                          {names.join(", ")}
+                        <div style={{ marginTop: 5, marginLeft: 18, fontSize: 12, color: "var(--muted)", lineHeight: 1.6, display: "flex", flexWrap: "wrap", gap: "2px 12px" }}>
+                          {names.map((u) => (
+                            <span key={u.name} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                              <span
+                                title={u.activity === "active" ? "Actif" : "Connecté (arrière-plan)"}
+                                style={{ width: 7, height: 7, borderRadius: 999, background: u.activity === "active" ? "var(--success)" : "#B87400", display: "inline-block", flexShrink: 0 }}
+                              />
+                              {u.name}
+                            </span>
+                          ))}
                         </div>
                       )}
                     </div>

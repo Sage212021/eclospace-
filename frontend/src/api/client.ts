@@ -141,9 +141,14 @@ export function quickSearch(q: string) {
 // Noms des personnes connectées, regroupés par grand pôle. Réservé aux profils
 // habilités : Direction générale et super-administrateur (tous les pôles), ou
 // chef de département (son seul grand pôle). 403 sinon.
+export interface PolePresenceUser {
+  name: string;
+  activity: "active" | "away";
+}
+
 export interface PolePresence {
   pole: string;
-  users: string[];
+  users: PolePresenceUser[];
 }
 
 export function getPresenceNames() {

@@ -25,6 +25,9 @@ const TYPE_COLORS: Record<CalendarEventType, string> = {
   sortie: "var(--success)",
   ceremonie: "var(--eclosion-dark)",
   autre: "var(--muted)",
+  dedicace: "var(--eclosion-dark)",
+  salon: "var(--eclosion)",
+  lancement: "var(--success)",
 };
 
 interface CalendarPageProps {
@@ -76,7 +79,7 @@ export function CalendarPage({ canPublish }: CalendarPageProps) {
   const [options, setOptions] = useState<TargetOptions | null>(null);
 
   const typeLabel = (ty: CalendarEventType) =>
-    t(`cal.type.${ty}`, { reunion: "Réunion", echeance: "Échéance", formation: "Formation", sortie: "Sortie", ceremonie: "Cérémonie", autre: "Autre" }[ty]);
+    t(`cal.type.${ty}`, { reunion: "Réunion", echeance: "Échéance", formation: "Formation", sortie: "Sortie", ceremonie: "Cérémonie", autre: "Autre", dedicace: "Dédicace", salon: "Salon du livre", lancement: "Lancement d'ouvrage" }[ty]);
 
   // Bornes du mois affiché (grille complète lundi→dimanche, 6 semaines).
   const grid = useMemo(() => {
@@ -333,7 +336,10 @@ export function CalendarPage({ canPublish }: CalendarPageProps) {
                     >
                       {e.birthday && "🎂 "}
                       {!e.birthday && !e.all_day && <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{fmtTime(e.starts_at)} </span>}
-                      {e.title}
+                      {/* Anniversaire : on affiche le PRÉNOM/nom de la personne en
+                          premier (le titre complet « Anniversaire de … » serait tronqué
+                          sur une case étroite et masquerait le nom). */}
+                      {e.birthday ? (e.person ?? e.title) : e.title}
                     </button>
                   ))}
                   {dayEvents.length > 3 && <span style={{ fontSize: 10.5, color: "var(--muted)" }}>+{dayEvents.length - 3}</span>}
@@ -393,7 +399,7 @@ export function CalendarPage({ canPublish }: CalendarPageProps) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
             <Field label={t("cal.f_type", "Type")}>
               <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CalendarEventType })}>
-                {(["reunion", "echeance", "formation", "sortie", "ceremonie", "autre"] as CalendarEventType[]).map((ty) => (
+                {(["reunion", "echeance", "formation", "sortie", "ceremonie", "dedicace", "salon", "lancement", "autre"] as CalendarEventType[]).map((ty) => (
                   <option key={ty} value={ty}>{typeLabel(ty)}</option>
                 ))}
               </select>

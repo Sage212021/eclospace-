@@ -4767,6 +4767,10 @@ enum CalendarEventType {
   sortie
   ceremonie
   autre
+  // Vie éditoriale publique (demande opérateur, 01/09/2026).
+  dedicace // séance de dédicace / signature
+  salon // salon ou foire du livre
+  lancement // lancement d'ouvrage
 }
 
 model CalendarEvent {

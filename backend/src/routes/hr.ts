@@ -710,7 +710,7 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       },
     });
     const openings = rows.map((o) => {
-      const counts = { recue: 0, entretien: 0, retenue: 0, refusee: 0 };
+      const counts = { recue: 0, entretien: 0, retenue: 0, refusee: 0, en_attente: 0 };
       for (const a of o.applications) counts[a.status] += 1;
       return {
         id: o.id,

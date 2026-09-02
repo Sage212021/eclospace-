@@ -1403,6 +1403,7 @@ const APPLICATION_STATUS_FR: Record<string, string> = {
   recue: "Reçue",
   entretien: "Entretien",
   retenue: "Retenue",
+  en_attente: "En attente",
   refusee: "Refusée",
 };
 export function printJobApplications(d: JobApplicationsPrint, opts?: PrintOpts): void {

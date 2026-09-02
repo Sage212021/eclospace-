@@ -208,6 +208,9 @@ enum JobApplicationStatus {
   entretien
   retenue
   refusee
+  // Vivier : profil intéressant conservé, ni retenu ni refusé (demande RH,
+  // 01/09/2026). Statut NON terminal — on peut ensuite retenir ou refuser.
+  en_attente
 }
 
 model JobApplication {

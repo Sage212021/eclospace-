@@ -6,6 +6,7 @@ import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { resolveAudience } from "../lib/announcements.js";
 import { notifyUsers } from "../lib/notify.js";
+import { getHallAgendaConfig, setHallAgendaConfig } from "../lib/hallAgenda.js";
 
 // Centre de Communication Interne — Calendrier partagé & événements
 // (module « communication »). Événements de la maison, ciblés comme les
@@ -257,6 +258,109 @@ export default async function calendarRoutes(fastify: FastifyInstance) {
       include: { author: { select: { id: true, username: true } } },
     });
     return reply.send(events.map((e) => eventView(e)));
+  });
+
+  // ── Bandeau « Programme à venir » du Hall (rappel discret, D-029) ──────────
+  // Renvoie la configuration (paramétrable) + les événements à venir qui me
+  // concernent (agenda + anniversaires), sur l'horizon configuré, enrichis
+  // d'une priorité (urgent / aujourd'hui / ce mois / plus tard) et du délai en
+  // minutes. Le passé est retiré ; les urgents sont mis en tête.
+  fastify.get("/api/v1/calendar/agenda-banner", { preHandler: requirePermission("communication", "consultation") }, async (request, reply) => {
+    const config = await getHallAgendaConfig();
+    if (!config.enabled) return reply.send({ config, events: [] });
+
+    const now = new Date();
+    const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const until = new Date(now.getTime() + config.horizonDays * 86_400_000);
+
+    let visibility: Prisma.CalendarEventWhereInput = {};
+    if (!canManageAll(request)) {
+      const scope = await viewerScope(request.user!.id);
+      visibility = {
+        targets: {
+          some: {
+            OR: [
+              { targetType: "tous" },
+              ...(scope.departmentId ? [{ targetType: "departement" as const, targetId: scope.departmentId }] : []),
+              ...(scope.roleIds.length ? [{ targetType: "role" as const, targetId: { in: scope.roleIds } }] : []),
+              { targetType: "utilisateur" as const, targetId: request.user!.id },
+            ],
+          },
+        },
+      };
+    }
+
+    const stored = await prisma.calendarEvent.findMany({
+      where: { deletedAt: null, startsAt: { gte: startOfToday, lt: until }, ...visibility },
+      orderBy: { startsAt: "asc" },
+    });
+    const birthdays = await buildBirthdayEvents(startOfToday, until);
+
+    type Raw = { id: string; title: string; type: string; starts_at: Date | string; all_day: boolean; location: string | null; birthday: boolean; person: string | null };
+    const raw: Raw[] = [
+      ...stored.map((e) => ({ id: e.id, title: e.title, type: e.type as string, starts_at: e.startsAt, all_day: e.allDay, location: e.location, birthday: false, person: null })),
+      ...birthdays.map((b) => ({ id: b.id, title: b.title, type: b.type, starts_at: b.starts_at, all_day: b.all_day, location: b.location, birthday: true, person: b.person })),
+    ];
+
+    const enriched = raw
+      .map((e) => {
+        const start = new Date(e.starts_at);
+        // Fin de référence : fin de journée pour un « journée entière », sinon
+        // le début — sert à retirer les événements passés.
+        const refEnd = e.all_day
+          ? new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate(), 23, 59, 59))
+          : start;
+        const minutesUntil = Math.round((start.getTime() - now.getTime()) / 60000);
+        const sameDay =
+          start.getUTCFullYear() === now.getUTCFullYear() && start.getUTCMonth() === now.getUTCMonth() && start.getUTCDate() === now.getUTCDate();
+        let priority: "urgent" | "today" | "month" | "later";
+        if (!e.all_day && minutesUntil >= 0 && minutesUntil <= config.urgentMinutes) priority = "urgent";
+        else if (sameDay) priority = "today";
+        else if (start.getUTCFullYear() === now.getUTCFullYear() && start.getUTCMonth() === now.getUTCMonth()) priority = "month";
+        else priority = "later";
+        return {
+          id: e.id,
+          title: e.title,
+          type: e.type,
+          starts_at: start.toISOString(),
+          all_day: e.all_day,
+          location: e.location,
+          birthday: e.birthday,
+          person: e.person,
+          minutes_until: e.all_day ? null : minutesUntil,
+          priority,
+          refEnd,
+        };
+      })
+      .filter((e) => e.refEnd.getTime() >= now.getTime()) // le passé disparaît automatiquement
+      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
+
+    const urgent = enriched.filter((e) => e.priority === "urgent");
+    const rest = enriched.filter((e) => e.priority !== "urgent");
+    const events = [...urgent, ...rest].slice(0, 20).map(({ refEnd: _refEnd, ...e }) => e);
+    return reply.send({ config, events });
+  });
+
+  // Configuration du bandeau : lecture ouverte (le bandeau tourne chez chacun),
+  // écriture réservée à l'administration du babillard (D-027 : DG, RH, Admin).
+  fastify.get("/api/v1/calendar/banner-config", { preHandler: requirePermission("communication", "consultation") }, async (_request, reply) => {
+    return reply.send(await getHallAgendaConfig());
+  });
+
+  fastify.put("/api/v1/calendar/banner-config", { preHandler: requirePermission("communication", "administration") }, async (request, reply) => {
+    const parsed = z
+      .object({
+        enabled: z.boolean(),
+        reappearMinutes: z.number().int().min(1).max(240),
+        capsuleSeconds: z.number().int().min(2).max(60),
+        horizonDays: z.number().int().min(1).max(365),
+        urgentMinutes: z.number().int().min(1).max(240),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return badRequest(reply, parsed.error.issues);
+    const saved = await setHallAgendaConfig(parsed.data);
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "hall_agenda_config", entityId: "hall_agenda_config", newValues: { ...parsed.data }, ipAddress: request.ip });
+    return reply.send(saved);
   });
 
   // ── Détail d'un événement ──────────────────────────────────────────────────

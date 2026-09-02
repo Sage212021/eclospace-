@@ -14,6 +14,9 @@ import {
   remindAnnouncement,
   setNotificationPreferences,
   updateAnnouncement,
+  getBannerConfig,
+  setBannerConfig,
+  type HallAgendaConfig,
   type AnnouncementCategory,
   type AnnouncementDetail,
   type AnnouncementFeedItem,
@@ -344,6 +347,9 @@ export function AnnouncementsPage({ canPublish, canAdminister, openAnnouncementI
       {/* Préférences de notification */}
       <NotificationPrefsCard categories={categories} prefs={prefs ?? null} onSaved={(p) => { onPrefsChange?.(p); setMessage(t("cm.prefs_saved", "Préférences enregistrées.")); }} onError={setError} />
 
+      {/* Réglages du bandeau « Programme à venir » du Hall (administration) */}
+      {canAdminister && <BannerConfigCard onError={setError} onSaved={() => setMessage(t("cm.banner_saved", "Réglages du bandeau enregistrés."))} />}
+
       {/* Gestion des annonces (publieurs) */}
       {canPublish && (
         <Card
@@ -604,6 +610,74 @@ function DevicePushControl() {
             : t("cm.push_off", "Activez pour être averti (bandeau + son) sur ce téléphone même quand l'application est fermée.")}
       </p>
     </div>
+  );
+}
+
+// Réglages (administration) du bandeau « Programme à venir » du Hall : activer,
+// cadence de réapparition, durée d'une capsule, horizon, seuil d'urgence.
+// Valeurs par défaut posées côté serveur ; ici on ne fait que les ajuster.
+function BannerConfigCard({ onSaved, onError }: { onSaved: () => void; onError: (m: string) => void }) {
+  const { t } = useI18n();
+  const [cfg, setCfg] = useState<HallAgendaConfig | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getBannerConfig().then(setCfg).catch(() => setCfg(null));
+  }, []);
+
+  if (!cfg) return null;
+
+  async function save(next: HallAgendaConfig) {
+    setCfg(next);
+    setSaving(true);
+    try {
+      await setBannerConfig(next);
+      onSaved();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Enregistrement impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const num = (label: string, key: keyof HallAgendaConfig, min: number, max: number, suffix: string) => (
+    <label style={{ display: "inline-flex", flexDirection: "column", gap: 3, fontSize: 12.5 }}>
+      {label}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <input
+          type="number"
+          min={min}
+          max={max}
+          value={cfg![key] as number}
+          disabled={saving || !cfg!.enabled}
+          onChange={(e) => setCfg({ ...cfg!, [key]: Number(e.target.value) })}
+          onBlur={(e) => {
+            const v = Math.max(min, Math.min(max, Number((e.target as HTMLInputElement).value) || min));
+            void save({ ...cfg!, [key]: v });
+          }}
+          style={{ width: 80 }}
+        />
+        <span style={{ color: "var(--muted)" }}>{suffix}</span>
+      </span>
+    </label>
+  );
+
+  return (
+    <Card title={t("cm.banner_title", "Bandeau « Programme à venir » du Hall")} icon={<IconPilotage />} subtitle={t("cm.banner_sub", "Réglages du rappel discret des événements. Modifiables à tout moment.")}>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13 }}>
+        <input type="checkbox" checked={cfg.enabled} disabled={saving} onChange={(e) => void save({ ...cfg, enabled: e.target.checked })} />
+        {t("cm.banner_enabled", "Afficher le bandeau")}
+      </label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 18, marginTop: 12 }}>
+        {num(t("cm.banner_reappear", "Revient toutes les"), "reappearMinutes", 1, 240, "min")}
+        {num(t("cm.banner_capsule", "Durée d'une capsule"), "capsuleSeconds", 2, 60, "s")}
+        {num(t("cm.banner_horizon", "Horizon à venir"), "horizonDays", 1, 365, "jours")}
+        {num(t("cm.banner_urgent", "Seuil « urgent »"), "urgentMinutes", 1, 240, "min")}
+      </div>
+      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>
+        {t("cm.banner_note", "Un événement passé disparaît automatiquement ; un événement à moins du seuil « urgent » s'affiche en tête, en rouge.")}
+      </p>
+    </Card>
   );
 }
 

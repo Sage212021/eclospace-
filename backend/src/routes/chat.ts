@@ -4,6 +4,8 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { emitToUsers } from "../lib/realtime.js";
+import { isUserActive } from "../lib/presence.js";
+import { sendWebPushToUsers } from "../lib/pushWeb.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import { getOrCreateConversation, otherOf, isParticipant } from "../lib/chat.js";
 
@@ -282,9 +284,25 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     });
 
     const view = messageView(created, request.user!.username, me, replyPreview);
+    const recipient = otherOf(conv, me);
     // Livraison temps réel au correspondant connecté (le badge non-lus prend le
     // relais s'il est hors ligne).
-    emitToUsers([otherOf(conv, me)], "chat:message", view);
+    emitToUsers([recipient], "chat:message", view);
+    // Notification « push » sur le téléphone UNIQUEMENT si le destinataire n'est
+    // pas déjà actif au premier plan (sinon la bulle temps réel suffit) : le
+    // message arrive alors même écran rabattu ou application fermée. Au meilleur
+    // effort — n'échoue jamais l'envoi du message. L'aperçu reste court.
+    if (!isUserActive(recipient)) {
+      const preview = body ? (body.length > 90 ? `${body.slice(0, 90)}…` : body) : "📎 Pièce jointe";
+      void sendWebPushToUsers([recipient], {
+        type: "autre",
+        priority: "medium",
+        title: `💬 ${request.user!.username}`,
+        body: preview,
+        entityType: "chat_conversation",
+        entityId: id,
+      }).catch(() => {});
+    }
     return reply.code(201).send(view);
   });
 
@@ -430,6 +448,18 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
     const view = messageView(created, request.user!.username, me);
     emitToUsers([target.id], "chat:message", { ...view, mine: false, read: false });
+    // Push si le destinataire n'est pas actif au premier plan (message transféré).
+    if (!isUserActive(target.id)) {
+      const preview = src.body ? (src.body.length > 90 ? `${src.body.slice(0, 90)}…` : src.body) : "📎 Pièce jointe";
+      void sendWebPushToUsers([target.id], {
+        type: "autre",
+        priority: "medium",
+        title: `💬 ${request.user!.username}`,
+        body: preview,
+        entityType: "chat_conversation",
+        entityId: conv.id,
+      }).catch(() => {});
+    }
     return reply.code(201).send({ ...view, conversation_id: conv.id, other_id: target.id, other_name: target.username });
   });
 

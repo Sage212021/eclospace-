@@ -136,8 +136,15 @@ export function AgendaBanner({ enabled, onOpenCalendar }: { enabled: boolean; on
         borderBottom: "1px solid var(--line)",
       }}
     >
-      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: "var(--muted)", whiteSpace: "nowrap", textTransform: "uppercase" }}>
-        📅 À venir
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: "var(--muted)", whiteSpace: "nowrap", textTransform: "uppercase" }}>
+        {/* Icône calendrier NEUTRE (SVG, sans numéro) : l'emoji 📅 est dessiné
+            « JUL 17 » en dur sur certains téléphones et laissait croire à une
+            date réelle. Cette icône est identique sur tous les appareils. */}
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+          <rect x="3" y="4.5" width="18" height="16.5" rx="2" />
+          <path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
+        </svg>
+        À venir
       </span>
       <button
         type="button"

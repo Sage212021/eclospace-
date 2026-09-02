@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { getCorrectionDashboard, type CorrectionDashboard, type CorrectionManuscript, type CorrectionSubState } from "../api/client";
 import { GuidanceSteps } from "../components/GuidanceNote";
+import { AiReadingLauncher } from "../components/AiReadingLauncher";
 
 // Sous-module autonome « Correction éditoriale » (refonte du pôle éditorial).
 // Même logique que « Manuscrits » / « Comité de lecture » / « Direction
@@ -139,6 +140,10 @@ function CorrectionStats({ data }: { data: CorrectionDashboard | null }) {
 }
 
 function CorrectionTable({ items, onOpen, empty }: { items: CorrectionManuscript[]; onOpen: (id: string) => void; empty: string }) {
+  // Relecture assistée par l'IA directement dans la liste de correction : une
+  // ligne dépliable par manuscrit ouvre les lanceurs (1ʳᵉ / 2ᵉ correction,
+  // couverture), sans avoir à ouvrir la fiche complète de l'ouvrage.
+  const [aiOpen, setAiOpen] = useState<string | null>(null);
   if (items.length === 0) return <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>{empty}</p>;
   return (
     <div style={{ overflowX: "auto" }}>
@@ -151,36 +156,63 @@ function CorrectionTable({ items, onOpen, empty }: { items: CorrectionManuscript
             <th>Avancement</th>
             <th>Points bloquants</th>
             <th>Retard</th>
+            <th>IA</th>
           </tr>
         </thead>
         <tbody>
           {items.map((m) => (
-            <tr key={m.id} onClick={() => onOpen(m.id)} style={{ cursor: "pointer" }}>
-              <td className="mono">{m.manuscript_number}</td>
-              <td className="linklike">{m.title}</td>
-              <td className="mono">
-                {m.tasks_done}/{m.tasks_total}
-              </td>
-              <td className="mono">{m.progress_pct} %</td>
-              <td>
-                {m.blocking > 0 ? (
-                  <span style={{ background: "#F6D9D3", color: "var(--alert, #C24B3A)", borderRadius: 999, padding: "2px 10px", fontSize: 11, whiteSpace: "nowrap" }}>
-                    {m.blocking} à lever
-                  </span>
-                ) : (
-                  <span style={{ color: "var(--muted)" }}>—</span>
-                )}
-              </td>
-              <td>
-                {m.en_retard ? (
-                  <span style={{ background: "var(--amber-soft, #F6E7D2)", color: "var(--amber, #C4661F)", borderRadius: 999, padding: "2px 10px", fontSize: 11, whiteSpace: "nowrap" }}>
-                    en retard
-                  </span>
-                ) : (
-                  <span style={{ color: "var(--muted)" }}>—</span>
-                )}
-              </td>
-            </tr>
+            <Fragment key={m.id}>
+              <tr onClick={() => onOpen(m.id)} style={{ cursor: "pointer" }}>
+                <td className="mono">{m.manuscript_number}</td>
+                <td className="linklike">{m.title}</td>
+                <td className="mono">
+                  {m.tasks_done}/{m.tasks_total}
+                </td>
+                <td className="mono">{m.progress_pct} %</td>
+                <td>
+                  {m.blocking > 0 ? (
+                    <span style={{ background: "#F6D9D3", color: "var(--alert, #C24B3A)", borderRadius: 999, padding: "2px 10px", fontSize: 11, whiteSpace: "nowrap" }}>
+                      {m.blocking} à lever
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--muted)" }}>—</span>
+                  )}
+                </td>
+                <td>
+                  {m.en_retard ? (
+                    <span style={{ background: "var(--amber-soft, #F6E7D2)", color: "var(--amber, #C4661F)", borderRadius: 999, padding: "2px 10px", fontSize: 11, whiteSpace: "nowrap" }}>
+                      en retard
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--muted)" }}>—</span>
+                  )}
+                </td>
+                <td>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAiOpen(aiOpen === m.id ? null : m.id);
+                    }}
+                    title="Relecture assistée par l'IA"
+                    style={{ background: aiOpen === m.id ? "var(--eclosion)" : "#fff", color: aiOpen === m.id ? "#0B0B0C" : "var(--eclosion-dark, #9a7a12)", border: "1px solid var(--line)", borderRadius: 6, padding: "3px 9px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                  >
+                    🤖 IA
+                  </button>
+                </td>
+              </tr>
+              {aiOpen === m.id && (
+                <tr>
+                  <td colSpan={7} style={{ background: "var(--paper, #FAF8F2)", padding: "6px 12px 14px" }}>
+                    <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 4px" }}>
+                      Relecture assistée par l'IA pour « {m.title} » — les documents produits (rapport + manuscrit corrigé) sont classés dans les Documents de l'ouvrage.
+                    </div>
+                    <AiReadingLauncher manuscriptId={m.id} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — 1ʳᵉ correction" hint="Produit aussi le manuscrit corrigé V1 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
+                    <AiReadingLauncher manuscriptId={m.id} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — 2ᵉ correction" hint="Produit aussi le manuscrit corrigé V2 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
+                    <AiReadingLauncher manuscriptId={m.id} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>

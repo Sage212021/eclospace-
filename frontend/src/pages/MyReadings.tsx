@@ -18,6 +18,7 @@ import {
   type ReadingAssignment,
 } from "../api/client";
 import { Button } from "../components/Button";
+import { AiReadingLauncher } from "../components/AiReadingLauncher";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Field } from "../components/Modal";
 import { printReadingReport, type PrintOpts } from "../lib/print";
@@ -205,6 +206,27 @@ function AssignmentCard({
         )}
         <span style={{ color: "var(--muted)", fontSize: 11.5 }}>{t("myr.received_by", "→ reçu par la Direction éditoriale")}</span>
       </div>
+
+      {/* Relecture assistée par l'IA (« relecteur d'Éclosion ») directement dans
+          la mission : accessible ici, sans ouvrir la fiche de l'ouvrage. Le
+          rapport produit est classé dans les Documents et sert d'appui à
+          l'évaluation. Proposé tant que la mission est à évaluer et que le
+          manuscrit a bien été déposé. */}
+      {(assignment.status === "pending" || assignment.status === "late") && assignment.manuscriptHasFile && (
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 600, color: "var(--eclosion-dark, #9a7a12)", userSelect: "none" }}>
+            {t("myr.ai_toggle", "🤖 Relecture assistée par l'IA (rapport d'évaluation)")}
+          </summary>
+          <AiReadingLauncher
+            manuscriptId={assignment.manuscriptId}
+            workType="evaluation"
+            stepCode="COMITE_LECTURE"
+            title={t("myr.ai_title", "Relecture IA — Rapport d'évaluation")}
+            hint={t("myr.ai_hint", "Le rapport est classé dans les Documents de l'ouvrage ; il vous sert d'appui pour rédiger votre propre évaluation.")}
+          />
+        </details>
+      )}
+
       {openAssignmentId === assignment.id && (
         <EvaluationForm
           assignmentId={assignment.id}

@@ -3611,7 +3611,7 @@ export function resolveFinanceRequest(id: string, status: "processed" | "rejecte
 
 // Recrutement — postes à pourvoir & candidatures.
 export type JobOpeningStatus = "ouvert" | "pourvu" | "annule";
-export type JobApplicationStatus = "recue" | "entretien" | "retenue" | "refusee";
+export type JobApplicationStatus = "recue" | "entretien" | "retenue" | "refusee" | "en_attente";
 export interface JobOpening {
   id: string;
   title: string;

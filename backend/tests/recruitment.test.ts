@@ -108,4 +108,31 @@ describe("recrutement — postes & candidatures", () => {
     const refusee = await app.inject({ method: "GET", url: "/api/v1/job-applications?status=refusee", headers: { cookie: adminCookie } });
     expect((refusee.json() as { id: string }[]).some((r) => r.id === appId)).toBe(false);
   });
+
+  it("statut « en attente » (vivier) : non terminal, sans décision, puis reclassable en retenue", async () => {
+    const opening = await app.inject({ method: "POST", url: "/api/v1/job-openings", headers: { cookie: adminCookie }, payload: { title: `Poste vivier ${rnd()}` } });
+    const openingId = opening.json().id as string;
+    const applied = await app.inject({ method: "POST", url: `/api/v1/job-openings/${openingId}/applications`, headers: { cookie: adminCookie }, payload: { first_name: "Sam", last_name: "Vivier" } });
+    const appId = applied.json().id as string;
+
+    // Mise « en attente » : statut accepté, aucune date de décision posée.
+    const held = await app.inject({ method: "PATCH", url: `/api/v1/job-applications/${appId}/status`, headers: { cookie: adminCookie }, payload: { status: "en_attente" } });
+    expect(held.statusCode).toBe(200);
+    expect(held.json().status).toBe("en_attente");
+    expect(held.json().decidedAt).toBeNull();
+
+    // Le décompte du poste comptabilise « en_attente ».
+    const list = await app.inject({ method: "GET", url: "/api/v1/job-openings", headers: { cookie: adminCookie } });
+    const row = (list.json() as { id: string; applications_by_status: Record<string, number> }[]).find((o) => o.id === openingId)!;
+    expect(row.applications_by_status.en_attente).toBe(1);
+
+    // Le filtre global ?status=en_attente l'inclut.
+    const filtered = await app.inject({ method: "GET", url: "/api/v1/job-applications?status=en_attente", headers: { cookie: adminCookie } });
+    expect((filtered.json() as { id: string }[]).some((r) => r.id === appId)).toBe(true);
+
+    // Reclassable ensuite en « retenue » (décision alors datée).
+    const retained = await app.inject({ method: "PATCH", url: `/api/v1/job-applications/${appId}/status`, headers: { cookie: adminCookie }, payload: { status: "retenue" } });
+    expect(retained.json().status).toBe("retenue");
+    expect(retained.json().decidedAt).not.toBeNull();
+  });
 });

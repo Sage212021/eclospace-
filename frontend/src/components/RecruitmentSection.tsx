@@ -32,6 +32,7 @@ const APP_STATUS_LABEL: Record<JobApplicationStatus, { label: string; bg: string
   entretien: { label: "Entretien", bg: "#F7E7DA", fg: "#C4661F" },
   retenue: { label: "Retenue", bg: "#e6efe4", fg: "#3B7A34" },
   refusee: { label: "Refusée", bg: "#f8e3df", fg: "var(--danger, #C24B3A)" },
+  en_attente: { label: "En attente", bg: "#FBEFD6", fg: "#B87400" },
 };
 
 function Chip({ s }: { s: { label: string; bg: string; fg: string } }) {
@@ -48,7 +49,7 @@ export function RecruitmentSection({ canManage, canValidate, departments }: { ca
   const [printStatus, setPrintStatus] = useState("");
   const [printingAll, setPrintingAll] = useState(false);
 
-  const STATUS_FR: Record<string, string> = { recue: "Reçue", entretien: "Entretien", retenue: "Retenue", refusee: "Refusée" };
+  const STATUS_FR: Record<string, string> = { recue: "Reçue", entretien: "Entretien", retenue: "Retenue", refusee: "Refusée", en_attente: "En attente" };
   async function printAll() {
     setPrintingAll(true); setError(null);
     try {
@@ -131,6 +132,7 @@ export function RecruitmentSection({ canManage, canValidate, departments }: { ca
           <option value="recue">Reçue</option>
           <option value="entretien">Entretien</option>
           <option value="retenue">Retenue</option>
+          <option value="en_attente">En attente</option>
           <option value="refusee">Refusée</option>
         </select>
         <Button variant="view" size="sm" disabled={printingAll} onClick={printAll}>{printingAll ? "Préparation…" : "🖨 Imprimer toutes les candidatures"}</Button>
@@ -246,6 +248,7 @@ function ApplicationsPanel({ openingId, openingTitle, department, canManage, onC
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {a.status === "recue" && <Button variant="view" size="sm" onClick={() => advance(a.id, "entretien")}>Entretien</Button>}
                 <Button variant="edit" size="sm" onClick={() => advance(a.id, "retenue")}>Retenir</Button>
+                {a.status !== "en_attente" && <Button variant="subtle" size="sm" onClick={() => advance(a.id, "en_attente")}>En attente</Button>}
                 <Button variant="danger" size="sm" onClick={() => advance(a.id, "refusee")}>Refuser</Button>
               </div>
             )}

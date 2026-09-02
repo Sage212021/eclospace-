@@ -24,19 +24,51 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const refresh = () => listAiJobs(manuscriptId).then((r) => setJobs(r.jobs.filter((j) => j.workType === workType))).catch(() => {});
+  const load = () => listAiJobs(manuscriptId).then((r) => r.jobs.filter((j) => j.workType === workType));
+  const refresh = () => load().then(setJobs).catch(() => {});
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [manuscriptId, workType]);
 
+  // L'analyse tourne EN ARRIÈRE-PLAN (fin des erreurs 504) : après le lancement,
+  // on suit l'avancement du job en rafraîchissant régulièrement, jusqu'à
+  // « Terminé » ou « Erreur ». Le bouton reste en « analyse en cours » pendant ce
+  // temps ; l'utilisateur peut quitter l'écran, le job se poursuit côté serveur.
   async function launch() {
     setBusy(true); setErr(null); setNote(null);
     try {
-      const r = await runAiEditorial({ manuscript_id: manuscriptId, work_type: workType, step_code: stepCode, editor_recommendation: reco.trim() || undefined });
-      setNote(`Rapport généré et classé dans les Documents de l'ouvrage (coût estimé ≈ ${r.costEstimate.toLocaleString("fr-FR")} FCFA).`);
+      await runAiEditorial({ manuscript_id: manuscriptId, work_type: workType, step_code: stepCode, editor_recommendation: reco.trim() || undefined });
       setReco("");
-      refresh();
+      setNote("Analyse lancée. Le relecteur d'Éclosion travaille en arrière-plan — vous pouvez patienter ou quitter cet écran, le rapport sera classé dans les Documents de l'ouvrage.");
+      // Suivi de progression (jusqu'à ~5 min).
+      const started = Date.now();
+      const poll = async (): Promise<void> => {
+        const list = await load().catch(() => null);
+        if (list) {
+          setJobs(list);
+          const latest = list[0];
+          if (latest && latest.status === "termine") {
+            setNote(`Rapport généré et classé dans les Documents de l'ouvrage${latest.costEstimate ? ` (coût estimé ≈ ${Number(latest.costEstimate).toLocaleString("fr-FR")} FCFA)` : ""}.`);
+            setBusy(false);
+            return;
+          }
+          if (latest && latest.status === "erreur") {
+            setErr(latest.errorMessage || "L'analyse a échoué.");
+            setNote(null);
+            setBusy(false);
+            return;
+          }
+        }
+        if (Date.now() - started > 5 * 60_000) {
+          setBusy(false); // on arrête le suivi actif ; le job continue côté serveur
+          setNote("L'analyse est plus longue que prévu ; elle se poursuit en arrière-plan. Actualisez la page dans quelques instants pour voir le résultat.");
+          return;
+        }
+        setTimeout(() => { void poll(); }, 4000);
+      };
+      void poll();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Lancement impossible.");
-    } finally { setBusy(false); }
+      setBusy(false);
+    }
   }
 
   return (

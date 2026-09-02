@@ -67,23 +67,34 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     await prisma.$disconnect();
   });
 
+  // L'analyse est lancée EN ARRIÈRE-PLAN : la requête répond 202 tout de suite,
+  // puis le job passe à « terminé » (attendu par sondage).
+  const waitJob = async (jobId: string, want: "termine" | "erreur" = "termine") => {
+    for (let i = 0; i < 100; i++) {
+      const j = await prisma.aiReadingJob.findUniqueOrThrow({ where: { id: jobId } });
+      if (j.status === want || j.status === "erreur") return j;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return prisma.aiReadingJob.findUniqueOrThrow({ where: { id: jobId } });
+  };
+
   it("lance une évaluation : job terminé, rapport classé dans la GED, coût estimé", async () => {
     const res = await app.inject({
       method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
       payload: { manuscript_id: manuscriptId, work_type: "evaluation", step_code: "COMITE_LECTURE", editor_recommendation: "Insister sur la cohérence." },
     });
-    expect(res.statusCode).toBe(201);
+    expect(res.statusCode).toBe(202);
     const body = res.json();
     expect(body.jobId).toBeTruthy();
-    expect(body.documentId).toBeTruthy();
-    expect(body.costEstimate).toBeGreaterThan(0);
+    expect(body.started).toBe(true);
 
-    // Le job est tracé et terminé.
-    const job = await prisma.aiReadingJob.findUniqueOrThrow({ where: { id: body.jobId } });
+    // Le job aboutit (en arrière-plan) et est tracé.
+    const job = await waitJob(body.jobId);
     expect(job.status).toBe("termine");
     expect(job.workType).toBe("evaluation");
     expect(job.model).toBe("claude-haiku-4-5");
     expect(job.editorRecommendation).toBe("Insister sur la cohérence.");
+    expect(Number(job.costEstimate)).toBeGreaterThan(0);
 
     // Un rapport de lecture (.docx) a été classé sur le manuscrit.
     const report = await prisma.document.findFirstOrThrow({ where: { entityType: "manuscript", entityId: manuscriptId, category: "rapport_lecture" }, include: { versions: true } });
@@ -101,8 +112,8 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
       method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
       payload: { manuscript_id: manuscriptId, work_type: "correction_1", step_code: "CORRECTION" },
     });
-    expect(res.statusCode).toBe(201);
-    const job = await prisma.aiReadingJob.findUniqueOrThrow({ where: { id: res.json().jobId } });
+    expect(res.statusCode).toBe(202);
+    const job = await waitJob(res.json().jobId);
     // Deux documents produits : le rapport + le manuscrit corrigé.
     expect((job.producedDocumentIds as string[]).length).toBe(2);
     const corrected = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, title: { contains: "Manuscrit corrigé (IA) — V1" } } });
@@ -114,7 +125,8 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
       method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
       payload: { manuscript_id: manuscriptId, work_type: "couverture", step_code: "CORRECTION" },
     });
-    expect(res.statusCode).toBe(201);
+    expect(res.statusCode).toBe(202);
+    await waitJob(res.json().jobId);
     const piece = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape" } });
     expect(piece).not.toBeNull();
   });

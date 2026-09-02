@@ -341,3 +341,78 @@ describe("communication — babillard d'annonces (incrément 1)", () => {
     expect(get2.json().email_enabled).toBe(false);
   });
 });
+
+// RBAC strict du Babillard (D-027, 01/09/2026) : administration réservée à DG,
+// RH et Administrateur général ; TOUS les autres rôles (Direction éditoriale et
+// Finance INCLUS) en lecture seule. Contrôle effectif côté API — pas seulement
+// masquage des boutons.
+describe("communication — RBAC strict du babillard (D-027)", () => {
+  let app: FastifyInstance;
+  const r = Math.floor(Math.random() * 1e6);
+  const cookies: Record<string, string> = {};
+
+  beforeAll(async () => {
+    app = await buildApp();
+    const specs: [string, string][] = [
+      ["dg", "DIR_GENERAL"],
+      ["rh", "RESP_RH"],
+      ["admin", "ADMIN_GENERAL"],
+      ["fin", "RESP_FINANCE"],
+      ["edi", "DIR_EDITORIAL"],
+      ["corr", "CORRECTEUR"],
+    ];
+    for (const [key, role] of specs) {
+      await createUserWithRole(`rbac_${key}_${r}`, role, PWD);
+      cookies[key] = await login(app, `rbac_${key}_${r}`, PWD);
+    }
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await prisma.$disconnect();
+  });
+
+  const create = (cookie: string) =>
+    app.inject({
+      method: "POST",
+      url: "/api/v1/announcements",
+      headers: { cookie },
+      payload: { title: `RBAC ${r}`, body_html: "<p>corps</p>", category_code: "info_generale", targets: [{ type: "tous" }] },
+    });
+
+  it("autorise DG, RH et Administrateur à créer une annonce", async () => {
+    for (const key of ["dg", "rh", "admin"]) {
+      const res = await create(cookies[key]);
+      expect(res.statusCode, `${key} devrait pouvoir créer`).toBe(201);
+    }
+  });
+
+  it("refuse la création à Finance et Direction éditoriale (lecture seule) — 403", async () => {
+    for (const key of ["fin", "edi"]) {
+      const res = await create(cookies[key]);
+      expect(res.statusCode, `${key} ne devrait PAS pouvoir créer`).toBe(403);
+    }
+  });
+
+  it("refuse la création à un employé ordinaire — 403", async () => {
+    const res = await create(cookies.corr);
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("autorise TOUT LE MONDE à consulter la liste des annonces", async () => {
+    for (const key of ["dg", "rh", "admin", "fin", "edi", "corr"]) {
+      const res = await app.inject({ method: "GET", url: "/api/v1/announcements", headers: { cookie: cookies[key] } });
+      expect(res.statusCode, `${key} devrait pouvoir consulter`).toBe(200);
+    }
+  });
+
+  it("refuse à Finance/Éditorial/employé une action d'administration (publier) — 403", async () => {
+    // La garde de permission s'applique avant toute vérification d'existence :
+    // un rôle sans droit reçoit 403 (et non 404), même sur un identifiant fictif.
+    const fakeId = "00000000-0000-0000-0000-000000000000";
+    for (const key of ["fin", "edi", "corr"]) {
+      const res = await app.inject({ method: "POST", url: `/api/v1/announcements/${fakeId}/publish`, headers: { cookie: cookies[key] } });
+      expect(res.statusCode, `${key} ne devrait pas pouvoir publier`).toBe(403);
+    }
+  });
+});

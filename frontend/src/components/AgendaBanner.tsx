@@ -42,7 +42,13 @@ function whenLabel(e: AgendaBannerEvent): string {
 }
 
 function capsuleText(e: AgendaBannerEvent): string {
-  if (e.birthday && e.person) return `Anniversaire — ${e.person}`;
+  // Anniversaire : on met le PRÉNOM en tête (plus chaleureux, et il reste
+  // visible même si la capsule est tronquée sur un écran étroit). Le prénom est
+  // le premier mot du nom complet fourni par le serveur (« Prénom Nom »).
+  if (e.birthday && e.person) {
+    const firstName = e.person.trim().split(/\s+/)[0] || e.person;
+    return `${firstName} fête son anniversaire`;
+  }
   return e.title;
 }
 

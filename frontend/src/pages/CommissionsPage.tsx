@@ -4,6 +4,7 @@ import { Card } from "../components/Card";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printCommissionStatement } from "../lib/print";
+import { downloadCommissionStatementPdf } from "../lib/financePdf";
 import { useI18n } from "../i18n";
 
 // Commissions commerciales : 10 % (paramétrable par la DAF) du montant vendu,
@@ -163,13 +164,16 @@ export function CommissionsPage({ canSetRate }: { canSetRate: boolean }) {
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
                                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--eclosion-dark)", textTransform: "uppercase", letterSpacing: 0.4 }}>{t("comm.detail", "Détail par ouvrage")}</div>
                                 <div onClick={(e) => e.stopPropagation()}>
-                                  <DocPrintMenu label={t("comm.print", "Imprimer l'état / PDF")} onPrint={(o) => printCommissionStatement({
-                                    agentName: r.agent_name,
-                                    periodLabel: `${t(`comm.gran_${granularity}`, GRANULARITIES.find((g) => g.key === granularity)?.label ?? "")} — ${t("comm.period_from", "du")} ${frDate(from)} ${t("comm.period_to", "au")} ${frDate(to)}`,
-                                    ratePct: Math.round(data.rate * 1000) / 10,
-                                    books: r.books.map((bk) => ({ title: bk.title, units: bk.units, amount: bk.amount, commission: bk.commission })),
-                                    totals: { units: r.units, amount: r.amount, commission: r.commission },
-                                  }, o)} />
+                                  {(() => {
+                                    const commission = {
+                                      agentName: r.agent_name,
+                                      periodLabel: `${t(`comm.gran_${granularity}`, GRANULARITIES.find((g) => g.key === granularity)?.label ?? "")} — ${t("comm.period_from", "du")} ${frDate(from)} ${t("comm.period_to", "au")} ${frDate(to)}`,
+                                      ratePct: Math.round(data.rate * 1000) / 10,
+                                      books: r.books.map((bk) => ({ title: bk.title, units: bk.units, amount: bk.amount, commission: bk.commission })),
+                                      totals: { units: r.units, amount: r.amount, commission: r.commission },
+                                    };
+                                    return <DocPrintMenu label={t("comm.print", "Imprimer l'état / PDF")} onPrint={(o) => printCommissionStatement(commission, o)} onDownloadPdf={() => downloadCommissionStatementPdf(commission)} />;
+                                  })()}
                                 </div>
                               </div>
                               <table style={{ ...tbl, minWidth: 420 }}>

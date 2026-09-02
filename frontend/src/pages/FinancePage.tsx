@@ -73,7 +73,7 @@ import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
 import { IconFinance } from "../components/icons";
 import { printInvoice, printRoyaltyStatement, type PrintOpts } from "../lib/print";
-import { downloadInvoicePdf } from "../lib/financePdf";
+import { downloadInvoicePdf, downloadRoyaltyStatementPdf } from "../lib/financePdf";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { AccountingExportSection } from "../components/AccountingExportSection";
 
@@ -345,9 +345,11 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
   }
 
   // Impression / export PDF d'un relevé de droits d'auteur.
-  async function handlePrintStatement(statementId: string, opts?: PrintOpts) {
+  async function handlePrintStatement(statementId: string, opts?: PrintOpts, asPdf = false) {
     try {
-      printRoyaltyStatement(await getRoyaltyStatement(statementId), opts);
+      const st = await getRoyaltyStatement(statementId);
+      if (asPdf) downloadRoyaltyStatementPdf(st);
+      else printRoyaltyStatement(st, opts);
     } catch (err) {
       fail(err, "Échec de l'ouverture du relevé.");
     }
@@ -748,7 +750,7 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
                   <StatusChip label={t("fin.st." + statement.status, STATUS_LABELS[statement.status] ?? statement.status)} />
                 </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
-                  <DocPrintMenu onPrint={(o) => handlePrintStatement(statement.id, o)} />
+                  <DocPrintMenu onPrint={(o) => handlePrintStatement(statement.id, o)} onDownloadPdf={() => handlePrintStatement(statement.id, {}, true)} />
                   <Button variant="view" size="sm" onClick={() => setEmailStatement(statement)}>{t("fin.send_email", "Envoyer par e-mail")}</Button>
                   {canAdminister && statement.status !== "paid" && Number(statement.remaining_balance ?? statement.balanceDue) > 0 && (
                     <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-statement", statement, amount: "" })}>{t("fin.pay", "Payer")}</Button>

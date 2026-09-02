@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
+import { notifyUsers } from "../lib/notify.js";
 
 // Tâches relevant de la correction éditoriale (Ch. 10 §10.3) et titre réservé
 // au dépôt de la version corrigée (sortie du correcteur → entrée de la Maquette).
@@ -95,17 +96,18 @@ export default async function taskRoutes(fastify: FastifyInstance) {
         },
       });
 
-      if (body.assignee_id) {
-        await prisma.notification.create({
-          data: {
-            userId: body.assignee_id,
-            type: "affectation",
-            priority: "medium",
-            title: "Nouvelle tâche assignée",
-            body: `« ${body.title} » sur le manuscrit ${manuscript.manuscriptNumber}.`,
-            entityType: "task",
-            entityId: task.id,
-          },
+      if (body.assignee_id && body.assignee_id !== request.user!.id) {
+        // Passe par le helper central : notification dans la cloche + alerte
+        // temps réel (son/pop-up) + push sur le téléphone si la personne n'est
+        // pas devant l'ERP. Pas d'auto-notification si l'on s'assigne soi-même.
+        await notifyUsers({
+          userIds: [body.assignee_id],
+          type: "affectation",
+          priority: "medium",
+          title: "Nouvelle tâche assignée",
+          body: `« ${body.title} » sur le manuscrit ${manuscript.manuscriptNumber}.`,
+          entityType: "task",
+          entityId: task.id,
         });
       }
 

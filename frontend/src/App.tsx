@@ -193,10 +193,11 @@ const NAV_POLES: NavPole[] = [
     ],
   },
   {
-    // Pôle Marketing & Distribution (D-031, à valider) : distinct du Commercial
-    // — il crée la demande et diffuse. Premier module : le Catalogue des
-    // ouvrages, alimenté automatiquement par les ouvrages publiés/archivés.
-    label: "Marketing & Distribution",
+    // Pôle Marketing, Communication & Distribution (D-031) : distinct du
+    // Commercial — il crée la demande (marketing), fait connaître (communication)
+    // et diffuse (distribution). Premier module : le Catalogue des ouvrages,
+    // alimenté automatiquement par les ouvrages publiés/archivés.
+    label: "Marketing, Communication & Distribution",
     items: [
       { key: "md-catalogue", label: "Catalogue des ouvrages", permission: "communication:consultation" },
     ],

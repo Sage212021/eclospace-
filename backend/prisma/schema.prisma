@@ -1882,6 +1882,7 @@ model Manuscript {
   authorFiles          AuthorFile[]
   schoolRoyaltyEntries SchoolRoyaltyEntry[]
   financeRequests      ManuscriptFinanceRequest[]
+  marketingPlan        MarketingPlan?
 
   @@map("manuscripts")
 }
@@ -4880,6 +4881,95 @@ model AnnualEvent {
 
   @@index([startDate])
   @@map("annual_events")
+}
+
+// ============================================================
+// Pôle Marketing, Communication & Distribution (D-031) — Fiche marketing par
+// ouvrage. Une fiche par ouvrage (rattachée à la fiche ouvrage centrale, aucune
+// duplication) : positionnement + plan d'action budgété. Portée par le module
+// de permission « marketing ».
+// ============================================================
+model MarketingPlan {
+  id           String     @id @default(uuid())
+  manuscriptId String     @unique @map("manuscript_id")
+  manuscript   Manuscript @relation(fields: [manuscriptId], references: [id])
+
+  // B. Positionnement.
+  publicCible      String? @map("public_cible")
+  publicSecondaire String? @map("public_secondaire")
+  zoneGeo          String? @map("zone_geo")
+  besoin           String? // problématique / besoin auquel répond l'ouvrage
+  argumentaire     String? // argumentaire principal
+  argumentsVente   String? @map("arguments_vente") // arguments de vente (multi-lignes)
+  positionnement   String?
+
+  // Pilotage.
+  responsableId String? @map("responsable_id") // porteur de la fiche (utilisateur)
+  notes         String?
+
+  actions MarketingAction[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("marketing_plans")
+}
+
+// Ligne du plan d'action marketing (tableau de pilotage).
+model MarketingAction {
+  id     String        @id @default(uuid())
+  planId String        @map("plan_id")
+  plan   MarketingPlan @relation(fields: [planId], references: [id])
+
+  canal       MarketingCanal
+  action      String
+  responsable String? // équipe ou personne (texte libre : « Marketing », « Communication »…)
+  dateDebut   DateTime?             @map("date_debut")
+  echeance    DateTime?
+  budgetPrevu  Decimal?             @map("budget_prevu") @db.Decimal(12, 2)
+  budgetEngage Decimal?             @map("budget_engage") @db.Decimal(12, 2)
+  statut      MarketingActionStatus @default(a_faire)
+  priorite    MarketingPriorite     @default(normale)
+  lien        String? // lien vers publication / support
+  resultat    String?
+  commentaire String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([planId])
+  @@map("marketing_actions")
+}
+
+enum MarketingCanal {
+  reseaux_sociaux
+  presse
+  newsletter
+  lancement
+  dedicace
+  salon
+  partenariat
+  influenceur
+  institutionnel
+  vente_directe
+  autre
+}
+
+enum MarketingActionStatus {
+  a_faire
+  en_cours
+  fait
+  annule
+}
+
+enum MarketingPriorite {
+  basse
+  normale
+  haute
 }
 
 // ============================================================

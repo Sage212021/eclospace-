@@ -5997,3 +5997,107 @@ export function getCatalogueConfig(): Promise<{ defaultSort: CatalogueSort; sort
 export function setCatalogueDefaultSort(default_sort: CatalogueSort): Promise<{ defaultSort: CatalogueSort }> {
   return request("/api/v1/catalogue/config", { method: "PUT", body: JSON.stringify({ default_sort }) });
 }
+
+// ── Pôle Marketing, Communication & Distribution — Fiche marketing par ouvrage ──
+export type MarketingCanal = "reseaux_sociaux" | "presse" | "newsletter" | "lancement" | "dedicace" | "salon" | "partenariat" | "influenceur" | "institutionnel" | "vente_directe" | "autre";
+export type MarketingActionStatus = "a_faire" | "en_cours" | "fait" | "annule";
+export type MarketingPriorite = "basse" | "normale" | "haute";
+export interface MarketingActionRow {
+  id: string;
+  canal: MarketingCanal;
+  action: string;
+  responsable: string | null;
+  date_debut: string | null;
+  echeance: string | null;
+  budget_prevu: number | null;
+  budget_engage: number | null;
+  statut: MarketingActionStatus;
+  priorite: MarketingPriorite;
+  lien: string | null;
+  resultat: string | null;
+  commentaire: string | null;
+}
+export interface MarketingPlanDetail {
+  id: string;
+  public_cible: string | null;
+  public_secondaire: string | null;
+  zone_geo: string | null;
+  besoin: string | null;
+  argumentaire: string | null;
+  arguments_vente: string | null;
+  positionnement: string | null;
+  responsable_id: string | null;
+  notes: string | null;
+  actions: MarketingActionRow[];
+}
+export interface MarketingManuscriptIdentity {
+  id: string;
+  reference: string;
+  title: string;
+  subtitle: string | null;
+  authors: string[];
+  collection: string | null;
+  genre: string | null;
+  publication_date: string | null;
+  price_public: number | null;
+}
+export interface MarketingPlanResponse {
+  manuscript: MarketingManuscriptIdentity;
+  plan: MarketingPlanDetail | null;
+}
+export interface MarketingPlanListItem {
+  id: string;
+  manuscript: { id: string; reference: string; title: string; authors: string[] };
+  responsable: { id: string; name: string } | null;
+  actions_total: number;
+  actions_done: number;
+  budget_prevu: number;
+  budget_engage: number;
+  updated_at: string;
+}
+export interface MarketingPlanInput {
+  public_cible?: string;
+  public_secondaire?: string;
+  zone_geo?: string;
+  besoin?: string;
+  argumentaire?: string;
+  arguments_vente?: string;
+  positionnement?: string;
+  responsable_id?: string | null;
+  notes?: string;
+}
+export interface MarketingActionInput {
+  canal: MarketingCanal;
+  action: string;
+  responsable?: string;
+  date_debut?: string | null;
+  echeance?: string | null;
+  budget_prevu?: number | null;
+  budget_engage?: number | null;
+  statut?: MarketingActionStatus;
+  priorite?: MarketingPriorite;
+  lien?: string;
+  resultat?: string;
+  commentaire?: string;
+}
+export function listMarketingPlans() {
+  return request<{ items: MarketingPlanListItem[] }>("/api/v1/marketing/plans");
+}
+export function searchMarketingManuscripts(q: string) {
+  return request<{ items: { id: string; reference: string; title: string; authors: string[]; has_plan: boolean }[] }>(`/api/v1/marketing/manuscripts${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+}
+export function getMarketingPlan(manuscriptId: string) {
+  return request<MarketingPlanResponse>(`/api/v1/marketing/manuscripts/${manuscriptId}/plan`);
+}
+export function saveMarketingPlan(manuscriptId: string, input: MarketingPlanInput) {
+  return request<{ id: string }>(`/api/v1/marketing/manuscripts/${manuscriptId}/plan`, { method: "PUT", body: JSON.stringify(input) });
+}
+export function addMarketingAction(planId: string, input: MarketingActionInput) {
+  return request<MarketingActionRow>(`/api/v1/marketing/plans/${planId}/actions`, { method: "POST", body: JSON.stringify(input) });
+}
+export function updateMarketingAction(id: string, input: Partial<MarketingActionInput>) {
+  return request<MarketingActionRow>(`/api/v1/marketing/actions/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function deleteMarketingAction(id: string) {
+  return request<{ deleted: boolean }>(`/api/v1/marketing/actions/${id}`, { method: "DELETE" });
+}

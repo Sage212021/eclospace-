@@ -25,6 +25,7 @@ const MyReadings = lazy(() => import("./pages/MyReadings").then((m) => ({ defaul
 const MyDossiers = lazy(() => import("./pages/MyDossiers").then((m) => ({ default: m.MyDossiers })));
 const StockPage = lazy(() => import("./pages/StockPage").then((m) => ({ default: m.StockPage })));
 const CommercialPage = lazy(() => import("./pages/CommercialPage").then((m) => ({ default: m.CommercialPage })));
+const CataloguePage = lazy(() => import("./pages/CataloguePage").then((m) => ({ default: m.CataloguePage })));
 const FinancePage = lazy(() => import("./pages/FinancePage").then((m) => ({ default: m.FinancePage })));
 const HrPage = lazy(() => import("./pages/HrPage").then((m) => ({ default: m.HrPage })));
 const DirectionPage = lazy(() => import("./pages/DirectionPage").then((m) => ({ default: m.DirectionPage })));
@@ -88,6 +89,7 @@ type PageId =
   | "rights-matrix"
   | "stock"
   | "commercial"
+  | "catalogue"
   | "finance"
   | "hr"
   | "direction"
@@ -191,6 +193,15 @@ const NAV_POLES: NavPole[] = [
     ],
   },
   {
+    // Pôle Marketing & Distribution (D-031, à valider) : distinct du Commercial
+    // — il crée la demande et diffuse. Premier module : le Catalogue des
+    // ouvrages, alimenté automatiquement par les ouvrages publiés/archivés.
+    label: "Marketing & Distribution",
+    items: [
+      { key: "md-catalogue", label: "Catalogue des ouvrages", permission: "communication:consultation" },
+    ],
+  },
+  {
     label: "Commercial",
     items: [
       { key: "co-ventes", label: "Commercial & ventes", permission: "commercial:consultation" },
@@ -266,6 +277,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "pr-isbn": { stage: "ATTRIBUTION_REFERENCES", heading: "ISBN & dépôt légal" },
   "pr-bat": { stage: "VALIDATION_BAT", heading: "BAT & contrôle qualité" },
   "pr-impression": { stage: "IMPRESSION", heading: "Impression" },
+  "md-catalogue": { page: "catalogue" },
   "co-stock": { page: "stock" },
   "co-ventes": { page: "commercial" },
   "co-mes-performances": { page: "commercial-performance" },
@@ -811,6 +823,9 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "commercial" && (
           <CommercialPage canManage={permissions.has("commercial:saisie")} canValidate={permissions.has("commercial:administration")} canInitiateOrder={canInitiateOrder} canSeeTeam={permissions.has("commercial:validation")} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "catalogue" && (
+          <CataloguePage onOpenManuscript={openManuscript} canAdmin={permissions.has("communication:administration")} />
         )}
         {leaf && "page" in leaf && leaf.page === "finance" && (
           <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} canInitiateOrder={canInitiateOrder} canValidateCancellation={permissions.has("pilotage:administration")} />

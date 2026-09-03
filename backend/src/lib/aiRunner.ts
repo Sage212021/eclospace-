@@ -390,13 +390,19 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // gabarit (reportTemplate.sections). Sans cela, la règle d'or « tu remplis
     // exactement la structure fournie » restait lettre morte — la structure
     // n'était jamais jointe au message, et l'IA improvisait ses titres.
-    const tpl = prompt.reportTemplate as { title?: string; sections?: { key: string; title: string }[]; footer?: string } | null;
+    const tpl = prompt.reportTemplate as { title?: string; sections?: { key: string; title: string }[]; guidance?: string; footer?: string } | null;
     const sections = Array.isArray(tpl?.sections) ? tpl!.sections : [];
+    // Consignes de forme PROPRES À CE GABARIT (guidance) : c'est ce qui distingue
+    // un rapport d'ÉVALUATION (aucune annotation de correction) d'un rapport de
+    // relecture pour correction. À défaut, une règle neutre (tableaux en Markdown).
+    const guidance = typeof tpl?.guidance === "string" && tpl.guidance.trim()
+      ? tpl.guidance.trim()
+      : "Tu rends les grilles de notation en TABLEAUX Markdown (| … |) ; les notes et scores sont chiffrés.";
     const structureBlock = sections.length
       ? `\n\n=== STRUCTURE IMPOSÉE DU RAPPORT « ${String(tpl!.title ?? "RAPPORT")} » ===\n`
         + "Tu produis EXACTEMENT ces rubriques, dans cet ordre, sans en ajouter ni en retirer, en reprenant l'intitulé comme titre de section (niveau « ## » en Markdown, préfixé de sa clé) :\n"
         + sections.map((s) => `## ${s.key}. ${s.title}`).join("\n")
-        + "\n\nRègles de forme : les grilles de notation et les listes d'annotations sont rendues en TABLEAUX Markdown (| … |) ; les notes et scores sont chiffrés (ex. « 8/10 », « 14/20 ») ; chaque annotation de correction précise numéro, page, type/sévérité, texte original, correction proposée et explication."
+        + `\n\nRègles de forme : ${guidance} Tout tableau est rendu au format Markdown (| … |).`
         + (tpl!.footer ? `\n\nTermine par ce pied de rapport : ${tpl!.footer}` : "")
       : "";
     const systemPrompt = prompt.systemPrompt + structureBlock;

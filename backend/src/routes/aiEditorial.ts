@@ -212,7 +212,42 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
       const manuscriptId = (request.query as { manuscript?: string }).manuscript;
       if (!manuscriptId) return reply.code(400).send({ code: "manuscript_required", message: "Paramètre « manuscript » requis." });
       const jobs = await prisma.aiReadingJob.findMany({ where: { manuscriptId }, orderBy: { launchedAt: "desc" } });
-      return reply.send({ jobs });
+      // Signale au lanceur qu'un rapport est téléchargeable (1er document produit).
+      const withReport = jobs.map((j) => ({
+        ...j,
+        reportAvailable: j.status === "termine" && Array.isArray(j.producedDocumentIds) && (j.producedDocumentIds as unknown[]).length > 0,
+      }));
+      return reply.send({ jobs: withReport });
+    },
+  );
+
+  // — Téléchargement du rapport produit par une relecture IA —
+  // Volontairement accessible à quiconque peut consulter les relectures IA (même
+  // porte que la liste ci-dessus) : le lecteur ou le correcteur récupère SON
+  // rapport là où il l'a lancé, SANS exiger le droit « documents : consultation »
+  // (la GED reste réservée). Le rapport est le 1er document produit par le job.
+  fastify.get(
+    "/api/v1/ai-editorial/jobs/:jobId/report",
+    { preHandler: requireAnyPermission([{ module: "comite_lecture", action: "consultation" }, { module: "manuscripts", action: "consultation" }]) },
+    async (request, reply) => {
+      const { jobId } = request.params as { jobId: string };
+      const job = await prisma.aiReadingJob.findUnique({ where: { id: jobId } });
+      if (!job) return reply.code(404).send({ code: "not_found", message: "Relecture introuvable." });
+      const produced = Array.isArray(job.producedDocumentIds) ? (job.producedDocumentIds as string[]) : [];
+      if (job.status !== "termine" || produced.length === 0) {
+        return reply.code(404).send({ code: "no_report", message: "Aucun rapport n'est encore disponible pour cette relecture." });
+      }
+      const version = await prisma.documentVersion.findFirst({
+        where: { document: { id: produced[0] } },
+        orderBy: { versionNumber: "desc" },
+      });
+      if (!version) return reply.code(404).send({ code: "no_report", message: "Le rapport de cette relecture est introuvable." });
+      const { readStoredFile } = await import("../lib/storage.js");
+      const buffer = await readStoredFile(version.filePath);
+      const fileName = `rapport_${job.workType}.docx`;
+      reply.header("content-type", version.mimeType);
+      reply.header("content-disposition", `attachment; filename="${fileName}"`);
+      return reply.send(buffer);
     },
   );
 }

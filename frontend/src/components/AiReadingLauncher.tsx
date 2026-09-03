@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { runAiEditorial, listAiJobs, type AiJob, type AiWorkType } from "../api/client";
+import { runAiEditorial, listAiJobs, aiJobReportDownloadUrl, type AiJob, type AiWorkType } from "../api/client";
 
 // Lot IA-1 : lancer une relecture assistée à l'étape courante. Le rapport produit
 // (au nom du relecteur d'Éclosion) est classé dans les Documents de l'ouvrage.
@@ -46,7 +46,7 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
           setJobs(list);
           const latest = list[0];
           if (latest && latest.status === "termine") {
-            setNote(`Rapport généré et classé dans les Documents de l'ouvrage${latest.costEstimate ? ` (coût estimé ≈ ${Number(latest.costEstimate).toLocaleString("fr-FR")} FCFA)` : ""}.`);
+            setNote(`Rapport généré : téléchargez-le ci-dessous (« 📄 Télécharger le rapport ») ; il est aussi classé dans les Documents de l'ouvrage${latest.costEstimate ? ` (coût estimé ≈ ${Number(latest.costEstimate).toLocaleString("fr-FR")} FCFA)` : ""}.`);
             setBusy(false);
             return;
           }
@@ -105,6 +105,15 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
                 <span style={{ fontWeight: 700, color: STATUS_COLORS[j.status] }}>{STATUS_LABELS[j.status]}</span>
                 {j.costEstimate && <span style={{ color: "var(--muted)" }}>≈ {Number(j.costEstimate).toLocaleString("fr-FR")} FCFA</span>}
                 {j.errorMessage && <span style={{ color: "var(--alert, #B23A2E)" }}>{j.errorMessage}</span>}
+                {j.status === "termine" && j.reportAvailable !== false && (
+                  <a
+                    href={aiJobReportDownloadUrl(j.id)}
+                    style={{ color: "var(--eclosion-dark, #9A7A12)", fontWeight: 700, textDecoration: "none" }}
+                    title="Télécharger le rapport produit par le relecteur d'Éclosion"
+                  >
+                    📄 Télécharger le rapport
+                  </a>
+                )}
               </div>
             ))}
           </div>

@@ -147,15 +147,21 @@ function buildTable(rows: string[][]): Table {
 // Rendu .docx du rapport, aux couleurs Éclosion. Interprète le Markdown produit
 // par le relecteur : titres (#/##/###), gras (**…**), listes à puces (- …) et
 // tableaux (| … |). En-tête et pied maison ; titres de section soulignés d'or.
-export async function renderReportDocx(reportTitle: string, body: string): Promise<Buffer> {
-  const children: (Paragraph | Table)[] = [
-    new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text: "ÉCLOSION ÉDITION", bold: true, size: 30, color: ECL.noir, font: FONT })] }),
-    new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: "Direction éditoriale — Service de relecture", size: 18, color: ECL.grey, font: FONT })] }),
-    // Filet noir souligné d'or (rappel de la charte).
-    new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 18, color: ECL.noir, space: 1 } }, spacing: { after: 40 } }),
-    new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 10, color: ECL.or, space: 1 } }, spacing: { after: 200 } }),
-    new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: reportTitle, bold: true, size: 32, color: ECL.noir, font: FONT })] }),
-  ];
+export async function renderReportDocx(reportTitle: string, body: string, opts: { entete?: boolean } = {}): Promise<Buffer> {
+  const entete = opts.entete ?? true;
+  // En-tête maison « papier à en-tête » : présent par défaut ; omis (impression
+  // « sans en-tête », ex. sur papier pré-imprimé) quand entete = false. Le titre
+  // du rapport reste, lui, toujours affiché.
+  const children: (Paragraph | Table)[] = entete
+    ? [
+        new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text: "ÉCLOSION ÉDITION", bold: true, size: 30, color: ECL.noir, font: FONT })] }),
+        new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: "Direction éditoriale — Service de relecture", size: 18, color: ECL.grey, font: FONT })] }),
+        // Filet noir souligné d'or (rappel de la charte).
+        new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 18, color: ECL.noir, space: 1 } }, spacing: { after: 40 } }),
+        new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 10, color: ECL.or, space: 1 } }, spacing: { after: 200 } }),
+        new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: reportTitle, bold: true, size: 32, color: ECL.noir, font: FONT })] }),
+      ]
+    : [new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: reportTitle, bold: true, size: 32, color: ECL.noir, font: FONT })] })];
 
   const lines = body.split("\n");
   let i = 0;
@@ -459,7 +465,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
 
     await prisma.aiReadingJob.update({
       where: { id: job.id },
-      data: { status: "termine", finishedAt: new Date(), producedDocumentIds: producedIds, reportVersion: 1, costEstimate },
+      data: { status: "termine", finishedAt: new Date(), producedDocumentIds: producedIds, reportVersion: 1, costEstimate, reportText },
     });
     await writeAuditLog({
       userId: params.userId,

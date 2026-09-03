@@ -118,11 +118,28 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     const jobId = run.json().jobId as string;
     await waitJob(jobId);
 
+    // Par défaut : rapport SANS en-tête (choix par défaut).
     const dl = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs/${jobId}/report`, headers: { cookie: adminCookie } });
     expect(dl.statusCode).toBe(200);
     expect(dl.headers["content-type"]).toContain("wordprocessingml");
     expect(String(dl.headers["content-disposition"])).toContain("attachment");
     // Un .docx est un ZIP : commence par « PK ».
+    expect(dl.rawPayload.subarray(0, 2).toString("latin1")).toBe("PK");
+    // Le texte source du rapport est conservé sur le job (permet la régénération).
+    const stored = await prisma.aiReadingJob.findUniqueOrThrow({ where: { id: jobId } });
+    expect(stored.reportText).toContain("Rapport d'évaluation");
+  });
+
+  it("télécharge le rapport IA AVEC en-tête maison (choix d'impression)", async () => {
+    const run = await app.inject({
+      method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
+      payload: { manuscript_id: manuscriptId, work_type: "evaluation", step_code: "COMITE_LECTURE" },
+    });
+    const jobId = run.json().jobId as string;
+    await waitJob(jobId);
+    const dl = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs/${jobId}/report?entete=1`, headers: { cookie: adminCookie } });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.headers["content-type"]).toContain("wordprocessingml");
     expect(dl.rawPayload.subarray(0, 2).toString("latin1")).toBe("PK");
   });
 

@@ -1,7 +1,8 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { confirmIdentifierChange, fetchMe, getChatUnread, getNotificationPreferences, logout, stopImpersonation, type EffectiveUser, type NotificationPreferences } from "./api/client";
 import { useI18n } from "./i18n";
 import { Login } from "./pages/Login";
+import { lazyWithRetry as lazy } from "./lib/lazyWithRetry";
 
 // Chargement à la demande (« code-splitting ») : chaque écran ne se télécharge
 // qu'au moment où l'utilisateur l'ouvre, au lieu de tout charger d'un bloc au

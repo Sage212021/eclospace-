@@ -6101,3 +6101,51 @@ export function updateMarketingAction(id: string, input: Partial<MarketingAction
 export function deleteMarketingAction(id: string) {
   return request<{ deleted: boolean }>(`/api/v1/marketing/actions/${id}`, { method: "DELETE" });
 }
+
+// Réseau de partenaires (annuaire de diffusion) — pôle Marketing.
+export type MarketingPartnerType = "librairie" | "ecole" | "universite" | "bibliotheque" | "distributeur" | "grossiste" | "revendeur" | "association" | "institution" | "media" | "organisateur_evenement" | "autre";
+export interface MarketingPartner {
+  id: string;
+  type: MarketingPartnerType;
+  name: string;
+  city: string | null;
+  country: string | null;
+  contact_name: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  partnership_type: string | null;
+  conditions: string | null;
+  notes: string | null;
+  active: boolean;
+}
+export interface MarketingPartnerInput {
+  type: MarketingPartnerType;
+  name: string;
+  city?: string;
+  country?: string;
+  contact_name?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  partnership_type?: string;
+  conditions?: string;
+  notes?: string;
+  active?: boolean;
+}
+export function listMarketingPartners(params: { type?: string; q?: string } = {}) {
+  const qs = new URLSearchParams();
+  if (params.type) qs.set("type", params.type);
+  if (params.q) qs.set("q", params.q);
+  const s = qs.toString();
+  return request<{ items: MarketingPartner[]; types: MarketingPartnerType[] }>(`/api/v1/marketing/partners${s ? `?${s}` : ""}`);
+}
+export function createMarketingPartner(input: MarketingPartnerInput) {
+  return request<MarketingPartner>("/api/v1/marketing/partners", { method: "POST", body: JSON.stringify(input) });
+}
+export function updateMarketingPartner(id: string, input: Partial<MarketingPartnerInput>) {
+  return request<MarketingPartner>(`/api/v1/marketing/partners/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function deleteMarketingPartner(id: string) {
+  return request<{ deleted: boolean }>(`/api/v1/marketing/partners/${id}`, { method: "DELETE" });
+}

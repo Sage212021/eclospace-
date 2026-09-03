@@ -23,7 +23,20 @@ import { GuidanceNote } from "../components/GuidanceNote";
 import { Field } from "../components/Modal";
 import { printReadingReport, type PrintOpts } from "../lib/print";
 import { buildReadingReport } from "../lib/readingReport";
-import { buildFinalReadingReport, type FinalReportResult } from "../lib/finalReport";
+import { buildFinalReadingReport, buildDepositOnLetterhead, type FinalReportResult } from "../lib/finalReport";
+
+// Ouvre un PDF (blob) dans un nouvel onglet pour impression / enregistrement.
+// Repli en téléchargement si le navigateur bloque l'ouverture d'onglet.
+function openPdfForPrint(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, "_blank");
+  if (!w) {
+    const a = document.createElement("a");
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "À évaluer",
@@ -431,6 +444,19 @@ function ReportMenu({ assignment, onMessage }: { assignment: ReadingAssignment; 
       onMessage("Copie impossible sur cet appareil.");
     }
   }
+  async function imprimerDepose() {
+    close();
+    try {
+      const res = await buildDepositOnLetterhead(assignment);
+      if (res.depositExcluded) {
+        onMessage("Le fichier déposé n'est ni un PDF ni une image : impossible de le poser sur le papier à en-tête. Déposez-le au format PDF pour l'imprimer à en-tête.");
+        return;
+      }
+      openPdfForPrint(res.blob, res.fileName);
+    } catch (e) {
+      onMessage(e instanceof Error ? e.message : "Préparation impossible.");
+    }
+  }
 
   return (
     <>
@@ -446,6 +472,9 @@ function ReportMenu({ assignment, onMessage }: { assignment: ReadingAssignment; 
             <a href={readingReportFileUrl(assignment.id)} target="_blank" rel="noreferrer" style={menuItemStyle} onClick={close}>
               📎 Extraire le fichier joint
             </a>
+          )}
+          {assignment.hasReportFile && (
+            <button style={menuItemStyle} onClick={imprimerDepose}>🖨 Rapport déposé sur papier à en-tête</button>
           )}
           <button style={menuItemStyle} onClick={joindre}>📌 Joindre à l'ouvrage</button>
           <button style={menuItemStyle} onClick={() => { close(); setTransferOpen(true); }}>✉️ Transférer par messagerie</button>

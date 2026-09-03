@@ -14,6 +14,7 @@ import {
   type RoleSummary,
   type ReadingAssignment,
 } from "../api/client";
+import { buildDepositOnLetterhead } from "../lib/finalReport";
 
 // Pièces jointes d'un ouvrage (GED, Ch. 21 §21.9) : chaque pôle dépose,
 // consulte, télécharge et remplace (nouvelle version) des fichiers, classés par
@@ -83,6 +84,29 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
       .catch(() => setReportFiles([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manuscriptId]);
+
+  // Repose le rapport DÉPOSÉ par le relecteur sur le papier à en-tête Éclosion
+  // (en-tête, filet or, pied légal, filigrane) et l'ouvre pour impression / PDF.
+  async function imprimerSurEntete(a: ReadingAssignment) {
+    setError(null);
+    try {
+      const res = await buildDepositOnLetterhead(a);
+      if (res.depositExcluded) {
+        setError("Le rapport déposé n'est ni un PDF ni une image : impossible de le poser sur le papier à en-tête. Il doit être déposé au format PDF.");
+        return;
+      }
+      const url = URL.createObjectURL(res.blob);
+      const w = window.open(url, "_blank");
+      if (!w) {
+        const link = document.createElement("a");
+        link.href = url; link.download = res.fileName;
+        document.body.appendChild(link); link.click(); link.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Préparation impossible.");
+    }
+  }
 
   async function handleNotify(doc: DocumentSummary, roleCode: string) {
     setError(null);
@@ -183,9 +207,18 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
                 {a.reportFileName ?? "Rapport de lecture"}{" "}
                 <span style={{ fontSize: 11, color: "var(--muted)" }}>· {a.reader?.username ?? "relecteur"}</span>
               </span>
-              <a href={readingReportFileUrl(a.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion)", fontSize: 12, fontWeight: 600 }}>
-                📎 Télécharger
-              </a>
+              <span style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <a href={readingReportFileUrl(a.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion)", fontSize: 12, fontWeight: 600 }}>
+                  📎 Télécharger
+                </a>
+                <button
+                  type="button"
+                  onClick={() => imprimerSurEntete(a)}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--eclosion-dark, #9a7a12)", fontSize: 12, fontWeight: 600 }}
+                >
+                  🖨 Sur papier à en-tête
+                </button>
+              </span>
             </div>
           ))}
         </div>

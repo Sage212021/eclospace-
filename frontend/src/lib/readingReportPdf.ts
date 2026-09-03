@@ -48,7 +48,7 @@ export async function buildReadingReportPdf(d: ReadingReportData): Promise<Uint8
   y += 8;
 
   // Titre + méta.
-  doc.setTextColor(22, 35, 61); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
+  doc.setTextColor(11, 11, 12); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
   doc.text("Rapport de lecture", L, y); y += 7;
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(60);
   doc.text(`Manuscrit : ${d.manuscriptNumber}    Remis le ${new Date(d.submittedAt).toLocaleDateString("fr-FR")}`, L, y); y += 7;
@@ -56,7 +56,7 @@ export async function buildReadingReportPdf(d: ReadingReportData): Promise<Uint8
   const kv = (label: string, value: string) => {
     doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(120);
     doc.text(label.toUpperCase(), L, y); y += 4;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(22, 35, 61);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(11, 11, 12);
     doc.text(value || "—", L, y); y += 7;
   };
   kv("Ouvrage", d.manuscriptTitle);
@@ -64,7 +64,7 @@ export async function buildReadingReportPdf(d: ReadingReportData): Promise<Uint8
 
   // Tableau des critères.
   y += 2;
-  doc.setFillColor(22, 35, 61); doc.rect(L, y, W, 7, "F");
+  doc.setFillColor(11, 11, 12); doc.rect(L, y, W, 7, "F");
   doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
   doc.text("CRITÈRE", L + 2, y + 4.7);
   doc.text("COEF.", L + 108, y + 4.7);
@@ -94,7 +94,7 @@ export async function buildReadingReportPdf(d: ReadingReportData): Promise<Uint8
     if (y > 265) { doc.addPage(); y = 18; }
     doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(120);
     doc.text(label.toUpperCase(), L, y); y += 4;
-    doc.setFont("helvetica", value === RECO_LABELS[d.recommendation] ? "bold" : "normal"); doc.setFontSize(10.5); doc.setTextColor(22, 35, 61);
+    doc.setFont("helvetica", value === RECO_LABELS[d.recommendation] ? "bold" : "normal"); doc.setFontSize(10.5); doc.setTextColor(11, 11, 12);
     const lines = doc.splitTextToSize(value, W) as string[];
     lines.forEach((ln) => { if (y > 285) { doc.addPage(); y = 18; } doc.text(ln, L, y); y += 5; });
     y += 4;

@@ -728,6 +728,8 @@ async function main() {
           { key: "L", title: "Conditions éventuelles" },
           { key: "M", title: "Avis final du relecteur" },
         ],
+        guidance:
+          "Ce document est un RAPPORT D'ÉVALUATION (comité de lecture), et NON un rapport de correction : il ne contient AUCUNE annotation de type « texte original / correction proposée / explication », NI tableau de corrections. Le SEUL tableau est la rubrique C « Grille d'évaluation » (Critère · Coefficient · Note /10 · Commentaire argumenté). Les rubriques H (points à améliorer), I (points de vigilance) et J (vérification des métadonnées) sont des LISTES À PUCES rédigées — pour H : « Point — Localisation — Gravité (mineur/modéré/important/critique) — Recommandation » ; pour I : « Type de risque — Passage concerné — Recommandation » ; pour J : « Élément — Statut (Conforme / Incohérence) — Observation ». La rubrique K énumère les options de recommandation puis indique l'option retenue et sa justification. Les autres rubriques sont rédigées en prose (sous-parties en gras).",
         footer: "Ce rapport constitue un avis argumenté de relecteur et ne représente pas une décision éditoriale finale.",
       },
     },
@@ -749,6 +751,8 @@ async function main() {
           { key: "5", title: "Corrections prioritaires avant publication" },
           { key: "6", title: "Recommandations éditoriales générales" },
         ],
+        guidance:
+          "Rapport de RELECTURE POUR CORRECTION. La rubrique 1 « Évaluation globale » comporte une grille de scores en TABLEAU (Critère · Note /20 · Commentaire) et la note globale /100. La rubrique 3 « Annotations de correction » est présentée en TABLEAUX, regroupés par type (orthographe/accords, syntaxe, ponctuation/typographie, style/répétitions, cohérence/références) ; chaque annotation : n° · page · type · texte original · correction proposée · explication. Les rubriques 2, 4, 5, 6 sont rédigées en prose et listes à puces.",
         deliverables: ["Rapport_relecture", "Manuscrit_corrige_V1"],
       },
     },
@@ -772,6 +776,8 @@ async function main() {
           { key: "6", title: "Corrections prioritaires avant publication" },
           { key: "7", title: "Verdict et recommandations éditoriales" },
         ],
+        guidance:
+          "Rapport de 2ᵉ CORRECTION (contrôle de la V1). La rubrique 1 « Suivi des corrections de la 1ʳᵉ relecture » est un TABLEAU (n° · page · correction demandée en V1 · statut ✔ appliquée / ✘ non appliquée / ~ partielle · constat en V2). La rubrique 2 met en avant, en liste priorisée par gravité, les corrections NON prises en compte (✘ et ~). La rubrique 3 « Anomalies résiduelles et nouvelles » est en TABLEAUX par type (n° · page · type · texte original · correction proposée · explication). La rubrique 4 comporte une grille de scores en tableau (Critère · Note /20 · Commentaire) avec l'évolution vs V1. Les autres rubriques sont en prose et listes.",
         deliverables: ["Rapport_deuxieme_correction", "Manuscrit_corrige_V2"],
       },
     },
@@ -793,6 +799,8 @@ async function main() {
           { key: "4", title: "Tableau d'annotations (zone · élément · original · correction · explication)" },
           { key: "5", title: "Verdict de publication" },
         ],
+        guidance:
+          "Rapport de RELECTURE DE COUVERTURE. La rubrique 1 comporte une grille de notation en TABLEAU (Critère · Note /20 · Observations) et la note globale pondérée /20. La rubrique 4 « Tableau d'annotations » est un TABLEAU (Sévérité C1/C2/C3 · Emplacement/zone · Constat · Recommandation). Les rubriques 0, 2, 3, 5 sont rédigées en prose et listes (les vérifications factuelles de la rubrique 3 en liste à puces : ISBN, code-barres EAN, cohérence couverture ↔ intérieur).",
         deliverables: ["Rapport_couverture"],
       },
     },
@@ -811,18 +819,29 @@ async function main() {
     });
   }
 
-  // Mise à niveau ponctuelle du gabarit de 2ᵉ correction (V2) vers le modèle
-  // « contrôle de la 1ʳᵉ relecture » qui fait ressortir les corrections NON
-  // prises en compte. On ne met à jour QUE si l'opérateur ne l'a pas
-  // personnalisé (titre encore à la valeur d'origine « RAPPORT DE 2ᵉ CORRECTION »).
-  // Idempotent : une fois à jour, le titre change et la condition ne s'applique plus.
-  const v2 = aiPrompts.find((p) => p.workType === "correction_2");
-  const existingV2 = await prisma.aiPrompt.findUnique({ where: { workType: "correction_2" } });
-  if (v2 && existingV2 && (existingV2.reportTemplate as { title?: string })?.title === "RAPPORT DE 2ᵉ CORRECTION") {
-    await prisma.aiPrompt.update({
-      where: { workType: "correction_2" },
-      data: { systemPrompt: v2.systemPrompt, reportTemplate: v2.reportTemplate as object, version: { increment: 1 } },
-    });
+  // Convergence des gabarits IA « par défaut » vers leur version canonique
+  // (structure + consignes de forme à jour), SANS écraser une personnalisation
+  // de l'opérateur : on ne met à jour un gabarit que si son titre est encore
+  // l'un des titres par défaut connus (actuels ou historiques). Idempotent : la
+  // mise à jour n'a lieu que si le contenu diffère réellement.
+  const DEFAULT_TITLES: Record<string, string[]> = {
+    evaluation: ["RAPPORT D'ÉVALUATION DE MANUSCRIT"],
+    correction_1: ["RAPPORT DE RELECTURE PROFESSIONNELLE"],
+    correction_2: ["RAPPORT DE 2ᵉ CORRECTION", "RAPPORT DE 2ᵉ CORRECTION — CONTRÔLE DE LA 1ʳᵉ RELECTURE"],
+    couverture: ["RAPPORT DE RELECTURE DE COUVERTURE"],
+  };
+  for (const p of aiPrompts) {
+    const existing = await prisma.aiPrompt.findUnique({ where: { workType: p.workType } });
+    if (!existing) continue;
+    const curTitle = (existing.reportTemplate as { title?: string })?.title ?? "";
+    const isDefault = (DEFAULT_TITLES[p.workType] ?? []).includes(curTitle);
+    const differs = existing.systemPrompt !== p.systemPrompt || JSON.stringify(existing.reportTemplate) !== JSON.stringify(p.reportTemplate);
+    if (isDefault && differs) {
+      await prisma.aiPrompt.update({
+        where: { workType: p.workType },
+        data: { systemPrompt: p.systemPrompt, reportTemplate: p.reportTemplate as object, version: { increment: 1 } },
+      });
+    }
   }
 
   // Seuils du comité de lecture (Ch. 7 §7.5 : "seuils paramétrables") —

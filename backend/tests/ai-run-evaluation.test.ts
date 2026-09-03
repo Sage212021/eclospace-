@@ -93,7 +93,11 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
         label: "Évaluation (test structure)",
         system_prompt: "Système d'évaluation.",
         user_template: "Manuscrit : {{manuscrit}}",
-        report_template: { title: "RAPPORT D'ÉVALUATION DE MANUSCRIT", sections: [{ key: "A", title: "Identification du manuscrit" }, { key: "M", title: "Avis final du relecteur" }] },
+        report_template: {
+          title: "RAPPORT D'ÉVALUATION DE MANUSCRIT",
+          sections: [{ key: "A", title: "Identification du manuscrit" }, { key: "M", title: "Avis final du relecteur" }],
+          guidance: "Ce document est un RAPPORT D'ÉVALUATION et NON un rapport de correction : aucune annotation de type texte original.",
+        },
       },
     });
     const res = await app.inject({
@@ -122,6 +126,10 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(lastSystem).toContain("STRUCTURE IMPOSÉE");
     expect(lastSystem).toContain("A. Identification du manuscrit");
     expect(lastSystem).toContain("M. Avis final du relecteur");
+    // Les consignes de forme PROPRES au gabarit d'évaluation sont transmises,
+    // et l'évaluation n'est PAS poussée vers des annotations de correction.
+    expect(lastSystem).toContain("NON un rapport de correction");
+    expect(lastSystem).not.toContain("correction proposée");
   });
 
   it("le journal des jobs du manuscrit est consultable et signale un rapport téléchargeable", async () => {

@@ -117,6 +117,23 @@ function splitCells(line: string): string[] {
   return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
 }
 
+// Jauge visuelle d'un score (« 16/20 », « 8/10 ») : le chiffre + une barre en
+// blocs (portion atteinte en or, reste en gris clair), à la manière des modèles
+// maison. Renvoie null si la cellule n'est pas un score.
+function scoreRuns(text: string): TextRun[] | null {
+  const m = /^\s*(\d+(?:[.,]\d+)?)\s*\/\s*(10|20)\s*$/.exec(text);
+  if (!m) return null;
+  const val = parseFloat(m[1].replace(",", "."));
+  const max = Number(m[2]);
+  const units = 10;
+  const filled = Math.max(0, Math.min(units, Math.round((val / max) * units)));
+  return [
+    new TextRun({ text: `${m[1]}/${m[2]}  `, bold: true, color: ECL.orDark, size: 19, font: FONT }),
+    new TextRun({ text: "█".repeat(filled), color: ECL.or, size: 19, font: FONT }),
+    new TextRun({ text: "█".repeat(units - filled), color: ECL.line, size: 19, font: FONT }),
+  ];
+}
+
 // Tableau (ex. grille d'évaluation) : en-tête noir/texte blanc, zébrure ivoire,
 // colonnes numériques centrées, filets discrets — rendu maison Éclosion.
 function buildTable(rows: string[][]): Table {
@@ -134,12 +151,18 @@ function buildTable(rows: string[][]): Table {
     })),
   });
   const dataRows = rows.slice(1).map((r, i) => new TableRow({
-    children: r.map((c, ci) => new TableCell({
-      shading: { fill: i % 2 ? ECL.ivoire : ECL.white, color: "auto", type: "clear" as never },
-      margins: { top: 50, bottom: 50, left: 100, right: 100 },
-      borders,
-      children: [new Paragraph({ alignment: numericCol(ci) ? AlignmentType.CENTER : AlignmentType.LEFT, children: inlineRuns(c, { color: numericCol(ci) ? ECL.orDark : ECL.ink, size: 19, bold: numericCol(ci) }) })],
-    })),
+    children: r.map((c, ci) => {
+      const gauge = scoreRuns(c); // jauge visuelle si la cellule est un score
+      return new TableCell({
+        shading: { fill: i % 2 ? ECL.ivoire : ECL.white, color: "auto", type: "clear" as never },
+        margins: { top: 50, bottom: 50, left: 100, right: 100 },
+        borders,
+        children: [new Paragraph({
+          alignment: gauge || numericCol(ci) ? AlignmentType.CENTER : AlignmentType.LEFT,
+          children: gauge ?? inlineRuns(c, { color: numericCol(ci) ? ECL.orDark : ECL.ink, size: 19, bold: numericCol(ci) }),
+        })],
+      });
+    }),
   }));
   return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headRow, ...dataRows] });
 }

@@ -5947,3 +5947,51 @@ export function getValidationThreshold() {
 export function setValidationThreshold(threshold: number) {
   return request<{ threshold: number }>("/api/v1/finance/validation-threshold", { method: "PUT", body: JSON.stringify({ threshold }) });
 }
+
+// Catalogue des ouvrages (Pôle Marketing & Distribution). Alimenté
+// automatiquement par les ouvrages publiés/archivés — aucune re-saisie.
+export type CatalogueSort = "recent" | "oldest" | "az" | "za" | "author" | "collection" | "genre";
+export interface CatalogueItem {
+  id: string;
+  reference: string;
+  title: string;
+  subtitle: string | null;
+  authors: string[];
+  collection: { id: string; label: string } | null;
+  genre: { id: string; label: string } | null;
+  publicationDate: string | null;
+  year: number | null;
+  pricePublic: number | null;
+  availability: string;
+  availabilityCode: string | null;
+  isBackCatalogue: boolean;
+  summary: string | null;
+  hasCover: boolean;
+}
+export interface CatalogueResponse {
+  items: CatalogueItem[];
+  sort: CatalogueSort;
+  defaultSort: CatalogueSort;
+  sorts: CatalogueSort[];
+  facets: {
+    collections: { id: string; label: string }[];
+    genres: { id: string; label: string }[];
+    years: number[];
+    availability: { code: string; label: string }[];
+  };
+}
+export function getCatalogue(params: { q?: string; collection?: string; genre?: string; year?: string; availability?: string; sort?: CatalogueSort } = {}): Promise<CatalogueResponse> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
+  const s = qs.toString();
+  return request<CatalogueResponse>(`/api/v1/catalogue${s ? `?${s}` : ""}`);
+}
+export function catalogueCoverUrl(id: string): string {
+  return `${API_BASE}/api/v1/catalogue/${id}/cover`;
+}
+export function getCatalogueConfig(): Promise<{ defaultSort: CatalogueSort; sorts: CatalogueSort[] }> {
+  return request("/api/v1/catalogue/config");
+}
+export function setCatalogueDefaultSort(default_sort: CatalogueSort): Promise<{ defaultSort: CatalogueSort }> {
+  return request("/api/v1/catalogue/config", { method: "PUT", body: JSON.stringify({ default_sort }) });
+}

@@ -84,7 +84,10 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
 
   const pageMargin = embed ? "0" : "18mm 16mm";
   // Fond « papier à en-tête » A4 officiel (forcé à l'impression). La zone centrale
-  // libre est réservée par le padding du bloc document.
+  // libre est réservée par le padding du bloc document. L'image est en HAUTE
+  // DÉFINITION (2635×3730 px ≈ 318 dpi à l'échelle A4) et le texte du pied
+  // (coordonnées, RC/NIU/BP, e-mail/site) y a été re-tracé net → plus de flou à
+  // l'impression, contrairement à l'ancienne version 127 dpi.
   const embedStyle = embed
     ? `body { background: url("${window.location.origin}/eclosion-papier-entete.png") top center / 210mm 297mm no-repeat; }
        .doc { max-width: none; padding: 58mm 20mm 58mm; }

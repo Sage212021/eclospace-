@@ -218,6 +218,9 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
                 >
                   🖨 Sur papier à en-tête
                 </button>
+                <a href={readingReportFileUrl(a.id)} target="_blank" rel="noreferrer" style={{ color: "var(--muted)", fontSize: 12, fontWeight: 600 }}>
+                  🖨 Tel quel (sans en-tête)
+                </a>
               </span>
             </div>
           ))}

@@ -78,4 +78,29 @@ describe("Fiche marketing par ouvrage (D-031)", () => {
     const res = await app.inject({ method: "PUT", url: `/api/v1/marketing/manuscripts/${manuscriptId}/plan`, headers: { cookie }, payload: { public_cible: "X" } });
     expect(res.statusCode).toBe(403);
   });
+
+  it("réseau de partenaires : création, filtre par type, modification, retrait", async () => {
+    const create = await app.inject({ method: "POST", url: "/api/v1/marketing/partners", headers: { cookie: adminCookie }, payload: { type: "librairie", name: `Librairie ${s}`, city: "Yaoundé", partnership_type: "dépôt-vente" } });
+    expect(create.statusCode).toBe(201);
+    const id = create.json().id;
+
+    const filtered = await app.inject({ method: "GET", url: "/api/v1/marketing/partners?type=librairie", headers: { cookie: adminCookie } });
+    expect((filtered.json().items as { id: string }[]).some((p) => p.id === id)).toBe(true);
+    const otherType = await app.inject({ method: "GET", url: "/api/v1/marketing/partners?type=universite", headers: { cookie: adminCookie } });
+    expect((otherType.json().items as { id: string }[]).some((p) => p.id === id)).toBe(false);
+
+    const patch = await app.inject({ method: "PATCH", url: `/api/v1/marketing/partners/${id}`, headers: { cookie: adminCookie }, payload: { active: false } });
+    expect(patch.json().active).toBe(false);
+
+    const del = await app.inject({ method: "DELETE", url: `/api/v1/marketing/partners/${id}`, headers: { cookie: adminCookie } });
+    expect(del.statusCode).toBe(200);
+    const after = await app.inject({ method: "GET", url: `/api/v1/marketing/partners?q=Librairie ${s}`, headers: { cookie: adminCookie } });
+    expect((after.json().items as { id: string }[]).some((p) => p.id === id)).toBe(false);
+  });
+
+  it("réseau de partenaires : écriture refusée sans marketing:saisie (403)", async () => {
+    const cookie = await login(`mkt_plain_${s}`, "Correcteur123!");
+    const res = await app.inject({ method: "POST", url: "/api/v1/marketing/partners", headers: { cookie }, payload: { type: "librairie", name: "X" } });
+    expect(res.statusCode).toBe(403);
+  });
 });

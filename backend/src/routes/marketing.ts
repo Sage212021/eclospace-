@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { MarketingCanal, MarketingActionStatus, MarketingPriorite } from "@prisma/client";
+import { MarketingCanal, MarketingActionStatus, MarketingPriorite, MarketingPartnerType } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -220,6 +220,100 @@ export default async function marketingRoutes(fastify: FastifyInstance) {
     if (!existing) return reply.code(404).send({ code: "not_found", message: "Action introuvable." });
     await prisma.marketingAction.update({ where: { id }, data: { deletedAt: new Date() } });
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "marketing_action", entityId: id, newValues: { deleted: true }, ipAddress: request.ip });
+    return reply.send({ deleted: true });
+  });
+
+  // ── Réseau de partenaires (annuaire de diffusion) ────────────────────────
+  const partnerSchema = z.object({
+    type: z.nativeEnum(MarketingPartnerType),
+    name: z.string().trim().min(1),
+    city: z.string().optional(),
+    country: z.string().optional(),
+    contact_name: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().optional(),
+    website: z.string().optional(),
+    partnership_type: z.string().optional(),
+    conditions: z.string().optional(),
+    notes: z.string().optional(),
+    active: z.boolean().optional(),
+  });
+  const partnerPatchSchema = partnerSchema.partial();
+
+  function partnerView(p: {
+    id: string; type: MarketingPartnerType; name: string; city: string | null; country: string | null; contactName: string | null;
+    phone: string | null; email: string | null; website: string | null; partnershipType: string | null; conditions: string | null; notes: string | null; active: boolean;
+  }) {
+    return {
+      id: p.id, type: p.type, name: p.name, city: p.city, country: p.country, contact_name: p.contactName,
+      phone: p.phone, email: p.email, website: p.website, partnership_type: p.partnershipType, conditions: p.conditions, notes: p.notes, active: p.active,
+    };
+  }
+
+  fastify.get("/api/v1/marketing/partners", { preHandler: READ }, async (request, reply) => {
+    const q = request.query as Record<string, string | undefined>;
+    const search = (q.q ?? "").trim();
+    const rows = await prisma.marketingPartner.findMany({
+      where: {
+        deletedAt: null,
+        ...(q.type && (Object.values(MarketingPartnerType) as string[]).includes(q.type) ? { type: q.type as MarketingPartnerType } : {}),
+        ...(search ? { OR: [{ name: { contains: search, mode: "insensitive" } }, { city: { contains: search, mode: "insensitive" } }, { contactName: { contains: search, mode: "insensitive" } }] } : {}),
+      },
+      orderBy: [{ name: "asc" }],
+    });
+    return reply.send({ items: rows.map(partnerView), types: Object.values(MarketingPartnerType) });
+  });
+
+  fastify.post("/api/v1/marketing/partners", { preHandler: WRITE }, async (request, reply) => {
+    const parsed = partnerSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Partenaire invalide (type et nom requis)." });
+    const d = parsed.data;
+    const created = await prisma.marketingPartner.create({
+      data: {
+        type: d.type, name: d.name, city: d.city || null, country: d.country || null, contactName: d.contact_name || null,
+        phone: d.phone || null, email: d.email || null, website: d.website || null, partnershipType: d.partnership_type || null,
+        conditions: d.conditions || null, notes: d.notes || null, active: d.active ?? true,
+        createdBy: request.user!.id, updatedBy: request.user!.id,
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "marketing_partner", entityId: created.id, newValues: { name: d.name, type: d.type }, ipAddress: request.ip });
+    return reply.code(201).send(partnerView(created));
+  });
+
+  fastify.patch("/api/v1/marketing/partners/:id", { preHandler: WRITE }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = partnerPatchSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Partenaire invalide." });
+    const existing = await prisma.marketingPartner.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Partenaire introuvable." });
+    const d = parsed.data;
+    const updated = await prisma.marketingPartner.update({
+      where: { id },
+      data: {
+        ...(d.type !== undefined ? { type: d.type } : {}),
+        ...(d.name !== undefined ? { name: d.name } : {}),
+        ...(d.city !== undefined ? { city: d.city || null } : {}),
+        ...(d.country !== undefined ? { country: d.country || null } : {}),
+        ...(d.contact_name !== undefined ? { contactName: d.contact_name || null } : {}),
+        ...(d.phone !== undefined ? { phone: d.phone || null } : {}),
+        ...(d.email !== undefined ? { email: d.email || null } : {}),
+        ...(d.website !== undefined ? { website: d.website || null } : {}),
+        ...(d.partnership_type !== undefined ? { partnershipType: d.partnership_type || null } : {}),
+        ...(d.conditions !== undefined ? { conditions: d.conditions || null } : {}),
+        ...(d.notes !== undefined ? { notes: d.notes || null } : {}),
+        ...(d.active !== undefined ? { active: d.active } : {}),
+        updatedBy: request.user!.id,
+      },
+    });
+    return reply.send(partnerView(updated));
+  });
+
+  fastify.delete("/api/v1/marketing/partners/:id", { preHandler: WRITE }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const existing = await prisma.marketingPartner.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Partenaire introuvable." });
+    await prisma.marketingPartner.update({ where: { id }, data: { deletedAt: new Date() } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "marketing_partner", entityId: id, newValues: { deleted: true }, ipAddress: request.ip });
     return reply.send({ deleted: true });
   });
 }

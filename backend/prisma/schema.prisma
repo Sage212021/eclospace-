@@ -4972,6 +4972,49 @@ enum MarketingPriorite {
   haute
 }
 
+// Réseau de partenaires / prescripteurs de diffusion (annuaire du pôle Marketing,
+// Communication & Distribution). Distinct des « clients » du Commercial : c'est
+// le carnet d'adresses de la mise en marché (librairies, écoles, distributeurs…).
+model MarketingPartner {
+  id              String                @id @default(uuid())
+  type            MarketingPartnerType
+  name            String
+  city            String?
+  country         String?
+  contactName     String?               @map("contact_name")
+  phone           String?
+  email           String?
+  website         String?
+  partnershipType String?               @map("partnership_type") // ex. dépôt-vente, achat ferme, convention
+  conditions      String?
+  notes           String?
+  active          Boolean               @default(true)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([type])
+  @@map("marketing_partners")
+}
+
+enum MarketingPartnerType {
+  librairie
+  ecole
+  universite
+  bibliotheque
+  distributeur
+  grossiste
+  revendeur
+  association
+  institution
+  media
+  organisateur_evenement
+  autre
+}
+
 // ============================================================
 // Stock & magasin — pièces officielles imprimables (revue opérateur du
 // 27/08/2026) : Bon de réception de livres (entrée fournisseur/imprimeur) et

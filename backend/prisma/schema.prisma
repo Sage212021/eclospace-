@@ -4862,6 +4862,9 @@ model AnnualEvent {
   location    String?
   dgPresent   Boolean           @default(false) @map("dg_present")
   status      AnnualEventStatus @default(a_venir)
+  // Faire défiler cet événement dans le bandeau « À venir » du Hall. Coché par
+  // défaut ; on le décoche pour les événements internes (ex. voyages du DG).
+  showInBanner Boolean          @default(true) @map("show_in_banner")
 
   // Affiche de l'événement (image légère, affichée directement). Stockée hors
   // base (disque en dev, stockage objet durable en prod) comme la GED.

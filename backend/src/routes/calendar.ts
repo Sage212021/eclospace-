@@ -139,6 +139,19 @@ async function buildBirthdayEvents(from: Date, to: Date) {
 
 // Format compact et neutre (indépendant de la langue) pour le corps des
 // notifications d'événement.
+// Choisit une icône pour un événement du « Planning des événements » (qui n'a
+// pas de champ « type ») d'après ses mots-clés — réutilise les mêmes familles
+// d'icônes que le bandeau (dédicace, salon, lancement, formation…).
+function annualEventIcon(title: string, description?: string | null): string {
+  const t = `${title} ${description ?? ""}`.toLocaleLowerCase("fr");
+  if (/(dédicace|dedicace|dédica|dedica|signature)/.test(t)) return "dedicace";
+  if (/(salon|foire)/.test(t)) return "salon";
+  if (/(lancement)/.test(t)) return "lancement";
+  if (/(masterclass|formation|atelier|académie|academie)/.test(t)) return "formation";
+  if (/(voyage|mission|déplacement|deplacement)/.test(t)) return "sortie";
+  return "ceremonie";
+}
+
 function eventWhen(startsAt: Date, allDay: boolean): string {
   const p = (n: number) => String(n).padStart(2, "0");
   const day = `${startsAt.getUTCFullYear()}-${p(startsAt.getUTCMonth() + 1)}-${p(startsAt.getUTCDate())}`;
@@ -296,19 +309,33 @@ export default async function calendarRoutes(fastify: FastifyInstance) {
     });
     const birthdays = await buildBirthdayEvents(startOfToday, until);
 
-    type Raw = { id: string; title: string; type: string; starts_at: Date | string; all_day: boolean; location: string | null; birthday: boolean; person: string | null };
+    // Événements du « Planning des événements » (dédicaces, salons, lancements…)
+    // cochés « à faire défiler » et encore à venir. Le Planning n'a pas de
+    // ciblage par pôle : ce sont des événements de la maison, diffusés à tous.
+    // Les événements internes (ex. voyages du DG) se retirent en décochant la
+    // case « Afficher dans le bandeau » sur la fiche de l'événement.
+    const annual = await prisma.annualEvent.findMany({
+      where: { deletedAt: null, showInBanner: true, status: { in: ["a_venir", "a_confirmer"] }, startDate: { lt: until } },
+      orderBy: { startDate: "asc" },
+    });
+
+    type Raw = { id: string; title: string; type: string; starts_at: Date | string; ends_at: Date | string | null; all_day: boolean; location: string | null; birthday: boolean; person: string | null };
     const raw: Raw[] = [
-      ...stored.map((e) => ({ id: e.id, title: e.title, type: e.type as string, starts_at: e.startsAt, all_day: e.allDay, location: e.location, birthday: false, person: null })),
-      ...birthdays.map((b) => ({ id: b.id, title: b.title, type: b.type, starts_at: b.starts_at, all_day: b.all_day, location: b.location, birthday: true, person: b.person })),
+      ...stored.map((e) => ({ id: e.id, title: e.title, type: e.type as string, starts_at: e.startsAt, ends_at: null, all_day: e.allDay, location: e.location, birthday: false, person: null })),
+      ...birthdays.map((b) => ({ id: b.id, title: b.title, type: b.type, starts_at: b.starts_at, ends_at: null, all_day: b.all_day, location: b.location, birthday: true, person: b.person })),
+      ...annual.map((e) => ({ id: `annual:${e.id}`, title: e.title, type: annualEventIcon(e.title, e.description), starts_at: e.startDate, ends_at: e.endDate ?? e.startDate, all_day: true, location: e.location, birthday: false, person: null })),
     ];
 
     const enriched = raw
       .map((e) => {
         const start = new Date(e.starts_at);
-        // Fin de référence : fin de journée pour un « journée entière », sinon
-        // le début — sert à retirer les événements passés.
-        const refEnd = e.all_day
-          ? new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate(), 23, 59, 59))
+        // Fin de référence : la date de fin (fin de journée) si l'événement en a
+        // une — cas des événements sur plusieurs jours (salon 12→13 déc.) —, sinon
+        // fin de journée pour un « journée entière », sinon le début. Sert à
+        // retirer les événements passés.
+        const endBase = e.ends_at ? new Date(e.ends_at) : e.all_day ? start : null;
+        const refEnd = endBase
+          ? new Date(Date.UTC(endBase.getUTCFullYear(), endBase.getUTCMonth(), endBase.getUTCDate(), 23, 59, 59))
           : start;
         const minutesUntil = Math.round((start.getTime() - now.getTime()) / 60000);
         const sameDay =

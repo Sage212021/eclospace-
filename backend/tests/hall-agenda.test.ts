@@ -97,7 +97,32 @@ describe("hall — bandeau programme à venir (D-029)", () => {
 
     const soon = body.events.find((e) => e.id === soonId)!;
     expect(soon.priority).toBe("urgent");
-    // Les urgents sont mis en tête.
-    expect(body.events[0].id).toBe(soonId);
+    // Les urgents sont mis en tête : l'urgent apparaît AVANT l'événement futur
+    // non urgent. (On ne vérifie pas l'index 0 absolu : le bandeau de l'admin voit
+    // tous les événements de la maison, d'autres pouvant coexister.)
+    expect(ids.indexOf(soonId)).toBeLessThan(ids.indexOf(futureId));
+    expect(body.events.find((e) => e.priority === "urgent")!.id).toBeTruthy();
+  });
+
+  it("le bandeau intègre les événements du Planning cochés, et retire ceux décochés (voyages du DG)", async () => {
+    const rnd = Math.random().toString(36).slice(2, 6);
+    const day = (offsetDays: number) => new Date(Date.now() + offsetDays * 86_400_000).toISOString().slice(0, 10);
+    const mkAnnual = async (title: string, show_in_banner: boolean) => {
+      const r = await app.inject({
+        method: "POST",
+        url: "/api/v1/annual-events",
+        headers: { cookie: adminCookie },
+        payload: { title, start_date: day(10), status: "a_venir", show_in_banner },
+      });
+      expect(r.statusCode).toBe(201);
+      return r.json().id as string;
+    };
+    const shownId = await mkAnnual(`Dédicace ${rnd}`, true);
+    const hiddenId = await mkAnnual(`Voyage de la DG ${rnd}`, false);
+
+    const res = await app.inject({ method: "GET", url: "/api/v1/calendar/agenda-banner", headers: { cookie: adminCookie } });
+    const ids = (res.json().events as { id: string }[]).map((e) => e.id);
+    expect(ids).toContain(`annual:${shownId}`); // événement du Planning coché → défile
+    expect(ids).not.toContain(`annual:${hiddenId}`); // décoché → jamais dans le bandeau
   });
 });

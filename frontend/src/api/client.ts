@@ -1847,6 +1847,7 @@ export interface AnnualEvent {
   location: string | null;
   dg_present: boolean;
   status: AnnualEventStatus;
+  show_in_banner: boolean;
   has_affiche: boolean;
   updated_at: string;
 }
@@ -1858,6 +1859,7 @@ export interface AnnualEventInput {
   location?: string;
   dg_present?: boolean;
   status?: AnnualEventStatus;
+  show_in_banner?: boolean;
 }
 
 export function listAnnualEvents() {

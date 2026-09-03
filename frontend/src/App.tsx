@@ -26,6 +26,7 @@ const MyDossiers = lazy(() => import("./pages/MyDossiers").then((m) => ({ defaul
 const StockPage = lazy(() => import("./pages/StockPage").then((m) => ({ default: m.StockPage })));
 const CommercialPage = lazy(() => import("./pages/CommercialPage").then((m) => ({ default: m.CommercialPage })));
 const CataloguePage = lazy(() => import("./pages/CataloguePage").then((m) => ({ default: m.CataloguePage })));
+const MarketingPlansPage = lazy(() => import("./pages/MarketingPlansPage").then((m) => ({ default: m.MarketingPlansPage })));
 const FinancePage = lazy(() => import("./pages/FinancePage").then((m) => ({ default: m.FinancePage })));
 const HrPage = lazy(() => import("./pages/HrPage").then((m) => ({ default: m.HrPage })));
 const DirectionPage = lazy(() => import("./pages/DirectionPage").then((m) => ({ default: m.DirectionPage })));
@@ -90,6 +91,7 @@ type PageId =
   | "stock"
   | "commercial"
   | "catalogue"
+  | "marketing-plans"
   | "finance"
   | "hr"
   | "direction"
@@ -200,6 +202,7 @@ const NAV_POLES: NavPole[] = [
     label: "Marketing, Communication & Distribution",
     items: [
       { key: "md-catalogue", label: "Catalogue des ouvrages", permission: "communication:consultation" },
+      { key: "md-fiches", label: "Fiches marketing", permission: "marketing:consultation" },
     ],
   },
   {
@@ -279,6 +282,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "pr-bat": { stage: "VALIDATION_BAT", heading: "BAT & contrôle qualité" },
   "pr-impression": { stage: "IMPRESSION", heading: "Impression" },
   "md-catalogue": { page: "catalogue" },
+  "md-fiches": { page: "marketing-plans" },
   "co-stock": { page: "stock" },
   "co-ventes": { page: "commercial" },
   "co-mes-performances": { page: "commercial-performance" },
@@ -827,6 +831,9 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "catalogue" && (
           <CataloguePage onOpenManuscript={openManuscript} canAdmin={permissions.has("communication:administration")} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "marketing-plans" && (
+          <MarketingPlansPage canManage={permissions.has("marketing:saisie")} />
         )}
         {leaf && "page" in leaf && leaf.page === "finance" && (
           <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} canInitiateOrder={canInitiateOrder} canValidateCancellation={permissions.has("pilotage:administration")} />

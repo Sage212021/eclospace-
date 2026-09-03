@@ -35,6 +35,7 @@ import stockVoucherRoutes from "./routes/stockVouchers.js";
 import authorCopyRoutes from "./routes/authorCopies.js";
 import commercialRoutes from "./routes/commercial.js";
 import catalogueRoutes from "./routes/catalogue.js";
+import marketingRoutes from "./routes/marketing.js";
 import financeRoutes from "./routes/finance.js";
 import financeRequestRoutes from "./routes/financeRequests.js";
 import editorialQuoteRoutes from "./routes/editorialQuotes.js";
@@ -211,6 +212,7 @@ export async function buildApp() {
   await app.register(authorCopyRoutes);
   await app.register(commercialRoutes);
   await app.register(catalogueRoutes);
+  await app.register(marketingRoutes);
   await app.register(financeRoutes);
   await app.register(financeRequestRoutes);
   await app.register(editorialQuoteRoutes);

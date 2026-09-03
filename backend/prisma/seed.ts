@@ -67,7 +67,7 @@ const lot5Modules = ["finance", "royalties"];
 const lot6Modules = ["rh", "rh_confidentiel", "direction", "pilotage", "rapports"];
 // Évolution : modules « Présences & Temps de travail » et « Paie » (D-007),
 // indépendants et désactivables.
-const evolutionModules = ["presences", "paie", "communication", "service_auteurs"];
+const evolutionModules = ["presences", "paie", "communication", "service_auteurs", "marketing"];
 const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules, ...lot5Modules, ...lot6Modules, ...evolutionModules];
 const actions = Object.values(PermissionAction);
 
@@ -1035,6 +1035,19 @@ async function main() {
   for (const demoted of ["RESP_FINANCE", "DIR_EDITORIAL"]) {
     await revoke(demoted, ["communication:saisie", "communication:administration"]);
   }
+
+  // ── Pôle Marketing, Communication & Distribution (D-031) : fiche marketing ──
+  // Consultation ouverte aux profils qui suivent la mise en marché ; saisie pour
+  // le marketing/communication, la direction éditoriale et le DG ;
+  // administration (paramètres du pôle) pour le DG. L'administrateur général a
+  // déjà toutes les permissions.
+  for (const r of ["CHARGE_COMMUNICATION", "DIR_GENERAL", "DIR_EDITORIAL", "RESP_COMMERCIAL", "RESP_RH"]) {
+    await grant(r, ["marketing:consultation"]);
+  }
+  for (const r of ["CHARGE_COMMUNICATION", "DIR_GENERAL", "DIR_EDITORIAL"]) {
+    await grant(r, ["marketing:saisie"]);
+  }
+  await grant("DIR_GENERAL", ["marketing:validation", "marketing:administration"]);
 
   // ── Espace Auteur : guichets Service Éducation / Service Client (inc. 2b) ────
   // Les messages des auteurs vers les services sont traités par les profils

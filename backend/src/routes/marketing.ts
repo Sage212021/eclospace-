@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { MarketingCanal, MarketingActionStatus, MarketingPriorite, MarketingPartnerType } from "@prisma/client";
+import { MarketingCanal, MarketingActionStatus, MarketingPriorite, MarketingPartnerType, MarketingCampaignStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -315,5 +315,151 @@ export default async function marketingRoutes(fastify: FastifyInstance) {
     await prisma.marketingPartner.update({ where: { id }, data: { deletedAt: new Date() } });
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "marketing_partner", entityId: id, newValues: { deleted: true }, ipAddress: request.ip });
     return reply.send({ deleted: true });
+  });
+
+  // ── Campagnes marketing ───────────────────────────────────────────────────
+  const campaignSchema = z.object({
+    name: z.string().trim().min(1),
+    objective: z.string().optional(),
+    manuscript_id: z.string().uuid().nullable().optional(),
+    start_date: z.string().nullable().optional(),
+    end_date: z.string().nullable().optional(),
+    budget_prevu: z.number().nonnegative().nullable().optional(),
+    budget_engage: z.number().nonnegative().nullable().optional(),
+    statut: z.nativeEnum(MarketingCampaignStatus).optional(),
+    resultats: z.string().optional(),
+    notes: z.string().optional(),
+  });
+  const campaignPatchSchema = campaignSchema.partial();
+
+  function campaignView(c: {
+    id: string; name: string; objective: string | null; startDate: Date | null; endDate: Date | null;
+    budgetPrevu: unknown; budgetEngage: unknown; statut: MarketingCampaignStatus; resultats: string | null; notes: string | null;
+    manuscript: { id: string; title: string } | null;
+  }) {
+    return {
+      id: c.id, name: c.name, objective: c.objective, start_date: c.startDate, end_date: c.endDate,
+      budget_prevu: num(c.budgetPrevu), budget_engage: num(c.budgetEngage), statut: c.statut, resultats: c.resultats, notes: c.notes,
+      book: c.manuscript ? { id: c.manuscript.id, title: c.manuscript.title } : null,
+    };
+  }
+
+  fastify.get("/api/v1/marketing/campaigns", { preHandler: READ }, async (request, reply) => {
+    const q = request.query as Record<string, string | undefined>;
+    const rows = await prisma.marketingCampaign.findMany({
+      where: { deletedAt: null, ...(q.statut && (Object.values(MarketingCampaignStatus) as string[]).includes(q.statut) ? { statut: q.statut as MarketingCampaignStatus } : {}) },
+      orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+      include: { manuscript: { select: { id: true, title: true } } },
+    });
+    return reply.send({ items: rows.map(campaignView) });
+  });
+
+  fastify.post("/api/v1/marketing/campaigns", { preHandler: WRITE }, async (request, reply) => {
+    const parsed = campaignSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Campagne invalide (nom requis)." });
+    const d = parsed.data;
+    const created = await prisma.marketingCampaign.create({
+      data: {
+        name: d.name, objective: d.objective || null, manuscriptId: d.manuscript_id ?? null,
+        startDate: toDate(d.start_date), endDate: toDate(d.end_date), budgetPrevu: d.budget_prevu ?? null, budgetEngage: d.budget_engage ?? null,
+        statut: d.statut ?? "planifiee", resultats: d.resultats || null, notes: d.notes || null,
+        createdBy: request.user!.id, updatedBy: request.user!.id,
+      },
+      include: { manuscript: { select: { id: true, title: true } } },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "marketing_campaign", entityId: created.id, newValues: { name: d.name }, ipAddress: request.ip });
+    return reply.code(201).send(campaignView(created));
+  });
+
+  fastify.patch("/api/v1/marketing/campaigns/:id", { preHandler: WRITE }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = campaignPatchSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Campagne invalide." });
+    const existing = await prisma.marketingCampaign.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Campagne introuvable." });
+    const d = parsed.data;
+    const updated = await prisma.marketingCampaign.update({
+      where: { id },
+      data: {
+        ...(d.name !== undefined ? { name: d.name } : {}),
+        ...(d.objective !== undefined ? { objective: d.objective || null } : {}),
+        ...(d.manuscript_id !== undefined ? { manuscriptId: d.manuscript_id ?? null } : {}),
+        ...(d.start_date !== undefined ? { startDate: toDate(d.start_date) } : {}),
+        ...(d.end_date !== undefined ? { endDate: toDate(d.end_date) } : {}),
+        ...(d.budget_prevu !== undefined ? { budgetPrevu: d.budget_prevu ?? null } : {}),
+        ...(d.budget_engage !== undefined ? { budgetEngage: d.budget_engage ?? null } : {}),
+        ...(d.statut !== undefined ? { statut: d.statut } : {}),
+        ...(d.resultats !== undefined ? { resultats: d.resultats || null } : {}),
+        ...(d.notes !== undefined ? { notes: d.notes || null } : {}),
+        updatedBy: request.user!.id,
+      },
+      include: { manuscript: { select: { id: true, title: true } } },
+    });
+    return reply.send(campaignView(updated));
+  });
+
+  fastify.delete("/api/v1/marketing/campaigns/:id", { preHandler: WRITE }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const existing = await prisma.marketingCampaign.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Campagne introuvable." });
+    await prisma.marketingCampaign.update({ where: { id }, data: { deletedAt: new Date() } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "marketing_campaign", entityId: id, newValues: { deleted: true }, ipAddress: request.ip });
+    return reply.send({ deleted: true });
+  });
+
+  // ── Tableau de bord Marketing (agrégats + à-faire + prochaines actions) ────
+  fastify.get("/api/v1/marketing/dashboard", { preHandler: READ }, async (_request, reply) => {
+    const now = new Date();
+    const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const in7 = new Date(startOfToday.getTime() + 7 * 86_400_000);
+    const openStatuts: MarketingActionStatus[] = ["a_faire", "en_cours"];
+
+    const [catalogue, campaignsActive, partnersActive, actions, campaigns, plansCount, publishedCount] = await Promise.all([
+      prisma.manuscript.count({ where: { deletedAt: null, status: { stepOrder: { gte: 17 } } } }),
+      prisma.marketingCampaign.count({ where: { deletedAt: null, statut: "en_cours" } }),
+      prisma.marketingPartner.count({ where: { deletedAt: null, active: true } }),
+      prisma.marketingAction.findMany({
+        where: { deletedAt: null, statut: { not: "annule" } },
+        select: { id: true, action: true, canal: true, echeance: true, statut: true, budgetEngage: true, budgetPrevu: true, plan: { select: { manuscript: { select: { id: true, title: true } } } } },
+      }),
+      prisma.marketingCampaign.findMany({ where: { deletedAt: null, statut: { not: "annulee" } }, select: { budgetEngage: true } }),
+      prisma.marketingPlan.count({ where: { deletedAt: null } }),
+      prisma.manuscript.count({ where: { deletedAt: null, status: { stepOrder: { gte: 17 } } } }),
+    ]);
+
+    const actionsWeek = actions.filter((a) => a.echeance && a.echeance >= startOfToday && a.echeance < in7 && openStatuts.includes(a.statut));
+    const actionsLate = actions.filter((a) => a.echeance && a.echeance < startOfToday && openStatuts.includes(a.statut));
+    const launchesUpcoming = actions.filter((a) => a.canal === "lancement" && a.echeance && a.echeance >= startOfToday && openStatuts.includes(a.statut));
+    const budgetEngage = actions.reduce((s, a) => s + Number(a.budgetEngage ?? 0), 0) + campaigns.reduce((s, c) => s + Number(c.budgetEngage ?? 0), 0);
+    const budgetPrevu = actions.reduce((s, a) => s + Number(a.budgetPrevu ?? 0), 0);
+
+    const upcoming = actions
+      .filter((a) => a.echeance && a.echeance >= startOfToday && openStatuts.includes(a.statut))
+      .sort((x, y) => (x.echeance!.getTime() - y.echeance!.getTime()))
+      .slice(0, 8)
+      .map((a) => ({ id: a.id, action: a.action, canal: a.canal, echeance: a.echeance, statut: a.statut, book: a.plan.manuscript ? { id: a.plan.manuscript.id, title: a.plan.manuscript.title } : null }));
+
+    const activeCampaigns = await prisma.marketingCampaign.findMany({
+      where: { deletedAt: null, statut: "en_cours" }, orderBy: { endDate: "asc" }, take: 8,
+      include: { manuscript: { select: { id: true, title: true } } },
+    });
+
+    return reply.send({
+      kpis: {
+        catalogue,
+        campaigns_active: campaignsActive,
+        actions_week: actionsWeek.length,
+        partners_active: partnersActive,
+        launches_upcoming: launchesUpcoming.length,
+        budget_prevu: budgetPrevu,
+        budget_engage: budgetEngage,
+      },
+      alerts: {
+        actions_late: actionsLate.length,
+        books_without_plan: Math.max(0, publishedCount - plansCount),
+      },
+      upcoming_actions: upcoming,
+      active_campaigns: activeCampaigns.map((c) => ({ id: c.id, name: c.name, statut: c.statut, end_date: c.endDate, budget_engage: num(c.budgetEngage), book: c.manuscript ? { id: c.manuscript.id, title: c.manuscript.title } : null })),
+    });
   });
 }

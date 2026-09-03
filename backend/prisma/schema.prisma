@@ -1883,6 +1883,7 @@ model Manuscript {
   schoolRoyaltyEntries SchoolRoyaltyEntry[]
   financeRequests      ManuscriptFinanceRequest[]
   marketingPlan        MarketingPlan?
+  marketingCampaigns   MarketingCampaign[]
 
   @@map("manuscripts")
 }
@@ -5013,6 +5014,39 @@ enum MarketingPartnerType {
   media
   organisateur_evenement
   autre
+}
+
+// Campagne marketing : opération datée et budgétée, éventuellement rattachée à
+// un ouvrage (lancement, promotion de rentrée, tournée de dédicaces…).
+model MarketingCampaign {
+  id           String                  @id @default(uuid())
+  name         String
+  objective    String?
+  manuscriptId String?                 @map("manuscript_id")
+  manuscript   Manuscript?             @relation(fields: [manuscriptId], references: [id])
+  startDate    DateTime?               @map("start_date")
+  endDate      DateTime?               @map("end_date")
+  budgetPrevu  Decimal?                @map("budget_prevu") @db.Decimal(12, 2)
+  budgetEngage Decimal?                @map("budget_engage") @db.Decimal(12, 2)
+  statut       MarketingCampaignStatus @default(planifiee)
+  resultats    String?
+  notes        String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([statut])
+  @@map("marketing_campaigns")
+}
+
+enum MarketingCampaignStatus {
+  planifiee
+  en_cours
+  terminee
+  annulee
 }
 
 // ============================================================

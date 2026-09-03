@@ -757,19 +757,20 @@ async function main() {
       label: "2ᵉ correction (Correction éditoriale)",
       systemPrompt:
         REGLE_DOR +
-        " Il s'agit d'un contrôle APRÈS la 1ʳᵉ correction : tu vérifies d'abord que les corrections précédentes ont bien été appliquées, puis tu traques les erreurs résiduelles. Tu produis un rapport et les annotations pour le manuscrit corrigé V2.",
+        " Il s'agit du CONTRÔLE de la 2ᵉ correction, APRÈS la 1ʳᵉ relecture. Ta mission PREMIÈRE est de faire RESSORTIR CLAIREMENT ce qui n'a PAS été pris en compte depuis la 1ʳᵉ relecture. Pour CHAQUE correction demandée en 1ʳᵉ relecture, tu indiques son statut : ✔ APPLIQUÉE, ✘ NON APPLIQUÉE, ou ~ PARTIELLEMENT appliquée, avec le constat observé en V2 (page à l'appui). Tu calcules un taux d'application (nombre de corrections appliquées / total). Tu consacres une rubrique DÉDIÉE ET PRIORITAIRE aux corrections NON prises en compte, classées par gravité. Puis tu relèves les anomalies résiduelles ou nouvellement introduites. Chaque annotation précise : numéro, page, type, texte original, correction proposée, explication. Si tu ne disposes pas du détail des demandes de la 1ʳᵉ relecture, tu le signales explicitement et tu déduis le suivi des corrections encore visibles dans le texte.",
       userTemplate:
         "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit après 1ʳᵉ correction (à contrôler) :\n{{manuscrit}}",
       reportTemplate: {
-        title: "RAPPORT DE 2ᵉ CORRECTION",
+        title: "RAPPORT DE 2ᵉ CORRECTION — CONTRÔLE DE LA 1ʳᵉ RELECTURE",
         sections: [
-          { key: "0", title: "Vérification des corrections précédentes (appliquées / non appliquées / nouvelles)" },
-          { key: "1", title: "Évaluation globale (scores /20 · note globale /100 · verdict)" },
-          { key: "2", title: "Points forts de l'œuvre" },
-          { key: "3", title: "Annotations de correction (erreurs résiduelles)" },
-          { key: "4", title: "Observations structurelles et stylistiques" },
-          { key: "5", title: "Corrections prioritaires avant publication" },
-          { key: "6", title: "Recommandations éditoriales générales" },
+          { key: "0", title: "Synthèse du contrôle V1 → V2 (taux d'application des corrections · nombre appliquées / non appliquées / partielles · verdict d'avancement)" },
+          { key: "1", title: "Suivi des corrections de la 1ʳᵉ relecture (tableau : n° · page · correction demandée en V1 · statut ✔ appliquée / ✘ non appliquée / ~ partielle · constat en V2)" },
+          { key: "2", title: "Corrections NON prises en compte — rappel prioritaire (liste des ✘ et ~, classées par gravité, à traiter impérativement)" },
+          { key: "3", title: "Anomalies résiduelles et nouvelles (annotations par type : orthographe/accords, syntaxe, ponctuation/typographie, style/répétitions)" },
+          { key: "4", title: "Évaluation globale (scores par critère /20 · note globale /100 · évolution par rapport à la 1ʳᵉ relecture)" },
+          { key: "5", title: "Observations structurelles et stylistiques" },
+          { key: "6", title: "Corrections prioritaires avant publication" },
+          { key: "7", title: "Verdict et recommandations éditoriales" },
         ],
         deliverables: ["Rapport_deuxieme_correction", "Manuscrit_corrige_V2"],
       },
@@ -807,6 +808,20 @@ async function main() {
         userTemplate: p.userTemplate,
         reportTemplate: p.reportTemplate as object,
       },
+    });
+  }
+
+  // Mise à niveau ponctuelle du gabarit de 2ᵉ correction (V2) vers le modèle
+  // « contrôle de la 1ʳᵉ relecture » qui fait ressortir les corrections NON
+  // prises en compte. On ne met à jour QUE si l'opérateur ne l'a pas
+  // personnalisé (titre encore à la valeur d'origine « RAPPORT DE 2ᵉ CORRECTION »).
+  // Idempotent : une fois à jour, le titre change et la condition ne s'applique plus.
+  const v2 = aiPrompts.find((p) => p.workType === "correction_2");
+  const existingV2 = await prisma.aiPrompt.findUnique({ where: { workType: "correction_2" } });
+  if (v2 && existingV2 && (existingV2.reportTemplate as { title?: string })?.title === "RAPPORT DE 2ᵉ CORRECTION") {
+    await prisma.aiPrompt.update({
+      where: { workType: "correction_2" },
+      data: { systemPrompt: v2.systemPrompt, reportTemplate: v2.reportTemplate as object, version: { increment: 1 } },
     });
   }
 

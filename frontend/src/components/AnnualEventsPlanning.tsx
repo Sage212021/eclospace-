@@ -334,6 +334,7 @@ function EventRow({
           <span style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>{ev.title}</span>
           {ev.dg_present && <span title={t("events.dg", "Présence de la Direction générale")} style={dgBadge}>DG</span>}
           <span style={statusChip(ev.status)}>{st.label}</span>
+          {!ev.show_in_banner && <span title={t("events.not_in_banner", "N'apparaît pas dans le bandeau « À venir »")} style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 999, padding: "1px 8px" }}>{t("events.off_banner", "Hors bandeau")}</span>}
         </div>
         {ev.description && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2, fontStyle: "italic" }}>{ev.description}</div>}
         <div style={{ fontSize: 12.5, color: "var(--ink)", marginTop: 4, fontFamily: "var(--font-mono)" }}>
@@ -378,6 +379,7 @@ function EventEditor({ event, onClose, onSaved, t }: { event: AnnualEvent | null
     location: event?.location ?? "",
     dg_present: event?.dg_present ?? false,
     status: event?.status ?? "a_venir",
+    show_in_banner: event?.show_in_banner ?? true,
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -437,6 +439,15 @@ function EventEditor({ event, onClose, onSaved, t }: { event: AnnualEvent | null
           {t("events.f_dg", "Présence de la DG")}
         </label>
       </div>
+      {/* Diffusion dans le bandeau « À venir » du Hall : cochée par défaut ; on la
+          décoche pour les événements internes (ex. voyages du DG). */}
+      <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13.5, padding: "6px 0", marginTop: 4 }}>
+        <input type="checkbox" checked={form.show_in_banner} onChange={(e) => setForm({ ...form, show_in_banner: e.target.checked })} style={{ marginTop: 2 }} />
+        <span>
+          {t("events.f_banner", "Afficher dans le bandeau « À venir »")}
+          <span style={{ display: "block", color: "var(--muted)", fontSize: 11.5 }}>{t("events.f_banner_hint", "Décochez pour un événement interne (ex. voyage de la DG) : il n'apparaîtra pas dans le bandeau défilant.")}</span>
+        </span>
+      </label>
     </Modal>
   );
 }

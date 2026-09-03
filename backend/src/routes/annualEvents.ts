@@ -25,6 +25,8 @@ const eventSchema = z.object({
   location: z.string().trim().optional().or(z.literal("")),
   dg_present: z.boolean().default(false),
   status: z.nativeEnum(AnnualEventStatus).default("a_venir"),
+  // Faire défiler dans le bandeau « À venir » (coché par défaut).
+  show_in_banner: z.boolean().default(true),
 });
 const patchSchema = eventSchema.partial();
 
@@ -36,7 +38,7 @@ function toDate(v?: string | null): Date | null {
 
 function serialize(e: {
   id: string; title: string; description: string | null; startDate: Date; endDate: Date | null;
-  location: string | null; dgPresent: boolean; status: AnnualEventStatus;
+  location: string | null; dgPresent: boolean; status: AnnualEventStatus; showInBanner: boolean;
   afficheMimeType: string | null; updatedAt: Date;
 }) {
   return {
@@ -48,6 +50,7 @@ function serialize(e: {
     location: e.location,
     dg_present: e.dgPresent,
     status: e.status,
+    show_in_banner: e.showInBanner,
     has_affiche: Boolean(e.afficheMimeType),
     updated_at: e.updatedAt,
   };
@@ -78,6 +81,7 @@ export default async function annualEventsRoutes(fastify: FastifyInstance) {
         location: parsed.data.location || null,
         dgPresent: parsed.data.dg_present,
         status: parsed.data.status,
+        showInBanner: parsed.data.show_in_banner,
         createdBy: request.user!.id,
         updatedBy: request.user!.id,
       },
@@ -105,6 +109,7 @@ export default async function annualEventsRoutes(fastify: FastifyInstance) {
         ...(d.location !== undefined ? { location: d.location || null } : {}),
         ...(d.dg_present !== undefined ? { dgPresent: d.dg_present } : {}),
         ...(d.status !== undefined ? { status: d.status } : {}),
+        ...(d.show_in_banner !== undefined ? { showInBanner: d.show_in_banner } : {}),
         updatedBy: request.user!.id,
       },
     });

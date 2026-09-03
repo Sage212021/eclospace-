@@ -179,7 +179,7 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(dl.statusCode).toBe(404);
   });
 
-  it("la 1ʳᵉ correction produit AUSSI un manuscrit corrigé (V1) en plus du rapport", async () => {
+  it("le BAT1 produit AUSSI un manuscrit corrigé (BAT1) en plus du rapport", async () => {
     const res = await app.inject({
       method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
       payload: { manuscript_id: manuscriptId, work_type: "correction_1", step_code: "CORRECTION" },
@@ -188,7 +188,7 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     const job = await waitJob(res.json().jobId);
     // Deux documents produits : le rapport + le manuscrit corrigé.
     expect((job.producedDocumentIds as string[]).length).toBe(2);
-    const corrected = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, title: { contains: "Manuscrit corrigé (IA) — V1" } } });
+    const corrected = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, title: { contains: "Manuscrit corrigé (IA) — BAT1" } } });
     expect(corrected).not.toBeNull();
   });
 

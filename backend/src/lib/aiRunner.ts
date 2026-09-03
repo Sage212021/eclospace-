@@ -460,7 +460,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // corrigé PAR TRANCHES pour tenir sur les gros volumes. L'IA renvoie le texte
     // corrigé seul ; le correcteur reste maître de l'intégration.
     if ((params.workType === "correction_1" || params.workType === "correction_2") && prepared.kind === "text" && prepared.text.trim()) {
-      const versionLabel = params.workType === "correction_1" ? "V1" : "V2";
+      const versionLabel = params.workType === "correction_1" ? "BAT1" : "BAT2";
       const rewriteSystem =
         "Tu es le correcteur du Service de relecture d'Éclosion Édition. On te confie un passage de manuscrit. Renvoie UNIQUEMENT le texte corrigé (orthographe, grammaire, syntaxe, ponctuation, typographie, répétitions), sans aucun commentaire, sans balise, sans note. Conserve strictement le sens, le style de l'auteur, la mise en paragraphes et la structure. Tu ne mentionnes jamais que tu es une intelligence artificielle.";
       const recoPrefix = params.editorRecommendation?.trim() ? `Consigne particulière de l'éditeur : ${params.editorRecommendation.trim()}\n\n` : "";

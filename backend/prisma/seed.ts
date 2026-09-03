@@ -735,50 +735,57 @@ async function main() {
     },
     {
       workType: "correction_1",
-      label: "Relecture / 1ʳᵉ correction (Correction éditoriale)",
+      label: "Relecture BAT1 (Correction éditoriale)",
       systemPrompt:
         REGLE_DOR +
-        " Tu produis (1) un rapport de relecture professionnelle et (2) les annotations de correction permettant d'obtenir le manuscrit corrigé V1. Chaque annotation précise : numéro, page, type, texte original, correction proposée, explication.",
+        " Tu produis le RAPPORT DE RELECTURE — BAT1 (premier passage de correction éditoriale) selon le modèle officiel Éclosion, et les annotations permettant d'obtenir le manuscrit corrigé BAT1." +
+        " La grille de notation compte EXACTEMENT 7 critères notés chacun /20 : Richesse du contenu et pertinence thématique ; Cohérence et progression argumentative ; Qualité syntaxique et grammaticale ; Maîtrise de l'orthographe et de l'accord ; Ponctuation et typographie ; Rigueur des références et notes de bas de page ; Clarté et fluidité de la lecture. La NOTE GLOBALE est la somme des 7 notes (sur 140), ramenée sur 100." +
+        " Chaque annotation de correction précise : n° (numérotation continue) · page RÉELLE du manuscrit · catégorie et sévérité · TEXTE ORIGINAL cité EXACTEMENT (la citation du passage fautif, jamais un simple numéro de page) · correction proposée · explication. Catégories : Orthographe · Accord · Syntaxe · Ponctuation · Typographie · Style (combinables, ex. « Accord+Syntaxe »). Sévérité : C1 mineure · C2 modérée · C3 majeure. Les annotations sont classées par ordre d'apparition dans le texte.",
       userTemplate:
-        "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit à relire (1ʳᵉ correction) :\n{{manuscrit}}",
+        "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit à relire (BAT1 — premier passage) :\n{{manuscrit}}",
       reportTemplate: {
-        title: "RAPPORT DE RELECTURE PROFESSIONNELLE",
+        title: "RAPPORT DE RELECTURE — BAT1 (Correction éditoriale)",
         sections: [
-          { key: "1", title: "Évaluation globale (synthèse · scores par critère /20 · note globale /100 · verdict)" },
+          { key: "0", title: "Informations sur le document (titre · auteur(e) · éditeur · format : pages/chapitres · ISBN · type de document · niveau de relecture · étape : BAT1 · pagination de référence)" },
+          { key: "1", title: "Évaluation globale (verdict synthétique · synthèse de 2 à 4 phrases · grille de notation : 7 critères notés /20 · NOTE GLOBALE somme sur 140 ramenée sur 100)" },
           { key: "2", title: "Points forts de l'œuvre" },
-          { key: "3", title: "Annotations de correction (par type : orthographe/accords, syntaxe, ponctuation/typographie, style/répétitions, cohérence/références)" },
+          { key: "3", title: "Annotations de correction (n° · page · catégorie + sévérité · texte original cité exactement · correction proposée · explication)" },
           { key: "4", title: "Observations structurelles et stylistiques" },
-          { key: "5", title: "Corrections prioritaires avant publication" },
+          { key: "5", title: "Corrections prioritaires avant publication (Priorité 1 urgente/bloquante · Priorité 2 importante · Priorité 3 recommandée)" },
           { key: "6", title: "Recommandations éditoriales générales" },
+          { key: "7", title: "Conclusion et verdict" },
         ],
         guidance:
-          "Rapport de RELECTURE POUR CORRECTION. La rubrique 1 « Évaluation globale » comporte une grille de scores en TABLEAU (Critère · Note /20 · Commentaire) et la note globale /100. La rubrique 3 « Annotations de correction » est présentée en TABLEAUX, regroupés par type (orthographe/accords, syntaxe, ponctuation/typographie, style/répétitions, cohérence/références) ; chaque annotation : n° · page · type · texte original · correction proposée · explication. Les rubriques 2, 4, 5, 6 sont rédigées en prose et listes à puces.",
-        deliverables: ["Rapport_relecture", "Manuscrit_corrige_V1"],
+          "Rapport de RELECTURE BAT1 (modèle officiel Éclosion). Rubrique 1 : la grille de notation est un TABLEAU à deux colonnes (CRITÈRE · NOTE) avec les 7 critères notés /20, suivie d'une ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 3 : les annotations de correction forment un TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication) ; « Texte original » cite TOUJOURS le passage fautif exact, jamais un numéro de page ; « Page » est la page réelle ; numérotation continue ; catégories Orthographe/Accord/Syntaxe/Ponctuation/Typographie/Style ; sévérité C1/C2/C3 indiquée dans la catégorie (ex. « Accord (C1) »). Rubrique 5 : trois blocs Priorité 1/2/3. Les rubriques 0, 2, 4, 6, 7 sont rédigées en prose et listes.",
+        deliverables: ["Rapport_relecture_BAT1", "Manuscrit_corrige_BAT1"],
       },
     },
     {
       workType: "correction_2",
-      label: "2ᵉ correction (Correction éditoriale)",
+      label: "Relecture BAT2 (Correction éditoriale)",
       systemPrompt:
         REGLE_DOR +
-        " Il s'agit du CONTRÔLE de la 2ᵉ correction, APRÈS la 1ʳᵉ relecture. Ta mission PREMIÈRE est de faire RESSORTIR CLAIREMENT ce qui n'a PAS été pris en compte depuis la 1ʳᵉ relecture. Pour CHAQUE correction demandée en 1ʳᵉ relecture, tu indiques son statut : ✔ APPLIQUÉE, ✘ NON APPLIQUÉE, ou ~ PARTIELLEMENT appliquée, avec le constat observé en V2 (page à l'appui). Tu calcules un taux d'application (nombre de corrections appliquées / total). Tu consacres une rubrique DÉDIÉE ET PRIORITAIRE aux corrections NON prises en compte, classées par gravité. Puis tu relèves les anomalies résiduelles ou nouvellement introduites. Chaque annotation précise : numéro, page, type, texte original, correction proposée, explication. Si tu ne disposes pas du détail des demandes de la 1ʳᵉ relecture, tu le signales explicitement et tu déduis le suivi des corrections encore visibles dans le texte.",
+        " Tu produis le RAPPORT DE RELECTURE — BAT2 (deuxième passage) selon le modèle officiel Éclosion. Sa particularité est la rubrique « SUIVI DES CORRECTIONS DU BAT PRÉCÉDENT » : tu reprends CHAQUE correction demandée au BAT1 et tu indiques son statut — ✔ appliquée · ✘ non appliquée · ~ partiellement appliquée — avec une observation (page à l'appui), puis tu signales les améliorations apportées par l'auteur(e) depuis le BAT précédent. Si tu ne disposes pas du détail des demandes du BAT1, tu le signales explicitement et tu déduis le suivi des corrections encore visibles." +
+        " La grille de notation compte EXACTEMENT 7 critères notés chacun /20 (Richesse du contenu et pertinence thématique ; Cohérence et progression argumentative ; Qualité syntaxique et grammaticale ; Maîtrise de l'orthographe et de l'accord ; Ponctuation et typographie ; Rigueur des références et notes de bas de page ; Clarté et fluidité de la lecture) ; la NOTE GLOBALE est la somme (sur 140) ramenée sur 100." +
+        " Chaque annotation de correction précise : n° (numérotation continue) · page réelle · catégorie et sévérité · TEXTE ORIGINAL cité exactement · correction proposée · explication. Catégories : Orthographe · Accord · Syntaxe · Ponctuation · Typographie · Style. Sévérité : C1 mineure · C2 modérée · C3 majeure. Annotations classées par ordre d'apparition.",
       userTemplate:
-        "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit après 1ʳᵉ correction (à contrôler) :\n{{manuscrit}}",
+        "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit après BAT1 (à contrôler pour BAT2) :\n{{manuscrit}}",
       reportTemplate: {
-        title: "RAPPORT DE 2ᵉ CORRECTION — CONTRÔLE DE LA 1ʳᵉ RELECTURE",
+        title: "RAPPORT DE RELECTURE — BAT2 (Correction éditoriale)",
         sections: [
-          { key: "0", title: "Synthèse du contrôle V1 → V2 (taux d'application des corrections · nombre appliquées / non appliquées / partielles · verdict d'avancement)" },
-          { key: "1", title: "Suivi des corrections de la 1ʳᵉ relecture (tableau : n° · page · correction demandée en V1 · statut ✔ appliquée / ✘ non appliquée / ~ partielle · constat en V2)" },
-          { key: "2", title: "Corrections NON prises en compte — rappel prioritaire (liste des ✘ et ~, classées par gravité, à traiter impérativement)" },
-          { key: "3", title: "Anomalies résiduelles et nouvelles (annotations par type : orthographe/accords, syntaxe, ponctuation/typographie, style/répétitions)" },
-          { key: "4", title: "Évaluation globale (scores par critère /20 · note globale /100 · évolution par rapport à la 1ʳᵉ relecture)" },
+          { key: "0", title: "Informations sur le document (titre · auteur(e) · éditeur · format · ISBN · type de document · niveau de relecture · étape : BAT2 · pagination de référence)" },
+          { key: "1", title: "Évaluation globale (verdict synthétique · synthèse de 2 à 4 phrases · grille de notation : 7 critères notés /20 · NOTE GLOBALE somme sur 140 ramenée sur 100)" },
+          { key: "2", title: "Suivi des corrections du BAT précédent (tableau : N° (BAT1) · correction demandée · statut ✔ appliquée / ✘ non appliquée / ~ partielle · observation) + améliorations apportées par l'auteur(e) depuis le BAT précédent" },
+          { key: "3", title: "Points forts de l'œuvre" },
+          { key: "4", title: "Annotations de correction (n° · page · catégorie + sévérité · texte original cité exactement · correction proposée · explication)" },
           { key: "5", title: "Observations structurelles et stylistiques" },
-          { key: "6", title: "Corrections prioritaires avant publication" },
-          { key: "7", title: "Verdict et recommandations éditoriales" },
+          { key: "6", title: "Corrections prioritaires avant publication (Priorité 1 urgente/bloquante · Priorité 2 importante · Priorité 3 recommandée)" },
+          { key: "7", title: "Recommandations éditoriales générales" },
+          { key: "8", title: "Conclusion et verdict" },
         ],
         guidance:
-          "Rapport de 2ᵉ CORRECTION (contrôle de la V1). La rubrique 1 « Suivi des corrections de la 1ʳᵉ relecture » est un TABLEAU (n° · page · correction demandée en V1 · statut ✔ appliquée / ✘ non appliquée / ~ partielle · constat en V2). La rubrique 2 met en avant, en liste priorisée par gravité, les corrections NON prises en compte (✘ et ~). La rubrique 3 « Anomalies résiduelles et nouvelles » est en TABLEAUX par type (n° · page · type · texte original · correction proposée · explication). La rubrique 4 comporte une grille de scores en tableau (Critère · Note /20 · Commentaire) avec l'évolution vs V1. Les autres rubriques sont en prose et listes.",
-        deliverables: ["Rapport_deuxieme_correction", "Manuscrit_corrige_V2"],
+          "Rapport de RELECTURE BAT2 (modèle officiel Éclosion). Rubrique 1 : grille en TABLEAU (CRITÈRE · NOTE) avec les 7 critères notés /20 + ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 2 « Suivi des corrections du BAT précédent » : TABLEAU à 4 colonnes (N° (BAT1) · Correction demandée · Statut ✔/✘/~ · Observation), puis une liste des améliorations apportées par l'auteur(e). Rubrique 4 : annotations en TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication), mêmes règles qu'au BAT1 (citation exacte, page réelle, numérotation continue, sévérité C1/C2/C3). Rubrique 6 : blocs Priorité 1/2/3. Les rubriques 0, 3, 5, 7, 8 sont en prose et listes.",
+        deliverables: ["Rapport_relecture_BAT2", "Manuscrit_corrige_BAT2"],
       },
     },
     {
@@ -826,8 +833,8 @@ async function main() {
   // mise à jour n'a lieu que si le contenu diffère réellement.
   const DEFAULT_TITLES: Record<string, string[]> = {
     evaluation: ["RAPPORT D'ÉVALUATION DE MANUSCRIT"],
-    correction_1: ["RAPPORT DE RELECTURE PROFESSIONNELLE"],
-    correction_2: ["RAPPORT DE 2ᵉ CORRECTION", "RAPPORT DE 2ᵉ CORRECTION — CONTRÔLE DE LA 1ʳᵉ RELECTURE"],
+    correction_1: ["RAPPORT DE RELECTURE PROFESSIONNELLE", "RAPPORT DE RELECTURE — BAT1 (Correction éditoriale)"],
+    correction_2: ["RAPPORT DE 2ᵉ CORRECTION", "RAPPORT DE 2ᵉ CORRECTION — CONTRÔLE DE LA 1ʳᵉ RELECTURE", "RAPPORT DE RELECTURE — BAT2 (Correction éditoriale)"],
     couverture: ["RAPPORT DE RELECTURE DE COUVERTURE"],
   };
   for (const p of aiPrompts) {
@@ -835,11 +842,11 @@ async function main() {
     if (!existing) continue;
     const curTitle = (existing.reportTemplate as { title?: string })?.title ?? "";
     const isDefault = (DEFAULT_TITLES[p.workType] ?? []).includes(curTitle);
-    const differs = existing.systemPrompt !== p.systemPrompt || JSON.stringify(existing.reportTemplate) !== JSON.stringify(p.reportTemplate);
+    const differs = existing.systemPrompt !== p.systemPrompt || existing.label !== p.label || JSON.stringify(existing.reportTemplate) !== JSON.stringify(p.reportTemplate);
     if (isDefault && differs) {
       await prisma.aiPrompt.update({
         where: { workType: p.workType },
-        data: { systemPrompt: p.systemPrompt, reportTemplate: p.reportTemplate as object, version: { increment: 1 } },
+        data: { label: p.label, systemPrompt: p.systemPrompt, reportTemplate: p.reportTemplate as object, version: { increment: 1 } },
       });
     }
   }

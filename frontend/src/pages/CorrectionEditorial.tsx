@@ -206,8 +206,8 @@ function CorrectionTable({ items, onOpen, empty }: { items: CorrectionManuscript
                     <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 4px" }}>
                       Relecture assistée par l'IA pour « {m.title} » — les documents produits (rapport + manuscrit corrigé) sont classés dans les Documents de l'ouvrage.
                     </div>
-                    <AiReadingLauncher manuscriptId={m.id} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — 1ʳᵉ correction" hint="Produit aussi le manuscrit corrigé V1 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
-                    <AiReadingLauncher manuscriptId={m.id} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — 2ᵉ correction" hint="Produit aussi le manuscrit corrigé V2 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
+                    <AiReadingLauncher manuscriptId={m.id} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — BAT1" hint="Produit aussi le manuscrit corrigé BAT1 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
+                    <AiReadingLauncher manuscriptId={m.id} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — BAT2" hint="Produit aussi le manuscrit corrigé BAT2 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
                     <AiReadingLauncher manuscriptId={m.id} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" />
                   </td>
                 </tr>

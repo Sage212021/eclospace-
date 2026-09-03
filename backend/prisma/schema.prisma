@@ -5190,6 +5190,7 @@ model AiReadingJob {
   status               AiJobStatus @default(en_attente)
   costEstimate         Decimal?    @map("cost_estimate") @db.Decimal(12, 2)
   reportVersion        Int?        @map("report_version")
+  reportText           String?     @map("report_text")
   producedDocumentIds  Json?       @map("produced_document_ids")
   errorMessage         String?     @map("error_message")
   launchedBy           String?     @map("launched_by")

@@ -106,13 +106,22 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
                 {j.costEstimate && <span style={{ color: "var(--muted)" }}>≈ {Number(j.costEstimate).toLocaleString("fr-FR")} FCFA</span>}
                 {j.errorMessage && <span style={{ color: "var(--alert, #B23A2E)" }}>{j.errorMessage}</span>}
                 {j.status === "termine" && j.reportAvailable !== false && (
-                  <a
-                    href={aiJobReportDownloadUrl(j.id)}
-                    style={{ color: "var(--eclosion-dark, #9A7A12)", fontWeight: 700, textDecoration: "none" }}
-                    title="Télécharger le rapport produit par le relecteur d'Éclosion"
-                  >
-                    📄 Télécharger le rapport
-                  </a>
+                  <>
+                    <a
+                      href={aiJobReportDownloadUrl(j.id, false)}
+                      style={{ color: "var(--eclosion-dark, #9A7A12)", fontWeight: 700, textDecoration: "none" }}
+                      title="Rapport tel quel, sans en-tête maison"
+                    >
+                      📄 Télécharger — sans en-tête
+                    </a>
+                    <a
+                      href={aiJobReportDownloadUrl(j.id, true)}
+                      style={{ color: "var(--muted)", fontWeight: 700, textDecoration: "none" }}
+                      title="Rapport avec l'en-tête Éclosion"
+                    >
+                      📄 avec en-tête Éclosion
+                    </a>
+                  </>
                 )}
               </div>
             ))}

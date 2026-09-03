@@ -237,6 +237,24 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
       if (job.status !== "termine" || produced.length === 0) {
         return reply.code(404).send({ code: "no_report", message: "Aucun rapport n'est encore disponible pour cette relecture." });
       }
+      const mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      // Choix d'impression : avec (entete=1) ou sans (entete=0) en-tête maison.
+      // Par défaut, SANS en-tête — cohérent avec le rapport déposé (le mode par
+      // défaut est « tel quel »). On régénère le .docx depuis le texte source
+      // conservé sur le job ; à défaut (anciens jobs), on sert le .docx classé.
+      const enteteParam = (request.query as { entete?: string }).entete;
+      const wantEntete = enteteParam === "1" || enteteParam === "true";
+      if (job.reportText) {
+        const prompt = await prisma.aiPrompt.findUnique({ where: { workType: job.workType } });
+        const reportTitle = String((prompt?.reportTemplate as { title?: string })?.title ?? "RAPPORT");
+        const { renderReportDocx } = await import("../lib/aiRunner.js");
+        const buffer = await renderReportDocx(reportTitle, job.reportText, { entete: wantEntete });
+        const fileName = `rapport_${job.workType}${wantEntete ? "_entete" : ""}.docx`;
+        reply.header("content-type", mime);
+        reply.header("content-disposition", `attachment; filename="${fileName}"`);
+        return reply.send(buffer);
+      }
+      // Repli (jobs antérieurs sans texte conservé) : le .docx classé (avec en-tête).
       const version = await prisma.documentVersion.findFirst({
         where: { document: { id: produced[0] } },
         orderBy: { versionNumber: "desc" },

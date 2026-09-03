@@ -981,8 +981,8 @@ export function listAiJobs(manuscriptId: string) {
 // Lien direct vers le rapport produit par une relecture IA. Accessible là où on
 // a lancé l'analyse (Mes lectures, Correction éditoriale), sans le droit GED :
 // le contrôle d'accès côté serveur suffit (mêmes droits que la liste des jobs).
-export function aiJobReportDownloadUrl(jobId: string): string {
-  return `${API_BASE}/api/v1/ai-editorial/jobs/${jobId}/report`;
+export function aiJobReportDownloadUrl(jobId: string, entete = false): string {
+  return `${API_BASE}/api/v1/ai-editorial/jobs/${jobId}/report${entete ? "?entete=1" : ""}`;
 }
 
 // — Cohérence des dossiers (maintenance workflow) —

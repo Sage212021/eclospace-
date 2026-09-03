@@ -1,5 +1,5 @@
 import zlib from "node:zlib";
-import { Document, Packer, Paragraph, HeadingLevel, TextRun } from "docx";
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType } from "docx";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "./prisma.js";
 import { storeFile } from "./storage.js";
@@ -93,24 +93,120 @@ function fillTemplate(tpl: string, vars: Record<string, string>): string {
   return tpl.replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? "");
 }
 
-// Rendu .docx du rapport : chaque ligne devient un paragraphe ; « # » = titre.
-async function renderReportDocx(reportTitle: string, body: string): Promise<Buffer> {
-  const children: Paragraph[] = [
-    new Paragraph({ text: "ÉCLOSION ÉDITION", heading: HeadingLevel.TITLE }),
-    new Paragraph({ children: [new TextRun({ text: reportTitle, bold: true, size: 28 })] }),
-    new Paragraph({ text: "" }),
+// Identité visuelle « Noir souverain » d'Éclosion (charte, D-022) appliquée au
+// rapport : or = marque/accent, noir = titres/structure, ivoire = zébrures de
+// tableau. Aucun bleu (l'ancien rendu utilisait le bleu par défaut de Word).
+const ECL = { or: "D9B21A", orDark: "9A7A12", noir: "0B0B0C", ink: "222222", grey: "5B6472", ivoire: "FAF8F2", line: "E7E2D4", white: "FFFFFF" };
+const FONT = "Calibri";
+
+// Découpe un texte en fragments gras/normaux (**gras** Markdown) → TextRun[].
+function inlineRuns(text: string, opts: { color?: string; size?: number; bold?: boolean } = {}): TextRun[] {
+  const size = opts.size ?? 21;
+  const color = opts.color ?? ECL.ink;
+  const runs: TextRun[] = [];
+  for (const part of text.split(/(\*\*[^*]+\*\*)/g)) {
+    if (!part) continue;
+    const m = /^\*\*([^*]+)\*\*$/.exec(part);
+    const clean = (m ? m[1] : part).replace(/\*\*/g, "").replace(/\s+$/, (s) => s);
+    runs.push(new TextRun({ text: clean, bold: opts.bold || Boolean(m), color, size, font: FONT }));
+  }
+  return runs.length ? runs : [new TextRun({ text: "", size, font: FONT })];
+}
+
+function splitCells(line: string): string[] {
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+}
+
+// Tableau (ex. grille d'évaluation) : en-tête noir/texte blanc, zébrure ivoire,
+// colonnes numériques centrées, filets discrets — rendu maison Éclosion.
+function buildTable(rows: string[][]): Table {
+  const b = { style: BorderStyle.SINGLE, size: 2, color: ECL.line };
+  const borders = { top: b, bottom: b, left: b, right: b };
+  const header = rows[0] ?? [];
+  const numericCol = (ci: number) => ci >= 1 && ci <= 2; // coefficient / note
+  const headRow = new TableRow({
+    tableHeader: true,
+    children: header.map((h) => new TableCell({
+      shading: { fill: ECL.noir, color: "auto", type: "clear" as never },
+      margins: { top: 60, bottom: 60, left: 100, right: 100 },
+      borders,
+      children: [new Paragraph({ children: inlineRuns(h, { color: ECL.white, size: 19, bold: true }) })],
+    })),
+  });
+  const dataRows = rows.slice(1).map((r, i) => new TableRow({
+    children: r.map((c, ci) => new TableCell({
+      shading: { fill: i % 2 ? ECL.ivoire : ECL.white, color: "auto", type: "clear" as never },
+      margins: { top: 50, bottom: 50, left: 100, right: 100 },
+      borders,
+      children: [new Paragraph({ alignment: numericCol(ci) ? AlignmentType.CENTER : AlignmentType.LEFT, children: inlineRuns(c, { color: numericCol(ci) ? ECL.orDark : ECL.ink, size: 19, bold: numericCol(ci) }) })],
+    })),
+  }));
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headRow, ...dataRows] });
+}
+
+// Rendu .docx du rapport, aux couleurs Éclosion. Interprète le Markdown produit
+// par le relecteur : titres (#/##/###), gras (**…**), listes à puces (- …) et
+// tableaux (| … |). En-tête et pied maison ; titres de section soulignés d'or.
+export async function renderReportDocx(reportTitle: string, body: string): Promise<Buffer> {
+  const children: (Paragraph | Table)[] = [
+    new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text: "ÉCLOSION ÉDITION", bold: true, size: 30, color: ECL.noir, font: FONT })] }),
+    new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: "Direction éditoriale — Service de relecture", size: 18, color: ECL.grey, font: FONT })] }),
+    // Filet noir souligné d'or (rappel de la charte).
+    new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 18, color: ECL.noir, space: 1 } }, spacing: { after: 40 } }),
+    new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 10, color: ECL.or, space: 1 } }, spacing: { after: 200 } }),
+    new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: reportTitle, bold: true, size: 32, color: ECL.noir, font: FONT })] }),
   ];
-  for (const raw of body.split("\n")) {
-    const line = raw.replace(/\s+$/, "");
-    if (!line.trim()) { children.push(new Paragraph({ text: "" })); continue; }
+
+  const lines = body.split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].replace(/\s+$/, "");
+    if (!line.trim()) { children.push(new Paragraph({ spacing: { after: 40 }, children: [] })); i++; continue; }
+
+    // Tableau Markdown : ligne d'en-tête suivie d'une ligne de séparation ---.
+    const isTableSep = i + 1 < lines.length && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1]) && lines[i + 1].includes("-");
+    if (line.includes("|") && isTableSep) {
+      const rows: string[][] = [splitCells(line)];
+      i += 2;
+      while (i < lines.length && lines[i].includes("|") && lines[i].trim()) { rows.push(splitCells(lines[i])); i++; }
+      children.push(buildTable(rows));
+      children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+      continue;
+    }
+
     const h = line.match(/^(#{1,3})\s+(.*)$/);
     if (h) {
-      children.push(new Paragraph({ text: h[2], heading: h[1].length === 1 ? HeadingLevel.HEADING_1 : h[1].length === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3 }));
-    } else {
-      children.push(new Paragraph({ text: line.replace(/^[*#]+\s*/, "") }));
+      const level = h[1].length;
+      const txt = h[2].replace(/\*\*/g, "");
+      if (level === 1) {
+        children.push(new Paragraph({ spacing: { before: 280, after: 90 }, border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: ECL.or, space: 3 } }, children: [new TextRun({ text: txt, bold: true, size: 26, color: ECL.noir, font: FONT })] }));
+      } else if (level === 2) {
+        children.push(new Paragraph({ spacing: { before: 170, after: 50 }, children: [new TextRun({ text: txt, bold: true, size: 22, color: ECL.orDark, font: FONT })] }));
+      } else {
+        children.push(new Paragraph({ spacing: { before: 130, after: 40 }, children: [new TextRun({ text: txt, bold: true, size: 20, color: ECL.noir, font: FONT })] }));
+      }
+      i++;
+      continue;
     }
+
+    const bullet = line.match(/^\s*[-*•]\s+(.*)$/);
+    if (bullet) {
+      children.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 30 }, children: inlineRuns(bullet[1], { color: ECL.ink, size: 21 }) }));
+      i++;
+      continue;
+    }
+
+    children.push(new Paragraph({ alignment: AlignmentType.JUSTIFIED, spacing: { after: 70 }, children: inlineRuns(line, { color: ECL.ink, size: 21 }) }));
+    i++;
   }
-  const doc = new Document({ sections: [{ children }] });
+
+  // Pied de page maison.
+  children.push(new Paragraph({ border: { top: { style: BorderStyle.SINGLE, size: 6, color: ECL.line, space: 6 } }, spacing: { before: 260 }, children: [new TextRun({ text: "Ce rapport est un avis argumenté du relecteur d'Éclosion Édition ; il ne constitue pas une décision éditoriale finale.", italics: true, size: 16, color: ECL.grey, font: FONT })] }));
+
+  const doc = new Document({
+    styles: { default: { document: { run: { font: FONT, size: 21, color: ECL.ink } } } },
+    sections: [{ children }],
+  });
   return Packer.toBuffer(doc);
 }
 

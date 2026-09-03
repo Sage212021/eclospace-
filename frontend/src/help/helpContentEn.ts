@@ -27,7 +27,7 @@ export const HELP_CONTENT_EN: HelpPole[] = [
         title: "Understanding a book's journey",
         purpose: "Many screens are not separate folders but STAGES each book goes through, from manuscript to finished book.",
         procedure: [
-          "A book moves stage by stage: reading committee → decision → contract → correction → layout → graphics → ISBN → proof (BAT) → printing → stock → sale → archiving.",
+          "A book moves stage by stage: reading committee → decision → contract → correction → layout → graphics → ISBN → final proof (BATF) → printing → stock → sale → archiving.",
           "Each stage section (Committee, Correction, Layout, Proof…) shows the books CURRENTLY at that stage.",
           "To work: open the book in the list, do the stage's work (upload a file, fill in a detail…), then click “Validate this stage”.",
           "The book then moves to the next stage and the relevant person is notified.",
@@ -299,8 +299,8 @@ export const HELP_CONTENT_EN: HelpPole[] = [
       },
       {
         key: "pr-bat",
-        title: "Proof (BAT) & quality control",
-        purpose: "Journey stage: the “Good to Print” (BAT), the final green light before printing.",
+        title: "Final proof (BATF) & quality control",
+        purpose: "Journey stage: the Final “Good to Print” (BAT Final), the last green light before printing.",
         procedure: [
           "Open the work at the proof stage.",
           "Upload the proof, record the quality control, and compare versions if there are several cycles.",

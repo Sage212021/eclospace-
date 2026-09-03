@@ -43,7 +43,7 @@ export function BatSection({ manuscriptId, canManage, canValidate }: BatSectionP
       await openBat(manuscriptId, interiorId, coverId);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'ouverture du dossier de BAT.");
+      setError(err instanceof Error ? err.message : "Échec de l'ouverture du dossier de BAT Final.");
     }
   }
 
@@ -52,15 +52,15 @@ export function BatSection({ manuscriptId, canManage, canValidate }: BatSectionP
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>BAT et contrôle qualité</div>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>BAT Final et contrôle qualité</div>
         {canManage && !current && (
           <button onClick={handleOpen} style={secondaryButtonStyle}>
-            Ouvrir le dossier de BAT
+            Ouvrir le dossier de BAT Final
           </button>
         )}
       </div>
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
-      {!current && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun cycle de BAT ouvert.</p>}
+      {!current && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun cycle de BAT Final ouvert.</p>}
 
       {current && (
         <BatCycle
@@ -188,7 +188,7 @@ function BatCycle({
 
       {canValidate && bat.status === "awaiting_signature" && (
         <button onClick={handleSign} style={{ ...secondaryButtonStyle, marginTop: 10, background: "var(--eclosion)", color: "#fff", border: "none" }}>
-          Signer le BAT
+          Signer le BAT Final
         </button>
       )}
     </div>

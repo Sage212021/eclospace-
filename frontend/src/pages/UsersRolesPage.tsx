@@ -372,7 +372,7 @@ function AccessAuditCard() {
 const MODULE_LABELS: Record<string, string> = {
   manuscripts: "Manuscrits", comite_lecture: "Comité de lecture", decision_editoriale: "Décision éditoriale",
   contracts: "Contrats & droits", tasks: "Tâches / correction", production: "Maquette / infographie",
-  isbn: "ISBN & dépôt légal", bat: "BAT & contrôle qualité", printing: "Impression", stock: "Stock & magasin",
+  isbn: "ISBN & dépôt légal", bat: "BAT Final & contrôle qualité", printing: "Impression", stock: "Stock & magasin",
   commercial: "Commercial & ventes", finance: "Finance & comptabilité", royalties: "États de droits d'auteur",
   rh: "Ressources humaines", rh_confidentiel: "RH confidentiel", paie: "Paie", presences: "Présences",
   users: "Utilisateurs & rôles", settings: "Paramètres", direction: "Direction générale", pilotage: "Pilotage",

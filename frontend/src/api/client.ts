@@ -968,6 +968,7 @@ export interface AiJob {
   errorMessage: string | null;
   launchedAt: string;
   finishedAt: string | null;
+  reportAvailable?: boolean;
 }
 // L'analyse est désormais lancée EN ARRIÈRE-PLAN : la requête répond aussitôt
 // avec l'identifiant du job (statut suivi via listAiJobs). Fini les erreurs 504.
@@ -976,6 +977,12 @@ export function runAiEditorial(input: { manuscript_id: string; work_type: AiWork
 }
 export function listAiJobs(manuscriptId: string) {
   return request<{ jobs: AiJob[] }>(`/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`);
+}
+// Lien direct vers le rapport produit par une relecture IA. Accessible là où on
+// a lancé l'analyse (Mes lectures, Correction éditoriale), sans le droit GED :
+// le contrôle d'accès côté serveur suffit (mêmes droits que la liste des jobs).
+export function aiJobReportDownloadUrl(jobId: string): string {
+  return `${API_BASE}/api/v1/ai-editorial/jobs/${jobId}/report`;
 }
 
 // — Cohérence des dossiers (maintenance workflow) —

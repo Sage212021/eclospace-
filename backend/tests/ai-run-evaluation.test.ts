@@ -101,10 +101,34 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(report.versions[0].mimeType).toContain("wordprocessingml");
   });
 
-  it("le journal des jobs du manuscrit est consultable", async () => {
+  it("le journal des jobs du manuscrit est consultable et signale un rapport téléchargeable", async () => {
     const res = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`, headers: { cookie: adminCookie } });
     expect(res.statusCode).toBe(200);
-    expect((res.json().jobs as unknown[]).length).toBeGreaterThanOrEqual(1);
+    const jobs = res.json().jobs as { status: string; reportAvailable: boolean }[];
+    expect(jobs.length).toBeGreaterThanOrEqual(1);
+    const done = jobs.find((j) => j.status === "termine");
+    expect(done?.reportAvailable).toBe(true);
+  });
+
+  it("télécharge le rapport d'un job terminé, là où l'analyse a été lancée (.docx)", async () => {
+    const run = await app.inject({
+      method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
+      payload: { manuscript_id: manuscriptId, work_type: "evaluation", step_code: "COMITE_LECTURE" },
+    });
+    const jobId = run.json().jobId as string;
+    await waitJob(jobId);
+
+    const dl = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs/${jobId}/report`, headers: { cookie: adminCookie } });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.headers["content-type"]).toContain("wordprocessingml");
+    expect(String(dl.headers["content-disposition"])).toContain("attachment");
+    // Un .docx est un ZIP : commence par « PK ».
+    expect(dl.rawPayload.subarray(0, 2).toString("latin1")).toBe("PK");
+  });
+
+  it("un job inexistant renvoie 404 clair sur le téléchargement", async () => {
+    const dl = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs/00000000-0000-0000-0000-000000000000/report`, headers: { cookie: adminCookie } });
+    expect(dl.statusCode).toBe(404);
   });
 
   it("la 1ʳᵉ correction produit AUSSI un manuscrit corrigé (V1) en plus du rapport", async () => {

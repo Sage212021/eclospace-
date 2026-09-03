@@ -103,4 +103,23 @@ describe("Fiche marketing par ouvrage (D-031)", () => {
     const res = await app.inject({ method: "POST", url: "/api/v1/marketing/partners", headers: { cookie }, payload: { type: "librairie", name: "X" } });
     expect(res.statusCode).toBe(403);
   });
+
+  it("campagnes : création (en cours) puis remontée dans le tableau de bord", async () => {
+    const create = await app.inject({ method: "POST", url: "/api/v1/marketing/campaigns", headers: { cookie: adminCookie }, payload: { name: `Campagne ${s}`, statut: "en_cours", budget_engage: 30000, manuscript_id: manuscriptId } });
+    expect(create.statusCode).toBe(201);
+    expect(create.json().book.id).toBe(manuscriptId);
+
+    const dash = await app.inject({ method: "GET", url: "/api/v1/marketing/dashboard", headers: { cookie: adminCookie } });
+    expect(dash.statusCode).toBe(200);
+    const body = dash.json();
+    expect(body.kpis.campaigns_active).toBeGreaterThanOrEqual(1);
+    expect(Number(body.kpis.budget_engage)).toBeGreaterThanOrEqual(30000);
+    expect((body.active_campaigns as { name: string }[]).some((c) => c.name === `Campagne ${s}`)).toBe(true);
+  });
+
+  it("campagnes : écriture refusée sans marketing:saisie (403)", async () => {
+    const cookie = await login(`mkt_plain_${s}`, "Correcteur123!");
+    const res = await app.inject({ method: "POST", url: "/api/v1/marketing/campaigns", headers: { cookie }, payload: { name: "X" } });
+    expect(res.statusCode).toBe(403);
+  });
 });

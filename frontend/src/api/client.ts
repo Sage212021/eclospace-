@@ -6149,3 +6149,52 @@ export function updateMarketingPartner(id: string, input: Partial<MarketingPartn
 export function deleteMarketingPartner(id: string) {
   return request<{ deleted: boolean }>(`/api/v1/marketing/partners/${id}`, { method: "DELETE" });
 }
+
+// Campagnes marketing + tableau de bord — pôle Marketing.
+export type MarketingCampaignStatus = "planifiee" | "en_cours" | "terminee" | "annulee";
+export interface MarketingCampaign {
+  id: string;
+  name: string;
+  objective: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  budget_prevu: number | null;
+  budget_engage: number | null;
+  statut: MarketingCampaignStatus;
+  resultats: string | null;
+  notes: string | null;
+  book: { id: string; title: string } | null;
+}
+export interface MarketingCampaignInput {
+  name: string;
+  objective?: string;
+  manuscript_id?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  budget_prevu?: number | null;
+  budget_engage?: number | null;
+  statut?: MarketingCampaignStatus;
+  resultats?: string;
+  notes?: string;
+}
+export function listMarketingCampaigns(statut?: string) {
+  return request<{ items: MarketingCampaign[] }>(`/api/v1/marketing/campaigns${statut ? `?statut=${statut}` : ""}`);
+}
+export function createMarketingCampaign(input: MarketingCampaignInput) {
+  return request<MarketingCampaign>("/api/v1/marketing/campaigns", { method: "POST", body: JSON.stringify(input) });
+}
+export function updateMarketingCampaign(id: string, input: Partial<MarketingCampaignInput>) {
+  return request<MarketingCampaign>(`/api/v1/marketing/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function deleteMarketingCampaign(id: string) {
+  return request<{ deleted: boolean }>(`/api/v1/marketing/campaigns/${id}`, { method: "DELETE" });
+}
+export interface MarketingDashboard {
+  kpis: { catalogue: number; campaigns_active: number; actions_week: number; partners_active: number; launches_upcoming: number; budget_prevu: number; budget_engage: number };
+  alerts: { actions_late: number; books_without_plan: number };
+  upcoming_actions: { id: string; action: string; canal: MarketingCanal; echeance: string | null; statut: MarketingActionStatus; book: { id: string; title: string } | null }[];
+  active_campaigns: { id: string; name: string; statut: MarketingCampaignStatus; end_date: string | null; budget_engage: number | null; book: { id: string; title: string } | null }[];
+}
+export function getMarketingDashboard() {
+  return request<MarketingDashboard>("/api/v1/marketing/dashboard");
+}

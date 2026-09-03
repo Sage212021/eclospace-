@@ -3,14 +3,20 @@ import type { FastifyInstance } from "fastify";
 
 // On simule l'API Claude : aucun appel réseau, aucun coût réel. Le faux client
 // renvoie un rapport et un usage de tokens fixes.
+// Capture le dernier « system » reçu par l'API simulée pour vérifier que la
+// structure imposée du rapport est bien transmise à l'IA.
+const sdkCalls: { system?: string }[] = [];
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
-      create: async () => ({
-        model: "claude-haiku-4-5",
-        content: [{ type: "text", text: "# Rapport d'évaluation\nSynthèse : manuscrit prometteur.\nAvis : Acceptation avec modifications mineures." }],
-        usage: { input_tokens: 12000, output_tokens: 1500 },
-      }),
+      create: async (args: { system?: string }) => {
+        sdkCalls.push({ system: args.system });
+        return {
+          model: "claude-haiku-4-5",
+          content: [{ type: "text", text: "# Rapport d'évaluation\nSynthèse : manuscrit prometteur.\nAvis : Acceptation avec modifications mineures." }],
+          usage: { input_tokens: 12000, output_tokens: 1500 },
+        };
+      },
     };
     constructor(_opts: unknown) {}
   }
@@ -79,6 +85,17 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
   };
 
   it("lance une évaluation : job terminé, rapport classé dans la GED, coût estimé", async () => {
+    // Fixe un gabarit connu (d'autres tests modifient ce prompt dans la base
+    // partagée) : on vérifiera que CES rubrics sont transmises à l'IA.
+    await app.inject({
+      method: "PUT", url: "/api/v1/ai-editorial/prompts/evaluation", headers: { cookie: adminCookie },
+      payload: {
+        label: "Évaluation (test structure)",
+        system_prompt: "Système d'évaluation.",
+        user_template: "Manuscrit : {{manuscrit}}",
+        report_template: { title: "RAPPORT D'ÉVALUATION DE MANUSCRIT", sections: [{ key: "A", title: "Identification du manuscrit" }, { key: "M", title: "Avis final du relecteur" }] },
+      },
+    });
     const res = await app.inject({
       method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
       payload: { manuscript_id: manuscriptId, work_type: "evaluation", step_code: "COMITE_LECTURE", editor_recommendation: "Insister sur la cohérence." },
@@ -99,6 +116,12 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     // Un rapport de lecture (.docx) a été classé sur le manuscrit.
     const report = await prisma.document.findFirstOrThrow({ where: { entityType: "manuscript", entityId: manuscriptId, category: "rapport_lecture" }, include: { versions: true } });
     expect(report.versions[0].mimeType).toContain("wordprocessingml");
+
+    // La STRUCTURE IMPOSÉE (rubriques A–M) est réellement transmise à l'IA.
+    const lastSystem = sdkCalls[sdkCalls.length - 1]?.system ?? "";
+    expect(lastSystem).toContain("STRUCTURE IMPOSÉE");
+    expect(lastSystem).toContain("A. Identification du manuscrit");
+    expect(lastSystem).toContain("M. Avis final du relecteur");
   });
 
   it("le journal des jobs du manuscrit est consultable et signale un rapport téléchargeable", async () => {

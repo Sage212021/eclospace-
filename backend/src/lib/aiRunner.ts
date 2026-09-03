@@ -363,11 +363,26 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
           ]
         : userText;
 
+    // Structure imposée : on TRANSMET réellement à l'IA la liste des rubriques du
+    // gabarit (reportTemplate.sections). Sans cela, la règle d'or « tu remplis
+    // exactement la structure fournie » restait lettre morte — la structure
+    // n'était jamais jointe au message, et l'IA improvisait ses titres.
+    const tpl = prompt.reportTemplate as { title?: string; sections?: { key: string; title: string }[]; footer?: string } | null;
+    const sections = Array.isArray(tpl?.sections) ? tpl!.sections : [];
+    const structureBlock = sections.length
+      ? `\n\n=== STRUCTURE IMPOSÉE DU RAPPORT « ${String(tpl!.title ?? "RAPPORT")} » ===\n`
+        + "Tu produis EXACTEMENT ces rubriques, dans cet ordre, sans en ajouter ni en retirer, en reprenant l'intitulé comme titre de section (niveau « ## » en Markdown, préfixé de sa clé) :\n"
+        + sections.map((s) => `## ${s.key}. ${s.title}`).join("\n")
+        + "\n\nRègles de forme : les grilles de notation et les listes d'annotations sont rendues en TABLEAUX Markdown (| … |) ; les notes et scores sont chiffrés (ex. « 8/10 », « 14/20 ») ; chaque annotation de correction précise numéro, page, type/sévérité, texte original, correction proposée et explication."
+        + (tpl!.footer ? `\n\nTermine par ce pied de rapport : ${tpl!.footer}` : "")
+      : "";
+    const systemPrompt = prompt.systemPrompt + structureBlock;
+
     const client = new Anthropic({ apiKey });
     const res = await client.messages.create({
       model: modelId,
       max_tokens: 8000,
-      system: prompt.systemPrompt,
+      system: systemPrompt,
       messages: [{ role: "user", content }],
     });
     const reportText = res.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("\n").trim()

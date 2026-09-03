@@ -107,7 +107,7 @@ const workflowStatuses: {
   // vérifiée AVANT la constitution du dossier de BAT — l'ordre initial du
   // Lot 1 (BAT avant attribution des références) contredisait ce texte.
   { code: "ATTRIBUTION_REFERENCES", label: "Attribution des références", stepOrder: 11, departmentCode: "SECR" },
-  { code: "VALIDATION_BAT", label: "Validation du BAT", stepOrder: 12, departmentCode: "CQ" },
+  { code: "VALIDATION_BAT", label: "Validation du BAT Final", stepOrder: 12, departmentCode: "CQ" },
   { code: "CONTRACTUALISATION", label: "Contractualisation", stepOrder: 13, departmentCode: "JURID" },
   { code: "IMPRESSION", label: "Impression", stepOrder: 14, departmentCode: "IMPR" },
   { code: "CONTROLE_QUALITE_IMPRESSION", label: "Contrôle qualité (exemplaires imprimés)", stepOrder: 15, departmentCode: "CQ" },
@@ -790,24 +790,26 @@ async function main() {
     },
     {
       workType: "couverture",
-      label: "Relecture de couverture (Correction éditoriale et BAT)",
+      label: "Relecture de couverture (BAT1 / BAT2)",
       systemPrompt:
         REGLE_DOR +
-        " Tu relis la couverture (1ʳᵉ, dos, 4ᵉ). Tu vérifies impérativement la COHÉRENCE couverture ↔ intérieur (titre, sous-titre, auteur, collection) et l'ISBN. Tu produis les annotations (zone · élément · original · correction · explication) et un verdict de publication.",
+        " Tu relis la couverture (1ʳᵉ, dos, 4ᵉ) — c'est le volet couverture du BAT. Tu vérifies impérativement la COHÉRENCE couverture ↔ intérieur (titre, sous-titre, auteur, collection) et l'ISBN. Tu produis les annotations (zone · élément · original · correction · explication) et un verdict de publication." +
+        " Distingue le passage : au 1ᵉʳ passage (BAT1) il n'y a pas de suivi ; à partir du 2ᵉ passage (BAT2), tu VÉRIFIES si les corrections demandées au BAT précédent ont été INTÉGRÉES (statut ✔ intégrée / ✘ non intégrée / ~ partielle, avec observation), tu signales CE QUI MANQUE encore, et tu APPRÉCIES les améliorations apportées par l'auteur(e). Si tu ne disposes pas du détail des demandes du BAT précédent, tu le signales et tu déduis le suivi à partir de la couverture elle-même.",
       userTemplate:
         "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nTextes de couverture / fichier de couverture à relire :\n{{manuscrit}}",
       reportTemplate: {
-        title: "RAPPORT DE RELECTURE DE COUVERTURE",
+        title: "RAPPORT DE RELECTURE DE COUVERTURE (BAT)",
         sections: [
-          { key: "0", title: "Identification (titre, sous-titre, auteur, ISBN couverture, éditeur/collection, fichier analysé, date)" },
+          { key: "0", title: "Identification (titre, sous-titre, auteur, ISBN couverture, éditeur/collection, fichier analysé, étape : BAT1 ou BAT2, date)" },
           { key: "1", title: "Synthèse et grille de notation (note globale pondérée /20)" },
-          { key: "2", title: "Analyse par zone (1ʳᵉ de couverture · dos · 4ᵉ de couverture)" },
-          { key: "3", title: "Vérifications factuelles (ISBN, cohérence couverture ↔ intérieur, mentions)" },
-          { key: "4", title: "Tableau d'annotations (zone · élément · original · correction · explication)" },
-          { key: "5", title: "Verdict de publication" },
+          { key: "2", title: "Suivi des corrections du BAT précédent (au BAT2 : intégrations effectuées ✔/✘/~ · ce qui manque · améliorations apportées par l'auteur ; au BAT1 : indiquer « premier passage, pas de suivi »)" },
+          { key: "3", title: "Analyse par zone (1ʳᵉ de couverture · dos · 4ᵉ de couverture)" },
+          { key: "4", title: "Vérifications factuelles (ISBN, code-barres EAN, cohérence couverture ↔ intérieur, mentions)" },
+          { key: "5", title: "Tableau d'annotations (sévérité · zone/emplacement · constat · recommandation)" },
+          { key: "6", title: "Verdict de publication" },
         ],
         guidance:
-          "Rapport de RELECTURE DE COUVERTURE. La rubrique 1 comporte une grille de notation en TABLEAU (Critère · Note /20 · Observations) et la note globale pondérée /20. La rubrique 4 « Tableau d'annotations » est un TABLEAU (Sévérité C1/C2/C3 · Emplacement/zone · Constat · Recommandation). Les rubriques 0, 2, 3, 5 sont rédigées en prose et listes (les vérifications factuelles de la rubrique 3 en liste à puces : ISBN, code-barres EAN, cohérence couverture ↔ intérieur).",
+          "Rapport de RELECTURE DE COUVERTURE (volet couverture du BAT). Rubrique 1 : grille de notation en TABLEAU (Critère · Note /20 · Observations) + note globale pondérée /20. Rubrique 2 « Suivi des corrections du BAT précédent » : au BAT2, un TABLEAU (N° (BAT précédent) · Correction demandée · Statut ✔ intégrée / ✘ non intégrée / ~ partielle · Observation) suivi de « Ce qui manque » et des « Améliorations apportées par l'auteur(e) » ; au BAT1, indiquer simplement « Premier passage — pas de suivi ». Rubrique 5 « Tableau d'annotations » : TABLEAU (Sévérité C1/C2/C3 · Zone/emplacement · Constat · Recommandation). Rubriques 0, 3, 4, 6 en prose et listes (vérifications factuelles de la rubrique 4 en liste : ISBN, code-barres EAN, cohérence couverture ↔ intérieur).",
         deliverables: ["Rapport_couverture"],
       },
     },
@@ -835,7 +837,7 @@ async function main() {
     evaluation: ["RAPPORT D'ÉVALUATION DE MANUSCRIT"],
     correction_1: ["RAPPORT DE RELECTURE PROFESSIONNELLE", "RAPPORT DE RELECTURE — BAT1 (Correction éditoriale)"],
     correction_2: ["RAPPORT DE 2ᵉ CORRECTION", "RAPPORT DE 2ᵉ CORRECTION — CONTRÔLE DE LA 1ʳᵉ RELECTURE", "RAPPORT DE RELECTURE — BAT2 (Correction éditoriale)"],
-    couverture: ["RAPPORT DE RELECTURE DE COUVERTURE"],
+    couverture: ["RAPPORT DE RELECTURE DE COUVERTURE", "RAPPORT DE RELECTURE DE COUVERTURE (BAT)"],
   };
   for (const p of aiPrompts) {
     const existing = await prisma.aiPrompt.findUnique({ where: { workType: p.workType } });

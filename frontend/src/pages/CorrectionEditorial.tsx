@@ -208,7 +208,7 @@ function CorrectionTable({ items, onOpen, empty }: { items: CorrectionManuscript
                     </div>
                     <AiReadingLauncher manuscriptId={m.id} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — BAT1" hint="Produit aussi le manuscrit corrigé BAT1 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
                     <AiReadingLauncher manuscriptId={m.id} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — BAT2" hint="Produit aussi le manuscrit corrigé BAT2 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
-                    <AiReadingLauncher manuscriptId={m.id} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" />
+                    <AiReadingLauncher manuscriptId={m.id} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" hint="Au 1ᵉʳ passage (BAT1) : relecture complète. Au 2ᵉ passage (BAT2) : vérifie si les corrections ont été intégrées, ce qui manque et les améliorations de l'auteur." />
                   </td>
                 </tr>
               )}

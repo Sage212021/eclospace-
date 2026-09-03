@@ -104,7 +104,7 @@ const FOCUS_LABELS: Record<string, string> = {
   contracts: "Contrats & droits",
   production: "Maquette & production",
   isbn: "ISBN & dépôt légal",
-  bat: "BAT & contrôle qualité",
+  bat: "BAT Final & contrôle qualité",
   printing: "Impression",
   authors: "Messagerie des auteurs",
 };
@@ -663,7 +663,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             <>
               <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — BAT1" hint="Produit aussi le manuscrit corrigé BAT1 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
               <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — BAT2" hint="Produit aussi le manuscrit corrigé BAT2 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
-              <AiReadingLauncher manuscriptId={manuscript.id} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" />
+              <AiReadingLauncher manuscriptId={manuscript.id} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" hint="Au 1ᵉʳ passage (BAT1) : relecture complète. Au 2ᵉ passage (BAT2) : vérifie si les corrections ont été intégrées, ce qui manque et les améliorations de l'auteur." />
             </>
           )}
           <CorrectionSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
@@ -700,7 +700,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             canValidate={permissions.has("bat:validation")}
           />
           {permissions.has("bat:saisie") && (
-            <AiReadingLauncher manuscriptId={manuscript.id} workType="couverture" stepCode="VALIDATION_BAT" title="Relecture IA — Couverture (contrôle BAT)" />
+            <AiReadingLauncher manuscriptId={manuscript.id} workType="couverture" stepCode="VALIDATION_BAT" title="Relecture IA — Couverture (BAT Final)" />
           )}
         </>
       )}

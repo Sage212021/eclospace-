@@ -33,9 +33,9 @@ const STAGE_NOTES: Record<string, string> = {
   INFOGRAPHIE:
     "Couverture et éléments graphiques. La convergence maquette/infographie (fiche complète, dos à jour, couverture conforme) est requise avant de valider.",
   ATTRIBUTION_REFERENCES:
-    "ISBN, dépôt légal, métadonnées et classification. La liste de contrôle doit être complète avant de libérer l'ouvrage vers le BAT.",
+    "ISBN, dépôt légal, métadonnées et classification. La liste de contrôle doit être complète avant de libérer l'ouvrage vers le BAT Final.",
   VALIDATION_BAT:
-    "Bon à tirer : le BAT doit être signé électroniquement pour valider l'étape et autoriser le lancement de l'impression.",
+    "BAT Final (bon à tirer) : le BAT Final doit être signé électroniquement pour valider l'étape et autoriser le lancement de l'impression.",
   IMPRESSION:
     "Impression : bon de commande transmis à l'imprimeur, réception des exemplaires puis contrôle qualité avant l'entrée en stock.",
 };

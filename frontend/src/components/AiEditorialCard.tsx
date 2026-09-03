@@ -21,7 +21,7 @@ const WORK_LABELS: Record<AiWorkType, string> = {
   evaluation: "Rapport d'évaluation (Comité de lecture)",
   correction_1: "Relecture BAT1 (Correction éditoriale)",
   correction_2: "Relecture BAT2 (Correction éditoriale)",
-  couverture: "Relecture de couverture (Correction & BAT)",
+  couverture: "Relecture de couverture (BAT1 / BAT2)",
 };
 const CONF_LABELS: Record<string, string> = { public: "Public", interne: "Interne", restreint: "Restreint" };
 

@@ -46,7 +46,7 @@ export const HELP_CONTENT: HelpPole[] = [
         title: "Comprendre le circuit d'un ouvrage",
         purpose: "Beaucoup d'écrans ne sont pas des dossiers séparés, mais des ÉTAPES par lesquelles passe chaque ouvrage, du manuscrit au livre fini.",
         procedure: [
-          "Un ouvrage avance étape par étape : comité de lecture → décision → contrat → correction → maquette → infographie → ISBN → BAT → impression → stock → vente → archivage.",
+          "Un ouvrage avance étape par étape : comité de lecture → décision → contrat → correction → maquette → infographie → ISBN → BAT Final → impression → stock → vente → archivage.",
           "Chaque rubrique d'étape (Comité, Correction, Maquette, BAT…) affiche les ouvrages ACTUELLEMENT à cette étape.",
           "Pour travailler : ouvrez l'ouvrage dans la liste, faites le travail de l'étape (déposer un fichier, remplir une info…), puis cliquez « Valider cette étape ».",
           "L'ouvrage passe alors à l'étape suivante et la personne concernée est prévenue par une notification.",
@@ -318,8 +318,8 @@ export const HELP_CONTENT: HelpPole[] = [
       },
       {
         key: "pr-bat",
-        title: "BAT & contrôle qualité",
-        purpose: "Étape du circuit : le « Bon À Tirer », dernier feu vert avant impression.",
+        title: "BAT Final & contrôle qualité",
+        purpose: "Étape du circuit : le « BAT Final » (Bon À Tirer Final), dernier feu vert avant impression.",
         procedure: [
           "Ouvrez l'ouvrage à l'étape BAT.",
           "Déposez le BAT, notez le contrôle qualité, et comparez les versions si plusieurs cycles.",

@@ -26,7 +26,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   visuel: "Visuels",
   contrat: "Contrats d'auteur",
   facture: "Factures & pièces finance",
-  bat: "BAT",
+  bat: "BAT Final",
   manuscrit: "Manuscrit",
   rapport_lecture: "Rapports de lecture",
   piece_archivage: "Pièces d'archivage",

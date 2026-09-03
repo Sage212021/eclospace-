@@ -211,16 +211,16 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
                 <a href={readingReportFileUrl(a.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion)", fontSize: 12, fontWeight: 600 }}>
                   📎 Télécharger
                 </a>
+                <a href={readingReportFileUrl(a.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark, #9a7a12)", fontSize: 12, fontWeight: 600 }}>
+                  🖨 Tel quel (sans en-tête)
+                </a>
                 <button
                   type="button"
                   onClick={() => imprimerSurEntete(a)}
-                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--eclosion-dark, #9a7a12)", fontSize: 12, fontWeight: 600 }}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--muted)", fontSize: 12, fontWeight: 600 }}
                 >
                   🖨 Sur papier à en-tête
                 </button>
-                <a href={readingReportFileUrl(a.id)} target="_blank" rel="noreferrer" style={{ color: "var(--muted)", fontSize: 12, fontWeight: 600 }}>
-                  🖨 Tel quel (sans en-tête)
-                </a>
               </span>
             </div>
           ))}

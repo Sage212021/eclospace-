@@ -475,8 +475,8 @@ function ReportMenu({ assignment, onMessage }: { assignment: ReadingAssignment; 
           )}
           {assignment.hasReportFile && (
             <>
-              <button style={menuItemStyle} onClick={imprimerDepose}>🖨 Rapport déposé — sur papier à en-tête</button>
               <a href={readingReportFileUrl(assignment.id)} target="_blank" rel="noreferrer" style={menuItemStyle} onClick={close}>🖨 Rapport déposé — tel quel (sans en-tête)</a>
+              <button style={menuItemStyle} onClick={imprimerDepose}>🖨 Rapport déposé — sur papier à en-tête</button>
             </>
           )}
           <button style={menuItemStyle} onClick={joindre}>📌 Joindre à l'ouvrage</button>

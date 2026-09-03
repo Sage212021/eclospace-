@@ -62,8 +62,12 @@ export function Dashboard({ user, onOpenAnnouncement, onOpenCalendar, onNavigate
     // que si l'utilisateur y a accès (appel réussi). Les autres échouent en
     // silence (403) et sont simplement absentes.
     const active = (s: string) => s !== "terminee" && s !== "validee";
+    // « Mes lectures » : on ne compte QUE les lectures réellement à traiter —
+    // en attente d'évaluation ou en retard —, pas celles déjà remises ou
+    // annulées. La tuile reflète ainsi le travail du jour, en temps réel.
+    const readingToDo = (s: string) => s === "pending" || s === "late";
     Promise.allSettled([
-      listMyReadingAssignments().then((rows) => ({ key: "readings", label: "Mes lectures", icon: "👓", count: rows.length, leaf: "ed-mes-lectures" } as WorkTile)),
+      listMyReadingAssignments().then((rows) => ({ key: "readings", label: "Mes lectures", icon: "👓", count: rows.filter((r) => readingToDo(r.status)).length, leaf: "ed-mes-lectures" } as WorkTile)),
       listMyCorrections().then((rows) => ({ key: "corrections", label: "Mes corrections", icon: "✍️", count: rows.filter((r) => active(r.status)).length, leaf: "ed-mes-corrections" } as WorkTile)),
       getMyDossiers().then((rows) => ({ key: "dossiers", label: "Mes dossiers à traiter", icon: "📁", count: rows.length, leaf: "mes-dossiers" } as WorkTile)),
     ]).then((res) => setWork(res.filter((r): r is PromiseFulfilledResult<WorkTile> => r.status === "fulfilled").map((r) => r.value)));

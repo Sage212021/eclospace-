@@ -140,7 +140,7 @@ export function AgendaBanner({ enabled, onOpenCalendar }: { enabled: boolean; on
         {/* Icône calendrier NEUTRE (SVG, sans numéro) : l'emoji 📅 est dessiné
             « JUL 17 » en dur sur certains téléphones et laissait croire à une
             date réelle. Cette icône est identique sur tous les appareils. */}
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--eclosion, #D9B21A)" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true" style={{ flexShrink: 0 }}>
           <rect x="3" y="4.5" width="18" height="16.5" rx="2" />
           <path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
         </svg>

@@ -1,5 +1,5 @@
 import zlib from "node:zlib";
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType } from "docx";
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType, TableLayoutType } from "docx";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "./prisma.js";
 import { storeFile } from "./storage.js";
@@ -152,16 +152,56 @@ function scoreRuns(text: string): TextRun[] | null {
   ];
 }
 
+// Un tableau « clé : valeur » (ex. Identification : Élément | Détail) — à
+// rendre en TEXTE plutôt qu'en tableau à colonnes étroites (qui empile le texte
+// sur de nombreuses lignes et gaspille du papier à l'impression).
+function isKeyValueTable(rows: string[][]): boolean {
+  if (rows.length < 2 || (rows[0]?.length ?? 0) !== 2) return false;
+  const h0 = (rows[0][0] || "").toLowerCase();
+  const h1 = (rows[0][1] || "").toLowerCase();
+  return /d[ée]tail|valeur|information|renseignement/.test(h1) || /^(élément|information|champ|rubrique|document|donnée)/.test(h0);
+}
+
+// Rendu « clé : valeur » compact (une ligne par entrée), sans tableau.
+function keyValueBlock(rows: string[][]): Paragraph[] {
+  return rows.slice(1).map((r) => new Paragraph({
+    spacing: { after: 60 },
+    children: [
+      new TextRun({ text: (r[0] || "").replace(/\*\*/g, "").trim() + " : ", bold: true, color: ECL.noir, size: 20, font: FONT }),
+      ...inlineRuns((r[1] || "").trim(), { color: ECL.ink, size: 20 }),
+    ],
+  }));
+}
+
+// Largeurs de colonnes (en dixièmes de point, DXA) calculées d'après les
+// en-têtes : colonnes de synthèse (commentaire, explication, observation…)
+// larges ; colonnes courtes (n°, coefficient, note, page, sévérité, statut)
+// étroites — pour que le texte respire et que les lignes soient moins hautes.
+function columnWidths(header: string[]): number[] {
+  const TOTAL = 9020; // largeur utile A4 portrait (marges par défaut)
+  const weights = header.map((h) => {
+    const t = h.toLowerCase().trim();
+    if (/^n°|^n$|coef|^note|^\/1|^\/2|^page|s[ée]v|statut|note ?\//.test(t)) return 0.7;
+    if (/commentaire|explication|observation|constat|recommandation|correction|texte original|d[ée]tail|améliorat|demand/.test(t)) return 3.0;
+    return 1.5;
+  });
+  const sum = weights.reduce((a, b) => a + b, 0) || 1;
+  return weights.map((w) => Math.max(650, Math.round((TOTAL * w) / sum)));
+}
+
 // Tableau (ex. grille d'évaluation) : en-tête noir/texte blanc, zébrure ivoire,
 // colonnes numériques centrées, filets discrets — rendu maison Éclosion.
+// Largeurs FIXES pour une mise en page économe en papier.
 function buildTable(rows: string[][]): Table {
   const b = { style: BorderStyle.SINGLE, size: 2, color: ECL.line };
   const borders = { top: b, bottom: b, left: b, right: b };
   const header = rows[0] ?? [];
-  const numericCol = (ci: number) => ci >= 1 && ci <= 2; // coefficient / note
+  const widths = columnWidths(header);
+  const numericCol = (ci: number) => /coef|^note|^\/1|^\/2/.test((header[ci] || "").toLowerCase().trim());
   const headRow = new TableRow({
     tableHeader: true,
-    children: header.map((h) => new TableCell({
+    children: header.map((h, ci) => new TableCell({
+      width: { size: widths[ci], type: WidthType.DXA },
       shading: { fill: ECL.noir, color: "auto", type: "clear" as never },
       margins: { top: 60, bottom: 60, left: 100, right: 100 },
       borders,
@@ -172,6 +212,7 @@ function buildTable(rows: string[][]): Table {
     children: r.map((c, ci) => {
       const gauge = scoreRuns(c); // jauge visuelle si la cellule est un score
       return new TableCell({
+        width: { size: widths[ci] ?? 1500, type: WidthType.DXA },
         shading: { fill: i % 2 ? ECL.ivoire : ECL.white, color: "auto", type: "clear" as never },
         margins: { top: 50, bottom: 50, left: 100, right: 100 },
         borders,
@@ -182,7 +223,7 @@ function buildTable(rows: string[][]): Table {
       });
     }),
   }));
-  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headRow, ...dataRows] });
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: widths, layout: TableLayoutType.FIXED, rows: [headRow, ...dataRows] });
 }
 
 // Rendu .docx du rapport, aux couleurs Éclosion. Interprète le Markdown produit
@@ -216,7 +257,10 @@ export async function renderReportDocx(reportTitle: string, body: string, opts: 
       const rows: string[][] = [splitCells(line)];
       i += 2;
       while (i < lines.length && lines[i].includes("|") && lines[i].trim()) { rows.push(splitCells(lines[i])); i++; }
-      children.push(buildTable(rows));
+      // Identification / infos document (clé : valeur) → texte compact ; sinon
+      // vrai tableau à largeurs fixes.
+      if (isKeyValueTable(rows)) { for (const p of keyValueBlock(rows)) children.push(p); }
+      else children.push(buildTable(rows));
       children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
       continue;
     }
@@ -398,6 +442,13 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       domaine,
       recommandation_editeur: params.editorRecommendation?.trim() || "(aucune)",
     });
+
+    // Éléments d'identification à reporter tels quels : la DATE du jour (date à
+    // laquelle le rapport est rendu) et le RELECTEUR (Comité de lecture pour une
+    // évaluation ; Service de relecture pour une relecture/correction).
+    const reportDate = new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+    const relecteur = params.workType === "evaluation" ? "Comité de lecture Éclosion Édition" : "Service de relecture Éclosion Édition";
+    userText += `\n\nÀ reporter dans la rubrique d'identification, tels quels : Date du rapport : ${reportDate} ; Relecteur : ${relecteur}.`;
 
     // Passage BAT de la relecture de couverture : on indique explicitement à l'IA
     // s'il s'agit du 1ᵉʳ passage (BAT1) ou du 2ᵉ (BAT2). Au BAT2, on lui JOINT le

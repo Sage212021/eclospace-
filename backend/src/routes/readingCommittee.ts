@@ -543,7 +543,11 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ code: "already_submitted", message: "Cette évaluation a déjà été remise." });
       }
 
-      const activeCriteria = await prisma.evaluationCriterion.findMany({ where: { isActive: true } });
+      // Grille ADAPTÉE au type du manuscrit (domaine) : grille propre au domaine
+      // si elle existe, sinon grille par défaut.
+      const ms = await prisma.manuscript.findUnique({ where: { id: assignment.manuscriptId }, select: { genreId: true } });
+      const { effectiveCriteria } = await import("../lib/evaluationGrid.js");
+      const activeCriteria = await effectiveCriteria(ms?.genreId ?? null);
       const missing = activeCriteria.filter((c) => !parsed.data.scores.some((s) => s.criterion_id === c.id));
       if (missing.length > 0) {
         return reply.code(409).send({

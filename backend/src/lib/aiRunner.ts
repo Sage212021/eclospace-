@@ -112,10 +112,12 @@ function prepareManuscript(mime: string, name: string, buffer: Buffer): Manuscri
   return { kind: "text", text: buffer.toString("utf8") };
 }
 
-// Grille d'évaluation OFFICIELLE de la maison (critères + coefficients, en base).
-// Transmise à l'IA pour qu'elle s'y TIENNE au lieu d'inventer ses critères.
-async function evaluationGrilleText(): Promise<string> {
-  const crit = await prisma.evaluationCriterion.findMany({ where: { isActive: true }, orderBy: [{ coefficient: "desc" }, { label: "asc" }] });
+// Grille d'évaluation OFFICIELLE de la maison (critères + coefficients, en base),
+// ADAPTÉE au type de manuscrit (domaine) : grille propre au domaine si elle
+// existe, sinon grille par défaut. Transmise à l'IA pour qu'elle s'y TIENNE.
+async function evaluationGrilleText(genreId: string | null | undefined): Promise<string> {
+  const { effectiveCriteria } = await import("./evaluationGrid.js");
+  const crit = await effectiveCriteria(genreId);
   if (!crit.length) return "(grille non configurée)";
   const lines = crit.map((c) => `- ${c.label} (coefficient ${Number(c.coefficient)})`).join("\n");
   const sum = crit.reduce((s, c) => s + Number(c.coefficient), 0);
@@ -535,7 +537,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // maison) pour que la rubrique C s'y tienne exactement, au lieu que l'IA
     // invente ses propres critères.
     if (params.workType === "evaluation") {
-      userText += `\n\nGRILLE D'ÉVALUATION OFFICIELLE D'ÉCLOSION — utilise EXACTEMENT ces critères et ces coefficients dans la grille (rubrique C), sans en ajouter ni en retirer, chaque note sur 10 :\n${await evaluationGrilleText()}`;
+      userText += `\n\nGRILLE D'ÉVALUATION OFFICIELLE D'ÉCLOSION (adaptée au type « ${manuscript.genre?.label ?? "—"} ») — utilise EXACTEMENT ces critères et ces coefficients dans la grille (rubrique C), sans en ajouter ni en retirer, chaque note sur 10 :\n${await evaluationGrilleText(manuscript.genreId)}`;
     }
 
     // Passage BAT de la relecture de couverture : on indique explicitement à l'IA

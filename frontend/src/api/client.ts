@@ -861,8 +861,9 @@ export interface EvaluationCriterion {
   coefficient: string;
 }
 
-export function listEvaluationCriteria() {
-  return request<EvaluationCriterion[]>("/api/v1/evaluation-criteria");
+export function listEvaluationCriteria(manuscriptId?: string) {
+  // Grille adaptée au type du manuscrit si fourni ; sinon grille par défaut.
+  return request<EvaluationCriterion[]>(`/api/v1/evaluation-criteria${manuscriptId ? `?manuscript=${manuscriptId}` : ""}`);
 }
 
 // — Administration de la grille d'évaluation (critères + coefficients) —
@@ -872,11 +873,16 @@ export interface EvaluationCriterionAdmin {
   coefficient: string;
   isActive: boolean;
 }
-export function listAllEvaluationCriteria() {
-  return request<{ criteria: EvaluationCriterionAdmin[]; active_coefficient_sum: number }>("/api/v1/evaluation-criteria/all");
+// scope : "default" (grille par défaut) ou l'identifiant d'un domaine.
+export function listAllEvaluationCriteria(scope?: string) {
+  const q = scope && scope !== "default" ? `?genre=${scope}` : "";
+  return request<{ criteria: EvaluationCriterionAdmin[]; active_coefficient_sum: number; scope: string; genres_with_own_grid: string[] }>(`/api/v1/evaluation-criteria/all${q}`);
 }
-export function createEvaluationCriterion(input: { label: string; coefficient: number }) {
+export function createEvaluationCriterion(input: { label: string; coefficient: number; genre_id?: string | null }) {
   return request<EvaluationCriterionAdmin>("/api/v1/evaluation-criteria", { method: "POST", body: JSON.stringify(input) });
+}
+export function cloneDefaultGrid(genreId: string) {
+  return request<{ ok: boolean; copied: number }>("/api/v1/evaluation-criteria/clone-default", { method: "POST", body: JSON.stringify({ genre_id: genreId }) });
 }
 export function updateEvaluationCriterion(id: string, input: { label?: string; coefficient?: number; is_active?: boolean }) {
   return request<EvaluationCriterionAdmin>(`/api/v1/evaluation-criteria/${id}`, { method: "PATCH", body: JSON.stringify(input) });

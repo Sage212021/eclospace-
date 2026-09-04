@@ -865,6 +865,26 @@ export function listEvaluationCriteria() {
   return request<EvaluationCriterion[]>("/api/v1/evaluation-criteria");
 }
 
+// — Administration de la grille d'évaluation (critères + coefficients) —
+export interface EvaluationCriterionAdmin {
+  id: string;
+  label: string;
+  coefficient: string;
+  isActive: boolean;
+}
+export function listAllEvaluationCriteria() {
+  return request<{ criteria: EvaluationCriterionAdmin[]; active_coefficient_sum: number }>("/api/v1/evaluation-criteria/all");
+}
+export function createEvaluationCriterion(input: { label: string; coefficient: number }) {
+  return request<EvaluationCriterionAdmin>("/api/v1/evaluation-criteria", { method: "POST", body: JSON.stringify(input) });
+}
+export function updateEvaluationCriterion(id: string, input: { label?: string; coefficient?: number; is_active?: boolean }) {
+  return request<EvaluationCriterionAdmin>(`/api/v1/evaluation-criteria/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function deactivateEvaluationCriterion(id: string) {
+  return request<{ ok: boolean }>(`/api/v1/evaluation-criteria/${id}`, { method: "DELETE" });
+}
+
 export interface WorkflowStatusRef {
   code: string;
   label: string;

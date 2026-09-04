@@ -5,12 +5,14 @@ import type { FastifyInstance } from "fastify";
 // renvoie un rapport et un usage de tokens fixes.
 // Capture le dernier « system » reçu par l'API simulée pour vérifier que la
 // structure imposée du rapport est bien transmise à l'IA.
-const sdkCalls: { system?: string }[] = [];
+const sdkCalls: { system?: string; user?: string }[] = [];
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
-      create: async (args: { system?: string }) => {
-        sdkCalls.push({ system: args.system });
+      create: async (args: { system?: string; messages?: { content?: unknown }[] }) => {
+        const c = args.messages?.[0]?.content;
+        const user = typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (b as { text?: string }).text ?? "").join(" ") : "";
+        sdkCalls.push({ system: args.system, user });
         return {
           model: "claude-haiku-4-5",
           content: [{ type: "text", text: "# Rapport d'évaluation\nSynthèse : manuscrit prometteur.\nAvis : Acceptation avec modifications mineures." }],
@@ -195,11 +197,26 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
   it("la relecture de couverture est branchée et classée en pièce d'étape", async () => {
     const res = await app.inject({
       method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
-      payload: { manuscript_id: manuscriptId, work_type: "couverture", step_code: "CORRECTION" },
+      payload: { manuscript_id: manuscriptId, work_type: "couverture", step_code: "CORRECTION", cover_pass: "BAT1" },
     });
     expect(res.statusCode).toBe(202);
     await waitJob(res.json().jobId);
     const piece = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape" } });
     expect(piece).not.toBeNull();
+    // Le passage BAT1 est transmis à l'IA.
+    expect(sdkCalls[sdkCalls.length - 1]?.user ?? "").toContain("PASSAGE : BAT1");
+  });
+
+  it("la couverture BAT2 reçoit le rapport du BAT précédent (suivi des corrections)", async () => {
+    // Un BAT1 a déjà été produit ci-dessus → le BAT2 doit le retrouver et le joindre.
+    const res = await app.inject({
+      method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
+      payload: { manuscript_id: manuscriptId, work_type: "couverture", step_code: "VALIDATION_BAT", cover_pass: "BAT2" },
+    });
+    expect(res.statusCode).toBe(202);
+    await waitJob(res.json().jobId);
+    const lastUser = sdkCalls[sdkCalls.length - 1]?.user ?? "";
+    expect(lastUser).toContain("PASSAGE : BAT2");
+    expect(lastUser).toContain("RAPPORT DU BAT PRÉCÉDENT");
   });
 });

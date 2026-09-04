@@ -93,6 +93,24 @@ function fillTemplate(tpl: string, vars: Record<string, string>): string {
   return tpl.replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? "");
 }
 
+// Récupère le texte du rapport de couverture du BAT PRÉCÉDENT (dernière relecture
+// de couverture terminée sur cet ouvrage, autre que le job courant) — pour que le
+// BAT2 puisse suivre les corrections effectivement demandées au passage précédent.
+async function findPreviousCoverReportText(manuscriptId: string, currentJobId: string): Promise<string | null> {
+  const prev = await prisma.aiReadingJob.findFirst({
+    where: { manuscriptId, workType: "couverture", status: "termine", id: { not: currentJobId } },
+    orderBy: [{ finishedAt: "desc" }, { launchedAt: "desc" }],
+  });
+  const ids = Array.isArray(prev?.producedDocumentIds) ? (prev!.producedDocumentIds as string[]) : [];
+  if (!ids.length) return null;
+  const version = await prisma.documentVersion.findFirst({ where: { document: { id: ids[0] } }, orderBy: { versionNumber: "desc" } });
+  if (!version) return null;
+  const { readStoredFile } = await import("./storage.js");
+  const buffer = await readStoredFile(version.filePath);
+  const text = docxToText(buffer);
+  return text ? text.slice(0, 12000) : null; // borne de sécurité (tokens)
+}
+
 // Identité visuelle « Noir souverain » d'Éclosion (charte, D-022) appliquée au
 // rapport : or = marque/accent, noir = titres/structure, ivoire = zébrures de
 // tableau. Aucun bleu (l'ancien rendu utilisait le bleu par défaut de Word).
@@ -278,6 +296,9 @@ export interface AiRunParams {
   workType: WorkType;
   editorRecommendation?: string;
   stepCode?: string;
+  // Passage BAT pour la relecture de couverture : "BAT1" (1ᵉʳ passage) ou
+  // "BAT2" (2ᵉ passage, avec suivi des corrections du BAT précédent).
+  coverPass?: "BAT1" | "BAT2";
   userId: string;
   ip?: string;
 }
@@ -369,7 +390,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     const authorName = author ? `${author.firstName} ${author.lastName}`.trim() : "—";
     const domaine = [manuscript.genre?.label, manuscript.collection?.label].filter(Boolean).join(" / ") || "(non renseigné)";
 
-    const userText = fillTemplate(prompt.userTemplate, {
+    let userText = fillTemplate(prompt.userTemplate, {
       manuscrit: prepared.kind === "text" ? prepared.text : "(le manuscrit est joint en PDF ci-dessous)",
       domaines_collections: await domainesCollectionsText(),
       titre: manuscript.title,
@@ -377,6 +398,22 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       domaine,
       recommandation_editeur: params.editorRecommendation?.trim() || "(aucune)",
     });
+
+    // Passage BAT de la relecture de couverture : on indique explicitement à l'IA
+    // s'il s'agit du 1ᵉʳ passage (BAT1) ou du 2ᵉ (BAT2). Au BAT2, on lui JOINT le
+    // rapport de couverture du passage précédent pour un suivi fiable des
+    // corrections (intégrées / manquantes) et l'appréciation des améliorations.
+    if (params.workType === "couverture") {
+      const pass = params.coverPass ?? "BAT1";
+      if (pass === "BAT1") {
+        userText += "\n\n=== PASSAGE : BAT1 (premier passage) ===\nAucun BAT précédent : la rubrique « Suivi des corrections du BAT précédent » doit indiquer « Premier passage — pas de suivi ».";
+      } else {
+        const prevReport = await findPreviousCoverReportText(manuscript.id, job.id);
+        userText += prevReport
+          ? "\n\n=== PASSAGE : BAT2 (deuxième passage) ===\nCi-dessous le RAPPORT DE COUVERTURE DU BAT PRÉCÉDENT. Dans la rubrique « Suivi des corrections du BAT précédent », reprends CHAQUE correction qui y était demandée et indique si elle a été intégrée (✔), non intégrée (✘) ou partielle (~), ce qui manque encore, puis apprécie les améliorations apportées.\n\n--- DÉBUT RAPPORT DU BAT PRÉCÉDENT ---\n" + prevReport + "\n--- FIN RAPPORT DU BAT PRÉCÉDENT ---"
+          : "\n\n=== PASSAGE : BAT2 (deuxième passage) ===\nLe rapport du BAT précédent est introuvable : signale-le dans la rubrique de suivi et déduis le suivi des corrections encore visibles sur la couverture.";
+      }
+    }
 
     const content: Anthropic.MessageParam["content"] =
       prepared.kind === "pdf"

@@ -17,9 +17,10 @@ const STATUS_COLORS: Record<AiJob["status"], string> = {
   erreur: "var(--alert, #B23A2E)",
 };
 
-export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hint }: { manuscriptId: string; workType: AiWorkType; stepCode: string; title: string; hint?: string }) {
+export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hint, askCoverPass }: { manuscriptId: string; workType: AiWorkType; stepCode: string; title: string; hint?: string; askCoverPass?: boolean }) {
   const [jobs, setJobs] = useState<AiJob[]>([]);
   const [reco, setReco] = useState("");
+  const [coverPass, setCoverPass] = useState<"BAT1" | "BAT2">("BAT1");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -35,7 +36,7 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
   async function launch() {
     setBusy(true); setErr(null); setNote(null);
     try {
-      await runAiEditorial({ manuscript_id: manuscriptId, work_type: workType, step_code: stepCode, editor_recommendation: reco.trim() || undefined });
+      await runAiEditorial({ manuscript_id: manuscriptId, work_type: workType, step_code: stepCode, editor_recommendation: reco.trim() || undefined, cover_pass: askCoverPass ? coverPass : undefined });
       setReco("");
       setNote("Analyse lancée. Le relecteur d'Éclosion travaille en arrière-plan — vous pouvez patienter ou quitter cet écran, le rapport sera classé dans les Documents de l'ouvrage.");
       // Suivi de progression (jusqu'à ~5 min).
@@ -81,6 +82,17 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
       {hint && <p style={{ color: "var(--eclosion-dark, #9A7A12)", fontSize: 12, margin: "-4px 0 10px", fontWeight: 600 }}>{hint}</p>}
       {err && <div style={{ background: "var(--alert-soft, #F6E2DE)", color: "var(--alert, #B23A2E)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
       {note && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{note}</div>}
+      {askCoverPass && (
+        <div style={{ marginBottom: 8, fontSize: 12.5 }}>
+          <span style={{ fontWeight: 600, marginRight: 10 }}>Passage :</span>
+          {(["BAT1", "BAT2"] as const).map((p) => (
+            <label key={p} style={{ marginRight: 14, cursor: "pointer" }}>
+              <input type="radio" name={`coverpass-${manuscriptId}`} checked={coverPass === p} onChange={() => setCoverPass(p)} style={{ marginRight: 4 }} />
+              {p === "BAT1" ? "BAT1 (1ᵉʳ passage)" : "BAT2 (2ᵉ passage — suivi du BAT précédent)"}
+            </label>
+          ))}
+        </div>
+      )}
       <textarea
         value={reco}
         onChange={(e) => setReco(e.target.value)}

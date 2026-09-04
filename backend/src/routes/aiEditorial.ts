@@ -161,6 +161,9 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
     work_type: z.enum(WORK_TYPES),
     step_code: z.string().max(40).optional(),
     editor_recommendation: z.string().max(4000).optional(),
+    // Passage BAT (couverture) : BAT1 = 1ᵉʳ passage, BAT2 = 2ᵉ passage (suivi
+    // des corrections du BAT précédent, transmis automatiquement à l'IA).
+    cover_pass: z.enum(["BAT1", "BAT2"]).optional(),
   });
   fastify.post(
     "/api/v1/ai-editorial/run",
@@ -183,6 +186,7 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
           workType: parsed.data.work_type,
           editorRecommendation: parsed.data.editor_recommendation,
           stepCode: parsed.data.step_code,
+          coverPass: parsed.data.cover_pass,
           userId: request.user!.id,
           ip: request.ip,
         };

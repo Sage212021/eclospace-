@@ -93,6 +93,29 @@ function fillTemplate(tpl: string, vars: Record<string, string>): string {
   return tpl.replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? "");
 }
 
+// Borne de sécurité du texte de manuscrit envoyé à l'IA : la fenêtre de contexte
+// est limitée (≈ 200 000 tokens). Un très gros ouvrage (ex. 430 000 tokens)
+// serait refusé (« prompt is too long »). Au-delà du budget, on envoie un
+// EXTRAIT REPRÉSENTATIF (début + milieu + fin) plutôt que d'échouer — suffisant
+// pour une évaluation d'ensemble ; le rapport le signale. ~500 000 caractères
+// ≈ 130 000 tokens, en gardant de la marge pour le prompt et la réponse.
+export const MANUSCRIT_CHAR_BUDGET = 500_000;
+export function capManuscriptText(text: string): { text: string; truncated: boolean } {
+  if (text.length <= MANUSCRIT_CHAR_BUDGET) return { text, truncated: false };
+  const head = Math.floor(MANUSCRIT_CHAR_BUDGET * 0.5);
+  const mid = Math.floor(MANUSCRIT_CHAR_BUDGET * 0.25);
+  const tail = MANUSCRIT_CHAR_BUDGET - head - mid;
+  const midStart = Math.max(head, Math.floor(text.length / 2 - mid / 2));
+  const parts = [
+    text.slice(0, head),
+    "\n\n[…] (extrait — passage central du manuscrit) [...]\n\n",
+    text.slice(midStart, midStart + mid),
+    "\n\n[…] (extrait — fin du manuscrit) [...]\n\n",
+    text.slice(text.length - tail),
+  ];
+  return { text: parts.join(""), truncated: true };
+}
+
 // Récupère le texte du rapport de couverture du BAT PRÉCÉDENT (dernière relecture
 // de couverture terminée sur cet ouvrage, autre que le job courant) — pour que le
 // BAT2 puisse suivre les corrections effectivement demandées au passage précédent.
@@ -434,14 +457,18 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     const authorName = author ? `${author.firstName} ${author.lastName}`.trim() : "—";
     const domaine = [manuscript.genre?.label, manuscript.collection?.label].filter(Boolean).join(" / ") || "(non renseigné)";
 
+    const capped = prepared.kind === "text" ? capManuscriptText(prepared.text) : { text: "", truncated: false };
     let userText = fillTemplate(prompt.userTemplate, {
-      manuscrit: prepared.kind === "text" ? prepared.text : "(le manuscrit est joint en PDF ci-dessous)",
+      manuscrit: prepared.kind === "text" ? capped.text : "(le manuscrit est joint en PDF ci-dessous)",
       domaines_collections: await domainesCollectionsText(),
       titre: manuscript.title,
       auteur: authorName,
       domaine,
       recommandation_editeur: params.editorRecommendation?.trim() || "(aucune)",
     });
+    if (capped.truncated) {
+      userText += "\n\n(Note : le manuscrit est très volumineux ; l'analyse porte sur un EXTRAIT REPRÉSENTATIF — début, passage central et fin. Signale-le clairement dans le rapport et invite à une relecture complète si nécessaire.)";
+    }
 
     // Éléments d'identification à reporter tels quels : la DATE du jour (date à
     // laquelle le rapport est rendu) et le RELECTEUR (Comité de lecture pour une

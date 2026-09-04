@@ -219,4 +219,15 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(lastUser).toContain("PASSAGE : BAT2");
     expect(lastUser).toContain("RAPPORT DU BAT PRÉCÉDENT");
   });
+
+  it("borne un manuscrit très volumineux (extrait représentatif, pas d'échec « prompt too long »)", async () => {
+    const { capManuscriptText, MANUSCRIT_CHAR_BUDGET } = await import("../src/lib/aiRunner.js");
+    const small = capManuscriptText("abc");
+    expect(small.truncated).toBe(false);
+    const huge = capManuscriptText("A".repeat(1_500_000));
+    expect(huge.truncated).toBe(true);
+    expect(huge.text.length).toBeLessThanOrEqual(MANUSCRIT_CHAR_BUDGET + 200);
+    expect(huge.text).toContain("passage central du manuscrit");
+    expect(huge.text).toContain("fin du manuscrit");
+  });
 });

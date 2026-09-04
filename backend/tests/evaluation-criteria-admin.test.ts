@@ -69,6 +69,16 @@ describe("Grille d'évaluation — administration (critères + coefficients)", (
     expect(res.statusCode).toBe(400);
   });
 
+  it("les manuels scolaires ont leur grille propre (semée)", async () => {
+    const manuel = await prisma.genre.findFirst({ where: { label: "Manuel scolaire ou pratique", deletedAt: null } });
+    expect(manuel).not.toBeNull();
+    const res = await app.inject({ method: "GET", url: `/api/v1/evaluation-criteria/all?genre=${manuel!.id}`, headers: { cookie: adminCookie } });
+    const labels = (res.json().criteria as { label: string }[]).map((c) => c.label);
+    expect(labels).toContain("Conformité au programme / curriculum officiel");
+    // Distincte de la grille par défaut (qui n'a pas ce critère).
+    expect(labels).not.toContain("Potentiel commercial");
+  });
+
   it("grille propre à un TYPE de manuscrit (domaine) : copie + priorité sur la grille par défaut", async () => {
     // Un domaine dédié pour le test.
     const genre = await prisma.genre.create({ data: { code: `GT-${Math.random().toString(36).slice(2, 6)}`, label: "Genre test grille" } });

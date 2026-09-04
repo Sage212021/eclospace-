@@ -157,7 +157,7 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
     expect(assignResponse.statusCode).toBe(201);
     const assignment = assignResponse.json();
 
-    const criteria = await prisma.evaluationCriterion.findMany();
+    const criteria = await prisma.evaluationCriterion.findMany({ where: { genreId: null, isActive: true } });
     const ligneEditoriale = criteria.find((c) => c.label.startsWith("Adéquation"))!;
     // Note maximale sur le critère le plus fortement pondéré (×3), notes
     // basses ailleurs : le score global doit être tiré vers le haut par la
@@ -209,7 +209,7 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
       payload: { reader_id: adminId, due_at: "2026-12-31T00:00:00.000Z" },
     });
     const assignment = assignResponse.json();
-    const criteria = await prisma.evaluationCriterion.findMany();
+    const criteria = await prisma.evaluationCriterion.findMany({ where: { genreId: null, isActive: true } });
     await app.inject({
       method: "POST",
       url: `/api/v1/reading-assignments/${assignment.id}/evaluation`,

@@ -243,6 +243,7 @@ function AssignmentCard({
       {openAssignmentId === assignment.id && (
         <EvaluationForm
           assignmentId={assignment.id}
+          manuscriptId={assignment.manuscriptId}
           onSubmitted={() => {
             setOpenAssignmentId(null);
             setMessage(t("myr.submitted_ok", "Évaluation remise avec succès."));
@@ -254,7 +255,7 @@ function AssignmentCard({
   );
 }
 
-function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; onSubmitted: () => void }) {
+function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmentId: string; manuscriptId: string; onSubmitted: () => void }) {
   const { t } = useI18n();
   const [criteria, setCriteria] = useState<EvaluationCriterion[]>([]);
   const [scores, setScores] = useState<Record<string, number>>({});
@@ -267,12 +268,12 @@ function EvaluationForm({ assignmentId, onSubmitted }: { assignmentId: string; o
   const [conflictDetails, setConflictDetails] = useState("");
 
   useEffect(() => {
-    listEvaluationCriteria().then((c) => {
+    listEvaluationCriteria(manuscriptId).then((c) => {
       setCriteria(c);
       setScores(Object.fromEntries(c.map((crit) => [crit.id, 5])));
     });
     getReadingCommitteeRules().then((r) => setConflictRequired(r.rules.conflictEnabled)).catch(() => {});
-  }, []);
+  }, [manuscriptId]);
 
   const totalCoefficient = criteria.reduce((sum, c) => sum + Number(c.coefficient), 0);
   const livePreview =

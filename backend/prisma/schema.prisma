@@ -1743,7 +1743,8 @@ model Genre {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  manuscripts Manuscript[]
+  manuscripts        Manuscript[]
+  evaluationCriteria EvaluationCriterion[]
 
   @@map("genres")
 }
@@ -2054,9 +2055,15 @@ model EvaluationCriterion {
   label       String
   coefficient Decimal @default(1) @db.Decimal(4, 2)
   isActive    Boolean @default(true) @map("is_active")
+  // Grille par TYPE de manuscrit : genreId null = grille par défaut (tous types) ;
+  // genreId renseigné = grille propre à ce domaine. Un type sans grille propre
+  // retombe sur la grille par défaut.
+  genreId     String? @map("genre_id")
+  genre       Genre?  @relation(fields: [genreId], references: [id])
 
   scores EvaluationScore[]
 
+  @@index([genreId])
   @@map("evaluation_criteria")
 }
 

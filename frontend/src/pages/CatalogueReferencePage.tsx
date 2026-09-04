@@ -10,6 +10,7 @@ import {
   createEvaluationCriterion,
   updateEvaluationCriterion,
   deactivateEvaluationCriterion,
+  cloneDefaultGrid,
   type Collection,
   type Genre,
   type EvaluationCriterionAdmin,
@@ -65,17 +66,35 @@ export function CatalogueReferencePage({ canManage }: { canManage: boolean }) {
 function EvaluationGridCard({ canManage, onError, onMessage }: { canManage: boolean; onError: (m: string | null) => void; onMessage: (m: string | null) => void }) {
   const [items, setItems] = useState<EvaluationCriterionAdmin[]>([]);
   const [sum, setSum] = useState(0);
+  const [scope, setScope] = useState("default"); // "default" ou id de domaine
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [ownGrids, setOwnGrids] = useState<string[]>([]);
   const [label, setLabel] = useState("");
   const [coeff, setCoeff] = useState("1");
   const [busy, setBusy] = useState(false);
 
-  const refresh = () =>
-    listAllEvaluationCriteria()
-      .then((r) => { setItems(r.criteria); setSum(r.active_coefficient_sum); })
+  const refresh = (sc: string) =>
+    listAllEvaluationCriteria(sc)
+      .then((r) => { setItems(r.criteria); setSum(r.active_coefficient_sum); setOwnGrids(r.genres_with_own_grid); })
       .catch((e) => onError(e instanceof Error ? e.message : "Chargement de la grille impossible."));
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { listGenres().then(setGenres).catch(() => setGenres([])); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { refresh(scope); }, [scope]);
+
+  const isTypeScope = scope !== "default";
+  const typeHasOwnGrid = isTypeScope && (items.length > 0 || ownGrids.includes(scope));
+
+  async function copyDefault() {
+    onError(null); onMessage(null); setBusy(true);
+    try {
+      const r = await cloneDefaultGrid(scope);
+      onMessage(`Grille par défaut copiée (${r.copied} critères) — ajustez-la pour ce type.`);
+      await refresh(scope);
+    } catch (err) { onError(err instanceof Error ? err.message : "Copie impossible."); }
+    finally { setBusy(false); }
+  }
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -83,8 +102,8 @@ function EvaluationGridCard({ canManage, onError, onMessage }: { canManage: bool
     if (!label.trim() || !(c > 0)) { onError("Libellé et coefficient (> 0) requis."); return; }
     onError(null); onMessage(null); setBusy(true);
     try {
-      await createEvaluationCriterion({ label: label.trim(), coefficient: c });
-      onMessage(`Critère « ${label.trim()} » ajouté.`); setLabel(""); setCoeff("1"); await refresh();
+      await createEvaluationCriterion({ label: label.trim(), coefficient: c, genre_id: isTypeScope ? scope : null });
+      onMessage(`Critère « ${label.trim()} » ajouté.`); setLabel(""); setCoeff("1"); await refresh(scope);
     } catch (err) { onError(err instanceof Error ? err.message : "Ajout impossible."); }
     finally { setBusy(false); }
   }
@@ -93,7 +112,7 @@ function EvaluationGridCard({ canManage, onError, onMessage }: { canManage: bool
     const c = Number(value.replace(",", "."));
     if (!(c > 0)) { onError("Coefficient invalide (> 0)."); return; }
     onError(null);
-    try { await updateEvaluationCriterion(id, { coefficient: c }); onMessage("Coefficient enregistré."); await refresh(); }
+    try { await updateEvaluationCriterion(id, { coefficient: c }); onMessage("Coefficient enregistré."); await refresh(scope); }
     catch (err) { onError(err instanceof Error ? err.message : "Enregistrement impossible."); }
   }
 
@@ -103,7 +122,7 @@ function EvaluationGridCard({ canManage, onError, onMessage }: { canManage: bool
       if (it.isActive) await deactivateEvaluationCriterion(it.id);
       else await updateEvaluationCriterion(it.id, { is_active: true });
       onMessage(it.isActive ? `« ${it.label} » retiré de la grille.` : `« ${it.label} » réactivé.`);
-      await refresh();
+      await refresh(scope);
     } catch (err) { onError(err instanceof Error ? err.message : "Action impossible."); }
   }
 
@@ -111,9 +130,34 @@ function EvaluationGridCard({ canManage, onError, onMessage }: { canManage: bool
     <Card title="Grille d'évaluation (comité de lecture & rapport IA)" icon={<IconBook />}>
       <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
         Chaque critère est noté sur 10 et pondéré par son coefficient. Cette grille pilote le formulaire de notation
-        du comité <strong>et</strong> le rapport d'évaluation de l'IA. Somme des coefficients actifs :{" "}
-        <strong style={{ fontFamily: "var(--font-mono)" }}>{sum}</strong>.
+        du comité <strong>et</strong> le rapport d'évaluation de l'IA. La grille peut être <strong>adaptée au type de
+        manuscrit</strong> : un type sans grille propre utilise la grille par défaut.
       </p>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <label style={{ fontSize: 12.5, fontWeight: 600 }}>Grille :</label>
+        <select value={scope} onChange={(e) => setScope(e.target.value)} style={{ padding: "6px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13 }}>
+          <option value="default">Par défaut (tous types)</option>
+          {genres.map((g) => (
+            <option key={g.id} value={g.id}>{g.label}{ownGrids.includes(g.id) ? " — grille propre" : ""}</option>
+          ))}
+        </select>
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+          Somme des coefficients actifs : <strong style={{ fontFamily: "var(--font-mono)" }}>{sum}</strong>
+        </span>
+      </div>
+
+      {isTypeScope && !typeHasOwnGrid && (
+        <div style={{ background: "var(--eclosion-soft)", color: "var(--ink)", borderRadius: 8, padding: "9px 12px", fontSize: 12.5, marginBottom: 10 }}>
+          Ce type utilise actuellement la <strong>grille par défaut</strong>. Pour lui donner une grille propre :{" "}
+          {canManage ? (
+            <button onClick={copyDefault} disabled={busy} style={{ border: "1px solid var(--eclosion)", background: "#fff", color: "var(--eclosion-dark)", borderRadius: 6, padding: "3px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              Copier la grille par défaut
+            </button>
+          ) : "un administrateur peut la copier depuis la grille par défaut."}
+          {" "}ou ajoutez directement des critères ci-dessous.
+        </div>
+      )}
+
       <div className="ecl-list">
         {items.map((it) => (
           <div key={it.id} className="ecl-row" style={{ padding: "9px 12px", gap: 10, opacity: it.isActive ? 1 : 0.55 }}>

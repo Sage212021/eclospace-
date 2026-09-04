@@ -108,9 +108,18 @@ export default async function referenceRoutes(fastify: FastifyInstance) {
 
   // Grille d'évaluation du comité de lecture (Ch. 7 §7.4) — nécessaire au
   // formulaire de notation pour savoir quels critères noter.
-  fastify.get("/api/v1/evaluation-criteria", { preHandler: requireAuth }, async (_request, reply) => {
-    const criteria = await prisma.evaluationCriterion.findMany({ where: { isActive: true }, orderBy: { label: "asc" } });
-    return reply.send(criteria);
+  // Grille EFFECTIVE pour le formulaire de notation : adaptée au type du
+  // manuscrit (?manuscript=<id>) — grille propre au domaine si elle existe,
+  // sinon grille par défaut. Sans paramètre : grille par défaut.
+  fastify.get("/api/v1/evaluation-criteria", { preHandler: requireAuth }, async (request, reply) => {
+    const { manuscript } = request.query as { manuscript?: string };
+    const { effectiveCriteria } = await import("../lib/evaluationGrid.js");
+    let genreId: string | null = null;
+    if (manuscript) {
+      const m = await prisma.manuscript.findFirst({ where: { id: manuscript, deletedAt: null }, select: { genreId: true } });
+      genreId = m?.genreId ?? null;
+    }
+    return reply.send(await effectiveCriteria(genreId));
   });
 
   // — Administration de la grille d'évaluation (critères + coefficients) —
@@ -120,21 +129,45 @@ export default async function referenceRoutes(fastify: FastifyInstance) {
     label: z.string().trim().min(1).max(160),
     coefficient: z.number().positive().max(20),
     is_active: z.boolean().optional(),
+    // Domaine ciblé (grille propre à un type) ; absent/null = grille par défaut.
+    genre_id: z.string().uuid().nullable().optional(),
   });
 
-  // Vue admin : TOUS les critères (actifs et inactifs), triés par poids.
-  fastify.get("/api/v1/evaluation-criteria/all", { preHandler: requirePermission("manuscripts", "administration") }, async (_request, reply) => {
-    const criteria = await prisma.evaluationCriterion.findMany({ orderBy: [{ isActive: "desc" }, { coefficient: "desc" }, { label: "asc" }] });
+  // Vue admin d'un SCOPE de grille : « par défaut » (sans ?genre) ou propre à un
+  // domaine (?genre=<id>). Renvoie les critères de ce scope + la somme des
+  // coefficients actifs, et si le domaine possède sa propre grille.
+  fastify.get("/api/v1/evaluation-criteria/all", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const { genre } = request.query as { genre?: string };
+    const genreId = genre && genre !== "default" ? genre : null;
+    const criteria = await prisma.evaluationCriterion.findMany({ where: { genreId }, orderBy: [{ isActive: "desc" }, { coefficient: "desc" }, { label: "asc" }] });
     const sum = criteria.filter((c) => c.isActive).reduce((s, c) => s + Number(c.coefficient), 0);
-    return reply.send({ criteria, active_coefficient_sum: sum });
+    // Nombre de domaines ayant une grille propre (pour l'écran d'administration).
+    const withOwn = await prisma.evaluationCriterion.findMany({ where: { genreId: { not: null }, isActive: true }, select: { genreId: true }, distinct: ["genreId"] });
+    return reply.send({ criteria, active_coefficient_sum: sum, scope: genreId ? "genre" : "default", genres_with_own_grid: withOwn.map((c) => c.genreId) });
   });
 
   fastify.post("/api/v1/evaluation-criteria", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
     const parsed = criterionSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Libellé et coefficient (> 0) requis.", details: parsed.error.issues });
-    const created = await prisma.evaluationCriterion.create({ data: { label: parsed.data.label, coefficient: parsed.data.coefficient, isActive: parsed.data.is_active ?? true } });
-    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "evaluation_criterion", entityId: created.id, newValues: { label: created.label, coefficient: Number(created.coefficient) }, ipAddress: request.ip });
+    const created = await prisma.evaluationCriterion.create({ data: { label: parsed.data.label, coefficient: parsed.data.coefficient, isActive: parsed.data.is_active ?? true, genreId: parsed.data.genre_id ?? null } });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "evaluation_criterion", entityId: created.id, newValues: { label: created.label, coefficient: Number(created.coefficient), genreId: created.genreId }, ipAddress: request.ip });
     return reply.code(201).send(created);
+  });
+
+  // Démarrer la grille d'un domaine à partir de la grille PAR DÉFAUT (copie des
+  // critères actifs par défaut vers ce domaine) — refusé si le domaine a déjà
+  // une grille propre.
+  fastify.post("/api/v1/evaluation-criteria/clone-default", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const parsed = z.object({ genre_id: z.string().uuid() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Domaine requis." });
+    const genre = await prisma.genre.findFirst({ where: { id: parsed.data.genre_id, deletedAt: null } });
+    if (!genre) return reply.code(404).send({ code: "not_found", message: "Domaine introuvable." });
+    const already = await prisma.evaluationCriterion.count({ where: { genreId: genre.id } });
+    if (already > 0) return reply.code(409).send({ code: "grid_exists", message: "Ce domaine a déjà sa propre grille." });
+    const base = await prisma.evaluationCriterion.findMany({ where: { genreId: null, isActive: true } });
+    await prisma.evaluationCriterion.createMany({ data: base.map((c) => ({ label: c.label, coefficient: c.coefficient, isActive: true, genreId: genre.id })) });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "evaluation_grid", entityId: genre.id, newValues: { genre: genre.label, copied: base.length }, ipAddress: request.ip });
+    return reply.code(201).send({ ok: true, copied: base.length });
   });
 
   fastify.patch("/api/v1/evaluation-criteria/:id", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {

@@ -24,6 +24,12 @@ describe("Grille d'évaluation — administration (critères + coefficients)", (
   });
 
   afterAll(async () => {
+    // Nettoyage de l'état partagé (grille par défaut) pour ne pas polluer les
+    // autres fichiers de test qui s'appuient sur la grille par défaut.
+    await prisma.manuscript.deleteMany({ where: { manuscriptNumber: { startsWith: "GT-" } } }).catch(() => {});
+    await prisma.manuscript.deleteMany({ where: { manuscriptNumber: { startsWith: "GD-" } } }).catch(() => {});
+    await prisma.evaluationCriterion.deleteMany({ where: { OR: [{ label: { startsWith: "Critère test" } }, { label: "Critère spécifique au type" }, { genre: { code: { startsWith: "GT-" } } }] } }).catch(() => {});
+    await prisma.genre.deleteMany({ where: { code: { startsWith: "GT-" } } }).catch(() => {});
     await app.close();
     await prisma.$disconnect();
   });
@@ -61,5 +67,37 @@ describe("Grille d'évaluation — administration (critères + coefficients)", (
   it("refuse un coefficient invalide (≤ 0)", async () => {
     const res = await app.inject({ method: "POST", url: "/api/v1/evaluation-criteria", headers: { cookie: adminCookie }, payload: { label: "X", coefficient: 0 } });
     expect(res.statusCode).toBe(400);
+  });
+
+  it("grille propre à un TYPE de manuscrit (domaine) : copie + priorité sur la grille par défaut", async () => {
+    // Un domaine dédié pour le test.
+    const genre = await prisma.genre.create({ data: { code: `GT-${Math.random().toString(36).slice(2, 6)}`, label: "Genre test grille" } });
+
+    // Sans grille propre : la vue "all?genre" est vide, mais la copie initialise.
+    const before = await app.inject({ method: "GET", url: `/api/v1/evaluation-criteria/all?genre=${genre.id}`, headers: { cookie: adminCookie } });
+    expect((before.json().criteria as unknown[]).length).toBe(0);
+
+    const clone = await app.inject({ method: "POST", url: "/api/v1/evaluation-criteria/clone-default", headers: { cookie: adminCookie }, payload: { genre_id: genre.id } });
+    expect(clone.statusCode).toBe(201);
+    expect(clone.json().copied).toBeGreaterThan(0);
+
+    // Un 2ᵉ clone est refusé (grille déjà propre).
+    const clone2 = await app.inject({ method: "POST", url: "/api/v1/evaluation-criteria/clone-default", headers: { cookie: adminCookie }, payload: { genre_id: genre.id } });
+    expect(clone2.statusCode).toBe(409);
+
+    // Ajoute un critère SPÉCIFIQUE au domaine.
+    await app.inject({ method: "POST", url: "/api/v1/evaluation-criteria", headers: { cookie: adminCookie }, payload: { label: "Critère spécifique au type", coefficient: 5, genre_id: genre.id } });
+
+    // La grille effective d'un manuscrit de ce domaine inclut le critère spécifique.
+    const status = await prisma.workflowStatus.findFirstOrThrow();
+    const owner = (await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).id;
+    const ms = await prisma.manuscript.create({ data: { manuscriptNumber: `GT-${Math.random().toString(36).slice(2, 6)}`, title: "MS type", language: "fr", statusId: status.id, ownerId: owner, genreId: genre.id, receivedAt: new Date() } });
+    const eff = await app.inject({ method: "GET", url: `/api/v1/evaluation-criteria?manuscript=${ms.id}`, headers: { cookie: adminCookie } });
+    const labels = (eff.json() as { label: string }[]).map((c) => c.label);
+    expect(labels).toContain("Critère spécifique au type");
+    // Un manuscrit SANS domaine retombe sur la grille par défaut (n'a pas ce critère).
+    const msDefault = await prisma.manuscript.create({ data: { manuscriptNumber: `GD-${Math.random().toString(36).slice(2, 6)}`, title: "MS défaut", language: "fr", statusId: status.id, ownerId: owner, receivedAt: new Date() } });
+    const effD = await app.inject({ method: "GET", url: `/api/v1/evaluation-criteria?manuscript=${msDefault.id}`, headers: { cookie: adminCookie } });
+    expect((effD.json() as { label: string }[]).map((c) => c.label)).not.toContain("Critère spécifique au type");
   });
 });

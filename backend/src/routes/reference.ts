@@ -113,6 +113,59 @@ export default async function referenceRoutes(fastify: FastifyInstance) {
     return reply.send(criteria);
   });
 
+  // — Administration de la grille d'évaluation (critères + coefficients) —
+  // La grille sert au formulaire de notation du comité de lecture ET au rapport
+  // d'évaluation IA : la modifier ici change les deux de façon cohérente.
+  const criterionSchema = z.object({
+    label: z.string().trim().min(1).max(160),
+    coefficient: z.number().positive().max(20),
+    is_active: z.boolean().optional(),
+  });
+
+  // Vue admin : TOUS les critères (actifs et inactifs), triés par poids.
+  fastify.get("/api/v1/evaluation-criteria/all", { preHandler: requirePermission("manuscripts", "administration") }, async (_request, reply) => {
+    const criteria = await prisma.evaluationCriterion.findMany({ orderBy: [{ isActive: "desc" }, { coefficient: "desc" }, { label: "asc" }] });
+    const sum = criteria.filter((c) => c.isActive).reduce((s, c) => s + Number(c.coefficient), 0);
+    return reply.send({ criteria, active_coefficient_sum: sum });
+  });
+
+  fastify.post("/api/v1/evaluation-criteria", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const parsed = criterionSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Libellé et coefficient (> 0) requis.", details: parsed.error.issues });
+    const created = await prisma.evaluationCriterion.create({ data: { label: parsed.data.label, coefficient: parsed.data.coefficient, isActive: parsed.data.is_active ?? true } });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "evaluation_criterion", entityId: created.id, newValues: { label: created.label, coefficient: Number(created.coefficient) }, ipAddress: request.ip });
+    return reply.code(201).send(created);
+  });
+
+  fastify.patch("/api/v1/evaluation-criteria/:id", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = criterionSchema.partial().safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const existing = await prisma.evaluationCriterion.findUnique({ where: { id } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Critère introuvable." });
+    const updated = await prisma.evaluationCriterion.update({
+      where: { id },
+      data: {
+        ...(parsed.data.label !== undefined ? { label: parsed.data.label } : {}),
+        ...(parsed.data.coefficient !== undefined ? { coefficient: parsed.data.coefficient } : {}),
+        ...(parsed.data.is_active !== undefined ? { isActive: parsed.data.is_active } : {}),
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "evaluation_criterion", entityId: id, oldValues: { label: existing.label, coefficient: Number(existing.coefficient), isActive: existing.isActive }, newValues: { label: updated.label, coefficient: Number(updated.coefficient), isActive: updated.isActive }, ipAddress: request.ip });
+    return reply.send(updated);
+  });
+
+  // Retrait = désactivation (isActive=false) : on ne supprime jamais un critère
+  // (des évaluations passées peuvent le référencer). Réactivable via PATCH.
+  fastify.delete("/api/v1/evaluation-criteria/:id", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const existing = await prisma.evaluationCriterion.findUnique({ where: { id } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Critère introuvable." });
+    await prisma.evaluationCriterion.update({ where: { id }, data: { isActive: false } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "evaluation_criterion", entityId: id, oldValues: { label: existing.label, isActive: existing.isActive }, newValues: { isActive: false }, ipAddress: request.ip });
+    return reply.send({ ok: true });
+  });
+
   // --- Gestion des domaines (genres) et collections (spéc. fonctionnelle §6) ---
 
   fastify.post("/api/v1/genres", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {

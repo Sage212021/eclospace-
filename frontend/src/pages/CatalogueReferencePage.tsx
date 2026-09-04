@@ -6,8 +6,13 @@ import {
   deleteGenre,
   listCollections,
   listGenres,
+  listAllEvaluationCriteria,
+  createEvaluationCriterion,
+  updateEvaluationCriterion,
+  deactivateEvaluationCriterion,
   type Collection,
   type Genre,
+  type EvaluationCriterionAdmin,
 } from "../api/client";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -45,7 +50,107 @@ export function CatalogueReferencePage({ canManage }: { canManage: boolean }) {
         <ReferencePanel title="Domaines" noun="domaine" canManage={canManage} load={listGenres} create={createGenre} remove={deleteGenre} onError={setError} onMessage={setMessage} />
         <ReferencePanel title="Collections" noun="collection" canManage={canManage} load={listCollections} create={createCollection} remove={deleteCollection} onError={setError} onMessage={setMessage} />
       </div>
+
+      <div style={{ marginTop: 22 }}>
+        <EvaluationGridCard canManage={canManage} onError={setError} onMessage={setMessage} />
+      </div>
     </div>
+  );
+}
+
+// Éditeur de la GRILLE D'ÉVALUATION (critères + coefficients). Sert au formulaire
+// de notation du comité de lecture ET au rapport d'évaluation IA — la modifier
+// ici change les deux de façon cohérente. Le retrait est une désactivation
+// (des évaluations passées peuvent référencer un critère).
+function EvaluationGridCard({ canManage, onError, onMessage }: { canManage: boolean; onError: (m: string | null) => void; onMessage: (m: string | null) => void }) {
+  const [items, setItems] = useState<EvaluationCriterionAdmin[]>([]);
+  const [sum, setSum] = useState(0);
+  const [label, setLabel] = useState("");
+  const [coeff, setCoeff] = useState("1");
+  const [busy, setBusy] = useState(false);
+
+  const refresh = () =>
+    listAllEvaluationCriteria()
+      .then((r) => { setItems(r.criteria); setSum(r.active_coefficient_sum); })
+      .catch((e) => onError(e instanceof Error ? e.message : "Chargement de la grille impossible."));
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { refresh(); }, []);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    const c = Number(coeff.replace(",", "."));
+    if (!label.trim() || !(c > 0)) { onError("Libellé et coefficient (> 0) requis."); return; }
+    onError(null); onMessage(null); setBusy(true);
+    try {
+      await createEvaluationCriterion({ label: label.trim(), coefficient: c });
+      onMessage(`Critère « ${label.trim()} » ajouté.`); setLabel(""); setCoeff("1"); await refresh();
+    } catch (err) { onError(err instanceof Error ? err.message : "Ajout impossible."); }
+    finally { setBusy(false); }
+  }
+
+  async function saveCoeff(id: string, value: string) {
+    const c = Number(value.replace(",", "."));
+    if (!(c > 0)) { onError("Coefficient invalide (> 0)."); return; }
+    onError(null);
+    try { await updateEvaluationCriterion(id, { coefficient: c }); onMessage("Coefficient enregistré."); await refresh(); }
+    catch (err) { onError(err instanceof Error ? err.message : "Enregistrement impossible."); }
+  }
+
+  async function toggleActive(it: EvaluationCriterionAdmin) {
+    onError(null);
+    try {
+      if (it.isActive) await deactivateEvaluationCriterion(it.id);
+      else await updateEvaluationCriterion(it.id, { is_active: true });
+      onMessage(it.isActive ? `« ${it.label} » retiré de la grille.` : `« ${it.label} » réactivé.`);
+      await refresh();
+    } catch (err) { onError(err instanceof Error ? err.message : "Action impossible."); }
+  }
+
+  return (
+    <Card title="Grille d'évaluation (comité de lecture & rapport IA)" icon={<IconBook />}>
+      <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
+        Chaque critère est noté sur 10 et pondéré par son coefficient. Cette grille pilote le formulaire de notation
+        du comité <strong>et</strong> le rapport d'évaluation de l'IA. Somme des coefficients actifs :{" "}
+        <strong style={{ fontFamily: "var(--font-mono)" }}>{sum}</strong>.
+      </p>
+      <div className="ecl-list">
+        {items.map((it) => (
+          <div key={it.id} className="ecl-row" style={{ padding: "9px 12px", gap: 10, opacity: it.isActive ? 1 : 0.55 }}>
+            <span className="ecl-row__main" style={{ flex: 1 }}>
+              <span className="ecl-row__title" style={{ fontWeight: 500 }}>{it.label}</span>
+              {!it.isActive && <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 999, padding: "1px 8px" }}>Retiré</span>}
+            </span>
+            <label style={{ fontSize: 11.5, color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
+              coeff.
+              <input
+                defaultValue={String(Number(it.coefficient))}
+                disabled={!canManage || !it.isActive}
+                onBlur={(e) => { if (canManage && it.isActive && e.target.value !== String(Number(it.coefficient))) saveCoeff(it.id, e.target.value); }}
+                inputMode="decimal"
+                style={{ width: 52, padding: "4px 6px", border: "1px solid var(--line)", borderRadius: 6, fontFamily: "var(--font-mono)", textAlign: "center" }}
+              />
+            </label>
+            {canManage && (
+              <button onClick={() => toggleActive(it)} title={it.isActive ? "Retirer de la grille" : "Réactiver"} style={{ border: "1px solid var(--line)", background: "#fff", color: it.isActive ? "var(--alert)" : "var(--eclosion-dark)", cursor: "pointer", borderRadius: 6, padding: "3px 9px", fontSize: 12, fontWeight: 600 }}>
+                {it.isActive ? "Retirer" : "Réactiver"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {canManage && (
+        <form onSubmit={add} style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          <div className="ecl-field" style={{ flex: 1, minWidth: 180 }}>
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Nouveau critère…" />
+          </div>
+          <div className="ecl-field" style={{ width: 90 }}>
+            <input value={coeff} onChange={(e) => setCoeff(e.target.value)} inputMode="decimal" placeholder="coeff." title="Coefficient" />
+          </div>
+          <Button variant="add" size="sm" type="submit" disabled={busy || !label.trim()}>Ajouter</Button>
+        </form>
+      )}
+    </Card>
   );
 }
 

@@ -220,6 +220,16 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(lastUser).toContain("RAPPORT DU BAT PRÉCÉDENT");
   });
 
+  it("extrait le texte d'un PDF (permet les PDF de plus de 100 pages)", async () => {
+    const { extractPdfText } = await import("../src/lib/aiRunner.js");
+    const { readFileSync } = await import("node:fs");
+    const buf = readFileSync(new URL("./fixtures/sample-3pages.pdf", import.meta.url));
+    const r = await extractPdfText(buf, 500000);
+    expect(r).not.toBeNull();
+    expect(r!.pages).toBe(3);
+    expect(r!.text).toContain("manuscrit de test");
+  });
+
   it("borne un manuscrit très volumineux (extrait représentatif, pas d'échec « prompt too long »)", async () => {
     const { capManuscriptText, MANUSCRIT_CHAR_BUDGET } = await import("../src/lib/aiRunner.js");
     const small = capManuscriptText("abc");

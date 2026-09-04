@@ -68,6 +68,39 @@ function extractDocxXml(buffer: Buffer): string | null {
 
 type ManuscriptInput = { kind: "text"; text: string } | { kind: "pdf"; base64: string };
 
+function isPdfBuffer(mime: string, buffer: Buffer): boolean {
+  return mime === "application/pdf" || buffer.subarray(0, 5).toString("latin1") === "%PDF-";
+}
+
+// Extraction du texte d'un PDF côté serveur (pdfjs-dist). Permet d'analyser des
+// PDF de PLUS de 100 pages — que l'IA refuse en pièce jointe — en les envoyant
+// comme TEXTE. Renvoie null si le PDF est illisible ou sans texte (PDF scanné/
+// image) : on retombe alors sur l'envoi du PDF tel quel.
+export async function extractPdfText(buffer: Buffer, charBudget: number): Promise<{ text: string; pages: number } | null> {
+  try {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer), isEvalSupported: false, useSystemFonts: true, disableFontFace: true }).promise;
+    const parts: string[] = [];
+    let total = 0;
+    const maxPages = Math.min(doc.numPages, 3000); // borne de sécurité
+    for (let p = 1; p <= maxPages; p++) {
+      const page = await doc.getPage(p);
+      const content = await page.getTextContent();
+      const line = content.items.map((it) => ("str" in it ? (it as { str: string }).str : "")).join(" ").replace(/[ \t]+/g, " ").trim();
+      parts.push(line);
+      total += line.length;
+      // On arrête tôt si l'on a déjà bien plus que le budget (le texte sera de
+      // toute façon ramené à un extrait représentatif ensuite).
+      if (total > charBudget * 1.4) break;
+    }
+    await doc.cleanup?.();
+    const text = parts.join("\n\n").trim();
+    return { text, pages: doc.numPages };
+  } catch {
+    return null;
+  }
+}
+
 function prepareManuscript(mime: string, name: string, buffer: Buffer): ManuscriptInput {
   const lower = name.toLowerCase();
   if (mime === "application/pdf" || lower.endsWith(".pdf")) {
@@ -451,7 +484,18 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     }
     const { readStoredFile } = await import("./storage.js");
     const buffer = await readStoredFile(version.filePath);
-    const prepared = prepareManuscript(version.mimeType, `f${version.versionNumber}`, buffer);
+    // PDF : on tente d'abord d'en EXTRAIRE le texte (permet d'analyser les PDF
+    // de plus de 100 pages, refusés par l'IA en pièce jointe). Si le PDF n'a pas
+    // de texte exploitable (scanné/image), on retombe sur l'envoi du PDF tel quel.
+    let prepared: ManuscriptInput;
+    if (isPdfBuffer(version.mimeType, buffer)) {
+      const extracted = await extractPdfText(buffer, MANUSCRIT_CHAR_BUDGET);
+      prepared = extracted && extracted.text.replace(/\s/g, "").length > 200
+        ? { kind: "text", text: extracted.text }
+        : { kind: "pdf", base64: buffer.toString("base64") };
+    } else {
+      prepared = prepareManuscript(version.mimeType, `f${version.versionNumber}`, buffer);
+    }
 
     const author = manuscript.workContributors.find((c) => c.role === "author")?.partner;
     const authorName = author ? `${author.firstName} ${author.lastName}`.trim() : "—";

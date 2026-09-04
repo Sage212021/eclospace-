@@ -714,7 +714,7 @@ async function main() {
       reportTemplate: {
         title: "RAPPORT D'ÉVALUATION DE MANUSCRIT",
         sections: [
-          { key: "A", title: "Identification du manuscrit" },
+          { key: "A", title: "Identification du manuscrit (titre · auteur · domaine déclaré · collection déclarée · longueur estimée · état du manuscrit · date du rapport · relecteur : Comité de lecture)" },
           { key: "B", title: "Synthèse générale (sujet, intrigue, intention, positionnement éditorial)" },
           { key: "C", title: "Grille d'évaluation (critère · coefficient · note /10 · commentaire argumenté)" },
           { key: "D", title: "Calcul du score global" },
@@ -729,7 +729,7 @@ async function main() {
           { key: "M", title: "Avis final du relecteur" },
         ],
         guidance:
-          "Ce document est un RAPPORT D'ÉVALUATION (comité de lecture), et NON un rapport de correction : il ne contient AUCUNE annotation de type « texte original / correction proposée / explication », NI tableau de corrections. Le SEUL tableau est la rubrique C « Grille d'évaluation » (Critère · Coefficient · Note /10 · Commentaire argumenté). Les rubriques H (points à améliorer), I (points de vigilance) et J (vérification des métadonnées) sont des LISTES À PUCES rédigées — pour H : « Point — Localisation — Gravité (mineur/modéré/important/critique) — Recommandation » ; pour I : « Type de risque — Passage concerné — Recommandation » ; pour J : « Élément — Statut (Conforme / Incohérence) — Observation ». La rubrique K énumère les options de recommandation puis indique l'option retenue et sa justification. Les autres rubriques sont rédigées en prose (sous-parties en gras).",
+          "Ce document est un RAPPORT D'ÉVALUATION (comité de lecture), et NON un rapport de correction : il ne contient AUCUNE annotation de type « texte original / correction proposée / explication », NI tableau de corrections. La rubrique A « Identification » est présentée en LISTE « Champ : valeur » (une ligne par élément : Titre, Auteur, Domaine déclaré, Collection déclarée, Longueur estimée, État du manuscrit, Date du rapport, Relecteur : Comité de lecture Éclosion Édition) — PAS de tableau étroit. Le SEUL tableau est la rubrique C « Grille d'évaluation » (Critère · Coefficient · Note /10 · Commentaire argumenté). Les rubriques H (points à améliorer), I (points de vigilance) et J (vérification des métadonnées) sont des LISTES À PUCES rédigées — pour H : « Point — Localisation — Gravité (mineur/modéré/important/critique) — Recommandation » ; pour I : « Type de risque — Passage concerné — Recommandation » ; pour J : « Élément — Statut (Conforme / Incohérence) — Observation ». La rubrique K énumère les options de recommandation puis indique l'option retenue et sa justification. Les autres rubriques sont rédigées en prose (sous-parties en gras).",
         footer: "Ce rapport constitue un avis argumenté de relecteur et ne représente pas une décision éditoriale finale.",
       },
     },
@@ -756,7 +756,7 @@ async function main() {
           { key: "7", title: "Conclusion et verdict" },
         ],
         guidance:
-          "Rapport de RELECTURE BAT1 (modèle officiel Éclosion). Rubrique 1 : la grille de notation est un TABLEAU à deux colonnes (CRITÈRE · NOTE) avec les 7 critères notés /20, suivie d'une ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 3 : les annotations de correction forment un TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication) ; « Texte original » cite TOUJOURS le passage fautif exact, jamais un numéro de page ; « Page » est la page réelle ; numérotation continue ; catégories Orthographe/Accord/Syntaxe/Ponctuation/Typographie/Style ; sévérité C1/C2/C3 indiquée dans la catégorie (ex. « Accord (C1) »). Rubrique 5 : trois blocs Priorité 1/2/3. Les rubriques 0, 2, 4, 6, 7 sont rédigées en prose et listes.",
+          "Rapport de RELECTURE BAT1 (modèle officiel Éclosion). Rubrique 1 : la grille de notation est un TABLEAU à deux colonnes (CRITÈRE · NOTE) avec les 7 critères notés /20, suivie d'une ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 3 : les annotations de correction forment un TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication) ; « Texte original » cite TOUJOURS le passage fautif exact, jamais un numéro de page ; « Page » est la page réelle ; numérotation continue ; catégories Orthographe/Accord/Syntaxe/Ponctuation/Typographie/Style ; sévérité C1/C2/C3 indiquée dans la catégorie (ex. « Accord (C1) »). Rubrique 5 : trois blocs Priorité 1/2/3. Les rubriques 0, 2, 4, 6, 7 sont rédigées en prose et listes. La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
         deliverables: ["Rapport_relecture_BAT1", "Manuscrit_corrige_BAT1"],
       },
     },
@@ -784,7 +784,7 @@ async function main() {
           { key: "8", title: "Conclusion et verdict" },
         ],
         guidance:
-          "Rapport de RELECTURE BAT2 (modèle officiel Éclosion). Rubrique 1 : grille en TABLEAU (CRITÈRE · NOTE) avec les 7 critères notés /20 + ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 2 « Suivi des corrections du BAT précédent » : TABLEAU à 4 colonnes (N° (BAT1) · Correction demandée · Statut ✔/✘/~ · Observation), puis une liste des améliorations apportées par l'auteur(e). Rubrique 4 : annotations en TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication), mêmes règles qu'au BAT1 (citation exacte, page réelle, numérotation continue, sévérité C1/C2/C3). Rubrique 6 : blocs Priorité 1/2/3. Les rubriques 0, 3, 5, 7, 8 sont en prose et listes.",
+          "Rapport de RELECTURE BAT2 (modèle officiel Éclosion). Rubrique 1 : grille en TABLEAU (CRITÈRE · NOTE) avec les 7 critères notés /20 + ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 2 « Suivi des corrections du BAT précédent » : TABLEAU à 4 colonnes (N° (BAT1) · Correction demandée · Statut ✔/✘/~ · Observation), puis une liste des améliorations apportées par l'auteur(e). Rubrique 4 : annotations en TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication), mêmes règles qu'au BAT1 (citation exacte, page réelle, numérotation continue, sévérité C1/C2/C3). Rubrique 6 : blocs Priorité 1/2/3. Les rubriques 0, 3, 5, 7, 8 sont en prose et listes. La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
         deliverables: ["Rapport_relecture_BAT2", "Manuscrit_corrige_BAT2"],
       },
     },
@@ -809,7 +809,7 @@ async function main() {
           { key: "6", title: "Verdict de publication" },
         ],
         guidance:
-          "Rapport de RELECTURE DE COUVERTURE (volet couverture du BAT). Rubrique 1 : grille de notation en TABLEAU (Critère · Note /20 · Observations) + note globale pondérée /20. Rubrique 2 « Suivi des corrections du BAT précédent » : au BAT2, un TABLEAU (N° (BAT précédent) · Correction demandée · Statut ✔ intégrée / ✘ non intégrée / ~ partielle · Observation) suivi de « Ce qui manque » et des « Améliorations apportées par l'auteur(e) » ; au BAT1, indiquer simplement « Premier passage — pas de suivi ». Rubrique 5 « Tableau d'annotations » : TABLEAU (Sévérité C1/C2/C3 · Zone/emplacement · Constat · Recommandation). Rubriques 0, 3, 4, 6 en prose et listes (vérifications factuelles de la rubrique 4 en liste : ISBN, code-barres EAN, cohérence couverture ↔ intérieur).",
+          "Rapport de RELECTURE DE COUVERTURE (volet couverture du BAT). Rubrique 1 : grille de notation en TABLEAU (Critère · Note /20 · Observations) + note globale pondérée /20. Rubrique 2 « Suivi des corrections du BAT précédent » : au BAT2, un TABLEAU (N° (BAT précédent) · Correction demandée · Statut ✔ intégrée / ✘ non intégrée / ~ partielle · Observation) suivi de « Ce qui manque » et des « Améliorations apportées par l'auteur(e) » ; au BAT1, indiquer simplement « Premier passage — pas de suivi ». Rubrique 5 « Tableau d'annotations » : TABLEAU (Sévérité C1/C2/C3 · Zone/emplacement · Constat · Recommandation). Rubriques 0, 3, 4, 6 en prose et listes (vérifications factuelles de la rubrique 4 en liste : ISBN, code-barres EAN, cohérence couverture ↔ intérieur). La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
         deliverables: ["Rapport_couverture"],
       },
     },

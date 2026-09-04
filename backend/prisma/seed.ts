@@ -958,18 +958,37 @@ async function main() {
     });
   }
 
-  // Grille d'évaluation du comité de lecture (Ch. 7 §7.4-7.5).
+  // Grille d'évaluation PAR DÉFAUT du comité de lecture (Ch. 7 §7.4-7.5).
+  // Portée à la grille par défaut (genreId null) — on ne touche PAS aux grilles
+  // propres à un type (même libellé possible avec un coefficient différent).
   for (const criterion of evaluationCriteria) {
-    const existing = await prisma.evaluationCriterion.findFirst({ where: { label: criterion.label } });
+    const existing = await prisma.evaluationCriterion.findFirst({ where: { label: criterion.label, genreId: null } });
     if (existing) {
-      await prisma.evaluationCriterion.update({
-        where: { id: existing.id },
-        data: { coefficient: criterion.coefficient },
-      });
+      await prisma.evaluationCriterion.update({ where: { id: existing.id }, data: { coefficient: criterion.coefficient } });
     } else {
-      await prisma.evaluationCriterion.create({
-        data: { label: criterion.label, coefficient: criterion.coefficient },
-      });
+      await prisma.evaluationCriterion.create({ data: { label: criterion.label, coefficient: criterion.coefficient } });
+    }
+  }
+
+  // Grille PROPRE aux manuels scolaires & pratiques (demande opérateur) : critères
+  // pédagogiques distincts. Semée UNE fois si le domaine n'a pas déjà sa grille ;
+  // entièrement ajustable ensuite dans « Domaines & collections ».
+  const scolaireGenre = await prisma.genre.findFirst({ where: { label: "Manuel scolaire ou pratique", deletedAt: null } });
+  if (scolaireGenre) {
+    const already = await prisma.evaluationCriterion.count({ where: { genreId: scolaireGenre.id } });
+    if (already === 0) {
+      const grilleScolaire: { label: string; coefficient: number }[] = [
+        { label: "Conformité au programme / curriculum officiel", coefficient: 3 },
+        { label: "Exactitude et rigueur des contenus", coefficient: 3 },
+        { label: "Clarté pédagogique et progression des apprentissages", coefficient: 2 },
+        { label: "Qualité et pertinence des exercices et activités", coefficient: 2 },
+        { label: "Adaptation au niveau et au public scolaire visé", coefficient: 2 },
+        { label: "Structure et repérage (sommaire, objectifs, index, corrigés)", coefficient: 1 },
+        { label: "Illustrations, schémas et supports visuels", coefficient: 1 },
+        { label: "Qualité de la langue et lisibilité", coefficient: 1 },
+        { label: "Potentiel d'adoption / commercial", coefficient: 1 },
+      ];
+      await prisma.evaluationCriterion.createMany({ data: grilleScolaire.map((c) => ({ label: c.label, coefficient: c.coefficient, genreId: scolaireGenre.id })) });
     }
   }
 

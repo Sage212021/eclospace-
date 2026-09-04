@@ -132,6 +132,11 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     // et l'évaluation n'est PAS poussée vers des annotations de correction.
     expect(lastSystem).toContain("NON un rapport de correction");
     expect(lastSystem).not.toContain("correction proposée");
+    // La grille officielle (critères + coefficients) est transmise à l'IA.
+    const lastUser = sdkCalls[sdkCalls.length - 1]?.user ?? "";
+    expect(lastUser).toContain("GRILLE D'ÉVALUATION OFFICIELLE");
+    expect(lastUser).toContain("Adéquation avec la ligne éditoriale d'Éclosion Édition");
+    expect(lastUser).toContain("coefficient 3");
   });
 
   it("le journal des jobs du manuscrit est consultable et signale un rapport téléchargeable", async () => {

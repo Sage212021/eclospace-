@@ -112,6 +112,16 @@ function prepareManuscript(mime: string, name: string, buffer: Buffer): Manuscri
   return { kind: "text", text: buffer.toString("utf8") };
 }
 
+// Grille d'évaluation OFFICIELLE de la maison (critères + coefficients, en base).
+// Transmise à l'IA pour qu'elle s'y TIENNE au lieu d'inventer ses critères.
+async function evaluationGrilleText(): Promise<string> {
+  const crit = await prisma.evaluationCriterion.findMany({ where: { isActive: true }, orderBy: [{ coefficient: "desc" }, { label: "asc" }] });
+  if (!crit.length) return "(grille non configurée)";
+  const lines = crit.map((c) => `- ${c.label} (coefficient ${Number(c.coefficient)})`).join("\n");
+  const sum = crit.reduce((s, c) => s + Number(c.coefficient), 0);
+  return `${lines}\nSomme des coefficients = ${sum}. Score global = Σ(note × coefficient) / Σ(coefficients), chaque note sur 10.`;
+}
+
 async function domainesCollectionsText(): Promise<string> {
   const [genres, collections] = await Promise.all([
     prisma.genre.findMany({ where: { deletedAt: null }, orderBy: { label: "asc" } }),
@@ -520,6 +530,13 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     const reportDate = new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
     const relecteur = params.workType === "evaluation" ? "Comité de lecture Éclosion Édition" : "Service de relecture Éclosion Édition";
     userText += `\n\nÀ reporter dans la rubrique d'identification, tels quels : Date du rapport : ${reportDate} ; Relecteur : ${relecteur}.`;
+
+    // Évaluation : on transmet la GRILLE OFFICIELLE (critères + coefficients de la
+    // maison) pour que la rubrique C s'y tienne exactement, au lieu que l'IA
+    // invente ses propres critères.
+    if (params.workType === "evaluation") {
+      userText += `\n\nGRILLE D'ÉVALUATION OFFICIELLE D'ÉCLOSION — utilise EXACTEMENT ces critères et ces coefficients dans la grille (rubrique C), sans en ajouter ni en retirer, chaque note sur 10 :\n${await evaluationGrilleText()}`;
+    }
 
     // Passage BAT de la relecture de couverture : on indique explicitement à l'IA
     // s'il s'agit du 1ᵉʳ passage (BAT1) ou du 2ᵉ (BAT2). Au BAT2, on lui JOINT le

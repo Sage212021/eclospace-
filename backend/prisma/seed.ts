@@ -970,25 +970,93 @@ async function main() {
     }
   }
 
-  // Grille PROPRE aux manuels scolaires & pratiques (demande opérateur) : critères
-  // pédagogiques distincts. Semée UNE fois si le domaine n'a pas déjà sa grille ;
-  // entièrement ajustable ensuite dans « Domaines & collections ».
-  const scolaireGenre = await prisma.genre.findFirst({ where: { label: "Manuel scolaire ou pratique", deletedAt: null } });
-  if (scolaireGenre) {
-    const already = await prisma.evaluationCriterion.count({ where: { genreId: scolaireGenre.id } });
+  // Grilles d'évaluation PROPRES à certains types de manuscrits (demande
+  // opérateur) : critères adaptés au genre. Semées UNE fois par domaine si celui-ci
+  // n'a pas déjà sa grille ; entièrement ajustables dans « Domaines & collections ».
+  const perTypeGrids: Record<string, { label: string; coefficient: number }[]> = {
+    "Manuel scolaire ou pratique": [
+      { label: "Conformité au programme / curriculum officiel", coefficient: 3 },
+      { label: "Exactitude et rigueur des contenus", coefficient: 3 },
+      { label: "Clarté pédagogique et progression des apprentissages", coefficient: 2 },
+      { label: "Qualité et pertinence des exercices et activités", coefficient: 2 },
+      { label: "Adaptation au niveau et au public scolaire visé", coefficient: 2 },
+      { label: "Structure et repérage (sommaire, objectifs, index, corrigés)", coefficient: 1 },
+      { label: "Illustrations, schémas et supports visuels", coefficient: 1 },
+      { label: "Qualité de la langue et lisibilité", coefficient: 1 },
+      { label: "Potentiel d'adoption / commercial", coefficient: 1 },
+    ],
+    "Poésie": [
+      { label: "Adéquation avec la ligne éditoriale d'Éclosion Édition", coefficient: 2 },
+      { label: "Force et originalité de la voix poétique", coefficient: 3 },
+      { label: "Musicalité, rythme et travail de la langue", coefficient: 3 },
+      { label: "Richesse des images et puissance évocatrice", coefficient: 2 },
+      { label: "Cohérence et unité du recueil", coefficient: 1 },
+      { label: "Émotion et portée universelle", coefficient: 1 },
+      { label: "Potentiel commercial", coefficient: 1 },
+    ],
+    "Jeunesse": [
+      { label: "Adéquation avec la ligne éditoriale d'Éclosion Édition", coefficient: 2 },
+      { label: "Adaptation à l'âge et au public visé", coefficient: 3 },
+      { label: "Qualité et intérêt du récit / de l'imaginaire", coefficient: 2 },
+      { label: "Valeur éducative et messages véhiculés", coefficient: 2 },
+      { label: "Illustrations et rapport texte-image", coefficient: 2 },
+      { label: "Qualité de la langue et lisibilité", coefficient: 1 },
+      { label: "Adéquation des contenus (absence de contenu inapproprié)", coefficient: 1 },
+      { label: "Potentiel commercial", coefficient: 1 },
+    ],
+    "Théâtre": [
+      { label: "Adéquation avec la ligne éditoriale d'Éclosion Édition", coefficient: 2 },
+      { label: "Qualité dramaturgique (conflit, tension, structure)", coefficient: 3 },
+      { label: "Qualité et vivacité des dialogues", coefficient: 3 },
+      { label: "Consistance des personnages", coefficient: 2 },
+      { label: "Jouabilité / faisabilité scénique", coefficient: 1 },
+      { label: "Qualité de la langue", coefficient: 1 },
+      { label: "Potentiel de représentation / commercial", coefficient: 1 },
+    ],
+    "Essai": [
+      { label: "Adéquation avec la ligne éditoriale d'Éclosion Édition", coefficient: 2 },
+      { label: "Rigueur et solidité de l'argumentation", coefficient: 3 },
+      { label: "Originalité et pertinence de la thèse", coefficient: 3 },
+      { label: "Qualité et fiabilité des sources et références", coefficient: 2 },
+      { label: "Clarté et structure du propos", coefficient: 2 },
+      { label: "Qualité de l'écriture", coefficient: 1 },
+      { label: "Potentiel commercial", coefficient: 1 },
+    ],
+    "Sciences humaines & économie": [
+      { label: "Adéquation avec la ligne éditoriale d'Éclosion Édition", coefficient: 2 },
+      { label: "Rigueur scientifique et méthodologique", coefficient: 3 },
+      { label: "Qualité et fiabilité des sources et de l'appareil critique", coefficient: 3 },
+      { label: "Originalité et apport à la discipline", coefficient: 2 },
+      { label: "Clarté et structure de la démonstration", coefficient: 2 },
+      { label: "Actualité et pertinence du sujet", coefficient: 1 },
+      { label: "Qualité de l'écriture et accessibilité", coefficient: 1 },
+      { label: "Potentiel commercial / universitaire", coefficient: 1 },
+    ],
+    "Témoignage & biographie": [
+      { label: "Adéquation avec la ligne éditoriale d'Éclosion Édition", coefficient: 2 },
+      { label: "Authenticité et sincérité du témoignage", coefficient: 3 },
+      { label: "Qualité narrative et intérêt du récit", coefficient: 2 },
+      { label: "Portée humaine et universelle", coefficient: 2 },
+      { label: "Points de vigilance (véracité, diffamation, vie privée)", coefficient: 2 },
+      { label: "Qualité de la langue", coefficient: 1 },
+      { label: "Potentiel commercial", coefficient: 1 },
+    ],
+    "Conte & légende": [
+      { label: "Adéquation avec la ligne éditoriale d'Éclosion Édition", coefficient: 2 },
+      { label: "Ancrage culturel et fidélité à la tradition", coefficient: 3 },
+      { label: "Qualité de l'oralité et du souffle narratif", coefficient: 2 },
+      { label: "Portée universelle et morale", coefficient: 2 },
+      { label: "Qualité de la langue et accessibilité", coefficient: 1 },
+      { label: "Illustrations / supports (le cas échéant)", coefficient: 1 },
+      { label: "Potentiel commercial", coefficient: 1 },
+    ],
+  };
+  for (const [genreLabel, grid] of Object.entries(perTypeGrids)) {
+    const g = await prisma.genre.findFirst({ where: { label: genreLabel, deletedAt: null } });
+    if (!g) continue;
+    const already = await prisma.evaluationCriterion.count({ where: { genreId: g.id } });
     if (already === 0) {
-      const grilleScolaire: { label: string; coefficient: number }[] = [
-        { label: "Conformité au programme / curriculum officiel", coefficient: 3 },
-        { label: "Exactitude et rigueur des contenus", coefficient: 3 },
-        { label: "Clarté pédagogique et progression des apprentissages", coefficient: 2 },
-        { label: "Qualité et pertinence des exercices et activités", coefficient: 2 },
-        { label: "Adaptation au niveau et au public scolaire visé", coefficient: 2 },
-        { label: "Structure et repérage (sommaire, objectifs, index, corrigés)", coefficient: 1 },
-        { label: "Illustrations, schémas et supports visuels", coefficient: 1 },
-        { label: "Qualité de la langue et lisibilité", coefficient: 1 },
-        { label: "Potentiel d'adoption / commercial", coefficient: 1 },
-      ];
-      await prisma.evaluationCriterion.createMany({ data: grilleScolaire.map((c) => ({ label: c.label, coefficient: c.coefficient, genreId: scolaireGenre.id })) });
+      await prisma.evaluationCriterion.createMany({ data: grid.map((c) => ({ label: c.label, coefficient: c.coefficient, genreId: g.id })) });
     }
   }
 

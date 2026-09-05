@@ -112,10 +112,15 @@ export default async function referenceRoutes(fastify: FastifyInstance) {
   // manuscrit (?manuscript=<id>) — grille propre au domaine si elle existe,
   // sinon grille par défaut. Sans paramètre : grille par défaut.
   fastify.get("/api/v1/evaluation-criteria", { preHandler: requireAuth }, async (request, reply) => {
-    const { manuscript } = request.query as { manuscript?: string };
+    // Deux façons de cibler la grille : ?manuscript=<id> (déduit le type de
+    // l'ouvrage) ou ?genre=<id> (type choisi par le relecteur sur son écran).
+    // Sans paramètre : grille par défaut.
+    const { manuscript, genre } = request.query as { manuscript?: string; genre?: string };
     const { effectiveCriteria } = await import("../lib/evaluationGrid.js");
     let genreId: string | null = null;
-    if (manuscript) {
+    if (genre && genre !== "default") {
+      genreId = genre;
+    } else if (manuscript) {
       const m = await prisma.manuscript.findFirst({ where: { id: manuscript, deletedAt: null }, select: { genreId: true } });
       genreId = m?.genreId ?? null;
     }

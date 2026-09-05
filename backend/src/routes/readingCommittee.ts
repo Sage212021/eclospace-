@@ -28,6 +28,9 @@ const listAssignmentsQuerySchema = z.object({
 
 const evaluationSchema = z.object({
   scores: z.array(z.object({ criterion_id: z.string().uuid(), score: z.number().min(0).max(10), comment: z.string().optional() })),
+  // Type de grille choisi par le relecteur sur son écran (sinon : type de
+  // l'ouvrage). Détermine la grille de validation ET de calcul du score.
+  grid_genre_id: z.string().uuid().nullable().optional(),
   overall_comment: z.string().optional(),
   recommendation: z.nativeEnum(EvaluationRecommendation),
   visibility: z.enum(["confidentiel", "direction_seule", "comite", "dossier_editorial"]).default("comite"),
@@ -547,7 +550,7 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       // si elle existe, sinon grille par défaut.
       const ms = await prisma.manuscript.findUnique({ where: { id: assignment.manuscriptId }, select: { genreId: true } });
       const { effectiveCriteria } = await import("../lib/evaluationGrid.js");
-      const activeCriteria = await effectiveCriteria(ms?.genreId ?? null);
+      const activeCriteria = await effectiveCriteria(parsed.data.grid_genre_id ?? ms?.genreId ?? null);
       const missing = activeCriteria.filter((c) => !parsed.data.scores.some((s) => s.criterion_id === c.id));
       if (missing.length > 0) {
         return reply.code(409).send({

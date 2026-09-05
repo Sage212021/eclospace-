@@ -861,9 +861,11 @@ export interface EvaluationCriterion {
   coefficient: string;
 }
 
-export function listEvaluationCriteria(manuscriptId?: string) {
-  // Grille adaptée au type du manuscrit si fourni ; sinon grille par défaut.
-  return request<EvaluationCriterion[]>(`/api/v1/evaluation-criteria${manuscriptId ? `?manuscript=${manuscriptId}` : ""}`);
+export function listEvaluationCriteria(opts?: { manuscriptId?: string; genreId?: string }) {
+  // Grille adaptée : au type choisi par le relecteur (genreId) en priorité,
+  // sinon au type de l'ouvrage (manuscriptId), sinon grille par défaut.
+  const q = opts?.genreId ? `?genre=${opts.genreId}` : opts?.manuscriptId ? `?manuscript=${opts.manuscriptId}` : "";
+  return request<EvaluationCriterion[]>(`/api/v1/evaluation-criteria${q}`);
 }
 
 // — Administration de la grille d'évaluation (critères + coefficients) —
@@ -921,6 +923,7 @@ export function submitEvaluation(
     overall_comment?: string;
     recommendation: "accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject";
     conflict_declaration?: { has_conflict: boolean; details?: string };
+    grid_genre_id?: string;
   },
 ) {
   return request(`/api/v1/reading-assignments/${assignmentId}/evaluation`, { method: "POST", body: JSON.stringify(input) });

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   listEvaluationCriteria,
+  listGenres,
   listMyReadingAssignments,
   submitEvaluation,
   getReadingCommitteeRules,
@@ -15,6 +16,7 @@ import {
   emailReadingReport,
   type ChatDirectoryEntry,
   type EvaluationCriterion,
+  type Genre,
   type ReadingAssignment,
 } from "../api/client";
 import { Button } from "../components/Button";
@@ -262,18 +264,28 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
   const [comment, setComment] = useState("");
   const [recommendation, setRecommendation] = useState<"accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject">("accept");
   const [error, setError] = useState<string | null>(null);
+  // Type de manuscrit choisi par le relecteur (pour adapter la grille) : ""
+  // = automatique (selon l'ouvrage). L'accordéon replie la grille pour gagner
+  // de la place à l'écran.
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [selectedGenre, setSelectedGenre] = useState("");
+  const [gridOpen, setGridOpen] = useState(true);
   // Conflit d'intérêt (point n°3) : demandé seulement si la règle est activée.
   const [conflictRequired, setConflictRequired] = useState(false);
   const [conflictChoice, setConflictChoice] = useState<"none" | "conflict" | "">("");
   const [conflictDetails, setConflictDetails] = useState("");
 
   useEffect(() => {
-    listEvaluationCriteria(manuscriptId).then((c) => {
+    listGenres().then(setGenres).catch(() => setGenres([]));
+    getReadingCommitteeRules().then((r) => setConflictRequired(r.rules.conflictEnabled)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    listEvaluationCriteria(selectedGenre ? { genreId: selectedGenre } : { manuscriptId }).then((c) => {
       setCriteria(c);
       setScores(Object.fromEntries(c.map((crit) => [crit.id, 5])));
     });
-    getReadingCommitteeRules().then((r) => setConflictRequired(r.rules.conflictEnabled)).catch(() => {});
-  }, [manuscriptId]);
+  }, [manuscriptId, selectedGenre]);
 
   const totalCoefficient = criteria.reduce((sum, c) => sum + Number(c.coefficient), 0);
   const livePreview =
@@ -297,6 +309,7 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
         scores: criteria.map((c) => ({ criterion_id: c.id, score: scores[c.id] ?? 0 })),
         overall_comment: comment,
         recommendation,
+        ...(selectedGenre ? { grid_genre_id: selectedGenre } : {}),
         ...(conflictRequired
           ? { conflict_declaration: { has_conflict: conflictChoice === "conflict", details: conflictChoice === "conflict" ? conflictDetails.trim() : undefined } }
           : {}),
@@ -309,29 +322,57 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
 
   return (
     <form onSubmit={handleSubmit} style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 16 }}>
-      {criteria.map((criterion) => (
-        <div key={criterion.id} style={{ marginBottom: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
-            <span>
-              {criterion.label} <span style={{ color: "var(--muted)" }}>({t("myr.coef", "coef.")} {criterion.coefficient})</span>
-            </span>
-            <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{scores[criterion.id] ?? 0}/10</span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={10}
-            step={0.5}
-            value={scores[criterion.id] ?? 5}
-            onChange={(e) => setScores((s) => ({ ...s, [criterion.id]: Number(e.target.value) }))}
-            style={{ width: "100%", accentColor: "var(--eclosion)" }}
-          />
-        </div>
-      ))}
+      {/* Grille d'évaluation en accordéon : le relecteur choisit le type de
+          manuscrit (la grille s'adapte) ; repliable pour gagner de la place. */}
+      <div style={{ border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden", marginBottom: 14 }}>
+        <button
+          type="button"
+          onClick={() => setGridOpen((o) => !o)}
+          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", background: gridOpen ? "var(--eclosion-soft)" : "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
+        >
+          <span style={{ fontWeight: 700, fontSize: 13.5 }}>Grille d'évaluation ({criteria.length} critères)</span>
+          <span style={{ color: "var(--muted)", fontSize: 11 }}>{gridOpen ? "▲ replier" : "▼ déplier"}</span>
+        </button>
+        {gridOpen && (
+          <div style={{ padding: "12px", borderTop: "1px solid var(--line)" }}>
+            <label style={{ display: "block", fontSize: 12.5, marginBottom: 12 }}>
+              <span style={{ fontWeight: 600 }}>Type de manuscrit (grille appliquée) :</span>{" "}
+              <select value={selectedGenre} onChange={(e) => setSelectedGenre(e.target.value)} style={{ padding: "5px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, marginTop: 4 }}>
+                <option value="">Automatique — selon l'ouvrage</option>
+                {genres.map((g) => (
+                  <option key={g.id} value={g.id}>{g.label}</option>
+                ))}
+              </select>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: 11.5, marginTop: 3 }}>
+                La grille s'adapte au type choisi ; « Automatique » utilise le type de l'ouvrage.
+              </span>
+            </label>
+            {criteria.map((criterion) => (
+              <div key={criterion.id} style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
+                  <span>
+                    {criterion.label} <span style={{ color: "var(--muted)" }}>({t("myr.coef", "coef.")} {criterion.coefficient})</span>
+                  </span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{scores[criterion.id] ?? 0}/10</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={0.5}
+                  value={scores[criterion.id] ?? 5}
+                  onChange={(e) => setScores((s) => ({ ...s, [criterion.id]: Number(e.target.value) }))}
+                  style={{ width: "100%", accentColor: "var(--eclosion)" }}
+                />
+              </div>
+            ))}
 
-      <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 14px", padding: "8px 12px", background: "var(--paper)", borderRadius: 8 }}>
-        {t("myr.global_score", "Score global indicatif (recalculé et validé par le serveur à la remise) :")}{" "}
-        <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{livePreview.toFixed(2)}</strong>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 0", padding: "8px 12px", background: "var(--paper)", borderRadius: 8 }}>
+              {t("myr.global_score", "Score global indicatif (recalculé et validé par le serveur à la remise) :")}{" "}
+              <strong style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{livePreview.toFixed(2)}</strong>
+            </div>
+          </div>
+        )}
       </div>
 
       <Field label={t("myr.recommendation", "Recommandation")}>

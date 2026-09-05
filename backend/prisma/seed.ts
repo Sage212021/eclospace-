@@ -1607,15 +1607,41 @@ async function main() {
       "Collection Source": "Collection Sources",
       "Collection Canari & les Héritiers": "Collection Canarie",
     };
-    const resolveCollectionId = (label: string): string | null =>
-      collectionsByLabel.get(collectionLabelAlias[label] ?? label) ?? null;
+    // Titres de l'ancien fonds « Canari & les Héritiers » identifiés comme
+    // JEUNESSE par l'opérateur (05/09/2026) : rattachés à « Collection Héritier »
+    // (et non Canarie). Set stable par numéro de catalogue → durable et re-jouable
+    // en production. Les autres restent dans « Canarie ».
+    const heritierBookNums = new Set([
+      "LG-CAT-0053", // ADA et Agnès, pas de vêtements courts
+      "LG-CAT-0054", // MAFEU et les travaux ménagers
+      "LG-CAT-0055", // MOLO et TAKAM en vacances au village
+      "LG-CAT-0056", // Makwan, mon bijou
+      "LG-CAT-0058", // Aïe a ses règles
+      "LG-CAT-0059", // DJANGA n'est pas propre
+      "LG-CAT-0060", // NOUNPOU A et YENTEMA apprennent l'argent
+      "LG-CAT-0061", // La fête à la maternelle
+      "LG-CAT-0062", // Contes et légendes du sahel
+      "LG-CAT-0063", // MERO face aux moqueries des camarades
+      "LG-CAT-0064", // MERO au défilé du 20 mai
+      "LG-CAT-0065", // MERO à la découverte du Cameroun
+      "LG-CAT-0066", // Palmes d'or T1 : les fables
+      "LG-CAT-0067", // MERO discovering Cameroon
+      "LG-CAT-0068", // MERO et les traditions
+      "LG-CAT-0070", // MERO and the traditions
+      "LG-CAT-0093", // Les Petits-Africains
+      "LG-CAT-0100", // Nkobi et Djobi
+    ]);
+    const resolveCollectionId = (label: string, num: string): string | null => {
+      if (heritierBookNums.has(num)) return collectionsByLabel.get("Collection Héritier") ?? null;
+      return collectionsByLabel.get(collectionLabelAlias[label] ?? label) ?? null;
+    };
     // Correspondance code de domaine → identifiant (essai, roman…), pour classer
     // les ouvrages qui précisent leur domaine.
     const genresByCode = new Map(
       (await prisma.genre.findMany({ select: { id: true, code: true } })).map((g) => [g.code, g.id]),
     );
     for (const b of generalCatalogue) {
-      const collectionId = resolveCollectionId(b.collection);
+      const collectionId = resolveCollectionId(b.collection, b.num);
       const genreId = b.genre ? genresByCode.get(b.genre) ?? null : null;
       const ms = await prisma.manuscript.upsert({
         where: { manuscriptNumber: b.num },

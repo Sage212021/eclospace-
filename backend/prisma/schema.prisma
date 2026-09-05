@@ -1729,6 +1729,7 @@ model Collection {
   manuscripts     Manuscript[]
   layoutTemplates LayoutTemplate[]
   graphicCharters GraphicCharter[]
+  genres          Genre[]
 
   @@map("collections")
 }
@@ -1743,9 +1744,17 @@ model Genre {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
+  // Rattachement officiel du domaine à sa collection (D-025, tableau des
+  // collections Éclosion) : Canarie (roman, théâtre, poésie), Héritier
+  // (jeunesse), Sources (essai, économie, développement personnel…). Sert
+  // notamment à l'analyse IA « adéquation avec la ligne éditoriale ».
+  collectionId String?     @map("collection_id")
+  collection   Collection? @relation(fields: [collectionId], references: [id])
+
   manuscripts        Manuscript[]
   evaluationCriteria EvaluationCriterion[]
 
+  @@index([collectionId])
   @@map("genres")
 }
 

@@ -129,9 +129,25 @@ async function domainesCollectionsText(): Promise<string> {
     prisma.genre.findMany({ where: { deletedAt: null }, orderBy: { label: "asc" } }),
     prisma.collection.findMany({ where: { deletedAt: null }, orderBy: { label: "asc" } }),
   ]);
-  const g = genres.map((x) => `- ${x.label}`).join("\n") || "- (aucun)";
-  const c = collections.map((x) => `- ${x.label}`).join("\n") || "- (aucune)";
-  return `Domaines : \n${g}\nCollections : \n${c}`;
+  // Présentation par COLLECTION avec les domaines qu'elle couvre (rattachement
+  // officiel D-025, porté « côté domaine » via genre.collectionId) : l'IA ancre
+  // ainsi le critère « adéquation avec la ligne éditoriale » sur le catalogue réel.
+  const blocks = collections.map((c) => {
+    const domaines = genres.filter((g) => g.collectionId === c.id).map((g) => g.label);
+    const list = domaines.length ? domaines.map((d) => `  · ${d}`).join("\n") : "  · (aucun domaine rattaché)";
+    return `- ${c.label} :\n${list}`;
+  });
+  const orphans = genres.filter((g) => !g.collectionId).map((g) => `  · ${g.label}`);
+  const orphansBlock = orphans.length
+    ? `- Autres domaines (hors collection dédiée) :\n${orphans.join("\n")}`
+    : "";
+  return [
+    "Collections et domaines couverts (ligne éditoriale d'Éclosion Édition) :",
+    ...blocks,
+    orphansBlock,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function fillTemplate(tpl: string, vars: Record<string, string>): string {

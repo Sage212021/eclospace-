@@ -137,14 +137,35 @@ const genres = [
   { code: "THEATRE", label: "Théâtre" },
 ];
 
-// Référentiel des collections de la maison (D-024, 30/08/2026). Les deux
-// collections réelles portées par le catalogue général d'Éclosion. Le libellé
-// « code » est repris tel quel du catalogue (subtitle/keywords) pour le
-// rattachement automatique des ouvrages.
+// Référentiel officiel des collections de la maison (D-025, 05/09/2026 —
+// remplace les 2 collections de D-024). Trois collections, chacune couvrant
+// des domaines précis :
+//   • Canarie  → Roman, Théâtre, Poésie
+//   • Héritier → Littérature jeunesse
+//   • Sources  → Essai, Économie/Sciences humaines, Développement personnel…
+// L'ancienne « Canari & les Héritiers » est scindée en Canarie / Héritier.
 const collections = [
-  { code: "SOURCE", label: "Collection Source" },
-  { code: "CANARI", label: "Collection Canari & les Héritiers" },
+  { code: "CANARIE", label: "Collection Canarie" },
+  { code: "HERITIER", label: "Collection Héritier" },
+  { code: "SOURCES", label: "Collection Sources" },
 ];
+
+// Codes des collections désormais retirées (remplacées par les 3 ci-dessus).
+const retiredCollectionCodes = ["SOURCE", "CANARI"];
+
+// Rattachement domaine → collection (tableau officiel D-025). Un domaine absent
+// de cette table reste sans collection dédiée (collection_id NULL). Ce
+// rattachement est « côté domaine » et sert notamment à l'analyse IA
+// « adéquation avec la ligne éditoriale d'Éclosion ».
+const genreCollectionByCode: Record<string, string> = {
+  ROMAN: "CANARIE",
+  THEATRE: "CANARIE",
+  POESIE: "CANARIE",
+  JEUNESSE: "HERITIER",
+  ESSAI: "SOURCES",
+  SCIENCES_HUMAINES: "SOURCES",
+  DEV_PERSO: "SOURCES",
+};
 
 // Grille d'évaluation du comité de lecture (Ch. 7 §7.4). Coefficients : les
 // trois exemples donnés par le cahier des charges (§7.5) sont appliqués tels
@@ -682,10 +703,34 @@ async function main() {
     await prisma.genre.upsert({ where: { code: genre.code }, update: { label: genre.label }, create: genre });
   }
 
-  // Référentiel des collections (D-024). Les ouvrages du catalogue général y
+  // Référentiel des collections (D-025). Les ouvrages du catalogue général y
   // sont rattachés plus bas (collectionId), d'après leur collection d'origine.
   for (const collection of collections) {
-    await prisma.collection.upsert({ where: { code: collection.code }, update: { label: collection.label }, create: collection });
+    await prisma.collection.upsert({
+      where: { code: collection.code },
+      update: { label: collection.label, deletedAt: null },
+      create: collection,
+    });
+  }
+  // Retrait des anciennes collections (D-024) remplacées par les 3 officielles :
+  // suppression logique uniquement (contrainte d'intégrité §13). Les ouvrages qui
+  // y étaient rattachés sont ré-affectés plus bas aux nouvelles collections.
+  for (const code of retiredCollectionCodes) {
+    await prisma.collection.updateMany({
+      where: { code, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+  }
+  // Rattachement domaine → collection (tableau officiel D-025), « côté domaine ».
+  {
+    const collByCode = new Map(
+      (await prisma.collection.findMany({ where: { deletedAt: null }, select: { id: true, code: true } })).map((c) => [c.code, c.id]),
+    );
+    for (const [genreCode, collCode] of Object.entries(genreCollectionByCode)) {
+      const collectionId = collByCode.get(collCode);
+      if (!collectionId) continue;
+      await prisma.genre.updateMany({ where: { code: genreCode }, data: { collectionId } });
+    }
   }
 
   // Bibliothèque de prompts IA (Lot IA-0). Ces prompts sont ÉDITABLES ensuite
@@ -1549,18 +1594,28 @@ async function main() {
         await prisma.isbn.update({ where: { id: row.id }, data: { isbn13: `TMP-LGCAT-${String(tmp++).padStart(5, "0")}` } });
       }
     }
-    // Correspondance libellé de collection → identifiant (D-024), pour rattacher
-    // chaque ouvrage du catalogue général à sa collection.
+    // Correspondance libellé de collection → identifiant (D-025), pour rattacher
+    // chaque ouvrage du catalogue général à sa collection. Les libellés
+    // historiques du catalogue (D-024) sont ré-aiguillés vers les nouvelles
+    // collections : « Source » → « Sources » ; « Canari & les Héritiers » →
+    // « Canarie » (littérature générale — le gros du fonds ; les rares titres
+    // jeunesse pourront être re-filés vers « Héritier » depuis l'administration).
     const collectionsByLabel = new Map(
-      (await prisma.collection.findMany({ select: { id: true, label: true } })).map((c) => [c.label, c.id]),
+      (await prisma.collection.findMany({ where: { deletedAt: null }, select: { id: true, label: true } })).map((c) => [c.label, c.id]),
     );
+    const collectionLabelAlias: Record<string, string> = {
+      "Collection Source": "Collection Sources",
+      "Collection Canari & les Héritiers": "Collection Canarie",
+    };
+    const resolveCollectionId = (label: string): string | null =>
+      collectionsByLabel.get(collectionLabelAlias[label] ?? label) ?? null;
     // Correspondance code de domaine → identifiant (essai, roman…), pour classer
     // les ouvrages qui précisent leur domaine.
     const genresByCode = new Map(
       (await prisma.genre.findMany({ select: { id: true, code: true } })).map((g) => [g.code, g.id]),
     );
     for (const b of generalCatalogue) {
-      const collectionId = collectionsByLabel.get(b.collection) ?? null;
+      const collectionId = resolveCollectionId(b.collection);
       const genreId = b.genre ? genresByCode.get(b.genre) ?? null : null;
       const ms = await prisma.manuscript.upsert({
         where: { manuscriptNumber: b.num },

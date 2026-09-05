@@ -427,6 +427,10 @@ export interface AiRunParams {
   // Passage BAT pour la relecture de couverture : "BAT1" (1ᵉʳ passage) ou
   // "BAT2" (2ᵉ passage, avec suivi des corrections du BAT précédent).
   coverPass?: "BAT1" | "BAT2";
+  // Évaluation : type de manuscrit choisi par le relecteur pour adapter la
+  // GRILLE transmise à l'IA. Sinon (absent), on retombe sur le domaine de
+  // l'ouvrage. Doit rester cohérent avec le sélecteur de la remise manuelle.
+  gridGenreId?: string | null;
   userId: string;
   ip?: string;
 }
@@ -553,7 +557,15 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // maison) pour que la rubrique C s'y tienne exactement, au lieu que l'IA
     // invente ses propres critères.
     if (params.workType === "evaluation") {
-      userText += `\n\nGRILLE D'ÉVALUATION OFFICIELLE D'ÉCLOSION (adaptée au type « ${manuscript.genre?.label ?? "—"} ») — utilise EXACTEMENT ces critères et ces coefficients dans la grille (rubrique C), sans en ajouter ni en retirer, chaque note sur 10 :\n${await evaluationGrilleText(manuscript.genreId)}`;
+      // Type retenu pour la grille : celui choisi par le relecteur (gridGenreId)
+      // sinon le domaine de l'ouvrage. On récupère son libellé pour l'annoncer.
+      const gridGenreId = params.gridGenreId ?? manuscript.genreId ?? null;
+      let gridGenreLabel = manuscript.genre?.label ?? "—";
+      if (params.gridGenreId && params.gridGenreId !== manuscript.genreId) {
+        const chosen = await prisma.genre.findFirst({ where: { id: params.gridGenreId, deletedAt: null }, select: { label: true } });
+        if (chosen) gridGenreLabel = chosen.label;
+      }
+      userText += `\n\nGRILLE D'ÉVALUATION OFFICIELLE D'ÉCLOSION (adaptée au type « ${gridGenreLabel} ») — utilise EXACTEMENT ces critères et ces coefficients dans la grille (rubrique C), sans en ajouter ni en retirer, chaque note sur 10 :\n${await evaluationGrilleText(gridGenreId)}`;
     }
 
     // Passage BAT de la relecture de couverture : on indique explicitement à l'IA

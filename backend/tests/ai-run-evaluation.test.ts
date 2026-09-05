@@ -139,6 +139,30 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(lastUser).toContain("coefficient 3");
   });
 
+  it("le type choisi par le relecteur (grid_genre_id) adapte la grille transmise à l'IA", async () => {
+    // Un domaine qui possède sa PROPRE grille (critères ≠ grille par défaut).
+    const own = await prisma.evaluationCriterion.findFirst({
+      where: { genreId: { not: null }, isActive: true, genre: { deletedAt: null } },
+      include: { genre: { select: { id: true, label: true } } },
+    });
+    expect(own?.genre).toBeTruthy();
+    const genreId = own!.genre!.id;
+    const genreLabel = own!.genre!.label;
+
+    const res = await app.inject({
+      method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
+      payload: { manuscript_id: manuscriptId, work_type: "evaluation", step_code: "COMITE_LECTURE", grid_genre_id: genreId },
+    });
+    expect(res.statusCode).toBe(202);
+    await waitJob(res.json().jobId);
+
+    // La grille transmise annonce le TYPE choisi et reprend un critère PROPRE à ce
+    // domaine (celui-ci n'existe pas tel quel dans la grille par défaut).
+    const lastUser = sdkCalls[sdkCalls.length - 1]?.user ?? "";
+    expect(lastUser).toContain(`adaptée au type « ${genreLabel} »`);
+    expect(lastUser).toContain(own!.label);
+  });
+
   it("le journal des jobs du manuscrit est consultable et signale un rapport téléchargeable", async () => {
     const res = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`, headers: { cookie: adminCookie } });
     expect(res.statusCode).toBe(200);

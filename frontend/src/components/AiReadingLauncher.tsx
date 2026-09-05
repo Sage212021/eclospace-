@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { runAiEditorial, listAiJobs, aiJobReportDownloadUrl, type AiJob, type AiWorkType } from "../api/client";
+import { runAiEditorial, listAiJobs, aiJobReportDownloadUrl, listGenres, type AiJob, type AiWorkType, type Genre } from "../api/client";
 
 // Lot IA-1 : lancer une relecture assistée à l'étape courante. Le rapport produit
 // (au nom du relecteur d'Éclosion) est classé dans les Documents de l'ouvrage.
@@ -17,17 +17,22 @@ const STATUS_COLORS: Record<AiJob["status"], string> = {
   erreur: "var(--alert, #B23A2E)",
 };
 
-export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hint, askCoverPass }: { manuscriptId: string; workType: AiWorkType; stepCode: string; title: string; hint?: string; askCoverPass?: boolean }) {
+export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hint, askCoverPass, askGrid }: { manuscriptId: string; workType: AiWorkType; stepCode: string; title: string; hint?: string; askCoverPass?: boolean; askGrid?: boolean }) {
   const [jobs, setJobs] = useState<AiJob[]>([]);
   const [reco, setReco] = useState("");
   const [coverPass, setCoverPass] = useState<"BAT1" | "BAT2">("BAT1");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Évaluation : type de manuscrit choisi par le relecteur pour adapter la
+  // GRILLE transmise à l'IA. "" = automatique (selon le domaine de l'ouvrage).
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [selectedGenre, setSelectedGenre] = useState("");
 
   const load = () => listAiJobs(manuscriptId).then((r) => r.jobs.filter((j) => j.workType === workType));
   const refresh = () => load().then(setJobs).catch(() => {});
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [manuscriptId, workType]);
+  useEffect(() => { if (askGrid) listGenres().then(setGenres).catch(() => setGenres([])); }, [askGrid]);
 
   // L'analyse tourne EN ARRIÈRE-PLAN (fin des erreurs 504) : après le lancement,
   // on suit l'avancement du job en rafraîchissant régulièrement, jusqu'à
@@ -36,7 +41,7 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
   async function launch() {
     setBusy(true); setErr(null); setNote(null);
     try {
-      await runAiEditorial({ manuscript_id: manuscriptId, work_type: workType, step_code: stepCode, editor_recommendation: reco.trim() || undefined, cover_pass: askCoverPass ? coverPass : undefined });
+      await runAiEditorial({ manuscript_id: manuscriptId, work_type: workType, step_code: stepCode, editor_recommendation: reco.trim() || undefined, cover_pass: askCoverPass ? coverPass : undefined, grid_genre_id: askGrid && selectedGenre ? selectedGenre : undefined });
       setReco("");
       setNote("Analyse lancée. Le relecteur d'Éclosion travaille en arrière-plan — vous pouvez patienter ou quitter cet écran, le rapport sera classé dans les Documents de l'ouvrage.");
       // Suivi de progression (jusqu'à ~5 min).
@@ -92,6 +97,31 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
             </label>
           ))}
         </div>
+      )}
+      {askGrid && (
+        // Fenêtre en accordéon : le relecteur choisit le TYPE de manuscrit pour
+        // que la GRILLE d'évaluation transmise à l'IA corresponde. Repliée par
+        // défaut (« Automatique — selon l'ouvrage ») pour ne pas occuper d'espace.
+        <details style={{ marginBottom: 10, border: "1px solid var(--line)", borderRadius: 8, background: "var(--bg, #fff)" }}>
+          <summary style={{ cursor: "pointer", padding: "8px 11px", fontSize: 12.5, fontWeight: 600, userSelect: "none" }}>
+            Type de manuscrit (grille appliquée) : {selectedGenre ? (genres.find((g) => g.id === selectedGenre)?.label ?? "—") : "Automatique — selon l'ouvrage"}
+          </summary>
+          <div style={{ padding: "0 11px 11px" }}>
+            <select
+              value={selectedGenre}
+              onChange={(e) => setSelectedGenre(e.target.value)}
+              style={{ width: "100%", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }}
+            >
+              <option value="">Automatique — selon l'ouvrage</option>
+              {genres.map((g) => (
+                <option key={g.id} value={g.id}>{g.label}</option>
+              ))}
+            </select>
+            <p style={{ color: "var(--muted)", fontSize: 11.5, margin: "6px 0 0", lineHeight: 1.5 }}>
+              La grille d'évaluation envoyée à l'IA s'adapte au type choisi ; « Automatique » utilise le type de l'ouvrage.
+            </p>
+          </div>
+        </details>
       )}
       <textarea
         value={reco}

@@ -164,6 +164,9 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
     // Passage BAT (couverture) : BAT1 = 1ᵉʳ passage, BAT2 = 2ᵉ passage (suivi
     // des corrections du BAT précédent, transmis automatiquement à l'IA).
     cover_pass: z.enum(["BAT1", "BAT2"]).optional(),
+    // Évaluation : type de manuscrit choisi par le relecteur pour adapter la
+    // grille transmise à l'IA (sinon : domaine de l'ouvrage).
+    grid_genre_id: z.string().uuid().nullable().optional(),
   });
   fastify.post(
     "/api/v1/ai-editorial/run",
@@ -187,6 +190,7 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
           editorRecommendation: parsed.data.editor_recommendation,
           stepCode: parsed.data.step_code,
           coverPass: parsed.data.cover_pass,
+          gridGenreId: parsed.data.grid_genre_id ?? undefined,
           userId: request.user!.id,
           ip: request.ip,
         };

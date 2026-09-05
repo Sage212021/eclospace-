@@ -236,6 +236,7 @@ function AssignmentCard({
             manuscriptId={assignment.manuscriptId}
             workType="evaluation"
             stepCode="COMITE_LECTURE"
+            askGrid
             title={t("myr.ai_title", "Relecture IA — Rapport d'évaluation")}
             hint={t("myr.ai_hint", "Le rapport est classé dans les Documents de l'ouvrage ; il vous sert d'appui pour rédiger votre propre évaluation.")}
           />

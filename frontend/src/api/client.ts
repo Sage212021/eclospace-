@@ -1001,7 +1001,7 @@ export interface AiJob {
 }
 // L'analyse est désormais lancée EN ARRIÈRE-PLAN : la requête répond aussitôt
 // avec l'identifiant du job (statut suivi via listAiJobs). Fini les erreurs 504.
-export function runAiEditorial(input: { manuscript_id: string; work_type: AiWorkType; step_code?: string; editor_recommendation?: string; cover_pass?: "BAT1" | "BAT2" }) {
+export function runAiEditorial(input: { manuscript_id: string; work_type: AiWorkType; step_code?: string; editor_recommendation?: string; cover_pass?: "BAT1" | "BAT2"; grid_genre_id?: string }) {
   return request<{ jobId: string; started: boolean }>(`/api/v1/ai-editorial/run`, { method: "POST", body: JSON.stringify(input) });
 }
 export function listAiJobs(manuscriptId: string) {

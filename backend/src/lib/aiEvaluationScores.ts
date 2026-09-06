@@ -20,16 +20,39 @@ function cleanLabel(cell: string): string {
     .trim();
 }
 
-// Cherche une note dans une ligne de tableau : on privilégie la forme « X/10 »
-// (ou « X/20 », ramenée sur 10), la plus fiable car non confondable avec le
-// coefficient. `virgule` décimale acceptée. Renvoie null si aucune note fiable.
-function extractScore(cells: string[]): number | null {
+const clamp10 = (v: number): number => Math.max(0, Math.min(10, v));
+
+// Note lue dans UNE cellule (colonne « Note »). Accepte : « 7/10 », « 7 / 20 »
+// (ramené sur 10), un nombre seul « 7 » ou « 6,5 » (colonne dont l'en-tête est
+// déjà « /10 »), un nombre 11–20 interprété comme /20, et ignore les jauges
+// (« ███ 7 »). Virgule décimale acceptée. Null si aucune note.
+function scoreFromCell(cell: string): number | null {
+  const slash = cell.match(/(\d+(?:[.,]\d+)?)\s*\/\s*(\d{1,2})\b/);
+  if (slash) {
+    const base = parseInt(slash[2], 10);
+    let v = parseFloat(slash[1].replace(",", "."));
+    if (base === 20) v = v / 2;
+    if (Number.isFinite(v)) return clamp10(v);
+  }
+  const num = cell.match(/(\d+(?:[.,]\d+)?)/);
+  if (num) {
+    let v = parseFloat(num[1].replace(",", "."));
+    if (!Number.isFinite(v)) return null;
+    if (v > 10 && v <= 20) v = v / 2; // note manifestement sur 20
+    if (v >= 0 && v <= 10) return v;
+  }
+  return null;
+}
+
+// Note d'une LIGNE, sans connaître la colonne : on privilégie « X/10 » (ou /20),
+// non confondable avec le coefficient. Repli quand l'en-tête n'a pas été trouvé.
+function scoreFromRow(cells: string[]): number | null {
   for (const cell of cells) {
     const m = cell.match(/(\d+(?:[.,]\d+)?)\s*\/\s*(10|20)\b/);
     if (m) {
-      let value = parseFloat(m[1].replace(",", "."));
-      if (m[2] === "20") value = value / 2;
-      if (Number.isFinite(value)) return Math.max(0, Math.min(10, value));
+      let v = parseFloat(m[1].replace(",", "."));
+      if (m[2] === "20") v = v / 2;
+      if (Number.isFinite(v)) return clamp10(v);
     }
   }
   return null;
@@ -37,33 +60,56 @@ function extractScore(cells: string[]): number | null {
 
 const HEADER_HINTS = ["critère", "critere", "coefficient", "commentaire", "note"];
 
+function splitRow(line: string): string[] {
+  const cells = line.split("|").map((c) => c.trim());
+  if (cells.length && cells[0] === "") cells.shift();
+  if (cells.length && cells[cells.length - 1] === "") cells.pop();
+  return cells;
+}
+const isSeparatorRow = (cells: string[]): boolean => cells.every((c) => /^:?-{2,}:?$/.test(c) || c === "");
+
 // Analyse le texte d'un rapport et renvoie les couples (critère → note) trouvés
-// dans le(s) tableau(x) Markdown. Prudent : ignore les lignes d'en-tête et de
-// séparation, ne retient que les lignes portant une note fiable, dédoublonne.
+// dans le(s) tableau(x) Markdown. Détecte, via la ligne d'en-tête, la colonne
+// « Critère » (libellé) et la colonne « Note » — ce qui permet de lire une note
+// en NOMBRE SEUL sans la confondre avec le coefficient. À défaut d'en-tête, repli
+// sur la forme « X/10 » présente dans la ligne. Ignore en-têtes/séparateurs,
+// dédoublonne.
 export function parseGrilleScores(reportText: string | null | undefined): ParsedCriterionScore[] {
   if (!reportText) return [];
   const out: ParsedCriterionScore[] = [];
   const seen = new Set<string>();
+  let labelCol = 0;
+  let noteCol = -1;
   for (const rawLine of reportText.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line.startsWith("|")) continue;
-    // Cellules de la ligne (on retire les bords vides).
-    const cells = line.split("|").map((c) => c.trim());
-    if (cells.length && cells[0] === "") cells.shift();
-    if (cells.length && cells[cells.length - 1] === "") cells.pop();
+    const cells = splitRow(line);
     if (cells.length < 2) continue;
-    // Ligne de séparation « ---|:--: » ?
-    if (cells.every((c) => /^:?-{2,}:?$/.test(c) || c === "")) continue;
-    const label = cleanLabel(cells[0]);
+    if (isSeparatorRow(cells)) continue;
+
+    // Ligne d'EN-TÊTE ? (contient « note » et « critère »/« coefficient »)
+    const low = cells.map((c) => c.toLowerCase());
+    const noteIdx = low.findIndex((c) => /\bnotes?\b/.test(c));
+    const critIdx = low.findIndex((c) => /crit[eè]re/.test(c));
+    if (noteIdx !== -1 && (critIdx !== -1 || low.some((c) => /coefficient/.test(c)))) {
+      noteCol = noteIdx;
+      labelCol = critIdx !== -1 ? critIdx : 0;
+      continue; // c'est l'en-tête, pas une donnée
+    }
+
+    // Ligne de DONNÉES.
+    const label = cleanLabel(cells[labelCol] ?? cells[0] ?? "");
     if (!label) continue;
-    // Ligne d'en-tête ?
-    const low = label.toLowerCase();
-    if (HEADER_HINTS.some((h) => low === h || low.startsWith(h + " "))) continue;
-    const score = extractScore(cells.slice(1));
+    const llow = label.toLowerCase();
+    if (HEADER_HINTS.some((h) => llow === h || llow.startsWith(h + " "))) continue;
+    if (/^(total|score global|score|moyenne)\b/.test(llow)) continue;
+
+    let score: number | null = null;
+    if (noteCol !== -1 && cells[noteCol] !== undefined) score = scoreFromCell(cells[noteCol]);
+    if (score === null) score = scoreFromRow(cells.slice(1)); // repli : « X/10 » dans la ligne
     if (score === null) continue;
-    const key = low;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (seen.has(llow)) continue;
+    seen.add(llow);
     out.push({ label, score });
   }
   return out;

@@ -173,12 +173,17 @@ export function missingSectionKeys(reportText: string, keys: string[]): string[]
 }
 
 // Borne de sécurité du texte de manuscrit envoyé à l'IA : la fenêtre de contexte
-// est limitée (≈ 200 000 tokens). Un très gros ouvrage (ex. 430 000 tokens)
-// serait refusé (« prompt is too long »). Au-delà du budget, on envoie un
-// EXTRAIT REPRÉSENTATIF (début + milieu + fin) plutôt que d'échouer — suffisant
-// pour une évaluation d'ensemble ; le rapport le signale. ~500 000 caractères
-// ≈ 130 000 tokens, en gardant de la marge pour le prompt et la réponse.
-export const MANUSCRIT_CHAR_BUDGET = 500_000;
+// est limitée (≈ 200 000 tokens). Au-delà du budget, on envoie un EXTRAIT
+// REPRÉSENTATIF (début + milieu + fin) plutôt que d'échouer — suffisant pour une
+// évaluation d'ensemble ; le rapport le signale.
+//
+// ⚠️ Le français dense (mots accentués, technique) tokenise BEAUCOUP plus serré
+// que l'estimation naïve « 4 caractères ≈ 1 token » : on a mesuré ~1,9 car./token
+// (un manuscrit de 500 000 car. atteignait 258 705 tokens et était REFUSÉ). On
+// prend donc un ratio prudent d'~2 car./token et une BONNE MARGE : 240 000 car.
+// ≈ 120 000 tokens de manuscrit, + le prompt (grille, structure) ≈ 130 000 tokens
+// au total, très en deçà des 200 000 — sans risque de « prompt too long ».
+export const MANUSCRIT_CHAR_BUDGET = 240_000;
 export function capManuscriptText(text: string): { text: string; truncated: boolean } {
   if (text.length <= MANUSCRIT_CHAR_BUDGET) return { text, truncated: false };
   const head = Math.floor(MANUSCRIT_CHAR_BUDGET * 0.5);
@@ -540,9 +545,24 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     let prepared: ManuscriptInput;
     if (isPdfBuffer(version.mimeType, buffer)) {
       const extracted = await extractPdfText(buffer, MANUSCRIT_CHAR_BUDGET);
-      prepared = extracted && extracted.text.replace(/\s/g, "").length > 200
-        ? { kind: "text", text: extracted.text }
-        : { kind: "pdf", base64: buffer.toString("base64") };
+      if (extracted && extracted.text.replace(/\s/g, "").length > 200) {
+        // Le texte extrait est déjà plafonné par extractPdfText (budget) ; il
+        // repasse par capManuscriptText plus bas pour la marge finale.
+        prepared = { kind: "text", text: extracted.text };
+      } else {
+        // PDF SANS texte exploitable (scanné/image) : on l'envoie tel quel, mais
+        // un PDF-image volumineux ferait exploser la fenêtre de contexte (chaque
+        // page ≈ 1 500–2 000 tokens en vision). Au-delà d'un seuil prudent, on
+        // refuse PROPREMENT avec un message clair plutôt qu'une erreur brute 400.
+        const pages = extracted?.pages ?? Math.ceil(buffer.length / 120_000); // ~120 Ko/page à défaut
+        if (pages > 80 || buffer.length > 24 * 1024 * 1024) {
+          throw new AiRunError(
+            "manuscript_too_large",
+            `Ce manuscrit est un PDF « image » (texte non sélectionnable) de ${pages} pages : il est trop volumineux pour l'analyse directe par l'IA. Fournissez une version texte (.docx) ou un PDF dont le texte est sélectionnable, puis relancez.`,
+          );
+        }
+        prepared = { kind: "pdf", base64: buffer.toString("base64") };
+      }
     } else {
       prepared = prepareManuscript(version.mimeType, `f${version.versionNumber}`, buffer);
     }

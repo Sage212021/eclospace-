@@ -132,10 +132,15 @@ const genres = [
   { code: "DOCUMENT", label: "Document & actualité" },
   { code: "TEMOIGNAGE", label: "Témoignage & biographie" },
   { code: "DEV_PERSO", label: "Développement personnel" },
-  { code: "SPIRITUALITE", label: "Spiritualité" },
   { code: "SCIENCES_HUMAINES", label: "Sciences humaines & économie" },
   { code: "THEATRE", label: "Théâtre" },
 ];
+
+// Domaines RETIRÉS de la ligne éditoriale (suppression logique). « Spiritualité »
+// n'est pas un domaine publié en soi (décision 06/09/2026) : le religieux/spirituel
+// reste toléré comme THÈME dans une œuvre, mais n'est plus un domaine du catalogue.
+// (La règle « thème toléré / doctrine proscrite » est portée par le prompt IA.)
+const retiredGenreCodes = ["SPIRITUALITE"];
 
 // Référentiel officiel des collections de la maison (D-025, 05/09/2026 —
 // remplace les 2 collections de D-024). Trois collections, chacune couvrant
@@ -158,13 +163,20 @@ const retiredCollectionCodes = ["SOURCE", "CANARI"];
 // rattachement est « côté domaine » et sert notamment à l'analyse IA
 // « adéquation avec la ligne éditoriale d'Éclosion ».
 const genreCollectionByCode: Record<string, string> = {
+  // Canarie — création littéraire (adulte)
   ROMAN: "CANARIE",
   THEATRE: "CANARIE",
   POESIE: "CANARIE",
+  // Héritier — jeunesse & patrimoine
   JEUNESSE: "HERITIER",
+  CONTE: "HERITIER",
+  // Sources — savoir, réflexion & pratique (non-fiction)
   ESSAI: "SOURCES",
   SCIENCES_HUMAINES: "SOURCES",
   DEV_PERSO: "SOURCES",
+  DOCUMENT: "SOURCES",
+  TEMOIGNAGE: "SOURCES",
+  MANUEL: "SOURCES",
 };
 
 // Grille d'évaluation du comité de lecture (Ch. 7 §7.4). Coefficients : les
@@ -698,9 +710,18 @@ async function main() {
     });
   }
 
-  // Référentiel des genres (Ch. 6 §6.2).
+  // Référentiel des genres (Ch. 6 §6.2). Les genres actifs sont ré-activés
+  // (deletedAt = null) au cas où ils auraient été retirés puis réintroduits.
   for (const genre of genres) {
-    await prisma.genre.upsert({ where: { code: genre.code }, update: { label: genre.label }, create: genre });
+    await prisma.genre.upsert({ where: { code: genre.code }, update: { label: genre.label, deletedAt: null }, create: genre });
+  }
+  // Domaines retirés de la ligne (ex. Spiritualité) : suppression logique. Les
+  // critères de grille qui leur seraient propres sont désactivés du même coup.
+  for (const code of retiredGenreCodes) {
+    const g = await prisma.genre.findFirst({ where: { code, deletedAt: null } });
+    if (!g) continue;
+    await prisma.evaluationCriterion.updateMany({ where: { genreId: g.id, isActive: true }, data: { isActive: false } });
+    await prisma.genre.update({ where: { id: g.id }, data: { deletedAt: new Date(), collectionId: null } });
   }
 
   // Référentiel des collections (D-025). Les ouvrages du catalogue général y
@@ -753,9 +774,9 @@ async function main() {
       label: "Rapport d'évaluation (Comité de lecture)",
       systemPrompt:
         REGLE_DOR +
-        " Pour le critère « Adéquation avec la ligne éditoriale », tu t'appuies STRICTEMENT sur la liste des domaines et collections d'Éclosion fournie ci-dessous : un ouvrage éloigné du catalogue réel est pénalisé sur ce critère, avec commentaire argumenté. La grille (critères, coefficients) est celle de la maison ; tu ne la modifies pas.",
+        " Pour le critère « Adéquation avec la ligne éditoriale », tu procèdes ainsi, sans t'en écarter : (1) tu identifies le DOMAINE et la COLLECTION déclarés du manuscrit ; (2) tu juges l'adéquation UNIQUEMENT contre la CHARTE de cette collection (fournie ci-dessous) — il suffit que l'ouvrage relève d'UN des domaines de sa collection pour être adéquat ; (3) note haute s'il colle nettement à sa collection ; note moyenne s'il est hybride ou à la lisière (tu précises alors le meilleur rattachement) ; note basse SEULEMENT s'il ne relève d'AUCUNE des trois collections. INTERDITS ABSOLUS : ne compare JAMAIS l'ouvrage à des domaines ou collections qu'il n'a pas revendiqués et n'énumère pas ceux auxquels il n'appartient pas ; n'exige JAMAIS qu'il couvre plusieurs domaines de sa collection (une collection regroupe plusieurs lignes distinctes, l'ouvrage n'en vise qu'une). Tu respectes la règle transversale thème/doctrine fournie ci-dessous. La grille (critères, coefficients) est celle de la maison ; tu ne la modifies pas.",
       userTemplate:
-        "Domaines et collections actuels d'Éclosion Édition :\n{{domaines_collections}}\n\nOuvrage soumis — titre : {{titre}} · auteur : {{auteur}} · domaine/collection déclaré : {{domaine}}.\nRecommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit à évaluer :\n{{manuscrit}}",
+        "Ligne éditoriale d'Éclosion Édition (chartes des collections) :\n{{domaines_collections}}\n\nOuvrage soumis — titre : {{titre}} · auteur : {{auteur}} · domaine/collection déclaré : {{domaine}}.\nRecommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit à évaluer :\n{{manuscrit}}",
       reportTemplate: {
         title: "RAPPORT D'ÉVALUATION DE MANUSCRIT",
         sections: [

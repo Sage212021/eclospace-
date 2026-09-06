@@ -124,30 +124,44 @@ async function evaluationGrilleText(genreId: string | null | undefined): Promise
   return `${lines}\nSomme des coefficients = ${sum}. Score global = Σ(note × coefficient) / Σ(coefficients), chaque note sur 10.`;
 }
 
-async function domainesCollectionsText(): Promise<string> {
+// CHARTE par collection (périmètre éditorial : ce qu'elle publie / exclut). C'est
+// la « ligne éditoriale » réelle — pas une simple liste de genres. Validée par la
+// Direction (06/09/2026). L'IA juge l'adéquation UNIQUEMENT contre la charte de la
+// collection DÉCLARÉE du manuscrit, sans comparer aux autres collections.
+const COLLECTION_CHARTERS: Record<string, string> = {
+  CANARIE:
+    "Création littéraire (adulte). Inclut : roman, nouvelle, théâtre, poésie — œuvres de fiction et d'expression littéraire, lectorat adulte/grand public. Exclut : ouvrages de savoir ou pratiques (→ Sources), livres pour la jeunesse (→ Héritier).",
+  HERITIER:
+    "Jeunesse & patrimoine. Inclut : littérature jeunesse (albums, premières lectures, romans jeunesse), contes & légendes, ouvrages de transmission destinés aux enfants/adolescents. Exclut : ouvrages visant d'abord un lectorat adulte.",
+  SOURCES:
+    "Savoir, réflexion & pratique. Inclut : essai, sciences humaines & économie, développement personnel, document & actualité, témoignage & biographie, manuel scolaire ou guide pratique — toute la non-fiction (analyse, connaissance, expérience, méthode). Exclut : fiction littéraire (→ Canarie), ouvrages jeunesse (→ Héritier).",
+};
+
+// Règle TRANSVERSALE thème/doctrine (vaut pour toutes les collections) : un thème
+// spirituel/religieux dans une œuvre est légitime et n'affecte PAS l'adéquation ;
+// seule la posture doctrinale (endoctrinement, prosélytisme, fanatisme) est un
+// motif de vigilance rédhibitoire.
+const THEME_DOCTRINE_RULE =
+  "Règle transversale (toutes collections) — spiritualité/religieux : ce n'est PAS un domaine publié en soi, mais l'aborder comme THÈME, décor ou ressort narratif (un roman où l'on prie, doute, vit une expérience spirituelle) est LÉGITIME et n'abaisse EN RIEN l'adéquation. En revanche, signale en « points de vigilance » — comme motif possiblement RÉDHIBITOIRE, indépendamment du score — tout manuscrit à visée d'endoctrinement, de prosélytisme, d'apologie religieuse, ou au discours fanatique/sectaire.";
+
+export async function domainesCollectionsText(): Promise<string> {
   const [genres, collections] = await Promise.all([
     prisma.genre.findMany({ where: { deletedAt: null }, orderBy: { label: "asc" } }),
-    prisma.collection.findMany({ where: { deletedAt: null }, orderBy: { label: "asc" } }),
+    prisma.collection.findMany({ where: { deletedAt: null, code: { in: Object.keys(COLLECTION_CHARTERS) } }, orderBy: { label: "asc" } }),
   ]);
-  // Présentation par COLLECTION avec les domaines qu'elle couvre (rattachement
-  // officiel D-025, porté « côté domaine » via genre.collectionId) : l'IA ancre
-  // ainsi le critère « adéquation avec la ligne éditoriale » sur le catalogue réel.
+  // Présentation par COLLECTION : sa CHARTE (périmètre) + les domaines qu'elle
+  // couvre. L'IA ancre ainsi le critère « adéquation » sur la ligne réelle.
   const blocks = collections.map((c) => {
     const domaines = genres.filter((g) => g.collectionId === c.id).map((g) => g.label);
-    const list = domaines.length ? domaines.map((d) => `  · ${d}`).join("\n") : "  · (aucun domaine rattaché)";
-    return `- ${c.label} :\n${list}`;
+    const list = domaines.length ? domaines.join(", ") : "(aucun domaine rattaché)";
+    const charter = COLLECTION_CHARTERS[c.code] ?? "";
+    return `- ${c.label} — ${charter}\n  Domaines : ${list}`;
   });
-  const orphans = genres.filter((g) => !g.collectionId).map((g) => `  · ${g.label}`);
-  const orphansBlock = orphans.length
-    ? `- Autres domaines (hors collection dédiée) :\n${orphans.join("\n")}`
-    : "";
   return [
-    "Collections et domaines couverts (ligne éditoriale d'Éclosion Édition) :",
+    "Ligne éditoriale d'Éclosion Édition — trois collections, chacune avec son périmètre :",
     ...blocks,
-    orphansBlock,
-  ]
-    .filter(Boolean)
-    .join("\n");
+    THEME_DOCTRINE_RULE,
+  ].join("\n");
 }
 
 function fillTemplate(tpl: string, vars: Record<string, string>): string {

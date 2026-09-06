@@ -9,7 +9,7 @@ const sdkCalls: { system?: string; user?: string; maxTokens?: number }[] = [];
 // Pilotage du faux client : quand `truncateNext` est vrai, le PROCHAIN appel
 // simule une réponse TRONQUÉE (seulement la 1ʳᵉ rubrique, stop_reason max_tokens)
 // pour vérifier que le moteur relance et complète le rapport (A→M).
-const sdkCtl = { truncateNext: false };
+const sdkCtl = { truncateNext: false, completeButCut: false };
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
@@ -32,6 +32,17 @@ vi.mock("@anthropic-ai/sdk", () => {
           };
         }
         const body = heads.length ? heads.map((h) => `${h}\nContenu de la rubrique.`).join("\n\n") : "Synthèse : manuscrit prometteur.";
+        // Rapport COMPLET (toutes rubriques) mais dont la dernière phrase est
+        // coupée (stop_reason max_tokens) : le moteur NE doit PAS relancer.
+        if (sdkCtl.completeButCut) {
+          sdkCtl.completeButCut = false;
+          return {
+            model: "claude-haiku-4-5",
+            stop_reason: "max_tokens",
+            content: [{ type: "text", text: `# Rapport d'évaluation\n${body}\nAvis final : le manuscrit mérite un investissement second de sa part pour clarifier son ambition. Une maison comme Éclosion pour` }],
+            usage: { input_tokens: 12000, output_tokens: 8000 },
+          };
+        }
         return {
           model: "claude-haiku-4-5",
           stop_reason: "end_turn",
@@ -280,6 +291,39 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     for (const call of sdkCalls) {
       expect(call.maxTokens ?? 0).toBeLessThanOrEqual(8192);
     }
+  });
+
+  it("un rapport COMPLET mais coupé en fin de M ne déclenche AUCUNE relance (pas de méta IA)", async () => {
+    // Gabarit A..M.
+    await app.inject({
+      method: "PUT", url: "/api/v1/ai-editorial/prompts/evaluation", headers: { cookie: adminCookie },
+      payload: {
+        label: "Évaluation (test anti-méta)",
+        system_prompt: "Système d'évaluation.",
+        user_template: "Manuscrit : {{manuscrit}}",
+        report_template: {
+          title: "RAPPORT D'ÉVALUATION DE MANUSCRIT",
+          sections: [
+            { key: "A", title: "Identification" }, { key: "B", title: "Synthèse" }, { key: "C", title: "Grille" },
+            { key: "D", title: "Score" }, { key: "M", title: "Avis final" },
+          ],
+        },
+      },
+    });
+    const before = sdkCalls.length;
+    sdkCtl.completeButCut = true;
+    const res = await app.inject({
+      method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
+      payload: { manuscript_id: manuscriptId, work_type: "evaluation", step_code: "COMITE_LECTURE" },
+    });
+    const job = await waitJob(res.json().jobId);
+    // UN SEUL appel IA (aucune relance de complétude).
+    expect(sdkCalls.length - before).toBe(1);
+    const stored = await prisma.aiReadingJob.findUniqueOrThrow({ where: { id: job.id } });
+    // Aucun bavardage révélant l'IA n'a été ajouté au rapport.
+    const t = stored.reportText ?? "";
+    expect(t).not.toMatch(/rubriques? (suivantes|figurent|sont présentes)/i);
+    expect(t).not.toMatch(/je confirme|je constate|vérification exhaustive|intelligence artificielle/i);
   });
 
   it("missingSectionKeys repère les rubriques absentes d'un rapport", async () => {

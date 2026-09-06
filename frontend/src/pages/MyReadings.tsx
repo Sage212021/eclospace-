@@ -4,6 +4,7 @@ import {
   listGenres,
   listMyReadingAssignments,
   submitEvaluation,
+  getAiEvaluationScores,
   getReadingCommitteeRules,
   uploadReadingReportFile,
   readingReportFileUrl,
@@ -258,13 +259,42 @@ function AssignmentCard({
   );
 }
 
+// Rapproche un libellé de critère d'un libellé lu dans le rapport IA (sans
+// accents, minuscules, alphanumérique compact) pour aligner les notes.
+function normLabel(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+function matchAiScores(crits: EvaluationCriterion[], ai: { label: string; score: number }[]): Record<string, number> {
+  const byNorm = new Map(ai.map((a) => [normLabel(a.label), a.score]));
+  const result: Record<string, number> = {};
+  for (const c of crits) {
+    const n = normLabel(c.label);
+    let sc = byNorm.get(n);
+    if (sc === undefined) {
+      for (const [k, v] of byNorm) {
+        if (k && (k.includes(n) || n.includes(k))) { sc = v; break; }
+      }
+    }
+    if (sc !== undefined) result[c.id] = sc;
+  }
+  return result;
+}
+
 function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmentId: string; manuscriptId: string; onSubmitted: () => void }) {
   const { t } = useI18n();
   const [criteria, setCriteria] = useState<EvaluationCriterion[]>([]);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [comment, setComment] = useState("");
-  const [recommendation, setRecommendation] = useState<"accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject">("accept");
+  const [recommendation, setRecommendation] = useState<"accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject" | "reject_encourage">("accept");
+  // Recommandation en texte libre (précisions du relecteur) + nom du relecteur
+  // (défaut « Comité de lecture d'Éclosion Édition »), tous deux facultatifs.
+  const [recommendationNote, setRecommendationNote] = useState("");
+  const [reviewerName, setReviewerName] = useState("Comité de lecture d'Éclosion Édition");
   const [error, setError] = useState<string | null>(null);
+  // Notes proposées par le dernier rapport IA d'évaluation (libellé → note/10),
+  // pour aligner automatiquement les curseurs. Le relecteur peut ajuster ensuite.
+  const [aiScores, setAiScores] = useState<{ label: string; score: number }[]>([]);
+  const aiPrefilled = useRef(false);
   // Type de manuscrit choisi par le relecteur (pour adapter la grille) : ""
   // = automatique (selon l'ouvrage). L'accordéon replie la grille pour gagner
   // de la place à l'écran.
@@ -288,6 +318,30 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
     });
   }, [manuscriptId, selectedGenre]);
 
+  // Notes proposées par le dernier rapport IA d'évaluation (s'il existe).
+  useEffect(() => {
+    getAiEvaluationScores(assignmentId).then((r) => setAiScores(r.available ? r.scores : [])).catch(() => setAiScores([]));
+  }, [assignmentId]);
+
+  // Alignement automatique des curseurs sur le rapport IA, au premier chargement
+  // où critères et notes IA sont tous deux disponibles. Le relecteur ajuste ensuite.
+  useEffect(() => {
+    if (aiPrefilled.current || criteria.length === 0 || aiScores.length === 0) return;
+    const matched = matchAiScores(criteria, aiScores);
+    if (Object.keys(matched).length > 0) {
+      setScores((s) => ({ ...s, ...matched }));
+      aiPrefilled.current = true;
+    }
+  }, [criteria, aiScores]);
+
+  // Ré-application manuelle (bouton) : reprend les notes du rapport IA sur la
+  // grille courante (utile après un changement de type de manuscrit).
+  function applyAiScores() {
+    const matched = matchAiScores(criteria, aiScores);
+    if (Object.keys(matched).length > 0) setScores((s) => ({ ...s, ...matched }));
+  }
+  const aiMatchCount = aiScores.length > 0 ? Object.keys(matchAiScores(criteria, aiScores)).length : 0;
+
   const totalCoefficient = criteria.reduce((sum, c) => sum + Number(c.coefficient), 0);
   const livePreview =
     totalCoefficient > 0
@@ -310,6 +364,8 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
         scores: criteria.map((c) => ({ criterion_id: c.id, score: scores[c.id] ?? 0 })),
         overall_comment: comment,
         recommendation,
+        ...(recommendationNote.trim() ? { recommendation_note: recommendationNote.trim() } : {}),
+        ...(reviewerName.trim() ? { reviewer_name: reviewerName.trim() } : {}),
         ...(selectedGenre ? { grid_genre_id: selectedGenre } : {}),
         ...(conflictRequired
           ? { conflict_declaration: { has_conflict: conflictChoice === "conflict", details: conflictChoice === "conflict" ? conflictDetails.trim() : undefined } }
@@ -348,6 +404,20 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
                 La grille s'adapte au type choisi ; « Automatique » utilise le type de l'ouvrage.
               </span>
             </label>
+            {aiMatchCount > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 12, padding: "8px 11px", background: "var(--eclosion-soft)", borderRadius: 8, fontSize: 12 }}>
+                <span style={{ color: "var(--eclosion-dark, #9A7A12)" }}>
+                  🤖 Curseurs pré-alignés sur le rapport IA ({aiMatchCount} critère{aiMatchCount > 1 ? "s" : ""}). Ajustez librement chaque note.
+                </span>
+                <button
+                  type="button"
+                  onClick={applyAiScores}
+                  style={{ marginLeft: "auto", background: "transparent", border: "1px solid var(--eclosion)", color: "var(--eclosion-dark, #9A7A12)", borderRadius: 6, padding: "4px 9px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}
+                >
+                  Reprendre les notes du rapport IA
+                </button>
+              </div>
+            )}
             {criteria.map((criterion) => (
               <div key={criterion.id} style={{ marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
@@ -384,8 +454,26 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
           <option value="rewrite">{t("myr.reco.rewrite", "Demande de réécriture")}</option>
           <option value="new_expertise">{t("myr.reco.new_expertise", "Nouvelle expertise")}</option>
           <option value="reject">{t("myr.reco.reject", "Refus motivé")}</option>
+          <option value="reject_encourage">{t("myr.reco.reject_encourage", "Rejet avec encouragement à retravailler")}</option>
         </select>
       </Field>
+
+      <div style={{ marginTop: 12 }}>
+        <Field label={t("myr.recommendation_note", "Recommandation — précisions (texte libre, facultatif)")}>
+          <textarea
+            value={recommendationNote}
+            onChange={(e) => setRecommendationNote(e.target.value)}
+            rows={2}
+            placeholder="Précisez votre recommandation dans vos propres mots (facultatif)."
+          />
+        </Field>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <Field label={t("myr.reviewer_name", "Relecteur")}>
+          <input type="text" value={reviewerName} onChange={(e) => setReviewerName(e.target.value)} placeholder="Comité de lecture d'Éclosion Édition" />
+        </Field>
+      </div>
 
       <div style={{ marginTop: 12 }}>
         <Field label={t("myr.general_comment", "Appréciation générale")}>

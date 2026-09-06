@@ -2083,6 +2083,8 @@ enum EvaluationRecommendation {
   rewrite
   new_expertise
   reject
+  // Refus, mais l'auteur est explicitement encouragé à retravailler et resoumettre.
+  reject_encourage
 }
 
 // Excellent / Très bon / Bon / À retravailler / Refusé (Ch. 7 §7.5).
@@ -2108,6 +2110,11 @@ model Evaluation {
   assignment     ReadingAssignment        @relation(fields: [assignmentId], references: [id])
   overallComment String?                  @map("overall_comment")
   recommendation EvaluationRecommendation
+  // Recommandation en TEXTE LIBRE (précisions/justification propres au relecteur),
+  // en complément de la recommandation typée ci-dessus.
+  recommendationNote String?              @map("recommendation_note")
+  // Nom du relecteur (défaut applicatif : « Comité de lecture d'Éclosion Édition »).
+  reviewerName   String?                  @map("reviewer_name")
   globalScore    Decimal                  @map("global_score") @db.Decimal(6, 2)
   rating         EvaluationRating
   visibility     EvaluationVisibility     @default(comite)

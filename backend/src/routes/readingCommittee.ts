@@ -10,6 +10,7 @@ import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { isMailConfigured, sendMail, senderIdentity } from "../lib/mailer.js";
 import { resolveLetterTemplates, renderLetter, letterHtml, houseName, LETTER_KEYS, LETTER_LABELS, DEFAULT_LETTERS, type EditorialLetterKey } from "../lib/editorialLetters.js";
 import { readingCommitteeRules, DEFAULT_READING_COMMITTEE_RULES, READING_COMMITTEE_RULES_KEY } from "../lib/readingCommitteeRules.js";
+import { parseGrilleScores } from "../lib/aiEvaluationScores.js";
 import { createHash } from "node:crypto";
 
 const DEFAULT_RATING_THRESHOLDS = { excellent: 8.5, very_good: 7, good: 5, to_rework: 3 };
@@ -33,6 +34,10 @@ const evaluationSchema = z.object({
   grid_genre_id: z.string().uuid().nullable().optional(),
   overall_comment: z.string().optional(),
   recommendation: z.nativeEnum(EvaluationRecommendation),
+  // Recommandation en texte libre (précisions du relecteur), en complément.
+  recommendation_note: z.string().max(4000).optional(),
+  // Nom du relecteur (défaut applicatif si vide : « Comité de lecture d'Éclosion Édition »).
+  reviewer_name: z.string().max(200).optional(),
   visibility: z.enum(["confidentiel", "direction_seule", "comite", "dossier_editorial"]).default("comite"),
   // Déclaration de conflit d'intérêt (point n°3) : exigée seulement si la règle
   // est activée ; sinon ignorée. `details` requis si un conflit est signalé.
@@ -590,6 +595,8 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
             assignmentId: id,
             overallComment: parsed.data.overall_comment,
             recommendation: parsed.data.recommendation,
+            recommendationNote: parsed.data.recommendation_note?.trim() || null,
+            reviewerName: parsed.data.reviewer_name?.trim() || "Comité de lecture d'Éclosion Édition",
             globalScore,
             rating,
             visibility: parsed.data.visibility,
@@ -630,6 +637,32 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       }
 
       return reply.code(201).send(evaluation);
+    },
+  );
+
+  // Notes proposées par le dernier rapport IA d'évaluation, pour pré-remplir les
+  // curseurs du relecteur (Mes lectures). Renvoie des couples (libellé → note/10)
+  // que le front rapproche des critères de SA grille ; le relecteur reste libre
+  // d'ajuster. Aucune note fiable trouvée → liste vide (pré-remplissage ignoré).
+  fastify.get(
+    "/api/v1/reading-assignments/:id/ai-evaluation-scores",
+    { preHandler: requirePermission("comite_lecture", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const assignment = await prisma.readingAssignment.findUnique({ where: { id } });
+      if (!assignment) {
+        return reply.code(404).send({ code: "not_found", message: "Mission de lecture introuvable." });
+      }
+      if (assignment.readerId !== request.user!.id) {
+        return reply.code(403).send({ code: "forbidden", message: "Cette mission n'est pas la vôtre." });
+      }
+      const job = await prisma.aiReadingJob.findFirst({
+        where: { manuscriptId: assignment.manuscriptId, workType: "evaluation", status: "termine", reportText: { not: null } },
+        orderBy: [{ finishedAt: "desc" }, { launchedAt: "desc" }],
+        select: { reportText: true, finishedAt: true },
+      });
+      const scores = parseGrilleScores(job?.reportText);
+      return reply.send({ available: scores.length > 0, scores, reportDate: job?.finishedAt ?? null });
     },
   );
 

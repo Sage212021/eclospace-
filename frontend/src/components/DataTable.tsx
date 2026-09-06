@@ -20,6 +20,7 @@ const COLUMN_LABELS: Record<string, string> = {
   rewrite: "Réécriture",
   new_expertise: "Nouvelle expertise",
   reject: "Refusé",
+  reject_encourage: "Rejet (encouragé à retravailler)",
   // Production / délais
   status: "Statut",
   avg_duration_days: "Durée moyenne (j)",

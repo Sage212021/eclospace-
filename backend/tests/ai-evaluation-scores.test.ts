@@ -30,6 +30,25 @@ describe("Notes IA → curseurs d'évaluation (Mes lectures)", () => {
     expect(byLabel["Total"]).toBeUndefined();
   });
 
+  it("parseGrilleScores lit une note en NOMBRE SEUL via l'en-tête « Note »", () => {
+    // Cas réel : l'IA met la note en nombre seul dans la colonne « Note /10 »
+    // (l'en-tête portant déjà « /10 »). Le coefficient ne doit pas être confondu
+    // avec la note (ici même valeur « 3 » pour l'un et l'autre sur la 1ʳᵉ ligne).
+    const report = [
+      "## C. Grille d'évaluation",
+      "| Critère | Coefficient | Note /10 | Commentaire |",
+      "| --- | --- | --- | --- |",
+      "| Originalité et pertinence de la thèse | 3 | 3 | Faible |",
+      "| Qualité de l'écriture | 1 | 6,5 | Correcte |",
+      "| Score global | | 3,34 | — |",
+    ].join("\n");
+    const byLabel = Object.fromEntries(parseGrilleScores(report).map((s) => [s.label, s.score]));
+    expect(byLabel["Originalité et pertinence de la thèse"]).toBe(3);
+    expect(byLabel["Qualité de l'écriture"]).toBe(6.5);
+    // « Score global » n'est pas un critère → non retenu.
+    expect(byLabel["Score global"]).toBeUndefined();
+  });
+
   it("parseGrilleScores renvoie une liste vide si aucun tableau de notes", () => {
     expect(parseGrilleScores("Un rapport en prose, sans tableau.")).toEqual([]);
     expect(parseGrilleScores(null)).toEqual([]);

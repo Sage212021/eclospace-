@@ -340,5 +340,9 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(huge.text.length).toBeLessThanOrEqual(MANUSCRIT_CHAR_BUDGET + 200);
     expect(huge.text).toContain("passage central du manuscrit");
     expect(huge.text).toContain("fin du manuscrit");
+    // Marge de sécurité : le français dense tokenise à ~2 car./token, donc le
+    // budget doit rester bien SOUS les 200 000 tokens de contexte (≈ 150 000 max
+    // pour le manuscrit, en laissant la place au prompt). Garde anti-régression.
+    expect(MANUSCRIT_CHAR_BUDGET / 2).toBeLessThanOrEqual(150_000);
   });
 });

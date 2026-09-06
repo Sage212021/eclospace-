@@ -15,6 +15,7 @@ const RECO_SHORT: Record<string, string> = {
   rewrite: "Réécriture",
   new_expertise: "Nouvelle expertise",
   reject: "Refus motivé",
+  reject_encourage: "Rejet — encouragé à retravailler",
 };
 
 export function ReadingEvaluationsSection({
@@ -95,9 +96,17 @@ export function ReadingEvaluationsSection({
                 <span style={{ color: "var(--muted)", marginLeft: 8 }}>
                   {RECO_SHORT[a.evaluation.recommendation] ?? a.evaluation.recommendation} ·{" "}
                   <span style={{ fontFamily: "var(--font-mono)" }}>{Number(a.evaluation.globalScore)} / 10</span>
+                  {a.evaluation.reviewerName && (
+                    <span style={{ color: "var(--muted)" }}> · Relecteur : {a.evaluation.reviewerName}</span>
+                  )}
                 </span>
               ) : (
                 <span style={{ color: "var(--muted)", marginLeft: 8, fontStyle: "italic" }}>évaluation en attente</span>
+              )}
+              {a.evaluation?.recommendationNote && (
+                <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--muted)", fontStyle: "italic" }}>
+                  « {a.evaluation.recommendationNote} »
+                </div>
               )}
               {a.conflictDeclaredAt && (
                 a.conflictHasConflict ? (

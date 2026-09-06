@@ -799,6 +799,8 @@ export interface ReadingEvaluationScore {
 }
 export interface ReadingEvaluation {
   recommendation: string;
+  recommendationNote?: string | null;
+  reviewerName?: string | null;
   globalScore: string | number;
   rating: string;
   overallComment: string | null;
@@ -921,12 +923,22 @@ export function submitEvaluation(
   input: {
     scores: { criterion_id: string; score: number; comment?: string }[];
     overall_comment?: string;
-    recommendation: "accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject";
+    recommendation: "accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject" | "reject_encourage";
+    recommendation_note?: string;
+    reviewer_name?: string;
     conflict_declaration?: { has_conflict: boolean; details?: string };
     grid_genre_id?: string;
   },
 ) {
   return request(`/api/v1/reading-assignments/${assignmentId}/evaluation`, { method: "POST", body: JSON.stringify(input) });
+}
+
+// Notes proposées par le dernier rapport IA d'évaluation (couples libellé → note
+// /10), pour pré-remplir les curseurs de la grille dans « Mes lectures ».
+export function getAiEvaluationScores(assignmentId: string) {
+  return request<{ available: boolean; scores: { label: string; score: number }[]; reportDate: string | null }>(
+    `/api/v1/reading-assignments/${assignmentId}/ai-evaluation-scores`,
+  );
 }
 
 // Règles « comité professionnel » (audit éditorial, point n°3), activables.

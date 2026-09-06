@@ -154,6 +154,21 @@ function fillTemplate(tpl: string, vars: Record<string, string>): string {
   return tpl.replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? "");
 }
 
+// Budget de sortie du rapport. Assez large pour un rapport complet A→M sans
+// troncature (cause n°1 des rapports « sans toutes les parties »).
+const REPORT_MAX_TOKENS = 12000;
+
+// Rubriques du gabarit ABSENTES du texte produit. Une rubrique est « présente »
+// si son intitulé de section apparaît (ex. « ## A. … », « **A.** », « A. … » en
+// début de ligne). Sert à garantir qu'un rapport contient TOUTES ses rubriques.
+export function missingSectionKeys(reportText: string, keys: string[]): string[] {
+  return keys.filter((k) => {
+    const esc = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(^|\\n)\\s*(#{1,6}\\s*)?\\*{0,2}\\s*${esc}\\s*[.)]`, "i");
+    return !re.test(reportText);
+  });
+}
+
 // Borne de sécurité du texte de manuscrit envoyé à l'IA : la fenêtre de contexte
 // est limitée (≈ 200 000 tokens). Un très gros ouvrage (ex. 430 000 tokens)
 // serait refusé (« prompt is too long »). Au-delà du budget, on envoie un
@@ -608,25 +623,66 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       ? `\n\n=== STRUCTURE IMPOSÉE DU RAPPORT « ${String(tpl!.title ?? "RAPPORT")} » ===\n`
         + "Tu produis EXACTEMENT ces rubriques, dans cet ordre, sans en ajouter ni en retirer, en reprenant l'intitulé comme titre de section (niveau « ## » en Markdown, préfixé de sa clé) :\n"
         + sections.map((s) => `## ${s.key}. ${s.title}`).join("\n")
+        + `\n\nOBLIGATION DE COMPLÉTUDE : le rapport va de la première à la DERNIÈRE rubrique (${sections[0]?.key ?? "A"} à ${sections[sections.length - 1]?.key ?? "M"}) et TOUTES doivent figurer, dans l'ordre — tu ne sautes JAMAIS une rubrique. Si une rubrique est sans objet, tu l'écris quand même avec la mention « Néant. ». Ne t'arrête pas avant d'avoir rédigé la dernière rubrique (${sections[sections.length - 1]?.key ?? "M"}).`
         + `\n\nRègles de forme : ${guidance} Tout tableau est rendu au format Markdown (| … |).`
         + (tpl!.footer ? `\n\nTermine par ce pied de rapport : ${tpl!.footer}` : "")
       : "";
     const systemPrompt = prompt.systemPrompt + structureBlock;
 
     const client = new Anthropic({ apiKey });
-    const res = await client.messages.create({
+    const textOf = (blocks: { type: string }[]) =>
+      blocks.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("\n").trim();
+
+    const first = await client.messages.create({
       model: modelId,
-      max_tokens: 8000,
+      max_tokens: REPORT_MAX_TOKENS,
       system: systemPrompt,
       messages: [{ role: "user", content }],
     });
-    const reportText = res.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("\n").trim()
-      || "Le relecteur n'a produit aucun texte.";
+    let reportText = textOf(first.content);
+    // Coût cumulé sur tous les appels (rapport + complétions + éventuelle réécriture).
+    let totalInput = first.usage.input_tokens;
+    let totalOutput = first.usage.output_tokens;
+    let stop: string | null = first.stop_reason;
+
+    // GARANTIE DE COMPLÉTUDE : le rapport doit contenir TOUTES les rubriques du
+    // gabarit (ex. évaluation : A → M). Une réponse tronquée (limite de tokens)
+    // ou une rubrique oubliée laisserait un rapport incomplet — c'est justement
+    // ce qui produisait des rapports « sans toutes les parties ». On relance alors
+    // l'IA pour qu'elle rédige LES RUBRIQUES MANQUANTES, à partir de son propre
+    // rapport partiel (sans renvoyer le manuscrit, pour ne pas payer deux fois).
+    // Jusqu'à 2 relances ; on n'échoue jamais (au pire le rapport reste tel quel).
+    const sectionKeys = sections.map((s) => s.key);
+    for (let attempt = 0; attempt < 2 && sectionKeys.length > 0; attempt++) {
+      const missing = missingSectionKeys(reportText, sectionKeys);
+      if (missing.length === 0 && stop !== "max_tokens") break;
+      const wanted = missing.length ? missing : sectionKeys;
+      const cont = await client.messages.create({
+        model: modelId,
+        max_tokens: REPORT_MAX_TOKENS,
+        system: systemPrompt,
+        messages: [
+          { role: "user", content: "Tu rédiges le rapport ci-dessous, selon la structure imposée déjà transmise." },
+          { role: "assistant", content: reportText },
+          {
+            role: "user",
+            content:
+              `Le rapport est INCOMPLET : il manque la/les rubrique(s) ${wanted.map((k) => `« ${k} »`).join(", ")}. `
+              + "Rédige-la/les MAINTENANT, dans l'ordre imposé, en reprenant l'intitulé « ## clé. titre », SANS répéter les rubriques déjà rédigées. "
+              + "Chaque rubrique doit apparaître même brièvement : « Néant. » si elle est sans objet.",
+          },
+        ],
+      });
+      totalInput += cont.usage.input_tokens;
+      totalOutput += cont.usage.output_tokens;
+      stop = cont.stop_reason;
+      const contText = textOf(cont.content);
+      if (!contText) break;
+      reportText = `${reportText}\n\n${contText}`;
+    }
+    if (!reportText) reportText = "Le relecteur n'a produit aucun texte.";
 
     const price = PRICES[modelId] ?? PRICES["claude-haiku-4-5"];
-    // Coût cumulé sur tous les appels (rapport + éventuelle réécriture).
-    let totalInput = res.usage.input_tokens;
-    let totalOutput = res.usage.output_tokens;
 
     const reportTitle = String((prompt.reportTemplate as { title?: string })?.title ?? "RAPPORT");
     const title = `${prompt.label} — ${manuscript.title}`;

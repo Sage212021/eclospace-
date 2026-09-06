@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 // renvoie un rapport et un usage de tokens fixes.
 // Capture le dernier « system » reçu par l'API simulée pour vérifier que la
 // structure imposée du rapport est bien transmise à l'IA.
-const sdkCalls: { system?: string; user?: string }[] = [];
+const sdkCalls: { system?: string; user?: string; maxTokens?: number }[] = [];
 // Pilotage du faux client : quand `truncateNext` est vrai, le PROCHAIN appel
 // simule une réponse TRONQUÉE (seulement la 1ʳᵉ rubrique, stop_reason max_tokens)
 // pour vérifier que le moteur relance et complète le rapport (A→M).
@@ -13,10 +13,10 @@ const sdkCtl = { truncateNext: false };
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
-      create: async (args: { system?: string; messages?: { content?: unknown }[] }) => {
+      create: async (args: { system?: string; max_tokens?: number; messages?: { content?: unknown }[] }) => {
         const c = args.messages?.[0]?.content;
         const user = typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (b as { text?: string }).text ?? "").join(" ") : "";
-        sdkCalls.push({ system: args.system, user });
+        sdkCalls.push({ system: args.system, user, maxTokens: args.max_tokens });
         // Reprend TOUTES les rubriques imposées (## X. …) listées dans le prompt
         // système : simule une IA « bien élevée » qui rend un rapport complet.
         const sys = String(args.system ?? "");
@@ -267,6 +267,19 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     const lastUser = sdkCalls[sdkCalls.length - 1]?.user ?? "";
     expect(lastUser).toContain("PASSAGE : BAT2");
     expect(lastUser).toContain("RAPPORT DU BAT PRÉCÉDENT");
+  });
+
+  it("n'appelle JAMAIS l'IA avec un max_tokens au-dessus de la limite du modèle (≤ 8192)", async () => {
+    const res = await app.inject({
+      method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
+      payload: { manuscript_id: manuscriptId, work_type: "evaluation", step_code: "COMITE_LECTURE" },
+    });
+    await waitJob(res.json().jobId);
+    // Un max_tokens trop élevé (ex. 12000) est refusé par l'API (400) et fait
+    // échouer tout le job : on garde la marge de sécurité universelle 8192.
+    for (const call of sdkCalls) {
+      expect(call.maxTokens ?? 0).toBeLessThanOrEqual(8192);
+    }
   });
 
   it("missingSectionKeys repère les rubriques absentes d'un rapport", async () => {

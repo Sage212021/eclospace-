@@ -154,9 +154,12 @@ function fillTemplate(tpl: string, vars: Record<string, string>): string {
   return tpl.replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? "");
 }
 
-// Budget de sortie du rapport. Assez large pour un rapport complet A→M sans
-// troncature (cause n°1 des rapports « sans toutes les parties »).
-const REPORT_MAX_TOKENS = 12000;
+// Budget de sortie PAR APPEL. Volontairement SOUS la limite de sortie des
+// modèles Claude (8192 pour Haiku) : au-delà, l'API rejette la requête (400) et
+// tout le job échoue — l'utilisateur reste alors sur l'ancien rapport tronqué.
+// La complétude A→M n'est PAS assurée par un gros budget (risqué), mais par la
+// boucle de complétion ci-dessous, qui enchaîne plusieurs appels au besoin.
+const REPORT_MAX_TOKENS = 8000;
 
 // Rubriques du gabarit ABSENTES du texte produit. Une rubrique est « présente »
 // si son intitulé de section apparaît (ex. « ## A. … », « **A.** », « A. … » en
@@ -653,32 +656,39 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // rapport partiel (sans renvoyer le manuscrit, pour ne pas payer deux fois).
     // Jusqu'à 2 relances ; on n'échoue jamais (au pire le rapport reste tel quel).
     const sectionKeys = sections.map((s) => s.key);
-    for (let attempt = 0; attempt < 2 && sectionKeys.length > 0; attempt++) {
+    for (let attempt = 0; attempt < 3 && sectionKeys.length > 0; attempt++) {
       const missing = missingSectionKeys(reportText, sectionKeys);
       if (missing.length === 0 && stop !== "max_tokens") break;
       const wanted = missing.length ? missing : sectionKeys;
-      const cont = await client.messages.create({
-        model: modelId,
-        max_tokens: REPORT_MAX_TOKENS,
-        system: systemPrompt,
-        messages: [
-          { role: "user", content: "Tu rédiges le rapport ci-dessous, selon la structure imposée déjà transmise." },
-          { role: "assistant", content: reportText },
-          {
-            role: "user",
-            content:
-              `Le rapport est INCOMPLET : il manque la/les rubrique(s) ${wanted.map((k) => `« ${k} »`).join(", ")}. `
-              + "Rédige-la/les MAINTENANT, dans l'ordre imposé, en reprenant l'intitulé « ## clé. titre », SANS répéter les rubriques déjà rédigées. "
-              + "Chaque rubrique doit apparaître même brièvement : « Néant. » si elle est sans objet.",
-          },
-        ],
-      });
-      totalInput += cont.usage.input_tokens;
-      totalOutput += cont.usage.output_tokens;
-      stop = cont.stop_reason;
-      const contText = textOf(cont.content);
-      if (!contText) break;
-      reportText = `${reportText}\n\n${contText}`;
+      try {
+        const cont = await client.messages.create({
+          model: modelId,
+          max_tokens: REPORT_MAX_TOKENS,
+          system: systemPrompt,
+          messages: [
+            { role: "user", content: "Tu rédiges le rapport ci-dessous, selon la structure imposée déjà transmise." },
+            { role: "assistant", content: reportText },
+            {
+              role: "user",
+              content:
+                `Le rapport est INCOMPLET : il manque la/les rubrique(s) ${wanted.map((k) => `« ${k} »`).join(", ")}. `
+                + "Rédige-la/les MAINTENANT, dans l'ordre imposé, en reprenant l'intitulé « ## clé. titre », SANS répéter les rubriques déjà rédigées. "
+                + "Chaque rubrique doit apparaître même brièvement : « Néant. » si elle est sans objet.",
+            },
+          ],
+        });
+        totalInput += cont.usage.input_tokens;
+        totalOutput += cont.usage.output_tokens;
+        stop = cont.stop_reason;
+        const contText = textOf(cont.content);
+        if (!contText) break;
+        reportText = `${reportText}\n\n${contText}`;
+      } catch {
+        // Une relance qui échoue ne doit PAS faire échouer tout le job : on
+        // conserve le rapport obtenu jusque-là (au pire partiel) plutôt que de
+        // laisser l'utilisateur sur l'ancien rapport.
+        break;
+      }
     }
     if (!reportText) reportText = "Le relecteur n'a produit aucun texte.";
 
@@ -726,12 +736,16 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       const rewriteSystem =
         "Tu es le correcteur du Service de relecture d'Éclosion Édition. On te confie un passage de manuscrit. Renvoie UNIQUEMENT le texte corrigé (orthographe, grammaire, syntaxe, ponctuation, typographie, répétitions), sans aucun commentaire, sans balise, sans note. Conserve strictement le sens, le style de l'auteur, la mise en paragraphes et la structure. Tu ne mentionnes jamais que tu es une intelligence artificielle.";
       const recoPrefix = params.editorRecommendation?.trim() ? `Consigne particulière de l'éditeur : ${params.editorRecommendation.trim()}\n\n` : "";
-      const chunks = chunkText(prepared.text, 12000);
+      // Tranches assez petites pour que le texte corrigé tienne SOUS la limite de
+      // sortie du modèle (8192 pour Haiku) : ~8000 caractères ≈ 2500 tokens, le
+      // corrigé reste bien en deçà de max_tokens. Un max_tokens trop élevé serait
+      // rejeté par l'API (400) et ferait échouer toute la correction.
+      const chunks = chunkText(prepared.text, 8000);
       const correctedParts: string[] = [];
       for (const ch of chunks) {
         const cr = await client.messages.create({
           model: modelId,
-          max_tokens: 16000,
+          max_tokens: REPORT_MAX_TOKENS,
           system: rewriteSystem,
           messages: [{ role: "user", content: recoPrefix + ch }],
         });

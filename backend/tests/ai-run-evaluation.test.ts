@@ -6,6 +6,10 @@ import type { FastifyInstance } from "fastify";
 // Capture le dernier « system » reçu par l'API simulée pour vérifier que la
 // structure imposée du rapport est bien transmise à l'IA.
 const sdkCalls: { system?: string; user?: string }[] = [];
+// Pilotage du faux client : quand `truncateNext` est vrai, le PROCHAIN appel
+// simule une réponse TRONQUÉE (seulement la 1ʳᵉ rubrique, stop_reason max_tokens)
+// pour vérifier que le moteur relance et complète le rapport (A→M).
+const sdkCtl = { truncateNext: false };
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
@@ -13,9 +17,25 @@ vi.mock("@anthropic-ai/sdk", () => {
         const c = args.messages?.[0]?.content;
         const user = typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (b as { text?: string }).text ?? "").join(" ") : "";
         sdkCalls.push({ system: args.system, user });
+        // Reprend TOUTES les rubriques imposées (## X. …) listées dans le prompt
+        // système : simule une IA « bien élevée » qui rend un rapport complet.
+        const sys = String(args.system ?? "");
+        const heads = Array.from(sys.matchAll(/## [0-9A-Za-z]+\.[^\n]*/g)).map((m) => m[0]);
+        if (sdkCtl.truncateNext) {
+          sdkCtl.truncateNext = false;
+          const firstHead = heads[0] ?? "## A. Rubrique";
+          return {
+            model: "claude-haiku-4-5",
+            stop_reason: "max_tokens",
+            content: [{ type: "text", text: `# Rapport d'évaluation\n${firstHead}\nContenu (rapport interrompu ici).` }],
+            usage: { input_tokens: 12000, output_tokens: 8000 },
+          };
+        }
+        const body = heads.length ? heads.map((h) => `${h}\nContenu de la rubrique.`).join("\n\n") : "Synthèse : manuscrit prometteur.";
         return {
           model: "claude-haiku-4-5",
-          content: [{ type: "text", text: "# Rapport d'évaluation\nSynthèse : manuscrit prometteur.\nAvis : Acceptation avec modifications mineures." }],
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: `# Rapport d'évaluation\n${body}\nAvis : Acceptation avec modifications mineures.` }],
           usage: { input_tokens: 12000, output_tokens: 1500 },
         };
       },
@@ -247,6 +267,45 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     const lastUser = sdkCalls[sdkCalls.length - 1]?.user ?? "";
     expect(lastUser).toContain("PASSAGE : BAT2");
     expect(lastUser).toContain("RAPPORT DU BAT PRÉCÉDENT");
+  });
+
+  it("missingSectionKeys repère les rubriques absentes d'un rapport", async () => {
+    const { missingSectionKeys } = await import("../src/lib/aiRunner.js");
+    const rpt = "## A. Titre\ntexte\n## C. Autre\ntexte";
+    expect(missingSectionKeys(rpt, ["A", "B", "C"])).toEqual(["B"]);
+    expect(missingSectionKeys(rpt, ["A", "C"])).toEqual([]);
+  });
+
+  it("complète un rapport tronqué : toutes les rubriques imposées finissent présentes (A→M)", async () => {
+    const { missingSectionKeys } = await import("../src/lib/aiRunner.js");
+    // Gabarit multi-rubriques imposées.
+    await app.inject({
+      method: "PUT", url: "/api/v1/ai-editorial/prompts/evaluation", headers: { cookie: adminCookie },
+      payload: {
+        label: "Évaluation (test complétude)",
+        system_prompt: "Système d'évaluation.",
+        user_template: "Manuscrit : {{manuscrit}}",
+        report_template: {
+          title: "RAPPORT D'ÉVALUATION DE MANUSCRIT",
+          sections: [
+            { key: "A", title: "Identification" }, { key: "B", title: "Synthèse" }, { key: "C", title: "Grille" },
+            { key: "D", title: "Score global" }, { key: "M", title: "Avis final" },
+          ],
+        },
+      },
+    });
+    const before = sdkCalls.length;
+    sdkCtl.truncateNext = true; // le 1ᵉʳ appel simulera une réponse tronquée (rubrique A seule)
+    const res = await app.inject({
+      method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
+      payload: { manuscript_id: manuscriptId, work_type: "evaluation", step_code: "COMITE_LECTURE" },
+    });
+    const job = await waitJob(res.json().jobId);
+    const stored = await prisma.aiReadingJob.findUniqueOrThrow({ where: { id: job.id } });
+    // Malgré la troncature initiale, TOUTES les rubriques sont présentes.
+    expect(missingSectionKeys(stored.reportText ?? "", ["A", "B", "C", "D", "M"])).toEqual([]);
+    // Au moins 2 appels IA pour ce job : la réponse tronquée + une complétion.
+    expect(sdkCalls.length - before).toBeGreaterThanOrEqual(2);
   });
 
   it("extrait le texte d'un PDF (permet les PDF de plus de 100 pages)", async () => {

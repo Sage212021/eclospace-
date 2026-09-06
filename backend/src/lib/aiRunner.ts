@@ -172,6 +172,24 @@ export function missingSectionKeys(reportText: string, keys: string[]): string[]
   });
 }
 
+// Index (dans `text`) du PREMIER intitulé de rubrique parmi `keys`. Sert à ne
+// garder, dans une complétion, que le contenu À PARTIR de la rubrique demandée —
+// et à jeter tout préambule/« méta » que l'IA aurait ajouté avant (ce qui
+// trahirait une rédaction par IA). Renvoie -1 si aucune rubrique demandée.
+export function firstSectionHeadingIndex(text: string, keys: string[]): number {
+  let best = -1;
+  for (const k of keys) {
+    const esc = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(^|\\n)(\\s*(?:#{1,6}\\s*)?\\*{0,2}\\s*${esc}\\s*[.)])`, "i");
+    const m = re.exec(text);
+    if (m) {
+      const idx = m.index + (m[1] ? m[1].length : 0);
+      if (best < 0 || idx < best) best = idx;
+    }
+  }
+  return best;
+}
+
 // Borne de sécurité du texte de manuscrit envoyé à l'IA : la fenêtre de contexte
 // est limitée (≈ 200 000 tokens). Au-delà du budget, on envoie un EXTRAIT
 // REPRÉSENTATIF (début + milieu + fin) plutôt que d'échouer — suffisant pour une
@@ -666,20 +684,23 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // Coût cumulé sur tous les appels (rapport + complétions + éventuelle réécriture).
     let totalInput = first.usage.input_tokens;
     let totalOutput = first.usage.output_tokens;
-    let stop: string | null = first.stop_reason;
 
     // GARANTIE DE COMPLÉTUDE : le rapport doit contenir TOUTES les rubriques du
-    // gabarit (ex. évaluation : A → M). Une réponse tronquée (limite de tokens)
-    // ou une rubrique oubliée laisserait un rapport incomplet — c'est justement
-    // ce qui produisait des rapports « sans toutes les parties ». On relance alors
-    // l'IA pour qu'elle rédige LES RUBRIQUES MANQUANTES, à partir de son propre
-    // rapport partiel (sans renvoyer le manuscrit, pour ne pas payer deux fois).
-    // Jusqu'à 2 relances ; on n'échoue jamais (au pire le rapport reste tel quel).
+    // gabarit (ex. évaluation : A → M). Si une rubrique est réellement ABSENTE
+    // (oubliée, ou coupée par la limite de tokens AVANT d'être atteinte), on
+    // relance l'IA pour qu'elle rédige UNIQUEMENT les rubriques manquantes.
+    //
+    // ⚠️ On ne relance JAMAIS quand toutes les rubriques sont présentes — même si
+    // la toute dernière phrase est coupée : sinon l'IA, ne voyant rien à ajouter,
+    // « répond » (« je confirme que les 13 rubriques figurent… ») et ce bavardage,
+    // qui TRAHIRAIT une rédaction par IA, se retrouverait dans le rapport destiné
+    // à l'auteur. La complétion ne demande que les rubriques manquantes, sans
+    // aucun préambule, et tout texte produit avant la 1ʳᵉ rubrique demandée est
+    // écarté par sécurité.
     const sectionKeys = sections.map((s) => s.key);
     for (let attempt = 0; attempt < 3 && sectionKeys.length > 0; attempt++) {
       const missing = missingSectionKeys(reportText, sectionKeys);
-      if (missing.length === 0 && stop !== "max_tokens") break;
-      const wanted = missing.length ? missing : sectionKeys;
+      if (missing.length === 0) break; // rapport complet → on ne relance pas
       try {
         const cont = await client.messages.create({
           model: modelId,
@@ -691,16 +712,22 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
             {
               role: "user",
               content:
-                `Le rapport est INCOMPLET : il manque la/les rubrique(s) ${wanted.map((k) => `« ${k} »`).join(", ")}. `
-                + "Rédige-la/les MAINTENANT, dans l'ordre imposé, en reprenant l'intitulé « ## clé. titre », SANS répéter les rubriques déjà rédigées. "
-                + "Chaque rubrique doit apparaître même brièvement : « Néant. » si elle est sans objet.",
+                `Il manque la/les rubrique(s) ${missing.map((k) => `« ${k} »`).join(", ")}. `
+                + "Réponds UNIQUEMENT avec le contenu de ces rubriques, en COMMENÇANT DIRECTEMENT par « ## clé. titre », dans l'ordre. "
+                + "AUCUNE phrase d'introduction, AUCUN commentaire, ne confirme rien, n'évoque JAMAIS ce message, une vérification, un contrôle ou une intelligence artificielle. "
+                + "Ne répète pas les rubriques déjà rédigées ; « Néant. » si une rubrique est sans objet.",
             },
           ],
         });
         totalInput += cont.usage.input_tokens;
         totalOutput += cont.usage.output_tokens;
-        stop = cont.stop_reason;
-        const contText = textOf(cont.content);
+        let contText = textOf(cont.content);
+        // On ne garde que le texte À PARTIR de la 1ʳᵉ rubrique demandée : tout
+        // préambule/« méta » éventuel est jeté. Aucune rubrique produite → on
+        // n'ajoute rien (évite de coller un commentaire au rapport).
+        const idx = firstSectionHeadingIndex(contText, missing);
+        if (idx < 0) break;
+        contText = contText.slice(idx).trim();
         if (!contText) break;
         reportText = `${reportText}\n\n${contText}`;
       } catch {

@@ -7,6 +7,7 @@ import {
   createAccessReview,
   createEmployee,
   decideAbsence,
+  notifyAbsenceDecision,
   decideAccessReviewItem,
   getEmployeeConfidential,
   grantRole,
@@ -36,6 +37,7 @@ import {
   type EmployeeStatus,
   type RoleSummary,
 } from "../api/client";
+import { buildAbsenceNoticePdf, absenceNoticeFileName } from "../lib/absenceNoticePdf";
 import { Card } from "../components/Card";
 import { StandardActionBar } from "../components/StandardActionBar";
 import { OrgChart } from "../components/OrgChart";
@@ -128,7 +130,7 @@ type HrModal =
       linkUserId?: string;
       linkUsername?: string;
     }
-  | { kind: "mobility"; employee: Employee; firstName: string; lastName: string; position: string; departmentId: string; managerId: string; hireDate: string; birthDate: string; maritalStatus: string; childrenCount: string; phone: string; emergencyContact: string; niu: string; leaveTaken: string }
+  | { kind: "mobility"; employee: Employee; firstName: string; lastName: string; position: string; departmentId: string; managerId: string; hireDate: string; birthDate: string; maritalStatus: string; childrenCount: string; phone: string; email: string; emergencyContact: string; niu: string; leaveTaken: string }
   | { kind: "departure"; employee: Employee; date: string }
   | { kind: "view-confidential"; employee: Employee; baseSalary: string; notes: string }
   | { kind: "edit-confidential"; employee: Employee; baseSalary: string }
@@ -270,6 +272,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
         marital_status: modal.maritalStatus.trim() || null,
         children_count: modal.childrenCount.trim() !== "" ? Math.max(Number(modal.childrenCount) || 0, 0) : null,
         phone: modal.phone.trim() || null,
+        email: modal.email.trim() || null,
         emergency_contact: modal.emergencyContact.trim() || null,
         niu: modal.niu.trim() || null,
         leave_taken_days: modal.leaveTaken.trim() !== "" ? Math.max(Number(modal.leaveTaken) || 0, 0) : null,
@@ -358,6 +361,27 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   async function handleDecideAbsence(absence: Absence, decision: "validee" | "refusee") {
     try { await decideAbsence(absence.id, decision); setMessage(decision === "validee" ? t("hr.msg.absence_approved", "Absence validée.") : t("hr.msg.absence_rejected", "Absence refusée.")); await refresh(); } catch (err) { fail(err, "Échec de la décision."); }
   }
+  // Notification de décision : PDF à en-tête Éclosion, à télécharger ou à
+  // envoyer par e-mail au salarié (via son adresse de contact).
+  function downloadAbsenceNotice(absence: Absence) {
+    const blob = buildAbsenceNoticePdf(absence);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = absenceNoticeFileName(absence); link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function sendAbsenceNotice(absence: Absence) {
+    try {
+      const blob = buildAbsenceNoticePdf(absence);
+      const b64 = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onloadend = () => { const s = String(r.result); resolve(s.slice(s.indexOf(",") + 1)); };
+        r.onerror = reject; r.readAsDataURL(blob);
+      });
+      const res = await notifyAbsenceDecision(absence.id, { pdf_base64: b64, file_name: absenceNoticeFileName(absence) });
+      setMessage(`Notification envoyée à ${res.to}.`);
+    } catch (err) { fail(err, "Envoi de la notification impossible."); }
+  }
   async function handleDecideReviewItem(item: AccessReviewItem, decision: "confirme" | "anomalie_signalee") {
     try { await decideAccessReviewItem(item.id, decision); setMessage(t("hr.msg.decision_saved", "Décision enregistrée.")); setReviewItems(await listAccessReviewItems(selectedReviewId)); } catch (err) { fail(err, "Échec de l'enregistrement."); }
   }
@@ -442,7 +466,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                   <StandardActionBar onPrint={() => printEmployeeFiche(employee)} />
                   <Button variant="view" size="sm" onClick={() => setContractsFor(employee)}>{t("hr.contracts", "Contrats")}</Button>
                   <Button variant="view" size="sm" onClick={() => setEvalFor(employee)}>{t("hr.evaluation", "Évaluation")}</Button>
-                  {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, firstName: employee.firstName, lastName: employee.lastName, position: employee.position ?? "", departmentId: employee.department?.id ?? "", managerId: employee.manager?.id ?? "", hireDate: employee.hireDate ? employee.hireDate.slice(0, 10) : "", birthDate: employee.birthDate ? employee.birthDate.slice(0, 10) : "", maritalStatus: employee.maritalStatus ?? "", childrenCount: employee.childrenCount != null ? String(employee.childrenCount) : "", phone: employee.phone ?? "", emergencyContact: employee.emergencyContact ?? "", niu: employee.niu ?? "", leaveTaken: employee.leaveTakenDays != null ? String(employee.leaveTakenDays) : "" })}>{t("hr.edit_file", "Modifier la fiche")}</Button>}
+                  {canManage && <Button variant="view" size="sm" onClick={() => setModal({ kind: "mobility", employee, firstName: employee.firstName, lastName: employee.lastName, position: employee.position ?? "", departmentId: employee.department?.id ?? "", managerId: employee.manager?.id ?? "", hireDate: employee.hireDate ? employee.hireDate.slice(0, 10) : "", birthDate: employee.birthDate ? employee.birthDate.slice(0, 10) : "", maritalStatus: employee.maritalStatus ?? "", childrenCount: employee.childrenCount != null ? String(employee.childrenCount) : "", phone: employee.phone ?? "", email: employee.email ?? "", emergencyContact: employee.emergencyContact ?? "", niu: employee.niu ?? "", leaveTaken: employee.leaveTakenDays != null ? String(employee.leaveTakenDays) : "" })}>{t("hr.edit_file", "Modifier la fiche")}</Button>}
                   {canAdminister && !employee.departureDate && <Button variant="view" size="sm" onClick={() => setModal({ kind: "departure", employee, date: new Date().toISOString().slice(0, 10) })}>{t("hr.departure_btn", "Départ")}</Button>}
                   {canAdminister && employee.user?.status === "active" && <Button variant="danger" size="sm" onClick={() => handleSuspend(employee)}>{t("hr.suspend", "Suspendre")}</Button>}
                   {canAdminister && employee.user?.status === "suspended" && <Button variant="add" size="sm" onClick={() => handleReinstate(employee)}>{t("hr.reinstate", "Réactiver")}</Button>}
@@ -575,6 +599,18 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                       )}
                     </div>
                     {absence.reason && <div style={{ marginTop: 6 }}><b>Précisions :</b> {absence.reason}</div>}
+                    {/* Notification de décision : document à en-tête Éclosion, à
+                        télécharger (PDF) ou à envoyer par e-mail au salarié. */}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, paddingTop: 8, borderTop: "1px dashed var(--line)", alignItems: "center" }}>
+                      <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Notification au salarié :</span>
+                      <Button variant="view" size="sm" onClick={() => downloadAbsenceNotice(absence)}>📄 Générer le PDF</Button>
+                      {canValidateAbsence && (
+                        <Button variant="add" size="sm" onClick={() => sendAbsenceNotice(absence)}>📤 Envoyer au salarié</Button>
+                      )}
+                      <span style={{ fontSize: 11, color: emp?.email ? "var(--muted)" : "var(--alert)" }}>
+                        {emp?.email ? `→ ${emp.email}` : "Aucun e-mail sur la fiche salarié"}
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -773,6 +809,7 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Field label={t("hr.phone", "Téléphone")}><input value={modal.phone} onChange={(e) => setModal({ ...modal, phone: e.target.value })} /></Field>
+            <Field label={t("hr.email", "E-mail (pour les notifications RH)")}><input type="email" value={modal.email} onChange={(e) => setModal({ ...modal, email: e.target.value })} placeholder={t("hr.email_hint", "adresse@exemple.com")} /></Field>
             <Field label={t("hr.emergency_contact", "Numéro d'urgence (personne à prévenir)")}><input value={modal.emergencyContact} onChange={(e) => setModal({ ...modal, emergencyContact: e.target.value })} placeholder={t("hr.emergency_hint", "Ex. Nom + téléphone")} /></Field>
             <Field label={t("hr.niu", "NIU (identifiant fiscal)")}><input value={modal.niu} onChange={(e) => setModal({ ...modal, niu: e.target.value })} placeholder={t("hr.niu_hint", "Numéro d'identifiant unique")} /></Field>
             <Field label={t("hr.leave_taken", "Jours de congés pris (cumul)")}><input type="number" min={0} step={0.5} value={modal.leaveTaken} onChange={(e) => setModal({ ...modal, leaveTaken: e.target.value })} /></Field>

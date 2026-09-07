@@ -74,6 +74,9 @@ model Employee {
   maritalStatus    String?        @map("marital_status")
   childrenCount    Int?           @map("children_count")
   phone            String?
+  // E-mail de contact du salarié (facultatif ; distinct d'un éventuel compte
+  // utilisateur) — sert à lui adresser la notification de décision d'absence.
+  email            String?
   // Personne / numéro à prévenir en cas d'urgence — figure sur le bulletin de paie.
   emergencyContact String?        @map("emergency_contact")
   // NIU (numéro d'identifiant unique / identifiant fiscal) de l'employé — saisi

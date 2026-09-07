@@ -108,6 +108,29 @@ describe("catalogue des motifs d'absence", () => {
     expect(row.status).toBe("validee");
   });
 
+  it("la fiche salarié accepte un e-mail de contact, exposé sur la liste des absences", async () => {
+    const empRes = await app.inject({ method: "POST", url: "/api/v1/employees", headers: { cookie }, payload: { first_name: "Mail", last_name: `Test${rnd()}`, email: "salarie.test@example.com" } });
+    const emp2 = empRes.json().id as string;
+    const abs = await app.inject({ method: "POST", url: "/api/v1/absences", headers: { cookie }, payload: { employee_id: emp2, type: "permission", reason_code: "permission_personnelle", from_date: "2027-02-01T00:00:00.000Z", to_date: "2027-02-01T00:00:00.000Z" } });
+    const list = (await app.inject({ method: "GET", url: "/api/v1/absences", headers: { cookie } })).json() as Array<{ id: string; employee?: { email?: string | null } | null }>;
+    const row = list.find((a) => a.id === abs.json().id)!;
+    expect(row.employee?.email).toBe("salarie.test@example.com");
+  });
+
+  it("la notification de décision refuse sans destinataire, puis signale l'e-mail non configuré", async () => {
+    // Employé SANS e-mail (créé au beforeAll) → pas de destinataire.
+    const abs = await app.inject({ method: "POST", url: "/api/v1/absences", headers: { cookie }, payload: { employee_id: employeeId, type: "permission", reason_code: "permission_personnelle", from_date: "2027-03-01T00:00:00.000Z", to_date: "2027-03-01T00:00:00.000Z" } });
+    const absId = abs.json().id as string;
+    const noRecipient = await app.inject({ method: "POST", url: `/api/v1/absences/${absId}/notify`, headers: { cookie }, payload: { pdf_base64: "QUFBQUFBQUE=" } });
+    expect(noRecipient.statusCode).toBe(409);
+    expect(noRecipient.json().code).toBe("no_recipient");
+    // Avec un destinataire explicite : la messagerie n'étant pas configurée en
+    // test, on obtient une 503 claire (et non un envoi silencieusement perdu).
+    const notConfigured = await app.inject({ method: "POST", url: `/api/v1/absences/${absId}/notify`, headers: { cookie }, payload: { pdf_base64: "QUFBQUFBQUE=", to: "dest@example.com" } });
+    expect(notConfigured.statusCode).toBe(503);
+    expect(notConfigured.json().code).toBe("email_not_configured");
+  });
+
   it("le paramétrage d'un motif est modifiable (règles) et pris en compte", async () => {
     // On rend la « permission personnelle » non payée + retenue de paie.
     const put = await app.inject({ method: "PATCH", url: "/api/v1/absence-reasons/permission_personnelle", headers: { cookie }, payload: { paid: false, payroll_deductible: true } });

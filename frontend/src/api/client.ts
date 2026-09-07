@@ -3489,6 +3489,7 @@ export interface Employee {
   maritalStatus: string | null;
   childrenCount: number | null;
   phone: string | null;
+  email: string | null;
   emergencyContact: string | null;
   niu: string | null;
   leaveTakenDays: string | null;
@@ -3807,6 +3808,7 @@ export function createEmployee(input: {
   marital_status?: string;
   children_count?: number;
   phone?: string;
+  email?: string;
   emergency_contact?: string;
   niu?: string;
   leave_taken_days?: number;
@@ -3817,8 +3819,14 @@ export function createEmployee(input: {
   return request<Employee>("/api/v1/employees", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateEmployee(id: string, input: Partial<{ first_name: string; last_name: string; hire_date: string | null; department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null; marital_status: string | null; children_count: number | null; phone: string | null; emergency_contact: string | null; niu: string | null; leave_taken_days: number | null }>) {
+export function updateEmployee(id: string, input: Partial<{ first_name: string; last_name: string; hire_date: string | null; department_id: string | null; status: EmployeeStatus; position: string; manager_id: string | null; birth_date: string | null; marital_status: string | null; children_count: number | null; phone: string | null; email: string | null; emergency_contact: string | null; niu: string | null; leave_taken_days: number | null }>) {
   return request<Employee>(`/api/v1/employees/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+// Notification de décision d'absence au salarié : le navigateur envoie le PDF
+// (base64) ; l'ERP l'expédie par e-mail à l'adresse de contact du salarié.
+export function notifyAbsenceDecision(id: string, input: { pdf_base64: string; to?: string; subject?: string; message?: string; file_name?: string }) {
+  return request<{ sent: true; to: string; employee: string }>(`/api/v1/absences/${id}/notify`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export function setEmployeeDeparture(id: string, date: string) {
@@ -4075,7 +4083,7 @@ export interface AbsenceReason {
 export interface Absence {
   id: string;
   employeeId: string;
-  employee?: { id: string; firstName: string; lastName: string; position: string | null } | null;
+  employee?: { id: string; firstName: string; lastName: string; position: string | null; email?: string | null } | null;
   type: AbsenceType;
   reasonCode: string | null;
   reasonRef?: AbsenceReason | null;

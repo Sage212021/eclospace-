@@ -5,6 +5,7 @@ import { EmployeeStatus, HrContractType, AbsenceType, AbsenceStatus, AccessRevie
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { isMailConfigured, sendMail } from "../lib/mailer.js";
 import { activityClosureStatus, sweepClosureReminders, sendClosureReminderNow } from "../lib/activityClosure.js";
 
 const employeeSchema = z.object({
@@ -19,6 +20,9 @@ const employeeSchema = z.object({
   marital_status: z.string().max(60).optional(),
   children_count: z.number().int().min(0).max(30).optional(),
   phone: z.string().max(40).optional(),
+  // E-mail de CONTACT du salarié (distinct de l'éventuel compte utilisateur) —
+  // sert notamment à lui envoyer la notification de décision d'absence.
+  email: z.string().email().or(z.literal("")).optional(),
   emergency_contact: z.string().max(120).optional(),
   niu: z.string().max(40).optional(),
   leave_taken_days: z.number().min(0).max(400).optional(),
@@ -54,6 +58,7 @@ const employeeUpdateSchema = z.object({
   marital_status: z.string().max(60).nullable().optional(),
   children_count: z.number().int().min(0).max(30).nullable().optional(),
   phone: z.string().max(40).nullable().optional(),
+  email: z.string().email().or(z.literal("")).nullable().optional(),
   emergency_contact: z.string().max(120).nullable().optional(),
   niu: z.string().max(40).nullable().optional(),
   leave_taken_days: z.number().min(0).max(400).nullable().optional(),
@@ -177,6 +182,7 @@ export default async function hrRoutes(fastify: FastifyInstance) {
           maritalStatus: body.marital_status,
           childrenCount: body.children_count,
           phone: body.phone,
+          email: body.email || null,
           emergencyContact: body.emergency_contact,
           niu: body.niu,
           leaveTakenDays: body.leave_taken_days,
@@ -292,6 +298,7 @@ export default async function hrRoutes(fastify: FastifyInstance) {
         ...(parsed.data.marital_status !== undefined ? { maritalStatus: parsed.data.marital_status } : {}),
         ...(parsed.data.children_count !== undefined ? { childrenCount: parsed.data.children_count } : {}),
         ...(parsed.data.phone !== undefined ? { phone: parsed.data.phone } : {}),
+        ...(parsed.data.email !== undefined ? { email: parsed.data.email || null } : {}),
         ...(parsed.data.emergency_contact !== undefined ? { emergencyContact: parsed.data.emergency_contact } : {}),
         ...(parsed.data.niu !== undefined ? { niu: parsed.data.niu } : {}),
         ...(parsed.data.leave_taken_days !== undefined ? { leaveTakenDays: parsed.data.leave_taken_days } : {}),
@@ -1233,7 +1240,7 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       },
       // Le SALARIÉ demandeur doit rester lié à la demande, quel que soit son
       // statut (traçabilité RH) : on renvoie son identité avec chaque ligne.
-      include: { reasonRef: true, employee: { select: { id: true, firstName: true, lastName: true, position: true } } },
+      include: { reasonRef: true, employee: { select: { id: true, firstName: true, lastName: true, position: true, email: true } } },
       orderBy: { fromDate: "desc" },
     });
     // Nom du validateur (approvedBy est un identifiant utilisateur) + référence
@@ -1316,6 +1323,56 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       }
     }
     return reply.send(updated);
+  });
+
+  // Notification de décision d'absence/permission au salarié : le navigateur
+  // produit le PDF (en-tête Éclosion) et le transmet ici en base64 ; l'ERP
+  // l'envoie par e-mail à l'adresse de contact du salarié (ou à `to`). Tracé.
+  fastify.post("/api/v1/absences/:id/notify", { preHandler: requirePermission("rh", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z
+      .object({
+        pdf_base64: z.string().min(10),
+        to: z.string().email().optional(),
+        subject: z.string().max(300).optional(),
+        message: z.string().max(8000).optional(),
+        file_name: z.string().max(200).optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+
+    const absence = await prisma.absence.findUnique({ where: { id }, include: { employee: { select: { firstName: true, lastName: true, email: true } }, reasonRef: { select: { label: true } } } });
+    if (!absence) return reply.code(404).send({ code: "not_found", message: "Demande d'absence introuvable." });
+
+    const to = parsed.data.to?.trim() || absence.employee?.email || null;
+    if (!to) {
+      return reply.code(409).send({ code: "no_recipient", message: "Aucune adresse e-mail pour ce salarié. Renseignez son e-mail sur sa fiche, ou saisissez une adresse de destination." });
+    }
+    if (!isMailConfigured()) {
+      return reply.code(503).send({ code: "email_not_configured", message: "L'envoi d'e-mail n'est pas configuré sur ce serveur. Téléchargez la notification (PDF) et transmettez-la manuellement." });
+    }
+
+    const who = absence.employee ? `${absence.employee.firstName} ${absence.employee.lastName}` : "le salarié";
+    const label = absence.reasonRef?.label ?? "absence";
+    const statutTxt = absence.status === "validee" ? "approuvée" : absence.status === "refusee" ? "refusée" : "en cours de traitement";
+    const subject = parsed.data.subject?.trim() || `Notification de décision — ${label}`;
+    const text = parsed.data.message?.trim()
+      || `Bonjour,\n\nVeuillez trouver ci-joint la notification concernant votre demande de ${label} : demande ${statutTxt}.\n\nCordialement,\nRessources humaines — Éclosion Édition`;
+
+    try {
+      const buffer = Buffer.from(parsed.data.pdf_base64, "base64");
+      const ok = await sendMail({
+        to,
+        subject,
+        text,
+        attachments: [{ filename: parsed.data.file_name?.trim() || `Notification-${id.slice(0, 8)}.pdf`, content: buffer, contentType: "application/pdf" }],
+      });
+      if (!ok) return reply.code(502).send({ code: "email_failed", message: "L'e-mail n'a pas pu être envoyé (serveur de messagerie indisponible). Réessayez ou transmettez le PDF manuellement." });
+    } catch {
+      return reply.code(502).send({ code: "email_failed", message: "L'e-mail n'a pas pu être envoyé." });
+    }
+    await writeAuditLog({ userId: request.user!.id, action: "export", entityType: "absence", entityId: id, newValues: { notified_to: to, status: absence.status }, ipAddress: request.ip });
+    return reply.send({ sent: true, to, employee: who });
   });
 
   // Catalogue des motifs d'absence (intégration des types du droit du travail).

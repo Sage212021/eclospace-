@@ -1264,6 +1264,9 @@ async function main() {
     { code: "felicitation", label: "Félicitations", sortOrder: 70 },
     { code: "anniversaire", label: "Anniversaire", sortOrder: 80 },
     { code: "arrivee_depart", label: "Arrivée / Départ", sortOrder: 90 },
+    // Nouveautés & améliorations du logiciel, à annoncer aux utilisateurs des
+    // pôles concernés (ciblage par département/pôle ou par rôle à la publication).
+    { code: "nouveaute_logiciel", label: "Nouveauté du logiciel", sortOrder: 95 },
     { code: "info_generale", label: "Information générale", sortOrder: 100 },
   ];
   for (const cat of announcementCategories) {

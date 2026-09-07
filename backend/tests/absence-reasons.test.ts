@@ -86,6 +86,28 @@ describe("catalogue des motifs d'absence", () => {
     expect(notif).toBeTruthy();
   });
 
+  it("la liste des absences conserve l'identité du salarié, la référence et le validateur", async () => {
+    const perm = await app.inject({
+      method: "POST", url: "/api/v1/absences", headers: { cookie },
+      payload: { employee_id: employeeId, type: "permission", reason_code: "permission_personnelle", from_date: "2027-01-04T00:00:00.000Z", to_date: "2027-01-04T00:00:00.000Z", reason: "Rendez-vous personnel" },
+    });
+    const permId = perm.json().id as string;
+    await app.inject({ method: "PATCH", url: `/api/v1/absences/${permId}/decide`, headers: { cookie }, payload: { decision: "validee" } });
+
+    const list = (await app.inject({ method: "GET", url: "/api/v1/absences", headers: { cookie } })).json() as Array<{
+      id: string; employee?: { firstName: string; lastName: string } | null; reference?: string; approvedByName?: string | null; status: string; approvedAt?: string | null;
+    }>;
+    const row = list.find((a) => a.id === permId)!;
+    // Le nom du salarié demandeur est bien renvoyé, même après validation.
+    expect(row.employee?.firstName).toBe("Abs");
+    // Référence lisible et stable de la demande (préfixe selon le type).
+    expect(row.reference).toMatch(/^PERM-20\d\d-[0-9A-F]{5}$/);
+    // Le validateur (compte admin) et la date de décision sont exposés.
+    expect(row.approvedByName).toBe("admin");
+    expect(row.approvedAt).toBeTruthy();
+    expect(row.status).toBe("validee");
+  });
+
   it("le paramétrage d'un motif est modifiable (règles) et pris en compte", async () => {
     // On rend la « permission personnelle » non payée + retenue de paie.
     const put = await app.inject({ method: "PATCH", url: "/api/v1/absence-reasons/permission_personnelle", headers: { cookie }, payload: { paid: false, payroll_deductible: true } });

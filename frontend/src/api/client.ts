@@ -4075,6 +4075,7 @@ export interface AbsenceReason {
 export interface Absence {
   id: string;
   employeeId: string;
+  employee?: { id: string; firstName: string; lastName: string; position: string | null } | null;
   type: AbsenceType;
   reasonCode: string | null;
   reasonRef?: AbsenceReason | null;
@@ -4082,6 +4083,11 @@ export interface Absence {
   toDate: string;
   status: AbsenceStatus;
   reason: string | null;
+  approvedBy?: string | null;
+  approvedByName?: string | null;
+  approvedAt?: string | null;
+  createdAt?: string | null;
+  reference?: string | null;
 }
 
 export function createAbsence(input: { employee_id: string; type: AbsenceType; reason_code?: string; from_date: string; to_date: string; reason?: string }) {

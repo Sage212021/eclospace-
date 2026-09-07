@@ -1231,10 +1231,28 @@ export default async function hrRoutes(fastify: FastifyInstance) {
         ...(query.employee_id ? { employeeId: query.employee_id } : {}),
         ...(query.status ? { status: query.status as AbsenceStatus } : {}),
       },
-      include: { reasonRef: true },
+      // Le SALARIÉ demandeur doit rester lié à la demande, quel que soit son
+      // statut (traçabilité RH) : on renvoie son identité avec chaque ligne.
+      include: { reasonRef: true, employee: { select: { id: true, firstName: true, lastName: true, position: true } } },
       orderBy: { fromDate: "desc" },
     });
-    return reply.send(absences);
+    // Nom du validateur (approvedBy est un identifiant utilisateur) + référence
+    // lisible et stable de la demande, pour l'historique et la fiche détail.
+    const approverIds = [...new Set(absences.map((a) => a.approvedBy).filter((v): v is string => !!v))];
+    const approvers = approverIds.length
+      ? await prisma.user.findMany({ where: { id: { in: approverIds } }, select: { id: true, username: true } })
+      : [];
+    const approverName = new Map(approvers.map((u) => [u.id, u.username]));
+    const PREFIX: Record<string, string> = {
+      permission: "PERM", conge: "CONGE", maladie: "MAL", mission: "MIS",
+      teletravail: "TT", suspension: "SUSP", injustifiee: "ABS",
+    };
+    const withMeta = absences.map((a) => ({
+      ...a,
+      approvedByName: a.approvedBy ? approverName.get(a.approvedBy) ?? null : null,
+      reference: `${PREFIX[a.type] ?? "ABS"}-${a.createdAt.getUTCFullYear()}-${a.id.replace(/-/g, "").slice(0, 5).toUpperCase()}`,
+    }));
+    return reply.send(withMeta);
   });
 
   // Circuit demandeur → responsable (Ch. 19 §19.5) : seul un "conge" validé

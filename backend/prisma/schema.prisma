@@ -1505,6 +1505,26 @@ model Notification {
   @@map("notifications")
 }
 
+// « Quoi de neuf » — note de version publiée par le développeur à chaque mise à
+// jour d'un pôle. Au déploiement (seed du postdeploy), chaque note non encore
+// distribuée génère UNE notification (cloche) pour chaque utilisateur concerné
+// (par pôle/département, par rôle, ou pour tous). `slug` unique = idempotence :
+// une note n'est distribuée qu'UNE fois, quels que soient les redéploiements.
+model ReleaseNote {
+  id              String    @id @default(uuid())
+  slug            String    @unique
+  version         String
+  title           String
+  body            String
+  audienceAll     Boolean   @default(false) @map("audience_all")
+  departmentCodes String[]  @map("department_codes")
+  roleCodes       String[]  @map("role_codes")
+  dispatchedAt    DateTime? @map("dispatched_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("release_notes")
+}
+
 enum DocumentCategory {
   manuscrit
   rapport_lecture

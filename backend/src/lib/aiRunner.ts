@@ -699,22 +699,46 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     let totalInput = first.usage.input_tokens;
     let totalOutput = first.usage.output_tokens;
 
-    // GARANTIE DE COMPLÉTUDE : le rapport doit contenir TOUTES les rubriques du
-    // gabarit (ex. évaluation : A → M). Si une rubrique est réellement ABSENTE
-    // (oubliée, ou coupée par la limite de tokens AVANT d'être atteinte), on
-    // relance l'IA pour qu'elle rédige UNIQUEMENT les rubriques manquantes.
+    // GARANTIE DE COMPLÉTUDE — le rapport doit aller entièrement de la première à
+    // la dernière rubrique (ex. A → M), y compris la conclusion (M) rédigée en
+    // ENTIER, sans jamais laisser paraître qu'il est généré par IA.
     //
-    // ⚠️ On ne relance JAMAIS quand toutes les rubriques sont présentes — même si
-    // la toute dernière phrase est coupée : sinon l'IA, ne voyant rien à ajouter,
-    // « répond » (« je confirme que les 13 rubriques figurent… ») et ce bavardage,
-    // qui TRAHIRAIT une rédaction par IA, se retrouverait dans le rapport destiné
-    // à l'auteur. La complétion ne demande que les rubriques manquantes, sans
-    // aucun préambule, et tout texte produit avant la 1ʳᵉ rubrique demandée est
-    // écarté par sécurité.
+    // (1) CONTINUATION PAR « PRÉFIXE ASSISTANT » : tant que la réponse est tronquée
+    // par la limite de tokens, on rappelle l'IA en lui redonnant SON propre texte
+    // partiel comme début de réponse — l'API le POURSUIT exactement là où il s'est
+    // arrêté. Aucune phrase d'introduction, aucun « méta » (« je confirme que… »)
+    // n'est donc possible : c'est la même rédaction qui continue. On finit ainsi
+    // les rubriques coupées (dont M) proprement. Bornage à 4 relances.
     const sectionKeys = sections.map((s) => s.key);
-    for (let attempt = 0; attempt < 3 && sectionKeys.length > 0; attempt++) {
+    let stop: string | null = first.stop_reason;
+    for (let i = 0; i < 4 && stop === "max_tokens"; i++) {
+      try {
+        const cont = await client.messages.create({
+          model: modelId,
+          max_tokens: REPORT_MAX_TOKENS,
+          system: systemPrompt,
+          messages: [
+            { role: "user", content },
+            { role: "assistant", content: reportText },
+          ],
+        });
+        totalInput += cont.usage.input_tokens;
+        totalOutput += cont.usage.output_tokens;
+        stop = cont.stop_reason;
+        const contText = textOf(cont.content);
+        if (!contText) break;
+        reportText += contText; // poursuite directe (pas de séparateur : même texte)
+      } catch {
+        break; // une relance qui échoue ne doit pas faire échouer tout le job
+      }
+    }
+
+    // (2) FILET DE SÉCURITÉ : si une rubrique manque encore (le modèle a « terminé »
+    // sans la rédiger), on la réclame explicitement — en ne conservant que le texte
+    // À PARTIR de la 1ʳᵉ rubrique demandée (tout préambule/« méta » est écarté).
+    for (let guard = 0; guard < 2 && sectionKeys.length > 0; guard++) {
       const missing = missingSectionKeys(reportText, sectionKeys);
-      if (missing.length === 0) break; // rapport complet → on ne relance pas
+      if (missing.length === 0) break;
       try {
         const cont = await client.messages.create({
           model: modelId,
@@ -728,7 +752,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
               content:
                 `Il manque la/les rubrique(s) ${missing.map((k) => `« ${k} »`).join(", ")}. `
                 + "Réponds UNIQUEMENT avec le contenu de ces rubriques, en COMMENÇANT DIRECTEMENT par « ## clé. titre », dans l'ordre. "
-                + "AUCUNE phrase d'introduction, AUCUN commentaire, ne confirme rien, n'évoque JAMAIS ce message, une vérification, un contrôle ou une intelligence artificielle. "
+                + "AUCUNE phrase d'introduction, AUCUN commentaire, ne confirme rien, n'évoque JAMAIS ce message, une vérification ou une intelligence artificielle. "
                 + "Ne répète pas les rubriques déjà rédigées ; « Néant. » si une rubrique est sans objet.",
             },
           ],
@@ -736,18 +760,12 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         totalInput += cont.usage.input_tokens;
         totalOutput += cont.usage.output_tokens;
         let contText = textOf(cont.content);
-        // On ne garde que le texte À PARTIR de la 1ʳᵉ rubrique demandée : tout
-        // préambule/« méta » éventuel est jeté. Aucune rubrique produite → on
-        // n'ajoute rien (évite de coller un commentaire au rapport).
         const idx = firstSectionHeadingIndex(contText, missing);
         if (idx < 0) break;
         contText = contText.slice(idx).trim();
         if (!contText) break;
         reportText = `${reportText}\n\n${contText}`;
       } catch {
-        // Une relance qui échoue ne doit PAS faire échouer tout le job : on
-        // conserve le rapport obtenu jusque-là (au pire partiel) plutôt que de
-        // laisser l'utilisateur sur l'ancien rapport.
         break;
       }
     }

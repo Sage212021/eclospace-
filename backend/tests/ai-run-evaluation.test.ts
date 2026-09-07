@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 // renvoie un rapport et un usage de tokens fixes.
 // Capture le dernier « system » reçu par l'API simulée pour vérifier que la
 // structure imposée du rapport est bien transmise à l'IA.
-const sdkCalls: { system?: string; user?: string; maxTokens?: number }[] = [];
+const sdkCalls: { system?: string; user?: string; maxTokens?: number; lastRole?: string }[] = [];
 // Pilotage du faux client : quand `truncateNext` est vrai, le PROCHAIN appel
 // simule une réponse TRONQUÉE (seulement la 1ʳᵉ rubrique, stop_reason max_tokens)
 // pour vérifier que le moteur relance et complète le rapport (A→M).
@@ -13,10 +13,11 @@ const sdkCtl = { truncateNext: false, completeButCut: false };
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
-      create: async (args: { system?: string; max_tokens?: number; messages?: { content?: unknown }[] }) => {
+      create: async (args: { system?: string; max_tokens?: number; messages?: { role?: string; content?: unknown }[] }) => {
         const c = args.messages?.[0]?.content;
         const user = typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (b as { text?: string }).text ?? "").join(" ") : "";
-        sdkCalls.push({ system: args.system, user, maxTokens: args.max_tokens });
+        const lastRole = args.messages?.[args.messages.length - 1]?.role;
+        sdkCalls.push({ system: args.system, user, maxTokens: args.max_tokens, lastRole });
         // Reprend TOUTES les rubriques imposées (## X. …) listées dans le prompt
         // système : simule une IA « bien élevée » qui rend un rapport complet.
         const sys = String(args.system ?? "");
@@ -293,12 +294,12 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     }
   });
 
-  it("un rapport COMPLET mais coupé en fin de M ne déclenche AUCUNE relance (pas de méta IA)", async () => {
+  it("un rapport coupé en fin de M est COMPLÉTÉ (continuation) SANS bavardage IA", async () => {
     // Gabarit A..M.
     await app.inject({
       method: "PUT", url: "/api/v1/ai-editorial/prompts/evaluation", headers: { cookie: adminCookie },
       payload: {
-        label: "Évaluation (test anti-méta)",
+        label: "Évaluation (test complétion sans méta)",
         system_prompt: "Système d'évaluation.",
         user_template: "Manuscrit : {{manuscrit}}",
         report_template: {
@@ -311,16 +312,21 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
       },
     });
     const before = sdkCalls.length;
-    sdkCtl.completeButCut = true;
+    sdkCtl.completeButCut = true; // 1ʳᵉ réponse : rapport complet mais coupé (max_tokens)
     const res = await app.inject({
       method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
       payload: { manuscript_id: manuscriptId, work_type: "evaluation", step_code: "COMITE_LECTURE" },
     });
     const job = await waitJob(res.json().jobId);
-    // UN SEUL appel IA (aucune relance de complétude).
-    expect(sdkCalls.length - before).toBe(1);
+    // Une continuation a bien eu lieu (≥ 2 appels) pour finir la fin coupée…
+    expect(sdkCalls.length - before).toBeGreaterThanOrEqual(2);
+    // …et cette continuation est un « préfixe assistant » (le dernier message est
+    // le rapport partiel côté assistant, PAS une consigne interne) : c'est ce qui
+    // garantit une poursuite propre du texte, sans préambule ni méta.
+    const contCall = sdkCalls[before + 1];
+    expect(contCall?.lastRole).toBe("assistant");
     const stored = await prisma.aiReadingJob.findUniqueOrThrow({ where: { id: job.id } });
-    // Aucun bavardage révélant l'IA n'a été ajouté au rapport.
+    // Aucun bavardage révélant l'IA dans le rapport final.
     const t = stored.reportText ?? "";
     expect(t).not.toMatch(/rubriques? (suivantes|figurent|sont présentes)/i);
     expect(t).not.toMatch(/je confirme|je constate|vérification exhaustive|intelligence artificielle/i);

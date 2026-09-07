@@ -6,6 +6,7 @@ import { PrismaClient, PermissionAction, CustomerCategory } from "@prisma/client
 import { FORMULA_DEFS } from "../src/lib/payrollFormula.js";
 import { DEFAULT_ABSENCE_REASONS } from "../src/lib/absenceReasons.js";
 import { DEFAULT_SALARY_ELEMENTS } from "../src/lib/salaryElements.js";
+import { dispatchReleaseNotes } from "../src/lib/releaseNotes.js";
 
 const prisma = new PrismaClient();
 
@@ -1277,6 +1278,36 @@ async function main() {
     });
   }
 
+  // « Quoi de neuf » — notes de version. Le DÉVELOPPEUR ajoute ici une entrée à
+  // chaque mise à jour d'un pôle ; au déploiement suivant, les utilisateurs
+  // concernés (par département/pôle, rôle, ou tous) reçoivent automatiquement un
+  // message explicatif dans leur messagerie interne (la cloche). Idempotent :
+  // `slug` unique + `dispatchedAt` garantissent UN seul envoi par note. On ne
+  // touche PAS `dispatchedAt` au ré-upsert (ré-éditer le texte ne renvoie rien).
+  const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-09-rh-absences-suivi",
+      version: "2026.09",
+      title: "Nouveauté — Suivi des absences amélioré",
+      body: "Le registre des absences affiche désormais le NOM du salarié demandeur, avec un bouton « Voir » ouvrant la fiche complète (motif, période, validateur, date de décision, référence). Vous pouvez générer une notification de décision (PDF à en-tête Éclosion) et l'envoyer par e-mail au salarié (renseignez son e-mail sur sa fiche).",
+      departmentCodes: ["RH"],
+    },
+    {
+      slug: "2026-09-editorial-evaluation-ia",
+      version: "2026.09",
+      title: "Nouveauté — Évaluation éditoriale assistée par l'IA affinée",
+      body: "Dans « Mes lectures » : le type de manuscrit adapte la grille, les curseurs de note se pré-alignent sur le rapport IA, l'adéquation à la ligne éditoriale est recadrée par collection, et les rapports d'évaluation vont désormais de A à M sans coupure. Nouvelle recommandation « Rejet avec encouragement à retravailler ».",
+      departmentCodes: ["COMLEC", "DIRED"],
+    },
+  ];
+  for (const n of releaseNotes) {
+    await prisma.releaseNote.upsert({
+      where: { slug: n.slug },
+      update: { version: n.version, title: n.title, body: n.body, audienceAll: n.audienceAll ?? false, departmentCodes: n.departmentCodes ?? [], roleCodes: n.roleCodes ?? [] },
+      create: { slug: n.slug, version: n.version, title: n.title, body: n.body, audienceAll: n.audienceAll ?? false, departmentCodes: n.departmentCodes ?? [], roleCodes: n.roleCodes ?? [] },
+    });
+  }
+
   // Catalogue des motifs d'absence (droit du travail — intégration 20/08/2026).
   // Idempotent (upsert par code). On ne remet à jour QUE le libellé, la catégorie
   // et l'ordre : les RÈGLES (payé, justificatif, retenue…) ne sont pas réécrites
@@ -1845,6 +1876,11 @@ async function main() {
     });
   }
   await prisma.authorWithdrawalCounter.upsert({ where: { year: 2026 }, create: { year: 2026, lastValue: 1 }, update: {} });
+
+  // « Quoi de neuf » : distribue aux utilisateurs concernés les notes de version
+  // non encore envoyées (une notification par utilisateur, une seule fois).
+  const dispatch = await dispatchReleaseNotes();
+  console.log(`Notes de version : ${dispatch.notes} traitée(s), ${dispatch.notifications} notification(s) envoyée(s).`);
 
   console.log("Seed Lot 0 terminé.");
   console.log(`Compte administrateur : admin / ${adminPassword} (à changer immédiatement)`);

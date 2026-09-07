@@ -147,6 +147,8 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
   // Filtre par période (D-023) sur le registre des absences : mois en cours par défaut,
   // sur la date de début de l'absence.
   const [absencePeriod, setAbsencePeriod] = useState<Period>(currentPeriod());
+  // Demande d'absence dont la fiche détail est ouverte (bouton « Voir »).
+  const [openAbsenceId, setOpenAbsenceId] = useState<string | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [anomalies, setAnomalies] = useState<AccessAnomaly[]>([]);
@@ -527,24 +529,57 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
             <Empty>{t("hr.no_absence_period", "Aucune absence pour cette période.")}</Empty>
           ) : (
           <div className="ecl-list">
-            {filteredAbsences.map((absence) => (
-              <div key={absence.id} className="ecl-row">
+            {filteredAbsences.map((absence) => {
+              const emp = absence.employee ?? employees.find((e) => e.id === absence.employeeId) ?? null;
+              const salarie = emp ? `${emp.firstName} ${emp.lastName}` : t("hr.abs_unknown", "Salarié inconnu");
+              const open = openAbsenceId === absence.id;
+              return (
+              <div key={absence.id} className="ecl-row" style={{ flexWrap: "wrap" }}>
                 <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span className="ecl-row__title">{absence.reasonRef?.label ?? t("hr.abs." + absence.type, ABSENCE_TYPE_LABELS[absence.type])}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px" }}>{t("hr.abs." + absence.type, ABSENCE_TYPE_LABELS[absence.type])}</span>
+                  {/* Le NOM du salarié demandeur, en tête de ligne — conservé quel que soit le statut. */}
+                  <span className="ecl-row__title">{salarie}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px" }}>{absence.reasonRef?.label ?? t("hr.abs." + absence.type, ABSENCE_TYPE_LABELS[absence.type])}</span>
                   <span className="ecl-row__desc" style={{ margin: 0 }}>{absence.fromDate.slice(0, 10)} → {absence.toDate.slice(0, 10)}</span>
                   {absence.reasonRef?.isFault && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--alert)", background: "var(--alert-soft)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px" }}>Faute</span>}
                   {absence.reasonRef && !absence.reasonRef.paid && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#C4661F", background: "rgba(196,102,31,0.12)", border: "1px solid var(--line)", borderRadius: 999, padding: "2px 9px" }}>Non payée</span>}
                   <StatusChip label={t("hr.absst." + absence.status, ABSENCE_STATUS_LABELS[absence.status])} />
                 </div>
-                {canValidateAbsence && absence.status === "en_attente" && (
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <Button variant="add" size="sm" onClick={() => handleDecideAbsence(absence, "validee")}>{t("hr.validate", "Valider")}</Button>
-                    <Button variant="danger" size="sm" onClick={() => handleDecideAbsence(absence, "refusee")}>{t("hr.refuse", "Refuser")}</Button>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <Button variant="view" size="sm" onClick={() => setOpenAbsenceId(open ? null : absence.id)}>
+                    {open ? t("hr.close", "Fermer") : t("hr.view", "Voir")}
+                  </Button>
+                  {canValidateAbsence && absence.status === "en_attente" && (
+                    <>
+                      <Button variant="add" size="sm" onClick={() => handleDecideAbsence(absence, "validee")}>{t("hr.validate", "Valider")}</Button>
+                      <Button variant="danger" size="sm" onClick={() => handleDecideAbsence(absence, "refusee")}>{t("hr.refuse", "Refuser")}</Button>
+                    </>
+                  )}
+                </div>
+                {open && (
+                  <div style={{ flexBasis: "100%", marginTop: 8, padding: "12px 14px", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12.5, lineHeight: 1.7 }}>
+                    <div style={{ fontWeight: 700, color: "var(--ink)", marginBottom: 6 }}>
+                      Demande — <span style={{ fontFamily: "var(--font-mono)" }}>{absence.reference ?? "—"}</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "2px 18px" }}>
+                      <div><b>Demandeur :</b> {salarie}{emp?.position ? ` — ${emp.position}` : ""}</div>
+                      <div><b>Type :</b> {t("hr.abs." + absence.type, ABSENCE_TYPE_LABELS[absence.type])}</div>
+                      <div><b>Motif :</b> {absence.reasonRef?.label ?? "—"}</div>
+                      <div><b>Période :</b> {absence.fromDate.slice(0, 10)} → {absence.toDate.slice(0, 10)}</div>
+                      <div><b>Date de la demande :</b> {absence.createdAt ? absence.createdAt.slice(0, 10) : "—"}</div>
+                      <div><b>Statut :</b> {t("hr.absst." + absence.status, ABSENCE_STATUS_LABELS[absence.status])}</div>
+                      {absence.status !== "en_attente" && (
+                        <>
+                          <div><b>{absence.status === "validee" ? "Validée par" : "Refusée par"} :</b> {absence.approvedByName ?? "—"}</div>
+                          <div><b>Date de décision :</b> {absence.approvedAt ? absence.approvedAt.slice(0, 10) : "—"}</div>
+                        </>
+                      )}
+                    </div>
+                    {absence.reason && <div style={{ marginTop: 6 }}><b>Précisions :</b> {absence.reason}</div>}
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
           )}
           </>

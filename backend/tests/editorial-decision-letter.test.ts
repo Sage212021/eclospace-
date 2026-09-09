@@ -135,6 +135,26 @@ describe("réponse à l'auteur à la décision éditoriale", () => {
     expect(letter.body).toContain("axes de révision");
   });
 
+  it("aperçu de la lettre : aligné sur la décision demandée, matricule dans l'objet, pas d'aperçu pour la mise en attente", async () => {
+    const id = await manuscriptAtDecision("preview@example.com");
+
+    // Aperçu « acceptation » : texte favorable + matricule (réf.) dans l'objet.
+    const acc = (await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/decision-letter/preview`, headers: { cookie }, payload: { decision: "acceptation", author_message: "Bravo pour ce travail." } })).json() as { layout: { objet: string }; body: string };
+    expect(acc.layout.objet).toMatch(/\(réf\. .+\)/); // matricule présent
+    expect(acc.body).toContain("décision favorable");
+    expect(acc.body).toContain("Bravo pour ce travail.");
+
+    // Aperçu « révision » : la lettre CHANGE bien selon la décision demandée.
+    const rev = (await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/decision-letter/preview`, headers: { cookie }, payload: { decision: "revision" } })).json() as { body: string };
+    expect(rev.body).toContain("révisions substantielles");
+    expect(rev.body).not.toContain("décision favorable");
+
+    // « Mise en attente » ne donne pas de lettre : pas d'aperçu.
+    const att = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/decision-letter/preview`, headers: { cookie }, payload: { decision: "attente" } });
+    expect(att.statusCode).toBe(409);
+    expect(att.json().code).toBe("no_letter");
+  });
+
   it("sans e-mail auteur, la décision passe mais aucune lettre n'est adressée", async () => {
     // Dossier placé directement à la décision, avec un auteur SANS e-mail (cas
     // limite : le parcours normal exige les coordonnées auteur plus tôt).

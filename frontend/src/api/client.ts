@@ -1274,6 +1274,15 @@ export function getManuscriptDecisionLetter(manuscriptId: string) {
   return request<{ decision: string; subject: string; body: string; layout: DecisionLetterLayout; author_email: string | null; notified_at: string | null; notified_to: string | null }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter`);
 }
 
+// Aperçu de la lettre pour la décision EN COURS de saisie (avant enregistrement) :
+// la lettre correspond exactement à la décision sélectionnée + éléments communicables.
+export function previewDecisionLetter(manuscriptId: string, input: { decision: EditorialDecisionValue; author_message?: string; author_points?: string[] }) {
+  return request<{ decision: string; subject: string; body: string; layout: DecisionLetterLayout }>(
+    `/api/v1/manuscripts/${manuscriptId}/decision-letter/preview`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
 // --- Lot 2 : contrats, tâches/Gantt, correction et comparateur ---
 
 export type ContractStatus = "preparation" | "legal_review" | "direction_approval" | "awaiting_signature" | "active" | "expired" | "terminated";

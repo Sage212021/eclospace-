@@ -2849,6 +2849,75 @@ export function approveSalesOrder(id: string) {
   return request<SalesOrder>(`/api/v1/sales-orders/${id}/approve`, { method: "POST", body: "{}" });
 }
 
+// ── Livraisons / bons de livraison (Ch. 17 §17.8) ───────────────────────────
+// Rubrique partagée Stock + Commercial : suivi des livraisons, création depuis
+// une commande livrable, et bon de livraison imprimable.
+export interface DeliveryRow {
+  id: string;
+  delivery_number: string;
+  order_number: string;
+  customer_name: string;
+  carrier: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  line_count: number;
+  total_quantity: number;
+  complete: boolean;
+}
+
+export interface EligibleOrderLine {
+  isbn_id: string;
+  isbn13: string;
+  title: string;
+  ordered: number;
+  delivered: number;
+  remaining: number;
+}
+export interface EligibleOrder {
+  id: string;
+  order_number: string;
+  customer_name: string;
+  status: string;
+  created_at: string;
+  lines: EligibleOrderLine[];
+  remaining_total: number;
+}
+
+export interface DeliveryNote {
+  delivery_number: string;
+  order_number: string;
+  invoice_number: string | null;
+  carrier: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  complete: boolean;
+  customer: { name: string; contact_name: string | null; phone: string | null; email: string | null; address: string | null };
+  lines: { isbn13: string; title: string; ordered: number; delivered: number }[];
+}
+
+export function listDeliveries() {
+  return request<DeliveryRow[]>("/api/v1/deliveries");
+}
+
+export function listEligibleOrdersForDelivery() {
+  return request<EligibleOrder[]>("/api/v1/deliveries/eligible-orders");
+}
+
+export function getDeliveryNote(id: string) {
+  return request<DeliveryNote>(`/api/v1/deliveries/${id}/note`);
+}
+
+export function createDelivery(orderId: string, input: { carrier?: string; lines: { isbn_id: string; quantity: number }[] }) {
+  return request<{ id: string; deliveryNumber: string }>(`/api/v1/sales-orders/${orderId}/deliveries`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function confirmDelivery(id: string) {
+  return request(`/api/v1/deliveries/${id}/confirm`, { method: "PATCH", body: "{}" });
+}
+
 export function createPosSale(input: {
   isbn_id?: string;
   location_id?: string;

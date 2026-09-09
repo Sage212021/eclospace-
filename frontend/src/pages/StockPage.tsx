@@ -23,6 +23,7 @@ import { IsbnCombobox } from "../components/IsbnCombobox";
 import { CommercialStockSection } from "../components/CommercialStockSection";
 import { PeriodFilter, currentPeriod, inPeriod, type Period } from "../components/PeriodFilter";
 import { BookReceiptSection, AuthorWithdrawalSection } from "../components/StockVouchersSection";
+import { DeliveriesSection } from "../components/DeliveriesSection";
 import { StockConsolidatedSection } from "../components/StockConsolidatedSection";
 import { StockInitialImportSection } from "../components/StockInitialImportSection";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -342,6 +343,10 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
         onMessage={(m) => { setMessage(m); refresh(); bumpMovements(); }}
         onError={setError}
       />
+
+      {/* Livraisons — bons de livraison (Ch. 17 §17.8). Rubrique partagée avec le
+          pôle Commercial : le Magasin prépare/expédie et imprime le BL. */}
+      <DeliveriesSection canManage={canManage} />
 
       {/* Pièces officielles imprimables (documents, sans impact stock). */}
       <BookReceiptSection isbns={isbns} canManage={canManage} onError={setError} />

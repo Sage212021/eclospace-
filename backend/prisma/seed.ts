@@ -296,6 +296,10 @@ async function main() {
   await grant("MEMBRE_COMITE_LECTURE", ["comite_lecture:consultation", "comite_lecture:saisie"]);
   await grant("DIR_EDITORIAL", [
     "manuscripts:consultation",
+    // Le Directeur éditorial peut aussi DÉPOSER un manuscrit (demande opérateur
+    // 09/09/2026) : « + Nouveau manuscrit » lui est désormais accessible, en plus
+    // du dépôt par le Secrétariat éditorial.
+    "manuscripts:saisie",
     "manuscripts:validation",
     "comite_lecture:consultation",
     "decision_editoriale:validation",

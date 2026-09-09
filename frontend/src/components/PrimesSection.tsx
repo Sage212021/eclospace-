@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   listPrimes,
+  listEmployees,
   createPrime,
   updatePrime,
   deletePrime,
@@ -56,6 +57,10 @@ export function PrimesSection({ employees, canManage }: { employees: Employee[];
   const confirm = useConfirm();
   const [period, setPeriod] = useState(currentPeriod());
   const [primes, setPrimes] = useState<Prime[]>([]);
+  // Liste des salariés chargée par la section elle-même (indépendante du reste de
+  // la page RH) : si le chargement groupé de la page a échoué, le sélecteur reste
+  // néanmoins alimenté et le bouton « Ajouter » réagit.
+  const [emps, setEmps] = useState<Employee[]>(employees);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState<PrimeForm | null>(null);
@@ -72,16 +77,27 @@ export function PrimesSection({ employees, canManage }: { employees: Employee[];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
 
+  // Recharge la liste des salariés à l'ouverture (et si la page n'en a pas fourni).
+  useEffect(() => {
+    listEmployees()
+      .then((list) => { if (list.length) setEmps(list); })
+      .catch(() => { /* droit RH:consultation manquant : géré à l'ouverture du formulaire */ });
+  }, []);
+
   const money = new Intl.NumberFormat("fr-FR");
   const empName = (id: string) => {
-    const e = employees.find((x) => x.id === id);
+    const e = emps.find((x) => x.id === id);
     return e ? `${e.firstName} ${e.lastName}` : "—";
   };
 
   function openAdd() {
     setError(null);
     setMessage(null);
-    setForm({ employee_id: employees[0]?.id ?? "", period, type: "rendement", amount: "", motif: "", date_awarded: new Date().toISOString().slice(0, 10), observation: "" });
+    if (emps.length === 0) {
+      setError("Impossible de charger la liste des salariés. Vérifiez que votre compte a le droit « Ressources humaines : consultation », puis réessayez.");
+      return;
+    }
+    setForm({ employee_id: emps[0]?.id ?? "", period, type: "rendement", amount: "", motif: "", date_awarded: new Date().toISOString().slice(0, 10), observation: "" });
   }
   function openEdit(p: Prime) {
     setError(null);
@@ -176,7 +192,7 @@ export function PrimesSection({ employees, canManage }: { employees: Employee[];
       action={
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 13 }} title="Mois" />
-          {canManage && <Button variant="add" size="sm" onClick={openAdd} disabled={employees.length === 0}>➕ Ajouter une prime</Button>}
+          {canManage && <Button variant="add" size="sm" onClick={openAdd}>➕ Ajouter une prime</Button>}
         </div>
       }
     >
@@ -236,7 +252,7 @@ export function PrimesSection({ employees, canManage }: { employees: Employee[];
         >
           <Field label="Employé">
             <select value={form.employee_id} onChange={(e) => setForm({ ...form, employee_id: e.target.value })} disabled={!!form.id}>
-              {employees.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+              {emps.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
             </select>
           </Field>
           <Field label="Mois concerné (AAAA-MM)"><input type="month" value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>

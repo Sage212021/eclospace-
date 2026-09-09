@@ -1316,9 +1316,10 @@ const extInp: React.CSSProperties = { padding: "8px 11px", border: "1px solid va
 const DECISION_LABELS: Record<string, string> = {
   acceptation: "Acceptation",
   acceptation_conditions: "Acceptation sous conditions",
-  revision: "Demande de révision",
+  revision: "Révision demandée (nouvelle soumission possible)",
   attente: "Mise en attente",
-  refus: "Refus motivé",
+  refus: "Refus",
+  refus_resoumission: "Refus avec possibilité de nouvelle soumission",
 };
 
 function AcceptanceConditionsPanel({
@@ -1484,39 +1485,61 @@ function EditorialDecisionForm({
   onDecided: (message: string) => void;
   onError: (message: string) => void;
 }) {
-  const [decision, setDecision] = useState<"acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus">("acceptation");
+  const [decision, setDecision] = useState<"acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus" | "refus_resoumission">("acceptation");
   const [motivation, setMotivation] = useState("");
-  const [conditionsText, setConditionsText] = useState("");
+  // Éléments COMMUNICABLES à l'auteur (la lettre n'en extrait que ceux-ci) :
+  // points essentiels retenus + message complémentaire de la Direction.
+  const [pointsText, setPointsText] = useState("");
+  const [authorMessage, setAuthorMessage] = useState("");
+
+  // Décisions qui déclenchent une lettre à l'auteur (toutes sauf « mise en attente »).
+  const LETTER_DECISIONS = ["acceptation", "acceptation_conditions", "revision", "refus", "refus_resoumission"];
+  // Décisions terminales (le dossier quitte l'étape décision) : acceptations →
+  // planification ; refus / refus-resoumission → archivage. Révision et attente
+  // laissent le dossier ouvert (en attente d'une version révisée).
+  const TERMINAL = ["acceptation", "acceptation_conditions", "refus", "refus_resoumission"];
+  // Décisions pour lesquelles on saisit des « points communicables » (conditions /
+  // axes de révision / motifs) — pas l'acceptation simple ni le refus sec.
+  const showPoints = ["acceptation_conditions", "revision", "refus_resoumission"].includes(decision);
+  const pointsLabel =
+    decision === "revision"
+      ? "Axes de révision communiqués à l'auteur (un par ligne)"
+      : decision === "refus_resoumission"
+        ? "Motifs communiqués à l'auteur (un par ligne)"
+        : "Conditions communiquées à l'auteur (une par ligne)";
 
   async function submit() {
-    const conditions =
-      decision === "acceptation_conditions"
-        ? conditionsText.split("\n").map((c) => c.trim()).filter((c) => c.length > 0)
-        : [];
-    const terminal = ["acceptation", "acceptation_conditions", "refus"].includes(decision);
+    const points = showPoints ? pointsText.split("\n").map((c) => c.trim()).filter((c) => c.length > 0) : [];
+    // Pour l'acceptation sous conditions, les points servent aussi de conditions
+    // à lever (bloquantes avant la mise en page).
+    const conditions = decision === "acceptation_conditions" ? points : [];
+    const terminal = TERMINAL.includes(decision);
     const ok = await confirm({
       title: "Décision éditoriale",
       message: `Enregistrer la décision « ${DECISION_LABELS[decision]} » ?`,
       detail: terminal
-        ? decision === "refus"
-          ? "Un refus clôt le circuit (archivage)."
+        ? ["refus", "refus_resoumission"].includes(decision)
+          ? "Le dossier est clôturé (archivage)." + (decision === "refus_resoumission" ? " Une nouvelle version repartira comme un nouveau dossier." : "")
           : decision === "acceptation_conditions"
-            ? `Une acceptation fait passer le manuscrit à la planification.${conditions.length ? ` ${conditions.length} condition(s) à lever avant la mise en page.` : ""}`
-            : "Une acceptation fait passer le manuscrit à la planification."
-        : "Le manuscrit reste à l'étape de décision.",
-      tone: decision === "refus" ? "danger" : "default",
+            ? `Le manuscrit passe à la planification.${conditions.length ? ` ${conditions.length} condition(s) à lever avant la mise en page.` : ""}`
+            : "Le manuscrit passe à la planification."
+        : "Le dossier reste ouvert à l'étape de décision (en attente d'une version révisée).",
+      tone: ["refus", "refus_resoumission"].includes(decision) ? "danger" : "default",
       confirmLabel: "Enregistrer la décision",
     });
     if (!ok) return;
     try {
-      const res = await submitEditorialDecision(manuscriptId, decision, motivation, conditions);
+      const res = await submitEditorialDecision(manuscriptId, decision, motivation, conditions, {
+        author_message: authorMessage,
+        author_points: points,
+      });
       const notified = (res as { authorNotifiedTo?: string | null } | undefined)?.authorNotifiedTo;
       onDecided(
         `Décision enregistrée : ${DECISION_LABELS[decision]}.` +
-          (["acceptation", "acceptation_conditions", "refus"].includes(decision)
+          (LETTER_DECISIONS.includes(decision)
             ? notified
-              ? ` Une lettre de réponse a été adressée à l'auteur (${notified}).`
-              : " ⚠ Aucune adresse e-mail auteur : pensez à répondre à l'auteur manuellement."
+              ? ` Une lettre officielle a été adressée à l'auteur (${notified}).`
+              : " ⚠ Aucune adresse e-mail auteur : imprimez la lettre et répondez manuellement."
             : ""),
       );
     } catch (err) {
@@ -1536,13 +1559,14 @@ function EditorialDecisionForm({
         <select value={decision} onChange={(e) => setDecision(e.target.value as typeof decision)} style={{ display: "block", padding: 6, marginTop: 4 }}>
           <option value="acceptation">Acceptation</option>
           <option value="acceptation_conditions">Acceptation sous conditions</option>
-          <option value="revision">Demande de révision</option>
+          <option value="revision">Révision demandée (nouvelle soumission possible)</option>
           <option value="attente">Mise en attente</option>
-          <option value="refus">Refus motivé</option>
+          <option value="refus">Refus</option>
+          <option value="refus_resoumission">Refus avec possibilité de nouvelle soumission</option>
         </select>
       </label>
       <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
-        Motivation (obligatoire)
+        Motivation interne (obligatoire — dossier, jamais reproduite dans la lettre)
         <textarea
           value={motivation}
           onChange={(e) => setMotivation(e.target.value)}
@@ -1551,20 +1575,43 @@ function EditorialDecisionForm({
           style={{ display: "block", width: "100%", padding: 8, marginTop: 4, fontFamily: "inherit", fontSize: 13 }}
         />
       </label>
-      {decision === "acceptation_conditions" && (
-        <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
-          Conditions à lever (une par ligne)
-          <textarea
-            value={conditionsText}
-            onChange={(e) => setConditionsText(e.target.value)}
-            rows={3}
-            placeholder={"Ex. : Revoir le chapitre 4 (longueur)\nFournir l'autorisation de reproduction des illustrations"}
-            style={{ display: "block", width: "100%", padding: 8, marginTop: 4, fontFamily: "inherit", fontSize: 13 }}
-          />
-          <span style={{ display: "block", marginTop: 4, color: "var(--muted, #667)", fontSize: 11 }}>
-            Chaque condition devra être « levée » avant que le manuscrit puisse entrer en mise en page (production). Vous pourrez aussi en ajouter plus tard.
+
+      {/* Éléments communicables à l'auteur : la lettre officielle n'extrait que
+          ceux-ci (jamais le rapport du comité ni la motivation interne). */}
+      {LETTER_DECISIONS.includes(decision) && (
+        <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px", marginBottom: 8, background: "var(--paper, #faf8f2)" }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>À communiquer à l'auteur (lettre officielle)</div>
+          {showPoints && (
+            <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
+              {pointsLabel}
+              <textarea
+                value={pointsText}
+                onChange={(e) => setPointsText(e.target.value)}
+                rows={3}
+                placeholder={"Ex. : Revoir la structure du chapitre 4\nÉtoffer la partie méthodologique"}
+                style={{ display: "block", width: "100%", padding: 8, marginTop: 4, fontFamily: "inherit", fontSize: 13 }}
+              />
+              {decision === "acceptation_conditions" && (
+                <span style={{ display: "block", marginTop: 4, color: "var(--muted, #667)", fontSize: 11 }}>
+                  Ces points sont aussi enregistrés comme conditions à lever avant la mise en page.
+                </span>
+              )}
+            </label>
+          )}
+          <label style={{ fontSize: 12, display: "block" }}>
+            Message complémentaire de la Direction (facultatif)
+            <textarea
+              value={authorMessage}
+              onChange={(e) => setAuthorMessage(e.target.value)}
+              rows={2}
+              placeholder="Phrase d'accompagnement, précision, encouragement…"
+              style={{ display: "block", width: "100%", padding: 8, marginTop: 4, fontFamily: "inherit", fontSize: 13 }}
+            />
+          </label>
+          <span style={{ display: "block", marginTop: 6, color: "var(--muted, #667)", fontSize: 11 }}>
+            La lettre reprend un modèle institutionnel sobre + ces éléments. Elle se termine par « Pour Éclosion Édition » avec une zone de signature et de cachet (à signer après impression).
           </span>
-        </label>
+        </div>
       )}
       <ActionButton onClick={() => {}}>Enregistrer la décision</ActionButton>
     </form>

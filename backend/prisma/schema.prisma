@@ -2229,6 +2229,9 @@ enum EditorialDecisionType {
   revision
   attente
   refus
+  // Refus dans l'état actuel, mais nouvelle soumission possible après révision
+  // approfondie (la nouvelle version repart comme un nouveau dossier).
+  refus_resoumission
 }
 
 // Compteur atomique pour la numérotation des manuscrits (Ch. 6 §6.2 : généré
@@ -2250,6 +2253,12 @@ model EditorialDecision {
   decidedBy        User                  @relation(fields: [decidedById], references: [id])
   decidedAt        DateTime              @default(now()) @map("decided_at")
   motivation       String
+  // Éléments COMMUNICABLES à l'auteur (validés par la Direction) : la lettre
+  // n'extrait que ceux-ci, jamais le rapport du comité ni la motivation interne.
+  // authorMessage = message complémentaire de la Direction ; authorPoints =
+  // points essentiels retenus (conditions / axes de révision / motifs).
+  authorMessage    String?               @map("author_message")
+  authorPoints     Json?                 @map("author_points")
   scoreGapFlag     Boolean               @default(false) @map("score_gap_flag")
   // Réponse à l'auteur (26/08/2026) : date d'envoi de la lettre de décision et
   // adresse destinataire — trace au dossier.

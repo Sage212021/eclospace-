@@ -1191,15 +1191,24 @@ export function emailReadingReport(assignmentId: string, input: { to: string; su
   return request<{ sent: boolean }>(`/api/v1/reading-assignments/${assignmentId}/email-report`, { method: "POST", body: JSON.stringify(input) });
 }
 
+export type EditorialDecisionValue = "acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus" | "refus_resoumission";
+
 export function submitEditorialDecision(
   manuscriptId: string,
-  decision: "acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus",
+  decision: EditorialDecisionValue,
   motivation: string,
   conditions?: string[],
+  communicable?: { author_message?: string; author_points?: string[] },
 ) {
   return request<{ authorNotifiedTo?: string | null }>(`/api/v1/manuscripts/${manuscriptId}/editorial-decision`, {
     method: "POST",
-    body: JSON.stringify({ decision, motivation, ...(conditions && conditions.length ? { conditions } : {}) }),
+    body: JSON.stringify({
+      decision,
+      motivation,
+      ...(conditions && conditions.length ? { conditions } : {}),
+      ...(communicable?.author_message?.trim() ? { author_message: communicable.author_message.trim() } : {}),
+      ...(communicable?.author_points && communicable.author_points.length ? { author_points: communicable.author_points } : {}),
+    }),
   });
 }
 
@@ -1239,7 +1248,7 @@ export function deleteAcceptanceCondition(condId: string) {
 
 // Modèles de lettres de décision éditoriale (réponse à l'auteur).
 export interface EditorialLetterTemplate { subject: string; body: string }
-export type EditorialLetterKey = "acceptation" | "acceptation_conditions" | "refus";
+export type EditorialLetterKey = "acceptation" | "acceptation_conditions" | "revision" | "refus" | "refus_resoumission";
 export interface EditorialLetters {
   templates: Record<EditorialLetterKey, EditorialLetterTemplate>;
   keys: EditorialLetterKey[];

@@ -54,7 +54,7 @@ describe("réponse à l'auteur à la décision éditoriale", () => {
   it("expose les modèles de lettres (défauts) et les rend modifiables", async () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/editorial-decision-letters", headers: { cookie } });
     expect(res.statusCode).toBe(200);
-    expect(res.json().keys).toEqual(["acceptation", "acceptation_conditions", "refus"]);
+    expect(res.json().keys).toEqual(["acceptation", "acceptation_conditions", "revision", "refus", "refus_resoumission"]);
     expect(res.json().templates.refus.subject).toContain("{{titre}}");
 
     const put = await app.inject({ method: "PUT", url: "/api/v1/editorial-decision-letters", headers: { cookie }, payload: { refus: { subject: "Réponse — {{titre}}", body: "Bonjour {{auteur}}, refus pour {{numero}}. {{maison}}" } } });
@@ -78,6 +78,61 @@ describe("réponse à l'auteur à la décision éditoriale", () => {
     expect(letter.statusCode).toBe(200);
     expect(letter.json().subject).not.toContain("{{titre}}");
     expect(letter.json().body).toContain("Awa Ndiaye");
+  });
+
+  it("la lettre n'extrait que les éléments communicables (points + message), jamais la motivation interne, et porte le bloc signataire", async () => {
+    const id = await manuscriptAtDecision("etoa@example.com");
+    const res = await app.inject({
+      method: "POST", url: `/api/v1/manuscripts/${id}/editorial-decision`, headers: { cookie },
+      payload: {
+        decision: "acceptation_conditions",
+        motivation: "NOTE INTERNE CONFIDENTIELLE À NE PAS DIVULGUER",
+        author_points: ["Revoir la structure du chapitre 4", "Étoffer la méthodologie"],
+        author_message: "Nous saluons la qualité de la documentation.",
+      },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const letter = (await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/decision-letter`, headers: { cookie } })).json() as { body: string; decision: string };
+    expect(letter.decision).toBe("acceptation_conditions");
+    // Les points communicables et le message figurent ; la motivation interne, non.
+    expect(letter.body).toContain("Revoir la structure du chapitre 4");
+    expect(letter.body).toContain("Nous saluons la qualité de la documentation.");
+    expect(letter.body).not.toContain("NOTE INTERNE CONFIDENTIELLE");
+    // Bloc signataire officiel (signé à la main après impression).
+    expect(letter.body).toContain("Pour Éclosion Édition");
+    expect(letter.body).toContain("Signature et cachet");
+
+    // Les points sont aussi enregistrés comme conditions à lever avant production.
+    const conds = await prisma.editorialAcceptanceCondition.findMany({ where: { manuscriptId: id, deletedAt: null } });
+    expect(conds.length).toBe(2);
+  });
+
+  it("« refus avec possibilité de nouvelle soumission » archive le dossier et adresse une lettre", async () => {
+    const id = await manuscriptAtDecision("resoum@example.com");
+    const res = await app.inject({
+      method: "POST", url: `/api/v1/manuscripts/${id}/editorial-decision`, headers: { cookie },
+      payload: { decision: "refus_resoumission", motivation: "Non abouti mais potentiel.", author_points: ["Clarifier l'angle"] },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().authorNotifiedTo).toBe("resoum@example.com");
+    const m = await prisma.manuscript.findUniqueOrThrow({ where: { id }, include: { status: true } });
+    expect(m.status.code).toBe("ARCHIVAGE");
+    const letter = (await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/decision-letter`, headers: { cookie } })).json() as { body: string };
+    expect(letter.body).toContain("nouvelle soumission");
+  });
+
+  it("« révision demandée » laisse le dossier ouvert à l'étape décision et adresse une lettre", async () => {
+    const id = await manuscriptAtDecision("revision@example.com");
+    const res = await app.inject({
+      method: "POST", url: `/api/v1/manuscripts/${id}/editorial-decision`, headers: { cookie },
+      payload: { decision: "revision", motivation: "À retravailler.", author_points: ["Revoir le plan d'ensemble"] },
+    });
+    expect(res.statusCode).toBe(201);
+    const m = await prisma.manuscript.findUniqueOrThrow({ where: { id }, include: { status: true } });
+    expect(m.status.code).toBe("DECISION_EDITORIALE"); // dossier ouvert (en attente)
+    const letter = (await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/decision-letter`, headers: { cookie } })).json() as { body: string };
+    expect(letter.body).toContain("axes de révision");
   });
 
   it("sans e-mail auteur, la décision passe mais aucune lettre n'est adressée", async () => {

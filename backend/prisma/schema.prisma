@@ -370,6 +370,10 @@ model Absence {
   toDate     DateTime       @map("to_date")
   status     AbsenceStatus  @default(en_attente)
   reason     String?
+  // Référence officielle SÉQUENTIELLE, attribuée à la création (ex.
+  // PERM-2026-00045). Nulle pour les demandes saisies avant l'introduction du
+  // compteur — un repli dérivé de l'identifiant est alors affiché.
+  reference  String?        @unique
   approvedBy String?        @map("approved_by")
   approvedAt DateTime?      @map("approved_at")
 
@@ -377,6 +381,15 @@ model Absence {
   createdBy String?  @map("created_by")
 
   @@map("absences")
+}
+
+// Compteur de référence des absences/permissions : une séquence par (préfixe de
+// type, année), ex. clé « PERM-2026 » → 45 → référence PERM-2026-00045.
+model AbsenceReferenceCounter {
+  key       String @id
+  lastValue Int    @default(0) @map("last_value")
+
+  @@map("absence_reference_counters")
 }
 
 // Catalogue des motifs d'absence (demande opérateur 20/08/2026) — chaque motif

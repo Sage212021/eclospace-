@@ -370,17 +370,37 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
     link.href = url; link.download = absenceNoticeFileName(absence); link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  function absenceNoticeBase64(absence: Absence): Promise<string> {
+    const blob = buildAbsenceNoticePdf(absence);
+    return new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onloadend = () => { const s = String(r.result); resolve(s.slice(s.indexOf(",") + 1)); };
+      r.onerror = reject; r.readAsDataURL(blob);
+    });
+  }
   async function sendAbsenceNotice(absence: Absence) {
     try {
-      const blob = buildAbsenceNoticePdf(absence);
-      const b64 = await new Promise<string>((resolve, reject) => {
-        const r = new FileReader();
-        r.onloadend = () => { const s = String(r.result); resolve(s.slice(s.indexOf(",") + 1)); };
-        r.onerror = reject; r.readAsDataURL(blob);
-      });
+      const b64 = await absenceNoticeBase64(absence);
       const res = await notifyAbsenceDecision(absence.id, { pdf_base64: b64, file_name: absenceNoticeFileName(absence) });
       setMessage(`Notification envoyée à ${res.to}.`);
     } catch (err) { fail(err, "Envoi de la notification impossible."); }
+  }
+  // « Valider et notifier » : décision + envoi de la notification en un clic. La
+  // décision est prioritaire ; si l'envoi échoue (pas d'e-mail / messagerie non
+  // configurée), la validation reste acquise et on le signale clairement.
+  async function decideAndNotifyAbsence(absence: Absence, decision: "validee" | "refusee") {
+    try { await decideAbsence(absence.id, decision); }
+    catch (err) { fail(err, "Échec de la décision."); return; }
+    const list = await listAbsences().catch(() => absences);
+    setAbsences(list);
+    const updated = list.find((a) => a.id === absence.id) ?? { ...absence, status: decision };
+    try {
+      const b64 = await absenceNoticeBase64(updated);
+      const res = await notifyAbsenceDecision(absence.id, { pdf_base64: b64, file_name: absenceNoticeFileName(updated) });
+      setMessage(`${decision === "validee" ? "Absence validée" : "Absence refusée"} et notifiée à ${res.to}.`);
+    } catch {
+      setMessage(`${decision === "validee" ? "Absence validée" : "Absence refusée"}. La notification n'a pas pu être envoyée (vérifiez l'e-mail du salarié ou la configuration de la messagerie).`);
+    }
   }
   async function handleDecideReviewItem(item: AccessReviewItem, decision: "confirme" | "anomalie_signalee") {
     try { await decideAccessReviewItem(item.id, decision); setMessage(t("hr.msg.decision_saved", "Décision enregistrée.")); setReviewItems(await listAccessReviewItems(selectedReviewId)); } catch (err) { fail(err, "Échec de l'enregistrement."); }
@@ -574,7 +594,8 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                   </Button>
                   {canValidateAbsence && absence.status === "en_attente" && (
                     <>
-                      <Button variant="add" size="sm" onClick={() => handleDecideAbsence(absence, "validee")}>{t("hr.validate", "Valider")}</Button>
+                      <Button variant="add" size="sm" onClick={() => decideAndNotifyAbsence(absence, "validee")}>{t("hr.validate_notify", "Valider et notifier")}</Button>
+                      <Button variant="view" size="sm" onClick={() => handleDecideAbsence(absence, "validee")}>{t("hr.validate", "Valider")}</Button>
                       <Button variant="danger" size="sm" onClick={() => handleDecideAbsence(absence, "refusee")}>{t("hr.refuse", "Refuser")}</Button>
                     </>
                   )}

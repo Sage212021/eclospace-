@@ -4505,6 +4505,35 @@ export function updatePublisherIdentity(identity: PublisherIdentity) {
   return request<PublisherIdentity>("/api/v1/publisher-identity", { method: "PUT", body: JSON.stringify(identity) });
 }
 
+// Cachets & signature officiels (apposés sur les lettres de décision et les
+// contrats d'auteur). Images en Data URL (PNG), remplaçables par l'administration.
+export interface Branding {
+  cachet_editoriale: string | null;
+  cachet_generale: string | null;
+  signature_dg: string | null;
+  dg_name: string;
+  dg_title: string;
+  auto_sign_contracts: boolean;
+}
+export type BrandingStampKey = "cachet_editoriale" | "cachet_generale" | "signature_dg";
+
+export function getBranding() {
+  return request<Branding>("/api/v1/branding");
+}
+export function updateBranding(patch: Partial<Pick<Branding, "dg_name" | "dg_title" | "auto_sign_contracts">>) {
+  return request<Branding>("/api/v1/branding", { method: "PATCH", body: JSON.stringify(patch) });
+}
+export async function uploadBrandingStamp(key: BrandingStampKey, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/branding/${key}`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Téléversement impossible.");
+  return response.json() as Promise<Branding>;
+}
+export function clearBrandingStamp(key: BrandingStampKey) {
+  return request<Branding>(`/api/v1/branding/${key}?clear=1`, { method: "POST", body: "{}" });
+}
+
 // --- Module « Présences & Temps de travail » (évolution, incrément 1) --------
 export type WorkScheduleScope = "company" | "department" | "employee";
 

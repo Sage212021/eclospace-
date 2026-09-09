@@ -7,6 +7,8 @@ import { FORMULA_DEFS } from "../src/lib/payrollFormula.js";
 import { DEFAULT_ABSENCE_REASONS } from "../src/lib/absenceReasons.js";
 import { DEFAULT_SALARY_ELEMENTS } from "../src/lib/salaryElements.js";
 import { dispatchReleaseNotes } from "../src/lib/releaseNotes.js";
+import { BRANDING_KEY, BRANDING_DEFAULTS } from "../src/lib/branding.js";
+import { readFileSync } from "node:fs";
 
 const prisma = new PrismaClient();
 
@@ -1885,6 +1887,33 @@ async function main() {
   // non encore envoyées (une notification par utilisateur, une seule fois).
   const dispatch = await dispatchReleaseNotes();
   console.log(`Notes de version : ${dispatch.notes} traitée(s), ${dispatch.notifications} notification(s) envoyée(s).`);
+
+  // Cachets & signature officiels (demande opérateur 09/09/2026) : valeurs par
+  // défaut installées une seule fois (création). Un téléversement ultérieur par
+  // l'administration est préservé (on ne réécrit jamais un réglage existant).
+  const existingBranding = await prisma.setting.findUnique({ where: { key: BRANDING_KEY } });
+  if (!existingBranding) {
+    const stampDataUrl = (file: string): string | null => {
+      try {
+        const buf = readFileSync(new URL(`../assets/stamps/${file}`, import.meta.url));
+        return `data:image/png;base64,${buf.toString("base64")}`;
+      } catch {
+        return null;
+      }
+    };
+    await prisma.setting.create({
+      data: {
+        key: BRANDING_KEY,
+        value: {
+          cachet_editoriale: stampDataUrl("cachet-direction-editoriale.png"),
+          cachet_generale: stampDataUrl("cachet-direction-generale.png"),
+          signature_dg: stampDataUrl("signature-dg.png"),
+          ...BRANDING_DEFAULTS,
+        },
+      },
+    });
+    console.log("Cachets & signature officiels : valeurs par défaut installées.");
+  }
 
   console.log("Seed Lot 0 terminé.");
   console.log(`Compte administrateur : admin / ${adminPassword} (à changer immédiatement)`);

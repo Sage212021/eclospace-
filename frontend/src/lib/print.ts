@@ -897,7 +897,40 @@ export const EDITEUR_LEGAL: PublisherLegal = {
 // la fiche ; ce que le système ne stocke pas (BP, CNI, tirage, PPHT, date de
 // parution) reste en pointillés à compléter. Aucune donnée d'auteur n'est codée
 // en dur : tout provient de l'enregistrement du partenaire/ouvrage.
-export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null): void {
+// `sign` (optionnel) : quand la maison appose automatiquement la signature du DG
+// (réglage), on estampille la case « L'éditeur » avec la signature manuscrite du
+// DG, le cachet « Direction Générale » et le nominatif (nom + qualité).
+export interface ContractStampData {
+  cachet?: string | null;
+  signature?: string | null;
+  dgName?: string;
+  dgTitle?: string;
+}
+// Case « L'éditeur » : soit une zone de signature vierge (défaut), soit —
+// lorsque `sign` est fourni — la signature manuscrite du DG surmontant le cachet
+// « Direction Générale », suivie du nominatif (nom + qualité sur plusieurs lignes).
+function editorSignatureBlock(sign?: ContractStampData | null): string {
+  const hasStamp = sign && (sign.signature || sign.cachet || sign.dgName);
+  if (!hasStamp) {
+    return `<div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature &amp; cachet</div>`;
+  }
+  const sig = sign!.signature ? `<img src="${sign!.signature}" alt="" style="position:absolute;left:8px;top:0;height:52px;width:auto">` : "";
+  const cachet = sign!.cachet ? `<img src="${sign!.cachet}" alt="" style="position:absolute;right:0;top:6px;height:92px;width:auto;opacity:.92">` : "";
+  const titleLines = (sign!.dgTitle ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => `<div style="font-size:10px;color:#4b5563;line-height:1.35">${escapeHtml(l)}</div>`)
+    .join("");
+  const nominatif = sign!.dgName
+    ? `<div style="margin-top:2px"><div style="font-size:12px;font-weight:700;color:#0b0b0c">${escapeHtml(sign!.dgName)}</div>${titleLines}</div>`
+    : "";
+  return `
+    <div style="position:relative;height:100px;margin-top:6px">${sig}${cachet}</div>
+    <div style="border-top:1px solid #0b0b0c;padding-top:4px">${nominatif}</div>`;
+}
+
+export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): void {
   const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
   const p = c.partner;
   const BL = (w = 26) => `<span style="color:#9aa1ad">${"…".repeat(w)}</span>`;
@@ -1013,7 +1046,10 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publish
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
     <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap">
       <div style="flex:1; min-width:200px"><div class="party__label">L'auteur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
-      <div style="flex:1; min-width:200px"><div class="party__label">L'éditeur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature &amp; cachet</div></div>
+      <div style="flex:1; min-width:200px">
+        <div class="party__label">L'éditeur</div>
+        ${editorSignatureBlock(sign)}
+      </div>
     </div>`;
 
   openPrintWindow(`Contrat d'édition ${c.contractNumber}`, body, opts);
@@ -1687,12 +1723,19 @@ export interface DecisionLetterLayout {
   maison: string;
 }
 
-export function printEditorialDecisionLetter(d: DecisionLetterLayout, opts?: PrintOpts): void {
+// `cachet` (Data URL) : cachet « Direction Éditoriale » apposé sur la version
+// IMPRIMÉE, en surimpression légère près de la zone de signature (qui reste
+// prévue pour une signature à la main).
+export function printEditorialDecisionLetter(d: DecisionLetterLayout, opts?: PrintOpts, cachet?: string | null): void {
   const paras = d.paragraphs
     // Un paragraphe peut contenir des retours à la ligne (liste à puces) :
     // on les préserve avec des <br>.
     .map((p) => `<p style="margin:0 0 12px;text-align:justify;white-space:pre-wrap">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
     .join("");
+
+  const cachetImg = cachet
+    ? `<img src="${cachet}" alt="" aria-hidden="true" style="position:absolute;right:-6px;top:34px;height:110px;width:auto;opacity:.92;pointer-events:none">`
+    : "";
 
   const body = `
     <div style="text-align:right;margin:2px 0 18px;font-size:12.5px">
@@ -1706,10 +1749,11 @@ export function printEditorialDecisionLetter(d: DecisionLetterLayout, opts?: Pri
     ${paras}
 
     <div style="margin-top:34px;display:flex;justify-content:flex-end">
-      <div style="min-width:280px;text-align:left">
+      <div style="position:relative;min-width:300px;text-align:left">
+        ${cachetImg}
         <div style="font-weight:700">${tr("Pour", "For")} ${escapeHtml(d.maison)},</div>
         <div>La Direction éditoriale</div>
-        <div style="margin-top:40px;font-size:11px;color:#6b7280">${tr("Signature et cachet", "Signature and stamp")} :</div>
+        <div style="margin-top:44px;font-size:11px;color:#6b7280">${tr("Signature et cachet", "Signature and stamp")} :</div>
         <div style="border-top:1px solid #0b0b0c;margin-top:2px;height:0"></div>
         <div style="margin-top:16px;font-size:11px;color:#6b7280">${tr("Nom du responsable", "Officer's name")} :</div>
         <div style="border-top:1px solid #0b0b0c;margin-top:2px;height:0"></div>

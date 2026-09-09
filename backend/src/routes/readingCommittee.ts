@@ -8,7 +8,8 @@ import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { isMailConfigured, sendMail, senderIdentity } from "../lib/mailer.js";
-import { resolveLetterTemplates, composeLetter, letterHtml, houseName, buildPointsBlock, LETTER_KEYS, LETTER_LABELS, DEFAULT_LETTERS, type EditorialLetterKey } from "../lib/editorialLetters.js";
+import { resolveLetterTemplates, composeLetter, letterEmailHtml, houseName, buildPointsBlock, LETTER_KEYS, LETTER_LABELS, DEFAULT_LETTERS, type EditorialLetterKey } from "../lib/editorialLetters.js";
+import { getBranding } from "../lib/branding.js";
 import { readingCommitteeRules, DEFAULT_READING_COMMITTEE_RULES, READING_COMMITTEE_RULES_KEY } from "../lib/readingCommitteeRules.js";
 import { parseGrilleScores } from "../lib/aiEvaluationScores.js";
 import { createHash } from "node:crypto";
@@ -804,7 +805,9 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
               maison,
             });
             const sender = senderIdentity(request.user!);
-            await sendMail({ to: email, subject: composed.subject, text: composed.textBody, html: letterHtml(composed.subject, composed.textBody, maison), ...sender }).catch(() => false);
+            // Cachet « Direction Éditoriale » apposé sur l'e-mail (non signé à la main).
+            const cachet = (await getBranding()).cachet_editoriale;
+            await sendMail({ to: email, subject: composed.subject, text: composed.textBody, html: letterEmailHtml(composed.layout, cachet), ...sender }).catch(() => false);
             authorNotifiedTo = email;
             await prisma.editorialDecision.update({ where: { id: decision.id }, data: { authorNotifiedTo: email, authorNotifiedAt: new Date() } });
           }

@@ -8,7 +8,7 @@ import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { isMailConfigured, sendMail, senderIdentity } from "../lib/mailer.js";
-import { resolveLetterTemplates, renderLetter, letterHtml, houseName, buildPointsBlock, LETTER_KEYS, LETTER_LABELS, DEFAULT_LETTERS, type EditorialLetterKey } from "../lib/editorialLetters.js";
+import { resolveLetterTemplates, composeLetter, letterHtml, houseName, buildPointsBlock, LETTER_KEYS, LETTER_LABELS, DEFAULT_LETTERS, type EditorialLetterKey } from "../lib/editorialLetters.js";
 import { readingCommitteeRules, DEFAULT_READING_COMMITTEE_RULES, READING_COMMITTEE_RULES_KEY } from "../lib/readingCommitteeRules.js";
 import { parseGrilleScores } from "../lib/aiEvaluationScores.js";
 import { createHash } from "node:crypto";
@@ -794,7 +794,7 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
                 : key === "acceptation_conditions"
                   ? parsed.data.conditions ?? []
                   : [];
-            const rendered = renderLetter(templates[key], {
+            const composed = composeLetter(templates[key], {
               auteur: `${contributor!.partner.firstName ?? ""} ${contributor!.partner.lastName ?? ""}`.trim(),
               titre: manuscript.title,
               numero: manuscript.manuscriptNumber,
@@ -804,7 +804,7 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
               maison,
             });
             const sender = senderIdentity(request.user!);
-            await sendMail({ to: email, subject: rendered.subject, text: rendered.body, html: letterHtml(rendered.subject, rendered.body, maison), ...sender }).catch(() => false);
+            await sendMail({ to: email, subject: composed.subject, text: composed.textBody, html: letterHtml(composed.subject, composed.textBody, maison), ...sender }).catch(() => false);
             authorNotifiedTo = email;
             await prisma.editorialDecision.update({ where: { id: decision.id }, data: { authorNotifiedTo: email, authorNotifiedAt: new Date() } });
           }
@@ -891,7 +891,7 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       const conds = await prisma.editorialAcceptanceCondition.findMany({ where: { decisionId: decision.id, deletedAt: null }, select: { label: true } });
       pointsList = conds.map((c) => c.label);
     }
-    const rendered = renderLetter(templates[key], {
+    const composed = composeLetter(templates[key], {
       auteur: `${contributor?.partner.firstName ?? ""} ${contributor?.partner.lastName ?? ""}`.trim() || "l'auteur",
       titre: m.title,
       numero: m.manuscriptNumber,
@@ -900,7 +900,7 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       date: decision.decidedAt.toLocaleDateString("fr-FR"),
       maison,
     });
-    return reply.send({ decision: decision.decision, subject: rendered.subject, body: rendered.body, author_email: contributor?.partner.email ?? null, notified_at: decision.authorNotifiedAt, notified_to: decision.authorNotifiedTo });
+    return reply.send({ decision: decision.decision, subject: composed.subject, body: composed.textBody, layout: composed.layout, author_email: contributor?.partner.email ?? null, notified_at: decision.authorNotifiedAt, notified_to: decision.authorNotifiedTo });
   });
 
   // === Suivi des acceptations « sous conditions » (audit éditorial, point n°2) ===

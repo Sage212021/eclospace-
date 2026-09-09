@@ -40,30 +40,18 @@ export const LETTER_LABELS: Record<EditorialLetterKey, string> = {
   refus_resoumission: "Refus avec possibilité de nouvelle soumission",
 };
 
-// Bloc de signature commun : la lettre imprimée porte « Pour Éclosion Édition »,
-// une zone de signature et de cachet, et le nom du responsable — renseignés à la
-// main après impression (demande opérateur du 09/09/2026).
-const SIGNATURE = `Pour {{maison}},
-La Direction éditoriale
-
-Signature et cachet : ______________________________
-
-Nom du responsable : ______________________________`;
-
-// Placeholders : {{auteur}} {{titre}} {{numero}} {{genre}} {{date}} {{points}}
-// {{message}} {{maison}}.
+// La lettre imprimée porte le LOGO officiel (en-tête de la maison), la date et le
+// destinataire alignés à droite, et se termine par un bloc de signature aligné à
+// droite : « Pour Éclosion Édition », la Direction éditoriale, une zone de
+// signature et de cachet et le nom du responsable — renseignés à la main après
+// impression (demande opérateur du 09/09/2026). La mise en page (en-tête, date,
+// destinataire, objet, signature) est FIXE et harmonieuse ; seul le corps (prose)
+// est éditable dans les Réglages. Placeholders du corps : {{auteur}} {{titre}}
+// {{numero}} {{genre}} {{points}} {{message}} {{maison}}.
 export const DEFAULT_LETTERS: Record<EditorialLetterKey, LetterTemplate> = {
   acceptation: {
     subject: "Décision éditoriale relative à votre manuscrit « {{titre}} »",
-    body: `{{maison}}
-Direction éditoriale
-Yaoundé, le {{date}}
-
-À Monsieur/Madame {{auteur}}
-
-Objet : Décision éditoriale relative à votre manuscrit « {{titre}} » (réf. {{numero}})
-
-Monsieur/Madame,
+    body: `Monsieur/Madame,
 
 Nous vous remercions d'avoir confié votre manuscrit « {{titre}} » aux Éditions Éclosion.
 
@@ -77,22 +65,12 @@ La présente correspondance constitue une notification de notre décision édito
 
 Nous vous remercions pour la confiance accordée aux Éditions Éclosion et vous adressons nos sincères encouragements pour la poursuite de votre démarche d'écriture.
 
-Veuillez recevoir, Monsieur/Madame, nos salutations distinguées.
-
-${SIGNATURE}`,
+Veuillez recevoir, Monsieur/Madame, nos salutations distinguées.`,
   },
 
   acceptation_conditions: {
     subject: "Décision éditoriale relative à votre manuscrit « {{titre}} »",
-    body: `{{maison}}
-Direction éditoriale
-Yaoundé, le {{date}}
-
-À Monsieur/Madame {{auteur}}
-
-Objet : Décision éditoriale relative à votre manuscrit « {{titre}} » (réf. {{numero}})
-
-Monsieur/Madame,
+    body: `Monsieur/Madame,
 
 Nous vous remercions pour la soumission de votre manuscrit « {{titre}} » aux Éditions Éclosion.
 
@@ -110,22 +88,12 @@ La présente décision ne constitue pas, à elle seule, un engagement contractue
 
 Nous vous remercions pour votre confiance et vous encourageons à poursuivre ce travail dans la perspective d'une éventuelle publication au sein de notre maison.
 
-Veuillez recevoir, Monsieur/Madame, nos salutations distinguées.
-
-${SIGNATURE}`,
+Veuillez recevoir, Monsieur/Madame, nos salutations distinguées.`,
   },
 
   revision: {
     subject: "Retour éditorial concernant votre manuscrit « {{titre}} »",
-    body: `{{maison}}
-Direction éditoriale
-Yaoundé, le {{date}}
-
-À Monsieur/Madame {{auteur}}
-
-Objet : Retour éditorial concernant votre manuscrit « {{titre}} » (réf. {{numero}})
-
-Monsieur/Madame,
+    body: `Monsieur/Madame,
 
 Nous vous remercions d'avoir soumis votre manuscrit « {{titre}} » aux Éditions Éclosion et pour la confiance ainsi accordée à notre maison.
 
@@ -141,22 +109,12 @@ Cette demande de révision ne constitue ni une acceptation ni un engagement de p
 
 Nous vous remercions pour l'intérêt porté aux Éditions Éclosion et restons disponibles pour toute information relative aux modalités de nouvelle soumission.
 
-Veuillez recevoir, Monsieur/Madame, nos salutations distinguées.
-
-${SIGNATURE}`,
+Veuillez recevoir, Monsieur/Madame, nos salutations distinguées.`,
   },
 
   refus: {
     subject: "Décision éditoriale relative à votre manuscrit « {{titre}} »",
-    body: `{{maison}}
-Direction éditoriale
-Yaoundé, le {{date}}
-
-À Monsieur/Madame {{auteur}}
-
-Objet : Décision éditoriale relative à votre manuscrit « {{titre}} » (réf. {{numero}})
-
-Monsieur/Madame,
+    body: `Monsieur/Madame,
 
 Nous vous remercions d'avoir choisi de soumettre votre manuscrit « {{titre}} » aux Éditions Éclosion et pour la confiance que vous avez accordée à notre maison.
 
@@ -172,22 +130,12 @@ Pour toute question concernant cette décision ou les modalités de clôture de 
 
 Nous vous souhaitons pleine réussite dans la poursuite de votre parcours d'auteur.
 
-Veuillez recevoir, Monsieur/Madame, nos salutations distinguées.
-
-${SIGNATURE}`,
+Veuillez recevoir, Monsieur/Madame, nos salutations distinguées.`,
   },
 
   refus_resoumission: {
     subject: "Retour éditorial concernant votre manuscrit « {{titre}} »",
-    body: `{{maison}}
-Direction éditoriale
-Yaoundé, le {{date}}
-
-À Monsieur/Madame {{auteur}}
-
-Objet : Retour éditorial concernant votre manuscrit « {{titre}} » (réf. {{numero}})
-
-Monsieur/Madame,
+    body: `Monsieur/Madame,
 
 Nous vous remercions d'avoir soumis votre manuscrit « {{titre}} » aux Éditions Éclosion.
 
@@ -203,9 +151,7 @@ Une nouvelle version devra être soumise comme un nouveau dossier et fera l'obje
 
 Nous vous remercions pour votre confiance et vous encourageons à poursuivre le travail engagé.
 
-Veuillez recevoir, Monsieur/Madame, nos salutations distinguées.
-
-${SIGNATURE}`,
+Veuillez recevoir, Monsieur/Madame, nos salutations distinguées.`,
   },
 };
 
@@ -229,6 +175,8 @@ export interface LetterContext {
   numero: string;
   genre?: string;
   date?: string;
+  place?: string;
+  recipient?: string;
   points?: string;
   message?: string;
   maison: string;
@@ -272,15 +220,65 @@ export function renderLetter(tpl: LetterTemplate, ctx: LetterContext): LetterTem
 
 const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] as string);
 
-// Rendu HTML sobre, à l'en-tête de la maison, pour l'e-mail à l'auteur.
+// Mise en page structurée de la lettre (en-tête logo + date/destinataire à
+// droite + objet + corps + signature à droite). Le corps (prose) est éditable ;
+// tout le reste est fixe et harmonieux.
+export interface LetterLayout {
+  place: string;
+  date: string;
+  recipient: string;
+  objet: string;
+  paragraphs: string[];
+  maison: string;
+}
+
+// Construit, à partir d'un modèle et du contexte, l'objet, la mise en page
+// structurée (pour l'impression à l'en-tête) et le texte intégral (pour l'e-mail
+// et l'aperçu). La signature « Pour {maison} » est ajoutée automatiquement.
+export function composeLetter(tpl: LetterTemplate, ctx: LetterContext): { subject: string; layout: LetterLayout; textBody: string } {
+  const rendered = renderLetter(tpl, ctx);
+  const paragraphs = rendered.body.split(/\n{2,}/).map((p) => p.trim()).filter((p) => p.length > 0);
+  const place = ctx.place?.trim() || "Yaoundé";
+  const date = ctx.date || new Date().toLocaleDateString("fr-FR");
+  const layout: LetterLayout = { place, date, recipient: ctx.auteur, objet: rendered.subject, paragraphs, maison: ctx.maison };
+  const textBody = [
+    `${ctx.maison}`,
+    "Direction éditoriale",
+    `${place}, le ${date}`,
+    "",
+    `À Monsieur/Madame ${ctx.recipient?.trim() || ctx.auteur}`,
+    "",
+    `Objet : ${rendered.subject} (réf. ${ctx.numero})`,
+    "",
+    ...paragraphs.flatMap((p) => [p, ""]),
+    `Pour ${ctx.maison},`,
+    "La Direction éditoriale",
+    "",
+    "Signature et cachet : ______________________________",
+    "",
+    "Nom du responsable : ______________________________",
+  ].join("\n");
+  return { subject: rendered.subject, layout, textBody };
+}
+
+// Rendu HTML sobre, à l'en-tête de la maison, pour l'e-mail à l'auteur — avec le
+// bloc de signature aligné à droite.
 export function letterHtml(subject: string, bodyText: string, maison: string): string {
-  const paras = bodyText
+  const marker = `Pour ${maison},`;
+  const idx = bodyText.indexOf(marker);
+  const corps = idx >= 0 ? bodyText.slice(0, idx).trim() : bodyText;
+  const sign = idx >= 0 ? bodyText.slice(idx).trim() : "";
+  const paras = corps
     .split(/\n{2,}/)
     .map((p) => `<p style="margin:0 0 14px;white-space:pre-wrap">${esc(p)}</p>`)
     .join("");
+  const signHtml = sign
+    ? `<div style="margin-top:26px;text-align:right;white-space:pre-wrap">${esc(sign)}</div>`
+    : "";
   return `<div style="font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:1.7;color:#0b0b0c;max-width:640px;margin:0 auto;padding:8px">
     <div style="border-bottom:2px solid #D9B21A;padding-bottom:8px;margin-bottom:18px;font-weight:bold;letter-spacing:.5px;color:#0b0b0c">${esc(maison)}</div>
     ${paras}
+    ${signHtml}
   </div>`;
 }
 

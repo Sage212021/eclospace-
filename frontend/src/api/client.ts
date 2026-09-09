@@ -1262,8 +1262,16 @@ export function getEditorialDecisionLetters() {
 export function updateEditorialDecisionLetters(templates: Partial<Record<EditorialLetterKey, EditorialLetterTemplate>>) {
   return request<{ ok: true }>(`/api/v1/editorial-decision-letters`, { method: "PUT", body: JSON.stringify(templates) });
 }
+export interface DecisionLetterLayout {
+  place: string;
+  date: string;
+  recipient: string;
+  objet: string;
+  paragraphs: string[];
+  maison: string;
+}
 export function getManuscriptDecisionLetter(manuscriptId: string) {
-  return request<{ decision: string; subject: string; body: string; author_email: string | null; notified_at: string | null; notified_to: string | null }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter`);
+  return request<{ decision: string; subject: string; body: string; layout: DecisionLetterLayout; author_email: string | null; notified_at: string | null; notified_to: string | null }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter`);
 }
 
 // --- Lot 2 : contrats, tâches/Gantt, correction et comparateur ---

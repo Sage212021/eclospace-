@@ -28,6 +28,7 @@ import {
   setManuscriptSegment,
   setPublicationDate,
   submitEditorialDecision,
+  getManuscriptDecisionLetter,
   getAcceptanceConditions,
   addAcceptanceCondition,
   liftAcceptanceCondition,
@@ -50,6 +51,8 @@ import {
   type UserSummary,
 } from "../api/client";
 import { useConfirm } from "../components/ConfirmProvider";
+import { DocPrintMenu } from "../components/DocPrintMenu";
+import { printEditorialDecisionLetter } from "../lib/print";
 import { Spine } from "../components/Spine";
 import { ContractsSection } from "../components/ContractsSection";
 import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
@@ -514,6 +517,10 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             onError={setError}
           />
         )}
+
+        {/* Lettre officielle à l'auteur : dès qu'une décision donnant lieu à une
+            lettre a été prise, on peut la (ré)imprimer à l'en-tête de la maison. */}
+        {canDecide && <DecisionLetterCard manuscriptId={manuscript.id} />}
 
         {manuscript.status.code === "PLANIFICATION" && (
           <StartingProofPanel manuscriptId={manuscript.id} canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")} />
@@ -1473,6 +1480,39 @@ const smallBtnStyle: CSSProperties = {
   cursor: "pointer",
   color: "var(--ink)",
 };
+
+// Lettre officielle de décision, (ré)imprimable à l'en-tête de la maison une fois
+// la décision prise. Se masque tant qu'aucune lettre n'existe pour le dossier.
+function DecisionLetterCard({ manuscriptId }: { manuscriptId: string }) {
+  const [letter, setLetter] = useState<Awaited<ReturnType<typeof getManuscriptDecisionLetter>> | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getManuscriptDecisionLetter(manuscriptId)
+      .then((l) => { if (alive) setLetter(l); })
+      .catch(() => { if (alive) setLetter(null); });
+    return () => { alive = false; };
+  }, [manuscriptId]);
+
+  if (!letter) return null;
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "12px 14px", marginBottom: 12, background: "var(--paper, #faf8f2)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>Lettre officielle à l'auteur</div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>
+            {letter.layout.objet}
+            {letter.notified_to ? ` · envoyée à ${letter.notified_to}` : " · non envoyée par e-mail (imprimez et remettez la lettre)"}
+          </div>
+        </div>
+        <DocPrintMenu label="Imprimer la lettre" onPrint={(o) => printEditorialDecisionLetter(letter.layout, o)} />
+      </div>
+      <p style={{ fontSize: 11, color: "var(--muted)", margin: "8px 0 0" }}>
+        En-tête de la maison ; le bloc « Pour Éclosion Édition » (signature, cachet, nom du responsable) est à remplir à la main après impression. Choisissez « papier à en-tête intégré » ou « vierge » pour imprimer sur votre papier officiel.
+      </p>
+    </div>
+  );
+}
 
 function EditorialDecisionForm({
   manuscriptId,

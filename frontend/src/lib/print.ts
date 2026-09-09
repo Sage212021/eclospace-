@@ -1671,3 +1671,50 @@ export function printDeliveryNote(d: DeliveryNotePrintData, opts?: PrintOpts): v
 
   openPrintWindow(`${title} ${d.deliveryNumber}`, body, opts);
 }
+
+// Lettre officielle de décision éditoriale (refonte 09/09/2026) : mise en page
+// harmonieuse à l'en-tête de la maison (logo + filigrane, ou papier à en-tête
+// intégré / vierge selon `opts`). Date et destinataire alignés à droite, objet,
+// corps justifié, puis bloc de signature aligné à droite (« Pour Éclosion
+// Édition » + zone de signature et cachet + nom du responsable). Le contenu
+// (paragraphes) est fourni par le serveur, jamais recomposé ici.
+export interface DecisionLetterLayout {
+  place: string;
+  date: string;
+  recipient: string;
+  objet: string;
+  paragraphs: string[];
+  maison: string;
+}
+
+export function printEditorialDecisionLetter(d: DecisionLetterLayout, opts?: PrintOpts): void {
+  const paras = d.paragraphs
+    // Un paragraphe peut contenir des retours à la ligne (liste à puces) :
+    // on les préserve avec des <br>.
+    .map((p) => `<p style="margin:0 0 12px;text-align:justify;white-space:pre-wrap">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+
+  const body = `
+    <div style="text-align:right;margin:2px 0 18px;font-size:12.5px">
+      ${escapeHtml(d.place)}, le ${escapeHtml(d.date)}<br><br>
+      <span style="color:#6b7280">À l'attention de</span><br>
+      <b>Monsieur/Madame ${escapeHtml(d.recipient)}</b>
+    </div>
+
+    <div style="font-weight:700;margin:0 0 16px">${tr("Objet", "Subject")} : ${escapeHtml(d.objet)}</div>
+
+    ${paras}
+
+    <div style="margin-top:34px;display:flex;justify-content:flex-end">
+      <div style="min-width:280px;text-align:left">
+        <div style="font-weight:700">${tr("Pour", "For")} ${escapeHtml(d.maison)},</div>
+        <div>La Direction éditoriale</div>
+        <div style="margin-top:40px;font-size:11px;color:#6b7280">${tr("Signature et cachet", "Signature and stamp")} :</div>
+        <div style="border-top:1px solid #0b0b0c;margin-top:2px;height:0"></div>
+        <div style="margin-top:16px;font-size:11px;color:#6b7280">${tr("Nom du responsable", "Officer's name")} :</div>
+        <div style="border-top:1px solid #0b0b0c;margin-top:2px;height:0"></div>
+      </div>
+    </div>`;
+
+  openPrintWindow(`${tr("Lettre de décision", "Decision letter")} — ${d.recipient}`, body, opts);
+}

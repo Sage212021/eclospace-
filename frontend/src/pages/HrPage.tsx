@@ -595,8 +595,9 @@ export function HrPage({ canManage, canAdminister, canValidateAbsence, canManage
                   {canValidateAbsence && absence.status === "en_attente" && (
                     <>
                       <Button variant="add" size="sm" onClick={() => decideAndNotifyAbsence(absence, "validee")}>{t("hr.validate_notify", "Valider et notifier")}</Button>
+                      <Button variant="danger" size="sm" onClick={() => decideAndNotifyAbsence(absence, "refusee")}>{t("hr.refuse_notify", "Refuser et notifier")}</Button>
                       <Button variant="view" size="sm" onClick={() => handleDecideAbsence(absence, "validee")}>{t("hr.validate", "Valider")}</Button>
-                      <Button variant="danger" size="sm" onClick={() => handleDecideAbsence(absence, "refusee")}>{t("hr.refuse", "Refuser")}</Button>
+                      <Button variant="view" size="sm" onClick={() => handleDecideAbsence(absence, "refusee")}>{t("hr.refuse", "Refuser")}</Button>
                     </>
                   )}
                 </div>

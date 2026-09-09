@@ -33,6 +33,7 @@ import {
   type ChatDirectoryEntry,
 } from "../api/client";
 import { printContract, printAuthorContract } from "../lib/print";
+import { getBranding } from "../api/client";
 import { buildAuthorContractPdf } from "../lib/contractPdf";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
@@ -174,7 +175,21 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
             <DocPrintMenu label="Fiche (résumé)" onPrint={(o) => getContract(contract.id).then((c) => printContract(c, o)).catch((e) => setError(e.message))} />
             <DocPrintMenu
               label="Contrat d'édition"
-              onPrint={(o) => Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null)]).then(([c, pub]) => printAuthorContract(c, o, pub)).catch((e) => setError(e.message))}
+              onPrint={(o) =>
+                Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null), getBranding().catch(() => null)])
+                  .then(([c, pub, brand]) =>
+                    printAuthorContract(
+                      c,
+                      o,
+                      pub,
+                      // Signature + cachet DG apposés seulement si le réglage l'autorise.
+                      brand && brand.auto_sign_contracts
+                        ? { cachet: brand.cachet_generale, signature: brand.signature_dg, dgName: brand.dg_name, dgTitle: brand.dg_title }
+                        : null,
+                    ),
+                  )
+                  .catch((e) => setError(e.message))
+              }
               extras={[
                 { label: "Transférer (messagerie / WhatsApp)", onSelect: () => setTransferContract(contract) },
                 ...(canCreate && !["active", "terminated", "expired"].includes(contract.status) ? [{ label: "Modifier / enregistrer", onSelect: () => setEditContract(contract) }] : []),

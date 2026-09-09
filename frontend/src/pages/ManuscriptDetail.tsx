@@ -30,6 +30,7 @@ import {
   submitEditorialDecision,
   getManuscriptDecisionLetter,
   previewDecisionLetter,
+  getBranding,
   getAcceptanceConditions,
   addAcceptanceCondition,
   liftAcceptanceCondition,
@@ -1486,12 +1487,14 @@ const smallBtnStyle: CSSProperties = {
 // la décision prise. Se masque tant qu'aucune lettre n'existe pour le dossier.
 function DecisionLetterCard({ manuscriptId }: { manuscriptId: string }) {
   const [letter, setLetter] = useState<Awaited<ReturnType<typeof getManuscriptDecisionLetter>> | null>(null);
+  const [cachet, setCachet] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     getManuscriptDecisionLetter(manuscriptId)
       .then((l) => { if (alive) setLetter(l); })
       .catch(() => { if (alive) setLetter(null); });
+    getBranding().then((b) => { if (alive) setCachet(b.cachet_editoriale); }).catch(() => {});
     return () => { alive = false; };
   }, [manuscriptId]);
 
@@ -1506,7 +1509,7 @@ function DecisionLetterCard({ manuscriptId }: { manuscriptId: string }) {
             {letter.notified_to ? ` · envoyée à ${letter.notified_to}` : " · non envoyée par e-mail (imprimez et remettez la lettre)"}
           </div>
         </div>
-        <DocPrintMenu label="Imprimer la lettre" onPrint={(o) => printEditorialDecisionLetter(letter.layout, o)} />
+        <DocPrintMenu label="Imprimer la lettre" onPrint={(o) => printEditorialDecisionLetter(letter.layout, o, cachet)} />
       </div>
       <p style={{ fontSize: 11, color: "var(--muted)", margin: "8px 0 0" }}>
         En-tête de la maison ; le bloc « Pour Éclosion Édition » (signature, cachet, nom du responsable) est à remplir à la main après impression. Choisissez « papier à en-tête intégré » ou « vierge » pour imprimer sur votre papier officiel.
@@ -1554,12 +1557,15 @@ function EditorialDecisionForm({
   async function printPreview(opts: PrintOpts) {
     const points = showPoints ? pointsText.split("\n").map((c) => c.trim()).filter((c) => c.length > 0) : [];
     try {
-      const res = await previewDecisionLetter(manuscriptId, {
-        decision,
-        author_message: authorMessage.trim() || undefined,
-        author_points: points.length ? points : undefined,
-      });
-      printEditorialDecisionLetter(res.layout, opts);
+      const [res, brand] = await Promise.all([
+        previewDecisionLetter(manuscriptId, {
+          decision,
+          author_message: authorMessage.trim() || undefined,
+          author_points: points.length ? points : undefined,
+        }),
+        getBranding().catch(() => null),
+      ]);
+      printEditorialDecisionLetter(res.layout, opts, brand?.cachet_editoriale ?? null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Aperçu de la lettre impossible.");
     }

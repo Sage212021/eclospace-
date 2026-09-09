@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listSettings, updateSetting, getPublisherIdentity, updatePublisherIdentity, getWorkflowDeliverableSteps, updateWorkflowDeliverableSteps, getWorkflowStepModes, updateWorkflowStepModes, getEditorialDecisionLetters, updateEditorialDecisionLetters, getReadingCommitteeRules, updateReadingCommitteeRules, type AppSetting, type EffectiveUser, type PublisherIdentity, type WorkflowDeliverableConfig, type WorkflowStepModesConfig, type EditorialLetters, type EditorialLetterKey, type ReadingCommitteeRules } from "../api/client";
+import { listSettings, updateSetting, getPublisherIdentity, updatePublisherIdentity, getWorkflowDeliverableSteps, updateWorkflowDeliverableSteps, getWorkflowStepModes, updateWorkflowStepModes, getEditorialDecisionLetters, updateEditorialDecisionLetters, getReadingCommitteeRules, updateReadingCommitteeRules, getBranding, updateBranding, uploadBrandingStamp, clearBrandingStamp, type AppSetting, type EffectiveUser, type PublisherIdentity, type WorkflowDeliverableConfig, type WorkflowStepModesConfig, type EditorialLetters, type EditorialLetterKey, type ReadingCommitteeRules, type Branding, type BrandingStampKey } from "../api/client";
 import { AccountSecurity } from "../components/AccountSecurity";
 import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -110,6 +110,9 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
 
       {/* Étapes « à option » : facultative (on peut passer) / obligatoire (à réaliser). */}
       <WorkflowStepModesCard canAdminister={canAdminister} />
+
+      {/* Cachets & signature officiels apposés sur les lettres et contrats. */}
+      <BrandingCard canAdminister={canAdminister} />
 
       {/* Lettres de réponse à l'auteur à la décision éditoriale (modèles éditables). */}
       <DecisionLettersCard canAdminister={canAdminister} />
@@ -473,6 +476,117 @@ function ReadingCommitteeRulesCard({ canAdminister }: { canAdminister: boolean }
           <button onClick={save} disabled={saving || !dirty} style={{ border: "none", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: saving || !dirty ? "default" : "pointer", opacity: saving || !dirty ? 0.55 : 1 }}>
             {saving ? "Enregistrement…" : "Enregistrer les règles du comité"}
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Cachets & signature officiels (demande opérateur 09/09/2026) : cachet Direction
+// Éditoriale (lettres), cachet Direction Générale + signature du DG (contrats).
+// Images téléversables ; nominatif (nom + qualité) et interrupteur « signer les
+// contrats automatiquement » paramétrables.
+const STAMP_META: { key: BrandingStampKey; label: string; hint: string }[] = [
+  { key: "cachet_editoriale", label: "Cachet — Direction Éditoriale", hint: "Apposé sur les lettres de décision à l'auteur (e-mail et impression)." },
+  { key: "cachet_generale", label: "Cachet — Direction Générale", hint: "Apposé sur les contrats d'auteur." },
+  { key: "signature_dg", label: "Signature du Directeur Général", hint: "Apposée sur les contrats (fond transparent recommandé)." },
+];
+
+function BrandingCard({ canAdminister }: { canAdminister: boolean }) {
+  const [b, setB] = useState<Branding | null>(null);
+  const [dgName, setDgName] = useState("");
+  const [dgTitle, setDgTitle] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  function apply(next: Branding) {
+    setB(next);
+    setDgName(next.dg_name);
+    setDgTitle(next.dg_title);
+  }
+  useEffect(() => {
+    getBranding().then(apply).catch(() => setErr("Chargement des cachets impossible."));
+  }, []);
+
+  async function onUpload(key: BrandingStampKey, file: File | null) {
+    if (!file) return;
+    setErr(null); setNote(null); setBusy(key);
+    try { apply(await uploadBrandingStamp(key, file)); setNote("Image enregistrée."); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Téléversement impossible."); }
+    finally { setBusy(null); }
+  }
+  async function onClear(key: BrandingStampKey) {
+    setErr(null); setNote(null); setBusy(key);
+    try { apply(await clearBrandingStamp(key)); setNote("Image retirée."); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Suppression impossible."); }
+    finally { setBusy(null); }
+  }
+  async function saveMeta(patch: Partial<Pick<Branding, "dg_name" | "dg_title" | "auto_sign_contracts">>) {
+    setErr(null); setNote(null);
+    try { apply(await updateBranding(patch)); setNote("Paramètres enregistrés."); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Enregistrement impossible."); }
+  }
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 14 }}>Cachets &amp; signature officiels</div>
+      <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "4px 0 12px", lineHeight: 1.6 }}>
+        Ces cachets et la signature du Directeur Général sont apposés automatiquement sur les documents sortants
+        (lettres de décision à l'auteur, contrats d'auteur). Vous pouvez les remplacer par vos propres images (PNG à fond transparent recommandé).
+      </p>
+      {err && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+      {note && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{note}</div>}
+      {!b ? (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
+      ) : (
+        <div style={{ display: "grid", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
+            {STAMP_META.map((s) => {
+              const img = b[s.key];
+              return (
+                <div key={s.key} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>{s.label}</div>
+                  <div style={{ height: 90, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--paper, #faf8f2)", borderRadius: 6, marginBottom: 6 }}>
+                    {img ? <img src={img} alt={s.label} style={{ maxHeight: 84, maxWidth: "100%" }} /> : <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Aucune image</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6, lineHeight: 1.4 }}>{s.hint}</div>
+                  {canAdminister && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <label style={{ fontSize: 12, cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 9px", background: "#fff" }}>
+                        {busy === s.key ? "…" : img ? "Remplacer" : "Téléverser"}
+                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { onUpload(s.key, e.target.files?.[0] ?? null); e.target.value = ""; }} />
+                      </label>
+                      {img && <button type="button" onClick={() => onClear(s.key)} style={{ fontSize: 12, cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 9px", background: "#fff", color: "var(--alert)" }}>Retirer</button>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ display: "grid", gap: 8, maxWidth: 520 }}>
+            <label style={{ fontSize: 12.5 }}>
+              Nom du signataire (Directeur Général)
+              <input value={dgName} disabled={!canAdminister} onChange={(e) => setDgName(e.target.value)} style={{ width: "100%", fontSize: 12.5, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, boxSizing: "border-box", marginTop: 4 }} />
+            </label>
+            <label style={{ fontSize: 12.5 }}>
+              Qualité / nominatif (une ligne par mention)
+              <textarea value={dgTitle} disabled={!canAdminister} onChange={(e) => setDgTitle(e.target.value)} rows={2} style={{ width: "100%", fontSize: 12.5, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, boxSizing: "border-box", marginTop: 4, fontFamily: "inherit" }} />
+            </label>
+            {canAdminister && (
+              <div>
+                <button type="button" onClick={() => saveMeta({ dg_name: dgName.trim(), dg_title: dgTitle })} style={{ fontSize: 12.5, cursor: "pointer", border: "none", borderRadius: 6, padding: "7px 14px", background: "var(--eclosion, #d9b21a)", color: "#0b0b0c", fontWeight: 600 }}>Enregistrer le nominatif</button>
+              </div>
+            )}
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, marginTop: 4 }}>
+              <input type="checkbox" checked={b.auto_sign_contracts} disabled={!canAdminister} onChange={(e) => saveMeta({ auto_sign_contracts: e.target.checked })} />
+              Apposer automatiquement la signature du DG sur les contrats d'auteur
+            </label>
+            <p style={{ fontSize: 11, color: "var(--muted)", margin: 0 }}>
+              Décoché : le contrat sort avec la zone « L'éditeur » vierge, à signer à la main. Coché : signature + cachet + nominatif du DG apposés automatiquement.
+            </p>
+          </div>
         </div>
       )}
     </div>

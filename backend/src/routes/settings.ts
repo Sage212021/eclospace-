@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { optimizeImage } from "../lib/imageOptimize.js";
+import { getBranding, patchBranding, BRANDING_KEY, BRANDING_STAMP_KEYS } from "../lib/branding.js";
 
 // Identité légale de l'éditeur, imprimée sur les contrats d'édition. Stockée
 // dans `settings` (clé publisher_identity) pour être modifiable sans
@@ -154,6 +156,60 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
       ipAddress: request.ip,
     });
     return reply.send({ ...PUBLISHER_DEFAULTS, ...(updated.value as Record<string, unknown>) });
+  });
+
+  // ── Cachets & signature officiels (demande opérateur 09/09/2026) ───────────
+  // Cachet Direction Éditoriale (lettres), cachet Direction Générale + signature
+  // du DG (contrats). Images téléversables, apposées automatiquement sur les
+  // documents sortants. Lecture ouverte à tout compte (pour l'impression) ;
+  // modification réservée à l'administration.
+  fastify.get("/api/v1/branding", { preHandler: requireAuth }, async (_request, reply) => {
+    return reply.send(await getBranding());
+  });
+
+  fastify.patch("/api/v1/branding", { preHandler: requirePermission("settings", "administration") }, async (request, reply) => {
+    const parsed = z
+      .object({
+        dg_name: z.string().max(120).optional(),
+        dg_title: z.string().max(200).optional(),
+        auto_sign_contracts: z.boolean().optional(),
+      })
+      .safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const next = await patchBranding(parsed.data);
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "setting", entityId: BRANDING_KEY, newValues: parsed.data as never, ipAddress: request.ip });
+    return reply.send(next);
+  });
+
+  // Téléversement d'un cachet / d'une signature (image) → optimisée en PNG et
+  // stockée en Data URL. Supprimer = envoyer un fichier vide n'est pas permis ;
+  // pour retirer une image, on stocke null via ce même endpoint avec ?clear=1.
+  fastify.post("/api/v1/branding/:key", { preHandler: requirePermission("settings", "administration") }, async (request, reply) => {
+    const { key } = request.params as { key: string };
+    if (!(BRANDING_STAMP_KEYS as string[]).includes(key)) {
+      return reply.code(400).send({ code: "invalid_key", message: "Type de cachet/signature inconnu." });
+    }
+    const q = request.query as { clear?: string };
+    if (q.clear === "1") {
+      const next = await patchBranding({ [key]: null } as never);
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "setting", entityId: BRANDING_KEY, newValues: { cleared: key } as never, ipAddress: request.ip });
+      return reply.send(next);
+    }
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier image requis." });
+    const buffer = await file.toBuffer();
+    if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+    let optimized;
+    try {
+      // Cachets/signatures : fond souvent transparent → PNG conservé, borné en taille.
+      optimized = await optimizeImage(buffer, { maxLongSide: 520, format: "png" });
+    } catch {
+      return reply.code(400).send({ code: "unsupported_image", message: "Image non prise en charge (formats: PNG, JPEG…)." });
+    }
+    const dataUrl = `data:${optimized.mime};base64,${optimized.buffer.toString("base64")}`;
+    const next = await patchBranding({ [key]: dataUrl } as never);
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "setting", entityId: BRANDING_KEY, newValues: { uploaded: key, bytes: optimized.buffer.length } as never, ipAddress: request.ip });
+    return reply.send(next);
   });
 
   // Paramètre du workflow : liste des étapes soumises au verrou « livrable de

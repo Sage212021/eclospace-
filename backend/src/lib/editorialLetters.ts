@@ -284,6 +284,29 @@ export function letterHtml(subject: string, bodyText: string, maison: string): s
   </div>`;
 }
 
+// Rendu HTML de la lettre pour l'E-MAIL à l'auteur (décision auto-notifiée) :
+// mise en page structurée + CACHET « Direction Éditoriale » apposé sous la
+// signature. Pas de lignes « signature/cachet à la main » (inutiles dans un mail).
+export function letterEmailHtml(layout: LetterLayout, cachetDataUrl?: string | null): string {
+  const paras = layout.paragraphs
+    .map((p) => `<p style="margin:0 0 14px;white-space:pre-wrap">${esc(p).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+  const cachet = cachetDataUrl
+    ? `<img src="${cachetDataUrl}" alt="Cachet Direction Éditoriale" style="height:118px;width:auto;display:inline-block;margin-top:6px">`
+    : "";
+  return `<div style="font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:1.7;color:#0b0b0c;max-width:640px;margin:0 auto;padding:8px">
+    <div style="border-bottom:2px solid #D9B21A;padding-bottom:8px;margin-bottom:18px;font-weight:bold;letter-spacing:.5px;color:#0b0b0c">${esc(layout.maison)}</div>
+    <div style="text-align:right;margin:0 0 16px">${esc(layout.place)}, le ${esc(layout.date)}<br><br><span style="color:#6b7280">À l'attention de</span><br><b>Monsieur/Madame ${esc(layout.recipient)}</b></div>
+    <div style="font-weight:700;margin:0 0 14px">Objet : ${esc(layout.objet)}</div>
+    ${paras}
+    <div style="margin-top:24px;text-align:right">
+      <div style="font-weight:700">Pour ${esc(layout.maison)},</div>
+      <div>La Direction éditoriale</div>
+      ${cachet}
+    </div>
+  </div>`;
+}
+
 // Résout l'identité de la maison (nom) depuis le réglage, avec repli.
 export async function houseName(): Promise<string> {
   const row = await prisma.setting.findUnique({ where: { key: "publisher_identity" } });

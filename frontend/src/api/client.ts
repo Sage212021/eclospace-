@@ -2863,6 +2863,8 @@ export interface DeliveryRow {
   line_count: number;
   total_quantity: number;
   complete: boolean;
+  has_proof: boolean;
+  proof_version_id: string | null;
 }
 
 export interface EligibleOrderLine {
@@ -2916,6 +2918,21 @@ export function createDelivery(orderId: string, input: { carrier?: string; lines
 
 export function confirmDelivery(id: string) {
   return request(`/api/v1/deliveries/${id}/confirm`, { method: "PATCH", body: "{}" });
+}
+
+// Preuve de livraison signée (scan/photo du bon de livraison signé) rattachée à
+// la livraison. Une seule preuve par livraison (un nouveau dépôt la remplace).
+export async function uploadDeliveryProof(id: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/deliveries/${id}/proof`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Dépôt de la preuve impossible.");
+  return response.json() as Promise<{ id: string; version_id: string; has_proof: boolean }>;
+}
+
+// URL de consultation de la preuve signée (ouverte dans un nouvel onglet).
+export function deliveryProofUrl(id: string) {
+  return `${API_BASE}/api/v1/deliveries/${id}/proof`;
 }
 
 export function createPosSale(input: {

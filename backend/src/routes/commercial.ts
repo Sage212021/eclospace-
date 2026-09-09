@@ -6,6 +6,7 @@ import { requirePermission, requireAnyPermission, requireAuth } from "../lib/per
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { adjustStockItem, availableQuantity } from "../lib/stock.js";
+import { storeFile, readStoredFile } from "../lib/storage.js";
 import { nextSalesOrderNumber, nextDeliveryNumber } from "../lib/salesOrderNumber.js";
 import { createInvoiceFromDelivery, createInvoiceFromConsignmentStatement, createInvoiceFromPosSale, createCreditNoteFromReturn, createCreditNoteFromInvoice } from "../lib/invoicing.js";
 import { PeriodClosedError, assertPeriodOpen } from "../lib/accountingPeriod.js";
@@ -921,6 +922,18 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
         order: { include: { lines: true, customer: true, deliveries: { include: { lines: true } } } },
       },
     });
+    // Preuves signées rattachées (une par livraison au plus, la plus récente) —
+    // chargées en une requête pour éviter les allers-retours par ligne.
+    const proofDocs = await prisma.document.findMany({
+      where: { entityType: "delivery", entityId: { in: deliveries.map((d) => d.id) }, category: "preuve_livraison", deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { entityId: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true } } },
+    });
+    const proofByDelivery = new Map<string, string>();
+    for (const doc of proofDocs) {
+      const vId = doc.versions[0]?.id;
+      if (vId && !proofByDelivery.has(doc.entityId)) proofByDelivery.set(doc.entityId, vId);
+    }
     const rows = deliveries.map((d) => {
       const totalDelivered = d.lines.reduce((s, l) => s + l.quantity, 0);
       return {
@@ -934,6 +947,8 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
         line_count: d.lines.length,
         total_quantity: totalDelivered,
         complete: orderFullyDelivered(d.order),
+        has_proof: proofByDelivery.has(d.id),
+        proof_version_id: proofByDelivery.get(d.id) ?? null,
       };
     });
     return reply.send(rows);
@@ -1030,6 +1045,81 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       },
       lines,
     });
+  });
+
+  // Rattachement de la PREUVE DE LIVRAISON signée (scan/photo du bon de livraison
+  // signé à la réception). Stockée dans la GED (Document/DocumentVersion, catégorie
+  // « preuve_livraison », confidentialité interne) et rattachée à la livraison.
+  // Ouvert aux deux pôles qui gèrent l'expédition (commercial ou stock, saisie).
+  fastify.post(
+    "/api/v1/deliveries/:id/proof",
+    { preHandler: requireAnyPermission([{ module: "commercial", action: "saisie" }, { module: "stock", action: "saisie" }]) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const delivery = await prisma.delivery.findUnique({ where: { id } });
+      if (!delivery) return reply.code(404).send({ code: "not_found", message: "Livraison introuvable." });
+      const file = await request.file();
+      if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+      const buffer = await file.toBuffer();
+      if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+
+      const stored = await storeFile(buffer, `preuve-livraison-${delivery.deliveryNumber}-${file.filename}`);
+      // Une seule pièce « preuve » par livraison : on VERSIONNE le même document si
+      // une preuve existe déjà (remplacement), sinon on le crée.
+      let doc = await prisma.document.findFirst({
+        where: { entityType: "delivery", entityId: id, category: "preuve_livraison", deletedAt: null },
+      });
+      if (!doc) {
+        doc = await prisma.document.create({
+          data: {
+            entityType: "delivery",
+            entityId: id,
+            category: "preuve_livraison",
+            confidentiality: "interne",
+            title: `Preuve de livraison ${delivery.deliveryNumber}`,
+            createdBy: request.user!.id,
+            updatedBy: request.user!.id,
+          },
+        });
+      }
+      const last = await prisma.documentVersion.findFirst({ where: { documentId: doc.id }, orderBy: { versionNumber: "desc" } });
+      const version = await prisma.documentVersion.create({
+        data: {
+          documentId: doc.id,
+          versionNumber: (last?.versionNumber ?? 0) + 1,
+          filePath: stored.filePath,
+          fileSize: stored.fileSize,
+          mimeType: file.mimetype,
+          sha256Hash: stored.sha256Hash,
+          changeSummary: `Preuve de livraison signée déposée (${file.filename})`,
+          uploadedBy: request.user!.id,
+        },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: last ? "update" : "create",
+        entityType: "document_version",
+        entityId: version.id,
+        newValues: { delivery_proof: true, deliveryNumber: delivery.deliveryNumber, versionNumber: version.versionNumber },
+        ipAddress: request.ip,
+      });
+      return reply.code(201).send({ id: doc.id, version_id: version.id, has_proof: true });
+    },
+  );
+
+  // Consultation de la preuve signée (flux du fichier). Lecture ouverte aux deux
+  // pôles, sans exiger la permission « documents » de la GED confidentielle.
+  fastify.get("/api/v1/deliveries/:id/proof", { preHandler: deliveryReadGuard }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const doc = await prisma.document.findFirst({
+      where: { entityType: "delivery", entityId: id, category: "preuve_livraison", deletedAt: null },
+      include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+    });
+    const version = doc?.versions[0];
+    if (!version) return reply.code(404).send({ code: "not_found", message: "Aucune preuve de livraison rattachée." });
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
   });
 
   // Ch. 17 §17.6 : dépôt-vente — les exemplaires restent la propriété

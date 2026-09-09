@@ -6,6 +6,14 @@ import { extractSessionCookie, uniqueIsbnPrefix } from "./helpers.js";
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
 
+// Corps multipart minimal pour téléverser un fichier via app.inject.
+function multipartFile(filename: string, contentType: string, content: Buffer) {
+  const boundary = "----ecl" + Math.random().toString(36).slice(2);
+  const head = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`);
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
+  return { body: Buffer.concat([head, content, tail]), contentType: `multipart/form-data; boundary=${boundary}` };
+}
+
 // Bon de livraison (Ch. 17 §17.8, demande opérateur) : registre des livraisons,
 // commandes livrables (reliquats) et détail imprimable du bon de livraison —
 // coordonnées client, quantité commandée vs livrée, mention complète/partielle.
@@ -18,6 +26,7 @@ describe("Bon de livraison — registre, reliquats et détail imprimable", () =>
   let customerId: string;
   let isbnId: string;
   let orderId: string;
+  let firstDeliveryId: string;
 
   beforeAll(async () => {
     app = await buildApp();
@@ -77,6 +86,7 @@ describe("Bon de livraison — registre, reliquats et détail imprimable", () =>
     const del = await app.inject({ method: "POST", url: `/api/v1/sales-orders/${orderId}/deliveries`, headers: { cookie }, payload: { carrier: "Coursier interne", lines: [{ isbn_id: isbnId, quantity: 4 }] } });
     expect(del.statusCode).toBe(201);
     const deliveryId = del.json().id as string;
+    firstDeliveryId = deliveryId;
 
     const note = (await app.inject({ method: "GET", url: `/api/v1/deliveries/${deliveryId}/note`, headers: { cookie } })).json() as {
       delivery_number: string; order_number: string; invoice_number: string | null; complete: boolean;
@@ -115,5 +125,31 @@ describe("Bon de livraison — registre, reliquats et détail imprimable", () =>
     // La commande n'apparaît plus comme livrable (plus de reliquat).
     const orders = (await app.inject({ method: "GET", url: "/api/v1/deliveries/eligible-orders", headers: { cookie } })).json() as Array<{ id: string }>;
     expect(orders.find((o) => o.id === orderId)).toBeUndefined();
+  });
+
+  it("rattache la preuve de livraison signée (scan/photo) et l'expose au registre + en consultation", async () => {
+    expect(firstDeliveryId).toBeTruthy();
+    // Avant : aucune preuve.
+    const before = (await app.inject({ method: "GET", url: "/api/v1/deliveries", headers: { cookie } })).json() as Array<{ id: string; has_proof: boolean }>;
+    expect(before.find((d) => d.id === firstDeliveryId)!.has_proof).toBe(false);
+
+    // Téléversement d'une image (preuve signée).
+    const png = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+    const mp = multipartFile("bl-signe.png", "image/png", png);
+    const up = await app.inject({ method: "POST", url: `/api/v1/deliveries/${firstDeliveryId}/proof`, headers: { cookie, "content-type": mp.contentType }, payload: mp.body });
+    expect(up.statusCode).toBe(201);
+    expect(up.json().has_proof).toBe(true);
+
+    // Le registre marque désormais la livraison comme ayant une preuve.
+    const after = (await app.inject({ method: "GET", url: "/api/v1/deliveries", headers: { cookie } })).json() as Array<{ id: string; has_proof: boolean; proof_version_id: string | null }>;
+    const row = after.find((d) => d.id === firstDeliveryId)!;
+    expect(row.has_proof).toBe(true);
+    expect(row.proof_version_id).toBeTruthy();
+
+    // La consultation renvoie bien le fichier (même type MIME).
+    const view = await app.inject({ method: "GET", url: `/api/v1/deliveries/${firstDeliveryId}/proof`, headers: { cookie } });
+    expect(view.statusCode).toBe(200);
+    expect(view.headers["content-type"]).toContain("image/png");
+    expect(view.rawPayload.length).toBe(png.length);
   });
 });

@@ -1552,6 +1552,9 @@ enum DocumentCategory {
   // Pièce jointe libre déposée à une étape de production (fiche technique, scan,
   // justificatif) par l'acteur de l'étape.
   piece_etape
+  // Preuve de livraison signée (scan/photo du bon de livraison signé à la
+  // réception) rattachée à une livraison (Ch. 17 §17.8).
+  preuve_livraison
   autre
 }
 

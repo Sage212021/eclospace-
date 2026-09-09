@@ -5,6 +5,8 @@ import {
   getDeliveryNote,
   createDelivery,
   confirmDelivery,
+  uploadDeliveryProof,
+  deliveryProofUrl,
   type DeliveryRow,
   type EligibleOrder,
 } from "../api/client";
@@ -112,6 +114,19 @@ export function DeliveriesSection({ canManage }: { canManage: boolean }) {
     }
   }
 
+  async function handleProofUpload(deliveryId: string, file: File | null) {
+    if (!file) return;
+    setError(null);
+    setMessage(null);
+    try {
+      await uploadDeliveryProof(deliveryId, file);
+      setMessage("Preuve de livraison signée rattachée.");
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Dépôt de la preuve impossible.");
+    }
+  }
+
   async function handleConfirm(d: DeliveryRow) {
     const ok = await confirm({
       title: "Confirmer la réception",
@@ -190,6 +205,22 @@ export function DeliveriesSection({ canManage }: { canManage: boolean }) {
                   </div>
                   <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
                     <DocPrintMenu label="Imprimer le bon de livraison" onPrint={(o) => printNote(d.id, o)} />
+                    {d.has_proof && (
+                      <a href={deliveryProofUrl(d.id)} target="_blank" rel="noopener noreferrer" style={proofLinkStyle} title="Ouvrir la preuve de livraison signée">
+                        ✓ Voir la preuve
+                      </a>
+                    )}
+                    {canManage && (
+                      <label style={proofUploadStyle} title="Photo ou scan du bon de livraison signé (image ou PDF)">
+                        {d.has_proof ? "Remplacer la preuve" : "Joindre la preuve signée"}
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          style={{ display: "none" }}
+                          onChange={(e) => { handleProofUpload(d.id, e.target.files?.[0] ?? null); e.target.value = ""; }}
+                        />
+                      </label>
+                    )}
                     {canManage && !d.delivered_at && (
                       <Button variant="view" size="sm" onClick={() => handleConfirm(d)}>Confirmer la réception</Button>
                     )}
@@ -250,3 +281,14 @@ export function DeliveriesSection({ canManage }: { canManage: boolean }) {
 function banner(bg: string, color: string): React.CSSProperties {
   return { background: bg, color, borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12 };
 }
+
+const proofLinkStyle: React.CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600,
+  color: "var(--positive, #2F7D4A)", textDecoration: "none",
+  border: "1px solid var(--positive, #2F7D4A)", borderRadius: 6, padding: "6px 10px",
+};
+
+const proofUploadStyle: React.CSSProperties = {
+  display: "inline-flex", alignItems: "center", fontSize: 12, cursor: "pointer",
+  background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 10px",
+};

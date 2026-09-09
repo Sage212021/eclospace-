@@ -108,6 +108,18 @@ describe("catalogue des motifs d'absence", () => {
     expect(row.status).toBe("validee");
   });
 
+  it("attribue une référence SÉQUENTIELLE (PREFIX-ANNÉE-00001) à chaque demande", async () => {
+    const mk = async () => (await app.inject({ method: "POST", url: "/api/v1/absences", headers: { cookie }, payload: { employee_id: employeeId, type: "permission", reason_code: "permission_personnelle", from_date: "2028-01-01T00:00:00.000Z", to_date: "2028-01-01T00:00:00.000Z" } })).json().id as string;
+    const ids = [await mk(), await mk()];
+    const list = (await app.inject({ method: "GET", url: "/api/v1/absences", headers: { cookie } })).json() as Array<{ id: string; reference?: string }>;
+    const refs = ids.map((id) => list.find((a) => a.id === id)!.reference!);
+    // Forme officielle séquentielle et zéro-remplie.
+    for (const r of refs) expect(r).toMatch(/^PERM-20\d\d-\d{5}$/);
+    // Les numéros se suivent (n, puis n+1) pour la même année.
+    const nums = refs.map((r) => Number(r.split("-")[2]));
+    expect(nums[1]).toBe(nums[0] + 1);
+  });
+
   it("la fiche salarié accepte un e-mail de contact, exposé sur la liste des absences", async () => {
     const empRes = await app.inject({ method: "POST", url: "/api/v1/employees", headers: { cookie }, payload: { first_name: "Mail", last_name: `Test${rnd()}`, email: "salarie.test@example.com" } });
     const emp2 = empRes.json().id as string;

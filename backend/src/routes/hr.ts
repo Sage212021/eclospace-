@@ -8,6 +8,16 @@ import { writeAuditLog } from "../lib/audit.js";
 import { isMailConfigured, sendMail } from "../lib/mailer.js";
 import { activityClosureStatus, sweepClosureReminders, sendClosureReminderNow } from "../lib/activityClosure.js";
 
+// Préfixe de référence par type d'absence (ex. permission → PERM-2026-00045).
+const ABSENCE_PREFIX: Record<string, string> = {
+  permission: "PERM", conge: "CONGE", maladie: "MAL", mission: "MIS",
+  teletravail: "TT", suspension: "SUSP", injustifiee: "ABS",
+};
+// Référence de repli pour les demandes créées AVANT le compteur (reference nulle).
+function fallbackAbsenceReference(type: string, createdAt: Date, id: string): string {
+  return `${ABSENCE_PREFIX[type] ?? "ABS"}-${createdAt.getUTCFullYear()}-${id.replace(/-/g, "").slice(0, 5).toUpperCase()}`;
+}
+
 const employeeSchema = z.object({
   first_name: z.string().min(1),
   last_name: z.string().min(1),
@@ -1199,16 +1209,28 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       }
       category = reasonRef.category;
     }
-    const absence = await prisma.absence.create({
-      data: {
-        employeeId: parsed.data.employee_id,
-        type: category,
-        reasonCode: parsed.data.reason_code ?? null,
-        fromDate,
-        toDate,
-        reason: parsed.data.reason,
-        createdBy: request.user!.id,
-      },
+    // Référence officielle SÉQUENTIELLE : compteur atomique par (préfixe, année).
+    const now = new Date();
+    const counterKey = `${ABSENCE_PREFIX[category] ?? "ABS"}-${now.getUTCFullYear()}`;
+    const absence = await prisma.$transaction(async (tx) => {
+      const counter = await tx.absenceReferenceCounter.upsert({
+        where: { key: counterKey },
+        create: { key: counterKey, lastValue: 1 },
+        update: { lastValue: { increment: 1 } },
+      });
+      const reference = `${counterKey}-${String(counter.lastValue).padStart(5, "0")}`;
+      return tx.absence.create({
+        data: {
+          employeeId: parsed.data.employee_id,
+          type: category,
+          reasonCode: parsed.data.reason_code ?? null,
+          fromDate,
+          toDate,
+          reason: parsed.data.reason,
+          reference,
+          createdBy: request.user!.id,
+        },
+      });
     });
 
     if (employee.managerId) {
@@ -1250,14 +1272,11 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       ? await prisma.user.findMany({ where: { id: { in: approverIds } }, select: { id: true, username: true } })
       : [];
     const approverName = new Map(approvers.map((u) => [u.id, u.username]));
-    const PREFIX: Record<string, string> = {
-      permission: "PERM", conge: "CONGE", maladie: "MAL", mission: "MIS",
-      teletravail: "TT", suspension: "SUSP", injustifiee: "ABS",
-    };
     const withMeta = absences.map((a) => ({
       ...a,
       approvedByName: a.approvedBy ? approverName.get(a.approvedBy) ?? null : null,
-      reference: `${PREFIX[a.type] ?? "ABS"}-${a.createdAt.getUTCFullYear()}-${a.id.replace(/-/g, "").slice(0, 5).toUpperCase()}`,
+      // Référence séquentielle stockée ; repli dérivé pour les anciennes demandes.
+      reference: a.reference ?? fallbackAbsenceReference(a.type, a.createdAt, a.id),
     }));
     return reply.send(withMeta);
   });

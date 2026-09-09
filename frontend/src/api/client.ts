@@ -3250,6 +3250,27 @@ export function getTreasuryForecast(horizonDays = 90) {
   );
 }
 
+// Bilan mensuel de trésorerie : pour chaque mois (1er→31), somme des entrées
+// (encaissements) et des dépenses (module Dépenses, statuts validée + payée),
+// solde = entrées − dépenses. Alimente le tableau d'évolution janvier→décembre
+// du pôle Finance. Aucune re-saisie : tout provient des opérations enregistrées.
+export interface MonthlyBalanceRow {
+  month: number;
+  entrees: number;
+  depenses: number;
+  solde: number;
+  depensesParCategorie: Record<string, number>;
+}
+
+export function getMonthlyBalance(year?: number) {
+  const query = year ? `?year=${year}` : "";
+  return request<{
+    year: number;
+    months: MonthlyBalanceRow[];
+    totals: { entrees: number; depenses: number; solde: number };
+  }>(`/api/v1/finance/monthly-balance${query}`);
+}
+
 // Ch. 9 §9.5, Ch. 18 §18.7 : moteur de droits d'auteur — exécution financière.
 export interface RoyaltyStatement {
   id: string;

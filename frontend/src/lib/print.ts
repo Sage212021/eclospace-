@@ -1498,3 +1498,69 @@ export function printAllJobApplications(d: AllJobApplicationsPrint, opts?: Print
     </table>`;
   openPrintWindow(tr("Candidatures — tous les postes", "Applications — all positions"), body, opts);
 }
+
+// Bilan de trésorerie imprimable (demande opérateur) : entrées − dépenses =
+// solde, sur les périodes choisies (mensuel, trimestriel, semestriel ou annuel)
+// d'une année. Les lignes sont pré-agrégées par l'appelant ; l'impression ne
+// recalcule rien. Le solde négatif est mis en évidence en rouge sobre (charte).
+export interface TreasuryBalancePeriod {
+  label: string;
+  entrees: number;
+  depenses: number;
+  solde: number;
+}
+export interface TreasuryBalancePrintData {
+  year: number;
+  granularityLabel: string;
+  periods: TreasuryBalancePeriod[];
+  totals: { entrees: number; depenses: number; solde: number };
+}
+
+export function printTreasuryBalance(d: TreasuryBalancePrintData, opts?: PrintOpts): void {
+  const cur = "XAF";
+  const soldeCell = (n: number) => `<td class="r num"${n < 0 ? ' style="color:#b23a2e"' : ""}>${money(n, cur)}</td>`;
+  const rows = d.periods
+    .map(
+      (p) => `<tr>
+        <td>${escapeHtml(p.label)}</td>
+        <td class="r num">${money(p.entrees, cur)}</td>
+        <td class="r num">${money(p.depenses, cur)}</td>
+        ${soldeCell(p.solde)}
+      </tr>`,
+    )
+    .join("");
+
+  const title = tr("Bilan de trésorerie", "Treasury balance");
+  const body = `
+    <div class="doc__title">${title} — ${d.year}</div>
+    <div class="meta">
+      <span>${tr("Périodicité", "Breakdown")} : <b>${escapeHtml(d.granularityLabel)}</b></span>
+      <span>${tr("Exercice", "Year")} : <b class="num">${d.year}</b></span>
+      <span>${tr("Édité le", "Issued on")} <b class="num">${fdate(new Date())}</b></span>
+    </div>
+    <table class="lines" style="margin-top:12px">
+      <thead><tr>
+        <th>${tr("Période", "Period")}</th>
+        <th class="r">${tr("Entrées", "Inflows")}</th>
+        <th class="r">${tr("Dépenses", "Expenses")}</th>
+        <th class="r">${tr("Solde", "Balance")}</th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="4" style="text-align:center;color:#6b7280">${tr("Aucune opération sur l'exercice.", "No operation for this year.")}</td></tr>`}</tbody>
+      <tfoot>
+        <tr style="font-weight:700;border-top:2px solid #0b0b0c">
+          <td>${tr("Total annuel", "Annual total")}</td>
+          <td class="r num">${money(d.totals.entrees, cur)}</td>
+          <td class="r num">${money(d.totals.depenses, cur)}</td>
+          ${soldeCell(d.totals.solde)}
+        </tr>
+      </tfoot>
+    </table>
+    <div style="margin-top:22px;font-size:10.5px;color:#6b7280;line-height:1.6">
+      ${tr(
+        "Entrées = encaissements enregistrés. Dépenses = module Dépenses, statuts « validée » et « payée ». Solde = entrées − dépenses. Montants en francs CFA (XAF), calculés automatiquement à partir des opérations enregistrées.",
+        "Inflows = recorded collections. Expenses = Expenses module, statuses “validated” and “paid”. Balance = inflows − expenses. Amounts in CFA francs (XAF), computed automatically from recorded operations.",
+      )}
+    </div>`;
+
+  openPrintWindow(`${title} ${d.year} — ${d.granularityLabel}`, body, opts);
+}

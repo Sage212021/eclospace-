@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   createAccountTransfer,
   createBankAccount,
@@ -22,6 +22,8 @@ import {
   type PendingCancellationInvoice,
   listRoyaltyStatements,
   listShippingRates,
+  getMonthlyBalance,
+  type MonthlyBalanceRow,
   nextDunning,
   payRoyaltyStatement,
   setContractBeneficiaries,
@@ -72,7 +74,7 @@ import { Modal, Field } from "../components/Modal";
 import { EmailModal } from "../components/EmailModal";
 import { Button } from "../components/Button";
 import { IconFinance } from "../components/icons";
-import { printInvoice, printRoyaltyStatement, type PrintOpts } from "../lib/print";
+import { printInvoice, printRoyaltyStatement, printTreasuryBalance, type PrintOpts } from "../lib/print";
 import { downloadInvoicePdf, downloadRoyaltyStatementPdf } from "../lib/financePdf";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { AccountingExportSection } from "../components/AccountingExportSection";
@@ -523,6 +525,13 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
       <RevenueByFamilyCard />
 
       <AnnualSummarySection />
+
+      {/* Bilan de trésorerie (demande opérateur) : entrées (encaissements) −
+          dépenses (module Dépenses, validées + payées) = solde, sur la
+          périodicité choisie (mensuel, trimestriel, semestriel, annuel).
+          Imprimable / exportable en PDF. Tout est calculé automatiquement à
+          partir des opérations déjà enregistrées. */}
+      <MonthlyBalanceSection />
 
       <PendingQuotesCard />
 
@@ -1445,6 +1454,212 @@ function PaymentMethodsModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+// Bilan de trésorerie : pour la périodicité choisie (mensuel, trimestriel,
+// semestriel ou annuel), on somme les entrées (encaissements enregistrés) et les
+// dépenses (module Dépenses, statuts « validée » + « payée »), et on calcule le
+// solde = entrées − dépenses. Rien à re-saisir : tout provient des opérations
+// déjà enregistrées. Le tableau montre l'évolution sur l'année avec le cumul
+// annuel et le détail des dépenses par catégorie (dépliable). Chaque bilan est
+// imprimable / exportable en PDF avec l'en-tête officiel de la maison.
+const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+
+type BalanceGranularity = "mensuel" | "trimestriel" | "semestriel" | "annuel";
+const GRANULARITY_LABELS: Record<BalanceGranularity, string> = {
+  mensuel: "Mensuel",
+  trimestriel: "Trimestriel",
+  semestriel: "Semestriel",
+  annuel: "Annuel",
+};
+
+// Une ligne agrégée (période) : libellé + entrées / dépenses / solde + le détail
+// des dépenses par catégorie cumulé sur la période.
+interface BalancePeriodRow {
+  key: string;
+  label: string;
+  entrees: number;
+  depenses: number;
+  solde: number;
+  depensesParCategorie: Record<string, number>;
+}
+
+// Regroupe les 12 mois selon la périodicité choisie. Chaque groupe est décrit par
+// les indices de mois qu'il couvre (0 = janvier) et son libellé.
+function periodGroups(granularity: BalanceGranularity, year: number): { key: string; label: string; months: number[] }[] {
+  switch (granularity) {
+    case "mensuel":
+      return MONTH_LABELS.map((label, i) => ({ key: String(i), label, months: [i] }));
+    case "trimestriel":
+      return [
+        { key: "T1", label: "1er trimestre (janv.–mars)", months: [0, 1, 2] },
+        { key: "T2", label: "2e trimestre (avr.–juin)", months: [3, 4, 5] },
+        { key: "T3", label: "3e trimestre (juil.–sept.)", months: [6, 7, 8] },
+        { key: "T4", label: "4e trimestre (oct.–déc.)", months: [9, 10, 11] },
+      ];
+    case "semestriel":
+      return [
+        { key: "S1", label: "1er semestre (janv.–juin)", months: [0, 1, 2, 3, 4, 5] },
+        { key: "S2", label: "2e semestre (juil.–déc.)", months: [6, 7, 8, 9, 10, 11] },
+      ];
+    case "annuel":
+      return [{ key: "A", label: `Année ${year}`, months: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] }];
+  }
+}
+
+function aggregatePeriods(rows: MonthlyBalanceRow[], granularity: BalanceGranularity, year: number): BalancePeriodRow[] {
+  return periodGroups(granularity, year).map((g) => {
+    const agg: BalancePeriodRow = { key: g.key, label: g.label, entrees: 0, depenses: 0, solde: 0, depensesParCategorie: {} };
+    for (const mi of g.months) {
+      const m = rows[mi];
+      if (!m) continue;
+      agg.entrees += m.entrees;
+      agg.depenses += m.depenses;
+      for (const [cat, amt] of Object.entries(m.depensesParCategorie)) {
+        agg.depensesParCategorie[cat] = (agg.depensesParCategorie[cat] ?? 0) + amt;
+      }
+    }
+    agg.solde = agg.entrees - agg.depenses;
+    return agg;
+  });
+}
+
+function MonthlyBalanceSection() {
+  const { t } = useI18n();
+  const now = new Date();
+  const [year, setYear] = useState(now.getUTCFullYear());
+  const [granularity, setGranularity] = useState<BalanceGranularity>("mensuel");
+  const [rows, setRows] = useState<MonthlyBalanceRow[] | null>(null);
+  const [totals, setTotals] = useState<{ entrees: number; depenses: number; solde: number } | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRows(null);
+    setError(null);
+    getMonthlyBalance(year)
+      .then((r) => { setRows(r.months); setTotals(r.totals); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Chargement du bilan impossible."));
+  }, [year]);
+
+  // Montants en francs CFA (XAF), chiffres à chasse fixe (charte Éclospace).
+  const money = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF", maximumFractionDigits: 0 }).format(n);
+  const catLabel = (code: string) => t("fin.cat." + code, CATEGORY_LABELS[code as ExpenseCategory] ?? code);
+
+  // Bornes d'années proposées : de l'année en cours jusqu'à 4 ans en arrière.
+  const yearOptions: number[] = [];
+  for (let y = now.getUTCFullYear() + 1; y >= now.getUTCFullYear() - 4; y--) yearOptions.push(y);
+
+  const periods = rows ? aggregatePeriods(rows, granularity, year) : [];
+  const periodHeader =
+    granularity === "mensuel" ? t("fin.month", "Mois")
+    : granularity === "trimestriel" ? t("fin.quarter", "Trimestre")
+    : granularity === "semestriel" ? t("fin.semester", "Semestre")
+    : t("fin.year", "Année");
+
+  // Impression / export PDF (choix natif du navigateur) du bilan sur la
+  // périodicité affichée, avec l'en-tête officiel de la maison.
+  function print(asPdf: boolean) {
+    if (!totals) return;
+    printTreasuryBalance(
+      {
+        year,
+        granularityLabel: GRANULARITY_LABELS[granularity],
+        periods: periods.map((p) => ({ label: p.label, entrees: p.entrees, depenses: p.depenses, solde: p.solde })),
+        totals,
+      },
+      { letterhead: true, embed: asPdf },
+    );
+  }
+
+  return (
+    <Card
+      title={t("fin.treasury_balance", "Bilan de trésorerie")}
+      icon={<IconFinance />}
+      subtitle={t("fin.treasury_balance_sub", "Entrées − dépenses (validées et payées) = solde. Périodicité au choix : mensuel, trimestriel, semestriel ou annuel. Calcul automatique à partir des opérations enregistrées.")}
+      action={
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <select value={granularity} onChange={(e) => { setGranularity(e.target.value as BalanceGranularity); setOpenKey(null); }} style={{ fontSize: 13 }} title={t("fin.periodicity", "Périodicité")}>
+            {(Object.keys(GRANULARITY_LABELS) as BalanceGranularity[]).map((g) => (
+              <option key={g} value={g}>{t("fin.gran." + g, GRANULARITY_LABELS[g])}</option>
+            ))}
+          </select>
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ fontSize: 13 }} title={t("fin.year", "Année")}>
+            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <Button variant="view" size="sm" onClick={() => print(false)} disabled={!rows}>{t("fin.print", "Imprimer")}</Button>
+          <Button variant="view" size="sm" onClick={() => print(true)} disabled={!rows}>{t("fin.pdf", "PDF")}</Button>
+        </div>
+      }
+    >
+      {error && <p style={{ color: "var(--alert)", fontSize: 13, margin: 0 }}>{error}</p>}
+      {!error && !rows && <Empty>{t("fin.loading", "Chargement…")}</Empty>}
+      {rows && totals && (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13, minWidth: 520 }}>
+            <thead>
+              <tr style={{ textAlign: "left", borderBottom: "2px solid var(--line)" }}>
+                <th style={{ padding: "8px 10px", fontWeight: 600 }}>{periodHeader}</th>
+                <th style={{ padding: "8px 10px", fontWeight: 600, textAlign: "right" }}>{t("fin.entries", "Entrées")}</th>
+                <th style={{ padding: "8px 10px", fontWeight: 600, textAlign: "right" }}>{t("fin.expenses", "Dépenses")}</th>
+                <th style={{ padding: "8px 10px", fontWeight: 600, textAlign: "right" }}>{t("fin.balance_short", "Solde")}</th>
+                <th style={{ padding: "8px 10px", width: 40 }} />
+              </tr>
+            </thead>
+            <tbody>
+              {periods.map((p) => {
+                const hasActivity = p.entrees !== 0 || p.depenses !== 0;
+                const cats = Object.entries(p.depensesParCategorie).sort((a, b) => b[1] - a[1]);
+                const isOpen = openKey === p.key;
+                return (
+                  <Fragment key={p.key}>
+                    <tr
+                      style={{ borderBottom: "1px solid var(--line)", cursor: cats.length > 0 ? "pointer" : "default", opacity: hasActivity ? 1 : 0.5 }}
+                      onClick={() => cats.length > 0 && setOpenKey(isOpen ? null : p.key)}
+                    >
+                      <td style={{ padding: "8px 10px" }}>{p.label}</td>
+                      <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "var(--font-mono)", color: p.entrees > 0 ? "var(--positive, #2F7D4A)" : "var(--muted)" }}>{money(p.entrees)}</td>
+                      <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "var(--font-mono)", color: p.depenses > 0 ? "var(--ink)" : "var(--muted)" }}>{money(p.depenses)}</td>
+                      <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 700, color: p.solde < 0 ? "var(--alert)" : "var(--ink)" }}>{money(p.solde)}</td>
+                      <td style={{ padding: "8px 10px", textAlign: "center", color: "var(--muted)" }}>
+                        {cats.length > 0 && <span style={{ transition: "transform .15s", display: "inline-block", transform: isOpen ? "rotate(90deg)" : "none" }}>▸</span>}
+                      </td>
+                    </tr>
+                    {isOpen && cats.length > 0 && (
+                      <tr style={{ background: "var(--paper)" }}>
+                        <td colSpan={5} style={{ padding: "8px 16px" }}>
+                          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>{t("fin.expenses_by_cat", "Dépenses par catégorie")}</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 20px" }}>
+                            {cats.map(([code, amt]) => (
+                              <span key={code} style={{ fontSize: 12.5 }}>
+                                {catLabel(code)} : <strong style={{ fontFamily: "var(--font-mono)" }}>{money(amt)}</strong>
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700 }}>
+                <td style={{ padding: "10px" }}>{t("fin.annual_total", "Total annuel")}</td>
+                <td style={{ padding: "10px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--positive, #2F7D4A)" }}>{money(totals.entrees)}</td>
+                <td style={{ padding: "10px", textAlign: "right", fontFamily: "var(--font-mono)" }}>{money(totals.depenses)}</td>
+                <td style={{ padding: "10px", textAlign: "right", fontFamily: "var(--font-mono)", color: totals.solde < 0 ? "var(--alert)" : "var(--ink)" }}>{money(totals.solde)}</td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+          <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>
+            {t("fin.monthly_balance_note", "Entrées = encaissements enregistrés. Dépenses = module Dépenses, statuts « validée » et « payée ». Cliquez sur une ligne pour le détail par catégorie ; « Imprimer » / « PDF » édite le bilan de la périodicité choisie.")}
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }
 

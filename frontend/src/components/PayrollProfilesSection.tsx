@@ -230,7 +230,9 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
   async function saveDeductions() {
     if (!employeeId) return;
     try {
-      const d = await saveMonthlyDeductions(employeeId, period, { primes: gains.primes, heures_sup: gains.heures_sup, retenue_absence: manualRetenue, ...internal });
+      // Les primes sont gérées par le module « Primes du mois » (source unique) :
+      // on ne les envoie plus ici, pour ne pas écraser le total des primes validées.
+      const d = await saveMonthlyDeductions(employeeId, period, { heures_sup: gains.heures_sup, retenue_absence: manualRetenue, ...internal });
       setDedStatus(d.status);
       setDedLocked(d.locked);
       setMessage(t("pay.deductions_saved", "Éléments du mois enregistrés (grille mensuelle mise à jour)."));
@@ -418,14 +420,12 @@ export function PayrollProfilesSection({ employees, canManage, collapsible, defa
             <div style={{ marginTop: 10 }}>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>{t("pay.gains_title", "Gains du mois (saisie RH)")}</div>
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
-                <Field label={t("pay.gain_primes", "Primes du mois")}>
-                  <input type="number" min={0} step={100} disabled={dedLocked} value={gains.primes} onChange={(e) => setGains({ ...gains, primes: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
-                </Field>
                 <Field label={t("pay.gain_heures_sup", "Heures sup (montant)")}>
                   <input type="number" min={0} step={100} disabled={dedLocked} value={gains.heures_sup} onChange={(e) => setGains({ ...gains, heures_sup: Math.max(Number(e.target.value) || 0, 0) })} style={{ fontFamily: "var(--font-mono, monospace)", width: 120 }} />
                 </Field>
               </div>
               <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{t("pay.gains_hint", "Imposables : ils s'ajoutent au salaire brut et à l'assiette d'impôt (comme dans la grille mensuelle).")}</p>
+              <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{t("pay.primes_moved", "Les primes du mois se saisissent désormais dans la rubrique « Primes du mois » : une fois validées, elles s'intègrent automatiquement à la paie.")}</p>
             </div>
             {/* Retenues du mois saisies par le RH : l'absence réduit le brut (avant
                 impôt) ; les prêts/avances/retards/autres réduisent le NET. Chaque

@@ -29,6 +29,7 @@ import { Card } from "./Card";
 import { Button } from "./Button";
 import { GuidanceNote } from "./GuidanceNote";
 import { PayrollMonthlySection } from "./PayrollMonthlySection";
+import { PrimesSection } from "./PrimesSection";
 import { PayrollProfilesSection } from "./PayrollProfilesSection";
 import { PayrollSettingsSection } from "./PayrollSettingsSection";
 import { SalaryElementsGuide } from "./SalaryElementsGuide";
@@ -930,6 +931,7 @@ export function PayrollEngineHub({
         <PayrollProfilesSection employees={employees} canManage={canEditPayroll} collapsible />
         <InternesCard />
         <PayrollRegisterSection canClose={canClosePayroll} collapsible />
+        <PrimesSection employees={employees} canManage={canEditPayroll} />
         <PayrollMonthlySection canManage={canEditPayroll} canValidateDg={canValidatePayrollDg} collapsible />
         <HandoffCard canManage={canHandoffDaf} />
         <JournalCard />

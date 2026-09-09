@@ -1498,3 +1498,223 @@ export function printAllJobApplications(d: AllJobApplicationsPrint, opts?: Print
     </table>`;
   openPrintWindow(tr("Candidatures — tous les postes", "Applications — all positions"), body, opts);
 }
+
+// Bilan de trésorerie imprimable (demande opérateur) : entrées − dépenses =
+// solde, sur les périodes choisies (mensuel, trimestriel, semestriel ou annuel)
+// d'une année. Les lignes sont pré-agrégées par l'appelant ; l'impression ne
+// recalcule rien. Le solde négatif est mis en évidence en rouge sobre (charte).
+export interface TreasuryBalancePeriod {
+  label: string;
+  entrees: number;
+  depenses: number;
+  solde: number;
+}
+export interface TreasuryBalancePrintData {
+  year: number;
+  granularityLabel: string;
+  periods: TreasuryBalancePeriod[];
+  totals: { entrees: number; depenses: number; solde: number };
+}
+
+export function printTreasuryBalance(d: TreasuryBalancePrintData, opts?: PrintOpts): void {
+  const cur = "XAF";
+  const soldeCell = (n: number) => `<td class="r num"${n < 0 ? ' style="color:#b23a2e"' : ""}>${money(n, cur)}</td>`;
+  const rows = d.periods
+    .map(
+      (p) => `<tr>
+        <td>${escapeHtml(p.label)}</td>
+        <td class="r num">${money(p.entrees, cur)}</td>
+        <td class="r num">${money(p.depenses, cur)}</td>
+        ${soldeCell(p.solde)}
+      </tr>`,
+    )
+    .join("");
+
+  const title = tr("Bilan de trésorerie", "Treasury balance");
+  const body = `
+    <div class="doc__title">${title} — ${d.year}</div>
+    <div class="meta">
+      <span>${tr("Périodicité", "Breakdown")} : <b>${escapeHtml(d.granularityLabel)}</b></span>
+      <span>${tr("Exercice", "Year")} : <b class="num">${d.year}</b></span>
+      <span>${tr("Édité le", "Issued on")} <b class="num">${fdate(new Date())}</b></span>
+    </div>
+    <table class="lines" style="margin-top:12px">
+      <thead><tr>
+        <th>${tr("Période", "Period")}</th>
+        <th class="r">${tr("Entrées", "Inflows")}</th>
+        <th class="r">${tr("Dépenses", "Expenses")}</th>
+        <th class="r">${tr("Solde", "Balance")}</th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="4" style="text-align:center;color:#6b7280">${tr("Aucune opération sur l'exercice.", "No operation for this year.")}</td></tr>`}</tbody>
+      <tfoot>
+        <tr style="font-weight:700;border-top:2px solid #0b0b0c">
+          <td>${tr("Total annuel", "Annual total")}</td>
+          <td class="r num">${money(d.totals.entrees, cur)}</td>
+          <td class="r num">${money(d.totals.depenses, cur)}</td>
+          ${soldeCell(d.totals.solde)}
+        </tr>
+      </tfoot>
+    </table>
+    <div style="margin-top:22px;font-size:10.5px;color:#6b7280;line-height:1.6">
+      ${tr(
+        "Entrées = encaissements enregistrés. Dépenses = module Dépenses, statuts « validée » et « payée ». Solde = entrées − dépenses. Montants en francs CFA (XAF), calculés automatiquement à partir des opérations enregistrées.",
+        "Inflows = recorded collections. Expenses = Expenses module, statuses “validated” and “paid”. Balance = inflows − expenses. Amounts in CFA francs (XAF), computed automatically from recorded operations.",
+      )}
+    </div>`;
+
+  openPrintWindow(`${title} ${d.year} — ${d.granularityLabel}`, body, opts);
+}
+
+// Bon de livraison imprimable (Ch. 17 §17.8, demande opérateur) : document
+// professionnel remis avec la marchandise. En-tête et coordonnées de la maison
+// (via documentShell), numéro de BL, date, référence commande/facture, identité
+// et adresse du client, tableau des ouvrages (ISBN, titre, quantité commandée /
+// livrée, observations à remplir à la main), mention « Livraison complète /
+// partielle », et trois zones de signature (Éclosion / Livreur / Client) avec la
+// mention « Reçu conforme » à cocher. Le bon peut être imprimé, signé à la main,
+// puis scanné/photographié et rattaché à la livraison comme preuve.
+export interface DeliveryNotePrintData {
+  deliveryNumber: string;
+  orderNumber: string;
+  invoiceNumber: string | null;
+  carrier: string | null;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  complete: boolean;
+  customer: { name: string; contactName: string | null; phone: string | null; email: string | null; address: string | null };
+  lines: { isbn13: string; title: string; ordered: number; delivered: number }[];
+}
+
+export function printDeliveryNote(d: DeliveryNotePrintData, opts?: PrintOpts): void {
+  const rows = d.lines
+    .map(
+      (l) => `<tr>
+        <td class="num">${escapeHtml(l.isbn13)}</td>
+        <td>${escapeHtml(l.title)}</td>
+        <td class="r num">${fnum(l.ordered)}</td>
+        <td class="r num">${fnum(l.delivered)}</td>
+        <td style="min-width:120px"></td>
+      </tr>`,
+    )
+    .join("");
+
+  // Une zone de signature (libellé + qualité + lignes Nom / Signature / Date).
+  const sigBox = (roleLabel: string, roleName: string) => `
+    <div style="flex:1; min-width:180px; border:1px solid #e7e2d4; border-radius:8px; padding:10px 12px">
+      <div class="party__label">${escapeHtml(roleLabel)}</div>
+      <div style="font-size:12.5px; font-weight:600; margin:2px 0 10px">${escapeHtml(roleName)}</div>
+      <div style="font-size:11px; color:#6b7280; line-height:2.2">
+        ${tr("Nom", "Name")} : ______________________<br>
+        ${tr("Signature", "Signature")} :<br><br>
+        ${tr("Date", "Date")} : ______________________
+      </div>
+    </div>`;
+
+  const title = tr("Bon de livraison", "Delivery note");
+  const mention = d.complete
+    ? `<span class="badge">${tr("Livraison complète", "Complete delivery")}</span>`
+    : `<span class="badge" style="border-color:#b87400;color:#b87400">${tr("Livraison partielle", "Partial delivery")}</span>`;
+
+  const body = `
+    <div class="doc__title">${title}</div>
+    <div class="meta">
+      <span>${tr("N° du bon", "Note no.")} : <b class="num">${escapeHtml(d.deliveryNumber)}</b></span>
+      <span>${tr("Date", "Date")} : <b class="num">${fdate(d.shippedAt ?? new Date())}</b></span>
+      <span>${tr("Commande", "Order")} : <b class="num">${escapeHtml(d.orderNumber)}</b></span>
+      ${d.invoiceNumber ? `<span>${tr("Facture", "Invoice")} : <b class="num">${escapeHtml(d.invoiceNumber)}</b></span>` : ""}
+      ${d.carrier ? `<span>${tr("Transporteur", "Carrier")} : <b>${escapeHtml(d.carrier)}</b></span>` : ""}
+    </div>
+
+    <div style="display:flex; gap:40px; flex-wrap:wrap; margin-bottom:14px">
+      <div class="party" style="flex:1; min-width:220px; margin:0">
+        <div class="party__label">${tr("Client", "Customer")}</div>
+        <div class="party__name">${escapeHtml(d.customer.name)}</div>
+        ${d.customer.contactName ? `<div style="font-size:12px">${escapeHtml(d.customer.contactName)}</div>` : ""}
+        ${d.customer.phone ? `<div style="font-size:12px; color:#4b5563">${tr("Tél.", "Tel.")} ${escapeHtml(d.customer.phone)}</div>` : ""}
+        ${d.customer.email ? `<div style="font-size:12px; color:#4b5563">${escapeHtml(d.customer.email)}</div>` : ""}
+      </div>
+      <div class="party" style="flex:1; min-width:220px; margin:0">
+        <div class="party__label">${tr("Adresse de livraison", "Delivery address")}</div>
+        <div style="font-size:12.5px; white-space:pre-line">${escapeHtml(d.customer.address ?? tr("(à préciser)", "(to be specified)"))}</div>
+      </div>
+    </div>
+
+    <div style="margin:6px 0 4px">${mention}</div>
+
+    <table class="lines" style="margin-top:6px">
+      <thead><tr>
+        <th>${tr("ISBN / Réf.", "ISBN / Ref.")}</th>
+        <th>${tr("Titre de l'ouvrage", "Title")}</th>
+        <th class="r">${tr("Qté commandée", "Qty ordered")}</th>
+        <th class="r">${tr("Qté livrée", "Qty delivered")}</th>
+        <th>${tr("Observations", "Remarks")}</th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="5" style="text-align:center;color:#6b7280">${tr("Aucun ouvrage.", "No item.")}</td></tr>`}</tbody>
+    </table>
+
+    <div style="margin-top:16px; border:1px solid #e7e2d4; border-radius:8px; padding:10px 12px">
+      <div style="font-size:12px">
+        <b>${tr("Reçu conforme", "Received in good order")}</b> :
+        &nbsp; ☐ ${tr("Oui", "Yes")} &nbsp;&nbsp; ☐ ${tr("Avec réserves", "With reservations")}
+      </div>
+      <div style="font-size:11px; color:#6b7280; margin-top:6px">
+        ${tr("Réserves / observations", "Reservations / remarks")} : ________________________________________________<br><br>
+        ______________________________________________________________________________
+      </div>
+    </div>
+
+    <div style="margin-top:18px; display:flex; gap:16px; flex-wrap:wrap">
+      ${sigBox(tr("Éclosion Édition", "Éclosion Édition"), HOUSE.legalName)}
+      ${sigBox(tr("Livreur / Responsable", "Carrier / Officer"), d.carrier ?? "")}
+      ${sigBox(tr("Client / Réceptionnaire", "Customer / Recipient"), d.customer.name)}
+    </div>`;
+
+  openPrintWindow(`${title} ${d.deliveryNumber}`, body, opts);
+}
+
+// Lettre officielle de décision éditoriale (refonte 09/09/2026) : mise en page
+// harmonieuse à l'en-tête de la maison (logo + filigrane, ou papier à en-tête
+// intégré / vierge selon `opts`). Date et destinataire alignés à droite, objet,
+// corps justifié, puis bloc de signature aligné à droite (« Pour Éclosion
+// Édition » + zone de signature et cachet + nom du responsable). Le contenu
+// (paragraphes) est fourni par le serveur, jamais recomposé ici.
+export interface DecisionLetterLayout {
+  place: string;
+  date: string;
+  recipient: string;
+  objet: string;
+  paragraphs: string[];
+  maison: string;
+}
+
+export function printEditorialDecisionLetter(d: DecisionLetterLayout, opts?: PrintOpts): void {
+  const paras = d.paragraphs
+    // Un paragraphe peut contenir des retours à la ligne (liste à puces) :
+    // on les préserve avec des <br>.
+    .map((p) => `<p style="margin:0 0 12px;text-align:justify;white-space:pre-wrap">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+
+  const body = `
+    <div style="text-align:right;margin:2px 0 18px;font-size:12.5px">
+      ${escapeHtml(d.place)}, le ${escapeHtml(d.date)}<br><br>
+      <span style="color:#6b7280">À l'attention de</span><br>
+      <b>Monsieur/Madame ${escapeHtml(d.recipient)}</b>
+    </div>
+
+    <div style="font-weight:700;margin:0 0 16px">${tr("Objet", "Subject")} : ${escapeHtml(d.objet)}</div>
+
+    ${paras}
+
+    <div style="margin-top:34px;display:flex;justify-content:flex-end">
+      <div style="min-width:280px;text-align:left">
+        <div style="font-weight:700">${tr("Pour", "For")} ${escapeHtml(d.maison)},</div>
+        <div>La Direction éditoriale</div>
+        <div style="margin-top:40px;font-size:11px;color:#6b7280">${tr("Signature et cachet", "Signature and stamp")} :</div>
+        <div style="border-top:1px solid #0b0b0c;margin-top:2px;height:0"></div>
+        <div style="margin-top:16px;font-size:11px;color:#6b7280">${tr("Nom du responsable", "Officer's name")} :</div>
+        <div style="border-top:1px solid #0b0b0c;margin-top:2px;height:0"></div>
+      </div>
+    </div>`;
+
+  openPrintWindow(`${tr("Lettre de décision", "Decision letter")} — ${d.recipient}`, body, opts);
+}

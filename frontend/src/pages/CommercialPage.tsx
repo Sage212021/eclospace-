@@ -33,6 +33,7 @@ import { StandardActionBar } from "../components/StandardActionBar";
 import { printCustomerFiche } from "../lib/print";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
+import { DeliveriesSection } from "../components/DeliveriesSection";
 import { TeamPerformanceSection } from "../components/TeamPerformanceSection";
 import { MyCommercialStockCard } from "../components/CommercialStockSection";
 import { useConfirm } from "../components/ConfirmProvider";
@@ -254,6 +255,10 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder, canSe
           );
         })()}
       </Card>
+
+      {/* Livraisons — bons de livraison (Ch. 17 §17.8). Rubrique partagée avec le
+          pôle Magasin/Stock : création depuis une commande + impression du BL. */}
+      <DeliveriesSection canManage={canManage} />
 
       {canManage && (
         <>

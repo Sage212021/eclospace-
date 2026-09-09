@@ -8,7 +8,7 @@ import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { isMailConfigured, sendMail, senderIdentity } from "../lib/mailer.js";
-import { resolveLetterTemplates, renderLetter, letterHtml, houseName, LETTER_KEYS, LETTER_LABELS, DEFAULT_LETTERS, type EditorialLetterKey } from "../lib/editorialLetters.js";
+import { resolveLetterTemplates, composeLetter, letterHtml, houseName, buildPointsBlock, LETTER_KEYS, LETTER_LABELS, DEFAULT_LETTERS, type EditorialLetterKey } from "../lib/editorialLetters.js";
 import { readingCommitteeRules, DEFAULT_READING_COMMITTEE_RULES, READING_COMMITTEE_RULES_KEY } from "../lib/readingCommitteeRules.js";
 import { parseGrilleScores } from "../lib/aiEvaluationScores.js";
 import { createHash } from "node:crypto";
@@ -46,10 +46,16 @@ const evaluationSchema = z.object({
 
 const editorialDecisionSchema = z.object({
   decision: z.nativeEnum(EditorialDecisionType),
+  // Motivation INTERNE (dossier, historique) — jamais reproduite dans la lettre.
   motivation: z.string().min(1),
   // Acceptation « sous conditions » (audit éditorial, point n°2) : la liste des
   // conditions à lever avant production. Ignorée pour les autres décisions.
   conditions: z.array(z.string().min(1)).optional(),
+  // Éléments COMMUNICABLES à l'auteur, validés par la Direction : message
+  // complémentaire + points essentiels (conditions / axes de révision / motifs).
+  // Seuls ces éléments alimentent la lettre — jamais le rapport du comité.
+  author_message: z.string().max(4000).optional(),
+  author_points: z.array(z.string().min(1).max(500)).max(20).optional(),
 });
 
 async function ratingThresholds() {
@@ -703,22 +709,32 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
             decision: parsed.data.decision,
             decidedById: request.user!.id,
             motivation: parsed.data.motivation,
+            authorMessage: parsed.data.author_message?.trim() || null,
+            authorPoints: parsed.data.author_points?.map((p) => p.trim()).filter((p) => p.length > 0) ?? undefined,
             scoreGapFlag,
           },
         });
 
         // Acceptation sous conditions (point n°2) : on enregistre les conditions
-        // posées comme des éléments à lever, un par un, avant la production.
-        if (parsed.data.decision === "acceptation_conditions" && parsed.data.conditions?.length) {
-          await tx.editorialAcceptanceCondition.createMany({
-            data: parsed.data.conditions
-              .map((c) => c.trim())
-              .filter((c) => c.length > 0)
-              .map((label) => ({ manuscriptId: id, decisionId: created.id, label, createdById: request.user!.id })),
-          });
+        // posées comme des éléments à lever, un par un, avant la production. Les
+        // « points communicables » saisis par la Direction en tiennent lieu si la
+        // liste dédiée n'est pas fournie (l'interface envoie les deux).
+        if (parsed.data.decision === "acceptation_conditions") {
+          const condLabels = (parsed.data.conditions?.length ? parsed.data.conditions : parsed.data.author_points ?? [])
+            .map((c) => c.trim())
+            .filter((c) => c.length > 0);
+          if (condLabels.length > 0) {
+            await tx.editorialAcceptanceCondition.createMany({
+              data: condLabels.map((label) => ({ manuscriptId: id, decisionId: created.id, label, createdById: request.user!.id })),
+            });
+          }
         }
 
-        const isTerminalDecision = ["acceptation", "acceptation_conditions", "refus"].includes(parsed.data.decision);
+        // Décisions terminales (le dossier quitte l'étape « décision ») :
+        // acceptation(s) → planification ; refus et refus avec resoumission →
+        // archivage. « revision » et « attente » laissent le dossier OUVERT à
+        // l'étape de décision (en attente d'une version révisée / d'un complément).
+        const isTerminalDecision = ["acceptation", "acceptation_conditions", "refus", "refus_resoumission"].includes(parsed.data.decision);
         if (isTerminalDecision) {
           await tx.manuscriptStep.upsert({
             where: { manuscriptId_statusId: { manuscriptId: id, statusId: manuscript.statusId } },
@@ -737,7 +753,7 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
           // Depuis D-010 (18/08/2026), la contractualisation n'est plus l'étape
           // qui suit la décision : elle a été déplacée juste après la validation
           // du BAT. La production démarre donc sur la planification.
-          const nextCode = parsed.data.decision === "refus" ? "ARCHIVAGE" : "PLANIFICATION";
+          const nextCode = ["refus", "refus_resoumission"].includes(parsed.data.decision) ? "ARCHIVAGE" : "PLANIFICATION";
           const nextStatus = await tx.workflowStatus.findUniqueOrThrow({ where: { code: nextCode } });
           await tx.manuscript.update({ where: { id }, data: { statusId: nextStatus.id, updatedBy: request.user!.id } });
           await tx.stepTransition.create({
@@ -759,7 +775,7 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       // conditions / refus courtois), à partir de modèles éditables, et on trace
       // l'envoi sur la décision. Au meilleur effort : n'échoue jamais la décision.
       let authorNotifiedTo: string | null = null;
-      if (["acceptation", "acceptation_conditions", "refus"].includes(parsed.data.decision)) {
+      if (LETTER_KEYS.includes(parsed.data.decision as EditorialLetterKey)) {
         try {
           const contributor = await prisma.workContributor.findFirst({
             where: { manuscriptId: id, role: "author" },
@@ -767,17 +783,28 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
           });
           const email = contributor?.partner.email?.trim();
           if (email) {
+            const key = parsed.data.decision as EditorialLetterKey;
             const templates = await resolveLetterTemplates();
             const maison = await houseName();
-            const rendered = renderLetter(templates[parsed.data.decision as EditorialLetterKey], {
+            // Points communicables : ceux saisis par la Direction ; à défaut, pour
+            // une acceptation sous conditions, les conditions posées.
+            const pointsList =
+              parsed.data.author_points && parsed.data.author_points.length > 0
+                ? parsed.data.author_points
+                : key === "acceptation_conditions"
+                  ? parsed.data.conditions ?? []
+                  : [];
+            const composed = composeLetter(templates[key], {
               auteur: `${contributor!.partner.firstName ?? ""} ${contributor!.partner.lastName ?? ""}`.trim(),
               titre: manuscript.title,
               numero: manuscript.manuscriptNumber,
-              motivation: parsed.data.motivation,
+              points: buildPointsBlock(key, pointsList),
+              message: parsed.data.author_message?.trim() || "",
+              date: new Date().toLocaleDateString("fr-FR"),
               maison,
             });
             const sender = senderIdentity(request.user!);
-            await sendMail({ to: email, subject: rendered.subject, text: rendered.body, html: letterHtml(rendered.subject, rendered.body, maison), ...sender }).catch(() => false);
+            await sendMail({ to: email, subject: composed.subject, text: composed.textBody, html: letterHtml(composed.subject, composed.textBody, maison), ...sender }).catch(() => false);
             authorNotifiedTo = email;
             await prisma.editorialDecision.update({ where: { id: decision.id }, data: { authorNotifiedTo: email, authorNotifiedAt: new Date() } });
           }
@@ -807,13 +834,21 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       keys: LETTER_KEYS,
       labels: LETTER_LABELS,
       defaults: DEFAULT_LETTERS,
-      placeholders: ["{{auteur}}", "{{titre}}", "{{numero}}", "{{motivation}}", "{{maison}}"],
+      placeholders: ["{{auteur}}", "{{titre}}", "{{numero}}", "{{genre}}", "{{date}}", "{{points}}", "{{message}}", "{{maison}}"],
     });
   });
 
   fastify.put("/api/v1/editorial-decision-letters", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
     const tpl = z.object({ subject: z.string().min(1).max(300), body: z.string().min(1).max(8000) });
-    const parsed = z.object({ acceptation: tpl.optional(), acceptation_conditions: tpl.optional(), refus: tpl.optional() }).safeParse(request.body);
+    const parsed = z
+      .object({
+        acceptation: tpl.optional(),
+        acceptation_conditions: tpl.optional(),
+        revision: tpl.optional(),
+        refus: tpl.optional(),
+        refus_resoumission: tpl.optional(),
+      })
+      .safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
     await prisma.setting.upsert({ where: { key: "editorial_decision_letters" }, update: { value: parsed.data }, create: { key: "editorial_decision_letters", value: parsed.data } });
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "setting", entityId: "editorial_decision_letters", ipAddress: request.ip });
@@ -842,21 +877,30 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const decision = await prisma.editorialDecision.findFirst({ where: { manuscriptId: id }, orderBy: { decidedAt: "desc" } });
     if (!decision) return reply.code(404).send({ code: "not_found", message: "Aucune décision pour ce manuscrit." });
-    if (!(["acceptation", "acceptation_conditions", "refus"] as string[]).includes(decision.decision)) {
-      return reply.code(409).send({ code: "not_terminal", message: "La dernière décision n'est pas terminale : pas de lettre." });
+    if (!LETTER_KEYS.includes(decision.decision as EditorialLetterKey)) {
+      return reply.code(409).send({ code: "no_letter", message: "Cette décision ne donne pas lieu à une lettre à l'auteur." });
     }
+    const key = decision.decision as EditorialLetterKey;
     const m = await prisma.manuscript.findUniqueOrThrow({ where: { id }, select: { title: true, manuscriptNumber: true } });
     const contributor = await prisma.workContributor.findFirst({ where: { manuscriptId: id, role: "author" }, include: { partner: { select: { firstName: true, lastName: true, email: true } } } });
     const templates = await resolveLetterTemplates();
     const maison = await houseName();
-    const rendered = renderLetter(templates[decision.decision as EditorialLetterKey], {
+    // Points communicables mémorisés sur la décision (repli : conditions posées).
+    let pointsList = Array.isArray(decision.authorPoints) ? (decision.authorPoints as string[]) : [];
+    if (pointsList.length === 0 && key === "acceptation_conditions") {
+      const conds = await prisma.editorialAcceptanceCondition.findMany({ where: { decisionId: decision.id, deletedAt: null }, select: { label: true } });
+      pointsList = conds.map((c) => c.label);
+    }
+    const composed = composeLetter(templates[key], {
       auteur: `${contributor?.partner.firstName ?? ""} ${contributor?.partner.lastName ?? ""}`.trim() || "l'auteur",
       titre: m.title,
       numero: m.manuscriptNumber,
-      motivation: decision.motivation,
+      points: buildPointsBlock(key, pointsList),
+      message: decision.authorMessage ?? "",
+      date: decision.decidedAt.toLocaleDateString("fr-FR"),
       maison,
     });
-    return reply.send({ decision: decision.decision, subject: rendered.subject, body: rendered.body, author_email: contributor?.partner.email ?? null, notified_at: decision.authorNotifiedAt, notified_to: decision.authorNotifiedTo });
+    return reply.send({ decision: decision.decision, subject: composed.subject, body: composed.textBody, layout: composed.layout, author_email: contributor?.partner.email ?? null, notified_at: decision.authorNotifiedAt, notified_to: decision.authorNotifiedTo });
   });
 
   // === Suivi des acceptations « sous conditions » (audit éditorial, point n°2) ===

@@ -691,6 +691,56 @@ export default async function financeRoutes(fastify: FastifyInstance) {
     return reply.send(accounts);
   });
 
+  // Bilan mensuel de trésorerie (demande direction, 09/09/2026) : pour une année,
+  // Total ENTRÉES (encaissements = paiements « in », par date d'encaissement) −
+  // Total DÉPENSES (module Dépenses, statuts VALIDÉE + PAYÉE, par date de saisie)
+  // = SOLDE, mois par mois + cumul annuel. Alimenté par les opérations déjà
+  // enregistrées (aucune ressaisie). Le détail des dépenses par catégorie est
+  // fourni pour chaque mois.
+  fastify.get("/api/v1/finance/monthly-balance", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const q = request.query as { year?: string };
+    const year = q.year && /^\d{4}$/.test(q.year) ? Number(q.year) : new Date().getUTCFullYear();
+    const start = new Date(Date.UTC(year, 0, 1));
+    const end = new Date(Date.UTC(year + 1, 0, 1));
+
+    const [incomes, expenses] = await Promise.all([
+      prisma.payment.findMany({ where: { direction: "in", receivedAt: { gte: start, lt: end } }, select: { amount: true, receivedAt: true } }),
+      prisma.expense.findMany({ where: { status: { in: ["validee", "payee"] }, createdAt: { gte: start, lt: end } }, select: { amount: true, category: true, createdAt: true } }),
+    ]);
+
+    const months = Array.from({ length: 12 }, (_, m) => ({
+      month: m + 1,
+      entrees: 0,
+      depenses: 0,
+      solde: 0,
+      depensesParCategorie: {} as Record<string, number>,
+    }));
+
+    for (const p of incomes) {
+      months[p.receivedAt.getUTCMonth()].entrees += Number(p.amount);
+    }
+    for (const e of expenses) {
+      const row = months[e.createdAt.getUTCMonth()];
+      const amt = Number(e.amount);
+      row.depenses += amt;
+      row.depensesParCategorie[e.category] = (row.depensesParCategorie[e.category] ?? 0) + amt;
+    }
+
+    const round = (n: number) => Math.round(n * 100) / 100;
+    for (const m of months) {
+      m.entrees = round(m.entrees);
+      m.depenses = round(m.depenses);
+      m.solde = round(m.entrees - m.depenses);
+      for (const k of Object.keys(m.depensesParCategorie)) m.depensesParCategorie[k] = round(m.depensesParCategorie[k]);
+    }
+    const totals = {
+      entrees: round(months.reduce((s, m) => s + m.entrees, 0)),
+      depenses: round(months.reduce((s, m) => s + m.depenses, 0)),
+      solde: round(months.reduce((s, m) => s + m.solde, 0)),
+    };
+    return reply.send({ year, months, totals });
+  });
+
   fastify.get("/api/v1/treasury-position", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
     const [accounts, incoming, outgoing] = await Promise.all([
       prisma.bankAccount.findMany(),

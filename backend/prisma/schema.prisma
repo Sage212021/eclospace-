@@ -105,6 +105,7 @@ model Employee {
   attendancePayrollLines    AttendancePayrollLine[]
   payrollMonthlyLines       PayrollMonthlyLine[]
   payrollProfile            PayrollEmployeeProfile?
+  primes                    Prime[]
   evaluations               EmployeeEvaluation[]
   trainingRequests          TrainingRequest[]
   trainingParticipations    TrainingParticipation[]
@@ -964,6 +965,50 @@ model PayrollMonthlyLine {
   @@map("payroll_monthly_lines")
 }
 
+// Prime individuelle d'un salarié pour un mois donné (demande opérateur du
+// 09/09/2026). Chaque prime porte son type, son montant, son motif, sa date et
+// une observation, et suit un cycle : « à valider » (modifiable / supprimable)
+// → « validée » (intégrée à la paie du mois, verrouillée) → « annulée »
+// (retirée de la paie, tracée). Le total des primes VALIDÉES d'un salarié pour
+// un mois alimente automatiquement la ligne de paie (source unique des primes).
+enum PrimeType {
+  rendement
+  transport
+  exceptionnelle
+  responsabilite
+  autre
+}
+
+enum PrimeStatus {
+  a_valider
+  validee
+  annulee
+}
+
+model Prime {
+  id          String      @id @default(uuid())
+  employeeId  String      @map("employee_id")
+  employee    Employee    @relation(fields: [employeeId], references: [id])
+  periodKey   String      @map("period_key") // AAAA-MM
+  type        PrimeType
+  amount      Decimal     @db.Decimal(12, 2)
+  motif       String?
+  dateAwarded DateTime    @map("date_awarded")
+  observation String?
+  status      PrimeStatus @default(a_valider)
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  createdBy   String?   @map("created_by")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  validatedBy String?   @map("validated_by")
+  validatedAt DateTime? @map("validated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  @@index([periodKey])
+  @@index([employeeId])
+  @@map("primes")
+}
+
 // Demande de RÉOUVERTURE EXCEPTIONNELLE d'une paie validée/verrouillée (ch. 23) :
 // le RH ne peut plus modifier directement ; il DEMANDE la réouverture (élément
 // concerné, ancienne valeur, correction, motif). Le DG autorise ou refuse.
@@ -1552,6 +1597,9 @@ enum DocumentCategory {
   // Pièce jointe libre déposée à une étape de production (fiche technique, scan,
   // justificatif) par l'acteur de l'étape.
   piece_etape
+  // Preuve de livraison signée (scan/photo du bon de livraison signé à la
+  // réception) rattachée à une livraison (Ch. 17 §17.8).
+  preuve_livraison
   autre
 }
 
@@ -2181,6 +2229,9 @@ enum EditorialDecisionType {
   revision
   attente
   refus
+  // Refus dans l'état actuel, mais nouvelle soumission possible après révision
+  // approfondie (la nouvelle version repart comme un nouveau dossier).
+  refus_resoumission
 }
 
 // Compteur atomique pour la numérotation des manuscrits (Ch. 6 §6.2 : généré
@@ -2202,6 +2253,12 @@ model EditorialDecision {
   decidedBy        User                  @relation(fields: [decidedById], references: [id])
   decidedAt        DateTime              @default(now()) @map("decided_at")
   motivation       String
+  // Éléments COMMUNICABLES à l'auteur (validés par la Direction) : la lettre
+  // n'extrait que ceux-ci, jamais le rapport du comité ni la motivation interne.
+  // authorMessage = message complémentaire de la Direction ; authorPoints =
+  // points essentiels retenus (conditions / axes de révision / motifs).
+  authorMessage    String?               @map("author_message")
+  authorPoints     Json?                 @map("author_points")
   scoreGapFlag     Boolean               @default(false) @map("score_gap_flag")
   // Réponse à l'auteur (26/08/2026) : date d'envoi de la lettre de décision et
   // adresse destinataire — trace au dossier.

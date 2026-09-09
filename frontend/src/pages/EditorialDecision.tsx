@@ -24,9 +24,10 @@ interface Props {
 const DECISION_LABELS: Record<string, string> = {
   acceptation: "Acceptation",
   acceptation_conditions: "Acceptation sous conditions",
-  revision: "Demande de modifications",
+  revision: "Révision demandée",
   attente: "Mise en attente",
   refus: "Refus",
+  refus_resoumission: "Refus (nouvelle soumission possible)",
 };
 
 const BUCKETS = [

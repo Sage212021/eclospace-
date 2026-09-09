@@ -1191,15 +1191,24 @@ export function emailReadingReport(assignmentId: string, input: { to: string; su
   return request<{ sent: boolean }>(`/api/v1/reading-assignments/${assignmentId}/email-report`, { method: "POST", body: JSON.stringify(input) });
 }
 
+export type EditorialDecisionValue = "acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus" | "refus_resoumission";
+
 export function submitEditorialDecision(
   manuscriptId: string,
-  decision: "acceptation" | "acceptation_conditions" | "revision" | "attente" | "refus",
+  decision: EditorialDecisionValue,
   motivation: string,
   conditions?: string[],
+  communicable?: { author_message?: string; author_points?: string[] },
 ) {
   return request<{ authorNotifiedTo?: string | null }>(`/api/v1/manuscripts/${manuscriptId}/editorial-decision`, {
     method: "POST",
-    body: JSON.stringify({ decision, motivation, ...(conditions && conditions.length ? { conditions } : {}) }),
+    body: JSON.stringify({
+      decision,
+      motivation,
+      ...(conditions && conditions.length ? { conditions } : {}),
+      ...(communicable?.author_message?.trim() ? { author_message: communicable.author_message.trim() } : {}),
+      ...(communicable?.author_points && communicable.author_points.length ? { author_points: communicable.author_points } : {}),
+    }),
   });
 }
 
@@ -1239,7 +1248,7 @@ export function deleteAcceptanceCondition(condId: string) {
 
 // Modèles de lettres de décision éditoriale (réponse à l'auteur).
 export interface EditorialLetterTemplate { subject: string; body: string }
-export type EditorialLetterKey = "acceptation" | "acceptation_conditions" | "refus";
+export type EditorialLetterKey = "acceptation" | "acceptation_conditions" | "revision" | "refus" | "refus_resoumission";
 export interface EditorialLetters {
   templates: Record<EditorialLetterKey, EditorialLetterTemplate>;
   keys: EditorialLetterKey[];
@@ -1253,8 +1262,16 @@ export function getEditorialDecisionLetters() {
 export function updateEditorialDecisionLetters(templates: Partial<Record<EditorialLetterKey, EditorialLetterTemplate>>) {
   return request<{ ok: true }>(`/api/v1/editorial-decision-letters`, { method: "PUT", body: JSON.stringify(templates) });
 }
+export interface DecisionLetterLayout {
+  place: string;
+  date: string;
+  recipient: string;
+  objet: string;
+  paragraphs: string[];
+  maison: string;
+}
 export function getManuscriptDecisionLetter(manuscriptId: string) {
-  return request<{ decision: string; subject: string; body: string; author_email: string | null; notified_at: string | null; notified_to: string | null }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter`);
+  return request<{ decision: string; subject: string; body: string; layout: DecisionLetterLayout; author_email: string | null; notified_at: string | null; notified_to: string | null }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter`);
 }
 
 // --- Lot 2 : contrats, tâches/Gantt, correction et comparateur ---
@@ -2849,6 +2866,92 @@ export function approveSalesOrder(id: string) {
   return request<SalesOrder>(`/api/v1/sales-orders/${id}/approve`, { method: "POST", body: "{}" });
 }
 
+// ── Livraisons / bons de livraison (Ch. 17 §17.8) ───────────────────────────
+// Rubrique partagée Stock + Commercial : suivi des livraisons, création depuis
+// une commande livrable, et bon de livraison imprimable.
+export interface DeliveryRow {
+  id: string;
+  delivery_number: string;
+  order_number: string;
+  customer_name: string;
+  carrier: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  line_count: number;
+  total_quantity: number;
+  complete: boolean;
+  has_proof: boolean;
+  proof_version_id: string | null;
+}
+
+export interface EligibleOrderLine {
+  isbn_id: string;
+  isbn13: string;
+  title: string;
+  ordered: number;
+  delivered: number;
+  remaining: number;
+}
+export interface EligibleOrder {
+  id: string;
+  order_number: string;
+  customer_name: string;
+  status: string;
+  created_at: string;
+  lines: EligibleOrderLine[];
+  remaining_total: number;
+}
+
+export interface DeliveryNote {
+  delivery_number: string;
+  order_number: string;
+  invoice_number: string | null;
+  carrier: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  complete: boolean;
+  customer: { name: string; contact_name: string | null; phone: string | null; email: string | null; address: string | null };
+  lines: { isbn13: string; title: string; ordered: number; delivered: number }[];
+}
+
+export function listDeliveries() {
+  return request<DeliveryRow[]>("/api/v1/deliveries");
+}
+
+export function listEligibleOrdersForDelivery() {
+  return request<EligibleOrder[]>("/api/v1/deliveries/eligible-orders");
+}
+
+export function getDeliveryNote(id: string) {
+  return request<DeliveryNote>(`/api/v1/deliveries/${id}/note`);
+}
+
+export function createDelivery(orderId: string, input: { carrier?: string; lines: { isbn_id: string; quantity: number }[] }) {
+  return request<{ id: string; deliveryNumber: string }>(`/api/v1/sales-orders/${orderId}/deliveries`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function confirmDelivery(id: string) {
+  return request(`/api/v1/deliveries/${id}/confirm`, { method: "PATCH", body: "{}" });
+}
+
+// Preuve de livraison signée (scan/photo du bon de livraison signé) rattachée à
+// la livraison. Une seule preuve par livraison (un nouveau dépôt la remplace).
+export async function uploadDeliveryProof(id: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/deliveries/${id}/proof`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Dépôt de la preuve impossible.");
+  return response.json() as Promise<{ id: string; version_id: string; has_proof: boolean }>;
+}
+
+// URL de consultation de la preuve signée (ouverte dans un nouvel onglet).
+export function deliveryProofUrl(id: string) {
+  return `${API_BASE}/api/v1/deliveries/${id}/proof`;
+}
+
 export function createPosSale(input: {
   isbn_id?: string;
   location_id?: string;
@@ -3248,6 +3351,27 @@ export function getTreasuryForecast(horizonDays = 90) {
   return request<{ current_position: number; horizon_days: number; windows: TreasuryForecastWindow[]; alert: boolean }>(
     `/api/v1/treasury/forecast?horizon=${horizonDays}d`,
   );
+}
+
+// Bilan mensuel de trésorerie : pour chaque mois (1er→31), somme des entrées
+// (encaissements) et des dépenses (module Dépenses, statuts validée + payée),
+// solde = entrées − dépenses. Alimente le tableau d'évolution janvier→décembre
+// du pôle Finance. Aucune re-saisie : tout provient des opérations enregistrées.
+export interface MonthlyBalanceRow {
+  month: number;
+  entrees: number;
+  depenses: number;
+  solde: number;
+  depensesParCategorie: Record<string, number>;
+}
+
+export function getMonthlyBalance(year?: number) {
+  const query = year ? `?year=${year}` : "";
+  return request<{
+    year: number;
+    months: MonthlyBalanceRow[];
+    totals: { entrees: number; depenses: number; solde: number };
+  }>(`/api/v1/finance/monthly-balance${query}`);
 }
 
 // Ch. 9 §9.5, Ch. 18 §18.7 : moteur de droits d'auteur — exécution financière.
@@ -4678,6 +4802,47 @@ export function getPayrollMode() {
 export function setPayrollMode(mode: "auto" | "manuel") {
   return request<{ mode: string }>(`/api/v1/attendance/payroll/mode`, { method: "PUT", body: JSON.stringify({ mode }) });
 }
+// ── Primes du mois (module RH, intégré à la paie) ───────────────────────────
+export type PrimeType = "rendement" | "transport" | "exceptionnelle" | "responsabilite" | "autre";
+export type PrimeStatus = "a_valider" | "validee" | "annulee";
+export interface Prime {
+  id: string;
+  employee_id: string;
+  employee_name: string | null;
+  period: string;
+  type: PrimeType;
+  amount: number;
+  motif: string | null;
+  date_awarded: string;
+  observation: string | null;
+  status: PrimeStatus;
+  validated_at: string | null;
+  created_at: string;
+}
+
+export function listPrimes(filters?: { period?: string; employee_id?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.period) params.set("period", filters.period);
+  if (filters?.employee_id) params.set("employee_id", filters.employee_id);
+  const query = params.toString() ? `?${params}` : "";
+  return request<Prime[]>(`/api/v1/primes${query}`);
+}
+export function createPrime(input: { employee_id: string; period: string; type: PrimeType; amount: number; motif?: string; date_awarded?: string; observation?: string }) {
+  return request<Prime>("/api/v1/primes", { method: "POST", body: JSON.stringify(input) });
+}
+export function updatePrime(id: string, input: Partial<{ period: string; type: PrimeType; amount: number; motif: string | null; date_awarded: string; observation: string | null }>) {
+  return request<Prime>(`/api/v1/primes/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function deletePrime(id: string) {
+  return request<void>(`/api/v1/primes/${id}`, { method: "DELETE" });
+}
+export function validatePrime(id: string) {
+  return request<Prime>(`/api/v1/primes/${id}/validate`, { method: "POST", body: "{}" });
+}
+export function cancelPrime(id: string) {
+  return request<Prime>(`/api/v1/primes/${id}/cancel`, { method: "POST", body: "{}" });
+}
+
 export function preparePayroll(periodKey: string) {
   return request<{ period_key: string; status: string; lines: number }>(`/api/v1/attendance/payroll/${periodKey}/prepare`, { method: "POST" });
 }
@@ -4918,7 +5083,7 @@ export function setAbsenceAutoDeduction(enabled: boolean) {
 export function saveMonthlyDeductions(
   employeeId: string,
   period: string,
-  amounts: { primes: number; heures_sup: number; retenue_absence: number; avance: number; pret: number; retard: number; autres: number },
+  amounts: { primes?: number; heures_sup: number; retenue_absence: number; avance: number; pret: number; retard: number; autres: number },
 ) {
   return request<MonthlyDeductions>(`/api/v1/payroll/employees/${employeeId}/deductions`, {
     method: "PUT",
@@ -5077,7 +5242,11 @@ export function reopenPayrollHandoff(period: string) {
   return request<{ period: string; closed: boolean }>(`/api/v1/payroll/monthly/${encodeURIComponent(period)}/handoff/reopen`, { method: "POST" });
 }
 export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null, extraLines?: PayrollExtraLine[]) {
-  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...elements, note: note ?? null, extra_lines: extraLines ?? [] }) });
+  // Les primes sont gérées par le module « Primes du mois » (source unique) : on
+  // ne renvoie jamais `primes` depuis la grille, pour ne pas écraser le total
+  // des primes validées reporté sur la ligne.
+  const { primes: _primes, ...rest } = elements;
+  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...rest, note: note ?? null, extra_lines: extraLines ?? [] }) });
 }
 // Validation définitive du mois par le Directeur général (obligatoire avant impression).
 export function validatePayrollMonth(period: string) {

@@ -6,6 +6,7 @@ import { requirePermission, requireAnyPermission, requireAuth } from "../lib/per
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { adjustStockItem, availableQuantity } from "../lib/stock.js";
+import { storeFile, readStoredFile } from "../lib/storage.js";
 import { nextSalesOrderNumber, nextDeliveryNumber } from "../lib/salesOrderNumber.js";
 import { createInvoiceFromDelivery, createInvoiceFromConsignmentStatement, createInvoiceFromPosSale, createCreditNoteFromReturn, createCreditNoteFromInvoice } from "../lib/invoicing.js";
 import { PeriodClosedError, assertPeriodOpen } from "../lib/accountingPeriod.js";
@@ -62,6 +63,23 @@ const deliverySchema = z.object({
   carrier: z.string().optional(),
   lines: z.array(z.object({ isbn_id: z.string().uuid(), quantity: z.number().int().positive() })).min(1),
 });
+
+// Une commande est « complètement livrée » quand, en cumulant toutes ses
+// livraisons, chaque ligne commandée a été servie en totalité. Sert à la mention
+// « Livraison complète / partielle » du bon de livraison (Ch. 17 §17.8).
+type OrderWithDeliveries = {
+  lines: { isbnId: string; quantity: number }[];
+  deliveries: { lines: { isbnId: string; quantity: number }[] }[];
+};
+function orderFullyDelivered(order: OrderWithDeliveries): boolean {
+  return order.lines.every((l) => {
+    const delivered = order.deliveries.reduce(
+      (s, d) => s + d.lines.filter((dl) => dl.isbnId === l.isbnId).reduce((ss, dl) => ss + dl.quantity, 0),
+      0,
+    );
+    return delivered >= l.quantity;
+  });
+}
 
 const consignmentSchema = z.object({
   customer_id: z.string().uuid(),
@@ -790,7 +808,10 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
   // §16.6) — reliquats gérés par livraisons multiples sur la même commande.
   fastify.post(
     "/api/v1/sales-orders/:id/deliveries",
-    { preHandler: requirePermission("commercial", "saisie") },
+    // Les deux pôles créent une livraison : le Commercial (d'où naît la commande)
+    // et le Magasin/Stock (qui prépare et expédie physiquement). Le décrément de
+    // stock et la facturation automatique restent inchangés.
+    { preHandler: requireAnyPermission([{ module: "commercial", action: "saisie" }, { module: "stock", action: "saisie" }]) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = deliverySchema.safeParse(request.body);
@@ -873,7 +894,7 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
 
   fastify.patch(
     "/api/v1/deliveries/:id/confirm",
-    { preHandler: requirePermission("commercial", "saisie") },
+    { preHandler: requireAnyPermission([{ module: "commercial", action: "saisie" }, { module: "stock", action: "saisie" }]) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const delivery = await prisma.delivery.update({ where: { id }, data: { deliveredAt: new Date() } });
@@ -881,6 +902,225 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
       return reply.send(delivery);
     },
   );
+
+  // ── Registre des livraisons (bon de livraison, Ch. 17 §17.8) ───────────────
+  // Rubrique partagée entre le pôle Commercial et le pôle Magasin/Stock : liste
+  // des livraisons, commandes encore livrables, et détail imprimable du bon de
+  // livraison. Lecture ouverte aux deux pôles (consultation).
+  const deliveryReadGuard = requireAnyPermission([
+    { module: "commercial", action: "consultation" },
+    { module: "stock", action: "consultation" },
+  ]);
+
+  // Liste des livraisons (les plus récentes d'abord), avec la commande, le
+  // client, le transporteur et l'état d'avancement (complète / partielle).
+  fastify.get("/api/v1/deliveries", { preHandler: deliveryReadGuard }, async (_request, reply) => {
+    const deliveries = await prisma.delivery.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        lines: true,
+        order: { include: { lines: true, customer: true, deliveries: { include: { lines: true } } } },
+      },
+    });
+    // Preuves signées rattachées (une par livraison au plus, la plus récente) —
+    // chargées en une requête pour éviter les allers-retours par ligne.
+    const proofDocs = await prisma.document.findMany({
+      where: { entityType: "delivery", entityId: { in: deliveries.map((d) => d.id) }, category: "preuve_livraison", deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { entityId: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true } } },
+    });
+    const proofByDelivery = new Map<string, string>();
+    for (const doc of proofDocs) {
+      const vId = doc.versions[0]?.id;
+      if (vId && !proofByDelivery.has(doc.entityId)) proofByDelivery.set(doc.entityId, vId);
+    }
+    const rows = deliveries.map((d) => {
+      const totalDelivered = d.lines.reduce((s, l) => s + l.quantity, 0);
+      return {
+        id: d.id,
+        delivery_number: d.deliveryNumber,
+        order_number: d.order.orderNumber,
+        customer_name: d.order.customer.name,
+        carrier: d.carrier,
+        shipped_at: d.shippedAt,
+        delivered_at: d.deliveredAt,
+        line_count: d.lines.length,
+        total_quantity: totalDelivered,
+        complete: orderFullyDelivered(d.order),
+        has_proof: proofByDelivery.has(d.id),
+        proof_version_id: proofByDelivery.get(d.id) ?? null,
+      };
+    });
+    return reply.send(rows);
+  });
+
+  // Commandes encore livrables (confirmée / en préparation / expédiée) avec, pour
+  // chaque ligne, la quantité commandée, déjà livrée et le reliquat restant.
+  // Alimente la création d'une nouvelle livraison depuis l'écran des livraisons.
+  fastify.get("/api/v1/deliveries/eligible-orders", { preHandler: deliveryReadGuard }, async (_request, reply) => {
+    const orders = await prisma.salesOrder.findMany({
+      where: { status: { in: ["confirmed", "preparing", "shipped"] } },
+      orderBy: { createdAt: "desc" },
+      include: {
+        customer: true,
+        lines: { include: { isbn: { include: { manuscript: true } } } },
+        deliveries: { include: { lines: true } },
+      },
+    });
+    const result = orders
+      .map((o) => {
+        const lines = o.lines.map((l) => {
+          const delivered = o.deliveries.reduce(
+            (s, d) => s + d.lines.filter((dl) => dl.isbnId === l.isbnId).reduce((ss, dl) => ss + dl.quantity, 0),
+            0,
+          );
+          const remaining = Math.max(0, l.quantity - delivered);
+          return {
+            isbn_id: l.isbnId,
+            isbn13: l.isbn.isbn13,
+            title: l.isbn.manuscript?.title ?? "—",
+            ordered: l.quantity,
+            delivered,
+            remaining,
+          };
+        });
+        return {
+          id: o.id,
+          order_number: o.orderNumber,
+          customer_name: o.customer.name,
+          status: o.status,
+          created_at: o.createdAt,
+          lines,
+          remaining_total: lines.reduce((s, l) => s + l.remaining, 0),
+        };
+      })
+      // Ne proposer que les commandes avec au moins un reliquat à livrer.
+      .filter((o) => o.remaining_total > 0);
+    return reply.send(result);
+  });
+
+  // Détail imprimable d'un bon de livraison : coordonnées client, adresse de
+  // livraison, référence commande + facture, lignes (ISBN, titre, quantité
+  // commandée vs livrée) et mention complète / partielle.
+  fastify.get("/api/v1/deliveries/:id/note", { preHandler: deliveryReadGuard }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const delivery = await prisma.delivery.findUnique({
+      where: { id },
+      include: {
+        lines: { include: { isbn: { include: { manuscript: true } } } },
+        order: { include: { customer: true, lines: true, deliveries: { include: { lines: true } } } },
+      },
+    });
+    if (!delivery) {
+      return reply.code(404).send({ code: "not_found", message: "Livraison introuvable." });
+    }
+    const invoice = await prisma.invoice.findFirst({
+      where: { sourceType: "delivery", sourceId: delivery.id },
+      select: { invoiceNumber: true },
+    });
+    const lines = delivery.lines.map((l) => {
+      const orderLine = delivery.order.lines.find((ol) => ol.isbnId === l.isbnId);
+      return {
+        isbn13: l.isbn.isbn13,
+        title: l.isbn.manuscript?.title ?? "—",
+        ordered: orderLine?.quantity ?? l.quantity,
+        delivered: l.quantity,
+      };
+    });
+    const c = delivery.order.customer;
+    return reply.send({
+      delivery_number: delivery.deliveryNumber,
+      order_number: delivery.order.orderNumber,
+      invoice_number: invoice?.invoiceNumber ?? null,
+      carrier: delivery.carrier,
+      shipped_at: delivery.shippedAt,
+      delivered_at: delivery.deliveredAt,
+      complete: orderFullyDelivered(delivery.order),
+      customer: {
+        name: c.name,
+        contact_name: c.contactName,
+        phone: c.phone,
+        email: c.email,
+        address: c.address,
+      },
+      lines,
+    });
+  });
+
+  // Rattachement de la PREUVE DE LIVRAISON signée (scan/photo du bon de livraison
+  // signé à la réception). Stockée dans la GED (Document/DocumentVersion, catégorie
+  // « preuve_livraison », confidentialité interne) et rattachée à la livraison.
+  // Ouvert aux deux pôles qui gèrent l'expédition (commercial ou stock, saisie).
+  fastify.post(
+    "/api/v1/deliveries/:id/proof",
+    { preHandler: requireAnyPermission([{ module: "commercial", action: "saisie" }, { module: "stock", action: "saisie" }]) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const delivery = await prisma.delivery.findUnique({ where: { id } });
+      if (!delivery) return reply.code(404).send({ code: "not_found", message: "Livraison introuvable." });
+      const file = await request.file();
+      if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+      const buffer = await file.toBuffer();
+      if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+
+      const stored = await storeFile(buffer, `preuve-livraison-${delivery.deliveryNumber}-${file.filename}`);
+      // Une seule pièce « preuve » par livraison : on VERSIONNE le même document si
+      // une preuve existe déjà (remplacement), sinon on le crée.
+      let doc = await prisma.document.findFirst({
+        where: { entityType: "delivery", entityId: id, category: "preuve_livraison", deletedAt: null },
+      });
+      if (!doc) {
+        doc = await prisma.document.create({
+          data: {
+            entityType: "delivery",
+            entityId: id,
+            category: "preuve_livraison",
+            confidentiality: "interne",
+            title: `Preuve de livraison ${delivery.deliveryNumber}`,
+            createdBy: request.user!.id,
+            updatedBy: request.user!.id,
+          },
+        });
+      }
+      const last = await prisma.documentVersion.findFirst({ where: { documentId: doc.id }, orderBy: { versionNumber: "desc" } });
+      const version = await prisma.documentVersion.create({
+        data: {
+          documentId: doc.id,
+          versionNumber: (last?.versionNumber ?? 0) + 1,
+          filePath: stored.filePath,
+          fileSize: stored.fileSize,
+          mimeType: file.mimetype,
+          sha256Hash: stored.sha256Hash,
+          changeSummary: `Preuve de livraison signée déposée (${file.filename})`,
+          uploadedBy: request.user!.id,
+        },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: last ? "update" : "create",
+        entityType: "document_version",
+        entityId: version.id,
+        newValues: { delivery_proof: true, deliveryNumber: delivery.deliveryNumber, versionNumber: version.versionNumber },
+        ipAddress: request.ip,
+      });
+      return reply.code(201).send({ id: doc.id, version_id: version.id, has_proof: true });
+    },
+  );
+
+  // Consultation de la preuve signée (flux du fichier). Lecture ouverte aux deux
+  // pôles, sans exiger la permission « documents » de la GED confidentielle.
+  fastify.get("/api/v1/deliveries/:id/proof", { preHandler: deliveryReadGuard }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const doc = await prisma.document.findFirst({
+      where: { entityType: "delivery", entityId: id, category: "preuve_livraison", deletedAt: null },
+      include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+    });
+    const version = doc?.versions[0];
+    if (!version) return reply.code(404).send({ code: "not_found", message: "Aucune preuve de livraison rattachée." });
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
+  });
 
   // Ch. 17 §17.6 : dépôt-vente — les exemplaires restent la propriété
   // d'Éclosion Édition ; seules les ventes relevées sont facturées.

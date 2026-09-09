@@ -6,6 +6,7 @@ import { writeAuditLog } from "../lib/audit.js";
 import { computePayslip, type Payslip, type PayrollRates, type FormulaOverlay } from "../lib/payrollEngine.js";
 import { evaluateExpression, FormulaError, FORMULA_BY_CODE, FORMULA_CODES } from "../lib/payrollFormula.js";
 import type { PayrollEmployeeProfile, PayrollMonthlyLine } from "@prisma/client";
+import { syncRunPrimes } from "../lib/payrollPrimes.js";
 import { buildPayslipEmail } from "../lib/documentEmail.js";
 import { absenceAutoDeductionEnabled, setAbsenceAutoDeduction, computeAbsenceDeduction } from "../lib/absencePayDeduction.js";
 import { SALARY_ELEMENT_CATEGORY_LABELS, FISCAL_STATUS_LABELS, CNPS_STATUS_LABELS } from "../lib/salaryElements.js";
@@ -110,7 +111,10 @@ const formulaUpdateSchema = z.object({
 
 // Éléments variables du mois pour un salarié (grille mensuelle).
 const monthlyLineSchema = z.object({
-  primes: money, heures_sup: money, retenue_absence: money,
+  // Les primes sont désormais gérées par le module « Primes du mois » (source
+  // unique) : ce champ reste accepté (compatibilité) mais l'interface ne l'envoie
+  // plus — il n'est écrit que s'il est fourni.
+  primes: money.optional(), heures_sup: money, retenue_absence: money,
   retard: money, avance: money, pret: money, sanction: money, autres: money,
   // Lignes libres ajoutées par le RH (aucune codée en dur) : gains imposables
   // ou retenues nettes, avec un libellé et un montant.
@@ -585,7 +589,9 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const parsed = z
         .object({
           period: z.string(),
-          primes: money.default(0),
+          // Primes gérées par le module « Primes du mois » : champ optionnel,
+          // écrit seulement s'il est fourni (compatibilité ascendante).
+          primes: money.optional(),
           heures_sup: money.default(0),
           retenue_absence: money.default(0),
           avance: money.default(0),
@@ -615,13 +621,16 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         if (profiles.length > 0) {
           await prisma.payrollMonthlyLine.createMany({ data: profiles.map((p) => ({ runId: run!.id, employeeId: p.employeeId })), skipDuplicates: true });
         }
+        // Reporte les primes validées du module sur les lignes (source unique).
+        await syncRunPrimes(period, run.id);
       }
       // La ligne du salarié peut manquer (salarié sans fiche paie / ajouté après) :
       // on la crée à la volée.
       // On n'écrit QUE les éléments gérés par le bulletin unitaire (gains + retenues) ;
       // sanction, lignes libres et note restent tels quels (gérés dans la grille).
       const elems = {
-        primes: parsed.data.primes, heuresSup: parsed.data.heures_sup,
+        ...(parsed.data.primes != null ? { primes: parsed.data.primes } : {}),
+        heuresSup: parsed.data.heures_sup,
         retenueAbsence: parsed.data.retenue_absence,
         avance: parsed.data.avance, pret: parsed.data.pret, retard: parsed.data.retard, autres: parsed.data.autres,
       };
@@ -905,6 +914,9 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       if (toCreate.length > 0) {
         await prisma.payrollMonthlyLine.createMany({ data: toCreate.map((p) => ({ runId: run!.id, employeeId: p.employeeId })) });
       }
+      // Reporte les primes déjà validées du module « Primes du mois » sur les
+      // lignes du mois (source unique des primes).
+      await syncRunPrimes(period, run.id);
       return reply.send({ period, status: run.status });
     },
   );
@@ -936,6 +948,8 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         if (toCreate.length > 0) {
           await prisma.payrollMonthlyLine.createMany({ data: toCreate.map((p) => ({ runId: run.id, employeeId: p.employeeId })), skipDuplicates: true });
         }
+        // Reporte les primes validées du module sur les lignes (source unique).
+        await syncRunPrimes(period, run.id);
       }
 
       const lines = await prisma.payrollMonthlyLine.findMany({
@@ -1034,7 +1048,10 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       await prisma.payrollMonthlyLine.update({
         where: { runId_employeeId: { runId: run.id, employeeId } },
         data: {
-          primes: b.primes, heuresSup: b.heures_sup, retenueAbsence: b.retenue_absence,
+          // `primes` n'est écrit que s'il est explicitement fourni (compat) ;
+          // sinon on préserve la valeur gérée par le module « Primes du mois ».
+          ...(b.primes != null ? { primes: b.primes } : {}),
+          heuresSup: b.heures_sup, retenueAbsence: b.retenue_absence,
           retard: b.retard, avance: b.avance, pret: b.pret, sanction: b.sanction, autres: b.autres,
           extraLines: b.extra_lines ?? [],
           note: b.note,

@@ -469,20 +469,28 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
                         </button>
                       </div>
                     </td>
-                    {COLS.map((c) => (
-                      <td key={c.key} style={{ padding: "2px 4px" }}>
-                        <input
-                          type="number"
-                          min={0}
-                          step={100}
-                          disabled={!editable}
-                          value={draft[l.employee_id]?.[c.key] ?? 0}
-                          onChange={(e) => setCell(l.employee_id, c.key, e.target.value)}
-                          onBlur={() => saveRow(l)}
-                          style={{ width: 84, padding: "4px 6px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", border: "1px solid var(--line)", borderRadius: 5, background: editable ? "#fff" : "#f4f5f8" }}
-                        />
-                      </td>
-                    ))}
+                    {COLS.map((c) => {
+                      // Les primes sont gérées par le module « Primes du mois »
+                      // (source unique) : la colonne est en lecture seule ici, elle
+                      // affiche le total des primes validées reporté sur la ligne.
+                      const primesReadOnly = c.key === "primes";
+                      return (
+                        <td key={c.key} style={{ padding: "2px 4px" }}>
+                          <input
+                            type="number"
+                            min={0}
+                            step={100}
+                            disabled={!editable || primesReadOnly}
+                            readOnly={primesReadOnly}
+                            title={primesReadOnly ? "Total des primes validées du mois — géré dans la rubrique « Primes du mois »." : undefined}
+                            value={draft[l.employee_id]?.[c.key] ?? 0}
+                            onChange={(e) => !primesReadOnly && setCell(l.employee_id, c.key, e.target.value)}
+                            onBlur={() => !primesReadOnly && saveRow(l)}
+                            style={{ width: 84, padding: "4px 6px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", border: "1px solid var(--line)", borderRadius: 5, background: editable && !primesReadOnly ? "#fff" : "#f4f5f8" }}
+                          />
+                        </td>
+                      );
+                    })}
                     <td style={{ padding: "4px 8px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "var(--eclosion, #d9b21a)", whiteSpace: "nowrap" }}>{fcfa(l.net_a_payer)}</td>
                   </tr>
                 ))}

@@ -54,6 +54,7 @@ import presenceRoutes from "./routes/presence.js";
 import attendanceRoutes from "./routes/attendance.js";
 import erpConnectionsRoutes from "./routes/erpConnections.js";
 import payrollRoutes from "./routes/payroll.js";
+import primeRoutes from "./routes/primes.js";
 import announcementRoutes from "./routes/announcements.js";
 import calendarRoutes from "./routes/calendar.js";
 import newsfeedRoutes from "./routes/newsfeed.js";
@@ -231,6 +232,7 @@ export async function buildApp() {
   await app.register(attendanceRoutes);
   await app.register(erpConnectionsRoutes);
   await app.register(payrollRoutes);
+  await app.register(primeRoutes);
   await app.register(announcementRoutes);
   await app.register(calendarRoutes);
   await app.register(newsfeedRoutes);

@@ -105,6 +105,7 @@ model Employee {
   attendancePayrollLines    AttendancePayrollLine[]
   payrollMonthlyLines       PayrollMonthlyLine[]
   payrollProfile            PayrollEmployeeProfile?
+  primes                    Prime[]
   evaluations               EmployeeEvaluation[]
   trainingRequests          TrainingRequest[]
   trainingParticipations    TrainingParticipation[]
@@ -962,6 +963,50 @@ model PayrollMonthlyLine {
   @@unique([runId, employeeId])
   @@index([employeeId])
   @@map("payroll_monthly_lines")
+}
+
+// Prime individuelle d'un salarié pour un mois donné (demande opérateur du
+// 09/09/2026). Chaque prime porte son type, son montant, son motif, sa date et
+// une observation, et suit un cycle : « à valider » (modifiable / supprimable)
+// → « validée » (intégrée à la paie du mois, verrouillée) → « annulée »
+// (retirée de la paie, tracée). Le total des primes VALIDÉES d'un salarié pour
+// un mois alimente automatiquement la ligne de paie (source unique des primes).
+enum PrimeType {
+  rendement
+  transport
+  exceptionnelle
+  responsabilite
+  autre
+}
+
+enum PrimeStatus {
+  a_valider
+  validee
+  annulee
+}
+
+model Prime {
+  id          String      @id @default(uuid())
+  employeeId  String      @map("employee_id")
+  employee    Employee    @relation(fields: [employeeId], references: [id])
+  periodKey   String      @map("period_key") // AAAA-MM
+  type        PrimeType
+  amount      Decimal     @db.Decimal(12, 2)
+  motif       String?
+  dateAwarded DateTime    @map("date_awarded")
+  observation String?
+  status      PrimeStatus @default(a_valider)
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  createdBy   String?   @map("created_by")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  validatedBy String?   @map("validated_by")
+  validatedAt DateTime? @map("validated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  @@index([periodKey])
+  @@index([employeeId])
+  @@map("primes")
 }
 
 // Demande de RÉOUVERTURE EXCEPTIONNELLE d'une paie validée/verrouillée (ch. 23) :

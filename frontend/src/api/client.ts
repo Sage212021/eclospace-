@@ -4785,6 +4785,47 @@ export function getPayrollMode() {
 export function setPayrollMode(mode: "auto" | "manuel") {
   return request<{ mode: string }>(`/api/v1/attendance/payroll/mode`, { method: "PUT", body: JSON.stringify({ mode }) });
 }
+// ── Primes du mois (module RH, intégré à la paie) ───────────────────────────
+export type PrimeType = "rendement" | "transport" | "exceptionnelle" | "responsabilite" | "autre";
+export type PrimeStatus = "a_valider" | "validee" | "annulee";
+export interface Prime {
+  id: string;
+  employee_id: string;
+  employee_name: string | null;
+  period: string;
+  type: PrimeType;
+  amount: number;
+  motif: string | null;
+  date_awarded: string;
+  observation: string | null;
+  status: PrimeStatus;
+  validated_at: string | null;
+  created_at: string;
+}
+
+export function listPrimes(filters?: { period?: string; employee_id?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.period) params.set("period", filters.period);
+  if (filters?.employee_id) params.set("employee_id", filters.employee_id);
+  const query = params.toString() ? `?${params}` : "";
+  return request<Prime[]>(`/api/v1/primes${query}`);
+}
+export function createPrime(input: { employee_id: string; period: string; type: PrimeType; amount: number; motif?: string; date_awarded?: string; observation?: string }) {
+  return request<Prime>("/api/v1/primes", { method: "POST", body: JSON.stringify(input) });
+}
+export function updatePrime(id: string, input: Partial<{ period: string; type: PrimeType; amount: number; motif: string | null; date_awarded: string; observation: string | null }>) {
+  return request<Prime>(`/api/v1/primes/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function deletePrime(id: string) {
+  return request<void>(`/api/v1/primes/${id}`, { method: "DELETE" });
+}
+export function validatePrime(id: string) {
+  return request<Prime>(`/api/v1/primes/${id}/validate`, { method: "POST", body: "{}" });
+}
+export function cancelPrime(id: string) {
+  return request<Prime>(`/api/v1/primes/${id}/cancel`, { method: "POST", body: "{}" });
+}
+
 export function preparePayroll(periodKey: string) {
   return request<{ period_key: string; status: string; lines: number }>(`/api/v1/attendance/payroll/${periodKey}/prepare`, { method: "POST" });
 }
@@ -5025,7 +5066,7 @@ export function setAbsenceAutoDeduction(enabled: boolean) {
 export function saveMonthlyDeductions(
   employeeId: string,
   period: string,
-  amounts: { primes: number; heures_sup: number; retenue_absence: number; avance: number; pret: number; retard: number; autres: number },
+  amounts: { primes?: number; heures_sup: number; retenue_absence: number; avance: number; pret: number; retard: number; autres: number },
 ) {
   return request<MonthlyDeductions>(`/api/v1/payroll/employees/${employeeId}/deductions`, {
     method: "PUT",
@@ -5184,7 +5225,11 @@ export function reopenPayrollHandoff(period: string) {
   return request<{ period: string; closed: boolean }>(`/api/v1/payroll/monthly/${encodeURIComponent(period)}/handoff/reopen`, { method: "POST" });
 }
 export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null, extraLines?: PayrollExtraLine[]) {
-  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...elements, note: note ?? null, extra_lines: extraLines ?? [] }) });
+  // Les primes sont gérées par le module « Primes du mois » (source unique) : on
+  // ne renvoie jamais `primes` depuis la grille, pour ne pas écraser le total
+  // des primes validées reporté sur la ligne.
+  const { primes: _primes, ...rest } = elements;
+  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...rest, note: note ?? null, extra_lines: extraLines ?? [] }) });
 }
 // Validation définitive du mois par le Directeur général (obligatoire avant impression).
 export function validatePayrollMonth(period: string) {

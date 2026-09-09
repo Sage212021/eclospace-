@@ -240,7 +240,9 @@ export function composeLetter(tpl: LetterTemplate, ctx: LetterContext): { subjec
   const paragraphs = rendered.body.split(/\n{2,}/).map((p) => p.trim()).filter((p) => p.length > 0);
   const place = ctx.place?.trim() || "Yaoundé";
   const date = ctx.date || new Date().toLocaleDateString("fr-FR");
-  const layout: LetterLayout = { place, date, recipient: ctx.auteur, objet: rendered.subject, paragraphs, maison: ctx.maison };
+  // Le matricule (réf. de l'ouvrage) figure toujours dans l'objet de la lettre.
+  const objet = `${rendered.subject} (réf. ${ctx.numero})`;
+  const layout: LetterLayout = { place, date, recipient: ctx.auteur, objet, paragraphs, maison: ctx.maison };
   const textBody = [
     `${ctx.maison}`,
     "Direction éditoriale",
@@ -248,7 +250,7 @@ export function composeLetter(tpl: LetterTemplate, ctx: LetterContext): { subjec
     "",
     `À Monsieur/Madame ${ctx.recipient?.trim() || ctx.auteur}`,
     "",
-    `Objet : ${rendered.subject} (réf. ${ctx.numero})`,
+    `Objet : ${objet}`,
     "",
     ...paragraphs.flatMap((p) => [p, ""]),
     `Pour ${ctx.maison},`,

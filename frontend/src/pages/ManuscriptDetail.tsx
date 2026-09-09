@@ -29,6 +29,7 @@ import {
   setPublicationDate,
   submitEditorialDecision,
   getManuscriptDecisionLetter,
+  previewDecisionLetter,
   getAcceptanceConditions,
   addAcceptanceCondition,
   liftAcceptanceCondition,
@@ -52,7 +53,7 @@ import {
 } from "../api/client";
 import { useConfirm } from "../components/ConfirmProvider";
 import { DocPrintMenu } from "../components/DocPrintMenu";
-import { printEditorialDecisionLetter } from "../lib/print";
+import { printEditorialDecisionLetter, type PrintOpts } from "../lib/print";
 import { Spine } from "../components/Spine";
 import { ContractsSection } from "../components/ContractsSection";
 import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
@@ -586,11 +587,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
               onClick={() =>
                 confirmThen(
                   {
-                    title: "Revenir à l'étape précédente",
-                    message: `Ramener « ${manuscript.title} » à l'étape précédant « ${manuscript.status.label} » ?`,
-                    detail: "À n'utiliser que pour corriger une validation faite par erreur. L'étape précédente sera rouverte. Action tracée au journal.",
+                    title: "Revenir à l'étape précédente ?",
+                    message: `Confirmez-vous de ramener « ${manuscript.title} » à l'étape précédant « ${manuscript.status.label} » ?`,
+                    detail: "⚠ À n'utiliser que pour corriger une validation faite PAR ERREUR. Conséquences : l'étape « " + manuscript.status.label + " » est annulée, l'étape précédente redevient active, et le travail lié à l'étape en cours peut être à refaire. Action tracée au journal. Ne rien faire si vous n'êtes pas sûr.",
                     tone: "danger",
-                    confirmLabel: "Revenir en arrière",
+                    confirmLabel: "Oui, revenir en arrière",
                   },
                   () => revertManuscriptStep(manuscript.id),
                   "Manuscrit ramené à l'étape précédente.",
@@ -1499,7 +1500,7 @@ function DecisionLetterCard({ manuscriptId }: { manuscriptId: string }) {
     <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "12px 14px", marginBottom: 12, background: "var(--paper, #faf8f2)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700 }}>Lettre officielle à l'auteur</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>Lettre officielle à l'auteur — {DECISION_LABELS[letter.decision] ?? letter.decision}</div>
           <div style={{ fontSize: 12, color: "var(--muted)" }}>
             {letter.layout.objet}
             {letter.notified_to ? ` · envoyée à ${letter.notified_to}` : " · non envoyée par e-mail (imprimez et remettez la lettre)"}
@@ -1547,6 +1548,22 @@ function EditorialDecisionForm({
       : decision === "refus_resoumission"
         ? "Motifs communiqués à l'auteur (un par ligne)"
         : "Conditions communiquées à l'auteur (une par ligne)";
+
+  // Aperçu / impression de la lettre POUR LA DÉCISION EN COURS de sélection
+  // (avant enregistrement) : la lettre correspond exactement à la décision choisie.
+  async function printPreview(opts: PrintOpts) {
+    const points = showPoints ? pointsText.split("\n").map((c) => c.trim()).filter((c) => c.length > 0) : [];
+    try {
+      const res = await previewDecisionLetter(manuscriptId, {
+        decision,
+        author_message: authorMessage.trim() || undefined,
+        author_points: points.length ? points : undefined,
+      });
+      printEditorialDecisionLetter(res.layout, opts);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Aperçu de la lettre impossible.");
+    }
+  }
 
   async function submit() {
     const points = showPoints ? pointsText.split("\n").map((c) => c.trim()).filter((c) => c.length > 0) : [];
@@ -1651,6 +1668,13 @@ function EditorialDecisionForm({
           <span style={{ display: "block", marginTop: 6, color: "var(--muted, #667)", fontSize: 11 }}>
             La lettre reprend un modèle institutionnel sobre + ces éléments. Elle se termine par « Pour Éclosion Édition » avec une zone de signature et de cachet (à signer après impression).
           </span>
+          {/* Aperçu aligné sur la décision EN COURS (avant enregistrement). */}
+          <div style={{ marginTop: 10 }}>
+            <DocPrintMenu label={`Aperçu de la lettre « ${DECISION_LABELS[decision]} »`} onPrint={printPreview} />
+            <span style={{ display: "block", marginTop: 4, color: "var(--muted, #667)", fontSize: 11 }}>
+              Vérifiez la lettre AVANT d'enregistrer : elle correspond exactement à la décision sélectionnée.
+            </span>
+          </div>
         </div>
       )}
       <ActionButton onClick={() => {}}>Enregistrer la décision</ActionButton>

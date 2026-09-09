@@ -903,6 +903,40 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
     return reply.send({ decision: decision.decision, subject: composed.subject, body: composed.textBody, layout: composed.layout, author_email: contributor?.partner.email ?? null, notified_at: decision.authorNotifiedAt, notified_to: decision.authorNotifiedTo });
   });
 
+  // Aperçu de la lettre pour la décision EN COURS de saisie (avant enregistrement) :
+  // permet à la Direction de vérifier que la lettre correspond bien à la décision
+  // sélectionnée et à ses éléments communicables. Ne modifie rien.
+  fastify.post("/api/v1/manuscripts/:id/decision-letter/preview", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z
+      .object({
+        decision: z.nativeEnum(EditorialDecisionType),
+        author_message: z.string().max(4000).optional(),
+        author_points: z.array(z.string().min(1).max(500)).max(20).optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const key = parsed.data.decision as EditorialLetterKey;
+    if (!LETTER_KEYS.includes(key)) {
+      return reply.code(409).send({ code: "no_letter", message: "Cette décision ne donne pas lieu à une lettre à l'auteur (aucun aperçu)." });
+    }
+    const m = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { title: true, manuscriptNumber: true } });
+    if (!m) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+    const contributor = await prisma.workContributor.findFirst({ where: { manuscriptId: id, role: "author" }, include: { partner: { select: { firstName: true, lastName: true } } } });
+    const templates = await resolveLetterTemplates();
+    const maison = await houseName();
+    const composed = composeLetter(templates[key], {
+      auteur: `${contributor?.partner.firstName ?? ""} ${contributor?.partner.lastName ?? ""}`.trim() || "l'auteur",
+      titre: m.title,
+      numero: m.manuscriptNumber,
+      points: buildPointsBlock(key, parsed.data.author_points ?? []),
+      message: parsed.data.author_message?.trim() || "",
+      date: new Date().toLocaleDateString("fr-FR"),
+      maison,
+    });
+    return reply.send({ decision: key, subject: composed.subject, body: composed.textBody, layout: composed.layout });
+  });
+
   // === Suivi des acceptations « sous conditions » (audit éditorial, point n°2) ===
   // Les conditions posées par le comité sont listées, puis « levées » (datées,
   // tracées) au fur et à mesure. Le passage en mise en page (production) est

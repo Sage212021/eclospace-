@@ -295,4 +295,52 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
       return reply.send({ original: job.sourceText, rewritten: job.rewriteText });
     },
   );
+
+  const READ_JOB_PERMS = [{ module: "comite_lecture" as const, action: "consultation" as const }, { module: "manuscripts" as const, action: "consultation" as const }];
+
+  // — Livrables produits par une relecture IA (« Générer les livrables ») —
+  // Liste les documents effectivement produits par le job (rapport, version
+  // réécrite…), avec un lien de téléchargement par pièce. Réutilise la GED et le
+  // stockage existants (aucun second moteur de génération).
+  fastify.get(
+    "/api/v1/ai-editorial/jobs/:jobId/documents",
+    { preHandler: requireAnyPermission(READ_JOB_PERMS) },
+    async (request, reply) => {
+      const { jobId } = request.params as { jobId: string };
+      const job = await prisma.aiReadingJob.findUnique({ where: { id: jobId }, select: { producedDocumentIds: true } });
+      if (!job) return reply.code(404).send({ code: "not_found", message: "Relecture introuvable." });
+      const ids = Array.isArray(job.producedDocumentIds) ? (job.producedDocumentIds as string[]) : [];
+      const docs = await prisma.document.findMany({
+        where: { id: { in: ids }, deletedAt: null },
+        select: { id: true, title: true, category: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { fileSize: true, mimeType: true } } },
+      });
+      // Conserve l'ordre de production (rapport d'abord, puis version réécrite…).
+      const byId = new Map(docs.map((d) => [d.id, d]));
+      const livrables = ids
+        .map((id) => byId.get(id))
+        .filter((d): d is NonNullable<typeof d> => Boolean(d))
+        .map((d) => ({ id: d.id, title: d.title, category: d.category, file_size: d.versions[0]?.fileSize ?? null, mime_type: d.versions[0]?.mimeType ?? null }));
+      return reply.send({ documents: livrables });
+    },
+  );
+
+  // Téléchargement d'un livrable produit (validé comme appartenant au job).
+  fastify.get(
+    "/api/v1/ai-editorial/jobs/:jobId/documents/:docId/download",
+    { preHandler: requireAnyPermission(READ_JOB_PERMS) },
+    async (request, reply) => {
+      const { jobId, docId } = request.params as { jobId: string; docId: string };
+      const job = await prisma.aiReadingJob.findUnique({ where: { id: jobId }, select: { producedDocumentIds: true } });
+      if (!job) return reply.code(404).send({ code: "not_found", message: "Relecture introuvable." });
+      const ids = Array.isArray(job.producedDocumentIds) ? (job.producedDocumentIds as string[]) : [];
+      if (!ids.includes(docId)) return reply.code(404).send({ code: "not_found", message: "Livrable introuvable pour cette relecture." });
+      const version = await prisma.documentVersion.findFirst({ where: { document: { id: docId, deletedAt: null } }, orderBy: { versionNumber: "desc" } });
+      if (!version) return reply.code(404).send({ code: "not_found", message: "Livrable introuvable (peut-être retiré)." });
+      const { readStoredFile } = await import("../lib/storage.js");
+      const buffer = await readStoredFile(version.filePath);
+      reply.header("content-type", version.mimeType);
+      reply.header("content-disposition", `attachment; filename="livrable_${docId.slice(0, 8)}.docx"`);
+      return reply.send(buffer);
+    },
+  );
 }

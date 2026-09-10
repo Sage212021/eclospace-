@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { runAiEditorial, listAiJobs, aiJobReportDownloadUrl, aiJobComparison, listGenres, type AiJob, type AiWorkType, type Genre } from "../api/client";
+import { runAiEditorial, listAiJobs, aiJobReportDownloadUrl, aiJobComparison, aiJobDocuments, aiJobDocumentDownloadUrl, listGenres, type AiJob, type AiJobDocument, type AiWorkType, type Genre } from "../api/client";
 
 // Lot IA-1 : lancer une relecture assistée à l'étape courante. Le rapport produit
 // (au nom du relecteur d'Éclosion) est classé dans les Documents de l'ouvrage.
@@ -40,6 +40,46 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
   // Comparaison avant/après (réécriture) : texte original vs texte réécrit.
   const [compare, setCompare] = useState<{ jobId: string; original: string; rewritten: string } | null>(null);
   const [cmpBusy, setCmpBusy] = useState(false);
+
+  // Livrables produits (« Générer les livrables ») : sélection + téléchargement.
+  const [livrables, setLivrables] = useState<{ jobId: string; docs: AiJobDocument[]; selected: Set<string> } | null>(null);
+  const [livBusy, setLivBusy] = useState(false);
+
+  async function openLivrables(jobId: string) {
+    if (livrables?.jobId === jobId) { setLivrables(null); return; }
+    setLivBusy(true); setErr(null);
+    try {
+      const r = await aiJobDocuments(jobId);
+      setLivrables({ jobId, docs: r.documents, selected: new Set(r.documents.map((d) => d.id)) });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Livrables indisponibles.");
+    } finally {
+      setLivBusy(false);
+    }
+  }
+  function toggleLivrable(id: string) {
+    setLivrables((cur) => {
+      if (!cur) return cur;
+      const selected = new Set(cur.selected);
+      if (selected.has(id)) selected.delete(id); else selected.add(id);
+      return { ...cur, selected };
+    });
+  }
+  function downloadSelected() {
+    if (!livrables) return;
+    livrables.docs.filter((d) => livrables.selected.has(d.id)).forEach((d, i) => {
+      // Déclenche chaque téléchargement via un lien temporaire (léger décalage
+      // pour ne pas que le navigateur en ignore certains).
+      setTimeout(() => {
+        const a = document.createElement("a");
+        a.href = aiJobDocumentDownloadUrl(livrables.jobId, d.id);
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }, i * 400);
+    });
+  }
 
   async function openComparison(jobId: string) {
     if (compare?.jobId === jobId) { setCompare(null); return; }
@@ -228,11 +268,48 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
                         🔀 {compare?.jobId === j.id ? "Masquer la comparaison" : "Comparer avant/après"}
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => openLivrables(j.id)}
+                      disabled={livBusy}
+                      style={{ background: "none", border: "none", color: "var(--eclosion-dark, #9A7A12)", fontWeight: 700, cursor: livBusy ? "default" : "pointer", padding: 0, fontSize: 12 }}
+                      title="Choisir les documents produits à télécharger"
+                    >
+                      📦 {livrables?.jobId === j.id ? "Masquer les livrables" : "Générer les livrables"}
+                    </button>
                   </>
                 )}
               </div>
             ))}
           </div>
+          {livrables && (
+            // Sélection des livrables produits par la relecture (rapport, version
+            // réécrite…) puis téléchargement de la sélection. Réutilise les fichiers
+            // déjà classés dans les Documents de l'ouvrage.
+            <div style={{ marginTop: 10, border: "1px solid var(--line)", borderRadius: 8, padding: 10, background: "var(--paper, #FAF8F2)" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 6 }}>Générer les livrables</div>
+              {livrables.docs.length === 0 && <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>Aucun livrable produit.</p>}
+              <div style={{ display: "grid", gap: 4 }}>
+                {livrables.docs.map((d) => (
+                  <label key={d.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, cursor: "pointer" }}>
+                    <input type="checkbox" checked={livrables.selected.has(d.id)} onChange={() => toggleLivrable(d.id)} />
+                    <span style={{ fontWeight: 600 }}>{d.title}</span>
+                    <a href={aiJobDocumentDownloadUrl(livrables.jobId, d.id)} style={{ color: "var(--eclosion-dark, #9A7A12)", fontWeight: 700, textDecoration: "none" }}>📄 télécharger</a>
+                  </label>
+                ))}
+              </div>
+              {livrables.docs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={downloadSelected}
+                  disabled={livrables.selected.size === 0}
+                  style={{ marginTop: 8, background: "var(--eclosion)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12.5, fontWeight: 700, cursor: livrables.selected.size === 0 ? "default" : "pointer" }}
+                >
+                  Télécharger la sélection ({livrables.selected.size})
+                </button>
+              )}
+            </div>
+          )}
           {compare && (
             // Version originale / version proposée par l'IA, côte à côte. La
             // version originale n'est jamais modifiée : ceci est une proposition.

@@ -438,5 +438,17 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     const body = cmp.json() as { original: string; rewritten: string };
     expect(body.original).toContain("Contenu du manuscrit de test.");
     expect(body.rewritten.length).toBeGreaterThan(0);
+
+    // Livrables produits : le rapport ET la version réécrite sont listés et
+    // téléchargeables ; un identifiant étranger au job est refusé.
+    const docsRes = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs/${res.json().jobId}/documents`, headers: { cookie: adminCookie } });
+    expect(docsRes.statusCode).toBe(200);
+    const docs = (docsRes.json() as { documents: Array<{ id: string; title: string }> }).documents;
+    expect(docs.length).toBeGreaterThanOrEqual(2);
+    expect(docs.some((d) => d.title.startsWith("Version réécrite (IA)"))).toBe(true);
+    const dl = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs/${res.json().jobId}/documents/${docs[0].id}/download`, headers: { cookie: adminCookie } });
+    expect(dl.statusCode).toBe(200);
+    const bad = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs/${res.json().jobId}/documents/00000000-0000-0000-0000-000000000000/download`, headers: { cookie: adminCookie } });
+    expect(bad.statusCode).toBe(404);
   });
 });

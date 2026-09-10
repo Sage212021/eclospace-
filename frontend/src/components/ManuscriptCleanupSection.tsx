@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getCatalogueIncomplete, getPurgeCandidates, purgeManuscripts, type CatalogueIncompleteRow, type PurgeCandidateRow } from "../api/client";
+import { getCatalogueIncomplete, getPurgeCandidates, purgeManuscripts, getDuplicateManuscripts, deleteManuscript, type CatalogueIncompleteRow, type PurgeCandidateRow, type DuplicateGroup } from "../api/client";
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
@@ -14,14 +14,32 @@ export function ManuscriptCleanupSection({ canAdminister, onOpenManuscript }: { 
   const [incomplete, setIncomplete] = useState<CatalogueIncompleteRow[] | null>(null);
   const [candidates, setCandidates] = useState<PurgeCandidateRow[] | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [duplicates, setDuplicates] = useState<DuplicateGroup[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     getCatalogueIncomplete().then(setIncomplete).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
-    if (canAdminister) getPurgeCandidates().then(setCandidates).catch(() => {});
+    if (canAdminister) {
+      getPurgeCandidates().then(setCandidates).catch(() => {});
+      getDuplicateManuscripts().then(setDuplicates).catch(() => {});
+    }
   }, [canAdminister]);
+
+  async function removeDuplicate(id: string, label: string) {
+    if (!window.confirm(`Retirer « ${label} » ?\n\nSuppression logique (corbeille), réversible. Les autres fiches du doublon sont conservées.`)) return;
+    setBusy(true);
+    try {
+      await deleteManuscript(id);
+      setMessage(`Fiche « ${label} » retirée.`);
+      setDuplicates(await getDuplicateManuscripts());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Suppression impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const selectedIds = Object.entries(checked).filter(([, v]) => v).map(([id]) => id);
   const safeCandidates = candidates?.filter((c) => c.safe) ?? [];
@@ -82,7 +100,66 @@ export function ManuscriptCleanupSection({ canAdminister, onOpenManuscript }: { 
         )}
       </Card>
 
-      {/* 2. Épuration des essais (administration) */}
+      {/* 2. Doublons potentiels (administration) */}
+      {canAdminister && (
+        <Card title="Doublons potentiels" icon={<IconAdmin />} subtitle="Fiches partageant un même titre (accents/casse/ponctuation ignorés). Gardez la fiche porteuse, retirez le doublon accidentel." collapsible defaultOpen={false}>
+          {!duplicates ? (
+            <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Chargement…</p>
+          ) : duplicates.length === 0 ? (
+            <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucun doublon détecté. 👍</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {duplicates.map((g, gi) => (
+                <div key={gi} style={{ border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden" }}>
+                  <div style={{ background: "var(--eclosion-soft)", padding: "6px 10px", fontSize: 13, fontWeight: 600 }}>
+                    « {g.title} » — <span style={{ color: "var(--alert, #B87400)" }}>{g.count} fiches</span>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
+                          <th style={{ padding: "5px 8px" }}>N°</th>
+                          <th style={{ padding: "5px 8px" }}>Auteur</th>
+                          <th style={{ padding: "5px 8px" }}>Étape</th>
+                          <th style={{ padding: "5px 8px" }}>Créée le</th>
+                          <th style={{ padding: "5px 8px" }}>État</th>
+                          <th style={{ padding: "5px 8px" }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.manuscripts.map((m) => (
+                          <tr key={m.id} style={{ borderTop: "1px solid var(--line)" }}>
+                            <td style={{ padding: "5px 8px", fontFamily: "var(--font-mono)" }}>{m.manuscript_number}</td>
+                            <td style={{ padding: "5px 8px" }}>{m.author ?? "—"}</td>
+                            <td style={{ padding: "5px 8px", color: "var(--muted)" }}>{m.stage ?? "—"}</td>
+                            <td style={{ padding: "5px 8px", color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{new Date(m.created_at).toLocaleDateString("fr-FR")}</td>
+                            <td style={{ padding: "5px 8px" }}>
+                              {m.safe ? (
+                                <span style={{ color: "var(--eclosion-dark, #9a7a12)", fontSize: 12 }}>vide — sûr à retirer</span>
+                              ) : (
+                                <span style={{ color: "var(--alert, #B87400)", fontSize: 12 }}>🔒 {m.blockers.join(", ")}</span>
+                              )}
+                            </td>
+                            <td style={{ padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap" }}>
+                              <Button variant="view" size="sm" type="button" onClick={() => onOpenManuscript(m.id)}>Ouvrir</Button>{" "}
+                              <Button variant="danger" size="sm" type="button" disabled={busy} onClick={() => removeDuplicate(m.id, `${m.title} ${m.manuscript_number}`)}>Retirer</Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+              <p style={{ fontSize: 11.5, color: "var(--muted)", margin: 0 }}>
+                « Retirer » = suppression logique (corbeille), réversible. Une fiche marquée <strong>🔒</strong> porte un contrat, un ISBN ou des données financières : ouvrez-la avant de décider — c'est en général celle à conserver.
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* 3. Épuration des essais (administration) */}
       {canAdminister && (
         <Card title="Épuration des essais" icon={<IconAdmin />} subtitle="Manuscrits d'essai sans empreinte catalogue ni financière. Archivage réversible ; les ouvrages protégés ne sont pas cochables." collapsible defaultOpen={false}>
           {!candidates ? (

@@ -615,6 +615,26 @@ export function purgeManuscripts(ids: string[]) {
   return request<{ archived_count: number; archived: string[]; skipped: { id: string; reason: string }[] }>("/api/v1/manuscripts/purge", { method: "POST", body: JSON.stringify({ ids }) });
 }
 
+// Doublons potentiels : fiches partageant un même titre normalisé.
+export interface DuplicateManuscriptRow {
+  id: string;
+  manuscript_number: string;
+  title: string;
+  stage: string | null;
+  author: string | null;
+  created_at: string;
+  safe: boolean;
+  blockers: string[];
+}
+export interface DuplicateGroup {
+  title: string;
+  count: number;
+  manuscripts: DuplicateManuscriptRow[];
+}
+export function getDuplicateManuscripts() {
+  return request<DuplicateGroup[]>("/api/v1/manuscripts/duplicates");
+}
+
 // Fichier source du manuscrit (dépôt à la réception → entrée du circuit).
 export function getManuscriptSourceFileMeta(manuscriptId: string) {
   return request<{ has_file: boolean; mime_type: string | null }>(`/api/v1/manuscripts/${manuscriptId}/source-file/meta`);

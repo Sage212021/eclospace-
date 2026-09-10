@@ -46,6 +46,27 @@ async function resolveReleaseAudience(note: ReleaseNoteRow): Promise<string[]> {
     }
   }
 
+  // La Direction générale reçoit TOUJOURS les nouveautés (demande opérateur) :
+  // chaque note ciblée est aussi remise au pôle DG et aux encadrants généraux,
+  // pour que la direction ait la vue complète des mises à jour, quel que soit le
+  // pôle visé. (Les notes « tous » sont déjà sorties plus haut.)
+  const dgDept = await prisma.department.findFirst({ where: { code: "DG" }, select: { id: true } });
+  if (dgDept) {
+    const dgUsers = await prisma.user.findMany({
+      where: { status: "active", deletedAt: null, employee: { departmentId: dgDept.id } },
+      select: { id: true },
+    });
+    for (const u of dgUsers) ids.add(u.id);
+  }
+  const dgRoles = await prisma.role.findMany({ where: { code: { in: ["ADMIN_GENERAL", "DIR_GENERAL"] } }, select: { id: true } });
+  if (dgRoles.length > 0) {
+    const urs = await prisma.userRole.findMany({
+      where: { revokedAt: null, roleId: { in: dgRoles.map((r) => r.id) }, user: { status: "active", deletedAt: null } },
+      select: { userId: true },
+    });
+    for (const ur of urs) ids.add(ur.userId);
+  }
+
   return [...ids];
 }
 

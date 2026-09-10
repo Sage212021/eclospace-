@@ -3759,7 +3759,7 @@ export interface HrContractAmendment {
 }
 export interface HrContractRow {
   id: string;
-  type: "cdi" | "cdd" | "stage" | "prestation";
+  type: "cdi" | "cdd" | "stage" | "prestation" | "pre_emploi" | "essai";
   startDate: string;
   endDate: string | null;
   amendments: HrContractAmendment[];

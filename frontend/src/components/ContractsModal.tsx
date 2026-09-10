@@ -5,7 +5,7 @@ import { Field } from "./Modal";
 
 // Contrats de travail & avenants d'un employé (refonte RH — Étape 3). Liste des
 // contrats, ajout d'un contrat, et avenants tracés par contrat (date d'effet).
-const TYPE_LABELS: Record<string, string> = { cdi: "CDI", cdd: "CDD", stage: "Stage", prestation: "Prestation" };
+const TYPE_LABELS: Record<string, string> = { cdi: "CDI", cdd: "CDD", stage: "Stage", prestation: "Prestation", pre_emploi: "Pré-emploi", essai: "Essai" };
 
 export function ContractsModal({ employeeId, employeeName, canManage, onClose }: { employeeId: string; employeeName: string; canManage: boolean; onClose: () => void }) {
   const [contracts, setContracts] = useState<HrContractRow[]>([]);

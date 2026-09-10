@@ -40,7 +40,7 @@ const EMPLOYER = {
   ],
 };
 
-const CONTRACT_LABEL: Record<string, string> = { cdi: "CDI", cdd: "CDD", stage: "Stage", prestation: "Prestation" };
+const CONTRACT_LABEL: Record<string, string> = { cdi: "CDI", cdd: "CDD", stage: "Stage", prestation: "Prestation", pre_emploi: "Pré-emploi", essai: "Essai" };
 
 function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   const p = d.payslip;

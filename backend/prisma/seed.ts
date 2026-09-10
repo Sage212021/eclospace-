@@ -1367,6 +1367,13 @@ async function main() {
       departmentCodes: ["COMLEC", "DIRED"],
     },
     {
+      slug: "2026-09-rh-types-contrat-preemploi-essai",
+      version: "2026.09",
+      title: "Nouveauté — Types de contrat « Pré-emploi » et « Essai »",
+      body: "Dans la fiche d'un collaborateur → « Contrats de travail », la liste des types de contrat s'enrichit de « Pré-emploi » (contrat/stage de pré-emploi, ex. jeune diplômé en première expérience) et « Essai » (contrat d'essai court), en plus de CDI, CDD, Stage et Prestation.",
+      departmentCodes: ["RH"],
+    },
+    {
       slug: "2026-09-cachets-signature-documents",
       version: "2026.09",
       title: "Nouveauté — Cachets officiels et signature du DG sur les documents",

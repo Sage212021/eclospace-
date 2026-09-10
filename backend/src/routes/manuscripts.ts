@@ -11,7 +11,7 @@ import { optionalStepMeta } from "../lib/stepRealization.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
-import { findDuplicateManuscript, duplicateMessage } from "../lib/manuscriptDuplicate.js";
+import { findDuplicateManuscript, duplicateMessage, normalizeTitleForDuplicate } from "../lib/manuscriptDuplicate.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import type { DocumentCategory } from "@prisma/client";
 
@@ -678,6 +678,66 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       };
     });
     return reply.send(list);
+  });
+
+  // DOUBLONS POTENTIELS : ouvrages non supprimés dont le TITRE NORMALISÉ (sans
+  // accents/ponctuation/casse) est partagé par au moins deux fiches. Sert à
+  // nettoyer les doublons créés AVANT le renforcement de l'anti-doublon. Pour
+  // chaque fiche on indique si elle est « sûre » à archiver (aucune empreinte
+  // catalogue/financière), afin de retirer le doublon accidentel et de garder
+  // la fiche porteuse. Réservé à l'administration.
+  fastify.get("/api/v1/manuscripts/duplicates", { preHandler: requirePermission("manuscripts", "administration") }, async (_request, reply) => {
+    const rows = await prisma.manuscript.findMany({
+      where: { deletedAt: null },
+      include: {
+        status: { select: { label: true } },
+        workContributors: { where: { role: "author" }, include: { partner: { select: { firstName: true, lastName: true, penName: true } } }, take: 1 },
+        _count: { select: { isbns: true, contracts: true, financeRequests: true, editorialQuotes: true, expenses: true, costEntries: true, budgets: true, printQuotes: true, schoolRoyaltyEntries: true } },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 2000,
+    });
+
+    const groups = new Map<string, typeof rows>();
+    for (const m of rows) {
+      const key = normalizeTitleForDuplicate(m.title);
+      if (!key) continue;
+      const g = groups.get(key);
+      if (g) g.push(m);
+      else groups.set(key, [m]);
+    }
+
+    const result = [...groups.values()]
+      .filter((g) => g.length > 1)
+      .map((g) => ({
+        title: g[0].title,
+        count: g.length,
+        manuscripts: g.map((m) => {
+          const a = m.workContributors[0]?.partner;
+          const author = a ? (a.penName || `${a.firstName} ${a.lastName}`.trim()) : null;
+          const blockers: string[] = [];
+          if (m.publicationDate || m.isBackCatalogue) blockers.push("au catalogue");
+          if (m._count.isbns > 0) blockers.push("ISBN attribué");
+          if (m._count.contracts > 0) blockers.push("contrat");
+          if (m._count.financeRequests > 0 || m._count.editorialQuotes > 0) blockers.push("devis/facture");
+          if (m._count.expenses > 0 || m._count.costEntries > 0 || m._count.budgets > 0) blockers.push("dépenses/coûts");
+          if (m._count.printQuotes > 0) blockers.push("devis impression");
+          if (m._count.schoolRoyaltyEntries > 0) blockers.push("droits scolaires");
+          return {
+            id: m.id,
+            manuscript_number: m.manuscriptNumber,
+            title: m.title,
+            stage: m.status?.label ?? null,
+            author,
+            created_at: m.createdAt.toISOString(),
+            safe: blockers.length === 0,
+            blockers,
+          };
+        }),
+      }))
+      .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title));
+
+    return reply.send(result);
   });
 
   // Archivage (suppression LOGIQUE, réversible) des essais sélectionnés. Chaque

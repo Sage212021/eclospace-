@@ -46,6 +46,16 @@ const evaluationSchema = z.object({
   conflict_declaration: z.object({ has_conflict: z.boolean(), details: z.string().optional() }).optional(),
 });
 
+// Libellés FR des types de décision (messages d'erreur, historique).
+const EDITORIAL_DECISION_LABELS: Record<EditorialDecisionType, string> = {
+  acceptation: "Acceptation",
+  acceptation_conditions: "Acceptation sous conditions",
+  revision: "Révision demandée",
+  attente: "Mise en attente",
+  refus: "Refus éditorial",
+  refus_resoumission: "Refus avec resoumission possible",
+};
+
 const editorialDecisionSchema = z.object({
   decision: z.nativeEnum(EditorialDecisionType),
   // Motivation INTERNE (dossier, historique) — jamais reproduite dans la lettre.
@@ -692,6 +702,25 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({
           code: "step_out_of_order",
           message: `Le manuscrit est à l'étape « ${manuscript.status.label} », pas encore à la décision éditoriale.`,
+        });
+      }
+
+      // Garde-fou (demande opérateur 10/09/2026) : une SEULE décision éditoriale
+      // par manuscrit et par jour. Les décisions « révision » et « attente »
+      // laissent le dossier à l'étape décision : sans ce contrôle, la même
+      // décision pouvait être ré-enregistrée plusieurs fois le même jour
+      // (doublons dans l'historique, cf. MS-2026-0059 « LE PRIX DU SILENCE »).
+      const dayStart = new Date();
+      dayStart.setHours(0, 0, 0, 0);
+      const already = await prisma.editorialDecision.findFirst({
+        where: { manuscriptId: id, decidedAt: { gte: dayStart } },
+        orderBy: { decidedAt: "desc" },
+        include: { decidedBy: { select: { username: true } } },
+      });
+      if (already) {
+        return reply.code(409).send({
+          code: "decision_already_today",
+          message: `Une décision éditoriale (« ${EDITORIAL_DECISION_LABELS[already.decision]} ») a déjà été rendue pour ce manuscrit aujourd'hui par ${already.decidedBy.username}. Une seule décision par manuscrit et par jour : si une nouvelle décision est nécessaire, revenez demain.`,
         });
       }
 

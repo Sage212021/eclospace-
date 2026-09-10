@@ -649,6 +649,23 @@ export function deleteStepDocument(manuscriptId: string, docId: string) {
 export function listStepAttachments(manuscriptId: string) {
   return request<StepAttachment[]>(`/api/v1/manuscripts/${manuscriptId}/step-attachments`);
 }
+
+// Corbeille du dossier : pièces de travail (rapports IA, versions réécrites,
+// livrables) retirées du dossier actif (suppression logique) + restauration.
+export interface TrashItem {
+  id: string;
+  title: string;
+  category: string;
+  created_at: string;
+  deleted_at: string;
+  can_restore: boolean;
+}
+export function listManuscriptTrash(manuscriptId: string) {
+  return request<TrashItem[]>(`/api/v1/manuscripts/${manuscriptId}/trash`);
+}
+export function restoreStepDocument(manuscriptId: string, docId: string) {
+  return request<{ restored: boolean }>(`/api/v1/manuscripts/${manuscriptId}/step-documents/${docId}/restore`, { method: "POST" });
+}
 export async function uploadStepAttachment(manuscriptId: string, file: File, stepLabel: string) {
   const form = new FormData();
   form.append("file", file);

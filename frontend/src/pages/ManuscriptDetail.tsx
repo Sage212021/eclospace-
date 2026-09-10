@@ -74,6 +74,7 @@ import { FundingCheckpoint } from "../components/FundingCheckpoint";
 import { FinanceRequestCard } from "../components/FinanceRequestCard";
 import { EditorialQuotesInbox } from "../components/EditorialQuotesInbox";
 import { AiReadingLauncher } from "../components/AiReadingLauncher";
+import { AiTrashSection } from "../components/AiTrashSection";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 import { ManuscriptStockSection } from "../components/ManuscriptStockSection";
 
@@ -704,6 +705,9 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             </>
           )}
           <CorrectionSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
+          {/* Corbeille du dossier : productions IA / versions de travail retirées,
+              restaurables. Masquée tant qu'elle est vide (cahier des charges §45). */}
+          <AiTrashSection manuscriptId={manuscript.id} />
         </>
       )}
 

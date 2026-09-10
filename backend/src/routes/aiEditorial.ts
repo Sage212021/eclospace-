@@ -36,6 +36,8 @@ const configSchema = z.object({
     correction_1: presetEnum,
     correction_2: presetEnum,
     couverture: presetEnum,
+    expertise: presetEnum,
+    reecriture: presetEnum,
   }),
   allowed_confidentiality: z.array(z.enum(CONFIDENTIALITY_LEVELS)).min(1),
   // Clé API : facultative à la mise à jour. Fournie → chiffrée ; chaîne vide →

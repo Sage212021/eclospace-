@@ -57,7 +57,7 @@ describe("IA éditoriale — configuration & prompts (Lot IA-0)", () => {
       payload: {
         enabled: true,
         account_label: "Compte Éclosion API",
-        models: { evaluation: "leger", correction_1: "leger", correction_2: "intermediaire", couverture: "leger" },
+        models: { evaluation: "leger", correction_1: "leger", correction_2: "intermediaire", couverture: "leger", expertise: "intermediaire", reecriture: "intermediaire" },
         allowed_confidentiality: ["public", "interne", "restreint"],
         api_key: "sk-ant-secret-ABCD9876",
       },
@@ -86,7 +86,7 @@ describe("IA éditoriale — configuration & prompts (Lot IA-0)", () => {
       headers: { cookie: adminCookie },
       payload: {
         enabled: false,
-        models: { evaluation: "leger", correction_1: "leger", correction_2: "leger", couverture: "leger" },
+        models: { evaluation: "leger", correction_1: "leger", correction_2: "leger", couverture: "leger", expertise: "intermediaire", reecriture: "intermediaire" },
         allowed_confidentiality: ["interne"],
         api_key: "",
       },
@@ -96,12 +96,12 @@ describe("IA éditoriale — configuration & prompts (Lot IA-0)", () => {
     expect(res.json().code).toBe("no_api_key");
   });
 
-  it("la bibliothèque contient les 4 prompts par défaut, éditables et versionnés", async () => {
+  it("la bibliothèque contient les 6 prompts par défaut, éditables et versionnés", async () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/ai-editorial/prompts", headers: { cookie: adminCookie } });
     expect(res.statusCode).toBe(200);
     const prompts = res.json().prompts as Array<{ workType: string; version: number }>;
     const types = prompts.map((p) => p.workType).sort();
-    expect(types).toEqual(["correction_1", "correction_2", "couverture", "evaluation"]);
+    expect(types).toEqual(["correction_1", "correction_2", "couverture", "evaluation", "expertise", "reecriture"]);
 
     const before = prompts.find((p) => p.workType === "evaluation")!;
     const upd = await app.inject({

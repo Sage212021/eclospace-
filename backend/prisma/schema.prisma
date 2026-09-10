@@ -5268,6 +5268,8 @@ enum AiWorkType {
   correction_1
   correction_2
   couverture
+  expertise
+  reecriture
 }
 
 enum AiJobStatus {

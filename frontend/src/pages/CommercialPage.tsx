@@ -298,7 +298,9 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder, canSe
   );
 }
 
-function NewOrderForm({
+// Formulaire « Nouvelle commande » — exporté pour être réutilisé tel quel sur la
+// page Stock (le bon de livraison se génère ensuite depuis la commande créée).
+export function NewOrderForm({
   customers,
   isbns,
   locations,

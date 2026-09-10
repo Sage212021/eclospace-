@@ -17,7 +17,16 @@ const STATUS_COLORS: Record<AiJob["status"], string> = {
   erreur: "var(--alert, #B23A2E)",
 };
 
-export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hint, askCoverPass, askGrid }: { manuscriptId: string; workType: AiWorkType; stepCode: string; title: string; hint?: string; askCoverPass?: boolean; askGrid?: boolean }) {
+// Groupes de « chips » d'objectifs (facultatifs) : cliquer une puce insère la
+// consigne correspondante dans la zone de recommandation, sans ressaisie. Sert à
+// la sélection claire des objectifs (types d'expertise, niveaux de réécriture,
+// degré de préservation de la voix) — cf. cahier des charges IA §5/§12/§13.
+export interface PresetGroup {
+  title: string;
+  options: string[];
+}
+
+export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hint, askCoverPass, askGrid, presetGroups }: { manuscriptId: string; workType: AiWorkType; stepCode: string; title: string; hint?: string; askCoverPass?: boolean; askGrid?: boolean; presetGroups?: PresetGroup[] }) {
   const [jobs, setJobs] = useState<AiJob[]>([]);
   const [reco, setReco] = useState("");
   const [coverPass, setCoverPass] = useState<"BAT1" | "BAT2">("BAT1");
@@ -123,6 +132,30 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
           </div>
         </details>
       )}
+      {presetGroups && presetGroups.length > 0 && (
+        // Sélection claire des objectifs : chaque puce insère sa consigne dans la
+        // zone ci-dessous (cumulables). L'opérateur peut ensuite préciser à la main.
+        <div style={{ marginBottom: 10 }}>
+          {presetGroups.map((g) => (
+            <div key={g.title} style={{ marginBottom: 6 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", marginBottom: 4 }}>{g.title}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {g.options.map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setReco((cur) => (cur.trim() ? `${cur.trim()}\n${opt}` : opt))}
+                    style={{ background: "var(--bg, #fff)", border: "1px solid var(--line)", borderRadius: 999, padding: "4px 10px", fontSize: 12, cursor: "pointer", color: "var(--ink)" }}
+                    title="Ajouter cette consigne"
+                  >
+                    + {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <textarea
         value={reco}
         onChange={(e) => setReco(e.target.value)}
@@ -145,6 +178,11 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
               <div key={j.id} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 12, flexWrap: "wrap" }}>
                 <span style={{ fontFamily: "var(--font-mono)" }}>{new Date(j.launchedAt).toLocaleString("fr-FR")}</span>
                 <span style={{ fontWeight: 700, color: STATUS_COLORS[j.status] }}>{STATUS_LABELS[j.status]}</span>
+                {j.status === "termine" && (
+                  // Production IA : jamais présentée comme une décision. Reste « à
+                  // valider » jusqu'à intervention d'un responsable habilité.
+                  <span style={{ background: "#F4E9BE", color: "#8A6D00", border: "1px solid #D9B21A", borderRadius: 999, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>IA — à valider</span>
+                )}
                 {j.costEstimate && <span style={{ color: "var(--muted)" }}>≈ {Number(j.costEstimate).toLocaleString("fr-FR")} FCFA</span>}
                 {j.errorMessage && <span style={{ color: "var(--alert, #B23A2E)" }}>{j.errorMessage}</span>}
                 {j.status === "termine" && j.reportAvailable !== false && (

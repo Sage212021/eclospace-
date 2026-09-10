@@ -2406,6 +2406,11 @@ model Contract {
   // articles du modèle) : tableau JSON [{ title, body }]. Repris en fin de
   // contrat imprimé / PDF. Modifiables tant que le contrat n'est pas signé.
   customClauses      Json?          @map("custom_clauses")
+  // Surcharges ponctuelles du texte des articles standard (avant impression) :
+  // objet JSON { "5": "texte de remplacement de l'article 5", ... }. Un article
+  // surchargé remplace le corps du modèle ; les autres restent standard.
+  // Modifiables tant que le contrat n'est pas signé.
+  articleOverrides   Json?          @map("article_overrides")
   status             ContractStatus @default(preparation)
 
   createdAt DateTime  @default(now()) @map("created_at")

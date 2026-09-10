@@ -930,6 +930,26 @@ function editorSignatureBlock(sign?: ContractStampData | null): string {
     <div style="border-top:1px solid #0b0b0c;padding-top:4px">${nominatif}</div>`;
 }
 
+// Les 15 articles standard du contrat d'édition (n° + titre) — exposés pour que
+// l'écran Contrats propose la surcharge ponctuelle du texte d'un article donné.
+export const AUTHOR_CONTRACT_ARTICLES: { n: number; title: string }[] = [
+  { n: 1, title: "OBJET DU CONTRAT" },
+  { n: 2, title: "OBLIGATIONS DE L'AUTEUR" },
+  { n: 3, title: "OBLIGATIONS DE L'ÉDITEUR" },
+  { n: 4, title: "GESTION COLLECTIVE" },
+  { n: 5, title: "ÉTENDUE DE LA CESSION" },
+  { n: 6, title: "REMISE DES ÉPREUVES ET BON À TIRER" },
+  { n: 7, title: "PRÉROGATIVES DE L'ÉDITEUR" },
+  { n: 8, title: "TIRAGE" },
+  { n: 9, title: "PUBLICATION SOUS FORME IMPRIMÉE" },
+  { n: 10, title: "EXPLOITATION PERMANENTE ET SUIVIE" },
+  { n: 11, title: "RÉMUNÉRATION DE L'AUTEUR" },
+  { n: 12, title: "MISE AU PILON" },
+  { n: 13, title: "FORCE MAJEURE" },
+  { n: 14, title: "RÉSILIATION DE PLEIN DROIT" },
+  { n: 15, title: "LITIGES" },
+];
+
 export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): void {
   const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
   const p = c.partner;
@@ -965,10 +985,22 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publish
       : `${c.durationMonths} mois`
     : `${BL(6)} années`;
 
-  const art = (n: number, titre: string, corps: string) => `
-    <h3 style="font-family:Georgia,serif;font-size:14px;margin:20px 0 6px;color:#0b0b0c;border-bottom:1px solid #e7e2d4;padding-bottom:3px">ARTICLE ${n} — ${titre}</h3>
-    ${corps}`;
   const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
+  // Surcharges ponctuelles saisies avant impression : un article surchargé
+  // remplace le corps du modèle par le texte de l'éditeur (marqué « ajusté »).
+  const overrides = (c.articleOverrides && typeof c.articleOverrides === "object" && !Array.isArray(c.articleOverrides)
+    ? c.articleOverrides
+    : {}) as Record<string, string>;
+  const art = (n: number, titre: string, corps: string) => {
+    const ov = overrides[String(n)];
+    const body = ov
+      ? ov.split(/\n{2,}/).map((p2) => par(escapeHtml(p2).replace(/\n/g, "<br>"))).join("") +
+        `<p style="margin:2px 0 0;font-size:9.5px;color:#9a7a12;font-style:italic">Article ajusté pour ce contrat.</p>`
+      : corps;
+    return `
+    <h3 style="font-family:Georgia,serif;font-size:14px;margin:20px 0 6px;color:#0b0b0c;border-bottom:1px solid #e7e2d4;padding-bottom:3px">ARTICLE ${n} — ${titre}</h3>
+    ${body}`;
+  };
   const li = (items: string[]) => `<ul style="margin:6px 0 6px 4px;padding-left:16px;font-size:12px;line-height:1.5">${items.map((i) => `<li style="margin:3px 0">${i}</li>`).join("")}</ul>`;
 
   const body = `

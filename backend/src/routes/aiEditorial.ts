@@ -278,4 +278,21 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
       return reply.send(buffer);
     },
   );
+
+  // — Comparaison avant/après d'une réécriture IA —
+  // Renvoie le texte source analysé et le texte réécrit proposé, pour un affichage
+  // « version originale / version proposée ». Même porte que le rapport.
+  fastify.get(
+    "/api/v1/ai-editorial/jobs/:jobId/comparison",
+    { preHandler: requireAnyPermission([{ module: "comite_lecture", action: "consultation" }, { module: "manuscripts", action: "consultation" }]) },
+    async (request, reply) => {
+      const { jobId } = request.params as { jobId: string };
+      const job = await prisma.aiReadingJob.findUnique({ where: { id: jobId }, select: { workType: true, sourceText: true, rewriteText: true } });
+      if (!job) return reply.code(404).send({ code: "not_found", message: "Relecture introuvable." });
+      if (job.workType !== "reecriture" || !job.sourceText || !job.rewriteText) {
+        return reply.code(404).send({ code: "no_comparison", message: "Aucune comparaison avant/après n'est disponible pour cette relecture." });
+      }
+      return reply.send({ original: job.sourceText, rewritten: job.rewriteText });
+    },
+  );
 }

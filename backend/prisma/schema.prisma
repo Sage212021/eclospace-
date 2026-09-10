@@ -5309,6 +5309,8 @@ model AiReadingJob {
   costEstimate         Decimal?    @map("cost_estimate") @db.Decimal(12, 2)
   reportVersion        Int?        @map("report_version")
   reportText           String?     @map("report_text")
+  sourceText           String?     @map("source_text")
+  rewriteText          String?     @map("rewrite_text")
   producedDocumentIds  Json?       @map("produced_document_ids")
   errorMessage         String?     @map("error_message")
   launchedBy           String?     @map("launched_by")

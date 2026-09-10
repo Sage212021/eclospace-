@@ -1036,6 +1036,10 @@ export function runAiEditorial(input: { manuscript_id: string; work_type: AiWork
 export function listAiJobs(manuscriptId: string) {
   return request<{ jobs: AiJob[] }>(`/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`);
 }
+// Comparaison avant/après d'une réécriture IA : texte original vs texte réécrit.
+export function aiJobComparison(jobId: string) {
+  return request<{ original: string; rewritten: string }>(`/api/v1/ai-editorial/jobs/${jobId}/comparison`);
+}
 // Lien direct vers le rapport produit par une relecture IA. Accessible là où on
 // a lancé l'analyse (Mes lectures, Correction éditoriale), sans le droit GED :
 // le contrôle d'accès côté serveur suffit (mêmes droits que la liste des jobs).

@@ -1367,6 +1367,13 @@ async function main() {
       departmentCodes: ["COMLEC", "DIRED"],
     },
     {
+      slug: "2026-09-cachets-signature-documents",
+      version: "2026.09",
+      title: "Nouveauté — Cachets officiels et signature du DG sur les documents",
+      body: "Les lettres de décision éditoriale envoyées par e-mail à l'auteur portent désormais le cachet « Direction éditoriale ». Les contrats d'auteur portent le cachet « Direction générale », la signature manuscrite du DG et le nominatif (à la bonne taille, calé près de la signature). Tout est réglable dans Réglages → Cachets & signature : téléversement des images et interrupteur d'apposition automatique sur les contrats (désactivable pour signer à la main).",
+      departmentCodes: ["DIRED", "COMLEC"],
+    },
+    {
       slug: "2026-09-editorial-ia-expertise-reecriture",
       version: "2026.09",
       title: "Nouveauté — Assistants IA « Expertise scientifique » et « Réécriture »",

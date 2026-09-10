@@ -896,9 +896,56 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     if (!canCorrectDeposit(request, doc.createdBy)) {
       return reply.code(403).send({ code: "forbidden", message: "Seuls l'auteur du dépôt et la direction peuvent retirer ce fichier." });
     }
+    // Motif facultatif (corbeille — cahier des charges IA §45.3) : résultat
+    // insatisfaisant, doublon, erreur de génération… conservé au journal d'audit.
+    const body = (request.body ?? {}) as { reason?: string; comment?: string };
     await prisma.document.update({ where: { id: docId }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
-    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "document", entityId: docId, newValues: { step_document_removed: true, title: doc.title }, ipAddress: request.ip });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "document", entityId: docId, newValues: { step_document_removed: true, title: doc.title, reason: body.reason ?? null, comment: body.comment ?? null }, ipAddress: request.ip });
     return reply.send({ removed: true });
+  });
+
+  // Corbeille du dossier : pièces de travail (rapports IA, versions réécrites,
+  // livrables) RETIRÉES du dossier actif — suppression LOGIQUE, jamais physique.
+  // On ne liste QUE les documents « retirables » (jamais le manuscrit source ni
+  // une pièce protégée) et déjà en corbeille (deletedAt renseigné).
+  fastify.get("/api/v1/manuscripts/:id/trash", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const docs = await prisma.document.findMany({
+      where: { entityType: "manuscript", entityId: id, deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+      select: { id: true, title: true, category: true, createdAt: true, createdBy: true, deletedAt: true, deletedBy: true },
+    });
+    return reply.send(
+      docs
+        .filter((d) => isDeletableStepDoc(d))
+        .map((d) => ({
+          id: d.id,
+          title: d.title,
+          category: d.category,
+          created_at: d.createdAt,
+          deleted_at: d.deletedAt,
+          // Restauration réservée à l'auteur du dépôt et à la direction (mêmes
+          // règles que le retrait ; jamais un contournement des droits d'accès).
+          can_restore: canCorrectDeposit(request, d.createdBy),
+        })),
+    );
+  });
+
+  // Restaurer une pièce depuis la corbeille (remise dans le dossier actif).
+  // Conserve l'historique et les numéros de version ; tracée à l'audit.
+  fastify.post("/api/v1/manuscripts/:id/step-documents/:docId/restore", { preHandler: requireAuth }, async (request, reply) => {
+    const { id, docId } = request.params as { id: string; docId: string };
+    const doc = await prisma.document.findFirst({
+      where: { id: docId, entityType: "manuscript", entityId: id, deletedAt: { not: null } },
+      select: { id: true, category: true, title: true, createdBy: true },
+    });
+    if (!doc || !isDeletableStepDoc(doc)) return reply.code(404).send({ code: "not_found", message: "Élément de corbeille introuvable." });
+    if (!canCorrectDeposit(request, doc.createdBy)) {
+      return reply.code(403).send({ code: "forbidden", message: "Seuls l'auteur du dépôt et la direction peuvent restaurer ce fichier." });
+    }
+    await prisma.document.update({ where: { id: docId }, data: { deletedAt: null, deletedBy: null } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "document", entityId: docId, newValues: { step_document_restored: true, title: doc.title }, ipAddress: request.ip });
+    return reply.send({ restored: true });
   });
 
   // --- Correction éditoriale en deux temps (cycle de 4 phases) ---------------

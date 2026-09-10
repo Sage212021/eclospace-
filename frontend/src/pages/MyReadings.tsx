@@ -26,6 +26,7 @@ import { GuidanceNote } from "../components/GuidanceNote";
 import { Field } from "../components/Modal";
 import { printReadingReport, type PrintOpts } from "../lib/print";
 import { buildReadingReport } from "../lib/readingReport";
+import { tidyProse } from "../lib/tidyProse";
 import { buildFinalReadingReport, buildDepositOnLetterhead, type FinalReportResult } from "../lib/finalReport";
 
 // Ouvre un PDF (blob) dans un nouvel onglet pour impression / enregistrement.
@@ -477,8 +478,27 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
 
       <div style={{ marginTop: 12 }}>
         <Field label={t("myr.general_comment", "Appréciation générale")}>
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} />
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={6}
+            onPaste={(e) => {
+              // Remet en forme le texte collé (retours à la ligne perdus,
+              // phrases/intertitres soudés) et l'insère au curseur.
+              const pasted = e.clipboardData.getData("text");
+              if (!pasted) return;
+              e.preventDefault();
+              const el = e.currentTarget;
+              const start = el.selectionStart ?? comment.length;
+              const end = el.selectionEnd ?? comment.length;
+              setComment(comment.slice(0, start) + tidyProse(pasted) + comment.slice(end));
+            }}
+          />
         </Field>
+        <div style={{ marginTop: 4, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Le texte collé est automatiquement remis en forme (paragraphes, espaces).</span>
+          <button type="button" onClick={() => setComment(tidyProse(comment))} style={{ background: "none", border: "1px solid var(--line)", borderRadius: 6, padding: "3px 10px", fontSize: 12, cursor: "pointer", color: "var(--ink)" }}>Reformater</button>
+        </div>
       </div>
 
       {conflictRequired && (

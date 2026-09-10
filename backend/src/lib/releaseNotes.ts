@@ -131,10 +131,15 @@ export async function dispatchReleaseNotes(): Promise<{ notes: number; notificat
     audience.delete(sys.id);
     const body = noteBody(note);
 
-    // Envois déjà réalisés de CETTE note (repérés au corps exact, expéditeur
-    // système), quel que soit leur état — pour ne pas ré-envoyer ni ressusciter.
+    // Envois déjà réalisés de CETTE note, quel que soit leur état — pour ne pas
+    // ré-envoyer, ne pas ressusciter, et RETIRER ceux faits à tort. On les
+    // repère par la LIGNE DE TITRE (`📣 {titre}`), stable, et non par le corps
+    // entier : le texte d'une note peut avoir été retouché depuis son envoi,
+    // auquel cas un ancien message ne correspondrait plus au corps courant et
+    // échapperait au nettoyage.
+    const titleLine = `📣 ${note.title}`;
     const existing = await prisma.chatMessage.findMany({
-      where: { senderId: sys.id, body },
+      where: { senderId: sys.id, body: { startsWith: titleLine } },
       select: { id: true, deletedAt: true, conversation: { select: { userAId: true, userBId: true } } },
     });
     const deliveredTo = new Map<string, { id: string; deletedAt: Date | null }>();

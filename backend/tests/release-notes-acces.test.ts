@@ -63,11 +63,12 @@ describe("notes de version — ciblage par accès (pas de fuite hors périmètre
     });
     noteId = note.id;
 
-    // Simule un envoi ANTÉRIEUR à tort : le relecteur a déjà reçu la note
-    // (comme dans le cas signalé chez « Bertrand Relecteur »).
-    const body = `📣 ${note.title}\n\n${note.body}`;
+    // Simule un envoi ANTÉRIEUR à tort au relecteur (cas « Bertrand Relecteur »),
+    // avec un ANCIEN corps de texte (le texte de la note a été retouché depuis) :
+    // seul le titre est stable. Le nettoyage doit quand même le retirer.
+    const ancienCorps = `📣 ${note.title}\n\nAncienne formulation (texte modifié depuis).`;
     const conv = await getOrCreateConversation(sysId, relecteurId);
-    const wrong = await prisma.chatMessage.create({ data: { conversationId: conv.id, senderId: sysId, body } });
+    const wrong = await prisma.chatMessage.create({ data: { conversationId: conv.id, senderId: sysId, body: ancienCorps } });
     expect(wrong.deletedAt).toBeNull();
 
     await dispatchReleaseNotes();

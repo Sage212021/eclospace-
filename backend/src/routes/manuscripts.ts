@@ -11,6 +11,7 @@ import { optionalStepMeta } from "../lib/stepRealization.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
+import { findDuplicateManuscript, duplicateMessage } from "../lib/manuscriptDuplicate.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import type { DocumentCategory } from "@prisma/client";
 
@@ -277,19 +278,17 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     }
     const body = parsed.data;
 
-    // Anti-doublon (demande opérateur 19/08/2026) : un manuscrit ne peut pas être
-    // enregistré deux fois sous un titre déjà utilisé par un ouvrage ACTIF —
-    // sauf si le premier a été totalement supprimé. Comparaison insensible à la
-    // casse et aux espaces de bord. Message explicite pointant l'existant.
-    const dupTitle = body.title.trim();
-    const existing = await prisma.manuscript.findFirst({
-      where: { deletedAt: null, title: { equals: dupTitle, mode: "insensitive" } },
-      select: { manuscriptNumber: true, status: { select: { label: true } } },
-    });
+    // Anti-doublon (demande opérateur 19/08/2026, renforcé 10/09/2026) : un
+    // manuscrit ne peut pas être enregistré deux fois sous un titre déjà utilisé
+    // par un ouvrage non supprimé. La comparaison est insensible à la casse, aux
+    // ACCENTS, à la PONCTUATION, aux TRAITS D'UNION et aux ESPACES multiples —
+    // « Management de la Santé du bien-être » ≡ « management de la sante du bien
+    // être » (une comparaison au caractère près laissait passer ces variantes).
+    const existing = await findDuplicateManuscript(body.title);
     if (existing) {
       return reply.code(409).send({
         code: "duplicate_manuscript",
-        message: `Un manuscrit « ${dupTitle} » est déjà enregistré sous ${existing.manuscriptNumber} (étape : ${existing.status.label}). Reprenez cette fiche, ou supprimez-la d'abord si vous voulez la ré-enregistrer.`,
+        message: duplicateMessage(existing, body.title),
       });
     }
 
@@ -462,6 +461,13 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         code: "future_publication_date",
         message: "La date de parution d'un ouvrage déjà paru ne peut pas être postérieure à aujourd'hui.",
       });
+    }
+
+    // Même garde anti-doublon que le dépôt courant (titre normalisé) : un
+    // ouvrage déjà présent au catalogue ne peut pas être ré-importé.
+    const importDup = await findDuplicateManuscript(body.title);
+    if (importDup) {
+      return reply.code(409).send({ code: "duplicate_manuscript", message: duplicateMessage(importDup, body.title) });
     }
 
     const publishedStatus = await prisma.workflowStatus.findUnique({ where: { code: "SUIVI_POST_PUBLICATION" } });

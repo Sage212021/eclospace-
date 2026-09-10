@@ -118,6 +118,8 @@ enum HrContractType {
   cdd
   stage
   prestation
+  pre_emploi
+  essai
 }
 
 // Contrat de travail (interne) ou lien vers un contrat de prestation

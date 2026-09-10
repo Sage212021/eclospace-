@@ -7,7 +7,7 @@ import { IconAdmin } from "./icons";
 // Indicateurs de pilotage RH : effectif & répartition, contrats à échéance,
 // congés, recrutement & formation. Aucune donnée de présence/pointage.
 
-const CONTRACT_LABELS: Record<string, string> = { cdi: "CDI", cdd: "CDD", stage: "Stage", prestation: "Prestation", sans_contrat: "Sans contrat" };
+const CONTRACT_LABELS: Record<string, string> = { cdi: "CDI", cdd: "CDD", stage: "Stage", prestation: "Prestation", pre_emploi: "Pré-emploi", essai: "Essai", sans_contrat: "Sans contrat" };
 const STATUS_LABELS: Record<string, string> = { salarie: "Salariés", prestataire_externe: "Prestataires externes", stagiaire: "Stagiaires", benevole: "Bénévoles" };
 
 const mono: React.CSSProperties = { fontFamily: "var(--font-mono, monospace)" };

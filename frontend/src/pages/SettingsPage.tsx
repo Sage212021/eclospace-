@@ -17,6 +17,10 @@ interface SettingsPageProps {
 // Références au cahier des charges conservées en commentaire pour la traçabilité
 // interne uniquement, jamais dans le texte affiché (convention du 06/07/2026).
 const SETTING_LABELS: Record<string, { label: string; description: string }> = {
+  public_base_url: {
+    label: "Adresse web publique de l'ERP",
+    description: "Adresse que les auteurs ouvriront depuis leurs e-mails (ex. https://erp.eclosion.cm), pour confirmer la réception d'une lettre de décision. Laissée vide, l'ERP utilise l'adresse du serveur.",
+  },
   evaluation_rating_thresholds: {
     label: "Seuils de classement du comité de lecture", // Ch. 7 §7.5
     description: "Bornes de notation (Excellent, Très bon, Bon…) appliquées aux évaluations.",

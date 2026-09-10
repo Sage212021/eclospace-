@@ -11,6 +11,7 @@ import { lazyWithRetry as lazy } from "./lib/lazyWithRetry";
 // d'entrée). Les modules React exportent des composants nommés : on les
 // convertit en export « par défaut » attendu par lazy().
 const QuoteSignPage = lazy(() => import("./pages/QuoteSignPage").then((m) => ({ default: m.QuoteSignPage })));
+const DecisionLetterConfirmPage = lazy(() => import("./pages/DecisionLetterConfirmPage").then((m) => ({ default: m.DecisionLetterConfirmPage })));
 const Dashboard = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const Manuscripts = lazy(() => import("./pages/Manuscripts").then((m) => ({ default: m.Manuscripts })));
 const ReadingCommittee = lazy(() => import("./pages/ReadingCommittee").then((m) => ({ default: m.ReadingCommittee })));
@@ -601,6 +602,11 @@ export function App() {
   // lien reçu par e-mail : /signer-devis/:token. Court-circuite l'application.
   const signMatch = window.location.pathname.match(/^\/signer-devis\/([A-Za-z0-9]+)\/?$/);
   if (signMatch) return <Suspense fallback={<PageLoading />}><QuoteSignPage token={signMatch[1]} /></Suspense>;
+
+  // Page publique d'accusé de réception d'une décision éditoriale (auteur, lien
+  // par jeton reçu par e-mail) : /decision-lettre/:token. Court-circuite l'app.
+  const decisionLetterMatch = window.location.pathname.match(/^\/decision-lettre\/([A-Za-z0-9]+)\/?$/);
+  if (decisionLetterMatch) return <Suspense fallback={<PageLoading />}><DecisionLetterConfirmPage token={decisionLetterMatch[1]} /></Suspense>;
 
   if (loading) return null;
 

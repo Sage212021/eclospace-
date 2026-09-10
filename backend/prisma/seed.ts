@@ -577,6 +577,10 @@ async function main() {
   // Internalisation de la paie DÉSACTIVÉE par défaut (D-007) : tant qu'elle est
   // « non », l'export externe (D-003) reste le mode par défaut.
   await prisma.setting.upsert({ where: { key: "payroll_internal_enabled" }, update: {}, create: { key: "payroll_internal_enabled", value: "false" } });
+  // Adresse web publique de l'ERP (liens envoyés aux auteurs : confirmation de
+  // réception d'une lettre, signature de devis…). Vide par défaut → repli sur
+  // APP_BASE_URL puis l'origine de la requête. Modifiable dans les Réglages.
+  await prisma.setting.upsert({ where: { key: "public_base_url" }, update: {}, create: { key: "public_base_url", value: "" } });
 
   // Barème légal camerounais initial, repris du classeur (docs/paie/), version
   // 2019-01-01. Idempotent : créé seulement si aucun barème n'existe.

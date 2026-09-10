@@ -1040,6 +1040,14 @@ export function listAiJobs(manuscriptId: string) {
 export function aiJobComparison(jobId: string) {
   return request<{ original: string; rewritten: string }>(`/api/v1/ai-editorial/jobs/${jobId}/comparison`);
 }
+// Livrables produits par une relecture IA (rapport, version réécrite…).
+export interface AiJobDocument { id: string; title: string; category: string; file_size: number | null; mime_type: string | null; }
+export function aiJobDocuments(jobId: string) {
+  return request<{ documents: AiJobDocument[] }>(`/api/v1/ai-editorial/jobs/${jobId}/documents`);
+}
+export function aiJobDocumentDownloadUrl(jobId: string, docId: string): string {
+  return `${API_BASE}/api/v1/ai-editorial/jobs/${jobId}/documents/${docId}/download`;
+}
 // Lien direct vers le rapport produit par une relecture IA. Accessible là où on
 // a lancé l'analyse (Mes lectures, Correction éditoriale), sans le droit GED :
 // le contrôle d'accès côté serveur suffit (mêmes droits que la liste des jobs).

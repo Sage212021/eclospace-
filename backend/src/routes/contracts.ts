@@ -559,6 +559,54 @@ export default async function contractRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Petit garde-fou partagé : un contrat signé/actif ne se modifie plus.
+  const assertEditable = (contract: { status: string; _count: { signatures: number } }) =>
+    !["active", "terminated", "expired"].includes(contract.status) && contract._count.signatures === 0;
+
+  // Surcharger le TEXTE d'un article standard avant impression (ajuster un point).
+  // `text` vide retire la surcharge (l'article revient au texte du modèle).
+  // Possible tant que le contrat n'est pas signé.
+  fastify.put(
+    "/api/v1/contracts/:id/article-overrides",
+    { preHandler: requirePermission("contracts", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z.object({ article: z.number().int().min(1).max(15), text: z.string().max(8000) }).safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      const contract = await prisma.contract.findFirst({ where: { id, deletedAt: null }, include: { _count: { select: { signatures: true } } } });
+      if (!contract) return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
+      if (!assertEditable(contract)) return reply.code(409).send({ code: "contract_signed", message: "Un contrat signé ou actif ne peut plus être modifié. Utilisez un avenant le cas échéant." });
+      const map = contract.articleOverrides && typeof contract.articleOverrides === "object" && !Array.isArray(contract.articleOverrides)
+        ? { ...(contract.articleOverrides as Record<string, string>) }
+        : {};
+      const key = String(parsed.data.article);
+      const text = parsed.data.text.trim();
+      if (text) map[key] = text; else delete map[key];
+      const updated = await prisma.contract.update({ where: { id }, data: { articleOverrides: map as object, updatedBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "contract", entityId: id, newValues: { articleOverride: parsed.data.article, cleared: !text }, ipAddress: request.ip });
+      return reply.send(updated);
+    },
+  );
+
+  // Remplacer la LISTE des clauses additionnelles (permet modifier / retirer /
+  // réordonner) — pas seulement ajouter. Contrat non signé.
+  fastify.put(
+    "/api/v1/contracts/:id/clauses",
+    { preHandler: requirePermission("contracts", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z.object({ clauses: z.array(z.object({ title: z.string().min(2).max(200), body: z.string().min(2).max(8000) })).max(50) }).safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      const contract = await prisma.contract.findFirst({ where: { id, deletedAt: null }, include: { _count: { select: { signatures: true } } } });
+      if (!contract) return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
+      if (!assertEditable(contract)) return reply.code(409).send({ code: "contract_signed", message: "Un contrat signé ou actif ne peut plus être modifié. Utilisez un avenant le cas échéant." });
+      const clauses = parsed.data.clauses.map((c) => ({ title: c.title.trim(), body: c.body.trim() }));
+      const updated = await prisma.contract.update({ where: { id }, data: { customClauses: clauses as object, updatedBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "contract", entityId: id, newValues: { clausesReplaced: clauses.length }, ipAddress: request.ip });
+      return reply.send(updated);
+    },
+  );
+
   // Suppression (logique) d'un contrat NON SIGNÉ — ex. un contrat de test.
   // Interdite dès qu'il porte une signature ou qu'il est actif/terminé/expiré :
   // un engagement signé ne se supprime pas (contrainte d'intégrité). Réservée à

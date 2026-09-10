@@ -12,6 +12,9 @@ import {
   updateContractStatus,
   updateContractTerms,
   addContractClause,
+  replaceContractClauses,
+  setContractArticleOverride,
+  type ContractDetail,
   listContractDocuments,
   uploadContractDocument,
   contractDocumentDownloadUrl,
@@ -32,7 +35,7 @@ import {
   type SignatureParty,
   type ChatDirectoryEntry,
 } from "../api/client";
-import { printContract, printAuthorContract } from "../lib/print";
+import { printContract, printAuthorContract, AUTHOR_CONTRACT_ARTICLES } from "../lib/print";
 import { getBranding } from "../api/client";
 import { buildAuthorContractPdf } from "../lib/contractPdf";
 import { Modal, Field } from "./Modal";
@@ -943,35 +946,101 @@ function AmendmentModal({ parent, manuscriptId, onClose, onCreated, onError }: {
   );
 }
 
-// Ajouter un article (clause propre au contrat) : titre + corps, repris en fin
-// de contrat imprimé / PDF (numéroté 16, 17…). Possible tant qu'il n'est pas signé.
+// « Ajuster le contrat avant impression » (contrat non signé) : surcharger le
+// texte d'un article standard (1–15) et gérer les clauses additionnelles
+// (ajouter / modifier / retirer). L'impression/PDF reflète les ajustements ;
+// tout est tracé ; verrouillé dès signature (côté serveur).
 function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contract; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+  const [detail, setDetail] = useState<ContractDetail | null>(null);
   const [busy, setBusy] = useState(false);
+  // Surcharge d'article.
+  const [artN, setArtN] = useState(1);
+  const [artText, setArtText] = useState("");
+  // Clauses additionnelles (édition locale avant enregistrement).
+  const [clauses, setClauses] = useState<{ title: string; body: string }[]>([]);
 
-  async function save() {
+  const load = () => getContract(contract.id).then((d) => {
+    setDetail(d);
+    setClauses((d.customClauses ?? []).map((c) => ({ title: c.title, body: c.body })));
+    const ov = (d.articleOverrides ?? {})[String(artN)] ?? "";
+    setArtText(ov);
+  }).catch((e) => onError(e instanceof Error ? e.message : "Chargement impossible."));
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [contract.id]);
+  // Quand on change d'article dans le sélecteur, précharger sa surcharge courante.
+  useEffect(() => { if (detail) setArtText((detail.articleOverrides ?? {})[String(artN)] ?? ""); /* eslint-disable-next-line */ }, [artN]);
+
+  const overrides = (detail?.articleOverrides ?? {}) as Record<string, string>;
+
+  async function saveOverride(clear: boolean) {
     setBusy(true);
     try {
-      await addContractClause(contract.id, { title: title.trim(), body: body.trim() });
+      const d = await setContractArticleOverride(contract.id, artN, clear ? "" : artText);
+      setDetail(d);
       onSaved();
-    } catch (e) {
-      onError(e instanceof Error ? e.message : "Ajout de l'article impossible.");
-    } finally {
-      setBusy(false);
-    }
+    } catch (e) { onError(e instanceof Error ? e.message : "Ajustement impossible."); }
+    finally { setBusy(false); }
+  }
+  async function saveClauses() {
+    setBusy(true);
+    try {
+      const clean = clauses.map((c) => ({ title: c.title.trim(), body: c.body.trim() })).filter((c) => c.title.length >= 2 && c.body.length >= 2);
+      const d = await replaceContractClauses(contract.id, clean);
+      setDetail(d);
+      setClauses((d.customClauses ?? []).map((c) => ({ title: c.title, body: c.body })));
+      onSaved();
+    } catch (e) { onError(e instanceof Error ? e.message : "Enregistrement des clauses impossible."); }
+    finally { setBusy(false); }
   }
 
+  const label = AUTHOR_CONTRACT_ARTICLES.find((a) => a.n === artN)?.title ?? "";
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
-      <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 480, width: "100%" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Ajouter un article — contrat {contract.contractNumber}</div>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Clause additionnelle reprise à la fin du contrat imprimé / PDF (numérotée après l'article 15).</div>
-        <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>Intitulé de l'article<input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Clause de confidentialité" style={inputStyle} /></label>
-        <label style={{ fontSize: 12, display: "block" }}>Texte de l'article<textarea value={body} onChange={(e) => setBody(e.target.value)} rows={5} style={{ ...inputStyle, resize: "vertical" }} /></label>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 620, width: "100%", maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Ajuster le contrat avant impression — {contract.contractNumber}</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Modifiez le texte d'un article ou ajoutez/retirez des clauses. L'impression et le PDF reflètent vos ajustements. Impossible une fois le contrat signé.</div>
+
+        {/* Surcharge d'un article standard */}
+        <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 12, marginBottom: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Ajuster le texte d'un article</div>
+          <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>Article
+            <select value={artN} onChange={(e) => setArtN(Number(e.target.value))} style={inputStyle}>
+              {AUTHOR_CONTRACT_ARTICLES.map((a) => (
+                <option key={a.n} value={a.n}>Article {a.n} — {a.title}{overrides[String(a.n)] ? " (ajusté)" : ""}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ fontSize: 12, display: "block" }}>Texte de remplacement de l'article {artN} ({label})
+            <textarea value={artText} onChange={(e) => setArtText(e.target.value)} rows={6} placeholder="Laissez vide pour conserver le texte standard du modèle." style={{ ...inputStyle, resize: "vertical" }} />
+          </label>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
+            {overrides[String(artN)] && <button onClick={() => saveOverride(true)} disabled={busy} style={secondaryButtonStyle}>Rétablir le texte standard</button>}
+            <button onClick={() => saveOverride(false)} disabled={busy || artText.trim().length < 2} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>{busy ? "…" : "Enregistrer l'ajustement"}</button>
+          </div>
+        </div>
+
+        {/* Clauses additionnelles */}
+        <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Clauses additionnelles (reprises après l'article 15)</div>
+          {clauses.length === 0 && <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>Aucune clause additionnelle.</p>}
+          <div style={{ display: "grid", gap: 10 }}>
+            {clauses.map((cl, i) => (
+              <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 6, padding: 8 }}>
+                <input value={cl.title} onChange={(e) => setClauses((cs) => cs.map((c, j) => j === i ? { ...c, title: e.target.value } : c))} placeholder="Intitulé de la clause" style={{ ...inputStyle, marginBottom: 6 }} />
+                <textarea value={cl.body} onChange={(e) => setClauses((cs) => cs.map((c, j) => j === i ? { ...c, body: e.target.value } : c))} rows={3} placeholder="Texte de la clause" style={{ ...inputStyle, resize: "vertical" }} />
+                <div style={{ textAlign: "right", marginTop: 4 }}>
+                  <button onClick={() => setClauses((cs) => cs.filter((_, j) => j !== i))} style={{ ...secondaryButtonStyle, color: "var(--alert, #B23A2E)" }}>Retirer</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "space-between", marginTop: 10, flexWrap: "wrap" }}>
+            <button onClick={() => setClauses((cs) => [...cs, { title: "", body: "" }])} style={secondaryButtonStyle}>+ Ajouter une clause</button>
+            <button onClick={saveClauses} disabled={busy} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>{busy ? "Enregistrement…" : "Enregistrer les clauses"}</button>
+          </div>
+        </div>
+
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
-          <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Annuler</button>
-          <button onClick={save} disabled={busy || title.trim().length < 2 || body.trim().length < 2} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>{busy ? "Enregistrement…" : "Ajouter l'article"}</button>
+          <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Fermer</button>
         </div>
       </div>
     </div>

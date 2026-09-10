@@ -1467,6 +1467,7 @@ export interface ContractDetail extends Contract {
   effectiveAt?: string | null;
   durationMonths?: number | null;
   customClauses?: ContractClause[] | null;
+  articleOverrides?: Record<string, string> | null;
   territories: string[];
   languages: string[];
   formats: string[];
@@ -1501,6 +1502,14 @@ export function updateContractTerms(id: string, input: { type?: string; duration
 // Ajouter un article (clause) à un contrat non signé.
 export function addContractClause(id: string, input: { title: string; body: string }) {
   return request<ContractDetail>(`/api/v1/contracts/${id}/clauses`, { method: "POST", body: JSON.stringify(input) });
+}
+// Remplacer la liste des clauses (modifier / retirer / réordonner) — non signé.
+export function replaceContractClauses(id: string, clauses: { title: string; body: string }[]) {
+  return request<ContractDetail>(`/api/v1/contracts/${id}/clauses`, { method: "PUT", body: JSON.stringify({ clauses }) });
+}
+// Surcharger le texte d'un article standard (texte vide = revenir au modèle) — non signé.
+export function setContractArticleOverride(id: string, article: number, text: string) {
+  return request<ContractDetail>(`/api/v1/contracts/${id}/article-overrides`, { method: "PUT", body: JSON.stringify({ article, text }) });
 }
 
 export function createContract(input: {

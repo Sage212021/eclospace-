@@ -103,6 +103,26 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
     expect(again.json().manuscriptNumber).not.toBe(first.manuscriptNumber);
   });
 
+  it("refuse un doublon malgré accents, trait d'union et casse différents", async () => {
+    // Cas signalé par l'opérateur : « Management de la santé du bien être »
+    // ré-enregistré alors qu'un ouvrage quasi identique existe déjà.
+    const suffix = uniq();
+    const first = await app.inject({
+      method: "POST", url: "/api/v1/manuscripts", headers: { cookie: adminCookie },
+      payload: { title: `Management de la Santé du bien-être ${suffix}`, genre_id: genreId, language: "fr", owner_id: adminId, author: { first_name: "Auteur", last_name: "Test" } },
+    });
+    expect(first.statusCode).toBe(201);
+
+    // Sans accents, sans trait d'union, casse et espaces différents → même ouvrage.
+    const dup = await app.inject({
+      method: "POST", url: "/api/v1/manuscripts", headers: { cookie: adminCookie },
+      payload: { title: `management de la sante du bien etre ${suffix}`, genre_id: genreId, language: "fr", owner_id: adminId, author: { first_name: "Autre", last_name: "Auteur" } },
+    });
+    expect(dup.statusCode).toBe(409);
+    expect(dup.json().code).toBe("duplicate_manuscript");
+    expect(dup.json().message).toContain(first.json().manuscriptNumber);
+  });
+
   it("interdit de sauter une étape ou de valider hors séquence", async () => {
     const manuscript = await createManuscript("Manuscrit B");
 

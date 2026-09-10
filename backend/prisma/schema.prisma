@@ -1577,6 +1577,12 @@ model ReleaseNote {
   title           String
   body            String
   audienceAll     Boolean   @default(false) @map("audience_all")
+  // Ciblage par ACCÈS (recommandé) : modules de permission concernés — une
+  // personne reçoit la note si l'un de ses rôles actifs lui donne un droit sur
+  // l'un de ces modules. C'est la façon dont l'application modélise réellement
+  // « qui a accès à quoi » (la plupart des comptes n'ont pas de département).
+  permissionModules String[] @map("permission_modules")
+  // Ciblages complémentaires (facultatifs) : par pôle ou par rôle nominatif.
   departmentCodes String[]  @map("department_codes")
   roleCodes       String[]  @map("role_codes")
   dispatchedAt    DateTime? @map("dispatched_at")

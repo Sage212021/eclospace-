@@ -1371,12 +1371,17 @@ async function main() {
   // message explicatif dans leur messagerie interne (la cloche). Idempotent :
   // `slug` unique + `dispatchedAt` garantissent UN seul envoi par note. On ne
   // touche PAS `dispatchedAt` au ré-upsert (ré-éditer le texte ne renvoie rien).
-  const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+  // Ciblage : `permissionModules` = les modules dont l'ACCÈS rend concerné (une
+  // personne reçoit la note si un de ses rôles actifs a un droit sur ce module) —
+  // c'est le critère principal. `departmentCodes` reste un complément (« ou le
+  // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
+  const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
       slug: "2026-09-rh-absences-suivi",
       version: "2026.09",
       title: "Nouveauté — Suivi des absences amélioré",
       body: "Le registre des absences affiche désormais le NOM du salarié demandeur, avec un bouton « Voir » ouvrant la fiche complète (motif, période, validateur, date de décision, référence). Vous pouvez générer une notification de décision (PDF à en-tête Éclosion) et l'envoyer par e-mail au salarié (renseignez son e-mail sur sa fiche).",
+      permissionModules: ["presences", "rh"],
       departmentCodes: ["RH"],
     },
     {
@@ -1384,6 +1389,7 @@ async function main() {
       version: "2026.09",
       title: "Nouveauté — Évaluation éditoriale assistée par l'IA affinée",
       body: "Dans « Mes lectures » : le type de manuscrit adapte la grille, les curseurs de note se pré-alignent sur le rapport IA, l'adéquation à la ligne éditoriale est recadrée par collection, et les rapports d'évaluation vont désormais de A à M sans coupure. Nouvelle recommandation « Rejet avec encouragement à retravailler ».",
+      permissionModules: ["comite_lecture", "decision_editoriale"],
       departmentCodes: ["COMLEC", "DIRED"],
     },
     {
@@ -1391,6 +1397,7 @@ async function main() {
       version: "2026.09",
       title: "Nouveauté — Types de contrat « Pré-emploi » et « Essai »",
       body: "Dans la fiche d'un collaborateur → « Contrats de travail », la liste des types de contrat s'enrichit de « Pré-emploi » (contrat/stage de pré-emploi, ex. jeune diplômé en première expérience) et « Essai » (contrat d'essai court), en plus de CDI, CDD, Stage et Prestation.",
+      permissionModules: ["rh"],
       departmentCodes: ["RH"],
     },
     {
@@ -1398,13 +1405,15 @@ async function main() {
       version: "2026.09",
       title: "Nouveauté — Cachets officiels et signature du DG sur les documents",
       body: "Les lettres de décision éditoriale envoyées par e-mail à l'auteur portent désormais le cachet « Direction éditoriale ». Les contrats d'auteur portent le cachet « Direction générale », la signature manuscrite du DG et le nominatif (à la bonne taille, calé près de la signature). Tout est réglable dans Réglages → Cachets & signature : téléversement des images et interrupteur d'apposition automatique sur les contrats (désactivable pour signer à la main).",
-      departmentCodes: ["DIRED", "COMLEC"],
+      permissionModules: ["contracts", "decision_editoriale"],
+      departmentCodes: ["DIRED", "COMLEC", "JURID"],
     },
     {
       slug: "2026-09-editorial-ia-expertise-reecriture",
       version: "2026.09",
       title: "Nouveauté — Assistants IA « Expertise scientifique » et « Réécriture »",
       body: "Sur la fiche d'un manuscrit (à partir de la Planification), deux assistants sont disponibles. « Expertise scientifique IA » produit un rapport structuré (grille en 18 points) et une proposition d'avis — à valider, jamais une décision. « Réécriture IA » produit une version réécrite (l'original n'est jamais modifié) avec préservation de la voix de l'auteur : vous pouvez comparer l'avant/après côte à côte, choisir les livrables à télécharger, et retirer les essais non retenus dans une corbeille (restaurables). Un nouveau menu « Réécriture » complète « Expertise scientifique ». À activer par l'administration dans Réglages → IA éditoriale.",
+      permissionModules: ["comite_lecture", "decision_editoriale", "manuscripts"],
       departmentCodes: ["DIRED", "COMLEC", "CORR", "EXPERT"],
     },
     {
@@ -1412,14 +1421,15 @@ async function main() {
       version: "2026.09",
       title: "Nouveauté — Enregistrer une commande et générer le bon de livraison",
       body: "L'écran « Nouvelle commande » est désormais accessible aussi depuis le Stock (identique au Commercial). Le parcours : enregistrez une commande client (client, ouvrage, quantité) — elle est confirmée — puis, dans la carte « Livraisons » juste en dessous, créez la livraison (quantités + transporteur) et imprimez le bon de livraison à faire signer à la réception. Quel que soit l'écran, la commande conserve toujours la trace de qui l'a initiée.",
+      permissionModules: ["commercial", "stock"],
       departmentCodes: ["COM", "STOCK"],
     },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({
       where: { slug: n.slug },
-      update: { version: n.version, title: n.title, body: n.body, audienceAll: n.audienceAll ?? false, departmentCodes: n.departmentCodes ?? [], roleCodes: n.roleCodes ?? [] },
-      create: { slug: n.slug, version: n.version, title: n.title, body: n.body, audienceAll: n.audienceAll ?? false, departmentCodes: n.departmentCodes ?? [], roleCodes: n.roleCodes ?? [] },
+      update: { version: n.version, title: n.title, body: n.body, audienceAll: n.audienceAll ?? false, permissionModules: n.permissionModules ?? [], departmentCodes: n.departmentCodes ?? [], roleCodes: n.roleCodes ?? [] },
+      create: { slug: n.slug, version: n.version, title: n.title, body: n.body, audienceAll: n.audienceAll ?? false, permissionModules: n.permissionModules ?? [], departmentCodes: n.departmentCodes ?? [], roleCodes: n.roleCodes ?? [] },
     });
   }
 
@@ -1995,7 +2005,7 @@ async function main() {
   // « Quoi de neuf » : distribue aux utilisateurs concernés les notes de version
   // non encore envoyées (une notification par utilisateur, une seule fois).
   const dispatch = await dispatchReleaseNotes();
-  console.log(`Notes de version : ${dispatch.notes} traitée(s), ${dispatch.notifications} notification(s) envoyée(s).`);
+  console.log(`Notes de version : ${dispatch.notes} traitée(s), ${dispatch.notifications} notification(s) envoyée(s), ${dispatch.pruned} retirée(s) (non concernés).`);
 
   // Cachets & signature officiels (demande opérateur 09/09/2026) : valeurs par
   // défaut installées une seule fois (création). Un téléversement ultérieur par

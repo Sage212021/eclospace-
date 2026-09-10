@@ -915,7 +915,7 @@ function editorSignatureBlock(sign?: ContractStampData | null): string {
     return `<div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature &amp; cachet</div>`;
   }
   const sig = sign!.signature ? `<img src="${sign!.signature}" alt="" style="position:absolute;left:8px;top:0;height:52px;width:auto">` : "";
-  const cachet = sign!.cachet ? `<img src="${sign!.cachet}" alt="" style="position:absolute;right:0;top:6px;height:92px;width:auto;opacity:.92">` : "";
+  const cachet = sign!.cachet ? `<img src="${sign!.cachet}" alt="" style="position:absolute;right:0;top:6px;height:110px;width:auto;opacity:.92">` : "";
   const titleLines = (sign!.dgTitle ?? "")
     .split("\n")
     .map((l) => l.trim())
@@ -926,7 +926,7 @@ function editorSignatureBlock(sign?: ContractStampData | null): string {
     ? `<div style="margin-top:2px"><div style="font-size:12px;font-weight:700;color:#0b0b0c">${escapeHtml(sign!.dgName)}</div>${titleLines}</div>`
     : "";
   return `
-    <div style="position:relative;height:100px;margin-top:6px">${sig}${cachet}</div>
+    <div style="position:relative;height:120px;margin-top:6px">${sig}${cachet}</div>
     <div style="border-top:1px solid #0b0b0c;padding-top:4px">${nominatif}</div>`;
 }
 

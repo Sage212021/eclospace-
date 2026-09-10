@@ -99,6 +99,24 @@ describe("réponse à l'auteur à la décision éditoriale", () => {
     const after = await prisma.editorialDecision.findFirstOrThrow({ where: { manuscriptId: id } });
     expect(after.authorNotifiedTo).toBe("awa@example.com");
     expect(after.authorNotifiedAt).toBeTruthy();
+
+    // Accusé de réception (page publique, lien par jeton — sans authentification).
+    const row = await prisma.decisionLetter.findFirstOrThrow({ where: { manuscriptId: id } });
+    expect(row.confirmToken).toBeTruthy();
+    // Ouverture de la page sécurisée = « consultée ».
+    const pub = await app.inject({ method: "GET", url: `/api/v1/public/decision-letter/${row.confirmToken}` });
+    expect(pub.statusCode).toBe(200);
+    expect(pub.json().subject).toBeTruthy();
+    expect((await prisma.decisionLetter.findFirstOrThrow({ where: { id: row.id } })).openedAt).toBeTruthy();
+    // Clic « Confirmer la réception » = réception confirmée (idempotent).
+    const conf = await app.inject({ method: "POST", url: `/api/v1/public/decision-letter/${row.confirmToken}/confirm` });
+    expect(conf.statusCode).toBe(200);
+    const firstConfirm = (await prisma.decisionLetter.findFirstOrThrow({ where: { id: row.id } })).receivedAt;
+    expect(firstConfirm).toBeTruthy();
+    await app.inject({ method: "POST", url: `/api/v1/public/decision-letter/${row.confirmToken}/confirm` });
+    expect((await prisma.decisionLetter.findFirstOrThrow({ where: { id: row.id } })).receivedAt?.getTime()).toBe(firstConfirm?.getTime());
+    // Jeton inconnu → 404.
+    expect((await app.inject({ method: "GET", url: `/api/v1/public/decision-letter/inconnu` })).statusCode).toBe(404);
   });
 
   it("la lettre n'extrait que les éléments communicables (points + message), jamais la motivation interne, et porte le bloc signataire", async () => {

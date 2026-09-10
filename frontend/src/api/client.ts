@@ -1325,6 +1325,13 @@ export function validateDecisionLetter(manuscriptId: string) {
 export function sendDecisionLetter(manuscriptId: string) {
   return request<{ letter: DecisionLetterLifecycle; delivered: boolean }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter/send`, { method: "POST" });
 }
+// Page publique d'accusé de réception (auteur, lien par jeton — sans compte).
+export function getPublicDecisionLetter(token: string) {
+  return request<{ subject: string; body: string; maison: string; confirmed_at: string | null }>(`/api/v1/public/decision-letter/${token}`);
+}
+export function confirmPublicDecisionLetter(token: string) {
+  return request<{ confirmed_at: string }>(`/api/v1/public/decision-letter/${token}/confirm`, { method: "POST" });
+}
 
 // Aperçu de la lettre pour la décision EN COURS de saisie (avant enregistrement) :
 // la lettre correspond exactement à la décision sélectionnée + éléments communicables.

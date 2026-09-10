@@ -12,7 +12,8 @@ import { resolveLetterTemplates, composeLetter, letterEmailHtml, houseName, buil
 import { getBranding } from "../lib/branding.js";
 import { readingCommitteeRules, DEFAULT_READING_COMMITTEE_RULES, READING_COMMITTEE_RULES_KEY } from "../lib/readingCommitteeRules.js";
 import { parseGrilleScores } from "../lib/aiEvaluationScores.js";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { resolvePublicBaseUrl } from "../lib/publicUrl.js";
 
 const DEFAULT_RATING_THRESHOLDS = { excellent: 8.5, very_good: 7, good: 5, to_rework: 3 };
 const DEFAULT_SCORE_GAP_THRESHOLD = 3;
@@ -926,13 +927,19 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
     if (!built.recipientEmail) return reply.code(409).send({ code: "no_email", message: "Aucune adresse e-mail n'est renseignée pour l'auteur : complétez sa fiche avant l'envoi." });
     const sender = senderIdentity(request.user!);
     const cachet = (await getBranding()).cachet_editoriale;
-    const ok = await sendMail({ to: built.recipientEmail, subject: built.composed.subject, text: built.composed.textBody, html: letterEmailHtml(built.composed.layout, cachet), ...sender }).catch(() => false);
+    // Jeton d'accusé de réception (réutilisé s'il existe déjà) + lien public vers
+    // la page sécurisée « Confirmer la réception ».
+    const token = l.confirmToken ?? randomUUID().replace(/-/g, "");
+    const base = await resolvePublicBaseUrl(request);
+    const confirmUrl = `${base}/decision-lettre/${token}`;
+    const ok = await sendMail({ to: built.recipientEmail, subject: built.composed.subject, text: `${built.composed.textBody}\n\nConfirmez la réception : ${confirmUrl}`, html: letterEmailHtml(built.composed.layout, cachet, confirmUrl), ...sender }).catch(() => false);
     const now = new Date();
     const updated = await prisma.decisionLetter.update({
       where: { id: l.id },
       data: {
         status: "envoyee", sentById: request.user!.id, sentAt: now, recipientEmail: built.recipientEmail,
         subject: built.composed.subject, textBody: built.composed.textBody,
+        confirmToken: token,
         deliveryFailedAt: ok ? null : now,
       },
     });
@@ -940,6 +947,35 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
     await prisma.editorialDecision.update({ where: { id: l.decisionId }, data: { authorNotifiedAt: now, authorNotifiedTo: built.recipientEmail } });
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "decision_letter", entityId: l.id, newValues: { manuscriptId: id, sent_to: built.recipientEmail, delivered: ok, version: updated.version }, ipAddress: request.ip });
     return reply.send({ letter: letterView(updated), delivered: ok });
+  });
+
+  // ---- Accusé de réception par l'auteur (page publique, lien par jeton) ----
+  // AUCUNE authentification : l'accès est porté par le jeton unique du lien reçu
+  // par e-mail. On n'expose que le strict nécessaire (sujet + texte de la lettre,
+  // destinée à l'auteur lui-même).
+
+  // Ouverture de la page sécurisée = « consultée ». Renvoie la lettre à afficher.
+  fastify.get("/api/v1/public/decision-letter/:token", async (request, reply) => {
+    const { token } = request.params as { token: string };
+    const l = await prisma.decisionLetter.findFirst({ where: { confirmToken: token, status: "envoyee" } });
+    if (!l) return reply.code(404).send({ code: "not_found", message: "Lien invalide ou expiré." });
+    if (!l.openedAt) {
+      await prisma.decisionLetter.update({ where: { id: l.id }, data: { openedAt: new Date() } });
+    }
+    const maison = await houseName();
+    return reply.send({ subject: l.subject, body: l.textBody, maison, confirmed_at: l.receivedAt });
+  });
+
+  // Clic sur « Confirmer la réception » = accusé de réception formel.
+  fastify.post("/api/v1/public/decision-letter/:token/confirm", async (request, reply) => {
+    const { token } = request.params as { token: string };
+    const l = await prisma.decisionLetter.findFirst({ where: { confirmToken: token, status: "envoyee" } });
+    if (!l) return reply.code(404).send({ code: "not_found", message: "Lien invalide ou expiré." });
+    const confirmedAt = l.receivedAt ?? new Date();
+    if (!l.receivedAt) {
+      await prisma.decisionLetter.update({ where: { id: l.id }, data: { receivedAt: confirmedAt, openedAt: l.openedAt ?? confirmedAt } });
+    }
+    return reply.send({ confirmed_at: confirmedAt });
   });
 
   // Modèles de lettres de décision (éditables). Lecture : éditorial ; édition :

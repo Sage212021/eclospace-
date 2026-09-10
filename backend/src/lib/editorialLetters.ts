@@ -287,12 +287,21 @@ export function letterHtml(subject: string, bodyText: string, maison: string): s
 // Rendu HTML de la lettre pour l'E-MAIL à l'auteur (décision auto-notifiée) :
 // mise en page structurée + CACHET « Direction Éditoriale » apposé sous la
 // signature. Pas de lignes « signature/cachet à la main » (inutiles dans un mail).
-export function letterEmailHtml(layout: LetterLayout, cachetDataUrl?: string | null): string {
+export function letterEmailHtml(layout: LetterLayout, cachetDataUrl?: string | null, confirmUrl?: string | null): string {
   const paras = layout.paragraphs
     .map((p) => `<p style="margin:0 0 14px;white-space:pre-wrap">${esc(p).replace(/\n/g, "<br>")}</p>`)
     .join("");
   const cachet = cachetDataUrl
     ? `<img src="${cachetDataUrl}" alt="Cachet Direction Éditoriale" style="height:118px;width:auto;display:inline-block;margin-top:6px">`
+    : "";
+  // Accusé de réception : bouton vers la page sécurisée de confirmation (le lien
+  // porte un jeton unique). Présent uniquement si une URL est fournie.
+  const confirm = confirmUrl
+    ? `<div style="margin-top:26px;padding-top:16px;border-top:1px solid #e7e2d4;text-align:center">
+        <p style="font-size:13px;color:#4b5563;margin:0 0 10px">Merci de confirmer que vous avez bien reçu cette décision :</p>
+        <a href="${confirmUrl}" style="display:inline-block;background:#D9B21A;color:#0B0B0C;font-weight:700;text-decoration:none;border-radius:8px;padding:11px 20px;font-size:14px">Confirmer la réception</a>
+        <p style="font-size:11px;color:#9aa1ad;margin:10px 0 0">Si le bouton ne fonctionne pas, copiez ce lien : ${confirmUrl}</p>
+      </div>`
     : "";
   return `<div style="font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:1.7;color:#0b0b0c;max-width:640px;margin:0 auto;padding:8px">
     <div style="border-bottom:2px solid #D9B21A;padding-bottom:8px;margin-bottom:18px;font-weight:bold;letter-spacing:.5px;color:#0b0b0c">${esc(layout.maison)}</div>
@@ -304,6 +313,7 @@ export function letterEmailHtml(layout: LetterLayout, cachetDataUrl?: string | n
       <div>La Direction éditoriale</div>
       ${cachet}
     </div>
+    ${confirm}
   </div>`;
 }
 

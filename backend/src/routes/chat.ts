@@ -8,6 +8,7 @@ import { isUserActive } from "../lib/presence.js";
 import { sendWebPushToUsers } from "../lib/pushWeb.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import { getOrCreateConversation, otherOf, isParticipant } from "../lib/chat.js";
+import { SYSTEM_SENDER_USERNAME } from "../lib/releaseNotes.js";
 
 // Messagerie interne 1-à-1 (demande opérateur du 25/07/2026). Annuaire ouvert
 // (chacun écrit à tout le monde), présence masquée hors pôle (règle existante,
@@ -73,7 +74,9 @@ export default async function chatRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/chat/directory", { preHandler: requireAuth }, async (request, reply) => {
     const me = request.user!.id;
     const users = await prisma.user.findMany({
-      where: { status: "active", deletedAt: null, accountType: "internal", id: { not: me } },
+      // On exclut le compte système « Eclospace » (expéditeur des « Quoi de
+      // neuf ») : il n'est pas un correspondant que l'on démarre soi-même.
+      where: { status: "active", deletedAt: null, accountType: "internal", id: { not: me }, username: { not: SYSTEM_SENDER_USERNAME } },
       select: { id: true, username: true },
       orderBy: { username: "asc" },
     });

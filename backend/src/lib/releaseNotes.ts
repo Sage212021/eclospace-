@@ -1,11 +1,18 @@
 import { prisma } from "./prisma.js";
+import { getOrCreateConversation } from "./chat.js";
 
 // « Quoi de neuf » — distribution automatique des notes de version.
 //
 // À chaque déploiement (le seed du postdeploy l'appelle), toute note NON encore
-// distribuée génère une notification (la cloche) pour chaque utilisateur du/des
-// pôle(s) concerné(s). L'idempotence repose sur `dispatchedAt` : une note n'est
-// distribuée qu'une seule fois, quels que soient les redéploiements suivants.
+// distribuée est envoyée comme MESSAGE dans la messagerie interne, de la part de
+// l'expéditeur système « Eclospace », à chaque utilisateur du/des pôle(s)
+// concerné(s) (et toujours à la Direction générale). L'idempotence repose sur
+// `dispatchedAt` : une note n'est distribuée qu'une seule fois, quels que soient
+// les redéploiements suivants.
+
+// Compte système expéditeur des « Quoi de neuf » (créé au seed). Le nom d'usage
+// s'affiche tel quel comme correspondant dans la messagerie.
+export const SYSTEM_SENDER_USERNAME = "Eclospace";
 
 type ReleaseNoteRow = {
   id: string;
@@ -72,25 +79,25 @@ async function resolveReleaseAudience(note: ReleaseNoteRow): Promise<string[]> {
 
 export async function dispatchReleaseNotes(): Promise<{ notes: number; notifications: number }> {
   const pending = await prisma.releaseNote.findMany({ where: { dispatchedAt: null }, orderBy: { createdAt: "asc" } });
+  if (pending.length === 0) return { notes: 0, notifications: 0 };
+
+  // Expéditeur système « Eclospace ». Sans lui, on NE marque PAS les notes
+  // distribuées (elles partiront quand le compte existera) — pas de perte.
+  const sys = await prisma.user.findUnique({ where: { username: SYSTEM_SENDER_USERNAME }, select: { id: true } });
+  if (!sys) return { notes: 0, notifications: 0 };
+
   let notifications = 0;
   for (const note of pending) {
-    const userIds = await resolveReleaseAudience(note);
+    const userIds = (await resolveReleaseAudience(note)).filter((id) => id !== sys.id);
     if (userIds.length > 0) {
-      // Visible ~30 jours dans la cloche (comme un « Quoi de neuf » transitoire),
-      // au-delà de la fenêtre par défaut de 24 h des notifications ordinaires.
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      await prisma.notification.createMany({
-        data: userIds.map((userId) => ({
-          userId,
-          type: "annonce" as const,
-          priority: "medium" as const,
-          title: note.title,
-          body: note.body,
-          entityType: "release_note",
-          entityId: note.id,
-          expiresAt,
-        })),
-      });
+      const body = `📣 ${note.title}\n\n${note.body}`;
+      for (const userId of userIds) {
+        // Un message de la part d'Eclospace dans la conversation 1-à-1 avec la
+        // personne (créée si besoin). Non-lu tant qu'elle ne l'a pas ouverte.
+        const conv = await getOrCreateConversation(sys.id, userId);
+        await prisma.chatMessage.create({ data: { conversationId: conv.id, senderId: sys.id, body } });
+        await prisma.conversation.update({ where: { id: conv.id }, data: { lastMessageAt: new Date() } });
+      }
       notifications += userIds.length;
     }
     // Marquée distribuée même sans destinataire (base fraîche) : pas de renvoi.

@@ -1366,6 +1366,20 @@ async function main() {
       body: "Dans « Mes lectures » : le type de manuscrit adapte la grille, les curseurs de note se pré-alignent sur le rapport IA, l'adéquation à la ligne éditoriale est recadrée par collection, et les rapports d'évaluation vont désormais de A à M sans coupure. Nouvelle recommandation « Rejet avec encouragement à retravailler ».",
       departmentCodes: ["COMLEC", "DIRED"],
     },
+    {
+      slug: "2026-09-editorial-ia-expertise-reecriture",
+      version: "2026.09",
+      title: "Nouveauté — Assistants IA « Expertise scientifique » et « Réécriture »",
+      body: "Sur la fiche d'un manuscrit (à partir de la Planification), deux assistants sont disponibles. « Expertise scientifique IA » produit un rapport structuré (grille en 18 points) et une proposition d'avis — à valider, jamais une décision. « Réécriture IA » produit une version réécrite (l'original n'est jamais modifié) avec préservation de la voix de l'auteur : vous pouvez comparer l'avant/après côte à côte, choisir les livrables à télécharger, et retirer les essais non retenus dans une corbeille (restaurables). Un nouveau menu « Réécriture » complète « Expertise scientifique ». À activer par l'administration dans Réglages → IA éditoriale.",
+      departmentCodes: ["DIRED", "COMLEC", "CORR", "EXPERT"],
+    },
+    {
+      slug: "2026-09-commercial-commande-depuis-stock",
+      version: "2026.09",
+      title: "Nouveauté — Enregistrer une commande et générer le bon de livraison",
+      body: "L'écran « Nouvelle commande » est désormais accessible aussi depuis le Stock (identique au Commercial). Le parcours : enregistrez une commande client (client, ouvrage, quantité) — elle est confirmée — puis, dans la carte « Livraisons » juste en dessous, créez la livraison (quantités + transporteur) et imprimez le bon de livraison à faire signer à la réception. Quel que soit l'écran, la commande conserve toujours la trace de qui l'a initiée.",
+      departmentCodes: ["COM", "STOCK"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

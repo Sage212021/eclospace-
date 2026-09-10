@@ -93,6 +93,7 @@ const FOCUS_BY_ORIGIN: Record<string, string> = {
   "ed-direction": "decision",
   "ed-correction": "correction",
   "ed-expertise": "expertise",
+  "ed-reecriture": "reecriture",
   "jf-contrats": "contracts",
   "pr-maquette": "production",
   "pr-infographie": "production",
@@ -106,6 +107,7 @@ const FOCUS_LABELS: Record<string, string> = {
   decision: "Direction éditoriale",
   correction: "Correction éditoriale",
   expertise: "Expertise scientifique",
+  reecriture: "Réécriture éditoriale",
   contracts: "Contrats & droits",
   production: "Maquette & production",
   isbn: "ISBN & dépôt légal",
@@ -664,7 +666,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         <EditorialQuotesInbox manuscriptId={manuscript.id} />
       )}
 
-      {(show("correction") || show("expertise")) && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && permissions.has("tasks:consultation") && (
+      {(show("correction") || show("expertise") || show("reecriture")) && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && permissions.has("tasks:consultation") && (
         <>
           <TasksSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
           <CorrectionCyclePanel manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")} />
@@ -673,6 +675,12 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
               <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — BAT1" hint="Produit aussi le manuscrit corrigé BAT1 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
               <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — BAT2" hint="Produit aussi le manuscrit corrigé BAT2 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
               <AiReadingLauncher manuscriptId={manuscript.id} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" askCoverPass hint="Choisissez le passage : BAT1 (1ᵉʳ) ou BAT2. Au BAT2, l'IA reçoit le rapport du BAT précédent, vérifie les intégrations, ce qui manque et les améliorations." />
+              {/* Assistants IA « Expertise scientifique » et « Réécriture » — branchés
+                  sur les étapes éditoriales existantes (EXPERTISE, REECRITURE). La
+                  consigne particulière permet de préciser le type d'expertise, les
+                  paragraphes ciblés ou le niveau de préservation de la voix. */}
+              <AiReadingLauncher manuscriptId={manuscript.id} workType="expertise" stepCode="EXPERTISE" title="🤖 Expertise scientifique IA" hint="Produit un rapport d'expertise scientifique (grille en 18 points, Constat/Problème/Explication/Recommandation) + une proposition d'avis assistée par IA. Aide à la décision — jamais une expertise humaine. Dans la consigne : précisez le type d'expertise (méthodologie, références…) et le domaine scientifique." />
+              <AiReadingLauncher manuscriptId={manuscript.id} workType="reecriture" stepCode="REECRITURE" title="🤖 Réécriture IA" hint="Produit une VERSION RÉÉCRITE (l'original est conservé, jamais écrasé) + un rapport de réécriture. La voix de l'auteur est préservée. Dans la consigne : précisez le type (linguistique, stylistique, approfondie, académique, professionnelle), le niveau de préservation de la voix (minimal/modéré/important) ou les paragraphes à traiter." />
             </>
           )}
           <CorrectionSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />

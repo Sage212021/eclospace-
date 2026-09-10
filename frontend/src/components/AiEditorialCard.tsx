@@ -22,6 +22,8 @@ const WORK_LABELS: Record<AiWorkType, string> = {
   correction_1: "Relecture BAT1 (Correction éditoriale)",
   correction_2: "Relecture BAT2 (Correction éditoriale)",
   couverture: "Relecture de couverture (BAT1 / BAT2)",
+  expertise: "Expertise scientifique",
+  reecriture: "Réécriture éditoriale",
 };
 const CONF_LABELS: Record<string, string> = { public: "Public", interne: "Interne", restreint: "Restreint" };
 
@@ -36,7 +38,7 @@ export function AiEditorialConfigCard({ canAdminister }: { canAdminister: boolea
   const [cfg, setCfg] = useState<AiEditorialConfigView | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [accountLabel, setAccountLabel] = useState("");
-  const [models, setModels] = useState<Record<AiWorkType, AiModelPreset>>({ evaluation: "leger", correction_1: "leger", correction_2: "leger", couverture: "leger" });
+  const [models, setModels] = useState<Record<AiWorkType, AiModelPreset>>({ evaluation: "leger", correction_1: "leger", correction_2: "leger", couverture: "leger", expertise: "intermediaire", reecriture: "intermediaire" });
   const [conf, setConf] = useState<string[]>(["public", "interne", "restreint"]);
   const [apiKey, setApiKey] = useState("");
   const [forbidden, setForbidden] = useState(false);

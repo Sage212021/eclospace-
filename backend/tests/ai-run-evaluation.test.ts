@@ -98,7 +98,7 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     // Active l'IA + pose une clé (fictive : le client est simulé).
     await app.inject({
       method: "PUT", url: "/api/v1/ai-editorial/config", headers: { cookie: adminCookie },
-      payload: { enabled: true, models: { evaluation: "leger", correction_1: "leger", correction_2: "leger", couverture: "leger" }, allowed_confidentiality: ["public", "interne", "restreint"], api_key: "sk-ant-test-FAKE0000" },
+      payload: { enabled: true, models: { evaluation: "leger", correction_1: "leger", correction_2: "leger", couverture: "leger", expertise: "intermediaire", reecriture: "intermediaire" }, allowed_confidentiality: ["public", "interne", "restreint"], api_key: "sk-ant-test-FAKE0000" },
     });
   });
 
@@ -394,5 +394,42 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     // budget doit rester bien SOUS les 200 000 tokens de contexte (≈ 150 000 max
     // pour le manuscrit, en laissant la place au prompt). Garde anti-régression.
     expect(MANUSCRIT_CHAR_BUDGET / 2).toBeLessThanOrEqual(150_000);
+  });
+
+  it("réécriture IA : produit un rapport + une VERSION RÉÉCRITE, sans écraser l'original (modèle Sonnet par défaut)", async () => {
+    // Compte des documents « manuscrit » AVANT : l'original ne doit jamais être
+    // remplacé — la réécriture crée une NOUVELLE pièce, en plus.
+    const originauxAvant = await prisma.document.count({
+      where: { entityType: "manuscript", entityId: manuscriptId, category: "manuscrit", deletedAt: null },
+    });
+
+    const res = await app.inject({
+      method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
+      payload: { manuscript_id: manuscriptId, work_type: "reecriture", step_code: "REECRITURE", editor_recommendation: "Préserver la voix de l'auteur (niveau important)." },
+    });
+    expect(res.statusCode).toBe(202);
+    const job = await waitJob(res.json().jobId);
+    expect(job.status).toBe("termine");
+    expect(job.workType).toBe("reecriture");
+    // Modèle par défaut des analyses lourdes = « intermédiaire » → Sonnet.
+    expect(job.model).toBe("claude-sonnet-5");
+
+    // Une VERSION RÉÉCRITE (IA) a été produite comme pièce d'étape distincte.
+    const reecrit = await prisma.document.findFirst({
+      where: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape", title: { startsWith: "Version réécrite (IA)" }, deletedAt: null },
+      include: { versions: true },
+    });
+    expect(reecrit).not.toBeNull();
+    expect(reecrit!.versions[0].mimeType).toContain("wordprocessingml");
+
+    // L'ORIGINAL est intact : aucun document « manuscrit » supprimé ni remplacé.
+    const originauxApres = await prisma.document.count({
+      where: { entityType: "manuscript", entityId: manuscriptId, category: "manuscrit", deletedAt: null },
+    });
+    expect(originauxApres).toBe(originauxAvant);
+
+    // Le prompt de réécriture impose bien la préservation de la voix de l'auteur.
+    const lastSystem = sdkCalls[sdkCalls.length - 1]?.system ?? "";
+    expect(lastSystem.toUpperCase()).toContain("VOIX DE L'AUTEUR");
   });
 });

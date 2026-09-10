@@ -810,10 +810,12 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // correction et si le texte est exploitable (pas un PDF image). Le livre est
     // corrigé PAR TRANCHES pour tenir sur les gros volumes. L'IA renvoie le texte
     // corrigé seul ; le correcteur reste maître de l'intégration.
-    if ((params.workType === "correction_1" || params.workType === "correction_2") && prepared.kind === "text" && prepared.text.trim()) {
-      const versionLabel = params.workType === "correction_1" ? "BAT1" : "BAT2";
-      const rewriteSystem =
-        "Tu es le correcteur du Service de relecture d'Éclosion Édition. On te confie un passage de manuscrit. Renvoie UNIQUEMENT le texte corrigé (orthographe, grammaire, syntaxe, ponctuation, typographie, répétitions), sans aucun commentaire, sans balise, sans note. Conserve strictement le sens, le style de l'auteur, la mise en paragraphes et la structure. Tu ne mentionnes jamais que tu es une intelligence artificielle.";
+    if ((params.workType === "correction_1" || params.workType === "correction_2" || params.workType === "reecriture") && prepared.kind === "text" && prepared.text.trim()) {
+      const isReecriture = params.workType === "reecriture";
+      const versionLabel = params.workType === "correction_1" ? "BAT1" : params.workType === "correction_2" ? "BAT2" : "REECRITURE";
+      const rewriteSystem = isReecriture
+        ? "Tu es le réécriveur du Service de relecture d'Éclosion Édition. On te confie un passage de manuscrit à RÉÉCRIRE : améliore la fluidité, la clarté, la précision et le vocabulaire, supprime les lourdeurs et les répétitions, soigne les transitions et la logique — TOUT EN PRÉSERVANT LA VOIX DE L'AUTEUR (son ton, son rythme, son vocabulaire caractéristique). Renvoie UNIQUEMENT le texte réécrit, sans aucun commentaire, sans balise, sans note. Conserve le sens, la mise en paragraphes et la structure. Tu ne mentionnes jamais que tu es une intelligence artificielle."
+        : "Tu es le correcteur du Service de relecture d'Éclosion Édition. On te confie un passage de manuscrit. Renvoie UNIQUEMENT le texte corrigé (orthographe, grammaire, syntaxe, ponctuation, typographie, répétitions), sans aucun commentaire, sans balise, sans note. Conserve strictement le sens, le style de l'auteur, la mise en paragraphes et la structure. Tu ne mentionnes jamais que tu es une intelligence artificielle.";
       const recoPrefix = params.editorRecommendation?.trim() ? `Consigne particulière de l'éditeur : ${params.editorRecommendation.trim()}\n\n` : "";
       // Tranches assez petites pour que le texte corrigé tienne SOUS la limite de
       // sortie du modèle (8192 pour Haiku) : ~8000 caractères ≈ 2500 tokens, le
@@ -833,14 +835,16 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         correctedParts.push(cr.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join(""));
       }
       const correctedText = correctedParts.join("\n");
-      const correctedDocx = await renderManuscriptDocx(`Manuscrit corrigé (${versionLabel}) — ${manuscript.title}`, correctedText);
-      const storedC = await storeFile(correctedDocx, `manuscrit_corrige_${versionLabel}_${manuscript.manuscriptNumber}.docx`);
+      const docLabel = isReecriture ? "Version réécrite" : "Manuscrit corrigé";
+      const fileStem = isReecriture ? "manuscrit_reecrit" : "manuscrit_corrige";
+      const correctedDocx = await renderManuscriptDocx(`${docLabel} (${versionLabel}) — ${manuscript.title}`, correctedText);
+      const storedC = await storeFile(correctedDocx, `${fileStem}_${versionLabel}_${manuscript.manuscriptNumber}.docx`);
       const correctedDoc = await prisma.document.create({
         data: {
           entityType: "manuscript",
           entityId: manuscript.id,
           category: "piece_etape",
-          title: `Manuscrit corrigé (IA) — ${versionLabel}`,
+          title: `${docLabel} (IA) — ${versionLabel}`,
           createdBy: params.userId,
           versions: {
             create: {
@@ -850,7 +854,9 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
               mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
               sha256Hash: storedC.sha256Hash,
               status: "draft",
-              changeSummary: `Manuscrit corrigé ${versionLabel} généré par le service de relecture Éclosion (à intégrer par le correcteur).`,
+              changeSummary: isReecriture
+                ? "Version réécrite générée par le service de relecture Éclosion (proposition à valider, la voix de l'auteur est préservée)."
+                : `Manuscrit corrigé ${versionLabel} généré par le service de relecture Éclosion (à intégrer par le correcteur).`,
               uploadedBy: params.userId,
             },
           },

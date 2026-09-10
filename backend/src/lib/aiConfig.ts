@@ -16,7 +16,7 @@ export const MODEL_PRESETS = {
 } as const;
 
 export type ModelPreset = keyof typeof MODEL_PRESETS;
-export const WORK_TYPES = ["evaluation", "correction_1", "correction_2", "couverture"] as const;
+export const WORK_TYPES = ["evaluation", "correction_1", "correction_2", "couverture", "expertise", "reecriture"] as const;
 export type WorkType = (typeof WORK_TYPES)[number];
 export const CONFIDENTIALITY_LEVELS = ["public", "interne", "restreint"] as const;
 
@@ -33,7 +33,9 @@ function defaultConfig(): AiEditorialConfig {
   return {
     enabled: false,
     accountLabel: "",
-    models: { evaluation: "leger", correction_1: "leger", correction_2: "leger", couverture: "leger" },
+    // Les analyses lourdes (expertise scientifique, réécriture) démarrent en
+    // « intermédiaire » (équilibré) ; l'admin peut ajuster chaque type ensuite.
+    models: { evaluation: "leger", correction_1: "leger", correction_2: "leger", couverture: "leger", expertise: "intermediaire", reecriture: "intermediaire" },
     allowedConfidentiality: ["public", "interne", "restreint"],
     apiKeyCiphertext: null,
     apiKeyLast4: null,
@@ -43,7 +45,16 @@ function defaultConfig(): AiEditorialConfig {
 export async function loadConfig(): Promise<AiEditorialConfig> {
   const row = await prisma.setting.findUnique({ where: { key: AI_CONFIG_KEY } });
   if (!row) return defaultConfig();
-  return { ...defaultConfig(), ...(row.value as object) } as AiEditorialConfig;
+  const base = defaultConfig();
+  const stored = row.value as Partial<AiEditorialConfig>;
+  // Fusion PROFONDE de `models` : une config stockée avant l'ajout des types
+  // « expertise » / « reecriture » n'a que les anciennes clés ; on complète avec
+  // les valeurs par défaut pour que chaque type ait toujours un modèle résolu.
+  return {
+    ...base,
+    ...stored,
+    models: { ...base.models, ...(stored.models ?? {}) },
+  } as AiEditorialConfig;
 }
 
 // Vue « publique » : jamais la clé en clair, seulement ses 4 derniers caractères

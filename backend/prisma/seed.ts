@@ -770,7 +770,7 @@ async function main() {
   const REGLE_DOR =
     "Tu rédiges au nom du Service de relecture d'Éclosion Édition. Tu ne mentionnes JAMAIS que tu es une intelligence artificielle ni aucun outil ; tu écris comme le relecteur professionnel de la maison, en français sobre et professionnel, sous l'en-tête « ÉCLOSION ÉDITION ». Tu remplis EXACTEMENT la structure de rapport fournie, sans ajouter ni retirer de rubrique. Tu écris une prose NATURELLE et argumentée, JAMAIS de façon mécanique ou répétitive : pas de formules automatiques, pas de tournures qui restituent bêtement le barème. La « recommandation spéciale de l'éditeur » éventuelle est une consigne prioritaire. Tu n'es qu'un avis de relecteur : tu ne prends aucune décision éditoriale.";
   const aiPrompts: {
-    workType: "evaluation" | "correction_1" | "correction_2" | "couverture";
+    workType: "evaluation" | "correction_1" | "correction_2" | "couverture" | "expertise" | "reecriture";
     label: string;
     systemPrompt: string;
     userTemplate: string;
@@ -886,6 +886,65 @@ async function main() {
         deliverables: ["Rapport_couverture"],
       },
     },
+    {
+      workType: "expertise",
+      label: "Expertise scientifique",
+      systemPrompt:
+        REGLE_DOR +
+        " Tu produis une EXPERTISE SCIENTIFIQUE du document, au nom du Service d'expertise d'Éclosion Édition. Tu analyses selon une grille en 18 points : (1) Pertinence du sujet ; (2) Clarté de la problématique ; (3) Cohérence des objectifs ; (4) Cohérence des hypothèses lorsqu'elles existent ; (5) Pertinence de la méthodologie ; (6) Cohérence entre méthode et objectifs ; (7) Qualité du raisonnement ; (8) Cohérence des arguments ; (9) Qualité des résultats ; (10) Cohérence des conclusions ; (11) Qualité des références ; (12) Actualité des références lorsque cela peut être déterminé ; (13) Cohérence des citations ; (14) Présence d'affirmations insuffisamment étayées ; (15) Contradictions internes ; (16) Lacunes ; (17) Limites scientifiques ; (18) Suggestions d'amélioration." +
+        " Pour chaque problème relevé, tu distingues EXPLICITEMENT quatre niveaux : CONSTAT (ce qui est observé) · PROBLÈME (ce qui pose difficulté) · EXPLICATION (pourquoi cela pose problème) · RECOMMANDATION (comment améliorer)." +
+        " GARDE-FOU SUR LES SOURCES : tu n'inventes JAMAIS de référence bibliographique. Si une information ou une source ne peut être vérifiée, tu écris « Vérification nécessaire » et tu le signales dans le rapport. Tu ne présentes aucune source non vérifiable comme certaine." +
+        " Le SCORE éventuel est une APPRÉCIATION ASSISTÉE PAR IA (Excellent · Très satisfaisant · Satisfaisant · À améliorer · Insuffisant), jamais une vérité scientifique absolue." +
+        " La PROPOSITION D'AVIS (Favorable · Favorable sous réserves · À revoir · Défavorable) est présentée comme « Proposition d'avis générée avec assistance IA » avec ses motifs — ce n'est JAMAIS une décision définitive ni une validation d'expertise.",
+      userTemplate:
+        "Document soumis à expertise — titre : {{titre}} · auteur : {{auteur}} · domaine déclaré : {{domaine}}.\nConsigne particulière de l'éditeur (type/portée d'expertise, domaine scientifique, points à privilégier) : {{recommandation_editeur}}\n\nDocument à expertiser :\n{{manuscrit}}",
+      reportTemplate: {
+        title: "RAPPORT D'EXPERTISE SCIENTIFIQUE",
+        sections: [
+          { key: "A", title: "Identification (Éclosion Édition SARL · titre · auteur · référence du dossier · date · version analysée · type d'expertise · domaine scientifique)" },
+          { key: "B", title: "Objet de l'expertise" },
+          { key: "C", title: "Résumé de l'appréciation (avec appréciation assistée par IA : Excellent / Très satisfaisant / Satisfaisant / À améliorer / Insuffisant)" },
+          { key: "D", title: "Points forts" },
+          { key: "E", title: "Points faibles" },
+          { key: "F", title: "Analyse détaillée (grille en 18 points : critère · appréciation · commentaire argumenté)" },
+          { key: "G", title: "Problèmes identifiés (Constat · Problème · Explication · Recommandation)" },
+          { key: "H", title: "Références et sources (cohérence, actualité, affirmations à étayer ; toute source non vérifiable est marquée « Vérification nécessaire »)" },
+          { key: "I", title: "Recommandations" },
+          { key: "J", title: "Conclusion" },
+          { key: "K", title: "Proposition d'avis générée avec assistance IA (Favorable / Favorable sous réserves / À revoir / Défavorable) et ses motifs" },
+        ],
+        guidance:
+          "Rapport d'EXPERTISE SCIENTIFIQUE. La rubrique A « Identification » est présentée en LISTE « Champ : valeur » (une ligne par élément), jamais en tableau étroit. La rubrique F « Analyse détaillée » est un TABLEAU reprenant EXACTEMENT les 18 points de la grille (N° · Critère · Appréciation · Commentaire argumenté) : le commentaire est une prose d'analyse, jamais une restitution mécanique de l'appréciation. La rubrique G « Problèmes identifiés » distingue systématiquement, pour chaque problème, les quatre niveaux Constat / Problème / Explication / Recommandation (une entrée par problème). La rubrique H signale toute source non vérifiable par « Vérification nécessaire » et n'invente AUCUNE référence. La rubrique K énonce la proposition d'avis EN LA PRÉSENTANT comme assistée par IA, avec ses motifs, sans jamais la présenter comme une décision ou une validation définitive. Les autres rubriques sont rédigées en prose et listes.",
+        footer: "Rapport généré avec assistance IA — validation humaine requise. Ce document est une aide à la décision et ne constitue ni une expertise humaine signée ni une décision éditoriale finale.",
+      },
+    },
+    {
+      workType: "reecriture",
+      label: "Réécriture éditoriale",
+      systemPrompt:
+        REGLE_DOR +
+        " Tu produis le RAPPORT DE RÉÉCRITURE qui accompagne la version réécrite du document (la version réécrite elle-même est produite séparément). Tu interviens selon le TYPE demandé : correction linguistique (orthographe, grammaire, conjugaison, syntaxe, ponctuation, typographie) ; amélioration stylistique (fluidité, clarté, précision, vocabulaire, suppression des lourdeurs et des répétitions, transitions) ; réécriture approfondie (reformulation, structure des paragraphes, logique, cohérence argumentative, lisibilité) ; réécriture académique (rigueur du vocabulaire, précision, cohérence scientifique, articulation des idées, neutralité) ; réécriture professionnelle (documents destinés aux entreprises, institutions, bailleurs, administrations)." +
+        " RÈGLE IMPÉRATIVE : tu PRÉSERVES AU MAXIMUM LA VOIX DE L'AUTEUR (ton, rythme, vocabulaire caractéristique) ; tu ne transformes jamais le texte en prose générique." +
+        " Tu SIGNALES explicitement les passages où tu n'es pas certain (« intervention humaine nécessaire ») et les problèmes qui ne peuvent pas être corrigés automatiquement. La PROPOSITION D'AVIS ÉDITORIAL est présentée comme « Proposition générée avec assistance IA », jamais comme une décision.",
+      userTemplate:
+        "Document à réécrire — titre : {{titre}} · auteur : {{auteur}}.\nConsigne particulière de l'éditeur (type de réécriture, niveau de préservation de la voix, paragraphes ciblés) : {{recommandation_editeur}}\n\nDocument à réécrire :\n{{manuscrit}}",
+      reportTemplate: {
+        title: "RAPPORT DE RÉÉCRITURE",
+        sections: [
+          { key: "1", title: "Objet (document réécrit : titre · auteur · version · date)" },
+          { key: "2", title: "Type de réécriture (correction linguistique / stylistique / approfondie / académique / professionnelle · niveau de préservation de la voix)" },
+          { key: "3", title: "Principales interventions (corrections linguistiques · reformulations · améliorations stylistiques · améliorations structurelles · transitions · suppressions de répétitions)" },
+          { key: "4", title: "Points nécessitant une intervention humaine (passages incertains signalés)" },
+          { key: "5", title: "Observations éditoriales (problèmes non corrigeables automatiquement)" },
+          { key: "6", title: "Résultat (résumé de la qualité de la version produite)" },
+          { key: "7", title: "Proposition d'avis éditorial générée avec assistance IA (texte satisfaisant / corrections mineures recommandées / réécriture recommandée / restructuration nécessaire / intervention éditoriale approfondie recommandée)" },
+        ],
+        guidance:
+          "Rapport de RÉÉCRITURE, qui accompagne la « Version réécrite (IA) » produite séparément. La rubrique 1 « Objet » est en LISTE « Champ : valeur ». La rubrique 3 « Principales interventions » est une liste à puces rédigée par catégorie d'intervention. La rubrique 4 énumère précisément les passages où l'IA n'est pas certaine (localisation + raison). La rubrique 5 signale les problèmes qui relèvent d'une décision éditoriale humaine. La rubrique 7 énonce la proposition d'avis EN LA PRÉSENTANT comme assistée par IA, jamais comme une décision. Le rapport ne réécrit pas le texte : il EXPLIQUE l'intervention (la version réécrite est un document distinct).",
+        deliverables: ["Rapport_reecriture", "Version_reecrite"],
+        footer: "Rapport généré avec assistance IA — validation humaine requise. La version réécrite est une proposition : elle ne remplace pas le document original, qui est conservé.",
+      },
+    },
   ];
   for (const p of aiPrompts) {
     await prisma.aiPrompt.upsert({
@@ -911,6 +970,8 @@ async function main() {
     correction_1: ["RAPPORT DE RELECTURE PROFESSIONNELLE", "RAPPORT DE RELECTURE — BAT1 (Correction éditoriale)"],
     correction_2: ["RAPPORT DE 2ᵉ CORRECTION", "RAPPORT DE 2ᵉ CORRECTION — CONTRÔLE DE LA 1ʳᵉ RELECTURE", "RAPPORT DE RELECTURE — BAT2 (Correction éditoriale)"],
     couverture: ["RAPPORT DE RELECTURE DE COUVERTURE", "RAPPORT DE RELECTURE DE COUVERTURE (BAT)"],
+    expertise: ["RAPPORT D'EXPERTISE SCIENTIFIQUE"],
+    reecriture: ["RAPPORT DE RÉÉCRITURE"],
   };
   for (const p of aiPrompts) {
     const existing = await prisma.aiPrompt.findUnique({ where: { workType: p.workType } });

@@ -771,48 +771,54 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
         return created;
       });
 
-      // Réponse à l'auteur (audit éditorial, point n°1) : pour toute décision
-      // terminale, on adresse une lettre à l'auteur (acceptation / sous
-      // conditions / refus courtois), à partir de modèles éditables, et on trace
-      // l'envoi sur la décision. Au meilleur effort : n'échoue jamais la décision.
-      let authorNotifiedTo: string | null = null;
+      // Lettre à l'auteur : depuis le 10/09/2026, ENREGISTRER une décision ne
+      // l'envoie PLUS automatiquement. On PRÉPARE une lettre à l'état « à valider »
+      // (aperçu) ; la Direction devra ensuite la valider puis l'envoyer
+      // MANUELLEMENT (endpoints dédiés). Au meilleur effort : la préparation ne
+      // bloque jamais l'enregistrement de la décision.
+      let letterPrepared = false;
       if (LETTER_KEYS.includes(parsed.data.decision as EditorialLetterKey)) {
         try {
           const contributor = await prisma.workContributor.findFirst({
             where: { manuscriptId: id, role: "author" },
             include: { partner: { select: { firstName: true, lastName: true, email: true } } },
           });
-          const email = contributor?.partner.email?.trim();
-          if (email) {
-            const key = parsed.data.decision as EditorialLetterKey;
-            const templates = await resolveLetterTemplates();
-            const maison = await houseName();
-            // Points communicables : ceux saisis par la Direction ; à défaut, pour
-            // une acceptation sous conditions, les conditions posées.
-            const pointsList =
-              parsed.data.author_points && parsed.data.author_points.length > 0
-                ? parsed.data.author_points
-                : key === "acceptation_conditions"
-                  ? parsed.data.conditions ?? []
-                  : [];
-            const composed = composeLetter(templates[key], {
-              auteur: `${contributor!.partner.firstName ?? ""} ${contributor!.partner.lastName ?? ""}`.trim(),
-              titre: manuscript.title,
-              numero: manuscript.manuscriptNumber,
-              points: buildPointsBlock(key, pointsList),
-              message: parsed.data.author_message?.trim() || "",
-              date: new Date().toLocaleDateString("fr-FR"),
-              maison,
-            });
-            const sender = senderIdentity(request.user!);
-            // Cachet « Direction Éditoriale » apposé sur l'e-mail (non signé à la main).
-            const cachet = (await getBranding()).cachet_editoriale;
-            await sendMail({ to: email, subject: composed.subject, text: composed.textBody, html: letterEmailHtml(composed.layout, cachet), ...sender }).catch(() => false);
-            authorNotifiedTo = email;
-            await prisma.editorialDecision.update({ where: { id: decision.id }, data: { authorNotifiedTo: email, authorNotifiedAt: new Date() } });
-          }
+          const key = parsed.data.decision as EditorialLetterKey;
+          const templates = await resolveLetterTemplates();
+          const maison = await houseName();
+          // Points communicables : ceux saisis par la Direction ; à défaut, pour
+          // une acceptation sous conditions, les conditions posées.
+          const pointsList =
+            parsed.data.author_points && parsed.data.author_points.length > 0
+              ? parsed.data.author_points
+              : key === "acceptation_conditions"
+                ? parsed.data.conditions ?? []
+                : [];
+          const composed = composeLetter(templates[key], {
+            auteur: `${contributor?.partner.firstName ?? ""} ${contributor?.partner.lastName ?? ""}`.trim(),
+            titre: manuscript.title,
+            numero: manuscript.manuscriptNumber,
+            points: buildPointsBlock(key, pointsList),
+            message: parsed.data.author_message?.trim() || "",
+            date: new Date().toLocaleDateString("fr-FR"),
+            maison,
+          });
+          // Une seule lettre par décision (upsert sur decisionId, unique).
+          await prisma.decisionLetter.create({
+            data: {
+              decisionId: decision.id,
+              manuscriptId: id,
+              letterKey: key,
+              status: "a_valider",
+              subject: composed.subject,
+              textBody: composed.textBody,
+              recipientEmail: contributor?.partner.email?.trim() || null,
+              generatedById: request.user!.id,
+            },
+          });
+          letterPrepared = true;
         } catch {
-          /* l'envoi de la lettre ne doit jamais bloquer la décision */
+          /* la préparation de la lettre ne doit jamais bloquer la décision */
         }
       }
 
@@ -821,13 +827,120 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
         action: "validate",
         entityType: "manuscript",
         entityId: id,
-        newValues: { decision: parsed.data.decision, scoreGapFlag, author_notified_to: authorNotifiedTo, mail_configured: isMailConfigured() },
+        newValues: { decision: parsed.data.decision, scoreGapFlag, letter_prepared: letterPrepared, mail_configured: isMailConfigured() },
         ipAddress: request.ip,
       });
 
-      return reply.code(201).send({ ...decision, authorNotifiedTo });
+      return reply.code(201).send({ ...decision, letterPrepared });
     },
   );
+
+  // ---- Cycle de vie de la LETTRE de décision : aperçu → validation → envoi ----
+  // Règle absolue : générer/valider une lettre ne l'envoie JAMAIS. L'envoi est un
+  // acte MANUEL et explicite. Chaque étape est tracée (qui / quand / version).
+
+  // Recompose la lettre à partir de la décision (données à jour) : subject +
+  // textBody + layout (pour l'e-mail) + destinataire.
+  const buildLetterFromDecision = async (decisionId: string) => {
+    const dec = await prisma.editorialDecision.findUnique({ where: { id: decisionId } });
+    if (!dec) return null;
+    const key = dec.decision as EditorialLetterKey;
+    if (!LETTER_KEYS.includes(key)) return null;
+    const manuscript = await prisma.manuscript.findUnique({ where: { id: dec.manuscriptId }, select: { title: true, manuscriptNumber: true } });
+    const contributor = await prisma.workContributor.findFirst({
+      where: { manuscriptId: dec.manuscriptId, role: "author" },
+      include: { partner: { select: { firstName: true, lastName: true, email: true } } },
+    });
+    const templates = await resolveLetterTemplates();
+    const maison = await houseName();
+    const savedPoints = Array.isArray(dec.authorPoints) ? (dec.authorPoints as string[]) : [];
+    let pointsList = savedPoints;
+    if (pointsList.length === 0 && key === "acceptation_conditions") {
+      const conds = await prisma.editorialAcceptanceCondition.findMany({ where: { decisionId, deletedAt: null }, select: { label: true } });
+      pointsList = conds.map((c) => c.label);
+    }
+    const composed = composeLetter(templates[key], {
+      auteur: `${contributor?.partner.firstName ?? ""} ${contributor?.partner.lastName ?? ""}`.trim(),
+      titre: manuscript?.title ?? "",
+      numero: manuscript?.manuscriptNumber ?? "",
+      points: buildPointsBlock(key, pointsList),
+      message: dec.authorMessage?.trim() || "",
+      date: new Date().toLocaleDateString("fr-FR"),
+      maison,
+    });
+    return { key, composed, recipientEmail: contributor?.partner.email?.trim() || null };
+  };
+
+  const letterView = (l: {
+    id: string; status: string; version: number; subject: string; letterKey: string; recipientEmail: string | null;
+    generatedById: string | null; generatedAt: Date; validatedById: string | null; validatedAt: Date | null;
+    sentById: string | null; sentAt: Date | null; openedAt: Date | null; receivedAt: Date | null; deliveryFailedAt: Date | null;
+  }) => ({
+    id: l.id, status: l.status, version: l.version, subject: l.subject, letter_key: l.letterKey, recipient_email: l.recipientEmail,
+    generated_by: l.generatedById, generated_at: l.generatedAt, validated_by: l.validatedById, validated_at: l.validatedAt,
+    sent_by: l.sentById, sent_at: l.sentAt, opened_at: l.openedAt, received_at: l.receivedAt, delivery_failed_at: l.deliveryFailedAt,
+  });
+
+  const latestLetter = (manuscriptId: string) =>
+    prisma.decisionLetter.findFirst({ where: { manuscriptId }, orderBy: { createdAt: "desc" } });
+
+  // Régénérer depuis la décision (après avoir corrigé une donnée) → « à valider ».
+  fastify.post("/api/v1/manuscripts/:id/decision-letter/regenerate", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const l = await latestLetter(id);
+    if (!l) return reply.code(404).send({ code: "no_letter", message: "Aucune lettre à régénérer." });
+    if (l.status === "envoyee") return reply.code(409).send({ code: "already_sent", message: "La lettre a déjà été envoyée : elle ne peut plus être régénérée." });
+    const built = await buildLetterFromDecision(l.decisionId);
+    if (!built) return reply.code(409).send({ code: "no_letter", message: "Cette décision ne donne pas lieu à une lettre." });
+    const updated = await prisma.decisionLetter.update({
+      where: { id: l.id },
+      data: { status: "a_valider", subject: built.composed.subject, textBody: built.composed.textBody, recipientEmail: built.recipientEmail, version: { increment: 1 }, validatedById: null, validatedAt: null },
+    });
+    return reply.send({ letter: letterView(updated) });
+  });
+
+  // Valider la lettre (fige la version) → « validée / prête à envoyer ».
+  fastify.post("/api/v1/manuscripts/:id/decision-letter/validate", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const l = await latestLetter(id);
+    if (!l) return reply.code(404).send({ code: "no_letter", message: "Aucune lettre à valider." });
+    if (l.status === "envoyee") return reply.code(409).send({ code: "already_sent", message: "La lettre a déjà été envoyée." });
+    if (l.status !== "a_valider") return reply.code(409).send({ code: "bad_state", message: "La lettre doit être à l'état « à valider »." });
+    const updated = await prisma.decisionLetter.update({
+      where: { id: l.id },
+      data: { status: "validee", validatedById: request.user!.id, validatedAt: new Date() },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "validate", entityType: "decision_letter", entityId: l.id, newValues: { manuscriptId: id, version: updated.version }, ipAddress: request.ip });
+    return reply.send({ letter: letterView(updated) });
+  });
+
+  // Envoyer la lettre validée à l'auteur — acte MANUEL et explicite → « envoyée ».
+  fastify.post("/api/v1/manuscripts/:id/decision-letter/send", { preHandler: requirePermission("decision_editoriale", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const l = await latestLetter(id);
+    if (!l) return reply.code(404).send({ code: "no_letter", message: "Aucune lettre à envoyer." });
+    if (l.status === "envoyee") return reply.code(409).send({ code: "already_sent", message: "La lettre a déjà été envoyée." });
+    if (l.status !== "validee") return reply.code(409).send({ code: "not_validated", message: "La lettre doit d'abord être validée avant l'envoi." });
+    const built = await buildLetterFromDecision(l.decisionId);
+    if (!built) return reply.code(409).send({ code: "no_letter", message: "Cette décision ne donne pas lieu à une lettre." });
+    if (!built.recipientEmail) return reply.code(409).send({ code: "no_email", message: "Aucune adresse e-mail n'est renseignée pour l'auteur : complétez sa fiche avant l'envoi." });
+    const sender = senderIdentity(request.user!);
+    const cachet = (await getBranding()).cachet_editoriale;
+    const ok = await sendMail({ to: built.recipientEmail, subject: built.composed.subject, text: built.composed.textBody, html: letterEmailHtml(built.composed.layout, cachet), ...sender }).catch(() => false);
+    const now = new Date();
+    const updated = await prisma.decisionLetter.update({
+      where: { id: l.id },
+      data: {
+        status: "envoyee", sentById: request.user!.id, sentAt: now, recipientEmail: built.recipientEmail,
+        subject: built.composed.subject, textBody: built.composed.textBody,
+        deliveryFailedAt: ok ? null : now,
+      },
+    });
+    // Trace historique sur la décision (compat : date/adresse de notification).
+    await prisma.editorialDecision.update({ where: { id: l.decisionId }, data: { authorNotifiedAt: now, authorNotifiedTo: built.recipientEmail } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "decision_letter", entityId: l.id, newValues: { manuscriptId: id, sent_to: built.recipientEmail, delivered: ok, version: updated.version }, ipAddress: request.ip });
+    return reply.send({ letter: letterView(updated), delivered: ok });
+  });
 
   // Modèles de lettres de décision (éditables). Lecture : éditorial ; édition :
   // administration (config à l'échelle de la maison).
@@ -903,7 +1016,10 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       date: decision.decidedAt.toLocaleDateString("fr-FR"),
       maison,
     });
-    return reply.send({ decision: decision.decision, subject: composed.subject, body: composed.textBody, layout: composed.layout, author_email: contributor?.partner.email ?? null, notified_at: decision.authorNotifiedAt, notified_to: decision.authorNotifiedTo });
+    // Cycle de vie de la lettre (aperçu → validation → envoi) : jointe à l'aperçu
+    // pour que l'écran affiche l'état et les boutons Valider / Envoyer.
+    const lifecycle = await latestLetter(id);
+    return reply.send({ decision: decision.decision, subject: composed.subject, body: composed.textBody, layout: composed.layout, author_email: contributor?.partner.email ?? null, notified_at: decision.authorNotifiedAt, notified_to: decision.authorNotifiedTo, letter: lifecycle ? letterView(lifecycle) : null });
   });
 
   // Aperçu de la lettre pour la décision EN COURS de saisie (avant enregistrement) :

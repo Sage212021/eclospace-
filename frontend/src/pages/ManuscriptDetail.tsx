@@ -29,6 +29,9 @@ import {
   setPublicationDate,
   submitEditorialDecision,
   getManuscriptDecisionLetter,
+  validateDecisionLetter,
+  regenerateDecisionLetter,
+  sendDecisionLetter,
   previewDecisionLetter,
   getBranding,
   getAcceptanceConditions,
@@ -1517,32 +1520,101 @@ const smallBtnStyle: CSSProperties = {
 
 // Lettre officielle de décision, (ré)imprimable à l'en-tête de la maison une fois
 // la décision prise. Se masque tant qu'aucune lettre n'existe pour le dossier.
+// État visuel de la lettre (aperçu → validation → envoi → réception).
+const LETTER_STATUS_META: Record<string, { label: string; bg: string; fg: string }> = {
+  a_valider: { label: "🟠 À valider (aperçu)", bg: "#F4E9BE", fg: "#8A6D00" },
+  validee: { label: "✅ Validée — prête à envoyer", bg: "#DEE7DE", fg: "#2F7D4A" },
+  envoyee: { label: "📤 Envoyée", bg: "#E3E8F0", fg: "#2A4A7A" },
+};
+
 function DecisionLetterCard({ manuscriptId }: { manuscriptId: string }) {
   const [letter, setLetter] = useState<Awaited<ReturnType<typeof getManuscriptDecisionLetter>> | null>(null);
   const [cachet, setCachet] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
+  const load = () => getManuscriptDecisionLetter(manuscriptId).then(setLetter).catch(() => setLetter(null));
   useEffect(() => {
     let alive = true;
-    getManuscriptDecisionLetter(manuscriptId)
-      .then((l) => { if (alive) setLetter(l); })
-      .catch(() => { if (alive) setLetter(null); });
+    getManuscriptDecisionLetter(manuscriptId).then((l) => { if (alive) setLetter(l); }).catch(() => { if (alive) setLetter(null); });
     getBranding().then((b) => { if (alive) setCachet(b.cachet_editoriale); }).catch(() => {});
     return () => { alive = false; };
   }, [manuscriptId]);
 
   if (!letter) return null;
+  const lc = letter.letter;
+  const status = lc?.status ?? null;
+
+  async function act(run: () => Promise<unknown>, okMsg: string, confirmText?: string) {
+    if (confirmText && !window.confirm(confirmText)) return;
+    setBusy(true); setErr(null); setMsg(null);
+    try { await run(); await load(); setMsg(okMsg); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Action impossible."); }
+    finally { setBusy(false); }
+  }
+
+  // Sous-état d'accusé de réception quand la lettre est envoyée.
+  const receipt = status === "envoyee"
+    ? lc?.delivery_failed_at ? "⚠️ Échec de livraison"
+      : lc?.received_at ? `🟢 Réception confirmée par l'auteur${lc.received_at ? ` le ${new Date(lc.received_at).toLocaleDateString("fr-FR")}` : ""}`
+      : lc?.opened_at ? "🔵 Lettre consultée par l'auteur"
+      : "🟠 Envoyée — en attente de réception"
+    : null;
+  const meta = status ? LETTER_STATUS_META[status] : null;
+
   return (
     <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "12px 14px", marginBottom: 12, background: "var(--paper, #faf8f2)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 700 }}>Lettre officielle à l'auteur — {DECISION_LABELS[letter.decision] ?? letter.decision}</div>
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>
-            {letter.layout.objet}
-            {letter.notified_to ? ` · envoyée à ${letter.notified_to}` : " · non envoyée par e-mail (imprimez et remettez la lettre)"}
-          </div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>{letter.layout.objet}</div>
         </div>
         <DocPrintMenu label="Imprimer la lettre" onPrint={(o) => printEditorialDecisionLetter(letter.layout, o, cachet)} />
       </div>
+
+      {meta && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+          <span style={{ background: meta.bg, color: meta.fg, borderRadius: 999, padding: "2px 10px", fontSize: 12, fontWeight: 700 }}>{meta.label}</span>
+          {receipt && <span style={{ fontSize: 12, color: "var(--muted)" }}>{receipt}</span>}
+          {status === "envoyee" && lc?.sent_at && <span style={{ fontSize: 11.5, color: "var(--muted)" }}>· envoyée le {new Date(lc.sent_at).toLocaleString("fr-FR")}{lc.recipient_email ? ` à ${lc.recipient_email}` : ""}</span>}
+        </div>
+      )}
+
+      {err && <div style={{ background: "var(--alert-soft, #F6E2DE)", color: "var(--alert, #B23A2E)", borderRadius: 6, padding: "6px 10px", fontSize: 12.5, marginTop: 8 }}>{err}</div>}
+      {msg && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "6px 10px", fontSize: 12.5, marginTop: 8 }}>{msg}</div>}
+
+      {/* Cycle « Aperçu → Validation → Envoi » : aucun envoi automatique. */}
+      {status === "a_valider" && (
+        <div style={{ marginTop: 10 }}>
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px", lineHeight: 1.6 }}>
+            <b>Vérifiez l'aperçu ci-dessus</b> (nom de l'auteur, titre, décision, conditions, coordonnées, mise en page) avant toute chose. La lettre ne partira pas tant que vous ne l'aurez pas validée puis envoyée vous-même.
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" disabled={busy} onClick={() => act(() => validateDecisionLetter(manuscriptId), "Lettre validée : prête à être envoyée.", "Après validation, la lettre sera prête à être envoyée à l'auteur. Voulez-vous continuer ?")}
+              style={{ background: "var(--eclosion)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: busy ? "default" : "pointer" }}>
+              Valider la lettre et préparer l'envoi
+            </button>
+            <button type="button" disabled={busy} onClick={() => act(() => regenerateDecisionLetter(manuscriptId), "Lettre régénérée depuis le dossier.")}
+              style={{ background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 6, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: busy ? "default" : "pointer" }}
+              title="Après avoir corrigé une donnée (nom, conditions…), régénère la lettre">
+              Modifier / Corriger (régénérer)
+            </button>
+          </div>
+        </div>
+      )}
+      {status === "validee" && (
+        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" disabled={busy} onClick={() => act(async () => { const r = await sendDecisionLetter(manuscriptId); if (!r.delivered) throw new Error("La lettre est marquée envoyée mais l'e-mail n'a pas pu être remis (vérifiez la configuration e-mail)."); }, "Décision envoyée à l'auteur.", "Envoyer maintenant la décision à l'auteur par e-mail ?")}
+            style={{ background: "var(--eclosion)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: busy ? "default" : "pointer" }}>
+            Envoyer la décision à l'auteur
+          </button>
+          <button type="button" disabled={busy} onClick={() => act(() => regenerateDecisionLetter(manuscriptId), "Lettre remise à « à valider » pour correction.")}
+            style={{ background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 6, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: busy ? "default" : "pointer" }}>
+            Modifier / Corriger
+          </button>
+        </div>
+      )}
       <p style={{ fontSize: 11, color: "var(--muted)", margin: "8px 0 0" }}>
         En-tête de la maison ; le bloc « Pour Éclosion Édition » (signature, cachet, nom du responsable) est à remplir à la main après impression. Choisissez « papier à en-tête intégré » ou « vierge » pour imprimer sur votre papier officiel.
       </p>

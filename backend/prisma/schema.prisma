@@ -2267,7 +2267,53 @@ model EditorialDecision {
   authorNotifiedAt DateTime?             @map("author_notified_at")
   authorNotifiedTo String?               @map("author_notified_to")
 
+  letter DecisionLetter?
+
   @@map("editorial_decisions")
+}
+
+// Cycle de vie de la LETTRE de décision (D-… 10/09/2026) : générer une lettre ne
+// doit JAMAIS l'envoyer. Aperçu → validation explicite → envoi manuel → accusé de
+// réception par l'auteur. La version envoyée est figée (subject/textBody) et
+// conservée. Un jeton (confirmToken) donne accès à la page sécurisée de
+// confirmation ; son ouverture = « consultée », le clic sur le bouton =
+// « réception confirmée ».
+enum DecisionLetterStatus {
+  brouillon
+  a_valider
+  validee
+  envoyee
+}
+
+model DecisionLetter {
+  id           String            @id @default(uuid())
+  decisionId   String            @unique @map("decision_id")
+  decision     EditorialDecision @relation(fields: [decisionId], references: [id])
+  manuscriptId String            @map("manuscript_id")
+  letterKey    String            @map("letter_key")
+  status       DecisionLetterStatus @default(a_valider)
+  version      Int               @default(1)
+  subject         String   @default("")
+  textBody        String   @default("") @map("text_body")
+  recipientEmail  String?  @map("recipient_email")
+
+  generatedById String?   @map("generated_by")
+  generatedAt   DateTime  @default(now()) @map("generated_at")
+  validatedById String?   @map("validated_by")
+  validatedAt   DateTime? @map("validated_at")
+  sentById      String?   @map("sent_by")
+  sentAt        DateTime? @map("sent_at")
+
+  confirmToken     String?   @unique @map("confirm_token")
+  openedAt         DateTime? @map("opened_at")
+  receivedAt       DateTime? @map("received_at")
+  deliveryFailedAt DateTime? @map("delivery_failed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([manuscriptId])
+  @@map("decision_letters")
 }
 
 // Suivi des acceptations « sous conditions » (audit éditorial, point n°2) : les

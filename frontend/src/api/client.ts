@@ -1299,8 +1299,31 @@ export interface DecisionLetterLayout {
   paragraphs: string[];
   maison: string;
 }
+// Cycle de vie de la lettre (aperçu → validation → envoi → réception).
+export interface DecisionLetterLifecycle {
+  id: string;
+  status: "brouillon" | "a_valider" | "validee" | "envoyee";
+  version: number;
+  subject: string;
+  letter_key: string;
+  recipient_email: string | null;
+  generated_by: string | null; generated_at: string;
+  validated_by: string | null; validated_at: string | null;
+  sent_by: string | null; sent_at: string | null;
+  opened_at: string | null; received_at: string | null; delivery_failed_at: string | null;
+}
 export function getManuscriptDecisionLetter(manuscriptId: string) {
-  return request<{ decision: string; subject: string; body: string; layout: DecisionLetterLayout; author_email: string | null; notified_at: string | null; notified_to: string | null }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter`);
+  return request<{ decision: string; subject: string; body: string; layout: DecisionLetterLayout; author_email: string | null; notified_at: string | null; notified_to: string | null; letter: DecisionLetterLifecycle | null }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter`);
+}
+// Cycle de vie de la lettre : régénérer (après correction) / valider / envoyer.
+export function regenerateDecisionLetter(manuscriptId: string) {
+  return request<{ letter: DecisionLetterLifecycle }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter/regenerate`, { method: "POST" });
+}
+export function validateDecisionLetter(manuscriptId: string) {
+  return request<{ letter: DecisionLetterLifecycle }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter/validate`, { method: "POST" });
+}
+export function sendDecisionLetter(manuscriptId: string) {
+  return request<{ letter: DecisionLetterLifecycle; delivered: boolean }>(`/api/v1/manuscripts/${manuscriptId}/decision-letter/send`, { method: "POST" });
 }
 
 // Aperçu de la lettre pour la décision EN COURS de saisie (avant enregistrement) :

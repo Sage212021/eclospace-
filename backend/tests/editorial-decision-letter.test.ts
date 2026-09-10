@@ -63,21 +63,42 @@ describe("réponse à l'auteur à la décision éditoriale", () => {
     expect(after.json().templates.refus.subject).toBe("Réponse — {{titre}}");
   });
 
-  it("à l'acceptation, adresse une lettre à l'auteur et trace l'envoi", async () => {
+  it("à l'acceptation, PRÉPARE une lettre « à valider » SANS l'envoyer ; envoi seulement après validation + clic explicite", async () => {
     const id = await manuscriptAtDecision("awa@example.com");
     const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/editorial-decision`, headers: { cookie }, payload: { decision: "acceptation", motivation: "Texte prometteur." } });
     expect(res.statusCode).toBe(201);
-    expect(res.json().authorNotifiedTo).toBe("awa@example.com");
+    // La décision ne DÉCLENCHE PLUS l'envoi : lettre préparée, non envoyée.
+    expect(res.json().letterPrepared).toBe(true);
 
     const decision = await prisma.editorialDecision.findFirstOrThrow({ where: { manuscriptId: id } });
-    expect(decision.authorNotifiedTo).toBe("awa@example.com");
-    expect(decision.authorNotifiedAt).toBeTruthy();
+    expect(decision.authorNotifiedTo).toBeNull();
+    expect(decision.authorNotifiedAt).toBeNull();
 
-    // Aperçu / réimpression de la lettre, avec les balises remplacées.
+    // Aperçu + état du cycle de vie : « à valider ».
     const letter = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/decision-letter`, headers: { cookie } });
     expect(letter.statusCode).toBe(200);
     expect(letter.json().subject).not.toContain("{{titre}}");
     expect(letter.json().body).toContain("Awa Ndiaye");
+    expect(letter.json().letter.status).toBe("a_valider");
+
+    // On ne peut PAS envoyer une lettre non validée.
+    const earlySend = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/decision-letter/send`, headers: { cookie } });
+    expect(earlySend.statusCode).toBe(409);
+
+    // Validation explicite → « validée / prête ».
+    const validate = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/decision-letter/validate`, headers: { cookie } });
+    expect(validate.statusCode).toBe(200);
+    expect(validate.json().letter.status).toBe("validee");
+    expect(validate.json().letter.validated_by).toBeTruthy();
+
+    // Envoi MANUEL → « envoyée » + trace sur la décision.
+    const send = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/decision-letter/send`, headers: { cookie } });
+    expect(send.statusCode).toBe(200);
+    expect(send.json().letter.status).toBe("envoyee");
+    expect(send.json().letter.sent_by).toBeTruthy();
+    const after = await prisma.editorialDecision.findFirstOrThrow({ where: { manuscriptId: id } });
+    expect(after.authorNotifiedTo).toBe("awa@example.com");
+    expect(after.authorNotifiedAt).toBeTruthy();
   });
 
   it("la lettre n'extrait que les éléments communicables (points + message), jamais la motivation interne, et porte le bloc signataire", async () => {
@@ -115,7 +136,7 @@ describe("réponse à l'auteur à la décision éditoriale", () => {
       payload: { decision: "refus_resoumission", motivation: "Non abouti mais potentiel.", author_points: ["Clarifier l'angle"] },
     });
     expect(res.statusCode).toBe(201);
-    expect(res.json().authorNotifiedTo).toBe("resoum@example.com");
+    expect(res.json().letterPrepared).toBe(true);
     const m = await prisma.manuscript.findUniqueOrThrow({ where: { id }, include: { status: true } });
     expect(m.status.code).toBe("ARCHIVAGE");
     const letter = (await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/decision-letter`, headers: { cookie } })).json() as { body: string };
@@ -165,8 +186,13 @@ describe("réponse à l'auteur à la décision éditoriale", () => {
 
     const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/editorial-decision`, headers: { cookie }, payload: { decision: "refus", motivation: "Hors ligne éditoriale." } });
     expect(res.statusCode).toBe(201);
-    expect(res.json().authorNotifiedTo).toBeNull();
+    // La lettre est préparée (à valider) mais rien n'est envoyé automatiquement.
     const decision = await prisma.editorialDecision.findFirstOrThrow({ where: { manuscriptId: m.id } });
     expect(decision.authorNotifiedTo).toBeNull();
+    // Sans e-mail auteur, l'envoi est refusé même après validation.
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/decision-letter/validate`, headers: { cookie } });
+    const send = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/decision-letter/send`, headers: { cookie } });
+    expect(send.statusCode).toBe(409);
+    expect(send.json().code).toBe("no_email");
   });
 });

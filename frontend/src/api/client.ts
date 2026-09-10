@@ -956,7 +956,7 @@ export function updateReadingCommitteeRules(rules: ReadingCommitteeRules) {
 
 // — IA éditoriale (Lot IA-0) : configuration + bibliothèque de prompts —
 export type AiModelPreset = "leger" | "intermediaire" | "premium";
-export type AiWorkType = "evaluation" | "correction_1" | "correction_2" | "couverture";
+export type AiWorkType = "evaluation" | "correction_1" | "correction_2" | "couverture" | "expertise" | "reecriture";
 export interface AiEditorialConfigView {
   enabled: boolean;
   accountLabel: string;

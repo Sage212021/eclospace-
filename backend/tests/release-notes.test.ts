@@ -39,7 +39,7 @@ describe("notes de version — distribution en messagerie (expéditeur Eclospace
     const sys = await prisma.user.findUniqueOrThrow({ where: { username: SYSTEM_SENDER_USERNAME } });
 
     const note = await prisma.releaseNote.create({
-      data: { slug: `test-${tag}`, version: "test", title: "Nouveauté RH (test)", body: "Le pôle RH a été amélioré.", departmentCodes: ["RH"] },
+      data: { slug: `test-${tag}`, version: "test", title: "Nouveauté RH (test)", body: `Le pôle RH a été amélioré. (test-${tag}-marker)`, departmentCodes: ["RH"] },
     });
     noteId = note.id;
     expect(note.dispatchedAt).toBeNull();
@@ -48,9 +48,10 @@ describe("notes de version — distribution en messagerie (expéditeur Eclospace
     const res1 = await dispatchReleaseNotes();
     expect(res1.notes).toBeGreaterThanOrEqual(1);
 
-    const msgs = await prisma.chatMessage.findMany({
-      where: { senderId: sys.id, conversation: { OR: [{ userAId: userId }, { userBId: userId }] } },
-    });
+    // On cible la note DE CE TEST (le pôle RH reçoit aussi les notes RH du seed,
+    // désormais réconciliées à chaque déploiement — comportement voulu).
+    const where = { senderId: sys.id, body: { contains: `test-${tag}-marker` }, conversation: { OR: [{ userAId: userId }, { userBId: userId }] } };
+    const msgs = await prisma.chatMessage.findMany({ where });
     expect(msgs.length).toBe(1);
     expect(msgs[0].body).toContain("Nouveauté RH");
     // La note est marquée distribuée.
@@ -58,9 +59,7 @@ describe("notes de version — distribution en messagerie (expéditeur Eclospace
 
     // 2ᵉ déploiement (le seed rejoue) : AUCUN doublon.
     await dispatchReleaseNotes();
-    const after = await prisma.chatMessage.count({
-      where: { senderId: sys.id, conversation: { OR: [{ userAId: userId }, { userBId: userId }] } },
-    });
+    const after = await prisma.chatMessage.count({ where });
     expect(after).toBe(1);
   });
 });

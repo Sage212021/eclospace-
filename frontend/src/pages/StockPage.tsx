@@ -9,6 +9,8 @@ import {
   listStockMovements,
   updateStockMovement,
   cancelStockMovement,
+  listCustomers,
+  type Customer,
   type IsbnRef,
   type StockItem,
   type StockLocation,
@@ -24,6 +26,7 @@ import { CommercialStockSection } from "../components/CommercialStockSection";
 import { PeriodFilter, currentPeriod, inPeriod, type Period } from "../components/PeriodFilter";
 import { BookReceiptSection, AuthorWithdrawalSection } from "../components/StockVouchersSection";
 import { DeliveriesSection } from "../components/DeliveriesSection";
+import { NewOrderForm } from "./CommercialPage";
 import { StockConsolidatedSection } from "../components/StockConsolidatedSection";
 import { StockInitialImportSection } from "../components/StockInitialImportSection";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -133,6 +136,7 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
   const [items, setItems] = useState<StockItem[]>([]);
   const [alerts, setAlerts] = useState<(StockItem & { severity: string })[]>([]);
   const [isbns, setIsbns] = useState<IsbnRef[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [newLocation, setNewLocation] = useState<{ label: string; type: StockLocationType } | null>(null);
@@ -171,16 +175,18 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
   }
 
   const refresh = async () => {
-    const [locationList, itemList, alertList, isbnList] = await Promise.all([
+    const [locationList, itemList, alertList, isbnList, customerList] = await Promise.all([
       listStockLocations(),
       listStockItems(),
       listStockAlerts(),
       listIsbnRefs("print"),
+      listCustomers(),
     ]);
     setLocations(locationList);
     setItems(itemList);
     setAlerts(alertList);
     setIsbns(isbnList);
+    setCustomers(customerList);
   };
 
   useEffect(() => {
@@ -346,6 +352,19 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
 
       {/* Livraisons — bons de livraison (Ch. 17 §17.8). Rubrique partagée avec le
           pôle Commercial : le Magasin prépare/expédie et imprime le BL. */}
+      {/* Enregistrer une commande client directement depuis le Stock : même
+          écran que dans Commercial (même route → l'initiateur de la commande est
+          toujours tracé côté serveur). Le bon de livraison se génère ensuite
+          depuis la commande, dans la carte « Livraisons » ci-dessous. */}
+      {canManage && (
+        <NewOrderForm
+          customers={customers}
+          isbns={isbns}
+          locations={locations}
+          onCreated={(msg) => { setMessage(msg); void refresh(); }}
+          onError={setError}
+        />
+      )}
       <DeliveriesSection canManage={canManage} />
 
       {/* Pièces officielles imprimables (documents, sans impact stock). */}

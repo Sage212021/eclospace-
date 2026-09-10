@@ -6,7 +6,8 @@ import { PrismaClient, PermissionAction, CustomerCategory } from "@prisma/client
 import { FORMULA_DEFS } from "../src/lib/payrollFormula.js";
 import { DEFAULT_ABSENCE_REASONS } from "../src/lib/absenceReasons.js";
 import { DEFAULT_SALARY_ELEMENTS } from "../src/lib/salaryElements.js";
-import { dispatchReleaseNotes } from "../src/lib/releaseNotes.js";
+import { randomUUID } from "node:crypto";
+import { dispatchReleaseNotes, SYSTEM_SENDER_USERNAME } from "../src/lib/releaseNotes.js";
 import { BRANDING_KEY, BRANDING_DEFAULTS } from "../src/lib/branding.js";
 import { readFileSync } from "node:fs";
 
@@ -1216,6 +1217,21 @@ async function main() {
   if (!existingAdminRole) {
     await prisma.userRole.create({ data: { userId: adminUser.id, roleId: adminRoleId } });
   }
+
+  // Compte SYSTÈME « Eclospace » : expéditeur des messages « Quoi de neuf » dans
+  // la messagerie interne. Ne se connecte jamais (mot de passe aléatoire jeté),
+  // protégé, sans rôle ni pôle. Son nom d'usage s'affiche comme correspondant.
+  await prisma.user.upsert({
+    where: { username: SYSTEM_SENDER_USERNAME },
+    update: { isProtected: true, status: "active" },
+    create: {
+      username: SYSTEM_SENDER_USERNAME,
+      email: "systeme@eclospace.local",
+      passwordHash: await argon2.hash(randomUUID()),
+      status: "active",
+      isProtected: true,
+    },
+  });
 
   // TVA (Ch. 18 §18.9) : au Cameroun, les livres sont exonérés — taux par défaut
   // à 0 %. Création seule (update vide) : un changement fait depuis l'écran

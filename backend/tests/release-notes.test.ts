@@ -1,27 +1,34 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/lib/prisma.js";
-import { dispatchReleaseNotes } from "../src/lib/releaseNotes.js";
+import { dispatchReleaseNotes, SYSTEM_SENDER_USERNAME } from "../src/lib/releaseNotes.js";
 
 // « Quoi de neuf » : à chaque mise à jour, les utilisateurs du pôle concerné
-// reçoivent une notification explicative — automatiquement, une seule fois.
+// reçoivent un MESSAGE dans la messagerie interne, de la part d'« Eclospace » —
+// automatiquement, une seule fois.
 
 const rnd = () => Math.random().toString(36).slice(2, 8);
 
-describe("notes de version — distribution aux pôles concernés", () => {
+describe("notes de version — distribution en messagerie (expéditeur Eclospace)", () => {
   const tag = rnd();
   let userId: string;
   let employeeId: string;
   let noteId: string;
 
   afterAll(async () => {
-    await prisma.notification.deleteMany({ where: { entityType: "release_note", entityId: noteId } });
+    if (userId) {
+      const convs = await prisma.conversation.findMany({ where: { OR: [{ userAId: userId }, { userBId: userId }] }, select: { id: true } });
+      const ids = convs.map((c) => c.id);
+      await prisma.chatMessage.deleteMany({ where: { conversationId: { in: ids } } });
+      await prisma.conversationRead.deleteMany({ where: { conversationId: { in: ids } } });
+      await prisma.conversation.deleteMany({ where: { id: { in: ids } } });
+    }
     await prisma.releaseNote.deleteMany({ where: { id: noteId } });
     if (userId) await prisma.user.deleteMany({ where: { id: userId } });
     if (employeeId) await prisma.employee.deleteMany({ where: { id: employeeId } });
     await prisma.$disconnect();
   });
 
-  it("distribue une note au pôle ciblé, une seule fois, sans doublon au redéploiement", async () => {
+  it("envoie une note au pôle ciblé comme message d'Eclospace, une seule fois", async () => {
     const rh = await prisma.department.findFirstOrThrow({ where: { code: "RH" } });
     const emp = await prisma.employee.create({ data: { firstName: "Rel", lastName: `Note${tag}`, departmentId: rh.id } });
     employeeId = emp.id;
@@ -29,6 +36,7 @@ describe("notes de version — distribution aux pôles concernés", () => {
       data: { username: `rel-${tag}`, email: `rel-${tag}@example.com`, passwordHash: "x", status: "active", employeeId: emp.id },
     });
     userId = user.id;
+    const sys = await prisma.user.findUniqueOrThrow({ where: { username: SYSTEM_SENDER_USERNAME } });
 
     const note = await prisma.releaseNote.create({
       data: { slug: `test-${tag}`, version: "test", title: "Nouveauté RH (test)", body: "Le pôle RH a été amélioré.", departmentCodes: ["RH"] },
@@ -36,19 +44,23 @@ describe("notes de version — distribution aux pôles concernés", () => {
     noteId = note.id;
     expect(note.dispatchedAt).toBeNull();
 
-    // 1er déploiement : l'utilisateur du pôle RH reçoit la notification.
+    // 1er déploiement : l'utilisateur du pôle RH reçoit un message d'Eclospace.
     const res1 = await dispatchReleaseNotes();
     expect(res1.notes).toBeGreaterThanOrEqual(1);
-    const mine = await prisma.notification.findMany({ where: { userId, entityType: "release_note", entityId: noteId } });
-    expect(mine.length).toBe(1);
-    expect(mine[0].type).toBe("annonce");
-    expect(mine[0].title).toContain("Nouveauté RH");
+
+    const msgs = await prisma.chatMessage.findMany({
+      where: { senderId: sys.id, conversation: { OR: [{ userAId: userId }, { userBId: userId }] } },
+    });
+    expect(msgs.length).toBe(1);
+    expect(msgs[0].body).toContain("Nouveauté RH");
     // La note est marquée distribuée.
     expect((await prisma.releaseNote.findUniqueOrThrow({ where: { id: noteId } })).dispatchedAt).not.toBeNull();
 
     // 2ᵉ déploiement (le seed rejoue) : AUCUN doublon.
     await dispatchReleaseNotes();
-    const after = await prisma.notification.count({ where: { userId, entityType: "release_note", entityId: noteId } });
+    const after = await prisma.chatMessage.count({
+      where: { senderId: sys.id, conversation: { OR: [{ userAId: userId }, { userBId: userId }] } },
+    });
     expect(after).toBe(1);
   });
 });

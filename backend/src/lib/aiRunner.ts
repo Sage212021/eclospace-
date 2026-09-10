@@ -805,6 +805,10 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     });
 
     const producedIds: string[] = [created.id];
+    // Comparaison avant/après (réécriture) : on conserve le texte source analysé
+    // et le texte réécrit proposé pour l'afficher côte à côte.
+    let comparisonSource: string | null = null;
+    let comparisonRewrite: string | null = null;
 
     // Régénération du manuscrit corrigé (Lot IA-3b) — uniquement 1ʳᵉ/2ᵉ
     // correction et si le texte est exploitable (pas un PDF image). Le livre est
@@ -863,6 +867,10 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         },
       });
       producedIds.push(correctedDoc.id);
+      if (isReecriture) {
+        comparisonSource = prepared.text;
+        comparisonRewrite = correctedText;
+      }
     }
 
     const costUsd = (totalInput * price.in + totalOutput * price.out) / 1_000_000;
@@ -870,7 +878,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
 
     await prisma.aiReadingJob.update({
       where: { id: job.id },
-      data: { status: "termine", finishedAt: new Date(), producedDocumentIds: producedIds, reportVersion: 1, costEstimate, reportText },
+      data: { status: "termine", finishedAt: new Date(), producedDocumentIds: producedIds, reportVersion: 1, costEstimate, reportText, sourceText: comparisonSource, rewriteText: comparisonRewrite },
     });
     await writeAuditLog({
       userId: params.userId,

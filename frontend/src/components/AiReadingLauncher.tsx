@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { runAiEditorial, listAiJobs, aiJobReportDownloadUrl, listGenres, type AiJob, type AiWorkType, type Genre } from "../api/client";
+import { runAiEditorial, listAiJobs, aiJobReportDownloadUrl, aiJobComparison, listGenres, type AiJob, type AiWorkType, type Genre } from "../api/client";
 
 // Lot IA-1 : lancer une relecture assistée à l'étape courante. Le rapport produit
 // (au nom du relecteur d'Éclosion) est classé dans les Documents de l'ouvrage.
@@ -37,6 +37,22 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
   // GRILLE transmise à l'IA. "" = automatique (selon le domaine de l'ouvrage).
   const [genres, setGenres] = useState<Genre[]>([]);
   const [selectedGenre, setSelectedGenre] = useState("");
+  // Comparaison avant/après (réécriture) : texte original vs texte réécrit.
+  const [compare, setCompare] = useState<{ jobId: string; original: string; rewritten: string } | null>(null);
+  const [cmpBusy, setCmpBusy] = useState(false);
+
+  async function openComparison(jobId: string) {
+    if (compare?.jobId === jobId) { setCompare(null); return; }
+    setCmpBusy(true); setErr(null);
+    try {
+      const c = await aiJobComparison(jobId);
+      setCompare({ jobId, original: c.original, rewritten: c.rewritten });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Comparaison indisponible.");
+    } finally {
+      setCmpBusy(false);
+    }
+  }
 
   const load = () => listAiJobs(manuscriptId).then((r) => r.jobs.filter((j) => j.workType === workType));
   const refresh = () => load().then(setJobs).catch(() => {});
@@ -201,11 +217,38 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
                     >
                       📄 avec en-tête Éclosion
                     </a>
+                    {workType === "reecriture" && (
+                      <button
+                        type="button"
+                        onClick={() => openComparison(j.id)}
+                        disabled={cmpBusy}
+                        style={{ background: "none", border: "none", color: "var(--eclosion-dark, #9A7A12)", fontWeight: 700, cursor: cmpBusy ? "default" : "pointer", padding: 0, fontSize: 12 }}
+                        title="Afficher la version originale et la version réécrite côte à côte"
+                      >
+                        🔀 {compare?.jobId === j.id ? "Masquer la comparaison" : "Comparer avant/après"}
+                      </button>
+                    )}
                   </>
                 )}
               </div>
             ))}
           </div>
+          {compare && (
+            // Version originale / version proposée par l'IA, côte à côte. La
+            // version originale n'est jamais modifiée : ceci est une proposition.
+            <div style={{ marginTop: 10, border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+                <div style={{ borderRight: "1px solid var(--line)" }}>
+                  <div style={{ background: "var(--paper, #FAF8F2)", padding: "6px 10px", fontSize: 11.5, fontWeight: 700, color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>Version originale</div>
+                  <div style={{ padding: 10, fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: 360, overflow: "auto" }}>{compare.original}</div>
+                </div>
+                <div>
+                  <div style={{ background: "#F4E9BE", padding: "6px 10px", fontSize: 11.5, fontWeight: 700, color: "#8A6D00", borderBottom: "1px solid var(--line)" }}>Version proposée par l'IA — à valider</div>
+                  <div style={{ padding: 10, fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: 360, overflow: "auto" }}>{compare.rewritten}</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

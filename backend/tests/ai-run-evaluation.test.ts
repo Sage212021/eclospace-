@@ -431,5 +431,12 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     // Le prompt de réécriture impose bien la préservation de la voix de l'auteur.
     const lastSystem = sdkCalls[sdkCalls.length - 1]?.system ?? "";
     expect(lastSystem.toUpperCase()).toContain("VOIX DE L'AUTEUR");
+
+    // Comparaison avant/après disponible : texte original + texte réécrit.
+    const cmp = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs/${res.json().jobId}/comparison`, headers: { cookie: adminCookie } });
+    expect(cmp.statusCode).toBe(200);
+    const body = cmp.json() as { original: string; rewritten: string };
+    expect(body.original).toContain("Contenu du manuscrit de test.");
+    expect(body.rewritten.length).toBeGreaterThan(0);
   });
 });

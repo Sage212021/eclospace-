@@ -1,6 +1,7 @@
 import webpush from "web-push";
 import { prisma } from "./prisma.js";
 import type { NotificationPriority, NotificationType } from "@prisma/client";
+import { unreadBadgeCount } from "./badge.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Notifications « Web Push » : alerte l'utilisateur sur son téléphone MÊME
@@ -56,6 +57,7 @@ export async function sendWebPushToUsers(userIds: string[], input: PushPayloadIn
 
   let subs: {
     id: string;
+    userId: string;
     endpoint: string;
     p256dh: string;
     auth: string;
@@ -66,6 +68,7 @@ export async function sendWebPushToUsers(userIds: string[], input: PushPayloadIn
       where: { userId: { in: ids } },
       select: {
         id: true,
+        userId: true,
         endpoint: true,
         p256dh: true,
         auth: true,
@@ -78,9 +81,24 @@ export async function sendWebPushToUsers(userIds: string[], input: PushPayloadIn
   }
   if (subs.length === 0) return;
 
+  // Compteur de non-lus par destinataire (une fois par personne), pour poser le
+  // badge de l'icône même application fermée. Au meilleur effort : en cas
+  // d'erreur on n'envoie simplement pas de badge.
+  const badgeByUser = new Map<string, number>();
+  await Promise.all(
+    [...new Set(subs.map((s) => s.userId))].map(async (uid) => {
+      try {
+        badgeByUser.set(uid, await unreadBadgeCount(uid));
+      } catch {
+        /* pas de badge pour cette personne */
+      }
+    }),
+  );
+
   await Promise.all(
     subs.map(async (sub) => {
       const silent = sub.user?.notificationPreference?.soundEnabled === false;
+      const badge = badgeByUser.get(sub.userId);
       const payload = JSON.stringify({
         title: input.title,
         body: input.body,
@@ -88,6 +106,7 @@ export async function sendWebPushToUsers(userIds: string[], input: PushPayloadIn
         category: input.type,
         entityType: input.entityType ?? null,
         entityId: input.entityId ?? null,
+        badge: typeof badge === "number" ? badge : undefined,
         silent,
       });
       try {

@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { missingRequiredCorrectionPhases } from "../lib/correctionCycle.js";
 import { isDeliverableRequired, hasStepDeliverable, DELIVERABLE_LABELS } from "../lib/stepDeliverables.js";
+import { vc1State } from "../lib/startingProof.js";
 import { isOptionalDecisionStep, stepMode, missingRealizationFields, sanitizeRealizationData, OPTIONAL_STEP_LABELS, type OptionalStepCode } from "../lib/stepRealization.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
@@ -411,6 +412,19 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
           return reply.code(409).send({
             code: "deliverable_missing",
             message: `Livrable manquant — déposez « ${DELIVERABLE_LABELS[targetStatus.code] ?? "le livrable de l'étape"} » avant de passer à l'étape suivante.`,
+          });
+        }
+      }
+
+      // Planification : les DEUX dépôts VC1 sont obligatoires (demande opérateur
+      // 11/09/2026) — le manuscrit à corriger ET le fichier des couvertures —
+      // avant de passer à l'étape suivante. Une étape « passée » en est dispensée.
+      if (realizationMode !== "passe" && targetStatus.code === "PLANIFICATION") {
+        const missing = (await vc1State(id)).filter((s) => !s.has_file).map((s) => s.label);
+        if (missing.length > 0) {
+          return reply.code(409).send({
+            code: "vc1_missing",
+            message: `Fichiers manquants à la planification — déposez « ${missing.join(" » et « ")} » avant de passer à l'étape suivante.`,
           });
         }
       }

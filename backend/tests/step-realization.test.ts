@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, seedStepDeliverable, realizationPayload } from "./helpers.js";
+import { extractSessionCookie, seedStepDeliverable, realizationPayload , seedVc1 } from "./helpers.js";
 
 // Étapes « à option » (Expertise, Réécriture, Projet) — demande opérateur
 // 20/08/2026 : l'opérateur choisit « Réaliser » (avec les éléments) ou
@@ -51,7 +51,7 @@ describe("étapes « à option » : Réaliser / Passer", () => {
 
   it("Projet (Planification) est OBLIGATOIRE par défaut : « Passer » est refusé", async () => {
     const m = await manuscriptAt("PLANIFICATION");
-    await seedStepDeliverable(m.id, "PLANIFICATION");
+    await seedVc1(m.id);
     const res = await app.inject({
       method: "POST",
       url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`,
@@ -64,7 +64,7 @@ describe("étapes « à option » : Réaliser / Passer", () => {
 
   it("réaliser exige les éléments obligatoires, puis enregistre la décision", async () => {
     const m = await manuscriptAt("PLANIFICATION");
-    await seedStepDeliverable(m.id, "PLANIFICATION");
+    await seedVc1(m.id);
 
     // Sans le responsable ni le calendrier → refus.
     const incomplete = await app.inject({

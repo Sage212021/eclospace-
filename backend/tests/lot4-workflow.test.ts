@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, uniqueIsbnPrefix, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload } from "./helpers.js";
+import { extractSessionCookie, uniqueIsbnPrefix, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload , seedVc1 } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
@@ -103,7 +103,7 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
     // contractualisation est franchie plus tard, juste après la validation du BAT.
     // D-014 : Expertise puis Réécriture (étapes « à option ») précèdent la
     // Correction éditoriale ; on les passe ici pour atteindre la production.
-    await seedStepDeliverable(manuscript.id, "PLANIFICATION");
+    await seedVc1(manuscript.id);
     await validate(manuscript.id, "PLANIFICATION", realizationPayload("PLANIFICATION"));
     await validate(manuscript.id, "EXPERTISE", { step_decision: "passe", skip_reason: "N/A pour ce test" });
     await validate(manuscript.id, "REECRITURE", { step_decision: "passe", skip_reason: "N/A pour ce test" });

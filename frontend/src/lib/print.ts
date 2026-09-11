@@ -6,6 +6,7 @@
 // Aucune bibliothèque PDF lourde, fonctionne avec une connexion modeste.
 
 import type { AuthorWithdrawalVoucher, BookReceiptVoucher, ContractDetail, EditorialQuote, InvoiceDetail, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
+import { isReportDisclaimer } from "./tidyProse";
 
 // Coordonnées officielles de la maison — source unique pour tous les documents
 // imprimés (facture, avoir, et à venir : relevés, bons de commande, contrats).
@@ -1317,7 +1318,10 @@ export function printReadingReport(d: ReadingReportData, opts?: PrintOpts): void
     </div>
     ${
       d.overallComment
-        ? `<div style="margin-top:14px"><div class="party__label">${tr("Appréciation générale", "General assessment")}</div><div style="font-size:12.5px;color:#1f2937;white-space:pre-wrap;margin-top:4px">${escapeHtml(d.overallComment)}</div></div>`
+        ? `<div style="margin-top:14px"><div class="party__label">${tr("Appréciation générale", "General assessment")}</div><div style="font-size:12.5px;color:#1f2937;white-space:pre-wrap;margin-top:4px">${d.overallComment
+            .split("\n")
+            .map((line) => (isReportDisclaimer(line) ? `<strong>${escapeHtml(line)}</strong>` : escapeHtml(line)))
+            .join("\n")}</div></div>`
         : ""
     }`;
 

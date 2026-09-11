@@ -99,6 +99,15 @@ const REPORT_DISCLAIMERS = [
   "Ce rapport est un avis argumenté",
 ].sort((a, b) => b.length - a.length);
 
+// Vrai si le paragraphe est l'avertissement de portée du rapport (« Ce rapport
+// constitue un avis argumenté de relecteur et ne… ») — à mettre en gras au
+// rendu. Insensible à la casse et aux espaces de bord.
+export function isReportDisclaimer(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const t = text.trim().toLowerCase();
+  return REPORT_DISCLAIMERS.some((d) => t.startsWith(d.toLowerCase()));
+}
+
 // Handler `onPaste` réutilisable pour un <textarea> contrôlé : insère le texte
 // collé, remis en forme, à l'emplacement du curseur (en remplaçant la sélection
 // éventuelle). `tidy` permet de choisir la variante (générique par défaut).

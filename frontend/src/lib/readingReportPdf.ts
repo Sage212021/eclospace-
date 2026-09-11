@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { HOUSE, type ReadingReportData } from "./print";
+import { isReportDisclaimer } from "./tidyProse";
 
 // Rapport de lecture officiel (à en-tête Éclosion) en PDF côté navigateur — sert
 // de PREMIÈRE partie du document final envoyé au client/auteur, avant le rapport
@@ -94,9 +95,16 @@ export async function buildReadingReportPdf(d: ReadingReportData): Promise<Uint8
     if (y > 265) { doc.addPage(); y = 18; }
     doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(120);
     doc.text(label.toUpperCase(), L, y); y += 4;
-    doc.setFont("helvetica", value === RECO_LABELS[d.recommendation] ? "bold" : "normal"); doc.setFontSize(10.5); doc.setTextColor(11, 11, 12);
-    const lines = doc.splitTextToSize(value, W) as string[];
-    lines.forEach((ln) => { if (y > 285) { doc.addPage(); y = 18; } doc.text(ln, L, y); y += 5; });
+    doc.setFontSize(10.5); doc.setTextColor(11, 11, 12);
+    // On rend paragraphe par paragraphe : la recommandation et l'avertissement
+    // de portée (« Ce rapport constitue un avis argumenté… ») sont en GRAS.
+    const isReco = value === RECO_LABELS[d.recommendation];
+    value.split("\n").forEach((para) => {
+      const bold = isReco || isReportDisclaimer(para);
+      doc.setFont("helvetica", bold ? "bold" : "normal");
+      const lines = doc.splitTextToSize(para, W) as string[];
+      lines.forEach((ln) => { if (y > 285) { doc.addPage(); y = 18; } doc.text(ln, L, y); y += 5; });
+    });
     y += 4;
   };
   block("Recommandation", RECO_LABELS[d.recommendation] ?? d.recommendation);

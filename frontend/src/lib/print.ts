@@ -1328,6 +1328,127 @@ export function printReadingReport(d: ReadingReportData, opts?: PrintOpts): void
   openPrintWindow(`${tr("Rapport de lecture", "Reading report")} — ${d.manuscriptTitle}`, body, opts);
 }
 
+// === Planning du projet (étape Planification) ===============================
+// Document officiel généré par Eclospace à partir du planning SAISI (plus de
+// fichier externe). En-tête maison, tableau professionnel des activités, et bloc
+// « Direction éditoriale » en bas à DROITE (signature + cachet enregistré).
+export interface ProjectPlanPrintData {
+  manuscriptTitle: string;
+  manuscriptNumber: string;
+  managerName: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  objectives: string | null;
+  notes: string | null;
+  version: number;
+  activities: {
+    label: string;
+    responsible: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    priority: "basse" | "normale" | "haute";
+    status: "a_faire" | "en_cours" | "termine";
+    dependencies: string | null;
+    observations: string | null;
+  }[];
+}
+
+const PLAN_PRIORITY_LABELS = { basse: "Basse", normale: "Normale", haute: "Haute" } as const;
+const PLAN_STATUS_LABELS = { a_faire: "À faire", en_cours: "En cours", termine: "Terminé" } as const;
+
+function planDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString(locale(), { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+function planDurationDays(a: string | null, b: string | null): number | null {
+  if (!a || !b) return null;
+  const da = new Date(a).getTime();
+  const db = new Date(b).getTime();
+  if (Number.isNaN(da) || Number.isNaN(db) || db < da) return null;
+  return Math.round((db - da) / 86_400_000) + 1; // inclusif
+}
+
+export function printProjectPlan(d: ProjectPlanPrintData, opts?: PrintOpts, cachetEditoriale?: string | null): void {
+  const done = d.activities.filter((a) => a.status === "termine").length;
+  const progress = d.activities.length > 0 ? Math.round((done / d.activities.length) * 100) : 0;
+  const globalDuration = planDurationDays(d.startDate, d.endDate);
+  const now = new Date().toLocaleDateString(locale(), { day: "2-digit", month: "2-digit", year: "numeric" });
+  const ref = `PLAN-${d.manuscriptNumber}${d.version > 1 ? ` · v${d.version}` : ""}`;
+
+  const rows = d.activities.length
+    ? d.activities
+        .map((a) => {
+          const dur = planDurationDays(a.startDate, a.endDate);
+          const extra = [a.dependencies ? `${tr("Dépend.", "Deps")} : ${escapeHtml(a.dependencies)}` : "", a.observations ? escapeHtml(a.observations) : ""]
+            .filter(Boolean)
+            .join(" — ");
+          return `<tr>
+            <td><div style="font-weight:600">${escapeHtml(a.label)}</div>${extra ? `<div style="font-size:10.5px;color:#6b7280;margin-top:2px">${extra}</div>` : ""}</td>
+            <td>${escapeHtml(a.responsible ?? "—")}</td>
+            <td class="num">${planDate(a.startDate)}</td>
+            <td class="num">${planDate(a.endDate)}</td>
+            <td class="num r">${dur !== null ? `${dur} j` : "—"}</td>
+            <td>${PLAN_PRIORITY_LABELS[a.priority]}</td>
+            <td>${PLAN_STATUS_LABELS[a.status]}</td>
+          </tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="7" style="color:#6b7280">${tr("Aucune activité renseignée.", "No activity yet.")}</td></tr>`;
+
+  const cachetBlock = cachetEditoriale
+    ? `<img src="${cachetEditoriale}" alt="${tr("Cachet Direction éditoriale", "Editorial Direction stamp")}" style="max-height:96px;max-width:200px;object-fit:contain;display:block;margin-left:auto">`
+    : `<div style="border-top:1px solid #0b0b0c;margin-top:46px;padding-top:4px;font-size:10.5px;color:#6b7280">${tr("Signature et cachet", "Signature and stamp")}</div>`;
+
+  const body = `
+    <div class="doc__title">${tr("PLANNING DU PROJET", "PROJECT PLAN")}</div>
+    <div class="meta">
+      <span>${tr("Réf.", "Ref.")} <b class="num">${escapeHtml(ref)}</b></span>
+      <span>${tr("Généré le", "Generated on")} <b class="num">${escapeHtml(now)}</b></span>
+      ${progress ? `<span><span class="badge">${tr("Avancement", "Progress")} ${progress}%</span></span>` : ""}
+    </div>
+
+    <div class="party">
+      <div class="party__label">${tr("Ouvrage", "Work")}</div>
+      <div class="party__name">${escapeHtml(d.manuscriptTitle)} <span class="num" style="color:#6b7280;font-weight:400">${escapeHtml(d.manuscriptNumber)}</span></div>
+    </div>
+
+    <div class="meta">
+      ${d.managerName ? `<span>${tr("Responsable du projet", "Project lead")} : <b>${escapeHtml(d.managerName)}</b></span>` : ""}
+      <span>${tr("Début prévu", "Planned start")} : <b class="num">${planDate(d.startDate)}</b></span>
+      <span>${tr("Fin prévue", "Planned end")} : <b class="num">${planDate(d.endDate)}</b></span>
+      ${globalDuration !== null ? `<span>${tr("Durée", "Duration")} : <b class="num">${globalDuration} j</b></span>` : ""}
+    </div>
+
+    ${d.objectives ? `<div style="margin:0 0 14px"><div class="party__label">${tr("Objectifs / livrables", "Objectives / deliverables")}</div><div style="font-size:12.5px;color:#1f2937;white-space:pre-wrap;margin-top:4px">${escapeHtml(d.objectives)}</div></div>` : ""}
+
+    <table class="lines">
+      <thead><tr>
+        <th>${tr("Activité", "Activity")}</th>
+        <th>${tr("Responsable", "Owner")}</th>
+        <th>${tr("Début", "Start")}</th>
+        <th>${tr("Fin", "End")}</th>
+        <th class="r">${tr("Durée", "Duration")}</th>
+        <th>${tr("Priorité", "Priority")}</th>
+        <th>${tr("Statut", "Status")}</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    ${d.notes ? `<div style="margin:16px 0 0"><div class="party__label">${tr("Observations et points de vigilance", "Notes and watch points")}</div><div style="font-size:12.5px;color:#1f2937;white-space:pre-wrap;margin-top:4px">${escapeHtml(d.notes)}</div></div>` : ""}
+
+    <!-- Bloc signature réservé à la Direction éditoriale, à l'extrême droite. -->
+    <div style="margin-top:40px;display:flex;justify-content:flex-end">
+      <div style="min-width:240px;text-align:right">
+        <div class="party__label">${tr("Direction éditoriale", "Editorial Direction")}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px">${tr("Signature et cachet", "Signature and stamp")}</div>
+        <div style="margin-top:8px">${cachetBlock}</div>
+      </div>
+    </div>`;
+
+  openPrintWindow(`${tr("Planning du projet", "Project plan")} — ${d.manuscriptTitle}`, body, opts);
+}
+
 // === Pièces du pôle Stock & magasin (revue opérateur du 27/08/2026) ===
 // Mise en page fidèle aux imprimés maison (revue de fidélité du 27/08/2026).
 

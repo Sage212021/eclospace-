@@ -80,6 +80,7 @@ import { AiReadingLauncher } from "../components/AiReadingLauncher";
 import { AiTrashSection } from "../components/AiTrashSection";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 import { ManuscriptStockSection } from "../components/ManuscriptStockSection";
+import { ProjectPlanSection } from "../components/ProjectPlanSection";
 import { pasteTidied } from "../lib/tidyProse";
 
 interface ManuscriptDetailProps {
@@ -532,7 +533,15 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         {canDecide && <DecisionLetterCard manuscriptId={manuscript.id} />}
 
         {manuscript.status.code === "PLANIFICATION" && (
-          <StartingProofPanel manuscriptId={manuscript.id} canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")} />
+          <>
+            <ProjectPlanSection
+              manuscriptId={manuscript.id}
+              manuscriptTitle={manuscript.title}
+              manuscriptNumber={manuscript.manuscriptNumber}
+              canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")}
+            />
+            <StartingProofPanel manuscriptId={manuscript.id} canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")} />
+          </>
         )}
 
         {/* Acceptation sous conditions (audit éditorial, point n°2) : suivi des

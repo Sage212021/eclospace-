@@ -4622,6 +4622,46 @@ export function clearBrandingStamp(key: BrandingStampKey) {
   return request<Branding>(`/api/v1/branding/${key}?clear=1`, { method: "POST", body: "{}" });
 }
 
+// --- Planification du projet (étape PLANIFICATION) ---------------------------
+export type ProjectActivityPriority = "basse" | "normale" | "haute";
+export type ProjectActivityStatus = "a_faire" | "en_cours" | "termine";
+export interface ProjectPlanActivity {
+  id?: string;
+  label: string;
+  responsible: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  priority: ProjectActivityPriority;
+  status: ProjectActivityStatus;
+  dependencies: string | null;
+  observations: string | null;
+}
+export interface ProjectPlan {
+  id: string;
+  manager_name: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  objectives: string | null;
+  notes: string | null;
+  version: number;
+  updated_at: string;
+  activities: ProjectPlanActivity[];
+}
+export interface ProjectPlanInput {
+  manager_name?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  objectives?: string | null;
+  notes?: string | null;
+  activities: ProjectPlanActivity[];
+}
+export function getProjectPlan(manuscriptId: string) {
+  return request<ProjectPlan | null>(`/api/v1/manuscripts/${manuscriptId}/project-plan`);
+}
+export function saveProjectPlan(manuscriptId: string, input: ProjectPlanInput) {
+  return request<ProjectPlan>(`/api/v1/manuscripts/${manuscriptId}/project-plan`, { method: "PUT", body: JSON.stringify(input) });
+}
+
 // --- Module « Présences & Temps de travail » (évolution, incrément 1) --------
 export type WorkScheduleScope = "company" | "department" | "employee";
 

@@ -2050,16 +2050,16 @@ async function main() {
   // Cachets & signature officiels (demande opérateur 09/09/2026) : valeurs par
   // défaut installées une seule fois (création). Un téléversement ultérieur par
   // l'administration est préservé (on ne réécrit jamais un réglage existant).
+  const stampDataUrl = (file: string): string | null => {
+    try {
+      const buf = readFileSync(new URL(`../assets/stamps/${file}`, import.meta.url));
+      return `data:image/png;base64,${buf.toString("base64")}`;
+    } catch {
+      return null;
+    }
+  };
   const existingBranding = await prisma.setting.findUnique({ where: { key: BRANDING_KEY } });
   if (!existingBranding) {
-    const stampDataUrl = (file: string): string | null => {
-      try {
-        const buf = readFileSync(new URL(`../assets/stamps/${file}`, import.meta.url));
-        return `data:image/png;base64,${buf.toString("base64")}`;
-      } catch {
-        return null;
-      }
-    };
     await prisma.setting.create({
       data: {
         key: BRANDING_KEY,
@@ -2072,6 +2072,18 @@ async function main() {
       },
     });
     console.log("Cachets & signature officiels : valeurs par défaut installées.");
+  } else {
+    // On NE réécrit jamais un cachet déjà téléversé par l'administration ; on
+    // comble seulement le cachet « Direction éditoriale » s'il est ABSENT, avec
+    // le cachet officiel fourni (pour qu'il apparaisse sur les documents).
+    const v = (existingBranding.value ?? {}) as Record<string, unknown>;
+    if (!v.cachet_editoriale) {
+      const url = stampDataUrl("cachet-direction-editoriale.png");
+      if (url) {
+        await prisma.setting.update({ where: { key: BRANDING_KEY }, data: { value: { ...v, cachet_editoriale: url } } });
+        console.log("Cachet « Direction éditoriale » : cachet officiel installé (était absent).");
+      }
+    }
   }
 
   console.log("Seed Lot 0 terminé.");

@@ -24,6 +24,9 @@ export function DocPrintMenu({ onPrint, label = "Imprimer / PDF", extras, onDown
             📄 Télécharger le PDF (net)
           </button>
         )}
+        {/* Aperçu plein écran (défilable), sans lancer l'impression — pratique
+            sur téléphone pour VOIR le document avant de l'imprimer / l'enregistrer. */}
+        <button style={{ ...itemStyle, fontWeight: 600 }} onClick={() => choose({ preview: true })}>👁 Aperçu à l'écran</button>
         <button style={itemStyle} onClick={() => choose({})}>Numérique / PDF</button>
         <button style={itemStyle} onClick={() => choose({ embed: true })}>Avec papier à en-tête intégré</button>
         <button style={itemStyle} onClick={() => choose({ letterhead: true })}>Sur papier à en-tête vierge</button>

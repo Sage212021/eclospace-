@@ -38,6 +38,10 @@ export const HOUSE = {
 export interface PrintOpts {
   letterhead?: boolean;
   embed?: boolean;
+  // Aperçu à l'écran : ouvre le document en plein écran (onglet), SANS déclencher
+  // l'impression automatiquement — pour le consulter (utile sur téléphone). Le
+  // bouton « Imprimer / Enregistrer en PDF » du document reste disponible.
+  preview?: boolean;
 }
 
 // En-tête et pied communs à tous les documents officiels. Styles inlinés : la
@@ -158,7 +162,7 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
 // l'ancienne méthode (script inline `window.print()`) ne s'exécutait donc jamais
 // et rien ne s'imprimait. Appeler `print()` depuis le parent est conforme à la
 // CSP et fiable sur ordinateur comme sur mobile.
-function wirePrint(win: Window, doc: Document): void {
+function wirePrint(win: Window, doc: Document, autoPrint = true): void {
   let printed = false;
   const fire = () => {
     if (printed) return;
@@ -185,6 +189,10 @@ function wirePrint(win: Window, doc: Document): void {
   // et, filet de sécurité, après un court délai si load ne se déclenche pas
   // (variable selon les navigateurs après un document.write). Le verrou `printed`
   // évite d'ouvrir deux fois la boîte d'impression.
+  // Aperçu à l'écran : on NE lance PAS l'impression automatiquement — la personne
+  // consulte le document (défilable, plein écran) puis clique le bouton si elle
+  // veut imprimer / enregistrer en PDF.
+  if (!autoPrint) return;
   win.addEventListener("load", fire);
   // Filet de sécurité si « load » ne se déclenche pas. Marge un peu large pour
   // laisser le filigrane (image) se charger avant l'impression, y compris sur
@@ -196,7 +204,7 @@ function wirePrint(win: Window, doc: Document): void {
 // Impression via une IFRAME cachée : impression directe et silencieuse, idéale
 // sur ORDINATEUR, et non bloquée par les bloqueurs de pop-up (utile quand
 // l'impression suit une étape asynchrone, ex. « Établir la facture »).
-function printViaIframe(html: string): boolean {
+function printViaIframe(html: string, autoPrint = true): boolean {
   try {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
@@ -213,7 +221,7 @@ function printViaIframe(html: string): boolean {
     idoc.open();
     idoc.write(html);
     idoc.close();
-    wirePrint(win, idoc);
+    wirePrint(win, idoc, autoPrint);
     const remove = () => {
       if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
     };
@@ -229,13 +237,13 @@ function printViaIframe(html: string): boolean {
 // CORRECTEMENT sur mobile — contrairement à l'iframe, qui sur Android Chrome
 // imprime la page entière de l'application au lieu du document. Peut être bloqué
 // par un bloqueur de pop-up si l'appel ne suit pas une action de l'utilisateur.
-function printViaWindow(html: string): boolean {
+function printViaWindow(html: string, autoPrint = true): boolean {
   const w = window.open("", "_blank");
   if (!w) return false;
   w.document.open();
   w.document.write(html);
   w.document.close();
-  wirePrint(w, w.document);
+  wirePrint(w, w.document, autoPrint);
   // Referme l'onglet une fois l'impression terminée (au mieux : afterprint
   // n'est pas garanti sur tous les mobiles — l'utilisateur peut fermer l'onglet).
   try {
@@ -248,6 +256,18 @@ function printViaWindow(html: string): boolean {
 
 function openPrintWindow(title: string, body: string, opts?: PrintOpts): void {
   const html = documentShell(title, body, opts);
+
+  // Aperçu à l'écran (téléphone) : ouvrir un onglet VISIBLE, sans lancer
+  // l'impression. La personne consulte le document puis, si elle veut, clique le
+  // bouton « Imprimer / Enregistrer en PDF » en bas.
+  if (opts?.preview) {
+    if (printViaWindow(html, false)) return;
+    // Repli : onglet bloqué (pop-up) → on tente l'iframe (au moins l'impression
+    // reste possible) puis on avertit.
+    if (printViaIframe(html, false)) return;
+    alert(tr("Autorisez les fenêtres pop-up pour afficher l'aperçu.", "Allow pop-up windows to show the preview."));
+    return;
+  }
 
   // Choix de la méthode selon l'appareil :
   //  • MOBILE : nouvel onglet d'abord (l'iframe imprime la page entière sur

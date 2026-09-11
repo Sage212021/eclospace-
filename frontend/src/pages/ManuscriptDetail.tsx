@@ -570,7 +570,9 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           />
         )}
 
-        {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && (
+        {/* PLANIFICATION : plus de dépôt de fichier de planning — le planning est
+            saisi dans « Planification du projet » (ProjectPlanSection) ci-dessus. */}
+        {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && manuscript.status.code !== "PLANIFICATION" && (
           <StepDeliverableBlock
             manuscriptId={manuscript.id}
             stepCode={manuscript.status.code}

@@ -215,24 +215,25 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
   // Paramètre du workflow : liste des étapes soumises au verrou « livrable de
   // sortie » (un fichier doit être déposé avant d'avancer). Modifiable par un
   // administrateur ; sert au « pas d'avancement sans le fichier attendu ».
+  // PLANIFICATION n'est plus un « livrable fichier » : le planning est saisi
+  // dans Eclospace et lié au projet (plus de dépôt de fichier ni de verrou).
   const CANDIDATE_STEPS = [
-    { code: "PLANIFICATION", label: "Planification du projet" },
     { code: "EXPERTISE", label: "Expertise scientifique" },
     { code: "REECRITURE", label: "Réécriture éditoriale" },
     { code: "MISE_EN_PAGE", label: "Mise en page" },
     { code: "INFOGRAPHIE", label: "Infographie" },
   ];
   const DELIVERABLE_KEY = "workflow_deliverable_steps";
-  const DEFAULT_DELIVERABLE = ["PLANIFICATION", "EXPERTISE", "REECRITURE"];
+  const DEFAULT_DELIVERABLE = ["EXPERTISE", "REECRITURE"];
 
   fastify.get("/api/v1/workflow-deliverable-steps", { preHandler: requireAuth }, async (_request, reply) => {
     const row = await prisma.setting.findUnique({ where: { key: DELIVERABLE_KEY } });
-    const stored = Array.isArray(row?.value) ? (row!.value as string[]) : DEFAULT_DELIVERABLE;
+    const stored = (Array.isArray(row?.value) ? (row!.value as string[]) : DEFAULT_DELIVERABLE).filter((s) => s !== "PLANIFICATION");
     return reply.send({ steps: stored, candidates: CANDIDATE_STEPS });
   });
 
   fastify.put("/api/v1/workflow-deliverable-steps", { preHandler: requirePermission("settings", "administration") }, async (request, reply) => {
-    const parsed = z.object({ steps: z.array(z.enum(["PLANIFICATION", "EXPERTISE", "REECRITURE", "MISE_EN_PAGE", "INFOGRAPHIE"])) }).safeParse(request.body);
+    const parsed = z.object({ steps: z.array(z.enum(["EXPERTISE", "REECRITURE", "MISE_EN_PAGE", "INFOGRAPHIE"])) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Liste d'étapes invalide.", details: parsed.error.issues });
     const existing = await prisma.setting.findUnique({ where: { key: DELIVERABLE_KEY } });
     const updated = await prisma.setting.upsert({

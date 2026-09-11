@@ -62,6 +62,7 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [cachet, setCachet] = useState<string | null>(null);
@@ -106,8 +107,10 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
     touch();
   };
 
-  async function save() {
-    if (activities.some((a) => !a.label.trim())) { setError("Chaque activité doit avoir un intitulé."); return; }
+  const hasEmptyLabel = activities.some((a) => !a.label.trim());
+
+  async function save(quiet = false) {
+    if (hasEmptyLabel) { if (!quiet) setError("Chaque activité doit avoir un intitulé."); return; }
     setBusy(true); setError(null);
     try {
       const saved = await saveProjectPlan(manuscriptId, {
@@ -129,13 +132,24 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
       });
       setVersion(saved.version);
       setDirty(false);
-      setMessage(`Planning enregistré (version ${saved.version}).`);
+      setSavedAt(new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
+      if (!quiet) setMessage(`Planning enregistré (version ${saved.version}).`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Enregistrement impossible.");
     } finally {
       setBusy(false);
     }
   }
+
+  // Sauvegarde AUTOMATIQUE : après une pause de saisie, le planning est
+  // enregistré sans action de l'utilisateur (dès qu'il est valide). Le bouton
+  // « Enregistrer maintenant » reste disponible comme filet.
+  useEffect(() => {
+    if (!canManage || !dirty || busy || hasEmptyLabel) return;
+    const t = setTimeout(() => { void save(true); }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, busy, hasEmptyLabel, manager, start, end, objectives, notes, activities]);
 
   const printData = (): ProjectPlanPrintData => ({
     manuscriptTitle,
@@ -251,15 +265,14 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
       </label>
 
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", borderTop: "1px solid var(--line)", paddingTop: 10 }}>
-        {canManage && <Button variant="add" size="sm" type="button" disabled={busy || !dirty} onClick={save}>{busy ? "…" : "Enregistrer le planning"}</Button>}
-        {version > 0 && <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Version {version} enregistrée.</span>}
+        {canManage && <Button variant="add" size="sm" type="button" disabled={busy || !dirty} onClick={() => save(false)}>{busy ? "…" : "Enregistrer maintenant"}</Button>}
+        <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
+          {busy ? "Enregistrement…" : dirty ? "Modifications en cours — sauvegarde automatique…" : savedAt ? `Enregistré automatiquement à ${savedAt}${version ? ` (version ${version})` : ""}.` : version > 0 ? `Version ${version} enregistrée.` : "Sauvegarde automatique activée."}
+        </span>
         <div style={{ marginLeft: "auto" }}>
           <DocPrintMenu
             label="Aperçu / Imprimer / PDF"
-            onPrint={(opts) => {
-              if (dirty) { setError("Enregistrez le planning avant d'imprimer (des modifications ne sont pas sauvegardées)."); return; }
-              printProjectPlan(printData(), opts, cachet);
-            }}
+            onPrint={(opts) => printProjectPlan(printData(), opts, cachet)}
           />
         </div>
       </div>

@@ -13,7 +13,9 @@ import { prisma } from "./prisma.js";
 // distinct à l'étape suivante. Mise en page & Infographie ont déjà un verrou
 // métier propre (fiche technique, convergence) ; l'administrateur peut les
 // ajouter au verrou fichier depuis les Paramètres si besoin.
-export const DEFAULT_DELIVERABLE_STEPS = ["PLANIFICATION", "EXPERTISE", "REECRITURE"];
+// PLANIFICATION exclue : le planning est désormais saisi dans Eclospace (lié au
+// projet), il n'y a plus de fichier à déposer ni de verrou fichier à cette étape.
+export const DEFAULT_DELIVERABLE_STEPS = ["EXPERTISE", "REECRITURE"];
 
 // Libellé du livrable attendu par étape (aide à l'écran ; purement informatif).
 export const DELIVERABLE_LABELS: Record<string, string> = {
@@ -36,7 +38,9 @@ export function deliverableDocTitle(stepCode: string, filename: string): string 
 export async function deliverableRequiredSteps(): Promise<string[]> {
   const row = await prisma.setting.findUnique({ where: { key: SETTINGS_KEY } });
   const value = row?.value as unknown;
-  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string");
+  // PLANIFICATION toujours exclue (planning saisi, plus de fichier), même si un
+  // réglage plus ancien la contenait encore.
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string" && v !== "PLANIFICATION");
   return DEFAULT_DELIVERABLE_STEPS;
 }
 

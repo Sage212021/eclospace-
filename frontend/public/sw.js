@@ -8,7 +8,7 @@
 //   • le reste → comportement navigateur par défaut.
 // Incrémenter la version ci-dessous force le remplacement de l'ancien cache.
 
-const CACHE = "eclospace-shell-v4";
+const CACHE = "eclospace-shell-v5";
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -48,7 +48,19 @@ self.addEventListener("push", (event) => {
     silent: data.silent === true,
     data: { entityType: data.entityType || null, entityId: data.entityId || null, category: data.category || null },
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  // Met à jour le COMPTEUR sur l'icône de l'application (écran d'accueil), même
+  // application fermée : le serveur envoie le total de non-lus du destinataire
+  // dans `data.badge`. L'API « Badging » est ignorée là où elle n'existe pas.
+  const setBadge = async () => {
+    if (typeof data.badge !== "number") return;
+    try {
+      if (data.badge > 0 && self.navigator.setAppBadge) await self.navigator.setAppBadge(data.badge);
+      else if (self.navigator.clearAppBadge) await self.navigator.clearAppBadge();
+    } catch {
+      /* API indisponible : sans effet */
+    }
+  };
+  event.waitUntil(Promise.all([self.registration.showNotification(title, options), setBadge()]));
 });
 
 // Clic sur la notification : ouvre Eclospace (ou ramène l'onglet déjà ouvert au

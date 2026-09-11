@@ -1,5 +1,6 @@
 import { prisma } from "./prisma.js";
 import { getOrCreateConversation } from "./chat.js";
+import { sendWebPushToUsers } from "./pushWeb.js";
 
 // « Quoi de neuf » — distribution automatique des notes de version.
 //
@@ -160,12 +161,28 @@ export async function dispatchReleaseNotes(): Promise<{ notes: number; notificat
 
     // Ajout : personne concernée qui n'a jamais reçu la note (aucun envoi, même
     // supprimé) → on la lui remet dans la messagerie.
+    const added: string[] = [];
     for (const recipient of audience) {
       if (deliveredTo.has(recipient)) continue;
       const conv = await getOrCreateConversation(sys.id, recipient);
       await prisma.chatMessage.create({ data: { conversationId: conv.id, senderId: sys.id, body } });
       await prisma.conversation.update({ where: { id: conv.id }, data: { lastMessageAt: new Date() } });
+      added.push(recipient);
       notifications++;
+    }
+
+    // Notification « push » sur le téléphone (même application fermée) aux SEULS
+    // nouveaux destinataires : la nouveauté s'affiche comme un message et met à
+    // jour le compteur de l'icône. Au meilleur effort.
+    if (added.length > 0) {
+      void sendWebPushToUsers(added, {
+        type: "annonce",
+        priority: "medium",
+        title: SYSTEM_SENDER_USERNAME,
+        body: `📣 ${note.title}`,
+        entityType: "release_note",
+        entityId: note.id,
+      }).catch(() => {});
     }
 
     if (!note.dispatchedAt) {

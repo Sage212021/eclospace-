@@ -49,6 +49,7 @@ function view(plan: {
   notes: string | null;
   version: number;
   updatedAt: Date;
+  pdfGeneratedAt: Date | null;
   activities: {
     id: string;
     label: string;
@@ -72,6 +73,7 @@ function view(plan: {
     notes: plan.notes,
     version: plan.version,
     updated_at: plan.updatedAt.toISOString(),
+    pdf_generated_at: plan.pdfGeneratedAt?.toISOString() ?? null,
     activities: [...plan.activities]
       .sort((a, b) => a.displayOrder - b.displayOrder)
       .map((a) => ({
@@ -169,6 +171,31 @@ export default async function projectPlanRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
       });
       return reply.send(view(saved));
+    },
+  );
+
+  // Marque le planning comme « aperçu généré / téléchargé » : appelé par le
+  // navigateur au moment où l'utilisateur télécharge le PDF ou lance
+  // l'impression du document officiel. C'est cette trace qui autorise ensuite
+  // le passage à l'étape suivante (garde-fou `plan_not_generated` du workflow).
+  fastify.post(
+    "/api/v1/manuscripts/:id/project-plan/mark-generated",
+    { preHandler: requirePermission("manuscripts", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const plan = await prisma.projectPlan.findFirst({ where: { manuscriptId: id, deletedAt: null }, select: { id: true } });
+      if (!plan) return reply.code(404).send({ code: "not_found", message: "Aucun planning enregistré pour ce manuscrit." });
+      const now = new Date();
+      await prisma.projectPlan.update({ where: { id: plan.id }, data: { pdfGeneratedAt: now, pdfGeneratedBy: request.user!.id } });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "project_plan",
+        entityId: plan.id,
+        newValues: { pdf_generated_at: now.toISOString() },
+        ipAddress: request.ip,
+      });
+      return reply.send({ pdf_generated_at: now.toISOString() });
     },
   );
 }

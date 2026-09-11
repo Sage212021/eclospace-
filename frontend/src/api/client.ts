@@ -4646,6 +4646,7 @@ export interface ProjectPlan {
   notes: string | null;
   version: number;
   updated_at: string;
+  pdf_generated_at: string | null;
   activities: ProjectPlanActivity[];
 }
 export interface ProjectPlanInput {
@@ -4661,6 +4662,11 @@ export function getProjectPlan(manuscriptId: string) {
 }
 export function saveProjectPlan(manuscriptId: string, input: ProjectPlanInput) {
   return request<ProjectPlan>(`/api/v1/manuscripts/${manuscriptId}/project-plan`, { method: "PUT", body: JSON.stringify(input) });
+}
+// Trace la génération/téléchargement de l'aperçu officiel du planning (autorise
+// ensuite le passage à l'étape suivante).
+export function markProjectPlanGenerated(manuscriptId: string) {
+  return request<{ pdf_generated_at: string }>(`/api/v1/manuscripts/${manuscriptId}/project-plan/mark-generated`, { method: "POST" });
 }
 
 // --- Module « Présences & Temps de travail » (évolution, incrément 1) --------

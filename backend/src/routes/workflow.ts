@@ -427,6 +427,15 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
             message: `Fichiers manquants à la planification — déposez « ${missing.join(" » et « ")} » avant de passer à l'étape suivante.`,
           });
         }
+        // L'aperçu (PDF officiel) du planning doit avoir été généré/téléchargé au
+        // moins une fois avant de quitter l'étape (demande opérateur 11/09/2026).
+        const plan = await prisma.projectPlan.findFirst({ where: { manuscriptId: id, deletedAt: null }, select: { pdfGeneratedAt: true } });
+        if (!plan?.pdfGeneratedAt) {
+          return reply.code(409).send({
+            code: "plan_not_generated",
+            message: "Aperçu du planning non téléchargé — ouvrez « Aperçu / Imprimer / PDF » et téléchargez le PDF du planning avant de passer à l'étape suivante.",
+          });
+        }
       }
 
       const nextStatus = await findNextApplicableStatus(targetStatus.stepOrder, manuscriptForNextStep);

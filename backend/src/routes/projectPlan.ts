@@ -22,6 +22,7 @@ const optionalDate = z
 const activitySchema = z.object({
   label: z.string().trim().min(1).max(300),
   responsible: z.string().trim().max(200).optional().nullable(),
+  location: z.string().trim().max(200).optional().nullable(),
   start_date: optionalDate,
   end_date: optionalDate,
   priority: z.nativeEnum(ProjectActivityPriority).default("normale"),
@@ -52,6 +53,7 @@ function view(plan: {
     id: string;
     label: string;
     responsible: string | null;
+    location: string | null;
     startDate: Date | null;
     endDate: Date | null;
     priority: ProjectActivityPriority;
@@ -76,6 +78,7 @@ function view(plan: {
         id: a.id,
         label: a.label,
         responsible: a.responsible,
+        location: a.location,
         start_date: a.startDate?.toISOString() ?? null,
         end_date: a.endDate?.toISOString() ?? null,
         priority: a.priority,
@@ -143,6 +146,7 @@ export default async function projectPlanRoutes(fastify: FastifyInstance) {
               planId,
               label: a.label,
               responsible: a.responsible ?? null,
+              location: a.location ?? null,
               startDate: a.start_date,
               endDate: a.end_date,
               priority: a.priority,

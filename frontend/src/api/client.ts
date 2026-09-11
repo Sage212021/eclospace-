@@ -4629,6 +4629,7 @@ export interface ProjectPlanActivity {
   id?: string;
   label: string;
   responsible: string | null;
+  location: string | null;
   start_date: string | null;
   end_date: string | null;
   priority: ProjectActivityPriority;

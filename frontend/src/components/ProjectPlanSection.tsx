@@ -31,6 +31,7 @@ const STATUSES: { value: ProjectActivityStatus; label: string }[] = [
 const emptyActivity = (): ProjectPlanActivity => ({
   label: "",
   responsible: "",
+  location: "",
   start_date: null,
   end_date: null,
   priority: "normale",
@@ -76,7 +77,7 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
           setEnd(toDateInput(p.end_date));
           setObjectives(p.objectives ?? "");
           setNotes(p.notes ?? "");
-          setActivities(p.activities.map((a) => ({ ...a, responsible: a.responsible ?? "", dependencies: a.dependencies ?? "", observations: a.observations ?? "" })));
+          setActivities(p.activities.map((a) => ({ ...a, responsible: a.responsible ?? "", location: a.location ?? "", dependencies: a.dependencies ?? "", observations: a.observations ?? "" })));
           setVersion(p.version);
         }
       })
@@ -122,6 +123,7 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
         activities: activities.map((a) => ({
           label: a.label.trim(),
           responsible: (a.responsible ?? "").trim() || null,
+          location: (a.location ?? "").trim() || null,
           start_date: a.start_date || null,
           end_date: a.end_date || null,
           priority: a.priority,
@@ -162,6 +164,7 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
     version: version || 1,
     activities: activities.map((a) => ({
       label: a.label, responsible: (a.responsible ?? "").trim() || null,
+      location: (a.location ?? "").trim() || null,
       startDate: a.start_date, endDate: a.end_date,
       priority: a.priority, status: a.status,
       dependencies: (a.dependencies ?? "").trim() || null, observations: (a.observations ?? "").trim() || null,
@@ -198,60 +201,59 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
         <span>Avancement : <b>{progress}%</b></span>
       </div>
 
-      {/* Activités */}
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead>
-            <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11 }}>
-              <th style={{ padding: "4px 6px", minWidth: 200 }}>Activité</th>
-              <th style={{ padding: "4px 6px" }}>Responsable</th>
-              <th style={{ padding: "4px 6px" }}>Début</th>
-              <th style={{ padding: "4px 6px" }}>Fin</th>
-              <th style={{ padding: "4px 6px" }}>Durée</th>
-              <th style={{ padding: "4px 6px" }}>Priorité</th>
-              <th style={{ padding: "4px 6px" }}>Statut</th>
-              {canManage && <th style={{ padding: "4px 6px" }}></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {activities.map((a, i) => {
-              const dur = durationDays(a.start_date, a.end_date);
-              return (
-                <tr key={i} style={{ borderTop: "1px solid var(--line)", verticalAlign: "top" }}>
-                  <td style={{ padding: "5px 6px" }}>
-                    <input value={a.label} disabled={!canManage} onChange={(e) => updateActivity(i, { label: e.target.value })} style={inputStyle} placeholder="Intitulé de l'activité" />
-                    <input value={a.dependencies ?? ""} disabled={!canManage} onChange={(e) => updateActivity(i, { dependencies: e.target.value })} style={{ ...inputStyle, marginTop: 4 }} placeholder="Dépendances (facultatif)" />
-                    <input value={a.observations ?? ""} disabled={!canManage} onChange={(e) => updateActivity(i, { observations: e.target.value })} style={{ ...inputStyle, marginTop: 4 }} placeholder="Observations (facultatif)" />
-                  </td>
-                  <td style={{ padding: "5px 6px" }}><input value={a.responsible ?? ""} disabled={!canManage} onChange={(e) => updateActivity(i, { responsible: e.target.value })} style={{ ...inputStyle, minWidth: 110 }} /></td>
-                  <td style={{ padding: "5px 6px" }}><input type="date" value={toDateInput(a.start_date)} disabled={!canManage} onChange={(e) => updateActivity(i, { start_date: e.target.value || null })} style={inputStyle} /></td>
-                  <td style={{ padding: "5px 6px" }}><input type="date" value={toDateInput(a.end_date)} disabled={!canManage} onChange={(e) => updateActivity(i, { end_date: e.target.value || null })} style={inputStyle} /></td>
-                  <td style={{ padding: "5px 6px", whiteSpace: "nowrap", color: "var(--muted)" }}>{dur !== null ? `${dur} j` : "—"}</td>
-                  <td style={{ padding: "5px 6px" }}>
-                    <select value={a.priority} disabled={!canManage} onChange={(e) => updateActivity(i, { priority: e.target.value as ProjectActivityPriority })} style={inputStyle}>
-                      {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-                    </select>
-                  </td>
-                  <td style={{ padding: "5px 6px" }}>
-                    <select value={a.status} disabled={!canManage} onChange={(e) => updateActivity(i, { status: e.target.value as ProjectActivityStatus })} style={inputStyle}>
-                      {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                    </select>
-                  </td>
-                  {canManage && (
-                    <td style={{ padding: "5px 6px", whiteSpace: "nowrap" }}>
-                      <button type="button" title="Monter" onClick={() => move(i, -1)} style={miniBtn}>↑</button>
-                      <button type="button" title="Descendre" onClick={() => move(i, 1)} style={miniBtn}>↓</button>
-                      <button type="button" title="Retirer" onClick={() => { setActivities((c) => c.filter((_, j) => j !== i)); touch(); }} style={{ ...miniBtn, color: "var(--danger, #B23A2E)" }}>✕</button>
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-            {activities.length === 0 && (
-              <tr><td colSpan={canManage ? 8 : 7} style={{ padding: "8px 6px", color: "var(--muted)" }}>Aucune activité. Ajoutez la première étape du projet.</td></tr>
-            )}
-          </tbody>
-        </table>
+      {/* Activités — une CARTE par activité (lisible sur mobile), en nombre
+          illimité (actions, dédicaces, lieux…). */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {activities.length === 0 && (
+          <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>Aucune activité. Ajoutez la première étape du projet (ou une date de dédicace).</p>
+        )}
+        {activities.map((a, i) => {
+          const dur = durationDays(a.start_date, a.end_date);
+          return (
+            <div key={i} style={{ border: "1px solid var(--line)", borderLeft: "3px solid var(--eclosion, #D9B21A)", borderRadius: 8, padding: 10, background: "var(--paper, #faf8f2)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", minWidth: 20 }}>{i + 1}.</span>
+                <input value={a.label} disabled={!canManage} onChange={(e) => updateActivity(i, { label: e.target.value })} style={{ ...inputStyle, fontWeight: 600 }} placeholder="Intitulé de l'activité (ex. : Dédicace à Douala)" />
+                {canManage && (
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    <button type="button" title="Monter" onClick={() => move(i, -1)} style={miniBtn}>↑</button>
+                    <button type="button" title="Descendre" onClick={() => move(i, 1)} style={miniBtn}>↓</button>
+                    <button type="button" title="Retirer" onClick={() => { setActivities((c) => c.filter((_, j) => j !== i)); touch(); }} style={{ ...miniBtn, color: "var(--danger, #B23A2E)" }}>✕</button>
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8 }}>
+                <label style={miniLabel}>Responsable
+                  <input value={a.responsible ?? ""} disabled={!canManage} onChange={(e) => updateActivity(i, { responsible: e.target.value })} style={inputStyle} placeholder="Qui ?" />
+                </label>
+                <label style={miniLabel}>Lieu
+                  <input value={a.location ?? ""} disabled={!canManage} onChange={(e) => updateActivity(i, { location: e.target.value })} style={inputStyle} placeholder="Ex. : Douala (GECAM)" />
+                </label>
+                <label style={miniLabel}>Début
+                  <input type="date" value={toDateInput(a.start_date)} disabled={!canManage} onChange={(e) => updateActivity(i, { start_date: e.target.value || null })} style={inputStyle} />
+                </label>
+                <label style={miniLabel}>Fin
+                  <input type="date" value={toDateInput(a.end_date)} disabled={!canManage} onChange={(e) => updateActivity(i, { end_date: e.target.value || null })} style={inputStyle} />
+                </label>
+                <label style={miniLabel}>Priorité
+                  <select value={a.priority} disabled={!canManage} onChange={(e) => updateActivity(i, { priority: e.target.value as ProjectActivityPriority })} style={inputStyle}>
+                    {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  </select>
+                </label>
+                <label style={miniLabel}>Statut
+                  <select value={a.status} disabled={!canManage} onChange={(e) => updateActivity(i, { status: e.target.value as ProjectActivityStatus })} style={inputStyle}>
+                    {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginTop: 8 }}>
+                <input value={a.dependencies ?? ""} disabled={!canManage} onChange={(e) => updateActivity(i, { dependencies: e.target.value })} style={inputStyle} placeholder="Dépendances (facultatif)" />
+                <input value={a.observations ?? ""} disabled={!canManage} onChange={(e) => updateActivity(i, { observations: e.target.value })} style={inputStyle} placeholder="Observations (facultatif)" />
+              </div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Durée : {dur !== null ? `${dur} j` : "—"}</div>
+            </div>
+          );
+        })}
       </div>
 
       {canManage && (
@@ -284,3 +286,4 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
 }
 
 const miniBtn: React.CSSProperties = { background: "none", border: "1px solid var(--line)", borderRadius: 6, padding: "2px 7px", fontSize: 12, cursor: "pointer", marginRight: 3 };
+const miniLabel: React.CSSProperties = { fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 2 };

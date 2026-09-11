@@ -2326,6 +2326,7 @@ model ProjectPlanActivity {
 
   label        String
   responsible  String? // responsable de l'activité (nominatif)
+  location     String? // lieu (utile pour les dédicaces : Douala GECAM, Yaoundé…)
   startDate    DateTime?               @map("start_date")
   endDate      DateTime?               @map("end_date")
   priority     ProjectActivityPriority @default(normale)

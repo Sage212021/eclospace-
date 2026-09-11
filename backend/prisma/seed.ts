@@ -1456,6 +1456,14 @@ async function main() {
       permissionModules: ["comite_lecture", "decision_editoriale", "contracts"],
       departmentCodes: ["COMLEC", "DIRED", "CORR", "JURID"],
     },
+    {
+      slug: "2026-09-planification-planning-projet",
+      version: "2026.09",
+      title: "Nouveauté — Planning du projet intégré (étape Planification)",
+      body: "À l'étape Planification, plus besoin de préparer un fichier ailleurs puis de le téléverser : renseignez le planning directement dans Eclospace (responsable, dates, objectifs, activités datées avec priorité, statut, dépendances et observations). Le système calcule la durée de chaque activité, la durée globale et l'avancement. Après enregistrement, le planning est lié au projet et devient un document officiel : aperçu + impression + PDF à en-tête Éclosion, avec en bas à droite le bloc « Direction éditoriale » (signature + cachet enregistré dans le système). Options de sortie habituelles : numérique, avec papier à en-tête intégré, ou sur papier à en-tête vierge.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "COMLEC"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

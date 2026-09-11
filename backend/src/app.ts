@@ -17,6 +17,7 @@ import pushRoutes from "./routes/push.js";
 import manuscriptRoutes from "./routes/manuscripts.js";
 import workflowRoutes from "./routes/workflow.js";
 import readingCommitteeRoutes from "./routes/readingCommittee.js";
+import projectPlanRoutes from "./routes/projectPlan.js";
 import userRoutes from "./routes/users.js";
 import referenceRoutes from "./routes/reference.js";
 import aiEditorialRoutes from "./routes/aiEditorial.js";
@@ -195,6 +196,7 @@ export async function buildApp() {
   await app.register(manuscriptRoutes);
   await app.register(workflowRoutes);
   await app.register(readingCommitteeRoutes);
+  await app.register(projectPlanRoutes);
   await app.register(userRoutes);
   await app.register(referenceRoutes);
   await app.register(aiEditorialRoutes);

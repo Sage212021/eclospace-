@@ -1965,6 +1965,7 @@ model Manuscript {
   stepTransitions      StepTransition[]
   readingAssignments   ReadingAssignment[]
   editorialDecisions   EditorialDecision[]
+  projectPlan          ProjectPlan?
   contracts            Contract[]
   tasks                Task[]
   productionSpecs      ProductionSpecs?
@@ -2276,6 +2277,65 @@ model EditorialDecision {
   letter DecisionLetter?
 
   @@map("editorial_decisions")
+}
+
+// Planification du projet (étape PLANIFICATION) — remplace le dépôt d'un fichier
+// externe : le planning est SAISI dans Eclospace, LIÉ au manuscrit, et devient un
+// document officiel généré (aperçu + PDF à en-tête, bloc signature/cachet
+// Direction éditoriale). Un plan par manuscrit ; `version` s'incrémente à chaque
+// enregistrement (traçabilité). Les activités sont remplacées à chaque save.
+model ProjectPlan {
+  id           String     @id @default(uuid())
+  manuscriptId String     @unique @map("manuscript_id")
+  manuscript   Manuscript @relation(fields: [manuscriptId], references: [id])
+
+  managerName String?   @map("manager_name") // responsable du projet (nominatif)
+  startDate   DateTime? @map("start_date") // date de début prévue
+  endDate     DateTime? @map("end_date") // date de fin prévue
+  objectives  String? // objectifs / livrables
+  notes       String? // observations et points de vigilance (global)
+  version     Int       @default(1)
+
+  activities ProjectPlanActivity[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("project_plans")
+}
+
+enum ProjectActivityPriority {
+  basse
+  normale
+  haute
+}
+
+enum ProjectActivityStatus {
+  a_faire
+  en_cours
+  termine
+}
+
+model ProjectPlanActivity {
+  id       String      @id @default(uuid())
+  planId   String      @map("plan_id")
+  plan     ProjectPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  label        String
+  responsible  String? // responsable de l'activité (nominatif)
+  startDate    DateTime?               @map("start_date")
+  endDate      DateTime?               @map("end_date")
+  priority     ProjectActivityPriority @default(normale)
+  status       ProjectActivityStatus   @default(a_faire)
+  dependencies String? // dépendances éventuelles (texte libre)
+  observations String?
+  displayOrder Int @default(0) @map("display_order")
+
+  @@index([planId])
+  @@map("project_plan_activities")
 }
 
 // Cycle de vie de la LETTRE de décision (D-… 10/09/2026) : générer une lettre ne

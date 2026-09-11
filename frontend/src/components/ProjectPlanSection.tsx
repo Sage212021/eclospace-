@@ -70,6 +70,12 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
   const [cachet, setCachet] = useState<string | null>(null);
 
   useEffect(() => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; setLoaded(true); } };
+    // Filet de sécurité : si la requête ne répond pas (réseau lent / point
+    // d'accès indisponible), on débloque l'affichage au bout de 8 s pour que la
+    // carte et le formulaire restent utilisables au lieu de rester bloqués.
+    const guard = setTimeout(finish, 8000);
     getProjectPlan(manuscriptId)
       .then((p) => {
         if (p) {
@@ -83,8 +89,9 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
         }
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."))
-      .finally(() => setLoaded(true));
+      .finally(() => { clearTimeout(guard); finish(); });
     getBranding().then((b) => setCachet(b.cachet_editoriale)).catch(() => {});
+    return () => clearTimeout(guard);
   }, [manuscriptId]);
 
   const progress = useMemo(() => {
@@ -172,7 +179,18 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
     })),
   });
 
-  if (!loaded) return null;
+  // La carte reste TOUJOURS visible à l'étape Planification — même si le
+  // chargement du planning est lent ou échoue, elle ne disparaît jamais
+  // (sinon elle « manquait » sur certains postes, cf. incident 11/09/2026).
+  if (!loaded) {
+    return (
+      <Card title="Planification du projet" subtitle="Renseignez le planning ici : il est lié au projet et devient un document officiel (aperçu + PDF), sans fichier à déposer." collapsible defaultOpen>
+        {error
+          ? <div style={{ background: "#f8e3df", color: "var(--danger, #B23A2E)", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>{error}</div>
+          : <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Chargement du planning…</p>}
+      </Card>
+    );
+  }
 
   return (
     <Card title="Planification du projet" subtitle="Renseignez le planning ici : il est lié au projet et devient un document officiel (aperçu + PDF), sans fichier à déposer." collapsible defaultOpen>

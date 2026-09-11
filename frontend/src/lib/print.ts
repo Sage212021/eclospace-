@@ -1344,6 +1344,7 @@ export interface ProjectPlanPrintData {
   activities: {
     label: string;
     responsible: string | null;
+    location: string | null;
     startDate: string | null;
     endDate: string | null;
     priority: "basse" | "normale" | "haute";
@@ -1380,7 +1381,11 @@ export function printProjectPlan(d: ProjectPlanPrintData, opts?: PrintOpts, cach
     ? d.activities
         .map((a) => {
           const dur = planDurationDays(a.startDate, a.endDate);
-          const extra = [a.dependencies ? `${tr("Dépend.", "Deps")} : ${escapeHtml(a.dependencies)}` : "", a.observations ? escapeHtml(a.observations) : ""]
+          const extra = [
+            a.location ? `${tr("Lieu", "Venue")} : ${escapeHtml(a.location)}` : "",
+            a.dependencies ? `${tr("Dépend.", "Deps")} : ${escapeHtml(a.dependencies)}` : "",
+            a.observations ? escapeHtml(a.observations) : "",
+          ]
             .filter(Boolean)
             .join(" — ");
           return `<tr>

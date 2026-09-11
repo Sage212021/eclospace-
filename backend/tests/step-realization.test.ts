@@ -62,32 +62,22 @@ describe("étapes « à option » : Réaliser / Passer", () => {
     expect(res.json().code).toBe("step_mandatory");
   });
 
-  it("réaliser exige les éléments obligatoires, puis enregistre la décision", async () => {
+  it("la Planification se valide sans double saisie (harmonisée avec le planning)", async () => {
+    // Plus aucun champ de réalisation à l'étape (responsable/calendrier sont
+    // saisis une seule fois dans le planning du projet) : « Réaliser » suffit,
+    // une fois les deux VC1 déposés.
     const m = await manuscriptAt("PLANIFICATION");
     await seedVc1(m.id);
-
-    // Sans le responsable ni le calendrier → refus.
-    const incomplete = await app.inject({
-      method: "POST",
-      url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`,
-      headers: { cookie },
-      payload: { step_decision: "realise", realization: { budget: 500000 } },
-    });
-    expect(incomplete.statusCode).toBe(409);
-    expect(incomplete.json().code).toBe("realization_incomplete");
-
-    // Complet → OK, décision tracée sur l'étape.
     const ok = await app.inject({
       method: "POST",
       url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`,
       headers: { cookie },
-      payload: realizationPayload("PLANIFICATION"),
+      payload: { step_decision: "realise" },
     });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().realization_mode).toBe("realise");
     const step = await prisma.manuscriptStep.findFirstOrThrow({ where: { manuscriptId: m.id, status: { code: "PLANIFICATION" } } });
     expect(step.realizationMode).toBe("realise");
-    expect((step.realizationData as { responsible_name?: string }).responsible_name).toBe("Resp. projet");
   });
 
   it("passer une étape facultative n'exige PAS de livrable (le motif suffit) et trace le motif", async () => {

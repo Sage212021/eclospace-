@@ -76,11 +76,11 @@ export const REALIZATION_FIELDS: Record<OptionalStepCode, RealizationField[]> = 
     },
   ],
   REECRITURE: [{ key: "note", label: "Note de réécriture (consignes / résumé des changements)", type: "textarea", required: true }],
-  PLANIFICATION: [
-    { key: "responsible_name", label: "Responsable du projet", type: "text", required: true },
-    { key: "schedule", label: "Calendrier prévisionnel (jalons clés)", type: "textarea", required: true },
-    { key: "budget", label: "Budget prévisionnel (XAF)", type: "number", required: false },
-  ],
+  // Plus AUCUN champ de réalisation pour la Planification : le responsable, le
+  // calendrier et les objectifs sont saisis UNE SEULE FOIS dans le planning du
+  // projet (carte « Planification du projet »). L'encadré de validation ne fait
+  // que confirmer l'étape — plus de double saisie (harmonisation 11/09/2026).
+  PLANIFICATION: [],
 };
 
 // Contrôle des éléments renseignés à la réalisation : renvoie la liste des

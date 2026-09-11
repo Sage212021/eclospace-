@@ -36,6 +36,7 @@ import {
   type ChatDirectoryEntry,
 } from "../api/client";
 import { printContract, printAuthorContract, AUTHOR_CONTRACT_ARTICLES } from "../lib/print";
+import { pasteTidied } from "../lib/tidyProse";
 import { getBranding } from "../api/client";
 import { buildAuthorContractPdf } from "../lib/contractPdf";
 import { Modal, Field } from "./Modal";
@@ -1010,7 +1011,7 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
             </select>
           </label>
           <label style={{ fontSize: 12, display: "block" }}>Texte de remplacement de l'article {artN} ({label})
-            <textarea value={artText} onChange={(e) => setArtText(e.target.value)} rows={6} placeholder="Laissez vide pour conserver le texte standard du modèle." style={{ ...inputStyle, resize: "vertical" }} />
+            <textarea value={artText} onChange={(e) => setArtText(e.target.value)} onPaste={(e) => pasteTidied(e, artText, setArtText)} rows={6} placeholder="Laissez vide pour conserver le texte standard du modèle." style={{ ...inputStyle, resize: "vertical" }} />
           </label>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
             {overrides[String(artN)] && <button onClick={() => saveOverride(true)} disabled={busy} style={secondaryButtonStyle}>Rétablir le texte standard</button>}
@@ -1026,7 +1027,7 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
             {clauses.map((cl, i) => (
               <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 6, padding: 8 }}>
                 <input value={cl.title} onChange={(e) => setClauses((cs) => cs.map((c, j) => j === i ? { ...c, title: e.target.value } : c))} placeholder="Intitulé de la clause" style={{ ...inputStyle, marginBottom: 6 }} />
-                <textarea value={cl.body} onChange={(e) => setClauses((cs) => cs.map((c, j) => j === i ? { ...c, body: e.target.value } : c))} rows={3} placeholder="Texte de la clause" style={{ ...inputStyle, resize: "vertical" }} />
+                <textarea value={cl.body} onChange={(e) => setClauses((cs) => cs.map((c, j) => j === i ? { ...c, body: e.target.value } : c))} onPaste={(e) => pasteTidied(e, cl.body, (next) => setClauses((cs) => cs.map((c, j) => j === i ? { ...c, body: next } : c)))} rows={3} placeholder="Texte de la clause" style={{ ...inputStyle, resize: "vertical" }} />
                 <div style={{ textAlign: "right", marginTop: 4 }}>
                   <button onClick={() => setClauses((cs) => cs.filter((_, j) => j !== i))} style={{ ...secondaryButtonStyle, color: "var(--alert, #B23A2E)" }}>Retirer</button>
                 </div>

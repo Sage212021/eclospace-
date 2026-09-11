@@ -64,7 +64,6 @@ import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
 import { TasksSection } from "../components/TasksSection";
 import { CorrectionSection } from "../components/CorrectionSection";
 import { CorrectionCyclePanel } from "../components/CorrectionCyclePanel";
-import { StartingProofPanel } from "../components/StartingProofPanel";
 import { StepDeliverableBlock } from "../components/StepDeliverableBlock";
 import { ProductionSection } from "../components/ProductionSection";
 import { IsbnSection } from "../components/IsbnSection";
@@ -533,15 +532,12 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         {canDecide && <DecisionLetterCard manuscriptId={manuscript.id} />}
 
         {manuscript.status.code === "PLANIFICATION" && (
-          <>
-            <ProjectPlanSection
-              manuscriptId={manuscript.id}
-              manuscriptTitle={manuscript.title}
-              manuscriptNumber={manuscript.manuscriptNumber}
-              canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")}
-            />
-            <StartingProofPanel manuscriptId={manuscript.id} canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")} />
-          </>
+          <ProjectPlanSection
+            manuscriptId={manuscript.id}
+            manuscriptTitle={manuscript.title}
+            manuscriptNumber={manuscript.manuscriptNumber}
+            canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")}
+          />
         )}
 
         {/* Acceptation sous conditions (audit éditorial, point n°2) : suivi des

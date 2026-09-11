@@ -80,6 +80,7 @@ import { AiTrashSection } from "../components/AiTrashSection";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 import { ManuscriptStockSection } from "../components/ManuscriptStockSection";
 import { ProjectPlanSection } from "../components/ProjectPlanSection";
+import { StartingProofPanel } from "../components/StartingProofPanel";
 import { pasteTidied } from "../lib/tidyProse";
 
 interface ManuscriptDetailProps {
@@ -532,12 +533,18 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         {canDecide && <DecisionLetterCard manuscriptId={manuscript.id} />}
 
         {manuscript.status.code === "PLANIFICATION" && (
-          <ProjectPlanSection
-            manuscriptId={manuscript.id}
-            manuscriptTitle={manuscript.title}
-            manuscriptNumber={manuscript.manuscriptNumber}
-            canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")}
-          />
+          <>
+            <ProjectPlanSection
+              manuscriptId={manuscript.id}
+              manuscriptTitle={manuscript.title}
+              manuscriptNumber={manuscript.manuscriptNumber}
+              canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")}
+            />
+            {/* Deux dépôts de fichiers propres à cette étape : le manuscrit qui
+                partira en correction éditoriale, et le fichier des couvertures
+                (1ère + dos + 4ᵉ). */}
+            <StartingProofPanel manuscriptId={manuscript.id} canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")} />
+          </>
         )}
 
         {/* Acceptation sous conditions (audit éditorial, point n°2) : suivi des

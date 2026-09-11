@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, realizationPayload } from "./helpers.js";
+import { extractSessionCookie, realizationPayload, seedVc1 } from "./helpers.js";
 
 // Verrou « livrable de sortie » : une étape soumise au verrou (Planification…)
 // ne se valide pas tant que son fichier livrable n'est pas déposé.
@@ -66,15 +66,38 @@ describe("verrou « livrable de sortie » d'étape", () => {
     expect(ok.statusCode).toBe(200);
   });
 
-  it("PLANIFICATION n'est plus verrouillée par un livrable fichier (planning saisi)", async () => {
+  it("PLANIFICATION n'a plus de verrou « livrable fichier » (mais exige les VC1)", async () => {
     const m = await manuscriptAt("PLANIFICATION");
     const meta = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/step-deliverable/PLANIFICATION`, headers: { cookie } });
     expect(meta.statusCode).toBe(200);
     expect(meta.json().required).toBe(false);
-    // Se valide sans aucun fichier déposé.
+    // Les deux fichiers VC1 restent obligatoires ; une fois déposés, l'étape se
+    // valide sans « livrable de sortie » et mène à l'Expertise.
+    await seedVc1(m.id);
     const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: realizationPayload("PLANIFICATION") });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().status).toBe("EXPERTISE");
+  });
+
+  it("PLANIFICATION : les deux dépôts VC1 sont obligatoires pour avancer", async () => {
+    const m = await manuscriptAt("PLANIFICATION");
+    // Aucun VC1 → refus.
+    const none = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: realizationPayload("PLANIFICATION") });
+    expect(none.statusCode).toBe(409);
+    expect(none.json().code).toBe("vc1_missing");
+
+    // Un seul VC1 (manuscrit) → toujours refusé (il manque les couvertures).
+    const mp = multipart("file", "manuscrit.txt", "Manuscrit à corriger.");
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/vc1/manuscrit`, headers: { cookie, ...mp.headers }, payload: mp.body });
+    const one = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: realizationPayload("PLANIFICATION") });
+    expect(one.statusCode).toBe(409);
+    expect(one.json().code).toBe("vc1_missing");
+
+    // Les deux → validation possible.
+    const mp2 = multipart("file", "couvertures.txt", "Couvertures.");
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/vc1/couvertures`, headers: { cookie, ...mp2.headers }, payload: mp2.body });
+    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: realizationPayload("PLANIFICATION") });
+    expect(ok.statusCode).toBe(200);
   });
 
   it("le paramètre n'inclut plus PLANIFICATION (ni dans le défaut ni dans les choix)", async () => {

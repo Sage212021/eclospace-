@@ -92,6 +92,20 @@ export async function seedStepDeliverable(manuscriptId: string, stepCode: string
   return doc;
 }
 
+// Dépose les DEUX fichiers VC1 obligatoires de la Planification (manuscrit à
+// corriger + couvertures) — nécessaires pour valider l'étape PLANIFICATION.
+export async function seedVc1(manuscriptId: string) {
+  const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+  for (const key of ["manuscrit", "couvertures"]) {
+    const doc = await prisma.document.create({
+      data: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape", confidentiality: "interne", title: `[vc1:${key}] seed-${key}.txt`, createdBy: admin.id, updatedBy: admin.id },
+    });
+    await prisma.documentVersion.create({
+      data: { documentId: doc.id, versionNumber: 1, filePath: `test/vc1-${key}-${manuscriptId}.txt`, fileSize: 10, mimeType: "text/plain", sha256Hash: "0".repeat(64), changeSummary: "seed", uploadedBy: admin.id },
+    });
+  }
+}
+
 // Étapes « à option » (Expertise, Réécriture, Projet) : payload minimal pour
 // RÉALISER l'étape (éléments obligatoires renseignés). Pour PASSER une étape
 // facultative, utiliser plutôt { step_decision: "passe", skip_reason: "…" }.

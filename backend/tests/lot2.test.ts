@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { storeFile } from "../src/lib/storage.js";
-import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload , seedVc1 } from "./helpers.js";
 import { buildDocx } from "./docxFixture.js";
 import type { FastifyInstance } from "fastify";
 
@@ -103,7 +103,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
     // D-010 : après la décision éditoriale, le manuscrit est à la PLANIFICATION.
     // On la valide → le manuscrit atteint l'EXPERTISE (D-014 : Expertise et
     // Réécriture précèdent désormais la Correction éditoriale).
-    await seedStepDeliverable(manuscript.id, "PLANIFICATION");
+    await seedVc1(manuscript.id);
     await app.inject({
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/steps/PLANIFICATION/validate`,
@@ -277,7 +277,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
 
     // La production démarre SANS contrat : valider la planification réussit et
     // mène à l'expertise (D-014 ; l'ancien verrou « contrat requis » est supprimé).
-    await seedStepDeliverable(manuscript.id, "PLANIFICATION");
+    await seedVc1(manuscript.id);
     const attempt = await app.inject({
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/steps/PLANIFICATION/validate`,

@@ -1,13 +1,43 @@
+import type { ClipboardEvent } from "react";
+
 // Remise en forme d'un texte de prose collé « à plat ».
 //
-// Quand on copie-colle un avis (depuis un PDF, une page web, un assistant…), les
-// retours à la ligne sont souvent perdus : les phrases se collent (« …
-// francophone.L'auteur… ») et les intertitres se soudent au texte (« … du
-// relecteurSynthèse de l'évaluation… »). Le rendu devient un bloc « touffu ».
+// Quand on copie-colle un texte (depuis un PDF, une page web, un assistant…),
+// les retours à la ligne sont souvent perdus : les phrases se collent (« …
+// francophone.L'auteur… ») et, dans un rapport de lecture, les intertitres se
+// soudent au texte (« …du relecteurSynthèse de l'évaluation… »). Le rendu
+// devient un bloc « touffu ».
 //
-// `tidyProse` répare ces deux cas SANS abîmer un texte déjà propre : il n'ajoute
-// une espace ou un saut de paragraphe que là où le texte est manifestement
-// aggloméré. Idempotent : l'appliquer deux fois donne le même résultat.
+// Deux fonctions :
+//   • `tidyProse`  — GÉNÉRIQUE : rétablit les espaces entre phrases et normalise
+//     les blancs. Convient à tout champ de prose (motivation, message à
+//     l'auteur, clause de contrat…).
+//   • `tidyReadingAppreciation` — le générique PLUS l'isolement des intertitres
+//     propres au rapport de lecture, sur leur propre paragraphe.
+//
+// Toutes deux SANS effet sur un texte déjà propre, et idempotentes.
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Générique : espace manquant après une ponctuation de fin de phrase collée à
+// une capitale (ou un guillemet ouvrant), puis normalisation des blancs. La
+// lettre suivante DOIT être une capitale : « 7.86 » (chiffre après le point)
+// n'est donc pas touché.
+export function tidyProse(input: string | null | undefined): string {
+  if (!input) return input ?? "";
+  let t = input.replace(/\r\n?/g, "\n");
+  t = t.replace(/([\p{L}0-9»)\]])([.?!…])(?=[«"“A-ZÀ-ÖØ-Þ])/gu, "$1$2 ");
+  return normalizeBlanks(t);
+}
+
+function normalizeBlanks(t: string): string {
+  return t
+    .split("\n")
+    .map((line) => line.replace(/[ \t]{2,}/g, " ").trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 // Intertitres DISTINCTIFS du rapport de lecture / de l'avis du relecteur. On ne
 // retient que des expressions à plusieurs mots, peu susceptibles d'apparaître au
@@ -31,33 +61,58 @@ const REVIEW_HEADINGS = [
   // avant « … la ligne ») pour ne pas couper à l'intérieur d'un intitulé.
   .sort((a, b) => b.length - a.length);
 
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-export function tidyProse(input: string | null | undefined): string {
+// Spécifique au rapport de lecture : le générique + chaque intertitre connu
+// isolé sur son propre paragraphe (saut AVANT s'il s'est soudé au texte
+// précédent, saut APRÈS si le corps se colle directement à l'intertitre).
+export function tidyReadingAppreciation(input: string | null | undefined): string {
   if (!input) return input ?? "";
   let t = input.replace(/\r\n?/g, "\n");
-
-  // 1) Espace manquant après une ponctuation de fin de phrase collée à une
-  //    capitale (ou un guillemet ouvrant). La lettre suivante DOIT être une
-  //    capitale : « 7.86 » (chiffre après le point) n'est donc pas touché.
   t = t.replace(/([\p{L}0-9»)\]])([.?!…])(?=[«"“A-ZÀ-ÖØ-Þ])/gu, "$1$2 ");
 
-  // 2) Isole chaque intertitre connu sur son propre paragraphe : saut AVANT
-  //    (s'il s'est soudé au texte précédent) et saut APRÈS (si le corps se colle
-  //    directement à l'intertitre, sans espace).
+  // Séparateur horizontal (« --- », « — — — ») laissé par certains assistants →
+  // saut de paragraphe.
+  t = t.replace(/[ \t]*[-–—]{3,}[ \t]*/g, "\n\n");
+
   for (const h of REVIEW_HEADINGS) {
     const esc = escapeRegExp(h);
     t = t.replace(new RegExp(`([^\\n])[ \\t]*(${esc})`, "g"), "$1\n\n$2");
     t = t.replace(new RegExp(`(${esc})(?=[«"“A-ZÀ-ÖØ-Þ])`, "g"), "$1\n\n");
   }
 
-  // 3) Normalise les espaces et limite les sauts de ligne successifs.
-  t = t
-    .split("\n")
-    .map((line) => line.replace(/[ \t]{2,}/g, " ").trimEnd())
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  // Mentions de bas de rapport (avertissement de portée) : toujours détachées du
+  // dernier paragraphe (saut AVANT). Les plus longues d'abord pour éviter un
+  // double saut sur les préfixes communs.
+  for (const p of REPORT_DISCLAIMERS) {
+    const esc = escapeRegExp(p);
+    t = t.replace(new RegExp(`([^\\n])[ \\t]*(${esc})`, "g"), "$1\n\n$2");
+  }
 
-  return t;
+  return normalizeBlanks(t);
+}
+
+// Avertissements de portée figurant en fin de rapport, à isoler sur leur propre
+// paragraphe (« Ce rapport constitue un avis argumenté de relecteur et ne… »).
+const REPORT_DISCLAIMERS = [
+  "Ce rapport constitue un avis argumenté de relecteur",
+  "Ce rapport est un avis argumenté de relecteur",
+  "Ce rapport constitue un avis argumenté",
+  "Ce rapport est un avis argumenté",
+].sort((a, b) => b.length - a.length);
+
+// Handler `onPaste` réutilisable pour un <textarea> contrôlé : insère le texte
+// collé, remis en forme, à l'emplacement du curseur (en remplaçant la sélection
+// éventuelle). `tidy` permet de choisir la variante (générique par défaut).
+export function pasteTidied(
+  e: ClipboardEvent<HTMLTextAreaElement>,
+  current: string,
+  setValue: (next: string) => void,
+  tidy: (s: string | null | undefined) => string = tidyProse,
+): void {
+  const pasted = e.clipboardData.getData("text");
+  if (!pasted) return;
+  e.preventDefault();
+  const el = e.currentTarget;
+  const start = el.selectionStart ?? current.length;
+  const end = el.selectionEnd ?? current.length;
+  setValue(current.slice(0, start) + tidy(pasted) + current.slice(end));
 }

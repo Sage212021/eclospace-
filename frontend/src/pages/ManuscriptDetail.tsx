@@ -80,6 +80,7 @@ import { AiReadingLauncher } from "../components/AiReadingLauncher";
 import { AiTrashSection } from "../components/AiTrashSection";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 import { ManuscriptStockSection } from "../components/ManuscriptStockSection";
+import { pasteTidied } from "../lib/tidyProse";
 
 interface ManuscriptDetailProps {
   manuscriptId: string;
@@ -1737,6 +1738,7 @@ function EditorialDecisionForm({
         <textarea
           value={motivation}
           onChange={(e) => setMotivation(e.target.value)}
+          onPaste={(e) => pasteTidied(e, motivation, setMotivation)}
           required
           rows={3}
           style={{ display: "block", width: "100%", padding: 8, marginTop: 4, fontFamily: "inherit", fontSize: 13 }}
@@ -1770,6 +1772,7 @@ function EditorialDecisionForm({
             <textarea
               value={authorMessage}
               onChange={(e) => setAuthorMessage(e.target.value)}
+              onPaste={(e) => pasteTidied(e, authorMessage, setAuthorMessage)}
               rows={2}
               placeholder="Phrase d'accompagnement, précision, encouragement…"
               style={{ display: "block", width: "100%", padding: 8, marginTop: 4, fontFamily: "inherit", fontSize: 13 }}

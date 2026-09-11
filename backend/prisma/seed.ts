@@ -1424,6 +1424,38 @@ async function main() {
       permissionModules: ["commercial", "stock"],
       departmentCodes: ["COM", "STOCK"],
     },
+    {
+      slug: "2026-09-contrat-ajuster-avant-impression",
+      version: "2026.09",
+      title: "Nouveauté — Ajuster un article ou une clause du contrat avant impression",
+      body: "Depuis l'aperçu du contrat (Contrats & droit d'auteur), tant que le contrat n'est PAS signé, vous pouvez « Ajuster le contrat avant impression » : réécrire le texte d'un article standard (avec « Rétablir le texte standard » pour revenir au modèle) et ajouter / modifier / retirer / réordonner les clauses additionnelles. Le reste du modèle légal reste standard. Un contrat signé ou actif est verrouillé (un avenant reste la voie de modification). Chaque ajustement est tracé.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["JURID", "DIRED"],
+    },
+    {
+      slug: "2026-09-manuscrit-anti-doublon-doublons",
+      version: "2026.09",
+      title: "Nouveauté — Anti-doublon renforcé + écran « Doublons potentiels »",
+      body: "L'enregistrement d'un manuscrit refuse désormais un doublon même si le titre ne diffère que par les accents, un trait d'union, la ponctuation, la casse ou les espaces (« Management de la Santé du bien-être » ≡ « management de la sante du bien etre »). Un nouvel écran « Doublons potentiels » (Nettoyage, administration) regroupe les fiches partageant un même titre normalisé, signale celle qui porte un contrat/ISBN/finances (à conserver) et permet de retirer le doublon accidentel (corbeille, réversible).",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "COMLEC"],
+    },
+    {
+      slug: "2026-09-decision-une-par-jour",
+      version: "2026.09",
+      title: "Nouveauté — Une seule décision éditoriale par manuscrit et par jour",
+      body: "Pour éviter les doublons dans l'historique des décisions, le système refuse désormais une 2ᵉ décision éditoriale sur le même manuscrit le même jour (message explicite indiquant la décision déjà rendue). Une nouvelle décision reste possible un autre jour — par exemple après réception d'une version révisée.",
+      permissionModules: ["decision_editoriale"],
+      departmentCodes: ["DIRED"],
+    },
+    {
+      slug: "2026-09-textes-colles-mise-en-forme",
+      version: "2026.09",
+      title: "Nouveauté — Les textes collés sont remis en forme automatiquement",
+      body: "Quand vous copiez-collez un texte dont les retours à la ligne ont été perdus (phrases collées, intertitres soudés), il est désormais remis en forme automatiquement : espaces rétablis entre les phrases, paragraphes reconstitués. Cela s'applique à l'« Appréciation générale » du rapport de lecture (intertitres du rapport isolés), à la motivation et au message à l'auteur d'une décision éditoriale, et aux clauses de contrat. Les rapports déjà saisis s'affichent proprement à l'impression, sans ressaisie ; un bouton « Reformater » est disponible sur l'appréciation.",
+      permissionModules: ["comite_lecture", "decision_editoriale", "contracts"],
+      departmentCodes: ["COMLEC", "DIRED", "CORR", "JURID"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

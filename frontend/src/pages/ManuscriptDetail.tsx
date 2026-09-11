@@ -80,6 +80,7 @@ import { AiTrashSection } from "../components/AiTrashSection";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 import { ManuscriptStockSection } from "../components/ManuscriptStockSection";
 import { ProjectPlanSection } from "../components/ProjectPlanSection";
+import { SectionErrorBoundary } from "../components/SectionErrorBoundary";
 import { StartingProofPanel } from "../components/StartingProofPanel";
 import { pasteTidied } from "../lib/tidyProse";
 
@@ -534,12 +535,27 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
 
         {manuscript.status.code === "PLANIFICATION" && (
           <>
-            <ProjectPlanSection
-              manuscriptId={manuscript.id}
-              manuscriptTitle={manuscript.title}
-              manuscriptNumber={manuscript.manuscriptNumber}
-              canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")}
-            />
+            {/* Garde-fou LOCAL : si la carte du planning échoue au rendu, elle
+                affiche un petit repli à sa place au lieu d'emporter toute la
+                page (l'ErrorBoundary globale afficherait sinon l'écran
+                « Recharger »). La carte « ne disparaît » jamais. */}
+            <SectionErrorBoundary
+              fallback={
+                <div style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 12, padding: 16 }}>
+                  <h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Planification du projet</h3>
+                  <div style={{ background: "#fbf3e0", color: "var(--warn, #B87400)", border: "1px solid #eddcae", borderRadius: 8, padding: "10px 12px", fontSize: 13 }}>
+                    La carte du planning n'a pas pu s'afficher. Rechargez la page (Ctrl+Maj+R). Vos données ne sont pas perdues.
+                  </div>
+                </div>
+              }
+            >
+              <ProjectPlanSection
+                manuscriptId={manuscript.id}
+                manuscriptTitle={manuscript.title}
+                manuscriptNumber={manuscript.manuscriptNumber}
+                canManage={permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")}
+              />
+            </SectionErrorBoundary>
             {/* Deux dépôts de fichiers propres à cette étape : le manuscrit qui
                 partira en correction éditoriale, et le fichier des couvertures
                 (1ère + dos + 4ᵉ). */}

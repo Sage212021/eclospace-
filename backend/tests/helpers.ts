@@ -104,6 +104,13 @@ export async function seedVc1(manuscriptId: string) {
       data: { documentId: doc.id, versionNumber: 1, filePath: `test/vc1-${key}-${manuscriptId}.txt`, fileSize: 10, mimeType: "text/plain", sha256Hash: "0".repeat(64), changeSummary: "seed", uploadedBy: admin.id },
     });
   }
+  // L'aperçu du planning doit aussi avoir été généré (garde-fou
+  // `plan_not_generated`) : on crée un plan « déjà téléchargé » pour l'étape.
+  await prisma.projectPlan.upsert({
+    where: { manuscriptId },
+    update: { pdfGeneratedAt: new Date(), pdfGeneratedBy: admin.id },
+    create: { manuscriptId, pdfGeneratedAt: new Date(), pdfGeneratedBy: admin.id, createdBy: admin.id, updatedBy: admin.id },
+  });
 }
 
 // Étapes « à option » (Expertise, Réécriture, Projet) : payload minimal pour

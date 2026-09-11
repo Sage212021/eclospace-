@@ -93,9 +93,16 @@ describe("verrou « livrable de sortie » d'étape", () => {
     expect(one.statusCode).toBe(409);
     expect(one.json().code).toBe("vc1_missing");
 
-    // Les deux → validation possible.
+    // Les deux VC1 → il reste le garde-fou « aperçu du planning téléchargé ».
     const mp2 = multipart("file", "couvertures.txt", "Couvertures.");
     await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/vc1/couvertures`, headers: { cookie, ...mp2.headers }, payload: mp2.body });
+    const notGenerated = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: realizationPayload("PLANIFICATION") });
+    expect(notGenerated.statusCode).toBe(409);
+    expect(notGenerated.json().code).toBe("plan_not_generated");
+
+    // Une fois l'aperçu du planning généré/téléchargé → validation possible.
+    await app.inject({ method: "PUT", url: `/api/v1/manuscripts/${m.id}/project-plan`, headers: { cookie }, payload: { activities: [{ label: "Lancement", priority: "haute", status: "a_faire" }] } });
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/project-plan/mark-generated`, headers: { cookie } });
     const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: realizationPayload("PLANIFICATION") });
     expect(ok.statusCode).toBe(200);
   });

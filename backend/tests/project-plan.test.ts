@@ -80,6 +80,30 @@ describe("planification du projet — planning lié au manuscrit", () => {
     expect(reread.json().activities.length).toBe(1);
   });
 
+  it("trace la génération de l'aperçu (mark-generated) ; 404 sans planning", async () => {
+    const id = await manuscriptAtPlanification();
+
+    // Sans planning enregistré : rien à marquer (404).
+    const early = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/project-plan/mark-generated`, headers: { cookie } });
+    expect(early.statusCode).toBe(404);
+
+    await app.inject({
+      method: "PUT", url: `/api/v1/manuscripts/${id}/project-plan`, headers: { cookie },
+      payload: { manager_name: "Noah Mbala", activities: [{ label: "Lancement", priority: "haute", status: "a_faire" }] },
+    });
+
+    // Au départ, l'aperçu n'a pas été généré.
+    const before = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/project-plan`, headers: { cookie } });
+    expect(before.json().pdf_generated_at).toBeNull();
+
+    const mark = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/project-plan/mark-generated`, headers: { cookie } });
+    expect(mark.statusCode).toBe(200);
+    expect(mark.json().pdf_generated_at).toBeTruthy();
+
+    const after = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/project-plan`, headers: { cookie } });
+    expect(after.json().pdf_generated_at).toBeTruthy();
+  });
+
   it("refuse l'enregistrement sans droit de saisie manuscrits (403)", async () => {
     const id = await manuscriptAtPlanification();
     await createUserWithRole(`corr_plan_${rnd()}`, "CORRECTEUR", "Plan123!");

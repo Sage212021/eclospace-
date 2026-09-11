@@ -2296,6 +2296,12 @@ model ProjectPlan {
   notes       String? // observations et points de vigilance (global)
   version     Int       @default(1)
 
+  // Horodatage de la DERNIÈRE génération de l'aperçu/PDF officiel du planning.
+  // Sert de garde-fou : on ne quitte pas l'étape PLANIFICATION tant que le
+  // document n'a pas été produit (aperçu téléchargé) au moins une fois.
+  pdfGeneratedAt DateTime? @map("pdf_generated_at")
+  pdfGeneratedBy String?   @map("pdf_generated_by")
+
   activities ProjectPlanActivity[]
 
   createdAt DateTime  @default(now()) @map("created_at")

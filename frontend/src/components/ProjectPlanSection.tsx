@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getProjectPlan,
   saveProjectPlan,
+  markProjectPlanGenerated,
   getBranding,
   type ProjectPlanActivity,
   type ProjectActivityPriority,
@@ -68,6 +69,11 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [cachet, setCachet] = useState<string | null>(null);
+  // Suivi de l'aperçu officiel : `generatedAt` = dernier téléchargement/impression
+  // du PDF ; `planUpdatedAt` = dernier enregistrement. Si le planning a été
+  // modifié APRÈS le dernier téléchargement, l'aperçu détenu n'est plus à jour.
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [planUpdatedAt, setPlanUpdatedAt] = useState<string | null>(null);
 
   useEffect(() => {
     let done = false;
@@ -86,6 +92,8 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
           setNotes(p.notes ?? "");
           setActivities(p.activities.map((a) => ({ ...a, responsible: a.responsible ?? "", location: a.location ?? "", dependencies: a.dependencies ?? "", observations: a.observations ?? "" })));
           setVersion(p.version);
+          setGeneratedAt(p.pdf_generated_at);
+          setPlanUpdatedAt(p.updated_at);
         }
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."))
@@ -141,6 +149,7 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
         })),
       });
       setVersion(saved.version);
+      setPlanUpdatedAt(saved.updated_at);
       setDirty(false);
       setSavedAt(new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
       if (!quiet) setMessage(`Planning enregistré (version ${saved.version}).`);
@@ -178,6 +187,24 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
       dependencies: (a.dependencies ?? "").trim() || null, observations: (a.observations ?? "").trim() || null,
     })),
   });
+
+  // Après avoir produit le document officiel (téléchargement du PDF ou
+  // impression), on enregistre le planning s'il reste des modifications puis on
+  // trace la génération côté serveur : c'est cette trace qui autorise le passage
+  // à l'étape suivante. La génération locale a déjà eu lieu, donc un échec réseau
+  // ici reste silencieux (l'utilisateur a bien son fichier).
+  async function markGenerated() {
+    try {
+      if (canManage && !hasEmptyLabel && (dirty || version === 0)) await save(true);
+      const r = await markProjectPlanGenerated(manuscriptId);
+      setGeneratedAt(r.pdf_generated_at);
+    } catch { /* le fichier est déjà produit ; on n'affiche pas d'erreur bloquante */ }
+  }
+
+  // L'aperçu détenu est-il à jour ? Non tant qu'il n'a jamais été téléchargé, ou
+  // si le planning a été enregistré après le dernier téléchargement.
+  const generated = !!generatedAt;
+  const stale = !!(generatedAt && planUpdatedAt && new Date(planUpdatedAt).getTime() > new Date(generatedAt).getTime());
 
   // La carte reste TOUJOURS visible à l'étape Planification — même si le
   // chargement du planning est lent ou échoue, elle ne disparaît jamais
@@ -293,10 +320,27 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
         <div style={{ marginLeft: "auto" }}>
           <DocPrintMenu
             label="Aperçu / Imprimer / PDF"
-            onPrint={(opts) => printProjectPlan(printData(), opts, cachet)}
-            onDownloadPdf={() => { downloadProjectPlanPdf(printData(), cachet).catch((e) => setError(e instanceof Error ? e.message : "Téléchargement impossible.")); }}
+            // Un simple « Aperçu à l'écran » (opts.preview) ne compte pas comme un
+            // téléchargement ; l'impression et le PDF, si.
+            onPrint={(opts) => { printProjectPlan(printData(), opts, cachet); if (!opts.preview) void markGenerated(); }}
+            onDownloadPdf={() => { downloadProjectPlanPdf(printData(), cachet).then(() => markGenerated()).catch((e) => setError(e instanceof Error ? e.message : "Téléchargement impossible.")); }}
           />
         </div>
+      </div>
+
+      {/* État du garde-fou « aperçu téléchargé » : le passage à l'étape suivante
+          est bloqué tant que le PDF officiel du planning n'a pas été téléchargé. */}
+      <div style={{
+        marginTop: 10, borderRadius: 8, padding: "8px 12px", fontSize: 12.5,
+        background: generated && !stale ? "#e7f1ea" : "#fbf3e0",
+        color: generated && !stale ? "var(--valid, #2F7D4A)" : "var(--warn, #B87400)",
+        border: `1px solid ${generated && !stale ? "#bfdcc9" : "#eddcae"}`,
+      }}>
+        {generated && !stale
+          ? "✓ Aperçu du planning téléchargé — le passage à l'étape suivante est autorisé."
+          : stale
+            ? "⚠ Planning modifié depuis le dernier téléchargement — retéléchargez le PDF à jour avant de passer à l'étape suivante."
+            : "⚠ Aperçu du planning non téléchargé — téléchargez le PDF (bouton « Aperçu / Imprimer / PDF » → « Télécharger le PDF ») avant de passer à l'étape suivante."}
       </div>
       {!cachet && (
         <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Astuce : téléversez le cachet « Direction éditoriale » dans Réglages → Cachets &amp; signature pour qu'il apparaisse automatiquement sur le PDF.</p>

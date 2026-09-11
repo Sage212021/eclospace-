@@ -11,6 +11,7 @@ import { Card } from "./Card";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
 import { printProjectPlan, type ProjectPlanPrintData } from "../lib/print";
+import { downloadProjectPlanPdf } from "../lib/projectPlanPdf";
 
 // Planification du projet SAISIE dans Eclospace (plus de fichier à déposer) :
 // informations générales + activités datées, liées au manuscrit. Après
@@ -275,6 +276,7 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
           <DocPrintMenu
             label="Aperçu / Imprimer / PDF"
             onPrint={(opts) => printProjectPlan(printData(), opts, cachet)}
+            onDownloadPdf={() => { downloadProjectPlanPdf(printData(), cachet).catch((e) => setError(e instanceof Error ? e.message : "Téléchargement impossible.")); }}
           />
         </div>
       </div>

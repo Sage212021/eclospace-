@@ -1402,7 +1402,6 @@ export function printProjectPlan(d: ProjectPlanPrintData, opts?: PrintOpts, cach
         .map((a) => {
           const dur = planDurationDays(a.startDate, a.endDate);
           const extra = [
-            a.location ? `${tr("Lieu", "Venue")} : ${escapeHtml(a.location)}` : "",
             a.dependencies ? `${tr("Dépend.", "Deps")} : ${escapeHtml(a.dependencies)}` : "",
             a.observations ? escapeHtml(a.observations) : "",
           ]
@@ -1410,6 +1409,7 @@ export function printProjectPlan(d: ProjectPlanPrintData, opts?: PrintOpts, cach
             .join(" — ");
           return `<tr>
             <td><div style="font-weight:600">${escapeHtml(a.label)}</div>${extra ? `<div style="font-size:10.5px;color:#6b7280;margin-top:2px">${extra}</div>` : ""}</td>
+            <td>${escapeHtml(a.location ?? "—")}</td>
             <td>${escapeHtml(a.responsible ?? "—")}</td>
             <td class="num">${planDate(a.startDate)}</td>
             <td class="num">${planDate(a.endDate)}</td>
@@ -1419,7 +1419,7 @@ export function printProjectPlan(d: ProjectPlanPrintData, opts?: PrintOpts, cach
           </tr>`;
         })
         .join("")
-    : `<tr><td colspan="7" style="color:#6b7280">${tr("Aucune activité renseignée.", "No activity yet.")}</td></tr>`;
+    : `<tr><td colspan="8" style="color:#6b7280">${tr("Aucune activité renseignée.", "No activity yet.")}</td></tr>`;
 
   const cachetBlock = cachetEditoriale
     ? `<img src="${cachetEditoriale}" alt="${tr("Cachet Direction éditoriale", "Editorial Direction stamp")}" style="max-height:96px;max-width:200px;object-fit:contain;display:block;margin-left:auto">`
@@ -1450,6 +1450,7 @@ export function printProjectPlan(d: ProjectPlanPrintData, opts?: PrintOpts, cach
     <table class="lines">
       <thead><tr>
         <th>${tr("Activité", "Activity")}</th>
+        <th>${tr("Lieu", "Venue")}</th>
         <th>${tr("Responsable", "Owner")}</th>
         <th>${tr("Début", "Start")}</th>
         <th>${tr("Fin", "End")}</th>

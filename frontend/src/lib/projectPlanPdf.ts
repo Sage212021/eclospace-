@@ -25,6 +25,35 @@ async function loadImage(url: string): Promise<string | null> {
   }
 }
 
+// Réduit et ré-encode une image (data URL) pour ALLÉGER le PDF : redimensionnée
+// à `maxPx` de côté, aplatie sur fond blanc et exportée en JPEG. Un logo/cachet
+// en PNG de plusieurs centaines de Ko devient quelques Ko — le PDF passe de
+// plusieurs Mo à < 1 Mo. Renvoie { dataUrl, format } ('JPEG').
+async function shrink(dataUrl: string | null, maxPx: number, quality = 0.82): Promise<{ dataUrl: string; format: "JPEG" } | null> {
+  if (!dataUrl) return null;
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = dataUrl;
+    });
+    const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#ffffff"; // fond blanc (JPEG n'a pas de transparence)
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    return { dataUrl: canvas.toDataURL("image/jpeg", quality), format: "JPEG" };
+  } catch {
+    return null;
+  }
+}
+
 const fdate = (iso: string | null): string => {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -38,13 +67,14 @@ const durationDays = (a: string | null, b: string | null): number | null => {
 };
 
 export async function buildProjectPlanPdf(d: ProjectPlanPrintData, cachetEditoriale?: string | null): Promise<Uint8Array> {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  // `compress: true` → flux du PDF compressés (texte, vecteurs).
+  const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const L = 12, R = 198, W = R - L;
   let y = 14;
 
-  // En-tête : logo + coordonnées.
-  const logo = await loadImage(`${window.location.origin}/eclosion-logo.png`);
-  if (logo) { try { doc.addImage(logo, "PNG", L, y, 34, 14); } catch { /* ignore */ } }
+  // En-tête : logo réduit + coordonnées.
+  const logo = await shrink(await loadImage(`${window.location.origin}/eclosion-logo.png`), 220, 0.85);
+  if (logo) { try { doc.addImage(logo.dataUrl, logo.format, L, y, 34, 14, undefined, "FAST"); } catch { /* ignore */ } }
   doc.setFontSize(7.5); doc.setTextColor(90); doc.setFont("helvetica", "normal");
   [HOUSE.address, `${HOUSE.poBox} · Tél. ${HOUSE.phone}`, `${HOUSE.email} · ${HOUSE.website}`]
     .forEach((line, i) => doc.text(line, R, y + 3 + i * 3.6, { align: "right" }));
@@ -147,8 +177,9 @@ export async function buildProjectPlanPdf(d: ProjectPlanPrintData, cachetEditori
   if (y > 258) { doc.addPage(); y = 40; }
   doc.setFontSize(7.5); doc.setTextColor(120); doc.text("DIRECTION ÉDITORIALE", R, y, { align: "right" }); y += 4;
   doc.setFontSize(8); doc.setTextColor(107, 114, 128); doc.text("Signature et cachet", R, y, { align: "right" }); y += 3;
-  if (cachetEditoriale) {
-    try { doc.addImage(cachetEditoriale, "PNG", R - 34, y, 34, 34); } catch { /* ignore */ }
+  const cachet = await shrink(cachetEditoriale ?? null, 240, 0.85);
+  if (cachet) {
+    try { doc.addImage(cachet.dataUrl, cachet.format, R - 34, y, 34, 34, undefined, "FAST"); } catch { /* ignore */ }
   }
 
   // Pied légal.

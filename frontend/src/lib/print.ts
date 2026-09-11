@@ -1463,12 +1463,14 @@ export function printProjectPlan(d: ProjectPlanPrintData, opts?: PrintOpts, cach
 
     ${d.notes ? `<div style="margin:16px 0 0"><div class="party__label">${tr("Observations et points de vigilance", "Notes and watch points")}</div><div style="font-size:12.5px;color:#1f2937;white-space:pre-wrap;margin-top:4px">${escapeHtml(d.notes)}</div></div>` : ""}
 
-    <!-- Bloc signature réservé à la Direction éditoriale, à l'extrême droite. -->
-    <div style="margin-top:40px;display:flex;justify-content:flex-end">
-      <div style="min-width:240px;text-align:right">
+    <!-- Bloc signature réservé à la Direction éditoriale, à l'extrême droite.
+         « break-inside: avoid » : jamais coupé par un saut de page — le cachet
+         reste collé sous « Signature et cachet ». -->
+    <div style="margin-top:40px;display:flex;justify-content:flex-end;break-inside:avoid;page-break-inside:avoid">
+      <div style="min-width:240px;text-align:right;break-inside:avoid;page-break-inside:avoid">
         <div class="party__label">${tr("Direction éditoriale", "Editorial Direction")}</div>
         <div style="font-size:11px;color:#6b7280;margin-top:2px">${tr("Signature et cachet", "Signature and stamp")}</div>
-        <div style="margin-top:8px">${cachetBlock}</div>
+        <div style="margin-top:6px">${cachetBlock}</div>
       </div>
     </div>`;
 

@@ -59,6 +59,7 @@ import { useConfirm } from "../components/ConfirmProvider";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printEditorialDecisionLetter, type PrintOpts } from "../lib/print";
 import { Spine } from "../components/Spine";
+import { CorrectionReturns } from "../components/CorrectionReturns";
 import { ContractsSection } from "../components/ContractsSection";
 import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
 import { TasksSection } from "../components/TasksSection";
@@ -414,6 +415,14 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
       )}
 
       <Spine steps={timeline} currentStatusCode={manuscript.status.code} />
+
+      {/* Retours de correction (lecture seule) : consultables sur la fiche
+          globale APRÈS l'étape Correction (en production, stock…). Pendant la
+          correction, le cycle complet est déjà affiché plus bas. Se masque seul
+          s'il n'y a aucun retour. */}
+      {manuscript.status.code !== "CORRECTION" && (permissions.has("manuscripts:consultation") || permissions.has("tasks:consultation")) && (
+        <CorrectionReturns manuscriptId={manuscript.id} />
+      )}
 
       {message && (
         <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>

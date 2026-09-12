@@ -175,6 +175,21 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
 // l'ancienne méthode (script inline `window.print()`) ne s'exécutait donc jamais
 // et rien ne s'imprimait. Appeler `print()` depuis le parent est conforme à la
 // CSP et fiable sur ordinateur comme sur mobile.
+// Attend que TOUTES les images du document (logo, filigrane) soient chargées
+// avant d'appeler la callback — avec un filet de sécurité si une image ne se
+// charge jamais. Sans cela, sur une connexion modeste, l'impression automatique
+// partait avant le chargement du logo → document imprimé/PDF SANS logo.
+function whenImagesReady(doc: Document, cb: () => void, maxWait = 8000): void {
+  const pending = Array.from(doc.images || []).filter((im) => !im.complete);
+  if (pending.length === 0) { cb(); return; }
+  let remaining = pending.length;
+  let fired = false;
+  const done = () => { if (!fired) { fired = true; cb(); } };
+  const one = () => { remaining -= 1; if (remaining <= 0) done(); };
+  pending.forEach((im) => { im.addEventListener("load", one); im.addEventListener("error", one); });
+  setTimeout(done, maxWait);
+}
+
 function wirePrint(win: Window, doc: Document, autoPrint = true): void {
   let printed = false;
   const fire = () => {
@@ -211,12 +226,10 @@ function wirePrint(win: Window, doc: Document, autoPrint = true): void {
   // consulte le document (défilable, plein écran) puis clique le bouton si elle
   // veut imprimer / enregistrer en PDF.
   if (!autoPrint) return;
-  win.addEventListener("load", fire);
-  // Filet de sécurité si « load » ne se déclenche pas. Marge un peu large pour
-  // laisser le filigrane (image) se charger avant l'impression, y compris sur
-  // mobile ; sur ordinateur, « load » se déclenche bien avant et l'impression
-  // part sans attendre ce délai.
-  setTimeout(fire, 1500);
+  // On imprime une fois les images (logo + filigrane) réellement chargées, pour
+  // qu'aucun document ne sorte sans logo sur une connexion lente.
+  win.addEventListener("load", () => whenImagesReady(doc, fire));
+  whenImagesReady(doc, fire);
 }
 
 // Impression via une IFRAME cachée : impression directe et silencieuse, idéale

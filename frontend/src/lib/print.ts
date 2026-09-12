@@ -88,7 +88,7 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
   // de fond CSS : les images de fond ne s'impriment pas de façon fiable, surtout
   // sur mobile — un <img> positionné, lui, s'imprime partout.
   const watermark = !embed
-    ? `<img class="wm" src="${window.location.origin}/eclosion-filigrane.png" alt="" aria-hidden="true">`
+    ? `<img class="wm" src="${window.location.origin}/eclosion-filigrane-livre.png" alt="" aria-hidden="true">`
     : "";
 
   const pageMargin = embed ? "0" : "18mm 16mm";

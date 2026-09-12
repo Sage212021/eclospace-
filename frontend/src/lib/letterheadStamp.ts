@@ -50,7 +50,7 @@ export async function createLetterheadContext(doc: PDFDocument): Promise<Letterh
     try { logo = await doc.embedPng(logoBytes); } catch { logo = null; }
   }
   let wm: PDFImage | null = null;
-  const wmBytes = await fetchAsset("/eclosion-filigrane.png");
+  const wmBytes = await fetchAsset("/eclosion-filigrane-livre.png");
   if (wmBytes) {
     try { wm = await doc.embedPng(wmBytes); } catch { wm = null; }
   }

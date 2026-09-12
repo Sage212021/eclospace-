@@ -230,7 +230,7 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
   // (sinon elle « manquait » sur certains postes, cf. incident 11/09/2026).
   if (!loaded) {
     return (
-      <Card title="Planification du projet" subtitle="Renseignez le planning ici : il est lié au projet et devient un document officiel (aperçu + PDF), sans fichier à déposer." collapsible defaultOpen>
+      <Card title="Planification du projet" subtitle="Renseignez le planning ici : il est lié au projet et devient un document officiel (aperçu + PDF), sans fichier à déposer." collapsible defaultOpen accent>
         {error
           ? <div style={{ background: "#f8e3df", color: "var(--danger, #B23A2E)", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>{error}</div>
           : <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Chargement du planning…</p>}
@@ -239,7 +239,7 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
   }
 
   return (
-    <Card title="Planification du projet" subtitle="Renseignez le planning ici : il est lié au projet et devient un document officiel (aperçu + PDF), sans fichier à déposer." collapsible defaultOpen>
+    <Card title="Planification du projet" subtitle="Renseignez le planning ici : il est lié au projet et devient un document officiel (aperçu + PDF), sans fichier à déposer." collapsible defaultOpen accent>
       {error && <div style={{ background: "#f8e3df", color: "var(--danger, #B23A2E)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{error}</div>}
       {message && <div style={{ background: "var(--eclosion-soft)", color: "var(--ink)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{message}</div>}
 

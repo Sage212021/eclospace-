@@ -150,7 +150,10 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
       ${head}
       ${body}
       ${foot}
-      <div class="actions"><button type="button" data-print>${tr("Imprimer / Enregistrer en PDF", "Print / Save as PDF")}</button></div>
+      <div class="actions">
+        <button type="button" data-print>${tr("Imprimer / Enregistrer en PDF", "Print / Save as PDF")}</button>
+        <button type="button" data-close style="margin-left:8px; background:#fff; color:#0b0b0c; border:1px solid #cbd2dc">${tr("Fermer", "Close")}</button>
+      </div>
     </div>
   </body></html>`;
 }
@@ -184,6 +187,11 @@ function wirePrint(win: Window, doc: Document, autoPrint = true): void {
     } catch {
       /* ignore */
     }
+  });
+  // Bouton « Fermer » : referme la fenêtre/onglet du document pour revenir
+  // facilement à l'application (utile sur ordinateur, où l'aperçu s'ouvre à part).
+  doc.querySelector("button[data-close]")?.addEventListener("click", () => {
+    try { win.close(); } catch { /* ignore */ }
   });
   // Impression automatique : à l'évènement load (une fois les images chargées)
   // et, filet de sécurité, après un court délai si load ne se déclenche pas
@@ -254,16 +262,71 @@ function printViaWindow(html: string, autoPrint = true): boolean {
   return true;
 }
 
+// Aperçu à l'écran DANS l'application (superposition) : le document s'affiche
+// par-dessus la page, dans un cadre défilable, avec une barre « Imprimer /
+// Enregistrer en PDF » et surtout « ✕ Fermer ». On revient à l'application d'un
+// clic (ou avec Échap), sans onglet séparé à retrouver ni fenêtre à fermer —
+// c'était le point douloureux sur ordinateur. Fonctionne aussi sur mobile.
+function previewInModal(title: string, html: string): boolean {
+  try {
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed; inset:0; z-index:100000; background:rgba(11,11,12,.62); display:flex; flex-direction:column; padding:0;";
+
+    const bar = document.createElement("div");
+    bar.style.cssText = "display:flex; align-items:center; gap:10px; padding:10px 14px; background:#0b0b0c; color:#fff; flex-wrap:wrap;";
+    const label = document.createElement("div");
+    label.textContent = title;
+    label.style.cssText = "font:600 13px system-ui,-apple-system,'Segoe UI',sans-serif; flex:1; min-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+    const printBtn = document.createElement("button");
+    printBtn.type = "button";
+    printBtn.textContent = tr("Imprimer / Enregistrer en PDF", "Print / Save as PDF");
+    printBtn.style.cssText = "font:600 12.5px inherit; background:#d9b21a; color:#0b0b0c; border:none; border-radius:7px; padding:8px 14px; cursor:pointer;";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.textContent = tr("✕ Fermer", "✕ Close");
+    closeBtn.style.cssText = "font:600 12.5px inherit; background:#fff; color:#0b0b0c; border:none; border-radius:7px; padding:8px 14px; cursor:pointer;";
+
+    const frame = document.createElement("iframe");
+    frame.setAttribute("title", title);
+    frame.style.cssText = "flex:1; width:100%; border:0; background:#fff;";
+    frame.srcdoc = html;
+
+    const close = () => {
+      window.removeEventListener("keydown", onKey);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    closeBtn.addEventListener("click", close);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    window.addEventListener("keydown", onKey);
+    const doPrint = () => { try { frame.contentWindow?.focus(); frame.contentWindow?.print(); } catch { /* ignore */ } };
+    printBtn.addEventListener("click", doPrint);
+    // Le bouton « Imprimer » DANS le document (data-print) doit aussi fonctionner.
+    frame.addEventListener("load", () => {
+      try {
+        const idoc = frame.contentDocument;
+        idoc?.querySelector("button[data-print]")?.addEventListener("click", doPrint);
+        idoc?.querySelector("button[data-close]")?.addEventListener("click", close);
+      } catch { /* ignore */ }
+    });
+
+    bar.append(label, printBtn, closeBtn);
+    overlay.append(bar, frame);
+    document.body.appendChild(overlay);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function openPrintWindow(title: string, body: string, opts?: PrintOpts): void {
   const html = documentShell(title, body, opts);
 
-  // Aperçu à l'écran (téléphone) : ouvrir un onglet VISIBLE, sans lancer
-  // l'impression. La personne consulte le document puis, si elle veut, clique le
-  // bouton « Imprimer / Enregistrer en PDF » en bas.
+  // Aperçu à l'écran : superposition DANS l'application (retour facile), avec
+  // repli sur un onglet visible si la superposition échoue.
   if (opts?.preview) {
+    if (previewInModal(title, html)) return;
     if (printViaWindow(html, false)) return;
-    // Repli : onglet bloqué (pop-up) → on tente l'iframe (au moins l'impression
-    // reste possible) puis on avertit.
     if (printViaIframe(html, false)) return;
     alert(tr("Autorisez les fenêtres pop-up pour afficher l'aperçu.", "Allow pop-up windows to show the preview."));
     return;
@@ -281,6 +344,15 @@ function openPrintWindow(title: string, body: string, opts?: PrintOpts): void {
   }
   // Aucune méthode n'a pu s'ouvrir (pop-up bloqué et iframe indisponible).
   alert(tr("Autorisez les fenêtres pop-up pour imprimer ce document.", "Allow pop-up windows to print this document."));
+}
+
+// Papier à en-tête VIERGE, généré par l'ERP (même en-tête / pied / filigrane que
+// la lettre de décision éditoriale et les autres documents officiels) : le corps
+// est laissé vide pour être rempli à la main après impression. À télécharger en
+// PDF (« Enregistrer en PDF ») ou à imprimer directement.
+export function printBlankLetterhead(opts?: PrintOpts): void {
+  const body = `<div style="min-height:190mm"></div>`;
+  openPrintWindow(tr("Papier à en-tête", "Letterhead"), body, opts);
 }
 
 // Langue des documents imprimés (option Français / Anglais) : suit la langue de

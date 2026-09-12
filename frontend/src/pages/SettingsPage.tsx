@@ -4,6 +4,8 @@ import { AccountSecurity } from "../components/AccountSecurity";
 import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { SettingCard } from "../components/SettingCard";
+import { DocPrintMenu } from "../components/DocPrintMenu";
+import { printBlankLetterhead } from "../lib/print";
 import { AiEditorialConfigCard, AiPromptsCard } from "../components/AiEditorialCard";
 import { StepConsistencyCard } from "../components/StepConsistencyCard";
 
@@ -117,6 +119,16 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
 
       {/* Cachets & signature officiels apposés sur les lettres et contrats. */}
       <BrandingCard canAdminister={canAdminister} />
+
+      {/* Papeterie : papier à en-tête VIERGE généré par l'ERP, même en-tête que
+          les lettres de décision (logo, coordonnées, pied, filigrane). */}
+      <section className="ecl-card" style={{ borderLeft: "4px solid var(--eclosion, #d9b21a)" }}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>Papier à en-tête vierge</div>
+        <p style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 10px" }}>
+          Génère une page à l'en-tête officiel d'Éclosion (logo, coordonnées, pied et filigrane), au corps laissé vierge — le même en-tête que les lettres de décision éditoriale. À enregistrer en PDF (« Imprimer / Enregistrer en PDF ») ou à imprimer pour écrire à la main.
+        </p>
+        <DocPrintMenu label="Aperçu / Imprimer / PDF" onPrint={(o) => printBlankLetterhead(o)} />
+      </section>
 
       {/* Lettres de réponse à l'auteur à la décision éditoriale (modèles éditables). */}
       <DecisionLettersCard canAdminister={canAdminister} />

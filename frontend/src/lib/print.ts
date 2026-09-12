@@ -65,6 +65,10 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
           <a href="mailto:${HOUSE.email}">${HOUSE.email}</a> · <a href="${HOUSE.website}">${escapeHtml(HOUSE.website)}</a>
         </div>
       </div>
+      <div class="lh__brand">
+        <div class="lh__brandname">Éclosion Édition Sarl</div>
+        <div class="lh__services">Édition du livre<span class="lh__sep">|</span>Conception et réalisation des supports de communication<span class="lh__sep">|</span>Imprimerie offset et numérique</div>
+      </div>
       <div class="lh__rule"></div>`;
 
   const foot = embed
@@ -120,6 +124,12 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     .lh__logo { height: 88px; width: auto; image-rendering: auto; }
     .lh__contact { text-align: right; font-size: 10.5px; color: #4b5563; line-height: 1.7; max-width: 340px; }
     .lh__contact a { color: #4b5563; text-decoration: none; }
+    /* Mention centrale officielle (identité + métiers), reprise du papier à
+       en-tête Éclosion, placée sous le logo/coordonnées. */
+    .lh__brand { text-align: center; margin: 8px 0 2px; }
+    .lh__brandname { font-family: Georgia, serif; font-weight: 700; font-size: 20px; color: #0b0b0c; letter-spacing: .2px; }
+    .lh__services { font-family: Georgia, serif; font-size: 10.5px; color: #0b0b0c; margin-top: 3px; }
+    .lh__sep { color: #d9b21a; font-weight: 700; margin: 0 8px; }
     .lh__rule { height: 3px; background: linear-gradient(90deg, #0b0b0c 62%, #d9b21a 62%); border-radius: 2px; margin: 10px 0 4px; }
     .doc__title { font-family: Georgia, serif; font-size: 22px; margin: 20px 0 2px; }
     .num { font-family: ui-monospace, "IBM Plex Mono", monospace; }

@@ -58,7 +58,7 @@ import {
 import { useConfirm } from "../components/ConfirmProvider";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printEditorialDecisionLetter, type PrintOpts } from "../lib/print";
-import { Spine } from "../components/Spine";
+import { ManuscriptWorkflow } from "../components/ManuscriptWorkflow";
 import { ContractsSection } from "../components/ContractsSection";
 import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
 import { TasksSection } from "../components/TasksSection";
@@ -199,12 +199,20 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
     const previous = manuscript?.status.code;
     const m = await refresh();
     const advanced = m.status.code !== previous;
-    if (confided) {
-      setMessage("Étape validée et confiée : la personne désignée est notifiée.");
-    } else if (advanced) {
-      setShowAll(true); // on lève la vue centrée pour que l'action suivante soit visible
-      setMessage(`Étape validée. Étape suivante : « ${m.status.label} » — continuez ci-dessous.`);
+    if (advanced) {
+      // On reste sur la fiche : on lève la vue centrée et on amène l'utilisateur
+      // sur la suite. Le « Fil du projet » ci-dessus montre déjà la nouvelle
+      // étape active (et son pôle / sa personne), même si elle a été transmise à
+      // quelqu'un d'autre — pas besoin de repasser par le menu.
+      setShowAll(true);
+      setMessage(
+        confided
+          ? `Étape validée et transmise. Étape suivante : « ${m.status.label} » — visible dans le fil du projet ci-dessus.`
+          : `Étape validée. Étape suivante : « ${m.status.label} » — continuez ci-dessous.`,
+      );
       scrollToActions();
+    } else if (confided) {
+      setMessage("Étape validée et confiée : la personne désignée est notifiée.");
     } else {
       setMessage("Étape validée.");
     }
@@ -397,7 +405,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         </div>
       )}
 
-      <Spine steps={timeline} currentStatusCode={manuscript.status.code} />
+      <ManuscriptWorkflow steps={timeline} currentStatusCode={manuscript.status.code} />
 
       {message && (
         <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>

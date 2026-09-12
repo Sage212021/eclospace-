@@ -288,6 +288,10 @@ export interface TimelineStep {
   label: string;
   step_order: number;
   is_conditional: boolean;
+  state?: "done" | "current" | "todo";
+  department?: string | null;
+  assignee?: string | null;
+  started_at?: string | null;
   validated_at: string | null;
   planned_end: string | null;
   actual_end: string | null;

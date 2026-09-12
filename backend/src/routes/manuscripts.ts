@@ -1454,17 +1454,25 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
       }
 
-      const allStatuses = await prisma.workflowStatus.findMany({ orderBy: { stepOrder: "asc" } });
-      const steps = await prisma.manuscriptStep.findMany({ where: { manuscriptId: id } });
+      const allStatuses = await prisma.workflowStatus.findMany({ orderBy: { stepOrder: "asc" }, include: { department: true } });
+      const steps = await prisma.manuscriptStep.findMany({ where: { manuscriptId: id }, include: { responsible: { select: { username: true } } } });
       const stepByStatusId = new Map(steps.map((step) => [step.statusId, step]));
+      const currentOrder = allStatuses.find((s) => s.id === manuscript.statusId)?.stepOrder ?? 0;
 
       const timeline = allStatuses.map((status) => {
         const step = stepByStatusId.get(status.id);
+        // Statut de l'étape sur la frise : terminée (validée) / en cours (étape
+        // courante de l'ouvrage) / à venir.
+        const state = status.id === manuscript.statusId ? "current" : status.stepOrder < currentOrder || step?.validatedAt ? "done" : "todo";
         return {
           status_code: status.code,
           label: status.label,
           step_order: status.stepOrder,
           is_conditional: status.isConditional,
+          state,
+          department: status.department?.name ?? null,
+          assignee: step?.responsible?.username ?? null,
+          started_at: step?.actualStart ?? null,
           validated_at: step?.validatedAt ?? null,
           planned_end: step?.plannedEnd ?? null,
           actual_end: step?.actualEnd ?? null,

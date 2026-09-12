@@ -66,8 +66,14 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
     const steps = timeline.json();
     expect(steps[0].status_code).toBe("RECEPTION");
     expect(steps[0].validated_at).not.toBeNull();
+    expect(steps[0].state).toBe("done");
     expect(steps[1].status_code).toBe("VERIF_ADMIN");
     expect(steps[1].validated_at).toBeNull();
+    // Fil du projet enrichi : l'étape courante est marquée « current » et chaque
+    // étape porte son pôle (department) pour l'affichage sur la fiche.
+    expect(steps[1].state).toBe("current");
+    expect("department" in steps[1]).toBe(true);
+    expect("assignee" in steps[1]).toBe(true);
   });
 
   it("refuse un doublon (même titre) tant que le premier n'est pas supprimé", async () => {

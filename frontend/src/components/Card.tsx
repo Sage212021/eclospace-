@@ -12,6 +12,9 @@ interface CardProps {
   collapsible?: boolean;
   // État initial d'une carte repliable (ignoré si non repliable). Défaut : replié.
   defaultOpen?: boolean;
+  // Accent doré (liseré gauche) : marque une carte « signature » de façon
+  // CONSTANTE, quel que soit son contenu (ex. Planification du projet).
+  accent?: boolean;
   children: ReactNode;
 }
 
@@ -20,9 +23,10 @@ interface CardProps {
 // cartes à plat construites au cas par cas dans les pages opérationnelles.
 // Option « collapsible » : accordéon (en-tête cliquable + chevron), utilisé pour
 // regrouper les rubriques d'un module (ex. Moteur de paie).
-export function Card({ title, icon, subtitle, action, collapsible, defaultOpen, children }: CardProps) {
+export function Card({ title, icon, subtitle, action, collapsible, defaultOpen, accent, children }: CardProps) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const bodyShown = !collapsible || open;
+  const accentStyle = accent ? { borderLeft: "4px solid var(--eclosion, #d9b21a)" } : undefined;
 
   const head = (
     <>
@@ -41,7 +45,7 @@ export function Card({ title, icon, subtitle, action, collapsible, defaultOpen, 
   );
 
   return (
-    <section className="ecl-card">
+    <section className="ecl-card" style={accentStyle}>
       {collapsible ? (
         <header
           className="ecl-card__head"

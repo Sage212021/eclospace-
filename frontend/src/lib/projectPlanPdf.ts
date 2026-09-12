@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { HOUSE, type ProjectPlanPrintData } from "./print";
+import { drawWatermark as drawFiligrane } from "./pdfWatermark";
 
 // Téléchargement DIRECT du planning en PDF (vectoriel, net) — sans passer par la
 // boîte d'impression du navigateur. Reprend l'en-tête maison, un tableau
@@ -71,6 +72,7 @@ export async function buildProjectPlanPdf(d: ProjectPlanPrintData, cachetEditori
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const L = 12, R = 198, W = R - L;
   let y = 14;
+  drawFiligrane(doc);
 
   // En-tête : logo réduit + coordonnées.
   const logo = await shrink(await loadImage(`${window.location.origin}/eclosion-logo.png`), 220, 0.85);
@@ -141,7 +143,7 @@ export async function buildProjectPlanPdf(d: ProjectPlanPrintData, cachetEditori
     const lieuLines = doc.splitTextToSize(a.location ?? "—", cols[1].w - 2) as string[];
     const respLines = doc.splitTextToSize(a.responsible ?? "—", cols[2].w - 2) as string[];
     const rowH = Math.max(labelLines.length + subLines.length * 0.9, lieuLines.length, respLines.length, 1) * 4 + 3;
-    if (y + rowH > 276) { doc.addPage(); y = 16; header(); doc.setFont("helvetica", "normal"); doc.setTextColor(31, 41, 55); }
+    if (y + rowH > 276) { doc.addPage(); drawFiligrane(doc); y = 16; header(); doc.setFont("helvetica", "normal"); doc.setTextColor(31, 41, 55); }
     if (even) { doc.setFillColor(250, 248, 242); doc.rect(L, y, W, rowH, "F"); }
     even = !even;
     doc.setFontSize(8.5); doc.setTextColor(11, 11, 12); doc.setFont("helvetica", "bold");
@@ -165,7 +167,7 @@ export async function buildProjectPlanPdf(d: ProjectPlanPrintData, cachetEditori
 
   // Observations globales.
   if (d.notes) {
-    y += 4; if (y > 250) { doc.addPage(); y = 16; }
+    y += 4; if (y > 250) { doc.addPage(); drawFiligrane(doc); y = 16; }
     doc.setFontSize(7.5); doc.setTextColor(120); doc.text("OBSERVATIONS ET POINTS DE VIGILANCE", L, y); y += 4;
     doc.setFontSize(9); doc.setTextColor(31, 41, 55);
     const nl = doc.splitTextToSize(d.notes, W) as string[];
@@ -174,7 +176,7 @@ export async function buildProjectPlanPdf(d: ProjectPlanPrintData, cachetEditori
 
   // Bloc « Direction éditoriale » à l'extrême droite + cachet.
   y = Math.max(y + 8, 250);
-  if (y > 258) { doc.addPage(); y = 40; }
+  if (y > 258) { doc.addPage(); drawFiligrane(doc); y = 40; }
   doc.setFontSize(7.5); doc.setTextColor(120); doc.text("DIRECTION ÉDITORIALE", R, y, { align: "right" }); y += 4;
   doc.setFontSize(8); doc.setTextColor(107, 114, 128); doc.text("Signature et cachet", R, y, { align: "right" }); y += 3;
   const cachet = await shrink(cachetEditoriale ?? null, 240, 0.85);

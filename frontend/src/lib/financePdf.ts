@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { ECLOSION_LOGO_PNG, ECLOSION_LOGO_RATIO } from "./payslipAssets";
+import { drawWatermark } from "./pdfWatermark";
 import { HOUSE, type AuthorRoyaltyStatementData, type CommissionStatementData } from "./print";
 import type { InvoiceDetail, EditorialQuote, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
 
@@ -38,6 +39,7 @@ function money(value: string | number, currency: string): string {
 // En-tête maison : logo (pleine résolution) à gauche, coordonnées à droite,
 // filet or/noir. Renvoie la position verticale sous l'en-tête.
 function houseHeader(doc: jsPDF): number {
+  drawWatermark(doc);
   const logoW = 46;
   const logoH = logoW / ECLOSION_LOGO_RATIO;
   const top = 14;

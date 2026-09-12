@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { EDITEUR_LEGAL } from "./print";
+import { drawWatermark } from "./pdfWatermark";
 import type { Absence } from "../api/client";
 
 // Notification de décision d'absence/permission — PDF à en-tête Éclosion, généré
@@ -56,6 +57,7 @@ export function buildAbsenceNoticePdf(a: Absence): Blob {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const L = 20, R = 190, W = R - L;
   let y = 20;
+  drawWatermark(doc);
 
   const line = (s: string, opts?: { size?: number; bold?: boolean; gap?: number; color?: [number, number, number] }) => {
     const size = opts?.size ?? 10.5;

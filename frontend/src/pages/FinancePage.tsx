@@ -1545,7 +1545,9 @@ function MonthlyBalanceSection() {
 
   // Montants en francs CFA (XAF), chiffres à chasse fixe (charte Éclospace).
   const money = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF", maximumFractionDigits: 0 }).format(n);
-  const catLabel = (code: string) => t("fin.cat." + code, CATEGORY_LABELS[code as ExpenseCategory] ?? code);
+  // Codes de sortie hors module Dépenses (décaissements de trésorerie).
+  const EXTRA_LABELS: Record<string, string> = { droits_auteur: "Droits d'auteur (versés)" };
+  const catLabel = (code: string) => t("fin.cat." + code, CATEGORY_LABELS[code as ExpenseCategory] ?? EXTRA_LABELS[code] ?? code);
 
   // Bornes d'années proposées : de l'année en cours jusqu'à 4 ans en arrière.
   const yearOptions: number[] = [];
@@ -1577,7 +1579,7 @@ function MonthlyBalanceSection() {
     <Card
       title={t("fin.treasury_balance", "Bilan de trésorerie")}
       icon={<IconFinance />}
-      subtitle={t("fin.treasury_balance_sub", "Entrées − dépenses (validées et payées) = solde. Périodicité au choix : mensuel, trimestriel, semestriel ou annuel. Calcul automatique à partir des opérations enregistrées.")}
+      subtitle={t("fin.treasury_balance_sub", "Entrées (encaissements) − sorties (dépenses validées + décaissements de trésorerie : droits d'auteur versés…) = solde. Périodicité au choix : mensuel, trimestriel, semestriel ou annuel. Calcul automatique à partir des opérations enregistrées.")}
       action={
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <select value={granularity} onChange={(e) => { setGranularity(e.target.value as BalanceGranularity); setOpenKey(null); }} style={{ fontSize: 13 }} title={t("fin.periodicity", "Périodicité")}>

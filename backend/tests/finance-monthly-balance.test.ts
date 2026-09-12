@@ -29,10 +29,11 @@ describe("Bilan mensuel de trésorerie", () => {
       expenseIds.push(e.id);
     };
 
-    // Septembre 2099 : 2 encaissements (3 000 000), 2 dépenses comptées (1 750 000).
+    // Septembre 2099 : 2 encaissements (3 000 000), 2 dépenses (1 750 000) +
+    // 1 décaissement de trésorerie (paiement « out » = droits d'auteur, 250 000).
     await pay("in", 2_500_000, "2099-09-15T10:00:00.000Z");
     await pay("in", 500_000, "2099-09-20T10:00:00.000Z");
-    await pay("out", 999, "2099-09-10T10:00:00.000Z"); // sortie ignorée (pas une entrée)
+    await pay("out", 250_000, "2099-09-10T10:00:00.000Z"); // décaissement → compté en sortie
     await exp(1_000_000, "transport", "validee", "2099-09-05T10:00:00.000Z");
     await exp(750_000, "loyer", "payee", "2099-09-12T10:00:00.000Z");
     await exp(999, "autre", "a_valider", "2099-09-01T10:00:00.000Z"); // non validée → ignorée
@@ -62,10 +63,12 @@ describe("Bilan mensuel de trésorerie", () => {
     const sept = body.months[8]; // septembre
     expect(sept.month).toBe(9);
     expect(sept.entrees).toBe(3_000_000);
-    expect(sept.depenses).toBe(1_750_000);
-    expect(sept.solde).toBe(1_250_000);
+    // Sorties = dépenses validées/payées (1 750 000) + décaissement trésorerie (250 000).
+    expect(sept.depenses).toBe(2_000_000);
+    expect(sept.solde).toBe(1_000_000);
     expect(sept.depensesParCategorie.transport).toBe(1_000_000);
     expect(sept.depensesParCategorie.loyer).toBe(750_000);
+    expect(sept.depensesParCategorie.droits_auteur).toBe(250_000);
 
     const octo = body.months[9];
     expect(octo.entrees).toBe(100_000);
@@ -74,7 +77,7 @@ describe("Bilan mensuel de trésorerie", () => {
 
     // Cumul annuel (uniquement nos données de 2099).
     expect(body.totals.entrees).toBe(3_100_000);
-    expect(body.totals.depenses).toBe(1_750_000);
-    expect(body.totals.solde).toBe(1_350_000);
+    expect(body.totals.depenses).toBe(2_000_000);
+    expect(body.totals.solde).toBe(1_100_000);
   });
 });

@@ -703,9 +703,14 @@ export default async function financeRoutes(fastify: FastifyInstance) {
     const start = new Date(Date.UTC(year, 0, 1));
     const end = new Date(Date.UTC(year + 1, 0, 1));
 
-    const [incomes, expenses] = await Promise.all([
+    const [incomes, expenses, outPayments] = await Promise.all([
       prisma.payment.findMany({ where: { direction: "in", receivedAt: { gte: start, lt: end } }, select: { amount: true, receivedAt: true } }),
       prisma.expense.findMany({ where: { status: { in: ["validee", "payee"] }, createdAt: { gte: start, lt: end } }, select: { amount: true, category: true, createdAt: true } }),
+      // Décaissements réels passés par la trésorerie (paiements « out ») : droits
+      // d'auteur versés, etc. Ils réduisent la trésorerie au même titre que les
+      // dépenses, mais ne sont PAS des `Expense` — sans eux, le bilan ne comptait
+      // que les entrées et une partie des sorties (signalé par la Finance, 12/09/2026).
+      prisma.payment.findMany({ where: { direction: "out", receivedAt: { gte: start, lt: end } }, select: { amount: true, receivedAt: true } }),
     ]);
 
     const months = Array.from({ length: 12 }, (_, m) => ({
@@ -724,6 +729,12 @@ export default async function financeRoutes(fastify: FastifyInstance) {
       const amt = Number(e.amount);
       row.depenses += amt;
       row.depensesParCategorie[e.category] = (row.depensesParCategorie[e.category] ?? 0) + amt;
+    }
+    for (const p of outPayments) {
+      const row = months[p.receivedAt.getUTCMonth()];
+      const amt = Number(p.amount);
+      row.depenses += amt;
+      row.depensesParCategorie["droits_auteur"] = (row.depensesParCategorie["droits_auteur"] ?? 0) + amt;
     }
 
     const round = (n: number) => Math.round(n * 100) / 100;

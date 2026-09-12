@@ -104,9 +104,20 @@ export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId
                 {p.required && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: "var(--eclosion-retard, #C4661F)" }}>OBLIGATOIRE</span>}
               </div>
               {p.has_file ? (
-                <a href={stepAttachmentDownloadUrl(manuscriptId, p.version_id!)} download style={{ fontSize: 12, color: "var(--eclosion-dark)", fontWeight: 600 }}>
-                  ⬇️ {p.filename ?? "Télécharger le fichier"}
-                </a>
+                <div>
+                  <a href={stepAttachmentDownloadUrl(manuscriptId, p.version_id!)} download style={{ fontSize: 12, color: "var(--eclosion-dark)", fontWeight: 600 }}>
+                    ⬇️ {p.filename ?? "Télécharger le fichier"}
+                  </a>
+                  {/* Retour transmis : date, auteur, version — consultable depuis
+                      la fiche globale de l'ouvrage. */}
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                    {[
+                      p.created_at ? `Transmis le ${new Date(p.created_at).toLocaleDateString("fr-FR")}` : null,
+                      p.uploaded_by_name ? `par ${p.uploaded_by_name}` : null,
+                      p.version_number ? `v${p.version_number}` : null,
+                    ].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
               ) : (
                 <span style={{ fontSize: 12, color: p.required ? "var(--eclosion-retard, #C4661F)" : "var(--muted)" }}>
                   {p.required ? "À déposer (bloque la suite)" : "Optionnel — non déposé"}

@@ -1027,7 +1027,12 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
       if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
       const phases = await correctionCycleState(id);
-      return reply.send(phases.map((p) => ({ ...p, can_correct: p.has_file && canCorrectDeposit(request, p.uploaded_by) })));
+      // Nom du déposant pour le « retour » affiché sur la fiche globale (date +
+      // auteur + version) : on résout les identifiants en une seule requête.
+      const uploaderIds = [...new Set(phases.map((p) => p.uploaded_by).filter((v): v is string => Boolean(v)))];
+      const users = uploaderIds.length ? await prisma.user.findMany({ where: { id: { in: uploaderIds } }, select: { id: true, username: true } }) : [];
+      const nameById = new Map(users.map((u) => [u.id, u.username]));
+      return reply.send(phases.map((p) => ({ ...p, uploaded_by_name: p.uploaded_by ? nameById.get(p.uploaded_by) ?? null : null, can_correct: p.has_file && canCorrectDeposit(request, p.uploaded_by) })));
     },
   );
 

@@ -4663,10 +4663,30 @@ export function getProjectPlan(manuscriptId: string) {
 export function saveProjectPlan(manuscriptId: string, input: ProjectPlanInput) {
   return request<ProjectPlan>(`/api/v1/manuscripts/${manuscriptId}/project-plan`, { method: "PUT", body: JSON.stringify(input) });
 }
-// Trace la génération/téléchargement de l'aperçu officiel du planning (autorise
-// ensuite le passage à l'étape suivante).
-export function markProjectPlanGenerated(manuscriptId: string) {
-  return request<{ pdf_generated_at: string }>(`/api/v1/manuscripts/${manuscriptId}/project-plan/mark-generated`, { method: "POST" });
+// Document officiel du planning (PDF conservé) : métadonnées de la carte fichier,
+// dépôt (le navigateur génère le PDF et le conserve), et URL de consultation /
+// téléchargement.
+export interface ProjectPlanDocument {
+  has_file: boolean;
+  version_id?: string;
+  version_number?: number;
+  file_size?: number;
+  mime_type?: string;
+  deposited_at?: string;
+  deposited_by?: string | null;
+}
+export function getProjectPlanDocument(manuscriptId: string) {
+  return request<ProjectPlanDocument>(`/api/v1/manuscripts/${manuscriptId}/project-plan/document`);
+}
+export async function uploadProjectPlanDocument(manuscriptId: string, bytes: Uint8Array, filename: string) {
+  const form = new FormData();
+  form.append("file", new Blob([bytes as unknown as BlobPart], { type: "application/pdf" }), filename);
+  const response = await fetch(`${API_BASE}/api/v1/manuscripts/${manuscriptId}/project-plan/document`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Conservation du planning impossible.");
+  return response.json() as Promise<{ has_file: boolean; version_number: number; deposited_at: string }>;
+}
+export function projectPlanDocumentUrl(manuscriptId: string, opts?: { download?: boolean }): string {
+  return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/project-plan/document/download${opts?.download ? "?download=1" : ""}`;
 }
 
 // --- Module « Présences & Temps de travail » (évolution, incrément 1) --------

@@ -4,6 +4,13 @@ import { ProjectActivityPriority, ProjectActivityStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { storeFile, readStoredFile } from "../lib/storage.js";
+
+// Document officiel du planning : le planning est SAISI dans Eclospace, puis
+// « déposé » sous la forme de son PDF officiel — conservé comme document
+// versionné du dossier (nom, format, date, déposant), consultable et
+// téléchargeable ultérieurement sans avoir à le régénérer.
+const PLAN_DOC_TITLE = "Planning du projet (PDF officiel)";
 
 // Planification du projet (étape PLANIFICATION) : le planning est SAISI dans
 // Eclospace et LIÉ au manuscrit (plus de fichier externe à déposer). Un plan par
@@ -174,28 +181,103 @@ export default async function projectPlanRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // Marque le planning comme « aperçu généré / téléchargé » : appelé par le
-  // navigateur au moment où l'utilisateur télécharge le PDF ou lance
-  // l'impression du document officiel. C'est cette trace qui autorise ensuite
-  // le passage à l'étape suivante (garde-fou `plan_not_generated` du workflow).
+  // Métadonnées du document officiel conservé (pour la carte fichier :
+  // nom, format, taille, date de dépôt, déposant, n° de version).
+  fastify.get(
+    "/api/v1/manuscripts/:id/project-plan/document",
+    { preHandler: requirePermission("manuscripts", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const doc = await prisma.document.findFirst({
+        where: { entityType: "manuscript", entityId: id, category: "piece_etape", title: PLAN_DOC_TITLE, deletedAt: null },
+        select: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+      });
+      const v = doc?.versions[0];
+      if (!v) return reply.send({ has_file: false });
+      const uploader = v.uploadedBy ? await prisma.user.findUnique({ where: { id: v.uploadedBy }, select: { username: true } }) : null;
+      return reply.send({
+        has_file: true,
+        version_id: v.id,
+        version_number: v.versionNumber,
+        file_size: v.fileSize,
+        mime_type: v.mimeType,
+        deposited_at: v.uploadedAt.toISOString(),
+        deposited_by: uploader?.username ?? null,
+      });
+    },
+  );
+
+  // Consultation / téléchargement du PDF conservé (inline par défaut pour
+  // l'aperçu ; en pièce jointe avec ?download=1 pour l'enregistrement local).
+  fastify.get(
+    "/api/v1/manuscripts/:id/project-plan/document/download",
+    { preHandler: requirePermission("manuscripts", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { download } = request.query as { download?: string };
+      const doc = await prisma.document.findFirst({
+        where: { entityType: "manuscript", entityId: id, category: "piece_etape", title: PLAN_DOC_TITLE, deletedAt: null },
+        select: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+      });
+      const v = doc?.versions[0];
+      if (!v) return reply.code(404).send({ code: "not_found", message: "Aucun planning conservé pour cet ouvrage." });
+      const buffer = await readStoredFile(v.filePath);
+      reply.header("content-type", v.mimeType || "application/pdf");
+      reply.header("content-disposition", `${download ? "attachment" : "inline"}; filename="planning-projet-v${v.versionNumber}.pdf"`);
+      return reply.send(buffer);
+    },
+  );
+
+  // « Déposer le planning » : le navigateur génère le PDF officiel du planning
+  // (à partir des données saisies) et le CONSERVE ici comme document versionné.
+  // C'est ce dépôt qui autorise le passage à l'étape suivante (garde-fou
+  // `plan_not_generated`) et qui reste consultable/téléchargeable ensuite.
   fastify.post(
-    "/api/v1/manuscripts/:id/project-plan/mark-generated",
+    "/api/v1/manuscripts/:id/project-plan/document",
     { preHandler: requirePermission("manuscripts", "saisie") },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const plan = await prisma.projectPlan.findFirst({ where: { manuscriptId: id, deletedAt: null }, select: { id: true } });
-      if (!plan) return reply.code(404).send({ code: "not_found", message: "Aucun planning enregistré pour ce manuscrit." });
+      if (!plan) return reply.code(400).send({ code: "plan_missing", message: "Enregistrez d'abord le planning avant de conserver son PDF." });
+      const file = await request.file();
+      if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+      const buffer = await file.toBuffer();
+      if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+      if (file.mimetype !== "application/pdf") return reply.code(400).send({ code: "invalid_type", message: "Le document du planning doit être un PDF." });
+      const stored = await storeFile(buffer, `planning-projet-${id}-${file.filename || "planning.pdf"}`);
+
+      let doc = await prisma.document.findFirst({
+        where: { entityType: "manuscript", entityId: id, category: "piece_etape", title: PLAN_DOC_TITLE, deletedAt: null },
+      });
+      if (!doc) {
+        doc = await prisma.document.create({
+          data: { entityType: "manuscript", entityId: id, category: "piece_etape", confidentiality: "interne", title: PLAN_DOC_TITLE, createdBy: request.user!.id, updatedBy: request.user!.id },
+        });
+      }
+      const last = await prisma.documentVersion.findFirst({ where: { documentId: doc.id }, orderBy: { versionNumber: "desc" } });
+      const version = await prisma.documentVersion.create({
+        data: {
+          documentId: doc.id,
+          versionNumber: (last?.versionNumber ?? 0) + 1,
+          filePath: stored.filePath,
+          fileSize: stored.fileSize,
+          mimeType: "application/pdf",
+          sha256Hash: stored.sha256Hash,
+          changeSummary: "Planning du projet conservé (PDF officiel)",
+          uploadedBy: request.user!.id,
+        },
+      });
       const now = new Date();
       await prisma.projectPlan.update({ where: { id: plan.id }, data: { pdfGeneratedAt: now, pdfGeneratedBy: request.user!.id } });
       await writeAuditLog({
         userId: request.user!.id,
-        action: "update",
-        entityType: "project_plan",
-        entityId: plan.id,
-        newValues: { pdf_generated_at: now.toISOString() },
+        action: "create",
+        entityType: "document_version",
+        entityId: version.id,
+        newValues: { project_plan_document: true, versionNumber: version.versionNumber },
         ipAddress: request.ip,
       });
-      return reply.send({ pdf_generated_at: now.toISOString() });
+      return reply.code(201).send({ has_file: true, version_number: version.versionNumber, deposited_at: now.toISOString() });
     },
   );
 }

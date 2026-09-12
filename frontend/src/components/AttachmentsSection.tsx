@@ -134,10 +134,11 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
 
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Pièces jointes</div>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Documents de l'ouvrage (pièces jointes)</div>
       <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 12px" }}>
-        Couvertures, livre monté, contrats scannés, pièces finance, archivage… — déposés par ouvrage, visibles par les pôles
-        autorisés, versionnés et conservés durablement.
+        Tout document lié à l'ouvrage — y compris les pièces fournies par l'auteur : couvertures, livre monté, contrats
+        scannés, pièces finance, archivage… Déposés par ouvrage, visibles par les pôles autorisés, versionnés et conservés
+        durablement.
       </p>
 
       {error && <Banner tone="alert">{error}</Banner>}

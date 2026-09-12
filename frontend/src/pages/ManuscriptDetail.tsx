@@ -58,7 +58,7 @@ import {
 import { useConfirm } from "../components/ConfirmProvider";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printEditorialDecisionLetter, type PrintOpts } from "../lib/print";
-import { ManuscriptWorkflow } from "../components/ManuscriptWorkflow";
+import { Spine } from "../components/Spine";
 import { ContractsSection } from "../components/ContractsSection";
 import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
 import { TasksSection } from "../components/TasksSection";
@@ -355,7 +355,15 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
       )}
 
       <h1 style={{ fontFamily: "var(--font-title)", fontSize: 20, margin: 0 }}>{manuscript.title}</h1>
-      <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 12 }}>{manuscript.manuscriptNumber}</p>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "2px 0 0" }}>
+        <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 12 }}>{manuscript.manuscriptNumber}</span>
+        {/* Statut = où en est l'ouvrage (ex. « En correction ») : repère immédiat,
+            sans détailler le processus interne de l'étape. */}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", background: "var(--eclosion-soft, #f6efd8)", border: "1px solid var(--eclosion, #d9b21a)", borderRadius: 999, padding: "2px 11px" }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--eclosion, #d9b21a)" }} />
+          {manuscript.sealed ? "Dossier archivé" : manuscript.status.label}
+        </span>
+      </div>
       <p style={{ fontSize: 13 }}>
         Auteur : {manuscript.workContributors.map((c) => `${c.partner.firstName} ${c.partner.lastName}`).join(", ")} · Genre :{" "}
         {manuscript.genre?.label ?? "—"} · Responsable : {manuscript.owner.username}
@@ -405,7 +413,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         </div>
       )}
 
-      <ManuscriptWorkflow steps={timeline} currentStatusCode={manuscript.status.code} />
+      <Spine steps={timeline} currentStatusCode={manuscript.status.code} />
 
       {message && (
         <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginTop: 12 }}>

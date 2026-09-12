@@ -46,7 +46,7 @@ export async function correctionCycleState(manuscriptId: string) {
   const docs = await prisma.document.findMany({
     where: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape", deletedAt: null, title: { startsWith: PREFIX } },
     orderBy: { createdAt: "desc" },
-    select: { id: true, title: true, createdAt: true, createdBy: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true, fileSize: true, mimeType: true } } },
+    select: { id: true, title: true, createdAt: true, createdBy: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true, fileSize: true, mimeType: true, versionNumber: true } } },
   });
   const latestByPhase = new Map<string, (typeof docs)[number]>();
   for (const d of docs) {
@@ -65,6 +65,7 @@ export async function correctionCycleState(manuscriptId: string) {
       doc_id: d?.id ?? null,
       uploaded_by: d?.createdBy ?? null,
       version_id: v?.id ?? null,
+      version_number: v?.versionNumber ?? null,
       filename,
       created_at: d?.createdAt ?? null,
     };

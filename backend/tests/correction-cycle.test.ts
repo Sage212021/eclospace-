@@ -73,9 +73,15 @@ describe("correction éditoriale en deux temps", () => {
     expect(r2.statusCode).toBe(201);
 
     const meta = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/correction-cycle`, headers: { cookie } });
-    const byKey = Object.fromEntries((meta.json() as { key: string; has_file: boolean }[]).map((p) => [p.key, p.has_file]));
+    const rows = meta.json() as { key: string; has_file: boolean; uploaded_by_name: string | null; version_number: number | null; created_at: string | null }[];
+    const byKey = Object.fromEntries(rows.map((p) => [p.key, p.has_file]));
     expect(byKey.rapport_1).toBe(true);
     expect(byKey.integration_finale).toBe(true);
+    // Retour transmis consultable sur la fiche globale : date + auteur + version.
+    const r1row = rows.find((p) => p.key === "rapport_1")!;
+    expect(r1row.uploaded_by_name).toBe("admin");
+    expect(r1row.version_number).toBe(1);
+    expect(r1row.created_at).toBeTruthy();
 
     const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/CORRECTION/validate`, headers: { cookie }, payload: {} });
     expect(ok.statusCode).toBe(200);

@@ -713,8 +713,10 @@ export interface CorrectionPhaseState {
   doc_id?: string | null;
   can_correct?: boolean;
   version_id: string | null;
+  version_number?: number | null;
   filename: string | null;
   created_at: string | null;
+  uploaded_by_name?: string | null;
 }
 export function getCorrectionCycle(manuscriptId: string) {
   return request<CorrectionPhaseState[]>(`/api/v1/manuscripts/${manuscriptId}/correction-cycle`);

@@ -726,7 +726,14 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         <EditorialQuotesInbox manuscriptId={manuscript.id} />
       )}
 
-      {(show("correction") || show("expertise") || show("reecriture")) && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && permissions.has("tasks:consultation") && (
+      {/* Espace de travail éditorial (tâches, cycle de correction, assistants IA
+          Expertise / Réécriture / Correction) : visible en « vue centrée » sur
+          ces rubriques OU, quel que soit l'endroit d'où l'ouvrage a été ouvert,
+          dès que l'ouvrage EST à l'une de ces étapes (pour que les branchements
+          IA apparaissent toujours au bon endroit). */}
+      {(((show("correction") || show("expertise") || show("reecriture")) && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER)
+        || ["EXPERTISE", "REECRITURE", "CORRECTION"].includes(manuscript.status.code))
+        && permissions.has("tasks:consultation") && (
         <>
           <TasksSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
           <CorrectionCyclePanel manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")} />

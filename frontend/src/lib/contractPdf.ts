@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { EDITEUR_LEGAL, type PublisherLegal } from "./print";
+import { drawWatermark } from "./pdfWatermark";
 import type { ContractDetail } from "../api/client";
 
 // Contrat d'édition à compte d'éditeur — génération PDF côté navigateur (jsPDF,
@@ -77,8 +78,9 @@ export function buildAuthorContractPdf(c: ContractDetail, publisher?: Partial<Pu
   const L = 18, R = 192, W = R - L;
   const bottom = 282;
   let y = 20;
+  drawWatermark(doc);
 
-  const ensure = (h: number) => { if (y + h > bottom) { doc.addPage(); y = 20; } };
+  const ensure = (h: number) => { if (y + h > bottom) { doc.addPage(); drawWatermark(doc); y = 20; } };
   const text = (s: string, opts?: { size?: number; bold?: boolean; gap?: number }) => {
     const size = opts?.size ?? 9.5;
     doc.setFont("helvetica", opts?.bold ? "bold" : "normal");

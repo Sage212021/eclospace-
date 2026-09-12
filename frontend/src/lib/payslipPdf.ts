@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { PayslipPrintData } from "./print";
-import { ECLOSION_LOGO_PNG, ECLOSION_LOGO_RATIO, ECLOSION_FILIGRANE_PNG, ECLOSION_FILIGRANE_RATIO } from "./payslipAssets";
+import { ECLOSION_LOGO_PNG, ECLOSION_LOGO_RATIO } from "./payslipAssets";
+import { drawWatermark } from "./pdfWatermark";
 
 // BULLETIN DE PAIE — modèle UNIQUE, reproduction fidèle de l'onglet « Bulletin »
 // du classeur moteur (docs/paie/Moteur_Paie_Eclosion_V26_MAJ10.xlsm) :
@@ -46,14 +47,10 @@ function renderPayslip(doc: jsPDF, d: PayslipPrintData): void {
   const p = d.payslip;
   const r = d.rates ?? null;
 
-  // ---- Filigrane : ampoule Éclosion au centre, très pâle (authenticité) ----
-  // Dessiné EN PREMIER, derrière tout le contenu.
-  const filH = 150, filW = filH * ECLOSION_FILIGRANE_RATIO;
-  doc.saveGraphicsState();
-  // @ts-expect-error — GState est fourni par jsPDF à l'exécution.
-  doc.setGState(new doc.GState({ opacity: 0.55 }));
-  doc.addImage(ECLOSION_FILIGRANE_PNG, "PNG", (210 - filW) / 2, (297 - filH) / 2, filW, filH, "eclFil", "SLOW");
-  doc.restoreGraphicsState();
+  // ---- Filigrane : ampoule « livre » Éclosion au centre, pâle (authenticité) ----
+  // Dessiné EN PREMIER, derrière tout le contenu. Filigrane commun à tous les
+  // documents PDF (même ampoule que l'en-tête officiel).
+  drawWatermark(doc);
 
   let y = 12;
 

@@ -100,9 +100,11 @@ describe("verrou « livrable de sortie » d'étape", () => {
     expect(notGenerated.statusCode).toBe(409);
     expect(notGenerated.json().code).toBe("plan_not_generated");
 
-    // Une fois l'aperçu du planning généré/téléchargé → validation possible.
+    // Une fois le planning enregistré ET son PDF officiel conservé → validation
+    // possible.
     await app.inject({ method: "PUT", url: `/api/v1/manuscripts/${m.id}/project-plan`, headers: { cookie }, payload: { activities: [{ label: "Lancement", priority: "haute", status: "a_faire" }] } });
-    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/project-plan/mark-generated`, headers: { cookie } });
+    const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+    await prisma.projectPlan.update({ where: { manuscriptId: m.id }, data: { pdfGeneratedAt: new Date(), pdfGeneratedBy: admin.id } });
     const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/PLANIFICATION/validate`, headers: { cookie }, payload: realizationPayload("PLANIFICATION") });
     expect(ok.statusCode).toBe(200);
   });

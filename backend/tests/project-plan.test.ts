@@ -80,28 +80,57 @@ describe("planification du projet — planning lié au manuscrit", () => {
     expect(reread.json().activities.length).toBe(1);
   });
 
-  it("trace la génération de l'aperçu (mark-generated) ; 404 sans planning", async () => {
+  it("conserve le PDF officiel du planning (carte fichier) ; refuse sans planning ou non-PDF", async () => {
     const id = await manuscriptAtPlanification();
+    const pdf = (name: string) => {
+      const boundary = "----ecl" + rnd();
+      const body = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.4 fake\r\n--${boundary}--\r\n`;
+      return { headers: { cookie, "content-type": `multipart/form-data; boundary=${boundary}` }, payload: body };
+    };
 
-    // Sans planning enregistré : rien à marquer (404).
-    const early = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/project-plan/mark-generated`, headers: { cookie } });
-    expect(early.statusCode).toBe(404);
+    // Sans planning enregistré : dépôt refusé (400 plan_missing).
+    const early = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/project-plan/document`, ...pdf("p.pdf") });
+    expect(early.statusCode).toBe(400);
+    expect(early.json().code).toBe("plan_missing");
 
     await app.inject({
       method: "PUT", url: `/api/v1/manuscripts/${id}/project-plan`, headers: { cookie },
       payload: { manager_name: "Noah Mbala", activities: [{ label: "Lancement", priority: "haute", status: "a_faire" }] },
     });
 
-    // Au départ, l'aperçu n'a pas été généré.
-    const before = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/project-plan`, headers: { cookie } });
-    expect(before.json().pdf_generated_at).toBeNull();
+    // Au départ, pas de PDF conservé ni de date de génération.
+    const metaBefore = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/project-plan/document`, headers: { cookie } });
+    expect(metaBefore.json().has_file).toBe(false);
+    const planBefore = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/project-plan`, headers: { cookie } });
+    expect(planBefore.json().pdf_generated_at).toBeNull();
 
-    const mark = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/project-plan/mark-generated`, headers: { cookie } });
-    expect(mark.statusCode).toBe(200);
-    expect(mark.json().pdf_generated_at).toBeTruthy();
+    // Un fichier non-PDF est refusé.
+    const boundary = "----ecl" + rnd();
+    const txt = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="p.txt"\r\nContent-Type: text/plain\r\n\r\nplat\r\n--${boundary}--\r\n`;
+    const bad = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/project-plan/document`, headers: { cookie, "content-type": `multipart/form-data; boundary=${boundary}` }, payload: txt });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().code).toBe("invalid_type");
 
-    const after = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/project-plan`, headers: { cookie } });
-    expect(after.json().pdf_generated_at).toBeTruthy();
+    // Dépôt du PDF officiel : carte fichier renseignée, date de génération posée.
+    const dep = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/project-plan/document`, ...pdf("planning.pdf") });
+    expect(dep.statusCode).toBe(201);
+    expect(dep.json().version_number).toBe(1);
+
+    const meta = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/project-plan/document`, headers: { cookie } });
+    expect(meta.json().has_file).toBe(true);
+    expect(meta.json().mime_type).toBe("application/pdf");
+    expect(meta.json().deposited_by).toBe("admin");
+    const planAfter = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/project-plan`, headers: { cookie } });
+    expect(planAfter.json().pdf_generated_at).toBeTruthy();
+
+    // Un nouveau dépôt incrémente la version (versionnement conservé).
+    const dep2 = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/project-plan/document`, ...pdf("planning.pdf") });
+    expect(dep2.json().version_number).toBe(2);
+
+    // Téléchargement du PDF conservé.
+    const dl = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${id}/project-plan/document/download`, headers: { cookie } });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.headers["content-type"]).toContain("application/pdf");
   });
 
   it("refuse l'enregistrement sans droit de saisie manuscrits (403)", async () => {

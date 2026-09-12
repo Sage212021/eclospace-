@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getProjectPlan,
   saveProjectPlan,
-  markProjectPlanGenerated,
+  getProjectPlanDocument,
+  uploadProjectPlanDocument,
+  projectPlanDocumentUrl,
   getBranding,
   type ProjectPlanActivity,
+  type ProjectPlanDocument,
   type ProjectActivityPriority,
   type ProjectActivityStatus,
 } from "../api/client";
@@ -12,7 +15,9 @@ import { Card } from "./Card";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
 import { printProjectPlan, type ProjectPlanPrintData } from "../lib/print";
-import { downloadProjectPlanPdf } from "../lib/projectPlanPdf";
+import { buildProjectPlanPdf, downloadProjectPlanPdf } from "../lib/projectPlanPdf";
+
+const fmtSize = (n?: number) => (n == null ? "" : n < 1024 ? `${n} o` : n < 1_048_576 ? `${(n / 1024).toFixed(0)} Ko` : `${(n / 1_048_576).toFixed(1)} Mo`);
 
 // Planification du projet SAISIE dans Eclospace (plus de fichier à déposer) :
 // informations générales + activités datées, liées au manuscrit. Après
@@ -69,11 +74,14 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [cachet, setCachet] = useState<string | null>(null);
-  // Suivi de l'aperçu officiel : `generatedAt` = dernier téléchargement/impression
-  // du PDF ; `planUpdatedAt` = dernier enregistrement. Si le planning a été
-  // modifié APRÈS le dernier téléchargement, l'aperçu détenu n'est plus à jour.
+  // Document officiel conservé : `doc` = carte fichier (nom/date/déposant…) ;
+  // `generatedAt` = date du dernier PDF conservé ; `planUpdatedAt` = dernier
+  // enregistrement. Si le planning a été modifié APRÈS la conservation, le PDF
+  // détenu n'est plus à jour (invite à re-conserver).
+  const [doc, setDoc] = useState<ProjectPlanDocument | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [planUpdatedAt, setPlanUpdatedAt] = useState<string | null>(null);
+  const [storing, setStoring] = useState(false);
 
   useEffect(() => {
     let done = false;
@@ -98,6 +106,7 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."))
       .finally(() => { clearTimeout(guard); finish(); });
+    getProjectPlanDocument(manuscriptId).then((d) => setDoc(d)).catch(() => {});
     getBranding().then((b) => setCachet(b.cachet_editoriale)).catch(() => {});
     return () => clearTimeout(guard);
   }, [manuscriptId]);
@@ -188,23 +197,33 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
     })),
   });
 
-  // Après avoir produit le document officiel (téléchargement du PDF ou
-  // impression), on enregistre le planning s'il reste des modifications puis on
-  // trace la génération côté serveur : c'est cette trace qui autorise le passage
-  // à l'étape suivante. La génération locale a déjà eu lieu, donc un échec réseau
-  // ici reste silencieux (l'utilisateur a bien son fichier).
-  async function markGenerated() {
+  // « Déposer le planning » : on enregistre le planning s'il reste des
+  // modifications, on génère le PDF officiel à partir des données saisies, et on
+  // le CONSERVE côté serveur comme document versionné du dossier. C'est ce dépôt
+  // qui autorise le passage à l'étape suivante et qui reste consultable ensuite.
+  async function conserve() {
+    setError(null); setMessage(null);
     try {
       if (canManage && !hasEmptyLabel && (dirty || version === 0)) await save(true);
-      const r = await markProjectPlanGenerated(manuscriptId);
-      setGeneratedAt(r.pdf_generated_at);
-    } catch { /* le fichier est déjà produit ; on n'affiche pas d'erreur bloquante */ }
+      setStoring(true);
+      const bytes = await buildProjectPlanPdf(printData(), cachet);
+      const safe = (manuscriptTitle || "planning").replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 60);
+      const res = await uploadProjectPlanDocument(manuscriptId, bytes, `Planning-${safe}.pdf`);
+      setGeneratedAt(res.deposited_at);
+      setDoc(await getProjectPlanDocument(manuscriptId));
+      setMessage(`Planning conservé (PDF officiel) — version ${res.version_number}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Conservation du planning impossible.");
+    } finally {
+      setStoring(false);
+    }
   }
 
-  // L'aperçu détenu est-il à jour ? Non tant qu'il n'a jamais été téléchargé, ou
-  // si le planning a été enregistré après le dernier téléchargement.
-  const generated = !!generatedAt;
-  const stale = !!(generatedAt && planUpdatedAt && new Date(planUpdatedAt).getTime() > new Date(generatedAt).getTime());
+  // Le PDF officiel est-il conservé et à jour ? Non tant qu'aucun n'a été déposé,
+  // ou si le planning a été enregistré après le dernier dépôt.
+  const generated = !!doc?.has_file;
+  const depositedAt = doc?.deposited_at ?? generatedAt;
+  const stale = !!(generated && depositedAt && planUpdatedAt && new Date(planUpdatedAt).getTime() > new Date(depositedAt).getTime());
 
   // La carte reste TOUJOURS visible à l'étape Planification — même si le
   // chargement du planning est lent ou échoue, elle ne disparaît jamais
@@ -318,29 +337,66 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
           {busy ? "Enregistrement…" : dirty ? "Modifications en cours — sauvegarde automatique…" : savedAt ? `Enregistré automatiquement à ${savedAt}${version ? ` (version ${version})` : ""}.` : version > 0 ? `Version ${version} enregistrée.` : "Sauvegarde automatique activée."}
         </span>
         <div style={{ marginLeft: "auto" }}>
+          {/* Aperçu / impression à la volée (sans conserver). Le document officiel
+              du dossier est celui qui est DÉPOSÉ ci-dessous. */}
           <DocPrintMenu
-            label="Aperçu / Imprimer / PDF"
-            // Un simple « Aperçu à l'écran » (opts.preview) ne compte pas comme un
-            // téléchargement ; l'impression et le PDF, si.
-            onPrint={(opts) => { printProjectPlan(printData(), opts, cachet); if (!opts.preview) void markGenerated(); }}
-            onDownloadPdf={() => { downloadProjectPlanPdf(printData(), cachet).then(() => markGenerated()).catch((e) => setError(e instanceof Error ? e.message : "Téléchargement impossible.")); }}
+            label="Aperçu / Imprimer"
+            onPrint={(opts) => printProjectPlan(printData(), opts, cachet)}
+            onDownloadPdf={() => { downloadProjectPlanPdf(printData(), cachet).catch((e) => setError(e instanceof Error ? e.message : "Téléchargement impossible.")); }}
           />
         </div>
       </div>
 
-      {/* État du garde-fou « aperçu téléchargé » : le passage à l'étape suivante
-          est bloqué tant que le PDF officiel du planning n'a pas été téléchargé. */}
-      <div style={{
-        marginTop: 10, borderRadius: 8, padding: "8px 12px", fontSize: 12.5,
-        background: generated && !stale ? "#e7f1ea" : "#fbf3e0",
-        color: generated && !stale ? "var(--valid, #2F7D4A)" : "var(--warn, #B87400)",
-        border: `1px solid ${generated && !stale ? "#bfdcc9" : "#eddcae"}`,
-      }}>
-        {generated && !stale
-          ? "✓ Aperçu du planning téléchargé — le passage à l'étape suivante est autorisé."
-          : stale
-            ? "⚠ Planning modifié depuis le dernier téléchargement — retéléchargez le PDF à jour avant de passer à l'étape suivante."
-            : "⚠ Aperçu du planning non téléchargé — téléchargez le PDF (bouton « Aperçu / Imprimer / PDF » → « Télécharger le PDF ») avant de passer à l'étape suivante."}
+      {/* DÉPÔT DU PLANNING DU PROJET (obligatoire) — le planning saisi ci-dessus
+          est conservé comme document officiel du dossier (PDF versionné). Sa
+          présence conditionne le passage à l'étape suivante. */}
+      <div style={{ marginTop: 12, border: "1px solid var(--line)", borderRadius: 10, padding: 12, background: "var(--paper, #faf8f2)" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.2, marginBottom: 4 }}>DÉPOSER LE PLANNING DU PROJET</div>
+        <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 10px" }}>
+          Le planning saisi ci-dessus est conservé comme document officiel du projet (PDF). Ce dépôt est obligatoire pour valider l'étape ; il reste ensuite consultable et téléchargeable.
+        </p>
+
+        {/* Carte fichier du planning conservé */}
+        {generated && doc?.has_file ? (
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 12px" }}>
+            <span style={{ fontSize: 20 }}>📄</span>
+            <div style={{ minWidth: 200, flex: "1 1 auto" }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>Planning du projet — PDF{doc.version_number ? ` (v${doc.version_number})` : ""}</div>
+              <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                PDF{doc.file_size ? ` · ${fmtSize(doc.file_size)}` : ""}
+                {doc.deposited_at ? ` · déposé le ${new Date(doc.deposited_at).toLocaleDateString("fr-FR")}` : ""}
+                {doc.deposited_by ? ` · par ${doc.deposited_by}` : ""}
+              </div>
+            </div>
+            <a href={projectPlanDocumentUrl(manuscriptId)} target="_blank" rel="noreferrer" style={fileActionStyle}>👁 Aperçu</a>
+            <a href={projectPlanDocumentUrl(manuscriptId, { download: true })} style={fileActionStyle}>⬇ Télécharger</a>
+          </div>
+        ) : (
+          <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 8px" }}>Aucun planning conservé pour l'instant.</p>
+        )}
+
+        {canManage && (
+          <div style={{ marginTop: 10 }}>
+            <Button variant="add" size="sm" type="button" disabled={storing || busy || hasEmptyLabel} onClick={() => void conserve()}>
+              {storing ? "Conservation…" : generated ? "Mettre à jour le planning conservé" : "Déposer / conserver le planning (PDF officiel)"}
+            </Button>
+          </div>
+        )}
+
+        {/* État du garde-fou : le passage à l'étape suivante est bloqué tant que
+            le planning n'a pas été déposé. */}
+        <div style={{
+          marginTop: 10, borderRadius: 8, padding: "8px 12px", fontSize: 12.5,
+          background: generated && !stale ? "#e7f1ea" : "#fbf3e0",
+          color: generated && !stale ? "var(--valid, #2F7D4A)" : "var(--warn, #B87400)",
+          border: `1px solid ${generated && !stale ? "#bfdcc9" : "#eddcae"}`,
+        }}>
+          {generated && !stale
+            ? "✓ Planning déposé — le passage à l'étape suivante est autorisé."
+            : stale
+              ? "⚠ Planning modifié depuis le dernier dépôt — redéposez le planning à jour avant de passer à l'étape suivante."
+              : "⚠ Le dépôt du planning du projet est obligatoire pour valider cette étape."}
+        </div>
       </div>
       {!cachet && (
         <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Astuce : téléversez le cachet « Direction éditoriale » dans Réglages → Cachets &amp; signature pour qu'il apparaisse automatiquement sur le PDF.</p>
@@ -348,6 +404,8 @@ export function ProjectPlanSection({ manuscriptId, manuscriptTitle, manuscriptNu
     </Card>
   );
 }
+
+const fileActionStyle: React.CSSProperties = { color: "var(--eclosion-dark, #9a7a12)", textDecoration: "none", fontWeight: 600, fontSize: 12.5, border: "1px solid var(--eclosion)", borderRadius: 6, padding: "5px 10px", whiteSpace: "nowrap", background: "#fff" };
 
 const miniBtn: React.CSSProperties = { background: "none", border: "1px solid var(--line)", borderRadius: 6, padding: "2px 7px", fontSize: 12, cursor: "pointer", marginRight: 3 };
 const miniLabel: React.CSSProperties = { fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 2 };

@@ -739,35 +739,44 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           <CorrectionCyclePanel manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")} />
           {(permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")) && (
             <>
-              <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — BAT1" hint="Produit aussi le manuscrit corrigé BAT1 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
-              <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — BAT2" hint="Produit aussi le manuscrit corrigé BAT2 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
-              <AiReadingLauncher manuscriptId={manuscript.id} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" askCoverPass hint="Choisissez le passage : BAT1 (1ᵉʳ) ou BAT2. Au BAT2, l'IA reçoit le rapport du BAT précédent, vérifie les intégrations, ce qui manque et les améliorations." />
-              {/* Assistants IA « Expertise scientifique » et « Réécriture » — branchés
-                  sur les étapes éditoriales existantes (EXPERTISE, REECRITURE). La
-                  consigne particulière permet de préciser le type d'expertise, les
-                  paragraphes ciblés ou le niveau de préservation de la voix. */}
-              <AiReadingLauncher
-                manuscriptId={manuscript.id}
-                workType="expertise"
-                stepCode="EXPERTISE"
-                title="🤖 Expertise scientifique IA"
-                hint="Produit un rapport d'expertise scientifique (grille en 18 points, Constat/Problème/Explication/Recommandation) + une proposition d'avis assistée par IA. Aide à la décision — jamais une expertise humaine. Choisissez les objectifs ci-dessous ou précisez le domaine scientifique."
-                presetGroups={[
-                  { title: "Expertise ciblée (cumulable)", options: ["Analyse de la problématique", "Analyse des objectifs", "Analyse des hypothèses", "Analyse de la méthodologie", "Analyse de la cohérence scientifique", "Analyse de la structure", "Analyse de la qualité argumentative", "Analyse des résultats", "Analyse de la discussion", "Analyse des références bibliographiques", "Identification des affirmations nécessitant des sources", "Identification des incohérences", "Identification des contradictions", "Identification des lacunes scientifiques", "Analyse des limites du travail"] },
-                  { title: "Expertise complète", options: ["Expertise scientifique complète (analyse structurée de tout le document)"] },
-                ]}
-              />
-              <AiReadingLauncher
-                manuscriptId={manuscript.id}
-                workType="reecriture"
-                stepCode="REECRITURE"
-                title="🤖 Réécriture IA"
-                hint="Produit une VERSION RÉÉCRITE (l'original est conservé, jamais écrasé) + un rapport de réécriture. Choisissez le type et le degré de préservation de la voix ci-dessous ; vous pouvez aussi cibler des paragraphes dans la consigne."
-                presetGroups={[
-                  { title: "Type de réécriture", options: ["Correction linguistique", "Amélioration stylistique", "Réécriture approfondie", "Réécriture académique", "Réécriture professionnelle"] },
-                  { title: "Préserver la voix de l'auteur", options: ["Préservation de la voix : minimale", "Préservation de la voix : modérée", "Préservation de la voix : importante"] },
-                ]}
-              />
+              {/* Chaque assistant IA n'apparaît QU'À son étape (demande opérateur
+                  12/09/2026) : Correction en Correction, Expertise en Expertise,
+                  Réécriture en Réécriture. */}
+              {manuscript.status.code === "CORRECTION" && (
+                <>
+                  <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — BAT1" hint="Produit aussi le manuscrit corrigé BAT1 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
+                  <AiReadingLauncher manuscriptId={manuscript.id} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — BAT2" hint="Produit aussi le manuscrit corrigé BAT2 (à intégrer par le correcteur). Coût plus élevé qu'un simple rapport." />
+                  <AiReadingLauncher manuscriptId={manuscript.id} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" askCoverPass hint="Choisissez le passage : BAT1 (1ᵉʳ) ou BAT2. Au BAT2, l'IA reçoit le rapport du BAT précédent, vérifie les intégrations, ce qui manque et les améliorations." />
+                </>
+              )}
+              {/* Assistant IA « Expertise scientifique » — uniquement à l'étape Expertise. */}
+              {manuscript.status.code === "EXPERTISE" && (
+                <AiReadingLauncher
+                  manuscriptId={manuscript.id}
+                  workType="expertise"
+                  stepCode="EXPERTISE"
+                  title="🤖 Expertise scientifique IA"
+                  hint="Produit un rapport d'expertise scientifique (grille en 18 points, Constat/Problème/Explication/Recommandation) + une proposition d'avis assistée par IA. Aide à la décision — jamais une expertise humaine. Choisissez les objectifs ci-dessous ou précisez le domaine scientifique."
+                  presetGroups={[
+                    { title: "Expertise ciblée (cumulable)", options: ["Analyse de la problématique", "Analyse des objectifs", "Analyse des hypothèses", "Analyse de la méthodologie", "Analyse de la cohérence scientifique", "Analyse de la structure", "Analyse de la qualité argumentative", "Analyse des résultats", "Analyse de la discussion", "Analyse des références bibliographiques", "Identification des affirmations nécessitant des sources", "Identification des incohérences", "Identification des contradictions", "Identification des lacunes scientifiques", "Analyse des limites du travail"] },
+                    { title: "Expertise complète", options: ["Expertise scientifique complète (analyse structurée de tout le document)"] },
+                  ]}
+                />
+              )}
+              {/* Assistant IA « Réécriture » — uniquement à l'étape Réécriture. */}
+              {manuscript.status.code === "REECRITURE" && (
+                <AiReadingLauncher
+                  manuscriptId={manuscript.id}
+                  workType="reecriture"
+                  stepCode="REECRITURE"
+                  title="🤖 Réécriture IA"
+                  hint="Produit une VERSION RÉÉCRITE (l'original est conservé, jamais écrasé) + un rapport de réécriture. Choisissez le type et le degré de préservation de la voix ci-dessous ; vous pouvez aussi cibler des paragraphes dans la consigne."
+                  presetGroups={[
+                    { title: "Type de réécriture", options: ["Correction linguistique", "Amélioration stylistique", "Réécriture approfondie", "Réécriture académique", "Réécriture professionnelle"] },
+                    { title: "Préserver la voix de l'auteur", options: ["Préservation de la voix : minimale", "Préservation de la voix : modérée", "Préservation de la voix : importante"] },
+                  ]}
+                />
+              )}
             </>
           )}
           <CorrectionSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />

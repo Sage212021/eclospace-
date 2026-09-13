@@ -3411,7 +3411,7 @@ export interface Expense {
   id: string;
   category: ExpenseCategory;
   amount: string;
-  status: "a_valider" | "validee" | "payee" | "rejetee";
+  status: "a_valider" | "en_attente_dg" | "validee" | "payee" | "rejetee";
   supplier: string | null;
   description: string | null;
   createdBy: string | null;

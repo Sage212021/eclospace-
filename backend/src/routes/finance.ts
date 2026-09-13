@@ -500,7 +500,8 @@ export default async function financeRoutes(fastify: FastifyInstance) {
 
       if (expense.status === "a_valider") {
         const threshold = await expenseDgValidationThreshold();
-        if (Number(expense.amount) > threshold) {
+        // « À partir de » le seuil (montant ≥ seuil) → Direction générale.
+        if (Number(expense.amount) >= threshold) {
           const updated = await prisma.expense.update({
             where: { id },
             data: { status: "en_attente_dg", financeValidatedBy: request.user!.id },
@@ -1200,7 +1201,10 @@ function mapExpenseCategoryToCostType(category: string): CostType {
 
 async function expenseDgValidationThreshold(): Promise<number> {
   const setting = await prisma.setting.findUnique({ where: { key: "expense_dg_validation_threshold" } });
-  return (setting?.value as number | undefined) ?? 500_000;
+  // Seuil de délégation (demande opérateur 13/09/2026) : à partir de 1 000 000,
+  // la validation finale est envoyée à la Direction générale ; en dessous, la
+  // Finance valide. Paramétrable via le réglage `expense_dg_validation_threshold`.
+  return (setting?.value as number | undefined) ?? 1_000_000;
 }
 
 async function validateExpenseAndPostCostEntry(id: string, approvedBy: string) {

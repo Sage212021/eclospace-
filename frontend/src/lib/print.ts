@@ -98,9 +98,16 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
   // (coordonnées, RC/NIU/BP, e-mail/site) y a été re-tracé net → plus de flou à
   // l'impression, contrairement à l'ancienne version 127 dpi.
   const embedStyle = embed
-    ? `body { background: url("${window.location.origin}/eclosion-papier-entete.png") top center / 210mm 297mm no-repeat; }
-       .doc { max-width: none; padding: 58mm 20mm 58mm; }
+    ? `.doc { max-width: none; padding: 58mm 20mm 58mm; }
+       .lh-bg { position: fixed; left: 0; top: 0; width: 210mm; height: 297mm; z-index: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
        body, .doc { -webkit-print-color-adjust: exact; print-color-adjust: exact; }`
+    : "";
+  // Fond « papier à en-tête » A4 officiel rendu en <img> PLEIN PAGE (et non en
+  // image de fond CSS, qui ne s'imprime pas sur mobile → page blanche à
+  // l'impression alors que l'aperçu écran l'affichait). Position fixe : l'image
+  // se répète sur chaque page d'un document multi-pages.
+  const embedBg = embed
+    ? `<img class="lh-bg" src="${window.location.origin}/eclosion-papier-entete.png" alt="" aria-hidden="true">`
     : "";
 
   return `<!doctype html><html lang="${docLang()}"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
@@ -156,6 +163,7 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
   </style></head>
   <body>
     ${watermark}
+    ${embedBg}
     <div class="doc">
       ${head}
       ${body}

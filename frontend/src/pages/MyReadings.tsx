@@ -605,8 +605,7 @@ function ReportMenu({ assignment, onMessage }: { assignment: ReadingAssignment; 
         <summary style={menuSummaryStyle}>Mon rapport ▾</summary>
         <div style={menuBoxStyle}>
           <div style={menuHeadStyle}>Télécharger (PDF)</div>
-          <button style={menuItemStyle} onClick={() => print({})}>Numérique / PDF</button>
-          <button style={menuItemStyle} onClick={() => print({ embed: true })}>Avec papier à en-tête intégré</button>
+          <button style={menuItemStyle} onClick={() => print({})}>Numérique / PDF (en-tête officiel)</button>
           <button style={menuItemStyle} onClick={() => print({ letterhead: true })}>Sur papier à en-tête vierge</button>
           <div style={menuSepStyle} />
           {assignment.hasReportFile && (

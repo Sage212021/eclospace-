@@ -103,7 +103,10 @@ const STATUS_LABELS: Record<string, string> = {
   cancellation_requested: "Annulation en attente",
   credit_note: "Avoir",
   a_valider: "À valider",
+  en_attente_dg: "En attente DG",
   validee: "Validée",
+  payee: "Payée",
+  rejetee: "Rejetée",
   draft: "Brouillon",
 };
 
@@ -150,6 +153,9 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
   const [invoicePeriod, setInvoicePeriod] = useState<Period>(currentPeriod());
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  // Retour de validation affiché DANS la carte Dépenses (le bandeau global est en
+  // haut de page, hors écran quand on est sur les Dépenses → « rien ne réagit »).
+  const [expenseNote, setExpenseNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [royaltyStatements, setRoyaltyStatements] = useState<RoyaltyStatement[]>([]);
   const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -410,12 +416,19 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
       confirmLabel: t("fin.validate", "Valider"),
     });
     if (!ok) return;
+    setExpenseNote(null);
     try {
-      await validateExpense(expense.id);
-      setMessage(t("fin.msg.expense_validated", "Dépense validée."));
+      const updated = await validateExpense(expense.id);
+      setExpenseNote({
+        ok: true,
+        text: updated.status === "en_attente_dg"
+          ? "Dépense transmise à la Direction générale pour validation finale (montant ≥ seuil de délégation)."
+          : "Dépense validée.",
+      });
       await refresh();
     } catch (err) {
-      fail(err, "Échec de la validation.");
+      // Affiché DANS la carte (près du bouton), pour que le refus soit visible.
+      setExpenseNote({ ok: false, text: err instanceof Error ? err.message : "Échec de la validation." });
     }
   }
 
@@ -702,6 +715,16 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
 
       {/* Ch. 18 §18.4 — Dépenses */}
       <Card title={t("fin.expenses", "Dépenses")} icon={<IconFinance />} subtitle={t("fin.expenses_sub", "Engagements de dépenses et validations.")}>
+        {expenseNote && (
+          <div style={{
+            marginBottom: 10, borderRadius: 8, padding: "8px 12px", fontSize: 12.5,
+            background: expenseNote.ok ? "#e7f1ea" : "#f8e3df",
+            color: expenseNote.ok ? "var(--valid, #2F7D4A)" : "var(--danger, #B23A2E)",
+            border: `1px solid ${expenseNote.ok ? "#bfdcc9" : "#e6c3bc"}`,
+          }}>
+            {expenseNote.text}
+          </div>
+        )}
         {expenses.length === 0 ? (
           <Empty>{t("fin.no_expense", "Aucune dépense.")}</Empty>
         ) : (
@@ -714,8 +737,10 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
                   <StatusChip label={t("fin.st." + expense.status, STATUS_LABELS[expense.status] ?? expense.status)} />
                   {expense.description && <span className="ecl-row__desc" style={{ margin: 0 }}>{expense.description}</span>}
                 </div>
-                {canAdminister && expense.status === "a_valider" && (
-                  <Button variant="add" size="sm" onClick={() => handleValidateExpense(expense)}>{t("fin.validate", "Valider")}</Button>
+                {canAdminister && (expense.status === "a_valider" || expense.status === "en_attente_dg") && (
+                  <Button variant="add" size="sm" onClick={() => handleValidateExpense(expense)}>
+                    {expense.status === "en_attente_dg" ? t("fin.validate_dg", "Valider (DG)") : t("fin.validate", "Valider")}
+                  </Button>
                 )}
               </div>
             ))}

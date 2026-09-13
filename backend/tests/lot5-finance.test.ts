@@ -643,7 +643,7 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
       method: "POST",
       url: "/api/v1/expenses",
       headers: { cookie: adminCookie },
-      payload: { category: "prestation", amount: 600000, description: "Prestation au-delà du seuil de délégation" },
+      payload: { category: "prestation", amount: 1_200_000, description: "Prestation au-delà du seuil de délégation" },
     });
     expect(expense.statusCode).toBe(201);
 

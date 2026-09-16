@@ -2096,3 +2096,17 @@ export function previewStampedContract(sign: ContractStampData): void {
     </div>`;
   openPrintWindow(tr("Aperçu — cachet & signature (contrat)", "Preview — stamp & signature (contract)"), body, { preview: true });
 }
+
+// Historique des mouvements de stock (export PDF / impression) — table générique
+// à l'en-tête officiel, alimentée par le jeu déjà filtré à l'écran (§12).
+export function printStockMovements(d: { headers: string[]; rows: (string | number)[][]; count: number }, opts?: PrintOpts): void {
+  const head = d.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
+  const body = d.rows
+    .map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(String(c))}</td>`).join("")}</tr>`)
+    .join("");
+  const html = `
+    <div class="doc__title">${tr("Historique des mouvements de stock", "Stock movements history")}</div>
+    <div class="meta"><span>${d.count} ${tr("mouvement(s)", "movement(s)")}</span><span>${escapeHtml(new Date().toLocaleString(locale()))}</span></div>
+    <table class="lines" style="font-size:10px"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${d.headers.length}">${tr("Aucun mouvement.", "No movement.")}</td></tr>`}</tbody></table>`;
+  openPrintWindow(tr("Mouvements de stock", "Stock movements"), html, opts);
+}

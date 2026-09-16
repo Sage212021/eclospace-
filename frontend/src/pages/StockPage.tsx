@@ -37,6 +37,7 @@ import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
 import { IconCommercial } from "../components/icons";
+import { printStockMovements } from "../lib/print";
 
 const MOVEMENT_LABELS: Record<StockMovementType, string> = {
   production_in: "Réception de fabrication",
@@ -614,12 +615,61 @@ function MovementHistory({
   const [editing, setEditing] = useState<StockMovement | null>(null);
   const [period, setPeriod] = useState<Period>(currentPeriod);
   const [search, setSearch] = useState("");
+  // Filtres avancés (§12) : type, utilisateur, bénéficiaire, filtres rapides.
+  const [fType, setFType] = useState<string>("all");
+  const [fUser, setFUser] = useState<string>("all");
+  const [fBenef, setFBenef] = useState("");
+  const [fQuick, setFQuick] = useState<"all" | "reappro" | "degat">("all");
+  const DEGAT_TYPES: StockMovementType[] = ["destruction", "damage", "loss", "pulping"];
   // Recherche par ouvrage (titre) ou ISBN : on retrouve le titre via le catalogue.
   const titleByIsbn = new Map(isbns.map((i) => [i.id, i.manuscript?.title ?? ""]));
   const q = search.trim().toLowerCase();
+  const benefQ = fBenef.trim().toLowerCase();
+  // Utilisateurs présents dans l'historique (pour le filtre par utilisateur).
+  const usersInHistory = [...new Set(movements.map((m) => m.moved_by_name).filter((n): n is string => !!n))].sort((a, b) => a.localeCompare(b, "fr"));
   const filtered = movements
     .filter((m) => inPeriod(m.movedAt, period))
-    .filter((m) => !q || (m.isbn13 ?? "").toLowerCase().includes(q) || (titleByIsbn.get(m.isbnId) ?? "").toLowerCase().includes(q));
+    .filter((m) => !q || (m.isbn13 ?? "").toLowerCase().includes(q) || (titleByIsbn.get(m.isbnId) ?? "").toLowerCase().includes(q))
+    .filter((m) => fType === "all" || m.type === fType)
+    .filter((m) => fUser === "all" || m.moved_by_name === fUser)
+    .filter((m) => !benefQ || (m.beneficiary ?? "").toLowerCase().includes(benefQ))
+    .filter((m) => fQuick === "all" || (fQuick === "reappro" ? m.referenceType === "replenishment" : DEGAT_TYPES.includes(m.type)));
+
+  // Export du jeu filtré : Excel (CSV) et PDF (en-tête officiel).
+  function movementRows() {
+    return filtered.map((m) => {
+      const inQty = sign(m) === "+" ? String(m.quantity) : "";
+      const outQty = sign(m) === "−" ? String(m.quantity) : "";
+      return [
+        new Date(m.movedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }),
+        MOVEMENT_LABELS[m.type] ?? m.type,
+        titleByIsbn.get(m.isbnId) || m.isbn13 || "",
+        m.isbn13 ?? "",
+        inQty,
+        outQty,
+        [m.from_location_label, m.to_location_label].filter(Boolean).join(" → "),
+        m.reason ?? "",
+        m.beneficiary ?? "",
+        m.moved_by_name ?? "",
+        m.has_justification ? "Oui" : "Non",
+        m.status === "cancelled" ? "Annulé" : "",
+      ];
+    });
+  }
+  const EXPORT_HEADERS = ["Date", "Mouvement", "Ouvrage", "ISBN", "Entrée", "Sortie", "Lieu", "Motif", "Bénéficiaire", "Utilisateur", "Justificatif", "Statut"];
+  function exportCsv() {
+    const csv = [EXPORT_HEADERS, ...movementRows()].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `mouvements-stock_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  function exportPdf() {
+    printStockMovements({ headers: EXPORT_HEADERS, rows: movementRows(), count: filtered.length });
+  }
 
   useEffect(() => {
     listStockMovements(filterIsbnId ?? undefined).then(setMovements).catch((e) => onError(e instanceof Error ? e.message : "Chargement des mouvements impossible."));
@@ -678,6 +728,28 @@ function MovementHistory({
       )}
       {movements.length > 0 && (
         <PeriodFilter dates={movements.map((m) => m.movedAt)} value={period} onChange={setPeriod} resultCount={filtered.length} />
+      )}
+      {movements.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "8px 0 12px" }}>
+          <select value={fType} onChange={(e) => setFType(e.target.value)} style={filterSelectStyle} title="Type de mouvement">
+            <option value="all">Tous les types</option>
+            {(Object.keys(MOVEMENT_LABELS) as StockMovementType[]).map((tp) => <option key={tp} value={tp}>{MOVEMENT_LABELS[tp]}</option>)}
+          </select>
+          <select value={fUser} onChange={(e) => setFUser(e.target.value)} style={filterSelectStyle} title="Utilisateur">
+            <option value="all">Tous les utilisateurs</option>
+            {usersInHistory.map((u) => <option key={u} value={u}>{u}</option>)}
+          </select>
+          <input value={fBenef} onChange={(e) => setFBenef(e.target.value)} placeholder="Bénéficiaire / origine…" style={{ ...filterSelectStyle, minWidth: 160 }} />
+          <button type="button" onClick={() => setFQuick(fQuick === "reappro" ? "all" : "reappro")} style={chipBtnStyle(fQuick === "reappro")}>Réapprovisionnements</button>
+          <button type="button" onClick={() => setFQuick(fQuick === "degat" ? "all" : "degat")} style={chipBtnStyle(fQuick === "degat")}>Destructions / détériorations</button>
+          {(fType !== "all" || fUser !== "all" || fBenef || fQuick !== "all") && (
+            <button type="button" onClick={() => { setFType("all"); setFUser("all"); setFBenef(""); setFQuick("all"); }} style={{ ...chipBtnStyle(false), color: "var(--alert)" }}>Réinitialiser</button>
+          )}
+          <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+            <Button variant="view" size="sm" onClick={exportCsv} disabled={filtered.length === 0}>Excel (CSV)</Button>
+            <Button variant="view" size="sm" onClick={exportPdf} disabled={filtered.length === 0}>PDF</Button>
+          </div>
+        </div>
       )}
       {filtered.length === 0 ? (
         <Empty>{movements.length === 0 ? t("stock.no_movement", "Aucun mouvement enregistré.") : "Aucun mouvement pour cette période ou cette recherche."}</Empty>
@@ -814,4 +886,9 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 function bannerStyle(bg: string, color: string): React.CSSProperties {
   return { background: bg, color, borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 12 };
+}
+
+const filterSelectStyle: React.CSSProperties = { padding: "6px 9px", fontSize: 12.5, border: "1px solid var(--line)", borderRadius: 8, background: "var(--card)", color: "var(--ink)" };
+function chipBtnStyle(active: boolean): React.CSSProperties {
+  return { fontSize: 12, cursor: "pointer", border: `1px solid ${active ? "var(--eclosion, #d9b21a)" : "var(--line)"}`, background: active ? "var(--eclosion-soft, #f6efdc)" : "#fff", color: active ? "var(--eclosion-dark, #9a7a12)" : "var(--ink)", borderRadius: 999, padding: "5px 11px", fontWeight: active ? 700 : 400 };
 }

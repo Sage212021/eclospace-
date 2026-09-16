@@ -24,6 +24,11 @@ const paymentSchema = z.object({
   reference: z.string().max(120).optional(),
   amount: z.number().positive(),
   bank_account_id: z.string().uuid().optional(),
+  // Date réelle de l'encaissement (facultative : par défaut aujourd'hui). Sert
+  // au classement par mois/trimestre/semestre du bilan de trésorerie — sans
+  // elle, un encaissement saisi a posteriori tomberait dans le mois de saisie
+  // (d'où l'impression que « le bilan ne se ventile que par an »).
+  received_at: z.coerce.date().optional(),
   allocations: z.array(z.object({ invoice_id: z.string().uuid(), amount: z.number().positive() })).min(1),
 });
 
@@ -180,6 +185,9 @@ export default async function financeRoutes(fastify: FastifyInstance) {
         message: "Le total des lettrages doit correspondre au montant du paiement.",
       });
     }
+    if (body.received_at && body.received_at.getTime() > Date.now()) {
+      return reply.code(400).send({ code: "date_future", message: "La date d'encaissement ne peut pas être dans le futur." });
+    }
 
     // Mode de paiement : doit exister et être actif (liste configurable).
     const methodDef = await prisma.paymentMethodDef.findUnique({ where: { code: body.method } });
@@ -200,6 +208,8 @@ export default async function financeRoutes(fastify: FastifyInstance) {
             reference: body.reference,
             amount: body.amount,
             bankAccountId,
+            // Date réelle fournie, sinon aujourd'hui (défaut du schéma).
+            ...(body.received_at ? { receivedAt: body.received_at } : {}),
             createdBy: request.user!.id,
           },
         });

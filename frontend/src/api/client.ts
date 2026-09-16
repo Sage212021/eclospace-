@@ -3497,6 +3497,7 @@ export function createPayment(input: {
   reference?: string;
   bank_account_id?: string;
   amount: number;
+  received_at?: string;
   allocations: { invoice_id: string; amount: number }[];
 }) {
   return request(`/api/v1/payments`, { method: "POST", body: JSON.stringify(input) });

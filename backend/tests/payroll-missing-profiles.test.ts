@@ -60,15 +60,23 @@ describe("grille de paie : salariés sans fiche paie", () => {
     expect(missingIds).not.toContain(withProfile);
   });
 
-  it("un salarié dont la fiche paie est créée APRÈS préparation apparaît à la relecture (auto-complétion)", async () => {
+  it("un salarié dont la fiche paie est créée APRÈS préparation n'apparaît QUE si l'on re-prépare (contrôle explicite, D-041)", async () => {
     // Nouveau salarié + fiche paie créés APRÈS que le mois a été préparé.
     const late = await prisma.employee.create({ data: { firstName: `${tag}-Tardif`, lastName: "Fiche" } });
     await prisma.payrollEmployeeProfile.create({ data: { employeeId: late.id, grossContractual: 200000, basePct: 1 } });
 
-    // Simple relecture de la grille : la ligne manquante est créée à la volée.
-    const month = (await app.inject({ method: "GET", url: `/api/v1/payroll/monthly/${period}`, headers: { cookie } })).json();
-    const lineIds = (month.lines as Array<{ employee_id: string }>).map((l) => l.employee_id);
-    expect(lineIds).toContain(late.id);
+    // Relecture simple : il n'est PAS ajouté automatiquement au mois (plus de
+    // préremplissage silencieux), mais signalé comme « fiche présente, absent du mois ».
+    let month = (await app.inject({ method: "GET", url: `/api/v1/payroll/monthly/${period}`, headers: { cookie } })).json();
+    expect((month.lines as Array<{ employee_id: string }>).map((l) => l.employee_id)).not.toContain(late.id);
+    const miss = (month.missing_profiles as Array<{ employee_id: string; has_fiche?: boolean }>).find((m) => m.employee_id === late.id);
+    expect(miss).toBeTruthy();
+    expect(miss!.has_fiche).toBe(true);
+
+    // Après re-préparation EXPLICITE du mois, il est intégré à la grille.
+    await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${period}/prepare`, headers: { cookie } });
+    month = (await app.inject({ method: "GET", url: `/api/v1/payroll/monthly/${period}`, headers: { cookie } })).json();
+    expect((month.lines as Array<{ employee_id: string }>).map((l) => l.employee_id)).toContain(late.id);
 
     await prisma.payrollEmployeeProfile.deleteMany({ where: { employeeId: late.id } }).catch(() => {});
     await prisma.payrollMonthlyLine.deleteMany({ where: { employeeId: late.id } }).catch(() => {});

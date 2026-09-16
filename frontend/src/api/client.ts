@@ -5471,7 +5471,7 @@ export interface PayrollMonth {
   lines?: PayrollMonthLine[];
   totals?: { brut: number; net: number; cout: number };
   // Employés sans fiche paie (exclus de la grille tant que leur fiche n'existe pas).
-  missing_profiles?: { employee_id: string; name: string; department: string | null }[];
+  missing_profiles?: { employee_id: string; name: string; department: string | null; has_fiche?: boolean }[];
 }
 export function preparePayrollMonth(period: string) {
   return request<{ period: string; status: PayrollMonthStatus }>(`/api/v1/payroll/monthly/${period}/prepare`, { method: "POST" });
@@ -5561,6 +5561,10 @@ export function savePayrollMonthLine(period: string, employeeId: string, element
   // des primes validées reporté sur la ligne.
   const { primes: _primes, ...rest } = elements;
   return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...rest, note: note ?? null, extra_lines: extraLines ?? [] }) });
+}
+// Retire la fiche de paie d'un salarié pour CE mois (période ouverte).
+export function deletePayrollMonthLine(period: string, employeeId: string) {
+  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "DELETE" });
 }
 // Validation définitive du mois par le Directeur général (obligatoire avant impression).
 export function validatePayrollMonth(period: string) {

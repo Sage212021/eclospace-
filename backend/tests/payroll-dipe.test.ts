@@ -44,6 +44,8 @@ describe("DIPE mensuel CNPS", () => {
       method: "PUT", url: `/api/v1/payroll/employees/${e.id}/profile`, headers: { cookie },
       payload: { gross_contractual: 1500000, base_pct: 0.6, matricule, cnps_number: cnpsNumber, fiscal_parts: 1, apply_fiscal_parts: true, seniority_years: 0, apply_seniority: false },
     });
+    // D-041 : préparer la période pour que le livre de paie / DIPE la comptent.
+    await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/prepare`, headers: { cookie } });
   });
 
   afterAll(async () => {

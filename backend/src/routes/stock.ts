@@ -8,6 +8,8 @@ import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { adjustStockItem, availableQuantity } from "../lib/stock.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
+import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
+import { findDuplicateManuscript, duplicateMessage } from "../lib/manuscriptDuplicate.js";
 
 // Rapprochement de titres (chargement de l'inventaire) : normalisation tolérante
 // aux accents/casse/ponctuation + score de Dice sur bigrammes de caractères.
@@ -1343,6 +1345,125 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       if (e instanceof StockWouldGoNegativeError) return reply.code(409).send({ code: "stock_negative", message: `Retour impossible : le commercial ne détient pas ${parsed.data.quantity} exemplaire(s).` });
       throw e;
     }
+  });
+
+  // Ajout rapide d'un ouvrage/bien au CATALOGUE CENTRAL depuis la remise (D-042,
+  // option A validée par l'opérateur). Un commercial/magasinier peut, au moment
+  // de remettre des exemplaires, créer une fiche minimale (Manuscrit + ISBN) pour
+  // un ouvrage encore absent du catalogue — SANS créer de catalogue parallèle :
+  // c'est la même fiche ouvrage centrale que partout ailleurs. Contrôle de
+  // doublon (titre normalisé ET ISBN) : si l'ouvrage existe déjà, on renvoie la
+  // fiche existante pour que l'écran propose de la sélectionner plutôt que d'en
+  // créer une seconde. La fiche est marquée « back-catalogue » (saisie a
+  // posteriori, hors circuit de production) au statut « suivi post-publication »,
+  // afin d'apparaître comme un ouvrage commercialisable ; l'éditorial peut ensuite
+  // la compléter (auteur, collection, ISBN officiel…).
+  const quickGoodSchema = z.object({
+    title: z.string().trim().min(1, "Le titre est obligatoire."),
+    isbn13: z.string().trim().optional(),
+    author_name: z.string().trim().optional(),
+    price: z.number().nonnegative().optional(),
+  });
+
+  // Reconstitue une entrée au format des sélecteurs d'ouvrage (`/isbns`).
+  async function isbnRefFor(isbnId: string) {
+    const i = await prisma.isbn.findUnique({
+      where: { id: isbnId },
+      include: {
+        manuscript: { select: { title: true, workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, take: 1, select: { partner: { select: { firstName: true, lastName: true } } } } } },
+        priceList: { orderBy: { effectiveFrom: "desc" }, take: 1, select: { price: true } },
+      },
+    });
+    if (!i) return null;
+    const c = i.manuscript?.workContributors?.[0]?.partner;
+    const author = c ? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || null : null;
+    return { id: i.id, isbn13: i.isbn13, format: i.format, status: i.status, manuscriptId: i.manuscriptId, manuscript: i.manuscript ? { title: i.manuscript.title } : null, author, price_ht: i.priceList[0] ? Number(i.priceList[0].price) : null };
+  }
+
+  fastify.post("/api/v1/commercial-stock/quick-good", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const parsed = quickGoodSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const { title, author_name, price } = parsed.data;
+
+    // ISBN saisi : on retire tirets/espaces ; s'il est renseigné il doit compter
+    // 13 chiffres (ISBN-13). Absent → une référence provisoire interne est posée.
+    const rawIsbn = (parsed.data.isbn13 ?? "").replace(/[\s-]/g, "");
+    if (rawIsbn && !/^\d{13}$/.test(rawIsbn)) {
+      return reply.code(400).send({ code: "isbn_invalid", message: "L'ISBN doit comporter 13 chiffres (ISBN-13), ou être laissé vide." });
+    }
+
+    // Doublon par ISBN : l'ISBN n'est jamais réutilisé (contrainte d'intégrité).
+    if (rawIsbn) {
+      const existingIsbn = await prisma.isbn.findUnique({ where: { isbn13: rawIsbn } });
+      if (existingIsbn) {
+        const ref = await isbnRefFor(existingIsbn.id);
+        return reply.code(409).send({ code: "isbn_exists", message: `L'ISBN ${rawIsbn} est déjà attribué à un ouvrage du catalogue.`, existing: ref });
+      }
+    }
+
+    // Doublon par titre normalisé (casse/accents/ponctuation) : on propose la
+    // fiche existante au lieu d'en créer une seconde.
+    const dup = await findDuplicateManuscript(title);
+    if (dup) {
+      const dupMs = await prisma.manuscript.findFirst({
+        where: { manuscriptNumber: dup.manuscriptNumber },
+        select: { id: true, isbns: { where: { format: "print" }, orderBy: { createdAt: "asc" }, take: 1, select: { id: true } } },
+      });
+      const ref = dupMs?.isbns[0] ? await isbnRefFor(dupMs.isbns[0].id) : null;
+      return reply.code(409).send({ code: "duplicate_manuscript", message: duplicateMessage(dup, title), existing: ref });
+    }
+
+    const publishedStatus = await prisma.workflowStatus.findUnique({ where: { code: "SUIVI_POST_PUBLICATION" } });
+    if (!publishedStatus) return reply.code(500).send({ code: "referential_missing", message: "Statut SUIVI_POST_PUBLICATION absent du référentiel (seed manquant)." });
+
+    const manuscriptNumber = await nextManuscriptNumber();
+    const isbn13Final = rawIsbn || `PROV-${manuscriptNumber}`;
+    const now = new Date();
+
+    const isbn = await prisma.$transaction(async (tx) => {
+      let authorId: string | null = null;
+      if (author_name) {
+        const parts = author_name.split(/\s+/);
+        const lastName = parts.pop() ?? author_name;
+        const firstName = parts.join(" ");
+        const author = await tx.partner.create({ data: { category: "auteur", firstName, lastName, createdBy: request.user!.id, updatedBy: request.user!.id } });
+        authorId = author.id;
+      }
+      const ms = await tx.manuscript.create({
+        data: {
+          manuscriptNumber,
+          title,
+          language: "fr",
+          origin: "soumission",
+          statusId: publishedStatus.id,
+          ownerId: request.user!.id,
+          receivedAt: now,
+          publicationDate: now,
+          isBackCatalogue: true,
+          createdBy: request.user!.id,
+          updatedBy: request.user!.id,
+          ...(authorId ? { workContributors: { create: { partnerId: authorId, role: "author", displayOrder: 0 } } } : {}),
+        },
+      });
+      const createdIsbn = await tx.isbn.create({
+        data: { isbn13: isbn13Final, manuscriptId: ms.id, format: "print", status: "published", assignedAt: now, assignedBy: request.user!.id },
+      });
+      if (price != null && price > 0) {
+        await tx.priceList.create({ data: { isbnId: createdIsbn.id, country: "CM", currency: "XAF", price, effectiveFrom: now, createdBy: request.user!.id } });
+      }
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "create",
+        entityType: "manuscript",
+        entityId: ms.id,
+        newValues: { manuscriptNumber, title, quick_add_commercial: true, isbn13: isbn13Final, provisional_isbn: !rawIsbn, back_catalogue: true },
+        ipAddress: request.ip,
+      });
+      return createdIsbn;
+    });
+
+    const ref = await isbnRefFor(isbn.id);
+    return reply.code(201).send(ref);
   });
 
   // État de TOUS les commerciaux — responsable commercial / direction / admin stock.

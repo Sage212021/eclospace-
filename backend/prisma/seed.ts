@@ -414,14 +414,11 @@ async function main() {
   await grant("DIR_GENERAL", ["royalties:consultation", "royalties:validation"]);
   await grant("RESP_JURIDIQUE", ["royalties:consultation"]);
 
-  // Seuil de délégation pour la validation finale des dépenses (Ch. 18
-  // §18.11) : au-delà, la Direction générale doit valider en second — comme
-  // purchase_order_delegation_threshold (Ch. 15 §15.3), valeur à confirmer.
-  await prisma.setting.upsert({
-    where: { key: "expense_dg_validation_threshold" },
-    update: {},
-    create: { key: "expense_dg_validation_threshold", value: 500_000 },
-  });
+  // Décision opérateur (16/09/2026) : TOUTE dépense d'ouvrage est validée par
+  // deux personnes (DAF puis Direction générale), quel que soit le montant. Le
+  // seuil de délégation des dépenses n'a donc plus de raison d'être ; on nettoie
+  // l'ancien réglage s'il subsiste dans une base existante.
+  await prisma.setting.deleteMany({ where: { key: "expense_dg_validation_threshold" } });
 
   // Ressources humaines (Ch. 19) — le dossier RH est **réservé au responsable
   // RH et à la Direction générale** (§19.2, même exigence de confidentialité que

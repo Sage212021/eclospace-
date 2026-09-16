@@ -602,10 +602,13 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
     expect(Number(epubEntries.json()[0].amount)).toBe(7500);
   });
 
-  it("la séparation des tâches empêche l'auto-validation d'une dépense (Ch. 18 §18.11)", async () => {
+  it("même une petite dépense est validée par deux personnes — DAF puis DG, quel que soit le montant (décision opérateur 16/09/2026)", async () => {
     await createUserWithRole("resp_finance_test", "RESP_FINANCE", "RespFinance123!");
     const respFinanceCookie = await loginCookie(app, "resp_finance_test", "RespFinance123!");
+    await createUserWithRole("dir_general_test", "DIR_GENERAL", "DirGeneral123!");
+    const dirGeneralCookie = await loginCookie(app, "dir_general_test", "DirGeneral123!");
 
+    // Petit montant : il n'y a plus de seuil, la Direction générale valide quand même.
     const expense = await app.inject({
       method: "POST",
       url: "/api/v1/expenses",
@@ -614,26 +617,39 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
     });
     expect(expense.statusCode).toBe(201);
 
-    const selfValidate = await app.inject({
+    // Palier 1 : la Finance (DAF) valide — y compris sa propre saisie — et la
+    // dépense part en attente de la Direction générale.
+    const firstValidation = await app.inject({
       method: "PATCH",
       url: `/api/v1/expenses/${expense.json().id}/validate`,
       headers: { cookie: respFinanceCookie },
       payload: {},
     });
-    expect(selfValidate.statusCode).toBe(409);
-    expect(selfValidate.json().code).toBe("self_validation_forbidden");
+    expect(firstValidation.statusCode).toBe(200);
+    expect(firstValidation.json().status).toBe("en_attente_dg");
 
-    const validatedByOther = await app.inject({
+    // La Finance ne peut pas prononcer la validation finale.
+    const refusedNonDg = await app.inject({
       method: "PATCH",
       url: `/api/v1/expenses/${expense.json().id}/validate`,
-      headers: { cookie: adminCookie },
+      headers: { cookie: respFinanceCookie },
       payload: {},
     });
-    expect(validatedByOther.statusCode).toBe(200);
-    expect(validatedByOther.json().status).toBe("validee");
+    expect(refusedNonDg.statusCode).toBe(403);
+    expect(refusedNonDg.json().code).toBe("dg_approval_required");
+
+    // Palier 2 : la Direction générale valide → la dépense est comptée au bilan.
+    const finalValidation = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/expenses/${expense.json().id}/validate`,
+      headers: { cookie: dirGeneralCookie },
+      payload: {},
+    });
+    expect(finalValidation.statusCode).toBe(200);
+    expect(finalValidation.json().status).toBe("validee");
   });
 
-  it("une dépense au-delà du seuil de délégation exige une validation finale de la Direction générale (Ch. 18 §18.11)", async () => {
+  it("la validation finale d'une dépense est réservée à la Direction générale, distincte du premier validateur (Ch. 18 §18.11)", async () => {
     await createUserWithRole("resp_finance_test", "RESP_FINANCE", "RespFinance123!");
     const respFinanceCookie = await loginCookie(app, "resp_finance_test", "RespFinance123!");
     await createUserWithRole("dir_general_test", "DIR_GENERAL", "DirGeneral123!");
@@ -643,7 +659,7 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
       method: "POST",
       url: "/api/v1/expenses",
       headers: { cookie: adminCookie },
-      payload: { category: "prestation", amount: 1_200_000, description: "Prestation au-delà du seuil de délégation" },
+      payload: { category: "prestation", amount: 1_200_000, description: "Prestation à double validation" },
     });
     expect(expense.statusCode).toBe(201);
 
@@ -693,8 +709,12 @@ describe("Finance et droits d'auteur (Lot 5)", () => {
       headers: { cookie: adminCookie },
       payload: { category: "communication", amount: 15000, manuscript_id: manuscript.id, description: "Campagne de promotion" },
     });
+    // Double validation (DAF puis DG) : le cost_entry n'est créé qu'à la
+    // validation finale de la Direction générale.
     const respFinanceCookie = await loginCookie(app, "resp_finance_test", "RespFinance123!");
     await app.inject({ method: "PATCH", url: `/api/v1/expenses/${expense.json().id}/validate`, headers: { cookie: respFinanceCookie }, payload: {} });
+    const dirGeneralCookie = await loginCookie(app, "dir_general_test", "DirGeneral123!");
+    await app.inject({ method: "PATCH", url: `/api/v1/expenses/${expense.json().id}/validate`, headers: { cookie: dirGeneralCookie }, payload: {} });
 
     const costEntry = await prisma.costEntry.findFirstOrThrow({ where: { expenseId: expense.json().id } });
     expect(costEntry.costType).toBe("promotion");

@@ -422,7 +422,7 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
       setExpenseNote({
         ok: true,
         text: updated.status === "en_attente_dg"
-          ? "Dépense transmise à la Direction générale pour validation finale (montant ≥ seuil de délégation)."
+          ? "Première validation enregistrée. Dépense transmise à la Direction générale pour la validation finale (toute dépense est validée par deux personnes)."
           : "Dépense validée.",
       });
       await refresh();

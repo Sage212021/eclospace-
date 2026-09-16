@@ -3414,6 +3414,7 @@ export interface Expense {
   status: "a_valider" | "en_attente_dg" | "validee" | "payee" | "rejetee";
   supplier: string | null;
   description: string | null;
+  expenseDate: string;
   createdBy: string | null;
 }
 
@@ -3422,7 +3423,7 @@ export function listExpenses(manuscriptId?: string) {
   return request<Expense[]>(`/api/v1/expenses${query}`);
 }
 
-export function createExpense(input: { category: ExpenseCategory; amount: number; supplier?: string; manuscript_id?: string; description?: string }) {
+export function createExpense(input: { category: ExpenseCategory; amount: number; supplier?: string; manuscript_id?: string; description?: string; expense_date?: string }) {
   return request<Expense>(`/api/v1/expenses`, { method: "POST", body: JSON.stringify(input) });
 }
 

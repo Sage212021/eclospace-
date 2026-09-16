@@ -25,7 +25,8 @@ describe("Bilan mensuel de trésorerie", () => {
       paymentIds.push(p.id);
     };
     const exp = async (amount: number, category: "transport" | "loyer" | "autre", status: "validee" | "payee" | "a_valider" | "rejetee", iso: string) => {
-      const e = await prisma.expense.create({ data: { amount, category, status, createdAt: new Date(iso) } });
+      // expenseDate = date réelle de la dépense : le bilan répartit par mois selon elle.
+      const e = await prisma.expense.create({ data: { amount, category, status, expenseDate: new Date(iso), createdAt: new Date(iso) } });
       expenseIds.push(e.id);
     };
 
@@ -79,5 +80,38 @@ describe("Bilan mensuel de trésorerie", () => {
     expect(body.totals.entrees).toBe(3_100_000);
     expect(body.totals.depenses).toBe(2_000_000);
     expect(body.totals.solde).toBe(1_100_000);
+  });
+
+  it("classe la dépense selon sa DATE RÉELLE (expense_date), pas la date de saisie", async () => {
+    // Dépense engagée en mars 2098 mais SAISIE en septembre 2098.
+    const e = await prisma.expense.create({
+      data: {
+        amount: 500_000,
+        category: "transport",
+        status: "validee",
+        expenseDate: new Date("2098-03-15T10:00:00.000Z"),
+        createdAt: new Date("2098-09-20T10:00:00.000Z"),
+      },
+    });
+    expenseIds.push(e.id);
+
+    const res = await app.inject({ method: "GET", url: "/api/v1/finance/monthly-balance?year=2098", headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { months: { month: number; depenses: number }[] };
+    // Rangée en MARS (index 2), la date réelle — pas en septembre (index 8), la saisie.
+    expect(body.months[2].depenses).toBe(500_000);
+    expect(body.months[8].depenses).toBe(0);
+  });
+
+  it("POST /expenses accepte une date de dépense (expense_date) et la conserve", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/expenses",
+      headers: { cookie },
+      payload: { category: "autre", amount: 12345, description: "Dépense datée", expense_date: "2097-05-10T12:00:00.000Z" },
+    });
+    expect(created.statusCode).toBe(201);
+    expenseIds.push(created.json().id);
+    expect(created.json().expenseDate.slice(0, 10)).toBe("2097-05-10");
   });
 });

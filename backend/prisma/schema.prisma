@@ -4400,6 +4400,11 @@ model Expense {
   approvedBy         String?         @map("approved_by")
   financeValidatedBy String?         @map("finance_validated_by")
 
+  // Date RÉELLE de la dépense (quand elle a été engagée), distincte de la date
+  // de saisie `createdAt`. Le bilan de trésorerie répartit les dépenses par mois
+  // selon cette date — une dépense saisie a posteriori tombe dans son vrai mois.
+  expenseDate DateTime @default(now()) @map("expense_date")
+
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by")
 

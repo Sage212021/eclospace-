@@ -54,6 +54,9 @@ const expenseSchema = z.object({
   supplier: z.string().optional(),
   manuscript_id: z.string().uuid().optional(),
   description: z.string().optional(),
+  // Date réelle de la dépense (facultative : par défaut aujourd'hui). Sert au
+  // classement par mois dans le bilan de trésorerie.
+  expense_date: z.coerce.date().optional(),
 });
 
 const budgetSchema = z.object({
@@ -452,6 +455,8 @@ export default async function financeRoutes(fastify: FastifyInstance) {
         supplier: parsed.data.supplier,
         manuscriptId: parsed.data.manuscript_id,
         description: parsed.data.description,
+        // Date réelle fournie, sinon aujourd'hui (défaut du schéma).
+        ...(parsed.data.expense_date ? { expenseDate: parsed.data.expense_date } : {}),
         createdBy: request.user!.id,
       },
     });
@@ -696,7 +701,7 @@ export default async function financeRoutes(fastify: FastifyInstance) {
 
     const [incomes, expenses, outPayments] = await Promise.all([
       prisma.payment.findMany({ where: { direction: "in", receivedAt: { gte: start, lt: end } }, select: { amount: true, receivedAt: true } }),
-      prisma.expense.findMany({ where: { status: { in: ["validee", "payee"] }, createdAt: { gte: start, lt: end } }, select: { amount: true, category: true, createdAt: true } }),
+      prisma.expense.findMany({ where: { status: { in: ["validee", "payee"] }, expenseDate: { gte: start, lt: end } }, select: { amount: true, category: true, expenseDate: true } }),
       // Décaissements réels passés par la trésorerie (paiements « out ») : droits
       // d'auteur versés, etc. Ils réduisent la trésorerie au même titre que les
       // dépenses, mais ne sont PAS des `Expense` — sans eux, le bilan ne comptait
@@ -716,7 +721,8 @@ export default async function financeRoutes(fastify: FastifyInstance) {
       months[p.receivedAt.getUTCMonth()].entrees += Number(p.amount);
     }
     for (const e of expenses) {
-      const row = months[e.createdAt.getUTCMonth()];
+      // Classement par mois selon la DATE RÉELLE de la dépense (expense_date).
+      const row = months[e.expenseDate.getUTCMonth()];
       const amt = Number(e.amount);
       row.depenses += amt;
       row.depensesParCategorie[e.category] = (row.depensesParCategorie[e.category] ?? 0) + amt;

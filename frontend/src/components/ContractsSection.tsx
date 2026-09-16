@@ -38,7 +38,7 @@ import {
 import { printContract, printAuthorContract, AUTHOR_CONTRACT_ARTICLES } from "../lib/print";
 import { pasteTidied } from "../lib/tidyProse";
 import { getBranding } from "../api/client";
-import { buildAuthorContractPdf } from "../lib/contractPdf";
+import { buildAuthorContractPdf, downloadAuthorContractPdf } from "../lib/contractPdf";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
@@ -179,6 +179,11 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
             <DocPrintMenu label="Fiche (résumé)" onPrint={(o) => getContract(contract.id).then((c) => printContract(c, o)).catch((e) => setError(e.message))} />
             <DocPrintMenu
               label="Contrat d'édition"
+              onDownloadPdf={() =>
+                Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null), getBranding().catch(() => null)])
+                  .then(([c, pub, brand]) => downloadAuthorContractPdf(c, pub, brand))
+                  .catch((e) => setError(e.message))
+              }
               onPrint={(o) =>
                 Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null), getBranding().catch(() => null)])
                   .then(([c, pub, brand]) =>

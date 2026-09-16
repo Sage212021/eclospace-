@@ -1608,6 +1608,9 @@ enum DocumentCategory {
   // Preuve de livraison signée (scan/photo du bon de livraison signé à la
   // réception) rattachée à une livraison (Ch. 17 §17.8).
   preuve_livraison
+  // Justificatif d'un mouvement de stock (photo, PV, constat) — surtout pour les
+  // destructions, détériorations, pertes et dons (§6).
+  justificatif_stock
   autre
 }
 
@@ -3442,6 +3445,10 @@ model StockMovement {
   toLocation     StockLocation?      @relation("MovementTo", fields: [toLocationId], references: [id])
   quantity       Int
   reason         String?
+  // Bénéficiaire ou origine du mouvement (texte libre) : à qui / d'où — ex.
+  // « Association X » (don), « Presse » (SP), « Commercial Y », « Infiltration
+  // magasin » (détérioration). Complète le motif pour la traçabilité (§3).
+  beneficiary    String?
   // Référence polymorphe (Ch. 16 §16.4) : goods_receipt, sales_order,
   // consignment_statement, customer_return, inventory_line...
   referenceType  String?             @map("reference_type")

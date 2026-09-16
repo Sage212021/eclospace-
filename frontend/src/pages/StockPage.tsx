@@ -9,6 +9,8 @@ import {
   listStockMovements,
   updateStockMovement,
   cancelStockMovement,
+  uploadStockMovementJustification,
+  stockMovementJustificationUrl,
   listCustomers,
   type Customer,
   type IsbnRef,
@@ -28,6 +30,7 @@ import { BookReceiptSection, AuthorWithdrawalSection } from "../components/Stock
 import { DeliveriesSection } from "../components/DeliveriesSection";
 import { NewOrderForm } from "./CommercialPage";
 import { StockConsolidatedSection } from "../components/StockConsolidatedSection";
+import { StockDashboardSection } from "../components/StockDashboardSection";
 import { StockInitialImportSection } from "../components/StockInitialImportSection";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
@@ -244,6 +247,8 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
+      <StockDashboardSection />
+
       <StockConsolidatedSection collapsible defaultOpen canCorrect={canManage} onCorrect={focusOnIsbn} onRegularize={regularizeRow} />
 
       <StockInitialImportSection canManage={canManage} collapsible defaultOpen={false} />
@@ -420,6 +425,8 @@ function MovementForm({
   const [toLocationId, setToLocationId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [reason, setReason] = useState("");
+  const [beneficiary, setBeneficiary] = useState("");
+  const [justifFile, setJustifFile] = useState<File | null>(null);
   const [condition, setCondition] = useState<"vendable" | "declasse">("vendable");
 
   useEffect(() => {
@@ -457,16 +464,24 @@ function MovementForm({
       return;
     }
     try {
-      await createStockMovement({
+      const created = await createStockMovement({
         type,
         isbn_id: isbnId,
         from_location_id: showFrom ? fromLocationId || undefined : undefined,
         to_location_id: showTo ? toLocationId || undefined : undefined,
         quantity,
         reason,
+        beneficiary: beneficiary.trim() || undefined,
         condition,
       });
+      // Justificatif éventuel (photo / PV / constat) rattaché au mouvement.
+      if (justifFile && created?.id) {
+        try { await uploadStockMovementJustification(created.id, justifFile); }
+        catch { onError("Mouvement enregistré, mais le justificatif n'a pas pu être joint. Réessayez depuis l'historique."); }
+      }
       setReason("");
+      setBeneficiary("");
+      setJustifFile(null);
       onRecorded();
     } catch (err) {
       onError(err instanceof Error ? err.message : t("stock.err_movement", "Échec de l'enregistrement du mouvement."));
@@ -515,6 +530,19 @@ function MovementForm({
           <Field label={type === "other_return" ? "Motif — précisez la nature du retour" : t("stock.reason", "Motif")}>
             <input value={reason} onChange={(e) => setReason(e.target.value)} required placeholder={type === "other_return" ? "Ex. retour d'un salon, invendus d'un point de vente…" : undefined} />
           </Field>
+          <Field label="Bénéficiaire / origine (facultatif)">
+            <input value={beneficiary} onChange={(e) => setBeneficiary(e.target.value)} placeholder="Ex. Association X (don), Presse, Commercial Y, Infiltration magasin…" />
+          </Field>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <Field label="Justificatif (facultatif — photo, PV, constat)">
+            <input type="file" accept="image/*,application/pdf" onChange={(e) => setJustifFile(e.target.files?.[0] ?? null)} />
+          </Field>
+          {(type === "destruction" || type === "loss" || type === "damage" || type === "free_out") && (
+            <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>
+              Recommandé pour ce type de mouvement : joignez une pièce (photo des exemplaires, procès-verbal, constat…) — elle restera attachée au mouvement.
+            </p>
+          )}
         </div>
         {isReclass && (
           <p style={{ fontSize: 12, color: "var(--muted)", margin: "10px 0 0" }}>
@@ -577,6 +605,12 @@ function MovementHistory({
     setPeriod(filterIsbnId ? { year: "all", month: "all" } : currentPeriod());
   }, [filterIsbnId]);
 
+  async function attachJustif(m: StockMovement, file: File | null) {
+    if (!file) return;
+    try { await uploadStockMovementJustification(m.id, file); onMessage("Justificatif joint au mouvement."); onChanged(); }
+    catch (e) { onError(e instanceof Error ? e.message : "Dépôt du justificatif impossible."); }
+  }
+
   async function cancel(m: StockMovement) {
     const reason = window.prompt("Annuler ce mouvement saisi par erreur ?\nMotif (facultatif) :", "");
     if (reason === null) return; // annulation de la boîte de dialogue
@@ -637,10 +671,23 @@ function MovementHistory({
                   <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
                     {[m.from_location_label, m.to_location_label].filter(Boolean).join(" → ")}
                     {m.reason ? ` · ${m.reason}` : ""}
+                    {m.beneficiary ? ` · ${m.beneficiary}` : ""}
                     {" · "}{new Date(m.movedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}
                     {m.moved_by_name ? ` · ${m.moved_by_name}` : ""}
                     {cancelled && m.cancelReason ? ` · motif d'annulation : ${m.cancelReason}` : ""}
                   </div>
+                  {!cancelled && (
+                    <div style={{ fontSize: 11.5, marginTop: 2 }}>
+                      {m.has_justification ? (
+                        <a href={stockMovementJustificationUrl(m.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark, #9a7a12)", fontWeight: 600, textDecoration: "none" }}>✓ Voir le justificatif</a>
+                      ) : canManage ? (
+                        <label style={{ cursor: "pointer", color: "var(--muted)" }}>
+                          📎 Joindre un justificatif
+                          <input type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={(e) => { attachJustif(m, e.target.files?.[0] ?? null); e.currentTarget.value = ""; }} />
+                        </label>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
                 {canManage && m.editable && (
                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>

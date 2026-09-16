@@ -7,6 +7,7 @@ import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { adjustStockItem, availableQuantity } from "../lib/stock.js";
+import { storeFile, readStoredFile } from "../lib/storage.js";
 
 // Rapprochement de titres (chargement de l'inventaire) : normalisation tolérante
 // aux accents/casse/ponctuation + score de Dice sur bigrammes de caractères.
@@ -170,6 +171,8 @@ const stockMovementSchema = z.object({
   to_location_id: z.string().uuid().optional(),
   quantity: z.number().int().positive(),
   reason: z.string().min(1),
+  // Bénéficiaire / origine (facultatif) : à qui / d'où (don, presse, commercial…).
+  beneficiary: z.string().max(200).optional(),
   reference_type: z.string().optional(),
   reference_id: z.string().optional(),
   // État du compartiment (§16.7) : « declasse » pour les exemplaires abîmés
@@ -505,6 +508,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
             toLocationId,
             quantity: body.quantity,
             reason: body.reason,
+            beneficiary: body.beneficiary,
             referenceType: body.reference_type,
             referenceId: body.reference_id,
             status: isTransfer ? "in_transit" : "completed",
@@ -657,6 +661,17 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       },
     });
     const actorNames = await resolveStockActorNames(movements.flatMap((m) => [m.movedBy, m.cancelledBy]));
+    // Justificatifs rattachés (GED) : un seul aller-retour pour toute la page.
+    const withJustif = movements.length
+      ? new Set(
+          (
+            await prisma.document.findMany({
+              where: { entityType: "stock_movement", entityId: { in: movements.map((m) => m.id) }, category: "justificatif_stock", deletedAt: null },
+              select: { entityId: true },
+            })
+          ).map((d) => d.entityId),
+        )
+      : new Set<string>();
     return reply.send(movements.map((m) => ({
       ...m,
       isbn13: m.isbn?.isbn13 ?? null,
@@ -664,9 +679,185 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       to_location_label: m.toLocation?.label ?? null,
       moved_by_name: m.movedBy ? actorNames.get(m.movedBy) ?? null : null,
       cancelled_by_name: m.cancelledBy ? actorNames.get(m.cancelledBy) ?? null : null,
+      has_justification: withJustif.has(m.id),
       // Le magasinier ne corrige que ses saisies manuelles non annulées.
       editable: m.status !== "cancelled" && !m.referenceType && MANUAL_MOVEMENT_TYPES.includes(m.type),
     })));
+  });
+
+  // --- Justificatif d'un mouvement (photo, PV, constat — §6) ---
+  // Rattaché via la GED (Document/DocumentVersion, catégorie « justificatif_stock »),
+  // comme la preuve de livraison. Un seul justificatif par mouvement (versionné).
+  fastify.post("/api/v1/stock-movements/:id/justification", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const movement = await prisma.stockMovement.findUnique({ where: { id } });
+    if (!movement) return reply.code(404).send({ code: "not_found", message: "Mouvement introuvable." });
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+    const buffer = await file.toBuffer();
+    if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+
+    const stored = await storeFile(buffer, `justificatif-stock-${id}-${file.filename}`);
+    let doc = await prisma.document.findFirst({ where: { entityType: "stock_movement", entityId: id, category: "justificatif_stock", deletedAt: null } });
+    if (!doc) {
+      doc = await prisma.document.create({
+        data: { entityType: "stock_movement", entityId: id, category: "justificatif_stock", confidentiality: "interne", title: `Justificatif mouvement de stock`, createdBy: request.user!.id, updatedBy: request.user!.id },
+      });
+    }
+    const last = await prisma.documentVersion.findFirst({ where: { documentId: doc.id }, orderBy: { versionNumber: "desc" } });
+    const version = await prisma.documentVersion.create({
+      data: { documentId: doc.id, versionNumber: (last?.versionNumber ?? 0) + 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: file.mimetype, sha256Hash: stored.sha256Hash, changeSummary: `Justificatif déposé (${file.filename})`, uploadedBy: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: last ? "update" : "create", entityType: "document_version", entityId: version.id, newValues: { stock_movement_justification: true, movementId: id, versionNumber: version.versionNumber }, ipAddress: request.ip });
+    return reply.code(201).send({ id: doc.id, version_id: version.id, has_justification: true });
+  });
+
+  fastify.get("/api/v1/stock-movements/:id/justification", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const doc = await prisma.document.findFirst({
+      where: { entityType: "stock_movement", entityId: id, category: "justificatif_stock", deletedAt: null },
+      include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+    });
+    const version = doc?.versions[0];
+    if (!version) return reply.code(404).send({ code: "not_found", message: "Aucun justificatif rattaché à ce mouvement." });
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
+  });
+
+  // --- Tableau de bord du stock (§16) : indicateurs de pilotage ---
+  fastify.get("/api/v1/stock-dashboard", { preHandler: requirePermission("stock", "consultation") }, async (_request, reply) => {
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+    const [vendableItems, defaultThreshold, monthMoves, reappros] = await Promise.all([
+      prisma.stockItem.findMany({ where: { condition: "vendable" }, select: { isbnId: true, quantityPhysical: true, quantityReserved: true, alertThreshold: true, outOfStockThreshold: true } }),
+      isbnStockAlertThreshold(),
+      prisma.stockMovement.findMany({ where: { status: { not: "cancelled" }, movedAt: { gte: monthStart, lt: monthEnd } }, select: { type: true, quantity: true, fromLocationId: true, toLocationId: true, reason: true } }),
+      prisma.purchaseOrder.count({ where: { status: { in: ["approved", "sent", "in_production"] } } }),
+    ]);
+
+    // Stock disponible total (vendable) + ouvrages sous seuil (par ISBN).
+    let stockTotal = 0;
+    const availByIsbn = new Map<string, number>();
+    const thresholdByIsbn = new Map<string, number>();
+    const outByIsbn = new Map<string, number>();
+    for (const it of vendableItems) {
+      const avail = Math.max(0, it.quantityPhysical - it.quantityReserved);
+      stockTotal += avail;
+      availByIsbn.set(it.isbnId, (availByIsbn.get(it.isbnId) ?? 0) + avail);
+      thresholdByIsbn.set(it.isbnId, Math.max(thresholdByIsbn.get(it.isbnId) ?? 0, it.alertThreshold ?? defaultThreshold));
+      outByIsbn.set(it.isbnId, Math.max(outByIsbn.get(it.isbnId) ?? 0, it.outOfStockThreshold));
+    }
+    let lowStock = 0;
+    for (const [isbnId, avail] of availByIsbn) if (avail <= (thresholdByIsbn.get(isbnId) ?? defaultThreshold)) lowStock += 1;
+
+    // Mouvements du mois : entrées, sorties, destructions/détériorations, dons, écarts.
+    let entries = 0, exits = 0, destroyedDamaged = 0, offered = 0, variances = 0;
+    for (const m of monthMoves) {
+      const isInitial = m.type === "inventory_adjustment" && (m.reason ?? "").startsWith("Chargement inventaire initial");
+      const isIn = !!m.toLocationId && !m.fromLocationId;
+      const isOut = !!m.fromLocationId && !m.toLocationId;
+      if (isIn) entries += m.quantity;
+      else if (isOut) exits += m.quantity;
+      if (m.type === "destruction" || m.type === "pulping" || m.type === "damage") destroyedDamaged += m.quantity;
+      if (m.type === "free_out") offered += m.quantity;
+      if (m.type === "inventory_adjustment" && !isInitial) variances += m.quantity;
+    }
+
+    return reply.send({
+      stock_total: stockTotal,
+      low_stock_count: lowStock,
+      replenishments_in_progress: reappros,
+      entries_month: entries,
+      exits_month: exits,
+      destroyed_damaged_month: destroyedDamaged,
+      offered_month: offered,
+      inventory_variances_month: variances,
+      month: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`,
+    });
+  });
+
+  // --- Fluctuation par catégorie (§14) : entrées / sorties par type sur une période ---
+  fastify.get("/api/v1/stock-fluctuation", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
+    const q = request.query as { from?: string; to?: string; isbn_id?: string; location_id?: string };
+    const from = q.from && /^\d{4}-\d{2}-\d{2}/.test(q.from) ? new Date(q.from + "T00:00:00.000Z") : undefined;
+    const to = q.to && /^\d{4}-\d{2}-\d{2}/.test(q.to) ? new Date(q.to + "T00:00:00.000Z") : undefined;
+    const moves = await prisma.stockMovement.findMany({
+      where: {
+        status: { not: "cancelled" },
+        ...(from || to ? { movedAt: { ...(from ? { gte: from } : {}), ...(to ? { lt: to } : {}) } } : {}),
+        ...(q.isbn_id ? { isbnId: q.isbn_id } : {}),
+        ...(q.location_id ? { OR: [{ fromLocationId: q.location_id }, { toLocationId: q.location_id }] } : {}),
+      },
+      select: { type: true, quantity: true, fromLocationId: true, toLocationId: true },
+    });
+    const inByType = new Map<string, number>();
+    const outByType = new Map<string, number>();
+    for (const m of moves) {
+      const isIn = !!m.toLocationId && !m.fromLocationId;
+      const isOut = !!m.fromLocationId && !m.toLocationId;
+      if (isIn) inByType.set(m.type, (inByType.get(m.type) ?? 0) + m.quantity);
+      else if (isOut) outByType.set(m.type, (outByType.get(m.type) ?? 0) + m.quantity);
+      // transferts (from+to) : internes, non comptés.
+    }
+    const toRows = (map: Map<string, number>) => [...map.entries()].map(([type, quantity]) => ({ type, quantity })).sort((a, b) => b.quantity - a.quantity);
+    const entries = toRows(inByType);
+    const exits = toRows(outByType);
+    return reply.send({
+      from: q.from ?? null,
+      to: q.to ?? null,
+      entries,
+      exits,
+      total_in: entries.reduce((s, r) => s + r.quantity, 0),
+      total_out: exits.reduce((s, r) => s + r.quantity, 0),
+    });
+  });
+
+  // --- Fluctuation par ouvrage (§13) : initial + entrées − sorties ± ajustements = disponible ---
+  fastify.get("/api/v1/stock-fluctuation-by-book", { preHandler: requirePermission("stock", "consultation") }, async (_request, reply) => {
+    const [moves, vendableItems, defaultThreshold] = await Promise.all([
+      prisma.stockMovement.findMany({
+        where: { status: { not: "cancelled" } },
+        select: { isbnId: true, type: true, quantity: true, fromLocationId: true, toLocationId: true, reason: true, isbn: { select: { isbn13: true, manuscript: { select: { title: true, workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, take: 1, select: { partner: { select: { firstName: true, lastName: true } } } } } } } } },
+      }),
+      prisma.stockItem.findMany({ where: { condition: "vendable" }, select: { isbnId: true, quantityPhysical: true, quantityReserved: true, alertThreshold: true, outOfStockThreshold: true } }),
+      isbnStockAlertThreshold(),
+    ]);
+
+    type Row = { isbn_id: string; isbn13: string; title: string | null; author: string | null; initial: number; entries: number; exits: number; adjustments: number; available: number; threshold: number; out_threshold: number };
+    const rows = new Map<string, Row>();
+    const ensure = (isbnId: string, isbn13: string, title: string | null, author: string | null): Row => {
+      let r = rows.get(isbnId);
+      if (!r) { r = { isbn_id: isbnId, isbn13, title, author, initial: 0, entries: 0, exits: 0, adjustments: 0, available: 0, threshold: defaultThreshold, out_threshold: 0 }; rows.set(isbnId, r); }
+      return r;
+    };
+    for (const m of moves) {
+      const c = m.isbn?.manuscript?.workContributors?.[0]?.partner;
+      const author = c ? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || null : null;
+      const r = ensure(m.isbnId, m.isbn?.isbn13 ?? "", m.isbn?.manuscript?.title ?? null, author);
+      const isInitial = m.type === "inventory_adjustment" && (m.reason ?? "").startsWith("Chargement inventaire initial");
+      const isIn = !!m.toLocationId && !m.fromLocationId;
+      const isOut = !!m.fromLocationId && !m.toLocationId;
+      if (isInitial) { r.initial += m.quantity; }
+      else if (m.type === "inventory_adjustment") { r.adjustments += isIn ? m.quantity : isOut ? -m.quantity : 0; }
+      else if (isIn) { r.entries += m.quantity; }
+      else if (isOut) { r.exits += m.quantity; }
+      // transferts : internes, sans effet sur le total de l'ouvrage.
+    }
+    for (const it of vendableItems) {
+      const r = rows.get(it.isbnId);
+      if (!r) continue;
+      r.available += Math.max(0, it.quantityPhysical - it.quantityReserved);
+      r.threshold = Math.max(r.threshold, it.alertThreshold ?? defaultThreshold);
+      r.out_threshold = Math.max(r.out_threshold, it.outOfStockThreshold);
+    }
+    const state = (r: Row): "rupture" | "faible" | "normal" => (r.available <= r.out_threshold ? "rupture" : r.available <= r.threshold ? "faible" : "normal");
+    const out = [...rows.values()]
+      .map((r) => ({ ...r, state: state(r) }))
+      .sort((a, b) => (a.title ?? a.isbn13).localeCompare(b.title ?? b.isbn13, "fr"));
+    return reply.send({ rows: out });
   });
 
   // Entrée de fabrication (Ch. 16 §16.4, Ch. 15 §15.7) : seuls les

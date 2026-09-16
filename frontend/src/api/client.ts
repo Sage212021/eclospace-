@@ -2825,9 +2825,10 @@ export function createStockMovement(input: {
   to_location_id?: string;
   quantity: number;
   reason: string;
+  beneficiary?: string;
   condition?: "vendable" | "declasse";
 }) {
-  return request(`/api/v1/stock-movements`, { method: "POST", body: JSON.stringify(input) });
+  return request<{ id: string }>(`/api/v1/stock-movements`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export type StockMovementStatus = "pending" | "in_transit" | "completed" | "cancelled";
@@ -2839,6 +2840,7 @@ export interface StockMovement {
   printRun: number;
   quantity: number;
   reason: string | null;
+  beneficiary: string | null;
   condition: "vendable" | "declasse";
   status: StockMovementStatus;
   from_location_label: string | null;
@@ -2849,12 +2851,77 @@ export interface StockMovement {
   cancelledAt: string | null;
   cancelled_by_name: string | null;
   cancelReason: string | null;
+  has_justification: boolean;
   editable: boolean;
 }
 
 export function listStockMovements(isbnId?: string) {
   const qs = isbnId ? `?isbn_id=${encodeURIComponent(isbnId)}` : "";
   return request<StockMovement[]>(`/api/v1/stock-movements${qs}`);
+}
+
+// Justificatif d'un mouvement (photo / PV / constat).
+export async function uploadStockMovementJustification(movementId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return request<{ id: string; version_id: string; has_justification: boolean }>(`/api/v1/stock-movements/${movementId}/justification`, { method: "POST", body: form });
+}
+export function stockMovementJustificationUrl(movementId: string) {
+  return `/api/v1/stock-movements/${movementId}/justification`;
+}
+
+// Tableau de bord du stock.
+export interface StockDashboard {
+  stock_total: number;
+  low_stock_count: number;
+  replenishments_in_progress: number;
+  entries_month: number;
+  exits_month: number;
+  destroyed_damaged_month: number;
+  offered_month: number;
+  inventory_variances_month: number;
+  month: string;
+}
+export function getStockDashboard() {
+  return request<StockDashboard>(`/api/v1/stock-dashboard`);
+}
+
+// Fluctuation par catégorie (entrées / sorties par type de mouvement).
+export interface StockFluctuation {
+  from: string | null;
+  to: string | null;
+  entries: { type: StockMovementType; quantity: number }[];
+  exits: { type: StockMovementType; quantity: number }[];
+  total_in: number;
+  total_out: number;
+}
+export function getStockFluctuation(params?: { from?: string; to?: string; isbn_id?: string; location_id?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set("from", params.from);
+  if (params?.to) qs.set("to", params.to);
+  if (params?.isbn_id) qs.set("isbn_id", params.isbn_id);
+  if (params?.location_id) qs.set("location_id", params.location_id);
+  const s = qs.toString();
+  return request<StockFluctuation>(`/api/v1/stock-fluctuation${s ? `?${s}` : ""}`);
+}
+
+// Fluctuation par ouvrage : initial + entrées − sorties ± ajustements = disponible.
+export interface StockBookFluctuation {
+  isbn_id: string;
+  isbn13: string;
+  title: string | null;
+  author: string | null;
+  initial: number;
+  entries: number;
+  exits: number;
+  adjustments: number;
+  available: number;
+  threshold: number;
+  out_threshold: number;
+  state: "rupture" | "faible" | "normal";
+}
+export function getStockFluctuationByBook() {
+  return request<{ rows: StockBookFluctuation[] }>(`/api/v1/stock-fluctuation-by-book`);
 }
 
 // Corriger une saisie de mouvement (quantité, motif, état) — le stock est

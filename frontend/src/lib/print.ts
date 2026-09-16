@@ -2037,3 +2037,59 @@ export function printEditorialDecisionLetter(d: DecisionLetterLayout, opts?: Pri
 
   openPrintWindow(`${tr("Lettre de décision", "Decision letter")} — ${d.recipient}`, body, opts);
 }
+
+// --- Aperçus « document type » pour l'écran Réglages → Cachets & signature ---
+// Permettent de VOIR, avant impression, le rendu final d'un cachet sur un vrai
+// document (lettre de décision ou contrat), à sa taille réelle. Données fictives
+// (aucune donnée réelle d'auteur), le seul élément « vrai » est le cachet/la
+// signature enregistrés que l'on veut vérifier.
+
+// Aperçu d'une lettre de décision type portant le cachet « Direction éditoriale ».
+export function previewStampedDecisionLetter(cachet: string | null): void {
+  const layout: DecisionLetterLayout = {
+    place: "Yaoundé",
+    date: new Date().toLocaleDateString(locale()),
+    recipient: "Jean EXEMPLE",
+    objet: tr(
+      "Décision concernant votre manuscrit (réf. MS-2026-0000) — APERÇU",
+      "Decision regarding your manuscript (ref. MS-2026-0000) — PREVIEW",
+    ),
+    paragraphs: [
+      tr(
+        "Cet aperçu montre l'emplacement et la taille du cachet « Direction éditoriale » tel qu'il apparaîtra sur les lettres de décision imprimées.",
+        "This preview shows the position and size of the “Editorial Direction” stamp as it will appear on printed decision letters.",
+      ),
+      tr(
+        "Nous vous informons que votre manuscrit a retenu toute l'attention de notre comité de lecture. Le présent courrier est un exemple destiné à vérifier le rendu du cachet et de la mise en page.",
+        "We are pleased to inform you that your manuscript received the full attention of our reading committee. This letter is a sample intended to check the stamp and layout rendering.",
+      ),
+      tr(
+        "Veuillez agréer, Madame, Monsieur, l'expression de nos salutations distinguées.",
+        "Yours faithfully.",
+      ),
+    ],
+    maison: "Éclosion Édition",
+  };
+  printEditorialDecisionLetter(layout, { preview: true }, cachet);
+}
+
+// Aperçu d'un contrat type portant le cachet « Direction générale » et la
+// signature du DG (réutilise le MÊME bloc de signature que les vrais contrats).
+export function previewStampedContract(sign: ContractStampData): void {
+  const body = `
+    <div class="doc__title">${tr("Contrat d'édition — APERÇU", "Publishing contract — PREVIEW")}</div>
+    <div class="meta"><span>${tr("Réf.", "Ref.")} <b class="num">CTR-2026-EXEMPLE</b></span><span>${escapeHtml(new Date().toLocaleDateString(locale()))}</span></div>
+    <p style="text-align:justify;margin:0 0 12px">${tr(
+      "Cet aperçu montre l'emplacement et la taille du cachet « Direction générale » et de la signature du Directeur général tels qu'ils apparaîtront sur les contrats d'auteur imprimés. Le texte ci-dessous est un exemple.",
+      "This preview shows the position and size of the “General Management” stamp and the Managing Director's signature as they will appear on printed author contracts. The text below is a sample.",
+    )}</p>
+    <p style="text-align:justify;margin:0 0 12px"><b>${tr("Article 1 — Objet.", "Article 1 — Purpose.")}</b> ${tr(
+      "L'auteur cède à l'éditeur, à titre exclusif, le droit d'imprimer, de publier et de diffuser l'ouvrage désigné aux présentes, dans les conditions fixées par le contrat.",
+      "The author grants the publisher the exclusive right to print, publish and distribute the work designated herein, under the conditions set out in the contract.",
+    )}</p>
+    <div style="display:flex;gap:28px;margin-top:34px">
+      <div style="flex:1;min-width:200px"><div class="party__label">${tr("L'éditeur", "The publisher")}</div>${editorSignatureBlock(sign)}</div>
+      <div style="flex:1;min-width:200px"><div class="party__label">${tr("L'auteur", "The author")}</div><div style="border-top:1px solid #0b0b0c;margin-top:44px;padding-top:4px;font-size:10.5px;color:#6b7280">${tr("Signature (lu et approuvé)", "Signature (read and approved)")}</div></div>
+    </div>`;
+  openPrintWindow(tr("Aperçu — cachet & signature (contrat)", "Preview — stamp & signature (contract)"), body, { preview: true });
+}

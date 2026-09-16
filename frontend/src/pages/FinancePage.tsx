@@ -119,6 +119,10 @@ interface FinancePageProps {
   // administrateur général, pilotage:administration). La Finance qui DEMANDE
   // l'annulation ne peut pas la valider (séparation des pouvoirs).
   canValidateCancellation: boolean;
+  // Contre-validation (palier 2, DG) d'une dépense : rôle DIR_GENERAL ou
+  // finance:administration. Distinct de canAdminister pour couvrir un DG doté du
+  // seul droit « finance:validation ».
+  canCounterValidate: boolean;
 }
 
 // Fenêtres intégrées de la page (remplacent les pop-up du navigateur).
@@ -138,7 +142,7 @@ type FinanceModal =
 // droits d'auteur.
 import { useI18n } from "../i18n";
 
-export function FinancePage({ canManage, canAdminister, canInitiateOrder, canValidateCancellation }: FinancePageProps) {
+export function FinancePage({ canManage, canAdminister, canInitiateOrder, canValidateCancellation, canCounterValidate }: FinancePageProps) {
   const { t, lang } = useI18n();
   const confirm = useConfirm();
   // Alias de `t` pour les endroits où la variable de boucle s'appelle aussi `t`
@@ -722,6 +726,39 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
         )}
       </Card>
 
+      {/* Contre-validation DG (palier 2) — rendue IMPOSSIBLE à manquer : un
+          encart en tête liste les dépenses en attente de la Direction générale,
+          au lieu de les noyer dans la liste complète. */}
+      {(() => {
+        const pendingDg = expenses.filter((e) => e.status === "en_attente_dg");
+        if (pendingDg.length === 0) return null;
+        return (
+          <Card
+            title={`${t("fin.dg_to_validate", "À contre-valider — Direction générale")} (${pendingDg.length})`}
+            icon={<IconFinance />}
+            subtitle={t("fin.dg_to_validate_sub", "Dépenses validées par la DAF, en attente de la contre-validation de la Direction générale.")}
+          >
+            <div className="ecl-list">
+              {pendingDg.map((expense) => (
+                <div key={expense.id} className="ecl-row" style={{ borderLeft: "3px solid var(--eclosion, #D9B21A)" }}>
+                  <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span className="ecl-row__title">{t("fin.cat." + expense.category, CATEGORY_LABELS[expense.category])}</span>
+                    <Amount value={expense.amount} />
+                    {expense.expenseDate && <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{expense.expenseDate.slice(0, 10)}</span>}
+                    {expense.description && <span className="ecl-row__desc" style={{ margin: 0 }}>{expense.description}</span>}
+                  </div>
+                  {canCounterValidate ? (
+                    <Button variant="add" size="sm" onClick={() => handleValidateExpense(expense)}>{t("fin.validate_dg", "Valider (DG)")}</Button>
+                  ) : (
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>{t("fin.dg_only", "Réservé à la Direction générale")}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        );
+      })()}
+
       {/* Ch. 18 §18.4 — Dépenses */}
       <Card title={t("fin.expenses", "Dépenses")} icon={<IconFinance />} subtitle={t("fin.expenses_sub", "Engagements de dépenses et validations.")}>
         {expenseNote && (
@@ -747,10 +784,11 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
                   <StatusChip label={t("fin.st." + expense.status, STATUS_LABELS[expense.status] ?? expense.status)} />
                   {expense.description && <span className="ecl-row__desc" style={{ margin: 0 }}>{expense.description}</span>}
                 </div>
-                {canAdminister && (expense.status === "a_valider" || expense.status === "en_attente_dg") && (
-                  <Button variant="add" size="sm" onClick={() => handleValidateExpense(expense)}>
-                    {expense.status === "en_attente_dg" ? t("fin.validate_dg", "Valider (DG)") : t("fin.validate", "Valider")}
-                  </Button>
+                {expense.status === "a_valider" && canAdminister && (
+                  <Button variant="add" size="sm" onClick={() => handleValidateExpense(expense)}>{t("fin.validate", "Valider")}</Button>
+                )}
+                {expense.status === "en_attente_dg" && canCounterValidate && (
+                  <Button variant="add" size="sm" onClick={() => handleValidateExpense(expense)}>{t("fin.validate_dg", "Valider (DG)")}</Button>
                 )}
               </div>
             ))}

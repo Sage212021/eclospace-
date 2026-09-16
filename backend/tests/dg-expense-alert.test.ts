@@ -55,5 +55,28 @@ describe("Alerte DG — dépenses à contre-valider (D-040)", () => {
     const notif = await prisma.notification.findFirst({ where: { userId: dgId, entityType: "expense", entityId: expenseId } });
     expect(notif).toBeTruthy();
     expect(notif!.type).toBe("validation");
+
+    // Palier 2 : le DG contre-valide effectivement → « validee » (D-046 : la
+    // contre-validation passe par le rôle DIR_GENERAL, sans dépendre d'un droit
+    // d'administration Finance distinct).
+    const dgCookie = await login("dir_general_dgalert", "DirGeneral123!");
+    const palier2 = await app.inject({ method: "PATCH", url: `/api/v1/expenses/${expenseId}/validate`, headers: { cookie: dgCookie }, payload: {} });
+    expect(palier2.statusCode).toBe(200);
+    expect(palier2.json().status).toBe("validee");
+  });
+
+  it("le palier 1 (première validation) est refusé à un rôle finance:validation sans administration", async () => {
+    // Rôle « validation seule » (ni administration Finance, ni DG) : ne peut PAS
+    // initier la première validation d'une dépense (réservée au DAF).
+    const role = await prisma.role.upsert({ where: { code: "TEST_FIN_VALID_ONLY" }, update: {}, create: { code: "TEST_FIN_VALID_ONLY", label: "Finance validation (test)" } });
+    const perm = await prisma.permission.findFirstOrThrow({ where: { module: "finance", action: "validation" } });
+    await prisma.rolePermission.upsert({ where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } }, update: {}, create: { roleId: role.id, permissionId: perm.id } });
+    await createUserWithRole("fin_valid_only", "TEST_FIN_VALID_ONLY", "FinValid123!");
+    const cookie = await login("fin_valid_only", "FinValid123!");
+
+    const expense = await app.inject({ method: "POST", url: "/api/v1/expenses", headers: { cookie: adminCookie }, payload: { category: "prestation", amount: 15000, description: "Palier 1 interdit" } });
+    const res = await app.inject({ method: "PATCH", url: `/api/v1/expenses/${expense.json().id}/validate`, headers: { cookie }, payload: {} });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe("daf_validation_required");
   });
 });

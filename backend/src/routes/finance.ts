@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { Prisma, PaymentMethodKind, ExpenseCategory, CostType, BankAccountType, ShippingZone } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { assertPeriodOpen, PeriodClosedError, periodKeyFor } from "../lib/accountingPeriod.js";
 import { computeCustomerOutstandingBalance } from "../lib/finance.js";
@@ -506,7 +506,14 @@ export default async function financeRoutes(fastify: FastifyInstance) {
   // Lot 6) qui n'existe pas encore.
   fastify.patch(
     "/api/v1/expenses/:id/validate",
-    { preHandler: requirePermission("finance", "administration") },
+    // Le palier 1 (DAF) exige `finance:administration` ; le palier 2 (DG) est
+    // ouvert au rôle DIR_GENERAL, dont la contre-validation ne doit PAS dépendre
+    // d'un droit d'administration Finance : un compte DG doté de « finance :
+    // validation » (sans administration) pouvait valider la paie mais PAS
+    // contre-valider une dépense — d'où « ça n'apparaît pas / le bouton ne fait
+    // rien chez le DG ». On autorise donc l'accès avec l'un OU l'autre droit,
+    // puis on cloisonne les deux paliers à l'intérieur (D-046).
+    { preHandler: requireAnyPermission([{ module: "finance", action: "administration" }, { module: "finance", action: "validation" }]) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const expense = await prisma.expense.findUnique({ where: { id } });
@@ -514,9 +521,14 @@ export default async function financeRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ code: "not_found", message: "Dépense introuvable." });
       }
 
-      // Palier 1 : validation de la Finance (DAF). Toute dépense passe par la
-      // Direction générale ensuite, quel que soit le montant.
+      // Palier 1 : validation de la Finance (DAF, `finance:administration`).
+      // Toute dépense passe par la Direction générale ensuite, quel que soit le
+      // montant. Un compte n'ayant que `finance:validation` ne peut PAS initier
+      // la première validation (réservée au DAF).
       if (expense.status === "a_valider") {
+        if (!request.user!.permissions.has("finance:administration")) {
+          return reply.code(403).send({ code: "daf_validation_required", message: "La première validation d'une dépense est réservée à la Direction administrative et financière." });
+        }
         const updated = await prisma.expense.update({
           where: { id },
           data: { status: "en_attente_dg", financeValidatedBy: request.user!.id },

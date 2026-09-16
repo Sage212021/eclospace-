@@ -864,7 +864,7 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "marketing-dashboard" && <MarketingDashboardPage />}
         {leaf && "page" in leaf && leaf.page === "finance" && (
-          <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} canInitiateOrder={canInitiateOrder} canValidateCancellation={permissions.has("pilotage:administration")} />
+          <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} canInitiateOrder={canInitiateOrder} canValidateCancellation={permissions.has("pilotage:administration")} canCounterValidate={permissions.has("finance:administration") || roles.has("DIR_GENERAL")} />
         )}
         {leaf && "page" in leaf && leaf.page === "hr" && (
           <HrPage

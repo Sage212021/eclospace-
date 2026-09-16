@@ -6,6 +6,7 @@ import {
   getMyCommercialStock,
   handoverToCommercial,
   returnFromCommercial,
+  createCommercialGood,
   type CommercialPick,
   type CommercialStockRow,
   type CommercialStockReport,
@@ -159,6 +160,9 @@ function HandoverDialog({ mode, commercials, isbns, magasins, onClose, onDone, o
   onError: (m: string) => void;
 }) {
   const [userId, setUserId] = useState(commercials[0]?.id ?? "");
+  // Catalogue local : on part des ouvrages fournis, mais un ajout rapide (D-042)
+  // peut y insérer une nouvelle fiche sans recharger toute la page.
+  const [localIsbns, setLocalIsbns] = useState<IsbnRef[]>(isbns);
   const [isbnId, setIsbnId] = useState(isbns[0]?.id ?? "");
   const [locationId, setLocationId] = useState(magasins[0]?.id ?? "");
   const [quantity, setQuantity] = useState(1);
@@ -167,6 +171,50 @@ function HandoverDialog({ mode, commercials, isbns, magasins, onClose, onDone, o
   const [movedAt, setMovedAt] = useState(today);
   const [busy, setBusy] = useState(false);
   const isReturn = mode === "return";
+
+  // Ajout rapide d'un ouvrage/bien absent du catalogue (remise uniquement).
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [qgTitle, setQgTitle] = useState("");
+  const [qgIsbn, setQgIsbn] = useState("");
+  const [qgAuthor, setQgAuthor] = useState("");
+  const [qgPrice, setQgPrice] = useState("");
+  const [qgBusy, setQgBusy] = useState(false);
+  const [qgMsg, setQgMsg] = useState("");
+  const [qgDupExisting, setQgDupExisting] = useState<IsbnRef | null>(null);
+
+  function selectCatalogEntry(entry: IsbnRef) {
+    setLocalIsbns((prev) => (prev.some((i) => i.id === entry.id) ? prev : [entry, ...prev]));
+    setIsbnId(entry.id);
+    setQuickOpen(false);
+    setQgTitle(""); setQgIsbn(""); setQgAuthor(""); setQgPrice("");
+    setQgDupExisting(null);
+  }
+
+  async function submitQuickGood() {
+    if (!qgTitle.trim()) { setQgMsg("Indiquez au moins le titre de l'ouvrage."); return; }
+    setQgBusy(true); setQgMsg(""); setQgDupExisting(null);
+    try {
+      const priceNum = qgPrice.trim() ? Number(qgPrice) : undefined;
+      const res = await createCommercialGood({
+        title: qgTitle.trim(),
+        isbn13: qgIsbn.trim() || undefined,
+        author_name: qgAuthor.trim() || undefined,
+        price: priceNum != null && !Number.isNaN(priceNum) ? priceNum : undefined,
+      });
+      if ("isbn" in res) {
+        const label = res.isbn.manuscript?.title ?? qgTitle.trim();
+        selectCatalogEntry(res.isbn);
+        setQgMsg(`« ${label} » ajouté au catalogue et sélectionné pour la remise.`);
+      } else {
+        setQgMsg(res.duplicate.message);
+        setQgDupExisting(res.duplicate.existing);
+      }
+    } catch (e) {
+      setQgMsg(e instanceof Error ? e.message : "Ajout impossible.");
+    } finally {
+      setQgBusy(false);
+    }
+  }
 
   async function submit() {
     if (!userId || !isbnId || !locationId || quantity <= 0) { onError("Renseignez le commercial, l'ouvrage, le magasin et une quantité."); return; }
@@ -210,8 +258,45 @@ function HandoverDialog({ mode, commercials, isbns, magasins, onClose, onDone, o
         </select>
       </Field>
       <Field label="Ouvrage — tapez le titre, l'ISBN ou l'auteur">
-        <IsbnCombobox isbns={isbns} value={isbnId} onChange={setIsbnId} placeholder="Ex. « MAN » pour Manuel…" />
+        <IsbnCombobox isbns={localIsbns} value={isbnId} onChange={setIsbnId} placeholder="Ex. « MAN » pour Manuel…" />
+        {!isReturn && (
+          <button
+            type="button"
+            onClick={() => { setQuickOpen((v) => !v); setQgMsg(""); setQgDupExisting(null); }}
+            style={{ marginTop: 6, background: "none", border: "none", padding: 0, color: "var(--eclosion)", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}
+          >
+            {quickOpen ? "Fermer l'ajout rapide" : "＋ L'ouvrage n'est pas dans la liste ? L'ajouter au catalogue"}
+          </button>
+        )}
       </Field>
+      {!isReturn && quickOpen && (
+        <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", margin: "0 0 10px", background: "var(--ivoire, #FAF8F2)" }}>
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
+            Crée une fiche minimale dans le <strong>catalogue central</strong> (l'éditorial pourra la compléter). Un contrôle évite les doublons.
+          </p>
+          <Field label="Titre de l'ouvrage / du bien">
+            <input value={qgTitle} onChange={(e) => setQgTitle(e.target.value)} placeholder="Titre" autoFocus />
+          </Field>
+          <Field label="ISBN (facultatif — 13 chiffres)">
+            <input value={qgIsbn} onChange={(e) => setQgIsbn(e.target.value)} placeholder="978… (laisser vide si inconnu)" />
+          </Field>
+          <Field label="Auteur (facultatif)">
+            <input value={qgAuthor} onChange={(e) => setQgAuthor(e.target.value)} placeholder="Prénom Nom" />
+          </Field>
+          <Field label="Prix public FRS CFA (facultatif)">
+            <input type="number" min={0} value={qgPrice} onChange={(e) => setQgPrice(e.target.value)} placeholder="0" />
+          </Field>
+          {qgMsg && (
+            <p style={{ fontSize: 12, color: qgDupExisting || qgMsg.startsWith("«") ? "var(--ink)" : "var(--danger, #B23A2E)", margin: "0 0 8px" }}>{qgMsg}</p>
+          )}
+          <div style={{ display: "flex", gap: 6 }}>
+            <Button variant="add" size="sm" onClick={submitQuickGood} disabled={qgBusy}>{qgBusy ? "Ajout…" : "Ajouter au catalogue"}</Button>
+            {qgDupExisting && (
+              <Button variant="view" size="sm" onClick={() => selectCatalogEntry(qgDupExisting)}>Sélectionner l'ouvrage existant</Button>
+            )}
+          </div>
+        </div>
+      )}
       <Field label={isReturn ? "Magasin de destination" : "Magasin d'origine"}>
         <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
           {magasins.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}

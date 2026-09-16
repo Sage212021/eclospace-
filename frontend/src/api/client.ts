@@ -3016,6 +3016,32 @@ export function returnFromCommercial(userId: string, input: { isbn_id: string; q
   return request(`/api/v1/commercial-stock/${userId}/return`, { method: "POST", body: JSON.stringify(input) });
 }
 
+// Ajout rapide d'un ouvrage/bien au catalogue central depuis la remise (D-042).
+// Renvoie soit la fiche créée, soit — si un doublon (titre ou ISBN) existe déjà —
+// la fiche existante pour que l'écran propose de la sélectionner.
+export type QuickGoodOutcome =
+  | { isbn: IsbnRef }
+  | { duplicate: { code: string; message: string; existing: IsbnRef | null } };
+
+export async function createCommercialGood(input: { title: string; isbn13?: string; author_name?: string; price?: number }): Promise<QuickGoodOutcome> {
+  const response = await fetch(`${API_BASE}/api/v1/commercial-stock/quick-good`, {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (response.status === 409) {
+    const body = (await response.json().catch(() => null)) as { code: string; message: string; existing: IsbnRef | null } | null;
+    return { duplicate: body ?? { code: "conflict", message: "Ouvrage déjà présent au catalogue.", existing: null } };
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(body?.message ?? `Erreur ${response.status}`);
+  }
+  return { isbn: (await response.json()) as IsbnRef };
+}
+
 export type CustomerCategory = "librairie" | "distributeur" | "institution" | "particulier" | "plateforme" | "auteur";
 
 export interface Customer {

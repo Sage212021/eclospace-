@@ -2988,6 +2988,7 @@ model Isbn {
   billingOrderLines    BillingOrderLine[]
   schoolRoyaltyEntries SchoolRoyaltyEntry[]
   authorCopies         AuthorCopyEntry[]
+  stockPolicy          StockPolicy?
 
   @@map("isbns")
 }
@@ -3398,6 +3399,26 @@ model StockItem {
 
   @@unique([isbnId, locationId, printRun, condition])
   @@map("stock_items")
+}
+
+// Politique de stock PAR OUVRAGE (par ISBN) — paramètres pilotant les alertes et
+// le calcul de réapprovisionnement (cahier §18). Distincte du stock lui-même
+// (qui, lui, ne vient que des mouvements). Un seul jeu de réglages par ISBN.
+model StockPolicy {
+  id              String @id @default(uuid())
+  isbnId          String @unique @map("isbn_id")
+  isbn            Isbn   @relation(fields: [isbnId], references: [id])
+  alertThreshold  Int?   @map("alert_threshold")   // seuil d'alerte (stock faible)
+  reorderThreshold Int?  @map("reorder_threshold") // seuil de réapprovisionnement
+  targetStock     Int?   @map("target_stock")      // stock cible (réappro → ce niveau)
+  minReprintQty   Int?   @map("min_reprint_qty")   // quantité minimale de réimpression
+  reprintLeadDays Int?   @map("reprint_lead_days") // délai moyen de réimpression (jours)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("stock_policies")
 }
 
 // Table pivot : une ligne par mouvement, aucune modification a posteriori

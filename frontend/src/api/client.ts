@@ -3023,6 +3023,54 @@ export type QuickGoodOutcome =
   | { isbn: IsbnRef }
   | { duplicate: { code: string; message: string; existing: IsbnRef | null } };
 
+// --- Tableau récapitulatif du stock par ouvrage (§4) + politique (§18) ---
+export interface StockOverviewRow {
+  isbn_id: string;
+  isbn13: string;
+  title: string | null;
+  author: string | null;
+  stock_initial: number;
+  entrees: number;
+  retours: number;
+  sorties: number;
+  ajustements: number;
+  stock_physique: number;
+  reserve: number;
+  disponible: number;
+  defectueux: number;
+  en_depot: number;
+  en_transit: number;
+  seuil_alerte: number;
+  seuil_reappro: number | null;
+  stock_cible: number | null;
+  qte_min_reimpression: number | null;
+  qte_a_reapprovisionner: number | null;
+  statut: "normal" | "alerte" | "reappro" | "rupture";
+}
+export interface StockOverview {
+  rows: StockOverviewRow[];
+  totals: { stock_physique: number; disponible: number; reserve: number; en_depot: number; en_transit: number; defectueux: number };
+  counts: { sous_seuil: number; a_reapprovisionner: number; rupture: number };
+}
+export function getStockOverview() {
+  return request<StockOverview>(`/api/v1/stock/overview`);
+}
+export interface StockPolicy {
+  isbn_id: string;
+  alert_threshold: number | null;
+  reorder_threshold: number | null;
+  target_stock: number | null;
+  min_reprint_qty: number | null;
+  reprint_lead_days: number | null;
+  default_alert_threshold: number;
+}
+export function getStockPolicy(isbnId: string) {
+  return request<StockPolicy>(`/api/v1/stock/policy/${isbnId}`);
+}
+export function putStockPolicy(isbnId: string, body: { alert_threshold?: number | null; reorder_threshold?: number | null; target_stock?: number | null; min_reprint_qty?: number | null; reprint_lead_days?: number | null }) {
+  return request<{ ok: true }>(`/api/v1/stock/policy/${isbnId}`, { method: "PUT", body: JSON.stringify(body) });
+}
+
 export async function createCommercialGood(input: { title: string; isbn13?: string; author_name?: string; price?: number }): Promise<QuickGoodOutcome> {
   const response = await fetch(`${API_BASE}/api/v1/commercial-stock/quick-good`, {
     method: "POST",

@@ -31,6 +31,7 @@ import { DeliveriesSection } from "../components/DeliveriesSection";
 import { NewOrderForm } from "./CommercialPage";
 import { StockConsolidatedSection } from "../components/StockConsolidatedSection";
 import { StockDashboardSection } from "../components/StockDashboardSection";
+import { StockOverviewSection } from "../components/StockOverviewSection";
 import { ReplenishmentSection, type ReplenishmentPrefill } from "../components/ReplenishmentSection";
 import { StockInitialImportSection } from "../components/StockInitialImportSection";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -254,6 +255,8 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
 
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
+
+      <StockOverviewSection canManage={canManage} />
 
       <StockDashboardSection />
 

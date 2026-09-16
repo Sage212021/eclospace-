@@ -5,7 +5,7 @@ import { SystemDiagnosticCard } from "../components/SystemDiagnosticCard";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { SettingCard } from "../components/SettingCard";
 import { DocPrintMenu } from "../components/DocPrintMenu";
-import { printBlankLetterhead } from "../lib/print";
+import { printBlankLetterhead, previewStampedDecisionLetter, previewStampedContract } from "../lib/print";
 import { AiEditorialConfigCard, AiPromptsCard } from "../components/AiEditorialCard";
 import { StepConsistencyCard } from "../components/StepConsistencyCard";
 
@@ -539,6 +539,14 @@ function BrandingCard({ canAdminister }: { canAdminister: boolean }) {
     try { apply(await updateBranding(patch)); setNote("Paramètres enregistrés."); }
     catch (e) { setErr(e instanceof Error ? e.message : "Enregistrement impossible."); }
   }
+  // Aperçu « document type » : ouvre un exemple de lettre (cachet éditorial) ou de
+  // contrat (cachet + signature DG) tel qu'il sera imprimé, pour vérifier le rendu.
+  function preview(key: BrandingStampKey) {
+    if (!b) return;
+    if (key === "cachet_editoriale") previewStampedDecisionLetter(b.cachet_editoriale);
+    else previewStampedContract({ cachet: b.cachet_generale, signature: b.signature_dg, dgName: b.dg_name, dgTitle: b.dg_title });
+  }
+  const previewLabel = (key: BrandingStampKey) => (key === "cachet_editoriale" ? "Aperçu (lettre)" : "Aperçu (contrat)");
 
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 16 }}>
@@ -563,15 +571,18 @@ function BrandingCard({ canAdminister }: { canAdminister: boolean }) {
                     {img ? <img src={img} alt={s.label} style={{ maxHeight: 84, maxWidth: "100%" }} /> : <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Aucune image</span>}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6, lineHeight: 1.4 }}>{s.hint}</div>
-                  {canAdminister && (
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <label style={{ fontSize: 12, cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 9px", background: "#fff" }}>
-                        {busy === s.key ? "…" : img ? "Remplacer" : "Téléverser"}
-                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { onUpload(s.key, e.target.files?.[0] ?? null); e.target.value = ""; }} />
-                      </label>
-                      {img && <button type="button" onClick={() => onClear(s.key)} style={{ fontSize: 12, cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 9px", background: "#fff", color: "var(--alert)" }}>Retirer</button>}
-                    </div>
-                  )}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button type="button" onClick={() => preview(s.key)} style={{ fontSize: 12, cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 9px", background: "#fff" }}>{previewLabel(s.key)}</button>
+                    {canAdminister && (
+                      <>
+                        <label style={{ fontSize: 12, cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 9px", background: "#fff" }}>
+                          {busy === s.key ? "…" : img ? "Remplacer" : "Téléverser"}
+                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { onUpload(s.key, e.target.files?.[0] ?? null); e.target.value = ""; }} />
+                        </label>
+                        {img && <button type="button" onClick={() => onClear(s.key)} style={{ fontSize: 12, cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 9px", background: "#fff", color: "var(--alert)" }}>Retirer</button>}
+                      </>
+                    )}
+                  </div>
                 </div>
               );
             })}

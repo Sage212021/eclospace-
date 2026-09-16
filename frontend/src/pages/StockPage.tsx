@@ -31,6 +31,7 @@ import { DeliveriesSection } from "../components/DeliveriesSection";
 import { NewOrderForm } from "./CommercialPage";
 import { StockConsolidatedSection } from "../components/StockConsolidatedSection";
 import { StockDashboardSection } from "../components/StockDashboardSection";
+import { ReplenishmentSection, type ReplenishmentPrefill } from "../components/ReplenishmentSection";
 import { StockInitialImportSection } from "../components/StockInitialImportSection";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
@@ -146,6 +147,12 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
   // Rechargé à chaque saisie / correction / annulation de mouvement.
   const [movVersion, setMovVersion] = useState(0);
   const bumpMovements = () => setMovVersion((v) => v + 1);
+  // Pré-remplissage du réapprovisionnement depuis une alerte de stock.
+  const [replenishPrefill, setReplenishPrefill] = useState<ReplenishmentPrefill | null>(null);
+  function replenishFromAlert(isbnId: string, available: number, threshold: number) {
+    setReplenishPrefill({ isbnId, quantity: Math.max(1, (threshold || 0) * 2 - available), nonce: Date.now() });
+    setTimeout(() => document.getElementById("reapprovisionnements")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
   // Filtre « Corriger » depuis le consolidé : concentre l'historique sur un ouvrage.
   const [focusIsbn, setFocusIsbn] = useState<{ id: string; title: string | null } | null>(null);
   function focusOnIsbn(id: string, title: string | null) {
@@ -264,24 +271,44 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
                   <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{alert.isbn.isbn13}</span>
                   <span className="ecl-row__desc" style={{ margin: 0 }}>{alert.location.label}</span>
                 </div>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: alert.severity === "rupture" ? "var(--alert)" : "var(--amber)",
-                    border: `1px solid ${alert.severity === "rupture" ? "var(--alert)" : "var(--amber)"}`,
-                    borderRadius: 999,
-                    padding: "1px 9px",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {alert.severity === "rupture" ? t("stock.rupture", "Rupture") : t("stock.alert", "Alerte")} · {alert.quantityAvailable} {t("stock.available_short", "dispo.")}
-                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: alert.severity === "rupture" ? "var(--alert)" : "var(--amber)",
+                      border: `1px solid ${alert.severity === "rupture" ? "var(--alert)" : "var(--amber)"}`,
+                      borderRadius: 999,
+                      padding: "1px 9px",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {alert.severity === "rupture" ? t("stock.rupture", "Rupture") : t("stock.alert", "Alerte")} · {alert.quantityAvailable} {t("stock.available_short", "dispo.")}
+                  </span>
+                  {canManage && (
+                    <Button variant="add" size="sm" onClick={() => replenishFromAlert(alert.isbnId, alert.quantityAvailable, alert.alertThreshold ?? 0)}>Réapprovisionner</Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         </Card>
       )}
+
+      <div id="reapprovisionnements">
+        <ReplenishmentSection
+          isbns={isbns}
+          locations={locations}
+          canManage={canManage}
+          canValidate={!!canValidate}
+          prefill={replenishPrefill}
+          onMessage={(m) => { setMessage(m); refresh(); bumpMovements(); }}
+          onError={setError}
+          onChanged={() => { refresh(); bumpMovements(); }}
+          collapsible
+          defaultOpen
+        />
+      </div>
 
       <Card
         title={t("stock.locations_title", "Lieux de stockage")}

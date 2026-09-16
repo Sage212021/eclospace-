@@ -2977,6 +2977,7 @@ model Isbn {
   stockItems           StockItem[]
   stockMovements       StockMovement[]
   inventoryLines       InventoryLine[]
+  replenishments       Replenishment[]
   priceList            PriceList[]
   salesOrderLines      SalesOrderLine[]
   deliveryLines        DeliveryLine[]
@@ -3360,6 +3361,7 @@ model StockLocation {
   inventories      Inventory[]
   purchaseOrders   PurchaseOrder[]
   consignmentsHere Consignment[]
+  replenishments   Replenishment[]
 
   @@map("stock_locations")
 }
@@ -3514,6 +3516,46 @@ model InventoryLine {
   adjustmentMovement   StockMovement? @relation(fields: [adjustmentMovementId], references: [id])
 
   @@map("inventory_lines")
+}
+
+// Réapprovisionnement d'un ouvrage (§9) : cycle demande → validé → en cours →
+// (partiellement) reçu → clôturé, OU annulé. Le stock N'AUGMENTE QU'À LA
+// RÉCEPTION (Règle 5) : chaque réception crée un StockMovement d'entrée, source
+// de vérité du stock. Objet léger orienté stock (distinct du bon de commande
+// imprimeur, qui reste le circuit de fabrication avec contrôle qualité).
+enum ReplenishmentStatus {
+  requested // demandé
+  approved // validé (Direction / responsable)
+  in_progress // commande passée, en cours
+  partially_received // partiellement réceptionné
+  received // entièrement réceptionné
+  cancelled // annulé
+}
+
+model Replenishment {
+  id                String              @id @default(uuid())
+  isbnId            String              @map("isbn_id")
+  isbn              Isbn                @relation(fields: [isbnId], references: [id])
+  locationId        String              @map("location_id")
+  location          StockLocation       @relation(fields: [locationId], references: [id])
+  quantityRequested Int                 @map("quantity_requested")
+  quantityReceived  Int                 @default(0) @map("quantity_received")
+  status            ReplenishmentStatus @default(requested)
+  supplier          String?
+  unitCost          Decimal?            @map("unit_cost") @db.Decimal(10, 2)
+  orderRef          String?             @map("order_ref")
+  receiptRef        String?             @map("receipt_ref")
+  note              String?
+  requestedBy       String?             @map("requested_by")
+  requestedAt       DateTime            @default(now()) @map("requested_at")
+  validatedBy       String?             @map("validated_by")
+  validatedAt       DateTime?           @map("validated_at")
+  receivedAt        DateTime?           @map("received_at")
+  cancelledBy       String?             @map("cancelled_by")
+  cancelledAt       DateTime?           @map("cancelled_at")
+  cancelReason      String?             @map("cancel_reason")
+
+  @@map("replenishments")
 }
 
 // ============================================================

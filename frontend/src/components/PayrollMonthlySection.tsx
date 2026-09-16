@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, submitPayrollMonth, returnPayrollMonth, requestPayrollReopen, listPayrollReopenRequests, decidePayrollReopen, getSalaryElements, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements, type PayrollExtraLine, type ReopenRequest, type SalaryElement } from "../api/client";
+import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, deletePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, submitPayrollMonth, returnPayrollMonth, requestPayrollReopen, listPayrollReopenRequests, decidePayrollReopen, getSalaryElements, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements, type PayrollExtraLine, type ReopenRequest, type SalaryElement } from "../api/client";
 import { downloadPayslipsPdf } from "../lib/payslipPdf";
 import type { PayslipPrintData } from "../lib/print";
 import { Card } from "./Card";
@@ -201,13 +201,27 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
     }
   }
 
+  // Nettoie les lignes libres avant envoi : une ligne sans libellé (ou vidée)
+  // ferait échouer l'enregistrement (le serveur exige un libellé). On ne garde
+  // que les lignes valides. Évite « l'enregistrement échoue » après avoir retiré
+  // des informations.
+  function cleanExtras(id: string): PayrollExtraLine[] {
+    return (extraDraft[id] ?? [])
+      .filter((e) => e.label.trim() !== "" && (e.amount > 0 || e.bareme_type != null))
+      .map((e) => ({
+        label: e.label.trim(), kind: e.kind, amount: Math.max(e.amount, 0),
+        ...(e.element_code ? { element_code: e.element_code } : {}),
+        ...(e.bareme_type ? { bareme_type: e.bareme_type, quantity: e.quantity ?? 1 } : {}),
+      }));
+  }
+
   // Enregistrement EXPLICITE de toute la grille (bouton « Enregistrer la saisie »).
   async function saveAll() {
     if (!editable) return;
     setBusy(true);
     try {
       for (const l of month?.lines ?? []) {
-        await savePayrollMonthLine(period, l.employee_id, draft[l.employee_id], l.note, extraDraft[l.employee_id] ?? []);
+        await savePayrollMonthLine(period, l.employee_id, draft[l.employee_id], l.note, cleanExtras(l.employee_id));
       }
       setMessage("Saisie enregistrée. Vous pouvez continuer à la modifier tant que le mois n'est pas soumis ni validé.");
       setError(null);
@@ -219,10 +233,25 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
     }
   }
 
+  // Retire la fiche de paie du salarié pour CE mois (§6). N'affecte ni les autres
+  // périodes ni la fiche permanente. Le salarié peut être réintégré via « Préparer ».
+  async function removeLine(l: PayrollMonthLine) {
+    if (!editable) return;
+    if (!window.confirm(`Retirer ${l.employee_name} de la paie de ${period} ?\n\nSeule sa fiche de paie de CE mois sera supprimée (les autres mois et sa fiche permanente ne sont pas touchés). Vous pourrez le réintégrer via « Préparer le mois de paie ».`)) return;
+    try {
+      await deletePayrollMonthLine(period, l.employee_id);
+      setMessage(`${l.employee_name} retiré de la paie de ${period}.`);
+      setError(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Suppression impossible.");
+    }
+  }
+
   async function saveRow(l: PayrollMonthLine) {
     if (!editable) return;
     try {
-      await savePayrollMonthLine(period, l.employee_id, draft[l.employee_id], l.note, extraDraft[l.employee_id] ?? []);
+      await savePayrollMonthLine(period, l.employee_id, draft[l.employee_id], l.note, cleanExtras(l.employee_id));
       setError(null);
       await load();
     } catch (err) {
@@ -235,15 +264,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
   async function saveLines() {
     if (!linesFor) return;
     const id = linesFor.employeeId;
-    const clean = (extraDraft[id] ?? [])
-      // On garde une ligne si elle a un libellé ET (un montant > 0 OU un avantage en
-      // nature au barème, dont le montant est calculé par le moteur).
-      .filter((e) => e.label.trim() !== "" && (e.amount > 0 || e.bareme_type != null))
-      .map((e) => ({
-        label: e.label.trim(), kind: e.kind, amount: Math.max(e.amount, 0),
-        ...(e.element_code ? { element_code: e.element_code } : {}),
-        ...(e.bareme_type ? { bareme_type: e.bareme_type, quantity: e.quantity ?? 1 } : {}),
-      }));
+    const clean = cleanExtras(id);
     const note = month?.lines?.find((l) => l.employee_id === id)?.note ?? null;
     setBusy(true);
     try {
@@ -482,6 +503,16 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
                         >
                           ＋ lignes{(l.extra_lines?.length ?? 0) > 0 ? ` (${l.extra_lines!.length})` : ""}
                         </button>
+                        {editable && (
+                          <button
+                            type="button"
+                            onClick={() => removeLine(l)}
+                            title="Retirer ce salarié de la paie de ce mois"
+                            style={{ marginTop: 2, marginLeft: 6, border: "1px solid var(--line)", background: "#fff", borderRadius: 6, padding: "1px 7px", fontSize: 11, cursor: "pointer", color: "var(--alert, #B23A2E)" }}
+                          >
+                            Retirer
+                          </button>
+                        )}
                       </div>
                     </td>
                     {COLS.map((c) => {

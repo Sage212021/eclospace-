@@ -937,20 +937,13 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const rates = ratesFrom(rateSet as unknown as Record<string, unknown>);
       const formulas = await loadFormulaOverlay();
 
-      // Auto-complétion : un salarié dont la FICHE PAIE a été créée APRÈS la
-      // préparation du mois n'avait pas de ligne et restait invisible. Tant que le
-      // mois est modifiable (brouillon), on crée à la volée les lignes manquantes
-      // pour tous les salariés dotés d'une fiche → ils apparaissent immédiatement.
-      if (run.status === "brouillon") {
-        const profiles = await prisma.payrollEmployeeProfile.findMany({ where: { employee: { deletedAt: null } }, select: { employeeId: true } });
-        const existing = new Set((await prisma.payrollMonthlyLine.findMany({ where: { runId: run.id }, select: { employeeId: true } })).map((l) => l.employeeId));
-        const toCreate = profiles.filter((p) => !existing.has(p.employeeId));
-        if (toCreate.length > 0) {
-          await prisma.payrollMonthlyLine.createMany({ data: toCreate.map((p) => ({ runId: run.id, employeeId: p.employeeId })), skipDuplicates: true });
-        }
-        // Reporte les primes validées du module sur les lignes (source unique).
-        await syncRunPrimes(period, run.id);
-      }
+      // Correction (D-041) : plus d'auto-complétion silencieuse à la consultation.
+      // Le contenu d'un mois est EXPLICITE — peuplé par « Préparer le mois » et
+      // ajustable ligne par ligne (une fiche retirée du mois ne réapparaît pas
+      // toute seule). Un salarié doté d'une fiche mais absent du mois est signalé
+      // dans « missing_profiles » (ci-dessous) pour que le RH puisse re-préparer.
+      // Les primes validées restent synchronisées sur les lignes existantes.
+      if (run.status === "brouillon") await syncRunPrimes(period, run.id);
 
       const lines = await prisma.payrollMonthlyLine.findMany({
         where: { runId: run.id },
@@ -1016,15 +1009,17 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         (acc, r) => ({ brut: acc.brut + r.salaire_brut, net: acc.net + r.net_a_payer, cout: acc.cout + r.cout_employeur }),
         { brut: 0, net: 0, cout: 0 },
       );
-      // Employés SANS fiche paie : ils n'apparaissent pas dans la grille (le calcul
-      // exige une fiche). On les remonte explicitement pour que le RH sache QUI
-      // reste à compléter — sinon ils semblent « disparus ».
+      // Salariés ACTIFS absents de la grille du mois : soit sans fiche paie (à
+      // compléter), soit dotés d'une fiche mais pas encore ajoutés à ce mois
+      // (fiche créée après la préparation, ou ligne retirée). On les remonte pour
+      // que le RH sache qui manque et puisse re-préparer le mois s'il le souhaite.
+      const inMonth = new Set(lines.map((l) => l.employeeId));
       const missing = await prisma.employee.findMany({
-        where: { deletedAt: null, payrollProfile: { is: null } },
-        select: { id: true, firstName: true, lastName: true, department: { select: { name: true } } },
+        where: { deletedAt: null, id: { notIn: [...inMonth] } },
+        select: { id: true, firstName: true, lastName: true, department: { select: { name: true } }, payrollProfile: { select: { employeeId: true } } },
         orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
       });
-      const missingProfiles = missing.map((e) => ({ employee_id: e.id, name: `${e.firstName} ${e.lastName}`, department: e.department?.name ?? null }));
+      const missingProfiles = missing.map((e) => ({ employee_id: e.id, name: `${e.firstName} ${e.lastName}`, department: e.department?.name ?? null, has_fiche: e.payrollProfile != null }));
       return reply.send({ exists: true, period, status: run.status, validated_at: run.validatedAt, submitted_at: run.submittedAt, return_reason: run.returnReason, returned_at: run.returnedAt, rate_effective_from: rateSet.effectiveFrom.toISOString().slice(0, 10), rates: rateDisplay(rateSet as unknown as Record<string, unknown>), lines: rows, totals, missing_profiles: missingProfiles });
     },
   );
@@ -1057,6 +1052,27 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
           note: b.note,
         },
       });
+      return reply.send({ ok: true });
+    },
+  );
+
+  // Suppression d'une fiche de paie du mois (§6) : retire un salarié de CE mois
+  // uniquement, sur une période non clôturée et non verrouillée. La suppression
+  // ne touche pas la fiche permanente ni les autres périodes. Traçée au journal.
+  fastify.delete(
+    "/api/v1/payroll/monthly/:period/lines/:employeeId",
+    { preHandler: requirePermission("paie", "saisie") },
+    async (request, reply) => {
+      const period = normalizePeriod((request.params as { period: string }).period);
+      const { employeeId } = request.params as { employeeId: string };
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
+      if (!run) return reply.code(404).send({ code: "not_found", message: "Mois non préparé." });
+      if (run.status === "valide") return reply.code(409).send({ code: "run_locked", message: "Mois validé par la Direction : rouvrez-le pour corriger." });
+      if (run.status === "soumis_dg") return reply.code(409).send({ code: "run_submitted", message: "Mois soumis au Directeur général : non modifiable." });
+      const line = await prisma.payrollMonthlyLine.findUnique({ where: { runId_employeeId: { runId: run.id, employeeId } } });
+      if (!line) return reply.code(404).send({ code: "not_found", message: "Aucune fiche de paie pour ce salarié sur ce mois." });
+      await prisma.payrollMonthlyLine.delete({ where: { runId_employeeId: { runId: run.id, employeeId } } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payroll_monthly_line", entityId: `${period}:${employeeId}`, newValues: { removed_from_month: true, period, employeeId }, ipAddress: request.ip });
       return reply.send({ ok: true });
     },
   );
@@ -1750,54 +1766,34 @@ async function computeRegister(period: string): Promise<
   const rates = ratesFrom(rateSet as unknown as Record<string, unknown>);
   const formulas = await loadFormulaOverlay();
 
-  const profiles = await prisma.payrollEmployeeProfile.findMany({
-    where: { employee: { deletedAt: null } },
-    include: { employee: { select: { id: true, firstName: true, lastName: true, confidential: { select: { baseSalary: true } } } } },
-  });
-
-  // Si le mois a été PRÉPARÉ (grille mensuelle), le livre de paie reprend les
-  // éléments variables saisis (primes, heures sup, absences, retards, avances,
-  // prêts, sanctions) — les mêmes valeurs que les bulletins. Sinon (mois non
-  // préparé), calcul depuis les seules fiches paie. La retenue d'absence n'est
-  // jamais issue des présences (règle 07/08/2026) : elle est saisie sur la grille.
+  // CORRECTION (D-041) : le livre de paie d'une période ne contient QUE les
+  // salariés dont une paie a été RÉELLEMENT créée pour cette période — c.-à-d.
+  // une ligne dans le run du mois (mois préparé). Il n'y a AUCUN repli sur la
+  // fiche permanente : la seule présence d'un salarié dans la base RH ne fait
+  // plus apparaître sa paie dans tous les mois. Un mois non préparé (aucun run)
+  // n'a donc aucune ligne — rien n'est généré automatiquement pour les mois
+  // futurs. Chaque fiche de paie = (employé + période).
   const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period } });
-  const lineByEmp = new Map<string, PayrollMonthlyLine>();
-  if (run) {
-    for (const l of await prisma.payrollMonthlyLine.findMany({ where: { runId: run.id } })) lineByEmp.set(l.employeeId, l);
-  }
-
   const rubriques = await activeRubriqueMap();
   const lines: RegisterLine[] = [];
   const totals = { brut: 0, net: 0, charges_pat: 0 };
-  for (const p of profiles) {
-    const confBase = p.employee.confidential?.baseSalary != null ? num(p.employee.confidential.baseSalary) : null;
-    const { base, gross } = resolveBaseGross(p, confBase);
-    const monthLine = lineByEmp.get(p.employeeId);
-    const ps = monthLine
-      ? computeMonthlyLine(p, rates, monthLine, confBase, formulas, rubriques)
-      : computePayslip(
-          {
-            base,
-            complements: Math.round(gross - base),
-            fiscalBase: p.fiscalBase != null ? num(p.fiscalBase) : gross,
-            fiscalParts: num(p.fiscalParts),
-            applyFiscalParts: p.applyFiscalParts,
-            seniorityYears: p.seniorityYears,
-            seniorityRate: p.seniorityRate != null ? num(p.seniorityRate) : null,
-            seniorityThreshold: p.seniorityThreshold ?? 0,
-            applySeniority: p.applySeniority,
-            retenueAbsence: 0,
-            internal: { avance: 0, pret: 0, retard: 0, autres: 0 },
-          },
-          rates,
-          formulas,
-        );
+  const monthLines = run
+    ? await prisma.payrollMonthlyLine.findMany({
+        where: { runId: run.id, employee: { deletedAt: null } },
+        include: { employee: { select: { firstName: true, lastName: true, niu: true, payrollProfile: true, confidential: { select: { baseSalary: true } } } } },
+      })
+    : [];
+  for (const l of monthLines) {
+    const p = l.employee.payrollProfile;
+    if (!p) continue; // sans fiche paie, aucun calcul possible → non listé
+    const confBase = l.employee.confidential?.baseSalary != null ? num(l.employee.confidential.baseSalary) : null;
+    const ps = computeMonthlyLine(p, rates, l, confBase, formulas, rubriques);
     lines.push({
-      employee_id: p.employeeId,
-      employee_name: `${p.employee.firstName} ${p.employee.lastName}`,
+      employee_id: l.employeeId,
+      employee_name: `${l.employee.firstName} ${l.employee.lastName}`,
       matricule: p.matricule,
       cnps_number: p.cnpsNumber,
-      niu: p.niu,
+      niu: l.employee.niu ?? p.niu,
       salaire_brut: ps.salaire_brut,
       salaire_taxable: ps.assiette_fiscale,
       cnps_cotisable_total: ps.cnps_cotisable_total,

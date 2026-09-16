@@ -26,6 +26,9 @@ describe("livre de paie & clôture", () => {
       headers: { cookie },
       payload: { gross_contractual: 500000, base_pct: 0.6, fiscal_parts: 1, apply_fiscal_parts: true, seniority_years: 0, apply_seniority: false },
     });
+    // D-041 : le livre de paie d'un mois ne contient que les salariés dont la paie
+    // a été créée pour ce mois → on PRÉPARE explicitement la période.
+    await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/prepare`, headers: { cookie } });
   });
 
   afterAll(async () => {

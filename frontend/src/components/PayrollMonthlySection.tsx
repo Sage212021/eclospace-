@@ -20,6 +20,15 @@ function currentPeriod(): string {
   const d = new Date();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
+// Décale une période « AAAA-MM » de `delta` mois (robuste : passage d'année).
+// Utilisé par les boutons « ◀ mois précédent / mois suivant ▶ » — plus fiables
+// que le sélecteur de mois natif du navigateur (retour opérateur : mois figé).
+function shiftMonth(period: string, delta: number): string {
+  const [y, m] = period.split("-").map(Number);
+  if (!y || !m) return period;
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
 
 // Types d'avantages en nature évaluables au barème (CGI art. 33). Le pourcentage
 // réel vient du barème versionné (réponse du mois) ; ces libellés servent l'UI.
@@ -343,7 +352,13 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       defaultOpen={defaultOpen}
     >
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
-        <Field label="Mois de paie (AAAA-MM)"><input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
+        <Field label="Mois de paie (AAAA-MM)">
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button type="button" title="Mois précédent" onClick={() => setPeriod(shiftMonth(period, -1))} style={{ cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, background: "#fff", padding: "4px 9px", fontSize: 14, lineHeight: 1 }}>◀</button>
+            <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} />
+            <button type="button" title="Mois suivant" onClick={() => setPeriod(shiftMonth(period, 1))} style={{ cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, background: "#fff", padding: "4px 9px", fontSize: 14, lineHeight: 1 }}>▶</button>
+          </div>
+        </Field>
         {month && !month.exists && canManage && (
           <Button variant="add" size="sm" type="button" disabled={busy} onClick={prepare}>{busy ? "…" : "Préparer le mois de paie"}</Button>
         )}

@@ -2924,6 +2924,52 @@ export function getStockFluctuationByBook() {
   return request<{ rows: StockBookFluctuation[] }>(`/api/v1/stock-fluctuation-by-book`);
 }
 
+// --- Réapprovisionnement (cycle demande → réception) ---
+export type ReplenishmentStatus = "requested" | "approved" | "in_progress" | "partially_received" | "received" | "cancelled";
+export interface Replenishment {
+  id: string;
+  isbnId: string;
+  isbn13: string | null;
+  title: string | null;
+  locationId: string;
+  location_label: string | null;
+  quantityRequested: number;
+  quantityReceived: number;
+  remaining: number;
+  status: ReplenishmentStatus;
+  supplier: string | null;
+  unit_cost: number | null;
+  total_cost: number | null;
+  orderRef: string | null;
+  receiptRef: string | null;
+  note: string | null;
+  requested_by_name: string | null;
+  requestedAt: string;
+  validated_by_name: string | null;
+  validatedAt: string | null;
+  receivedAt: string | null;
+  cancelled_by_name: string | null;
+  cancelReason: string | null;
+}
+export function listReplenishments() {
+  return request<Replenishment[]>(`/api/v1/replenishments`);
+}
+export function createReplenishment(input: { isbn_id: string; location_id: string; quantity_requested: number; supplier?: string; unit_cost?: number; order_ref?: string; note?: string }) {
+  return request<Replenishment>(`/api/v1/replenishments`, { method: "POST", body: JSON.stringify(input) });
+}
+export function approveReplenishment(id: string) {
+  return request<Replenishment>(`/api/v1/replenishments/${id}/approve`, { method: "PATCH", body: JSON.stringify({}) });
+}
+export function orderReplenishment(id: string, input: { order_ref?: string; supplier?: string }) {
+  return request<Replenishment>(`/api/v1/replenishments/${id}/order`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function receiveReplenishment(id: string, input: { quantity: number; receipt_ref?: string }) {
+  return request<Replenishment>(`/api/v1/replenishments/${id}/receive`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function cancelReplenishment(id: string, reason?: string) {
+  return request<Replenishment>(`/api/v1/replenishments/${id}/cancel`, { method: "PATCH", body: JSON.stringify({ reason }) });
+}
+
 // Corriger une saisie de mouvement (quantité, motif, état) — le stock est
 // recalculé automatiquement côté serveur.
 export function updateStockMovement(id: string, input: { quantity?: number; reason?: string; condition?: "vendable" | "declasse" }) {

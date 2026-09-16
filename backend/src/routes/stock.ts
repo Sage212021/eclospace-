@@ -735,7 +735,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       prisma.stockItem.findMany({ where: { condition: "vendable" }, select: { isbnId: true, quantityPhysical: true, quantityReserved: true, alertThreshold: true, outOfStockThreshold: true } }),
       isbnStockAlertThreshold(),
       prisma.stockMovement.findMany({ where: { status: { not: "cancelled" }, movedAt: { gte: monthStart, lt: monthEnd } }, select: { type: true, quantity: true, fromLocationId: true, toLocationId: true, reason: true } }),
-      prisma.purchaseOrder.count({ where: { status: { in: ["approved", "sent", "in_production"] } } }),
+      prisma.replenishment.count({ where: { status: { in: ["requested", "approved", "in_progress", "partially_received"] } } }),
     ]);
 
     // Stock disponible total (vendable) + ouvrages sous seuil (par ISBN).
@@ -858,6 +858,119 @@ export default async function stockRoutes(fastify: FastifyInstance) {
       .map((r) => ({ ...r, state: state(r) }))
       .sort((a, b) => (a.title ?? a.isbn13).localeCompare(b.title ?? b.isbn13, "fr"));
     return reply.send({ rows: out });
+  });
+
+  // --- Réapprovisionnement (§9) : cycle demande → validé → en cours →
+  // (partiellement) reçu → clôturé / annulé. Le stock N'AUGMENTE QU'À LA
+  // RÉCEPTION (Règle 5), via un StockMovement d'entrée. ---
+  const replenishmentSchema = z.object({
+    isbn_id: z.string().uuid(),
+    location_id: z.string().uuid(),
+    quantity_requested: z.number().int().positive(),
+    supplier: z.string().max(200).optional(),
+    unit_cost: z.number().nonnegative().optional(),
+    order_ref: z.string().max(120).optional(),
+    note: z.string().max(500).optional(),
+  });
+
+  async function enrichReplenishments(rows: Array<Record<string, unknown> & { id: string }>) {
+    const full = await prisma.replenishment.findMany({
+      where: { id: { in: rows.map((r) => r.id) } },
+      include: { isbn: { select: { isbn13: true, manuscript: { select: { title: true } } } }, location: { select: { label: true } } },
+      orderBy: { requestedAt: "desc" },
+    });
+    const names = await resolveStockActorNames(full.flatMap((r) => [r.requestedBy, r.validatedBy, r.cancelledBy]));
+    return full.map((r) => ({
+      ...r,
+      isbn13: r.isbn?.isbn13 ?? null,
+      title: r.isbn?.manuscript?.title ?? null,
+      location_label: r.location?.label ?? null,
+      unit_cost: r.unitCost != null ? Number(r.unitCost) : null,
+      total_cost: r.unitCost != null ? Math.round(Number(r.unitCost) * r.quantityRequested * 100) / 100 : null,
+      requested_by_name: r.requestedBy ? names.get(r.requestedBy) ?? null : null,
+      validated_by_name: r.validatedBy ? names.get(r.validatedBy) ?? null : null,
+      cancelled_by_name: r.cancelledBy ? names.get(r.cancelledBy) ?? null : null,
+      remaining: Math.max(0, r.quantityRequested - r.quantityReceived),
+    }));
+  }
+
+  fastify.get("/api/v1/replenishments", { preHandler: requirePermission("stock", "consultation") }, async (_request, reply) => {
+    const rows = await prisma.replenishment.findMany({ orderBy: { requestedAt: "desc" }, take: 300, select: { id: true } });
+    return reply.send(await enrichReplenishments(rows));
+  });
+
+  fastify.post("/api/v1/replenishments", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const parsed = replenishmentSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const b = parsed.data;
+    const created = await prisma.replenishment.create({
+      data: { isbnId: b.isbn_id, locationId: b.location_id, quantityRequested: b.quantity_requested, supplier: b.supplier, unitCost: b.unit_cost, orderRef: b.order_ref, note: b.note, requestedBy: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "replenishment", entityId: created.id, newValues: b, ipAddress: request.ip });
+    return reply.code(201).send((await enrichReplenishments([created]))[0]);
+  });
+
+  // Validation (rôle distinct : stock:validation) — demandé → validé.
+  fastify.patch("/api/v1/replenishments/:id/approve", { preHandler: requirePermission("stock", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const r = await prisma.replenishment.findUnique({ where: { id } });
+    if (!r) return reply.code(404).send({ code: "not_found", message: "Demande introuvable." });
+    if (r.status !== "requested") return reply.code(409).send({ code: "invalid_transition", message: "Seule une demande « demandé » peut être validée." });
+    const updated = await prisma.replenishment.update({ where: { id }, data: { status: "approved", validatedBy: request.user!.id, validatedAt: new Date() } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "replenishment", entityId: id, newValues: { status: "approved" }, ipAddress: request.ip });
+    return reply.send((await enrichReplenishments([updated]))[0]);
+  });
+
+  // Commande passée : validé → en cours (référence de commande facultative).
+  fastify.patch("/api/v1/replenishments/:id/order", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ order_ref: z.string().max(120).optional(), supplier: z.string().max(200).optional() }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides." });
+    const r = await prisma.replenishment.findUnique({ where: { id } });
+    if (!r) return reply.code(404).send({ code: "not_found", message: "Demande introuvable." });
+    if (r.status !== "approved") return reply.code(409).send({ code: "invalid_transition", message: "La commande ne peut être passée que sur une demande validée." });
+    const updated = await prisma.replenishment.update({ where: { id }, data: { status: "in_progress", orderRef: parsed.data.order_ref ?? r.orderRef, supplier: parsed.data.supplier ?? r.supplier } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "replenishment", entityId: id, newValues: { status: "in_progress" }, ipAddress: request.ip });
+    return reply.send((await enrichReplenishments([updated]))[0]);
+  });
+
+  // Réception (totale ou partielle) : crée l'ENTRÉE de stock correspondante.
+  fastify.patch("/api/v1/replenishments/:id/receive", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ quantity: z.number().int().positive(), receipt_ref: z.string().max(120).optional() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Quantité reçue invalide." });
+    const r = await prisma.replenishment.findUnique({ where: { id } });
+    if (!r) return reply.code(404).send({ code: "not_found", message: "Demande introuvable." });
+    if (!["approved", "in_progress", "partially_received"].includes(r.status)) {
+      return reply.code(409).send({ code: "invalid_transition", message: "Cette demande n'est pas en attente de réception." });
+    }
+    const remaining = r.quantityRequested - r.quantityReceived;
+    if (parsed.data.quantity > remaining) {
+      return reply.code(409).send({ code: "over_reception", message: `Réception impossible : il reste ${remaining} exemplaire(s) à recevoir sur cette demande.` });
+    }
+    const newReceived = r.quantityReceived + parsed.data.quantity;
+    const nextStatus = newReceived >= r.quantityRequested ? "received" : "partially_received";
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.stockMovement.create({
+        data: { type: "supplier_in", isbnId: r.isbnId, printRun: 0, toLocationId: r.locationId, quantity: parsed.data.quantity, reason: `Réception réapprovisionnement${r.orderRef ? ` (${r.orderRef})` : ""}`, beneficiary: r.supplier ?? undefined, referenceType: "replenishment", referenceId: r.id, status: "completed", condition: "vendable", movedBy: request.user!.id },
+      });
+      await adjustStockItem(tx, r.isbnId, r.locationId, 0, parsed.data.quantity);
+      return tx.replenishment.update({ where: { id }, data: { quantityReceived: newReceived, status: nextStatus, receiptRef: parsed.data.receipt_ref ?? r.receiptRef, receivedAt: new Date() } });
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "replenishment", entityId: id, newValues: { received: parsed.data.quantity, status: nextStatus }, ipAddress: request.ip });
+    return reply.send((await enrichReplenishments([updated]))[0]);
+  });
+
+  fastify.patch("/api/v1/replenishments/:id/cancel", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ reason: z.string().max(300).optional() }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides." });
+    const r = await prisma.replenishment.findUnique({ where: { id } });
+    if (!r) return reply.code(404).send({ code: "not_found", message: "Demande introuvable." });
+    if (r.status === "received" || r.status === "cancelled") return reply.code(409).send({ code: "invalid_transition", message: "Cette demande ne peut plus être annulée." });
+    const updated = await prisma.replenishment.update({ where: { id }, data: { status: "cancelled", cancelledBy: request.user!.id, cancelledAt: new Date(), cancelReason: parsed.data.reason } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "replenishment", entityId: id, newValues: { status: "cancelled" }, ipAddress: request.ip });
+    return reply.send((await enrichReplenishments([updated]))[0]);
   });
 
   // Entrée de fabrication (Ch. 16 §16.4, Ch. 15 §15.7) : seuls les

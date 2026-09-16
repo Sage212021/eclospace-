@@ -475,13 +475,19 @@ export default async function financeRoutes(fastify: FastifyInstance) {
     return reply.send(expenses);
   });
 
-  // Séparation des tâches (Ch. 18 §18.11) : celui qui saisit une dépense ne
-  // peut pas la valider seul. Circuit à deux paliers au-delà d'un seuil
-  // paramétrable (comme purchase_order_delegation_threshold, Ch. 15 §15.3) :
-  // validation courante (finance:administration) puis validation finale
-  // réservée au rôle Direction générale. Simplification documentée : un vrai
-  // circuit "demandeur → responsable hiérarchique → DAF → DG" suppose un
-  // organigramme (Ch. 19, Lot 6) qui n'existe pas encore.
+  // Séparation des tâches (Ch. 18 §18.11) — décision opérateur (13/09/2026,
+  // précisée le 16/09/2026) : TOUTE dépense d'ouvrage est validée par DEUX
+  // personnes, quel que soit le montant.
+  //   Palier 1 — la Finance (DAF, finance:administration) valide → statut
+  //              « en_attente_dg », on mémorise le premier validateur.
+  //   Palier 2 — la Direction générale (rôle DIR_GENERAL) valide en dernier →
+  //              statut « validee » ; ce doit être une personne DISTINCTE du
+  //              premier validateur.
+  // Il n'y a donc plus de seuil : le DG valide systématiquement. La dépense
+  // n'est comptée au bilan (statut « validee »/« payee ») qu'après la double
+  // validation. Simplification documentée : un vrai circuit « demandeur →
+  // responsable hiérarchique → DAF → DG » suppose un organigramme (Ch. 19,
+  // Lot 6) qui n'existe pas encore.
   fastify.patch(
     "/api/v1/expenses/:id/validate",
     { preHandler: requirePermission("finance", "administration") },
@@ -491,48 +497,32 @@ export default async function financeRoutes(fastify: FastifyInstance) {
       if (!expense) {
         return reply.code(404).send({ code: "not_found", message: "Dépense introuvable." });
       }
-      if (expense.createdBy === request.user!.id) {
-        return reply.code(409).send({
-          code: "self_validation_forbidden",
-          message: "Celui qui saisit une dépense ne peut pas la valider seul (Ch. 18 §18.11).",
-        });
-      }
 
+      // Palier 1 : validation de la Finance (DAF). Toute dépense passe par la
+      // Direction générale ensuite, quel que soit le montant.
       if (expense.status === "a_valider") {
-        const threshold = await expenseDgValidationThreshold();
-        // « À partir de » le seuil (montant ≥ seuil) → Direction générale.
-        if (Number(expense.amount) >= threshold) {
-          const updated = await prisma.expense.update({
-            where: { id },
-            data: { status: "en_attente_dg", financeValidatedBy: request.user!.id },
-          });
-          await writeAuditLog({
-            userId: request.user!.id,
-            action: "update",
-            entityType: "expense",
-            entityId: id,
-            newValues: { status: "en_attente_dg" },
-            ipAddress: request.ip,
-          });
-          return reply.send(updated);
-        }
-        const updated = await validateExpenseAndPostCostEntry(id, request.user!.id);
+        const updated = await prisma.expense.update({
+          where: { id },
+          data: { status: "en_attente_dg", financeValidatedBy: request.user!.id },
+        });
         await writeAuditLog({
           userId: request.user!.id,
           action: "update",
           entityType: "expense",
           entityId: id,
-          newValues: { status: "validee" },
+          newValues: { status: "en_attente_dg" },
           ipAddress: request.ip,
         });
         return reply.send(updated);
       }
 
+      // Palier 2 : validation finale, réservée à la Direction générale, par une
+      // personne distincte du premier validateur.
       if (expense.status === "en_attente_dg") {
         if (!request.user!.roles.includes("DIR_GENERAL")) {
           return reply.code(403).send({
             code: "dg_approval_required",
-            message: "Au-delà du seuil de délégation, la validation finale est réservée à la Direction générale.",
+            message: "La validation finale d'une dépense est réservée à la Direction générale.",
           });
         }
         if (expense.financeValidatedBy === request.user!.id) {
@@ -1197,14 +1187,6 @@ function mapExpenseCategoryToCostType(category: string): CostType {
   if (category === "prestation") return "editorial_services";
   if (category === "communication") return "promotion";
   return "overhead_allocation";
-}
-
-async function expenseDgValidationThreshold(): Promise<number> {
-  const setting = await prisma.setting.findUnique({ where: { key: "expense_dg_validation_threshold" } });
-  // Seuil de délégation (demande opérateur 13/09/2026) : à partir de 1 000 000,
-  // la validation finale est envoyée à la Direction générale ; en dessous, la
-  // Finance valide. Paramétrable via le réglage `expense_dg_validation_threshold`.
-  return (setting?.value as number | undefined) ?? 1_000_000;
 }
 
 async function validateExpenseAndPostCostEntry(id: string, approvedBy: string) {

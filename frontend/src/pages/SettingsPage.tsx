@@ -31,10 +31,6 @@ const SETTING_LABELS: Record<string, { label: string; description: string }> = {
     label: "Seuil d'écart entre lecteurs", // Ch. 7 §7.5
     description: "Écart de note au-delà duquel un désaccord entre lecteurs est signalé.",
   },
-  expense_dg_validation_threshold: {
-    label: "Seuil de validation Direction générale des dépenses", // Ch. 18 §18.11
-    description: "Montant au-delà duquel une dépense doit être validée par la Direction générale.",
-  },
   isbn_stock_alert_threshold: {
     label: "Seuil d'alerte du stock d'ISBN", // Ch. 13 §13.2
     description: "Nombre d'ISBN disponibles restants déclenchant une alerte de réapprovisionnement.",

@@ -17,6 +17,13 @@ function currentPeriod(): string {
   const d = new Date();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
+// Décale une période « AAAA-MM » de `delta` mois (robuste au passage d'année).
+function shiftMonth(period: string, delta: number): string {
+  const [y, m] = period.split("-").map(Number);
+  if (!y || !m) return period;
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
 
 function downloadCsv(name: string, header: string[], rows: (string | number)[][]) {
   const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\r\n");
@@ -98,7 +105,13 @@ export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: {
       defaultOpen={defaultOpen}
     >
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
-        <Field label={t("pay.period_field", "Période (AAAA-MM)")}><input value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} /></Field>
+        <Field label={t("pay.period_field", "Période (AAAA-MM)")}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button type="button" title={t("pay.prev_month", "Mois précédent")} onClick={() => setPeriod(shiftMonth(period, -1))} style={{ cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, background: "#fff", padding: "4px 9px", fontSize: 14, lineHeight: 1 }}>◀</button>
+            <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ fontFamily: "var(--font-mono, monospace)" }} />
+            <button type="button" title={t("pay.next_month", "Mois suivant")} onClick={() => setPeriod(shiftMonth(period, 1))} style={{ cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, background: "#fff", padding: "4px 9px", fontSize: 14, lineHeight: 1 }}>▶</button>
+          </div>
+        </Field>
         <Button variant="edit" size="sm" type="button" disabled={busy} onClick={load}>{busy ? "…" : t("pay.gen_register", "Générer le livre de paie")}</Button>
         {reg && reg.lines.length > 0 && <Button variant="export" size="sm" type="button" onClick={exportCnps}>{t("pay.export_cnps", "Export CNPS (CSV)")}</Button>}
         {reg && reg.lines.length > 0 && <Button variant="export" size="sm" type="button" onClick={exportFiscal}>{t("pay.export_fiscal", "Export fiscal (CSV)")}</Button>}

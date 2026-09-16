@@ -511,6 +511,9 @@ function BrandingCard({ canAdminister }: { canAdminister: boolean }) {
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Résolution réelle (px) de chaque image enregistrée, mesurée dans le
+  // navigateur : sert à indiquer si un cachet est assez net pour l'impression.
+  const [dims, setDims] = useState<Record<string, { w: number; h: number }>>({});
 
   function apply(next: Branding) {
     setB(next);
@@ -520,6 +523,18 @@ function BrandingCard({ canAdminister }: { canAdminister: boolean }) {
   useEffect(() => {
     getBranding().then(apply).catch(() => setErr("Chargement des cachets impossible."));
   }, []);
+  // Mesure la résolution de chaque image dès qu'elle change.
+  useEffect(() => {
+    if (!b) return;
+    setDims({});
+    for (const s of STAMP_META) {
+      const src = b[s.key];
+      if (!src) continue;
+      const im = new Image();
+      im.onload = () => setDims((d) => ({ ...d, [s.key]: { w: im.naturalWidth, h: im.naturalHeight } }));
+      im.src = src;
+    }
+  }, [b]);
 
   async function onUpload(key: BrandingStampKey, file: File | null) {
     if (!file) return;
@@ -570,6 +585,16 @@ function BrandingCard({ canAdminister }: { canAdminister: boolean }) {
                   <div style={{ height: 90, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--paper, #faf8f2)", borderRadius: 6, marginBottom: 6 }}>
                     {img ? <img src={img} alt={s.label} style={{ maxHeight: 84, maxWidth: "100%" }} /> : <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Aucune image</span>}
                   </div>
+                  {img && (() => {
+                    const d = dims[s.key];
+                    if (!d) return null;
+                    const lowRes = Math.max(d.w, d.h) < 700;
+                    return (
+                      <div style={{ fontSize: 11, marginBottom: 6, color: lowRes ? "var(--alert)" : "var(--muted)" }}>
+                        {d.w}×{d.h} px — {lowRes ? "basse résolution, à re-déposer (scan net) pour une impression nette" : "résolution suffisante"}
+                      </div>
+                    );
+                  })()}
                   <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6, lineHeight: 1.4 }}>{s.hint}</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button type="button" onClick={() => preview(s.key)} style={{ fontSize: 12, cursor: "pointer", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 9px", background: "#fff" }}>{previewLabel(s.key)}</button>

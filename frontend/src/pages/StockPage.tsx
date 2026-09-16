@@ -175,12 +175,18 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
   }
 
   const refresh = async () => {
+    // Chargement RÉSILIENT : chaque ressource est chargée indépendamment. Le
+    // Magasinier n'a pas le droit `commercial:consultation` (liste des clients) ;
+    // avant, l'échec 403 de `listCustomers()` dans un Promise.all faisait échouer
+    // TOUT le chargement — d'où une liste d'ouvrages vide et « Remettre à un
+    // commercial » qui ne montrait aucun livre. Désormais, un droit manquant sur
+    // une ressource n'efface plus les autres.
     const [locationList, itemList, alertList, isbnList, customerList] = await Promise.all([
-      listStockLocations(),
-      listStockItems(),
-      listStockAlerts(),
-      listIsbnRefs("print"),
-      listCustomers(),
+      listStockLocations().catch(() => [] as StockLocation[]),
+      listStockItems().catch(() => [] as StockItem[]),
+      listStockAlerts().catch(() => [] as (StockItem & { severity: string })[]),
+      listIsbnRefs("print").catch(() => [] as IsbnRef[]),
+      listCustomers().catch(() => [] as Customer[]),
     ]);
     setLocations(locationList);
     setItems(itemList);

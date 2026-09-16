@@ -292,7 +292,7 @@ export function letterEmailHtml(layout: LetterLayout, cachetDataUrl?: string | n
     .map((p) => `<p style="margin:0 0 14px;white-space:pre-wrap">${esc(p).replace(/\n/g, "<br>")}</p>`)
     .join("");
   const cachet = cachetDataUrl
-    ? `<img src="${cachetDataUrl}" alt="Cachet Direction Éditoriale" style="height:118px;width:auto;display:inline-block;margin-top:6px">`
+    ? `<img src="${cachetDataUrl}" alt="Cachet Direction Éditoriale" style="height:150px;width:auto;max-width:250px;display:inline-block;margin-top:6px">`
     : "";
   // Accusé de réception : bouton vers la page sécurisée de confirmation (le lien
   // porte un jeton unique). Présent uniquement si une URL est fournie.

@@ -87,7 +87,9 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     @page { size: A4; margin: 18mm 16mm; }
     * { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #0b0b0c; margin: 0; font-size: 12.5px; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .doc { max-width: 720px; margin: 0 auto; padding: 8px; position: relative; z-index: 1; }
+    /* max-width bornée à la largeur imprimable (jamais plus large que la zone
+       A4 utile) pour qu'aucun contenu de droite ne déborde hors page. */
+    .doc { max-width: min(720px, 100%); margin: 0 auto; padding: 8px; position: relative; z-index: 1; }
     /* Filigrane ampoule Éclosion : image de contenu, derrière le texte, centrée
        sur la page (position fixe → se répète sur chaque page d'un document long). */
     .wm { position: fixed; left: 50%; top: 54%; transform: translate(-50%, -50%); width: 52%; height: auto; z-index: 0; pointer-events: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -121,8 +123,13 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     table.lines th.r, table.lines td.r { text-align: right; }
     table.lines td { padding: 8px 10px; border-bottom: 1px solid #e7e2d4; }
     table.lines tr:nth-child(even) td { background: #faf8f2; }
-    .totals { margin-top: 14px; margin-left: auto; width: 280px; }
-    .totals div { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+    .totals { margin-top: 14px; margin-left: auto; width: 300px; max-width: 100%; }
+    /* Le libellé peut se réduire (ellipse) ; le MONTANT garde sa place à droite
+       et ne déborde jamais hors du cadre — donc jamais coupé au bord de page
+       (ex. « … FRS CFA » sur un gros total). */
+    .totals div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; }
+    .totals div > span:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .totals .num { flex: 0 0 auto; white-space: nowrap; }
     .totals .ttc { border-top: 2px solid #d9b21a; margin-top: 6px; padding-top: 8px; font-size: 15px; font-weight: 700; }
     .totals .ttc .num { color: #9a7a12; }
     .badge { display: inline-block; border: 1px solid #d9b21a; color: #9a7a12; border-radius: 999px; padding: 1px 10px; font-size: 11px; font-weight: 600; }
@@ -130,7 +137,9 @@ function documentShell(title: string, body: string, opts?: PrintOpts): string {
     .foot__legal { color: #0b0b0c; font-weight: 600; }
     .actions { text-align: center; margin: 18px 0 4px; }
     .actions button { font: inherit; background: #0b0b0c; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; cursor: pointer; }
-    @media print { .actions { display: none; } .doc { padding: 0; } }
+    /* Impression : petit retrait latéral pour que les montants alignés à droite
+       ne « collent » pas au bord (marge de sécurité anti-coupe). */
+    @media print { .actions { display: none; } .doc { padding: 0 2mm; } }
   </style></head>
   <body>
     ${watermark}
@@ -1495,7 +1504,7 @@ export function printProjectPlan(d: ProjectPlanPrintData, opts?: PrintOpts, cach
     : `<tr><td colspan="8" style="color:#6b7280">${tr("Aucune activité renseignée.", "No activity yet.")}</td></tr>`;
 
   const cachetBlock = cachetEditoriale
-    ? `<img src="${cachetEditoriale}" alt="${tr("Cachet Direction éditoriale", "Editorial Direction stamp")}" style="max-height:96px;max-width:200px;object-fit:contain;display:block;margin-left:auto">`
+    ? `<img src="${cachetEditoriale}" alt="${tr("Cachet Direction éditoriale", "Editorial Direction stamp")}" style="max-height:150px;max-width:240px;object-fit:contain;display:block;margin-left:auto;image-rendering:auto">`
     : `<div style="border-top:1px solid #0b0b0c;margin-top:46px;padding-top:4px;font-size:10.5px;color:#6b7280">${tr("Signature et cachet", "Signature and stamp")}</div>`;
 
   const body = `
@@ -1991,8 +2000,12 @@ export function printEditorialDecisionLetter(d: DecisionLetterLayout, opts?: Pri
     .map((p) => `<p style="margin:0 0 12px;text-align:justify;white-space:pre-wrap">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
     .join("");
 
+  // Cachet « Direction éditoriale » : taille d'un vrai tampon (≈ celle du cachet
+  // « Direction financière » apposé sur les factures), sans déformation (les
+  // proportions sont conservées) et sans déborder hors de la page (right:0, plus
+  // de valeur négative qui coupait le bord droit du cachet).
   const cachetImg = cachet
-    ? `<img src="${cachet}" alt="" aria-hidden="true" style="position:absolute;right:-6px;top:34px;height:110px;width:auto;opacity:.92;pointer-events:none">`
+    ? `<img src="${cachet}" alt="" aria-hidden="true" style="position:absolute;right:0;top:28px;height:auto;width:auto;max-height:160px;max-width:250px;opacity:.92;pointer-events:none;image-rendering:auto">`
     : "";
 
   const body = `

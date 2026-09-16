@@ -201,8 +201,14 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
     if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
     let optimized;
     try {
-      // Cachets/signatures : fond souvent transparent → PNG conservé, borné en taille.
-      optimized = await optimizeImage(buffer, { maxLongSide: 520, format: "png" });
+      // Cachets/signatures : fond souvent transparent → PNG conservé. Résolution
+      // portée à 1200 px de plus grand côté (au lieu de 520) : un cachet est
+      // désormais apposé à la taille d'un vrai tampon (~4-5 cm) sur les lettres
+      // et contrats ; il faut donc assez de pixels pour rester NET à l'impression
+      // (un agrandissement d'une image 520 px paraissait flou). L'image n'est que
+      // réduite, jamais agrandie : déposer un scan haute définition donne le
+      // meilleur rendu.
+      optimized = await optimizeImage(buffer, { maxLongSide: 1200, format: "png" });
     } catch {
       return reply.code(400).send({ code: "unsupported_image", message: "Image non prise en charge (formats: PNG, JPEG…)." });
     }

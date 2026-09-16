@@ -734,6 +734,7 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
                 <div className="ecl-row__main" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span className="ecl-row__title">{t("fin.cat." + expense.category, CATEGORY_LABELS[expense.category])}</span>
                   <Amount value={expense.amount} />
+                  {expense.expenseDate && <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{expense.expenseDate.slice(0, 10)}</span>}
                   <StatusChip label={t("fin.st." + expense.status, STATUS_LABELS[expense.status] ?? expense.status)} />
                   {expense.description && <span className="ecl-row__desc" style={{ margin: 0 }}>{expense.description}</span>}
                 </div>
@@ -1192,16 +1193,27 @@ function TaxRatesCard({
 
 function NewExpenseForm({ onCreated, onError }: { onCreated: () => void; onError: (m: string) => void }) {
   const { t } = useI18n();
+  const today = new Date().toISOString().slice(0, 10);
   const [category, setCategory] = useState<ExpenseCategory>("autre");
   const [amount, setAmount] = useState(0);
   const [description, setDescription] = useState("");
+  const [expenseDate, setExpenseDate] = useState(today);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (expenseDate && expenseDate > today) { onError("La date de la dépense ne peut pas être postérieure à aujourd'hui."); return; }
     try {
-      await createExpense({ category, amount, description: description || undefined });
+      await createExpense({
+        category,
+        amount,
+        description: description || undefined,
+        // Date réelle de la dépense (classement par mois au bilan). À midi pour
+        // éviter tout décalage de fuseau qui ferait basculer de jour.
+        expense_date: expenseDate ? new Date(expenseDate + "T12:00:00").toISOString() : undefined,
+      });
       setAmount(0);
       setDescription("");
+      setExpenseDate(today);
       onCreated();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Échec de l'enregistrement de la dépense.");
@@ -1219,6 +1231,10 @@ function NewExpenseForm({ onCreated, onError }: { onCreated: () => void; onError
       <div className="ecl-field" style={{ flex: "1 1 120px" }}>
         <label>{t("fin.amount", "Montant")}</label>
         <input type="number" min={0} value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+      </div>
+      <div className="ecl-field" style={{ flex: "1 1 140px" }}>
+        <label>{t("fin.expense_date", "Date de la dépense")}</label>
+        <input type="date" max={today} value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
       </div>
       <div className="ecl-field" style={{ flex: "2 1 200px" }}>
         <label>{t("fin.description", "Description")}</label>

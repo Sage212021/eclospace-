@@ -1,7 +1,16 @@
 import { jsPDF } from "jspdf";
 import { EDITEUR_LEGAL, type PublisherLegal } from "./print";
 import { drawWatermark } from "./pdfWatermark";
-import type { ContractDetail } from "../api/client";
+import { inkStamp, type InkedImage } from "./stampInk";
+import type { ContractDetail, Branding } from "../api/client";
+
+// Signature + cachet de l'éditeur, images déjà « encrées » (fond transparent).
+export interface ContractPdfSign {
+  signature?: InkedImage | null;
+  cachet?: InkedImage | null;
+  dgName?: string;
+  dgTitle?: string;
+}
 
 // Contrat d'édition à compte d'éditeur — génération PDF côté navigateur (jsPDF,
 // même choix que le bulletin de paie : pas de dépendance serveur/Chromium, pas
@@ -71,7 +80,9 @@ function articles(vars: { titre: string; dureeTxt: string; tauxTxt: string }): {
 }
 
 // Construit le PDF du contrat d'édition et le renvoie sous forme de Blob.
-export function buildAuthorContractPdf(c: ContractDetail, publisher?: Partial<PublisherLegal> | null): Blob {
+// `sign` (facultatif) : signature + cachet DG apposés dans la case « L'éditeur »
+// (images déjà encrées, fond transparent) quand la maison signe automatiquement.
+export function buildAuthorContractPdf(c: ContractDetail, publisher?: Partial<PublisherLegal> | null, sign?: ContractPdfSign | null): Blob {
   const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
   const p = c.partner;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -148,16 +159,59 @@ export function buildAuthorContractPdf(c: ContractDetail, publisher?: Partial<Pu
   y += 4;
   text(`Fait à ${ED.ville}, le ${dots(14)}. En deux (02) exemplaires.`);
   y += 6;
-  ensure(24);
-  doc.setFontSize(9.5); doc.setFont("helvetica", "bold");
-  doc.text("L'auteur", L, y); doc.text("L'éditeur", L + W / 2, y);
-  y += 16;
+  ensure(44);
+  const colR = L + W / 2;
+  doc.setFontSize(9.5); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+  doc.text("L'auteur", L, y); doc.text("L'éditeur", colR, y);
+  const sigTop = y + 3;
+  // Case « L'éditeur » : signature manuscrite + cachet DG apposés (fondus, fond
+  // transparent) si la maison signe automatiquement. La case « L'auteur » reste
+  // vierge (signée à la main). Le cachet est décalé à droite de la signature
+  // pour ne pas la masquer (cohérent avec l'impression HTML, D-035).
+  if (sign?.signature) {
+    const h = 15; const w = Math.min(46, (h * sign.signature.w) / sign.signature.h);
+    try { doc.addImage(sign.signature.url, "PNG", colR, sigTop, w, h, "ctrSig", "SLOW"); } catch { /* ignore */ }
+  }
+  if (sign?.cachet) {
+    const h = 30; const w = Math.min(42, (h * sign.cachet.w) / sign.cachet.h);
+    try { doc.addImage(sign.cachet.url, "PNG", colR + 22, sigTop - 3, w, h, "ctrCachet", "SLOW"); } catch { /* ignore */ }
+  }
+  y = sigTop + (sign && (sign.signature || sign.cachet) ? 32 : 13);
   doc.setDrawColor(120);
-  doc.line(L, y, L + 60, y); doc.line(L + W / 2, y, L + W / 2 + 60, y);
+  doc.line(L, y, L + 60, y); doc.line(colR, y, colR + 60, y);
   y += 4;
   doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(110);
   doc.text("Signature (lu et approuvé)", L, y);
-  doc.text("Signature & cachet", L + W / 2, y);
+  doc.text("Signature & cachet", colR, y);
+  if (sign?.dgName) {
+    y += 5; doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(0);
+    doc.text(sign.dgName, colR, y);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(90);
+    for (const line of (sign.dgTitle ?? "").split("\n").map((s) => s.trim()).filter(Boolean)) { y += 3.6; doc.text(line, colR, y); }
+  }
+  doc.setTextColor(0);
 
   return doc.output("blob");
+}
+
+// Télécharge le contrat en PDF NATIF (vectoriel, net sur tout appareil, mobile
+// compris). Prépare d'abord la signature + le cachet DG (fond blanc rendu
+// transparent) quand la maison signe automatiquement les contrats.
+export async function downloadAuthorContractPdf(
+  c: ContractDetail,
+  publisher?: Partial<PublisherLegal> | null,
+  branding?: Branding | null,
+): Promise<void> {
+  let sign: ContractPdfSign | undefined;
+  if (branding && branding.auto_sign_contracts) {
+    const [cachet, signature] = await Promise.all([inkStamp(branding.cachet_generale), inkStamp(branding.signature_dg)]);
+    sign = { cachet, signature, dgName: branding.dg_name, dgTitle: branding.dg_title };
+  }
+  const blob = buildAuthorContractPdf(c, publisher, sign);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Contrat-${c.contractNumber}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
 }

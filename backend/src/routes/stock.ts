@@ -863,6 +863,180 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     return reply.send({ rows: out });
   });
 
+  // ————————————————————————————————————————————————————————————————
+  // TABLEAU RÉCAPITULATIF DU STOCK PAR OUVRAGE (cahier §4, §31) + POLITIQUE
+  // DE STOCK PAR OUVRAGE (§18). Tous les CHIFFRES sont CALCULÉS depuis les
+  // données réelles : mouvements (flux), stock_items (état), consignations
+  // (dépôt), livraisons expédiées non reçues (transit). Seuls les SEUILS et le
+  // stock cible viennent d'un paramétrage (StockPolicy). Aucune valeur libre.
+  // ————————————————————————————————————————————————————————————————
+
+  // Mouvements considérés comme des RETOURS (entrées d'exemplaires revenus).
+  const RETURN_TYPES = new Set<StockMovementType>(["consignment_return", "customer_return", "commercial_return", "event_return", "promotional_return", "other_return"]);
+  // Mouvements d'ENTRÉE « fabrication / fournisseur » (hors retours, hors initial).
+  const ENTRY_TYPES = new Set<StockMovementType>(["production_in", "supplier_in"]);
+
+  type OverviewRow = {
+    isbn_id: string; isbn13: string; title: string | null; author: string | null;
+    stock_initial: number; entrees: number; retours: number; sorties: number; ajustements: number;
+    stock_physique: number; reserve: number; disponible: number; defectueux: number;
+    en_depot: number; en_transit: number;
+    seuil_alerte: number; seuil_reappro: number | null; stock_cible: number | null; qte_min_reimpression: number | null;
+    qte_a_reapprovisionner: number | null; statut: "normal" | "alerte" | "reappro" | "rupture";
+  };
+
+  async function computeStockOverview(): Promise<{ rows: OverviewRow[]; totals: { stock_physique: number; disponible: number; reserve: number; en_depot: number; en_transit: number; defectueux: number }; counts: { sous_seuil: number; a_reapprovisionner: number; rupture: number } }> {
+    const [moves, items, consignments, transitDeliveries, policies, defaultThreshold] = await Promise.all([
+      prisma.stockMovement.findMany({
+        where: { status: { not: "cancelled" } },
+        select: { isbnId: true, type: true, quantity: true, fromLocationId: true, toLocationId: true, reason: true, isbn: { select: { isbn13: true, manuscript: { select: { title: true, workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, take: 1, select: { partner: { select: { firstName: true, lastName: true } } } } } } } } },
+      }),
+      prisma.stockItem.findMany({ select: { isbnId: true, condition: true, quantityPhysical: true, quantityReserved: true } }),
+      prisma.consignment.findMany({ where: { status: "active" }, select: { isbnId: true, quantityDeposited: true, statements: { select: { quantitySold: true } } } }),
+      prisma.delivery.findMany({ where: { shippedAt: { not: null }, deliveredAt: null }, select: { lines: { select: { isbnId: true, quantity: true } } } }),
+      prisma.stockPolicy.findMany(),
+      isbnStockAlertThreshold(),
+    ]);
+
+    const map = new Map<string, OverviewRow>();
+    const ensure = (isbnId: string, isbn13: string, title: string | null, author: string | null): OverviewRow => {
+      let r = map.get(isbnId);
+      if (!r) {
+        r = { isbn_id: isbnId, isbn13, title, author, stock_initial: 0, entrees: 0, retours: 0, sorties: 0, ajustements: 0, stock_physique: 0, reserve: 0, disponible: 0, defectueux: 0, en_depot: 0, en_transit: 0, seuil_alerte: defaultThreshold, seuil_reappro: null, stock_cible: null, qte_min_reimpression: null, qte_a_reapprovisionner: null, statut: "normal" };
+        map.set(isbnId, r);
+      }
+      return r;
+    };
+
+    // FLUX (mouvements) : d'où vient le stock, ce qui est sorti, revenu, ajusté.
+    for (const m of moves) {
+      const c = m.isbn?.manuscript?.workContributors?.[0]?.partner;
+      const author = c ? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || null : null;
+      const r = ensure(m.isbnId, m.isbn?.isbn13 ?? "", m.isbn?.manuscript?.title ?? null, author);
+      const isInitial = m.type === "inventory_adjustment" && (m.reason ?? "").startsWith("Chargement inventaire initial");
+      const isIn = !!m.toLocationId && !m.fromLocationId;
+      const isOut = !!m.fromLocationId && !m.toLocationId;
+      if (isInitial) r.stock_initial += m.quantity;
+      else if (m.type === "inventory_adjustment") r.ajustements += isIn ? m.quantity : isOut ? -m.quantity : 0;
+      else if (RETURN_TYPES.has(m.type)) r.retours += m.quantity;
+      else if (ENTRY_TYPES.has(m.type)) r.entrees += m.quantity;
+      else if (isOut) r.sorties += m.quantity;
+      else if (isIn) r.entrees += m.quantity;
+      // transfer : interne, sans effet sur le total de l'ouvrage.
+    }
+
+    // ÉTAT réel (stock_items) : présent = vendable + déclassé ; disponible =
+    // vendable − réservé ; défectueux = déclassé (présent mais non vendable).
+    // perdu / détruit = pierres tombales (hors stock présent).
+    for (const it of items) {
+      const r = map.get(it.isbnId);
+      if (!r) continue; // un item sans aucun mouvement est improbable (créé par mvt)
+      if (it.condition === "vendable") { r.stock_physique += it.quantityPhysical; r.reserve += it.quantityReserved; r.disponible += it.quantityPhysical - it.quantityReserved; }
+      else if (it.condition === "declasse") { r.stock_physique += it.quantityPhysical; r.defectueux += it.quantityPhysical; }
+    }
+    // Un ISBN peut avoir des items mais aucun mouvement listé (rare) : on les crée.
+    for (const it of items) {
+      if (map.has(it.isbnId)) continue;
+      const r = ensure(it.isbnId, "", null, null);
+      if (it.condition === "vendable") { r.stock_physique += it.quantityPhysical; r.reserve += it.quantityReserved; r.disponible += it.quantityPhysical - it.quantityReserved; }
+      else if (it.condition === "declasse") { r.stock_physique += it.quantityPhysical; r.defectueux += it.quantityPhysical; }
+    }
+
+    // EN DÉPÔT (consignations actives) : déposé − vendu (relevés).
+    for (const cons of consignments) {
+      const r = map.get(cons.isbnId);
+      if (!r) continue;
+      const sold = cons.statements.reduce((s, st) => s + st.quantitySold, 0);
+      r.en_depot += Math.max(0, cons.quantityDeposited - sold);
+    }
+    // EN TRANSIT : livraisons expédiées, réception non encore enregistrée.
+    for (const d of transitDeliveries) for (const l of d.lines) { const r = map.get(l.isbnId); if (r) r.en_transit += l.quantity; }
+
+    // POLITIQUE (seuils, cible) + dérivés (qté à réappro, statut à 4 niveaux).
+    const policyByIsbn = new Map(policies.map((p) => [p.isbnId, p]));
+    for (const r of map.values()) {
+      const p = policyByIsbn.get(r.isbn_id);
+      r.seuil_alerte = p?.alertThreshold ?? defaultThreshold;
+      r.seuil_reappro = p?.reorderThreshold ?? null;
+      r.stock_cible = p?.targetStock ?? null;
+      r.qte_min_reimpression = p?.minReprintQty ?? null;
+      if (r.stock_cible != null) {
+        const raw = r.stock_cible - r.disponible;
+        r.qte_a_reapprovisionner = raw <= 0 ? 0 : Math.max(raw, r.qte_min_reimpression ?? 0);
+      }
+      r.statut = r.disponible <= 0 ? "rupture"
+        : r.seuil_reappro != null && r.disponible <= r.seuil_reappro ? "reappro"
+        : r.disponible <= r.seuil_alerte ? "alerte"
+        : "normal";
+    }
+
+    const rows = [...map.values()].sort((a, b) => (a.title ?? a.isbn13).localeCompare(b.title ?? b.isbn13, "fr"));
+    const totals = rows.reduce((acc, r) => ({ stock_physique: acc.stock_physique + r.stock_physique, disponible: acc.disponible + r.disponible, reserve: acc.reserve + r.reserve, en_depot: acc.en_depot + r.en_depot, en_transit: acc.en_transit + r.en_transit, defectueux: acc.defectueux + r.defectueux }), { stock_physique: 0, disponible: 0, reserve: 0, en_depot: 0, en_transit: 0, defectueux: 0 });
+    const counts = {
+      sous_seuil: rows.filter((r) => r.statut === "alerte").length,
+      a_reapprovisionner: rows.filter((r) => r.statut === "reappro").length,
+      rupture: rows.filter((r) => r.statut === "rupture").length,
+    };
+    return { rows, totals, counts };
+  }
+
+  // Tableau récapitulatif par ouvrage (§4) — tout est calculé automatiquement.
+  fastify.get("/api/v1/stock/overview", { preHandler: requirePermission("stock", "consultation") }, async (_request, reply) => {
+    return reply.send(await computeStockOverview());
+  });
+
+  // Politique de stock d'un ouvrage (§18) : lecture (avec valeurs par défaut).
+  fastify.get("/api/v1/stock/policy/:isbnId", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
+    const { isbnId } = request.params as { isbnId: string };
+    const policy = await prisma.stockPolicy.findUnique({ where: { isbnId } });
+    const defaultThreshold = await isbnStockAlertThreshold();
+    return reply.send({
+      isbn_id: isbnId,
+      alert_threshold: policy?.alertThreshold ?? null,
+      reorder_threshold: policy?.reorderThreshold ?? null,
+      target_stock: policy?.targetStock ?? null,
+      min_reprint_qty: policy?.minReprintQty ?? null,
+      reprint_lead_days: policy?.reprintLeadDays ?? null,
+      default_alert_threshold: defaultThreshold,
+    });
+  });
+
+  const stockPolicySchema = z.object({
+    alert_threshold: z.number().int().nonnegative().nullable().optional(),
+    reorder_threshold: z.number().int().nonnegative().nullable().optional(),
+    target_stock: z.number().int().nonnegative().nullable().optional(),
+    min_reprint_qty: z.number().int().nonnegative().nullable().optional(),
+    reprint_lead_days: z.number().int().nonnegative().nullable().optional(),
+  });
+
+  // Paramétrage des seuils / stock cible d'un ouvrage (§18) — réservé à la saisie.
+  fastify.put("/api/v1/stock/policy/:isbnId", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const { isbnId } = request.params as { isbnId: string };
+    const parsed = stockPolicySchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const isbn = await prisma.isbn.findUnique({ where: { id: isbnId }, select: { id: true } });
+    if (!isbn) return reply.code(404).send({ code: "not_found", message: "Ouvrage (ISBN) introuvable." });
+    const b = parsed.data;
+    // Cohérence douce : le seuil de réappro ≤ seuil d'alerte ≤ stock cible (si tous renseignés).
+    if (b.reorder_threshold != null && b.alert_threshold != null && b.reorder_threshold > b.alert_threshold) {
+      return reply.code(400).send({ code: "threshold_order", message: "Le seuil de réapprovisionnement doit être inférieur ou égal au seuil d'alerte." });
+    }
+    if (b.target_stock != null && b.alert_threshold != null && b.target_stock < b.alert_threshold) {
+      return reply.code(400).send({ code: "threshold_order", message: "Le stock cible doit être supérieur ou égal au seuil d'alerte." });
+    }
+    const data = {
+      alertThreshold: b.alert_threshold ?? null,
+      reorderThreshold: b.reorder_threshold ?? null,
+      targetStock: b.target_stock ?? null,
+      minReprintQty: b.min_reprint_qty ?? null,
+      reprintLeadDays: b.reprint_lead_days ?? null,
+      updatedBy: request.user!.id,
+    };
+    const saved = await prisma.stockPolicy.upsert({ where: { isbnId }, create: { isbnId, ...data }, update: data });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "stock_policy", entityId: saved.id, newValues: JSON.parse(JSON.stringify(b)), ipAddress: request.ip });
+    return reply.send({ ok: true });
+  });
+
   // --- Réapprovisionnement (§9) : cycle demande → validé → en cours →
   // (partiellement) reçu → clôturé / annulé. Le stock N'AUGMENTE QU'À LA
   // RÉCEPTION (Règle 5), via un StockMovement d'entrée. ---

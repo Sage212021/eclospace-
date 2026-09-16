@@ -1017,12 +1017,15 @@ function editorSignatureBlock(sign?: ContractStampData | null): string {
   if (!hasStamp) {
     return `<div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature &amp; cachet</div>`;
   }
-  const sig = sign!.signature ? `<img src="${sign!.signature}" alt="" style="position:absolute;left:8px;top:0;height:56px;width:auto">` : "";
-  // Cachet « Direction générale » harmonisé avec celui des lettres (D-033) :
-  // taille d'un vrai tampon, proportions conservées, mais borné à la largeur de
-  // la colonne « L'éditeur » du contrat (mise en page à deux colonnes) pour ne
-  // pas déborder sur la colonne « L'auteur ».
-  const cachet = sign!.cachet ? `<img src="${sign!.cachet}" alt="" style="position:absolute;left:64px;top:2px;height:auto;width:auto;max-height:150px;max-width:200px;opacity:.92;image-rendering:auto">` : "";
+  // Signature manuscrite : à gauche, en haut. `mix-blend-mode: multiply` fond
+  // l'encre dans le document (le fond blanc de l'image disparaît).
+  const sig = sign!.signature ? `<img src="${sign!.signature}" alt="" style="position:absolute;left:6px;top:4px;height:58px;width:auto;mix-blend-mode:multiply">` : "";
+  // Cachet « Direction générale » harmonisé avec celui des lettres (D-033),
+  // taille d'un vrai tampon, borné à la colonne « L'éditeur ». Décalé à droite
+  // de la signature (top:0 mais left:110) pour ne PAS la masquer, et fondu au
+  // document (`mix-blend-mode: multiply` : le fond blanc du tampon s'efface, seul
+  // l'encre bleue s'imprime sur le papier — comme un vrai cachet, D-035).
+  const cachet = sign!.cachet ? `<img src="${sign!.cachet}" alt="" style="position:absolute;left:110px;top:0;height:auto;width:auto;max-height:150px;max-width:185px;mix-blend-mode:multiply;image-rendering:auto">` : "";
   const titleLines = (sign!.dgTitle ?? "")
     .split("\n")
     .map((l) => l.trim())
@@ -1508,7 +1511,7 @@ export function printProjectPlan(d: ProjectPlanPrintData, opts?: PrintOpts, cach
     : `<tr><td colspan="8" style="color:#6b7280">${tr("Aucune activité renseignée.", "No activity yet.")}</td></tr>`;
 
   const cachetBlock = cachetEditoriale
-    ? `<img src="${cachetEditoriale}" alt="${tr("Cachet Direction éditoriale", "Editorial Direction stamp")}" style="max-height:150px;max-width:240px;object-fit:contain;display:block;margin-left:auto;image-rendering:auto">`
+    ? `<img src="${cachetEditoriale}" alt="${tr("Cachet Direction éditoriale", "Editorial Direction stamp")}" style="max-height:150px;max-width:240px;object-fit:contain;display:block;margin-left:auto;mix-blend-mode:multiply;image-rendering:auto">`
     : `<div style="border-top:1px solid #0b0b0c;margin-top:46px;padding-top:4px;font-size:10.5px;color:#6b7280">${tr("Signature et cachet", "Signature and stamp")}</div>`;
 
   const body = `
@@ -2009,7 +2012,7 @@ export function printEditorialDecisionLetter(d: DecisionLetterLayout, opts?: Pri
   // proportions sont conservées) et sans déborder hors de la page (right:0, plus
   // de valeur négative qui coupait le bord droit du cachet).
   const cachetImg = cachet
-    ? `<img src="${cachet}" alt="" aria-hidden="true" style="position:absolute;right:0;top:28px;height:auto;width:auto;max-height:160px;max-width:250px;opacity:.92;pointer-events:none;image-rendering:auto">`
+    ? `<img src="${cachet}" alt="" aria-hidden="true" style="position:absolute;right:0;top:28px;height:auto;width:auto;max-height:160px;max-width:250px;mix-blend-mode:multiply;pointer-events:none;image-rendering:auto">`
     : "";
 
   const body = `

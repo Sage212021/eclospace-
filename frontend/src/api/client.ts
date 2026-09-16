@@ -2517,6 +2517,7 @@ export interface IsbnRef {
   isbn13: string;
   format: IsbnFormat;
   manuscript: { title: string } | null;
+  author?: string | null;
 }
 
 export function listIsbnRefs(format?: IsbnFormat) {

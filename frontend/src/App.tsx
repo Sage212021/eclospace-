@@ -888,7 +888,7 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "users-roles" && (
           <UsersRolesPage canAdminister={permissions.has("users:administration")} />
         )}
-        {leaf && "page" in leaf && leaf.page === "direction" && <DirectionPage canTreatRecommendations={permissions.has("pilotage:saisie")} canInitiateOrder={canInitiateOrder} canValidateCancellation={permissions.has("pilotage:administration")} canValidatePayrollDg={roles.has("DIR_GENERAL") || roles.has("ADMIN_GENERAL")} />}
+        {leaf && "page" in leaf && leaf.page === "direction" && <DirectionPage canTreatRecommendations={permissions.has("pilotage:saisie")} canInitiateOrder={canInitiateOrder} canValidateCancellation={permissions.has("pilotage:administration")} canValidatePayrollDg={roles.has("DIR_GENERAL") || roles.has("ADMIN_GENERAL")} onNavigate={(key) => setView({ kind: "leaf", key })} />}
         {leaf && "page" in leaf && leaf.page === "payroll-suivi" && <PayrollSuiviPage canValidatePayrollDg={roles.has("DIR_GENERAL") || roles.has("ADMIN_GENERAL")} canHandoffDaf={permissions.has("finance:validation")} />}
         {leaf && "page" in leaf && leaf.page === "reports" && (
           <ReportsPage canCreateAnalysis={permissions.has("rapports:saisie")} canPromoteAnalysis={permissions.has("rapports:administration")} />

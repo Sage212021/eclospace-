@@ -15,6 +15,7 @@ import {
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { Modal, Field } from "./Modal";
+import { IsbnCombobox } from "./IsbnCombobox";
 import { IconCommercial } from "./icons";
 
 // Stock commercial individuel (§10) : remise magasin → commercial (≠ vente),
@@ -208,10 +209,8 @@ function HandoverDialog({ mode, commercials, isbns, magasins, onClose, onDone, o
           {commercials.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </Field>
-      <Field label="Ouvrage (ISBN)">
-        <select value={isbnId} onChange={(e) => setIsbnId(e.target.value)}>
-          {isbns.map((i) => <option key={i.id} value={i.id}>{i.isbn13}{i.manuscript?.title ? ` — ${i.manuscript.title}` : ""}</option>)}
-        </select>
+      <Field label="Ouvrage — tapez le titre, l'ISBN ou l'auteur">
+        <IsbnCombobox isbns={isbns} value={isbnId} onChange={setIsbnId} placeholder="Ex. « MAN » pour Manuel…" />
       </Field>
       <Field label={isReturn ? "Magasin de destination" : "Magasin d'origine"}>
         <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>

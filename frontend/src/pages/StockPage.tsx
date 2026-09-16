@@ -623,6 +623,7 @@ function MovementHistory({
   const DEGAT_TYPES: StockMovementType[] = ["destruction", "damage", "loss", "pulping"];
   // Recherche par ouvrage (titre) ou ISBN : on retrouve le titre via le catalogue.
   const titleByIsbn = new Map(isbns.map((i) => [i.id, i.manuscript?.title ?? ""]));
+  const authorByIsbn = new Map(isbns.map((i) => [i.id, i.author ?? ""]));
   const q = search.trim().toLowerCase();
   const benefQ = fBenef.trim().toLowerCase();
   // Utilisateurs présents dans l'historique (pour le filtre par utilisateur).
@@ -641,12 +642,13 @@ function MovementHistory({
       const inQty = sign(m) === "+" ? String(m.quantity) : "";
       const outQty = sign(m) === "−" ? String(m.quantity) : "";
       return [
-        new Date(m.movedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }),
-        MOVEMENT_LABELS[m.type] ?? m.type,
         titleByIsbn.get(m.isbnId) || m.isbn13 || "",
         m.isbn13 ?? "",
+        authorByIsbn.get(m.isbnId) || "",
+        MOVEMENT_LABELS[m.type] ?? m.type,
         inQty,
         outQty,
+        new Date(m.movedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }),
         [m.from_location_label, m.to_location_label].filter(Boolean).join(" → "),
         m.reason ?? "",
         m.beneficiary ?? "",
@@ -656,7 +658,7 @@ function MovementHistory({
       ];
     });
   }
-  const EXPORT_HEADERS = ["Date", "Mouvement", "Ouvrage", "ISBN", "Entrée", "Sortie", "Lieu", "Motif", "Bénéficiaire", "Utilisateur", "Justificatif", "Statut"];
+  const EXPORT_HEADERS = ["Ouvrage", "ISBN", "Auteur", "Mouvement", "Entrée", "Sortie", "Date", "Lieu", "Motif", "Bénéficiaire", "Utilisateur", "Justificatif", "Statut"];
   function exportCsv() {
     const csv = [EXPORT_HEADERS, ...movementRows()].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\r\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
@@ -761,9 +763,11 @@ function MovementHistory({
               <div key={m.id} className="ecl-row" style={{ alignItems: "flex-start", opacity: cancelled ? 0.55 : 1 }}>
                 <div className="ecl-row__main" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span className="ecl-row__title" style={{ textDecoration: cancelled ? "line-through" : "none" }}>{MOVEMENT_LABELS[m.type] ?? m.type}</span>
+                    {/* OUVRAGE (titre) en tête — on reconnaît le livre sans lire l'ISBN. */}
+                    <span className="ecl-row__title" style={{ textDecoration: cancelled ? "line-through" : "none" }}>{titleByIsbn.get(m.isbnId) || m.isbn13 || "—"}</span>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>{MOVEMENT_LABELS[m.type] ?? m.type}</span>
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{sign(m)}{m.quantity}</span>
-                    {m.isbn13 && <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--muted)" }}>{m.isbn13}</span>}
+                    {m.isbn13 && <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>{m.isbn13}</span>}
                     {m.condition === "declasse" && <span style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 999, padding: "1px 8px", fontSize: 11 }}>{t("stock.declasse", "Déclassé")}</span>}
                     {cancelled && <span style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 999, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>Annulé</span>}
                   </div>

@@ -135,14 +135,25 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
     const isbns = await prisma.isbn.findMany({
       where: query.format ? { format: query.format } : {},
       include: {
-        manuscript: { select: { title: true, subtitle: true, editorialSegment: true } },
+        manuscript: {
+          select: {
+            title: true, subtitle: true, editorialSegment: true,
+            // Auteur (premier contributeur « author ») pour l'affichage et la
+            // recherche par auteur dans les sélecteurs d'ouvrage (remise, etc.).
+            workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, take: 1, select: { partner: { select: { firstName: true, lastName: true } } } },
+          },
+        },
         // Prix courant (dernier tarif) : permet de pré-remplir le prix unitaire
         // au moment de la sélection d'un ouvrage dans une commande à facturer.
         priceList: { orderBy: { effectiveFrom: "desc" }, take: 1, select: { price: true } },
       },
       orderBy: { createdAt: "desc" },
     });
-    return reply.send(isbns.map((i) => ({ ...i, price_ht: i.priceList[0] ? Number(i.priceList[0].price) : null })));
+    return reply.send(isbns.map((i) => {
+      const c = i.manuscript?.workContributors?.[0]?.partner;
+      const author = c ? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || null : null;
+      return { ...i, author, price_ht: i.priceList[0] ? Number(i.priceList[0].price) : null };
+    }));
   });
 
   // Attribution (Ch. 13 §13.3) : conditions vérifiées (contrat actif), ISBN

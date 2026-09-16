@@ -123,7 +123,7 @@ interface FinancePageProps {
 
 // Fenêtres intégrées de la page (remplacent les pop-up du navigateur).
 type FinanceModal =
-  | { kind: "pay-invoice"; invoice: Invoice; tenders: { method: string; bankAccountId: string; reference: string; amount: string }[] }
+  | { kind: "pay-invoice"; invoice: Invoice; receivedAt: string; tenders: { method: string; bankAccountId: string; reference: string; amount: string }[] }
   | { kind: "payment-methods" }
   | { kind: "generate-statement"; contractId: string; start: string; end: string }
   | { kind: "pay-statement"; statement: RoyaltyStatement; amount: string }
@@ -369,6 +369,14 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
     // rattaché à la facture (mode + compte + référence propres).
     const tenders = modal.tenders.filter((t) => Number(t.amount) > 0);
     if (tenders.length === 0) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (modal.receivedAt && modal.receivedAt > today) {
+      fail(new Error("La date d'encaissement ne peut pas être dans le futur."), "Date invalide.");
+      return;
+    }
+    // Date réelle de l'encaissement : envoyée seulement si différente d'aujourd'hui
+    // (sinon le défaut serveur = aujourd'hui). Midi pour éviter les décalages de fuseau.
+    const received_at = modal.receivedAt && modal.receivedAt !== today ? new Date(modal.receivedAt + "T12:00:00").toISOString() : undefined;
     try {
       let total = 0;
       for (const t of tenders) {
@@ -378,6 +386,7 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
           reference: t.reference.trim() || undefined,
           bank_account_id: t.bankAccountId || undefined,
           amount,
+          received_at,
           allocations: [{ invoice_id: modal.invoice.id, amount }],
         });
         total += amount;
@@ -574,7 +583,7 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
               {canManage && invoice.type === "invoice" && invoice.status === "issued" && (
                 <>
                   <Button variant="view" size="sm" onClick={() => setScheduleInvoice(invoice)}>{t("fin.schedule_btn", "Échéancier")}</Button>
-                  <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, tenders: [{ method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: String(invoice.totalTtc) }] })}>
+                  <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, receivedAt: new Date().toISOString().slice(0, 10), tenders: [{ method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: String(invoice.totalTtc) }] })}>
                     {t("fin.collect", "Encaisser")}
                   </Button>
                   {/* Correction AVANT impression : tant que la facture n'a pas été
@@ -918,6 +927,17 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
           <div style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 8px" }}>
             {t("fin.mixed_hint", "Un ou plusieurs modes (paiement mixte). Compte laissé sur « Auto » = compte par défaut du mode.")}
           </div>
+          <Field label={t("fin.received_at", "Date d'encaissement")}>
+            <input
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              value={modal.receivedAt}
+              onChange={(e) => setModal({ ...modal, receivedAt: e.target.value })}
+            />
+            <p style={{ fontSize: 11, color: "var(--muted)", margin: "4px 0 0" }}>
+              {t("fin.received_at_hint", "Par défaut aujourd'hui. Mettez la date réelle si l'encaissement a eu lieu un autre mois : c'est elle qui classe l'entrée dans le bilan (mois / trimestre / semestre).")}
+            </p>
+          </Field>
           {modal.tenders.map((t, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1.1fr 1.1fr 1fr 0.9fr 28px", gap: 8, alignItems: "center", marginBottom: 8 }}>
               <select value={t.method} onChange={(e) => setModal({ ...modal, tenders: modal.tenders.map((x, idx) => (idx === i ? { ...x, method: e.target.value } : x)) })}>

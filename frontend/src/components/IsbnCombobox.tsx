@@ -20,7 +20,9 @@ export function IsbnCombobox({
   const [activeIdx, setActiveIdx] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const labelOf = (i: IsbnRef) => `${i.isbn13} — ${i.manuscript?.title ?? "—"}`;
+  // Affichage TITRE d'abord (demande opérateur) : on reconnaît l'ouvrage sans
+  // devoir lire l'ISBN. L'ISBN (et l'auteur) restent en information secondaire.
+  const labelOf = (i: IsbnRef) => `${i.manuscript?.title ?? "Sans titre"} · ${i.isbn13}`;
   const selected = useMemo(() => isbns.find((i) => i.id === value) ?? null, [isbns, value]);
 
   // Refléter le libellé de l'ouvrage sélectionné (y compris pré-rempli) quand la
@@ -33,7 +35,7 @@ export function IsbnCombobox({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const all = q && !(selected && labelOf(selected).toLowerCase() === q)
-      ? isbns.filter((i) => i.isbn13.toLowerCase().includes(q) || (i.manuscript?.title ?? "").toLowerCase().includes(q))
+      ? isbns.filter((i) => i.isbn13.toLowerCase().includes(q) || (i.manuscript?.title ?? "").toLowerCase().includes(q) || (i.author ?? "").toLowerCase().includes(q))
       : isbns;
     return all.slice(0, 50);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,7 +77,7 @@ export function IsbnCombobox({
           else if (e.key === "Enter" && open && filtered[activeIdx]) { e.preventDefault(); pick(filtered[activeIdx]); }
           else if (e.key === "Escape") setOpen(false);
         }}
-        style={{ width: "100%", fontFamily: "var(--font-mono)" }}
+        style={{ width: "100%" }}
       />
       {open && (
         <ul
@@ -98,8 +100,11 @@ export function IsbnCombobox({
                 background: idx === activeIdx ? "var(--eclosion-soft)" : "transparent",
               }}
             >
-              <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{i.isbn13}</span>
-              <span style={{ color: "var(--muted)" }}> — {i.manuscript?.title ?? "—"}</span>
+              <div style={{ fontWeight: 600 }}>{i.manuscript?.title ?? "Sans titre"}</div>
+              <div style={{ color: "var(--muted)", fontSize: 11.5 }}>
+                <span style={{ fontFamily: "var(--font-mono)" }}>{i.isbn13}</span>
+                {i.author ? ` · ${i.author}` : ""}
+              </div>
             </li>
           ))}
         </ul>

@@ -41,6 +41,8 @@ interface DirectionPageProps {
   // Le DG (ou l'administrateur général) valide la paie mensuelle préparée par le
   // RH, depuis sa propre page (rôle DIR_GENERAL / ADMIN_GENERAL).
   canValidatePayrollDg: boolean;
+  // Navigation vers une autre rubrique (ex. « Finance » depuis une alerte).
+  onNavigate?: (leafKey: string) => void;
 }
 
 // Ch. 5 : tableau de bord Direction générale consolidé, recherche globale,
@@ -48,7 +50,7 @@ interface DirectionPageProps {
 import { useI18n } from "../i18n";
 import { PayrollMonthlySection } from "../components/PayrollMonthlySection";
 
-export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canValidateCancellation, canValidatePayrollDg }: DirectionPageProps) {
+export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canValidateCancellation, canValidatePayrollDg, onNavigate }: DirectionPageProps) {
   const { t, lang } = useI18n();
   const [dashboard, setDashboard] = useState<DirectionDashboard | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -232,12 +234,22 @@ export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canVa
           <Empty>{t("dir.no_alert", "Aucune alerte.")}</Empty>
         ) : (
           <div className="ecl-list">
-            {alerts.map((alert, i) => (
-              <div key={i} className="ecl-row">
-                <span className="ecl-row__title" style={{ fontWeight: 500 }}>{alert.message}</span>
-                <PriorityChip priority={alert.priority} />
-              </div>
-            ))}
+            {alerts.map((alert, i) => {
+              // L'alerte « dépenses à contre-valider » est cliquable → Finance.
+              const clickable = alert.entity_type === "expense_validation" && !!onNavigate;
+              return (
+                <div
+                  key={i}
+                  className="ecl-row"
+                  onClick={clickable ? () => onNavigate!("jf-finance") : undefined}
+                  style={clickable ? { cursor: "pointer", background: "var(--eclosion-soft)", borderRadius: 8 } : undefined}
+                  title={clickable ? "Ouvrir la validation des dépenses" : undefined}
+                >
+                  <span className="ecl-row__title" style={{ fontWeight: clickable ? 700 : 500 }}>{clickable ? "💰 " : ""}{alert.message}{clickable ? " →" : ""}</span>
+                  <PriorityChip priority={alert.priority} />
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>

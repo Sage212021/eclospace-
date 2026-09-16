@@ -135,7 +135,7 @@ export default async function directionRoutes(fastify: FastifyInstance) {
   // Alertes automatiques (Ch. 5 §5.6) : quatre niveaux de priorité.
   fastify.get("/api/v1/alerts", { preHandler: requirePermission("direction", "consultation") }, async (_request, reply) => {
     const now = new Date();
-    const [lateTasks, pendingValidations, unsignedContracts, batToApprove, lowStock, overdueInvoices] = await Promise.all([
+    const [lateTasks, pendingValidations, unsignedContracts, batToApprove, lowStock, overdueInvoices, expensesAwaitingDg] = await Promise.all([
       prisma.task.findMany({
         where: { deletedAt: null, status: { notIn: ["terminee", "validee"] }, plannedEnd: { lt: now } },
         include: { manuscript: true },
@@ -153,9 +153,23 @@ export default async function directionRoutes(fastify: FastifyInstance) {
         where: { type: "invoice", status: { not: "cancelled" }, dueDate: { lt: now } },
         include: { paymentAllocations: true, creditNotes: true, customer: true },
       }),
+      // Dépenses en attente de la contre-validation du DG (circuit à deux paliers, D-032).
+      prisma.expense.count({ where: { status: "en_attente_dg" } }),
     ]);
 
     const alerts: { type: string; priority: "faible" | "moyenne" | "elevee" | "critique"; message: string; entity_type: string; entity_id: string }[] = [];
+
+    // Dépenses en attente de la contre-validation du DG : une alerte agrégée,
+    // en tête, cliquable côté écran vers la rubrique « Validation des dépenses ».
+    if (expensesAwaitingDg > 0) {
+      alerts.push({
+        type: "depense_validation_dg",
+        priority: "elevee",
+        message: `Validation des dépenses — ${expensesAwaitingDg} en attente de votre contre-validation.`,
+        entity_type: "expense_validation",
+        entity_id: "",
+      });
+    }
 
     for (const task of lateTasks) {
       const daysLate = Math.floor((now.getTime() - task.plannedEnd!.getTime()) / (1000 * 60 * 60 * 24));

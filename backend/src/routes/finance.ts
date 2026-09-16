@@ -10,6 +10,7 @@ import { computeCustomerOutstandingBalance } from "../lib/finance.js";
 import { SYSCOHADA_ACCOUNTS, JOURNAL_CODES, expenseCategoryToAccount } from "../lib/accountingMapping.js";
 import { sendMail, senderIdentity } from "../lib/mailer.js";
 import { buildInvoiceEmail } from "../lib/documentEmail.js";
+import { notifyRole } from "../lib/notify.js";
 
 const invoiceEmailSchema = z.object({
   to: z.string().email().optional(),
@@ -518,6 +519,17 @@ export default async function financeRoutes(fastify: FastifyInstance) {
           newValues: { status: "en_attente_dg" },
           ipAddress: request.ip,
         });
+        // Signal immédiat au DG : une dépense attend sa contre-validation.
+        const amountTxt = new Intl.NumberFormat("fr-FR").format(Number(expense.amount));
+        await notifyRole({
+          roleCode: "DIR_GENERAL",
+          type: "validation",
+          priority: "high",
+          title: "Dépense à contre-valider",
+          body: `Une dépense de ${amountTxt} FCFA${expense.description ? ` (${expense.description})` : ""} attend votre validation.`,
+          entityType: "expense",
+          entityId: id,
+        }).catch(() => undefined);
         return reply.send(updated);
       }
 

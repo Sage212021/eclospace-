@@ -653,7 +653,8 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     const movements = await prisma.stockMovement.findMany({
       where: query.isbn_id ? { isbnId: query.isbn_id } : {},
       orderBy: { movedAt: "desc" },
-      take: 200,
+      // Historique élargi pour permettre le filtrage avancé et l'export côté client.
+      take: 1000,
       include: {
         isbn: { select: { isbn13: true } },
         fromLocation: { select: { label: true } },

@@ -1777,9 +1777,18 @@ async function computeRegister(period: string): Promise<
   const rubriques = await activeRubriqueMap();
   const lines: RegisterLine[] = [];
   const totals = { brut: 0, net: 0, charges_pat: 0 };
+  // CORRECTION (D-044) : la ROSTER d'un mois = les lignes réellement créées pour
+  // ce mois (le run), sans AUCUN filtre secondaire sur le salarié. On ne filtre
+  // PLUS sur `employee.deletedAt` : une fiche de paie enregistrée pour août
+  // appartient à août même si le salarié a quitté l'entreprise depuis (sinon un
+  // salarié parti — donc archivé/supprimé logiquement — disparaissait de la
+  // clôture de son propre mois, alors qu'il apparaissait toujours dans la grille
+  // de saisie qui, elle, ne filtrait pas). La grille (saisie) et le livre de paie
+  // (clôture) listent désormais exactement le même ensemble : toutes les lignes
+  // du mois. Le journal figé archive donc bien tous les bulletins du mois.
   const monthLines = run
     ? await prisma.payrollMonthlyLine.findMany({
-        where: { runId: run.id, employee: { deletedAt: null } },
+        where: { runId: run.id },
         include: { employee: { select: { firstName: true, lastName: true, niu: true, payrollProfile: true, confidential: { select: { baseSalary: true } } } } },
       })
     : [];

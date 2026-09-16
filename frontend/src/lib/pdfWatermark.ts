@@ -8,7 +8,7 @@ export function drawWatermark(doc: jsPDF): void {
   try {
     const w = 104;
     const h = w / ECLOSION_FILIGRANE_RATIO;
-    doc.addImage(ECLOSION_FILIGRANE_JPG, "JPEG", (210 - w) / 2, (297 - h) / 2, w, h, "eclWm", "FAST");
+    doc.addImage(ECLOSION_FILIGRANE_JPG, "JPEG", (210 - w) / 2, (297 - h) / 2, w, h, "eclWm", "SLOW");
   } catch {
     /* filigrane indisponible : on continue sans */
   }

@@ -883,13 +883,19 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     en_depot: number; en_transit: number;
     seuil_alerte: number; seuil_reappro: number | null; stock_cible: number | null; qte_min_reimpression: number | null;
     qte_a_reapprovisionner: number | null; statut: "normal" | "alerte" | "reappro" | "rupture";
+    // Rotation (Lot C, §23) : ventes réelles (mouvements de vente) sur les
+    // fenêtres glissantes, cadence mensuelle retenue, couverture en mois, et
+    // proposition de réappro « intelligente » explicable (§22).
+    ventes_1m: number; ventes_3m: number; ventes_6m: number; ventes_12m: number;
+    ventes_par_mois: number; couverture_mois: number | null;
+    reappro_conseille: number; reappro_explication: string;
   };
 
   async function computeStockOverview(): Promise<{ rows: OverviewRow[]; totals: { stock_physique: number; disponible: number; reserve: number; en_depot: number; en_transit: number; defectueux: number }; counts: { sous_seuil: number; a_reapprovisionner: number; rupture: number } }> {
     const [moves, items, consignments, transitDeliveries, policies, defaultThreshold] = await Promise.all([
       prisma.stockMovement.findMany({
         where: { status: { not: "cancelled" } },
-        select: { isbnId: true, type: true, quantity: true, fromLocationId: true, toLocationId: true, reason: true, isbn: { select: { isbn13: true, manuscript: { select: { title: true, workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, take: 1, select: { partner: { select: { firstName: true, lastName: true } } } } } } } } },
+        select: { isbnId: true, type: true, quantity: true, movedAt: true, fromLocationId: true, toLocationId: true, reason: true, isbn: { select: { isbn13: true, manuscript: { select: { title: true, workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, take: 1, select: { partner: { select: { firstName: true, lastName: true } } } } } } } } },
       }),
       prisma.stockItem.findMany({ select: { isbnId: true, condition: true, quantityPhysical: true, quantityReserved: true } }),
       prisma.consignment.findMany({ where: { status: "active" }, select: { isbnId: true, quantityDeposited: true, statements: { select: { quantitySold: true } } } }),
@@ -902,7 +908,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     const ensure = (isbnId: string, isbn13: string, title: string | null, author: string | null): OverviewRow => {
       let r = map.get(isbnId);
       if (!r) {
-        r = { isbn_id: isbnId, isbn13, title, author, stock_initial: 0, entrees: 0, retours: 0, sorties: 0, ajustements: 0, stock_physique: 0, reserve: 0, disponible: 0, defectueux: 0, en_depot: 0, en_transit: 0, seuil_alerte: defaultThreshold, seuil_reappro: null, stock_cible: null, qte_min_reimpression: null, qte_a_reapprovisionner: null, statut: "normal" };
+        r = { isbn_id: isbnId, isbn13, title, author, stock_initial: 0, entrees: 0, retours: 0, sorties: 0, ajustements: 0, stock_physique: 0, reserve: 0, disponible: 0, defectueux: 0, en_depot: 0, en_transit: 0, seuil_alerte: defaultThreshold, seuil_reappro: null, stock_cible: null, qte_min_reimpression: null, qte_a_reapprovisionner: null, statut: "normal", ventes_1m: 0, ventes_3m: 0, ventes_6m: 0, ventes_12m: 0, ventes_par_mois: 0, couverture_mois: null, reappro_conseille: 0, reappro_explication: "" };
         map.set(isbnId, r);
       }
       return r;
@@ -968,6 +974,57 @@ export default async function stockRoutes(fastify: FastifyInstance) {
         : r.seuil_reappro != null && r.disponible <= r.seuil_reappro ? "reappro"
         : r.disponible <= r.seuil_alerte ? "alerte"
         : "normal";
+    }
+
+    // ROTATION (Lot C, §22/§23) : ventes RÉELLES (mouvements de vente) sur des
+    // fenêtres glissantes, cadence mensuelle, couverture, et proposition de
+    // réappro « intelligente » — toujours EXPLICABLE (une phrase de calcul).
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    for (const m of moves) {
+      if (m.type !== "sale_out") continue;
+      const r = map.get(m.isbnId);
+      if (!r) continue;
+      const ageDays = (now - m.movedAt.getTime()) / DAY;
+      if (ageDays < 0) continue;
+      if (ageDays <= 30) r.ventes_1m += m.quantity;
+      if (ageDays <= 90) r.ventes_3m += m.quantity;
+      if (ageDays <= 180) r.ventes_6m += m.quantity;
+      if (ageDays <= 365) r.ventes_12m += m.quantity;
+    }
+    const round1 = (n: number) => Math.round(n * 10) / 10;
+    for (const r of map.values()) {
+      // Cadence mensuelle : moyenne sur 3 mois, à défaut 6 puis 12 (repli si
+      // l'ouvrage est récent ou peu vendu récemment).
+      const rate = r.ventes_3m > 0 ? r.ventes_3m / 3 : r.ventes_6m > 0 ? r.ventes_6m / 6 : r.ventes_12m > 0 ? r.ventes_12m / 12 : 0;
+      r.ventes_par_mois = round1(rate);
+      r.couverture_mois = rate > 0 ? round1(r.disponible / rate) : null;
+
+      // Réappro conseillé : couvrir le délai de réimpression + une marge, à
+      // partir de la cadence de vente ; on déduit le disponible et le transit.
+      const policy = policyByIsbn.get(r.isbn_id);
+      const leadDays = policy?.reprintLeadDays ?? null;
+      const lead = leadDays != null ? Math.max(1, Math.ceil(leadDays / 30)) : 1; // mois
+      const marge = 2; // mois de sécurité
+      if (rate > 0) {
+        const besoin = Math.round(rate * (lead + marge));
+        let conseil = Math.max(0, besoin - r.disponible - r.en_transit);
+        if (conseil > 0 && r.qte_min_reimpression != null && conseil < r.qte_min_reimpression) conseil = r.qte_min_reimpression;
+        r.reappro_conseille = conseil;
+        r.reappro_explication = conseil > 0
+          ? `Ventes ~${round1(rate)}/mois × ${lead + marge} mois (délai ${lead} + marge ${marge}) = ${besoin}, − ${r.disponible} dispo${r.en_transit ? ` − ${r.en_transit} en transit` : ""} = ${Math.max(0, besoin - r.disponible - r.en_transit)}${conseil !== Math.max(0, besoin - r.disponible - r.en_transit) ? ` → ${conseil} (réimpression mini)` : ""}.`
+          : `Ventes ~${round1(rate)}/mois : ${r.disponible} disponible${r.en_transit ? ` + ${r.en_transit} en transit` : ""} couvre ${lead + marge} mois → pas de réappro nécessaire.`;
+      } else if (r.stock_cible != null) {
+        // Pas d'historique de ventes : on retombe sur la règle simple (§20).
+        const raw = r.stock_cible - r.disponible;
+        r.reappro_conseille = raw <= 0 ? 0 : Math.max(raw, r.qte_min_reimpression ?? 0);
+        r.reappro_explication = raw <= 0
+          ? `Pas de ventes récentes ; stock cible ${r.stock_cible} déjà atteint (${r.disponible} dispo).`
+          : `Pas de ventes récentes : stock cible ${r.stock_cible} − ${r.disponible} dispo = ${raw}${r.reappro_conseille !== raw ? ` → ${r.reappro_conseille} (réimpression mini)` : ""}.`;
+      } else {
+        r.reappro_conseille = 0;
+        r.reappro_explication = "Pas de ventes récentes ni de stock cible réglé : aucune proposition.";
+      }
     }
 
     const rows = [...map.values()].sort((a, b) => (a.title ?? a.isbn13).localeCompare(b.title ?? b.isbn13, "fr"));

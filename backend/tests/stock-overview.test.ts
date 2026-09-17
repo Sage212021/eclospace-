@@ -99,4 +99,16 @@ describe("Stock — tableau récapitulatif par ouvrage (§4/§18)", () => {
     expect(r.statusCode).toBe(400);
     expect(r.json().code).toBe("threshold_order");
   });
+
+  it("rotation (Lot C) : cadence de vente, couverture et réappro conseillé explicable", async () => {
+    // À ce stade : 450 vendus (récents), disponible 50, en transit 30, cible 500,
+    // réimpression mini 250, pas de délai réglé (→ 1 mois) + marge 2 mois.
+    const row = await overviewRow();
+    expect(row.ventes_3m).toBe(450);
+    expect(row.ventes_par_mois).toBe(150); // 450 / 3 mois
+    expect(row.couverture_mois).toBe(0.3); // 50 dispo / 150 par mois
+    // besoin = 150 × (1 + 2) = 450 ; − 50 dispo − 30 transit = 370 (≥ 250 mini).
+    expect(row.reappro_conseille).toBe(370);
+    expect(String(row.reappro_explication)).toMatch(/Ventes/);
+  });
 });

@@ -34,6 +34,7 @@ export function StockOverviewSection({ canManage }: { canManage: boolean }) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [editIsbn, setEditIsbn] = useState<{ isbn_id: string; title: string | null } | null>(null);
+  const [detailRow, setDetailRow] = useState<StockOverviewRow | null>(null);
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -101,7 +102,7 @@ export function StockOverviewSection({ canManage }: { canManage: boolean }) {
             <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>Aucun ouvrage ne correspond.</p>
           ) : (
             <TableScroll>
-              <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 1500 }}>
+              <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 1850 }}>
                 <thead>
                   <tr style={{ textAlign: "right", borderBottom: "2px solid var(--line)", color: "var(--muted)", fontSize: 11 }}>
                     <th style={{ ...thL, position: "sticky", left: 0, background: "var(--card, #fff)", zIndex: 1 }}>Ouvrage</th>
@@ -116,12 +117,15 @@ export function StockOverviewSection({ canManage }: { canManage: boolean }) {
                     <th style={thR}>En dépôt</th>
                     <th style={thR}>En transit</th>
                     <th style={thR}>Défectueux</th>
+                    <th style={thR}>Ventes/mois</th>
+                    <th style={thR}>Couverture</th>
                     <th style={thR}>Seuil alerte</th>
                     <th style={thR}>Seuil réappro.</th>
                     <th style={thR}>Stock cible</th>
                     <th style={thR}>À réappro.</th>
+                    <th style={thR}>Conseillé</th>
                     <th style={thC}>Statut</th>
-                    {canManage && <th style={thC}>Réglages</th>}
+                    <th style={thC}>Actions</th>
                   </tr>
                 </thead>
                 <tbody style={{ fontFamily: "var(--font-mono, monospace)" }}>
@@ -145,16 +149,20 @@ export function StockOverviewSection({ canManage }: { canManage: boolean }) {
                         <td style={tdR}>{nf(r.en_depot)}</td>
                         <td style={tdR}>{nf(r.en_transit)}</td>
                         <td style={{ ...tdR, color: r.defectueux > 0 ? "#8a5a00" : "var(--muted)" }}>{nf(r.defectueux)}</td>
+                        <td style={tdR}>{r.ventes_par_mois > 0 ? r.ventes_par_mois.toLocaleString("fr-FR") : "—"}</td>
+                        <td style={{ ...tdR, color: r.couverture_mois != null && r.couverture_mois < 2 ? "#B87400" : "var(--ink)" }}>{r.couverture_mois != null ? `${r.couverture_mois.toLocaleString("fr-FR")} m` : "—"}</td>
                         <td style={{ ...tdR, color: "var(--muted)" }}>{nf(r.seuil_alerte)}</td>
                         <td style={{ ...tdR, color: "var(--muted)" }}>{orDash(r.seuil_reappro)}</td>
                         <td style={{ ...tdR, color: "var(--muted)" }}>{orDash(r.stock_cible)}</td>
                         <td style={{ ...tdR, fontWeight: 700, color: (r.qte_a_reapprovisionner ?? 0) > 0 ? "#B87400" : "var(--muted)" }}>{orDash(r.qte_a_reapprovisionner)}</td>
+                        <td style={{ ...tdR, fontWeight: 700, color: r.reappro_conseille > 0 ? "var(--eclosion-dark, #9a7a12)" : "var(--muted)" }}>{r.reappro_conseille > 0 ? nf(r.reappro_conseille) : "—"}</td>
                         <td style={tdC}><span style={{ background: st.bg, color: st.color, borderRadius: 999, padding: "1px 9px", fontSize: 11, fontWeight: 600, fontFamily: "system-ui", whiteSpace: "nowrap" }}>{st.label}</span></td>
-                        {canManage && (
-                          <td style={tdC}>
-                            <Button variant="view" size="sm" onClick={() => setEditIsbn({ isbn_id: r.isbn_id, title: r.title })}>Paramètres</Button>
-                          </td>
-                        )}
+                        <td style={tdC}>
+                          <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                            <Button variant="view" size="sm" onClick={() => setDetailRow(r)}>Détail</Button>
+                            {canManage && <Button variant="view" size="sm" onClick={() => setEditIsbn({ isbn_id: r.isbn_id, title: r.title })}>Paramètres</Button>}
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -163,7 +171,7 @@ export function StockOverviewSection({ canManage }: { canManage: boolean }) {
             </TableScroll>
           )}
           <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>
-            Physique = exemplaires réellement présents. Disponible = physique − réservé. « À réappro. » = stock cible − disponible (quand le stock cible est réglé). Statut : Normal · Alerte (≤ seuil d'alerte) · À réapprovisionner (≤ seuil de réappro) · Rupture (0 disponible).
+            Physique = exemplaires réellement présents. Disponible = physique − réservé. « À réappro. » = stock cible − disponible (règle simple). « Conseillé » = proposition tenant compte des ventes réelles, du délai de réimpression, du disponible et du transit (cliquez « Détail » pour le calcul). Couverture = disponible ÷ ventes par mois. Statut : Normal · Alerte · À réapprovisionner · Rupture.
           </p>
         </>
       )}
@@ -176,7 +184,56 @@ export function StockOverviewSection({ canManage }: { canManage: boolean }) {
           onSaved={() => { setEditIsbn(null); setReload((n) => n + 1); }}
         />
       )}
+      {detailRow && <DetailDialog row={detailRow} onClose={() => setDetailRow(null)} />}
     </Card>
+  );
+}
+
+function DetailDialog({ row, onClose }: { row: StockOverviewRow; onClose: () => void }) {
+  const line = (label: string, value: React.ReactNode) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "5px 0", borderBottom: "1px solid var(--line)", fontSize: 13 }}>
+      <span style={{ color: "var(--muted)" }}>{label}</span>
+      <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 600 }}>{value}</span>
+    </div>
+  );
+  const block = (title: string) => <div style={{ fontWeight: 700, fontSize: 13, margin: "14px 0 4px", color: "var(--eclosion-dark, #9a7a12)" }}>{title}</div>;
+  return (
+    <Modal
+      title={row.title ?? row.isbn13}
+      onClose={onClose}
+      footer={<Button variant="view" size="sm" onClick={onClose}>Fermer</Button>}
+    >
+      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 0 }}>
+        {row.author ? `${row.author} · ` : ""}<span style={{ fontFamily: "var(--font-mono)" }}>{row.isbn13}</span>
+      </div>
+
+      {block("Stock")}
+      {line("Stock initial", nf(row.stock_initial))}
+      {line("Entrées", `+${nf(row.entrees)}`)}
+      {line("Retours", `+${nf(row.retours)}`)}
+      {line("Sorties", `−${nf(row.sorties)}`)}
+      {line("Ajustements", `${row.ajustements >= 0 ? "+" : "−"}${nf(Math.abs(row.ajustements))}`)}
+      {line("Stock physique", nf(row.stock_physique))}
+      {line("Réservé", nf(row.reserve))}
+      {line("Disponible", nf(row.disponible))}
+      {line("En dépôt", nf(row.en_depot))}
+      {line("En transit", nf(row.en_transit))}
+      {line("Défectueux", nf(row.defectueux))}
+
+      {block("Rotation (ventes réelles)")}
+      {line("Ventes 30 derniers jours", nf(row.ventes_1m))}
+      {line("Ventes 3 mois", nf(row.ventes_3m))}
+      {line("Ventes 6 mois", nf(row.ventes_6m))}
+      {line("Ventes 12 mois", nf(row.ventes_12m))}
+      {line("Cadence retenue", row.ventes_par_mois > 0 ? `${row.ventes_par_mois.toLocaleString("fr-FR")} / mois` : "—")}
+      {line("Couverture estimée", row.couverture_mois != null ? `${row.couverture_mois.toLocaleString("fr-FR")} mois` : "—")}
+
+      {block("Réapprovisionnement conseillé")}
+      <div style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 700, fontSize: 20, color: row.reappro_conseille > 0 ? "var(--eclosion-dark, #9a7a12)" : "var(--muted)" }}>
+        {row.reappro_conseille > 0 ? `${nf(row.reappro_conseille)} exemplaires` : "Aucun réappro nécessaire"}
+      </div>
+      <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 0", lineHeight: 1.5 }}>{row.reappro_explication}</p>
+    </Modal>
   );
 }
 

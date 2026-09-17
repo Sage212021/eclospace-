@@ -3046,6 +3046,14 @@ export interface StockOverviewRow {
   qte_min_reimpression: number | null;
   qte_a_reapprovisionner: number | null;
   statut: "normal" | "alerte" | "reappro" | "rupture";
+  ventes_1m: number;
+  ventes_3m: number;
+  ventes_6m: number;
+  ventes_12m: number;
+  ventes_par_mois: number;
+  couverture_mois: number | null;
+  reappro_conseille: number;
+  reappro_explication: string;
 }
 export interface StockOverview {
   rows: StockOverviewRow[];

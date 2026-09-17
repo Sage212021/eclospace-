@@ -1525,6 +1525,14 @@ async function main() {
       permissionModules: ["paie"],
       departmentCodes: ["RH", "FIN"],
     },
+    {
+      slug: "2026-09-correction-choisir-correcteur",
+      version: "2026.09",
+      title: "Nouveauté — Correction éditoriale : choisir / changer qui fait la correction",
+      body: "Dans « Correction éditoriale », une colonne « Correcteur » indique à qui la correction est confiée, et la Direction éditoriale peut la (ré)attribuer d'un clic (« Assigner » / « Changer »). La liste propose les profils habilités à corriger — correcteurs, relecteurs (comité de lecture), direction éditoriale et assistant éditorial : un infographe ou un maquettiste ne peut jamais être affecté à la correction par erreur. La personne choisie reçoit une notification. Pratique pour corriger une affectation erronée sans repasser par une validation d'étape.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

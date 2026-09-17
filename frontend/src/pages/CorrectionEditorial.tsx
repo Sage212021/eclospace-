@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { getCorrectionDashboard, type CorrectionDashboard, type CorrectionManuscript, type CorrectionSubState } from "../api/client";
+import { getCorrectionDashboard, getCurrentStepAssignees, assignCurrentStep, type CorrectionDashboard, type CorrectionManuscript, type CorrectionSubState, type CurrentStepAssignees } from "../api/client";
 import { GuidanceSteps } from "../components/GuidanceNote";
 import { AiReadingLauncher } from "../components/AiReadingLauncher";
 
@@ -13,6 +13,8 @@ import { AiReadingLauncher } from "../components/AiReadingLauncher";
 
 interface Props {
   onOpenManuscript: (id: string) => void;
+  // Droit d'affecter/changer le correcteur (manuscripts:validation — Direction éditoriale).
+  canAssign?: boolean;
 }
 
 const BUCKETS: { key: CorrectionSubState | "recherche" | "stats"; label: string; icon: string }[] = [
@@ -24,7 +26,7 @@ const BUCKETS: { key: CorrectionSubState | "recherche" | "stats"; label: string;
   { key: "stats", label: "Statistiques & indicateurs", icon: "📊" },
 ];
 
-export function CorrectionEditorial({ onOpenManuscript }: Props) {
+export function CorrectionEditorial({ onOpenManuscript, canAssign = false }: Props) {
   const [data, setData] = useState<CorrectionDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [section, setSection] = useState<string>("points_bloquants");
@@ -88,13 +90,14 @@ export function CorrectionEditorial({ onOpenManuscript }: Props) {
                   style={{ padding: "8px 10px", fontSize: 13, border: "1px solid var(--line)", borderRadius: 6, background: "#fff", minWidth: 220, width: "100%", maxWidth: 360 }}
                 />
                 <div style={{ marginTop: 12 }}>
-                  <CorrectionTable items={searchResults} onOpen={onOpenManuscript} empty="Aucun manuscrit en correction ne correspond." />
+                  <CorrectionTable items={searchResults} onOpen={onOpenManuscript} canAssign={canAssign} empty="Aucun manuscrit en correction ne correspond." />
                 </div>
               </>
             ) : (
               <CorrectionTable
                 items={bySubState(b.key)}
                 onOpen={onOpenManuscript}
+                canAssign={canAssign}
                 empty={
                   b.key === "points_bloquants"
                     ? "Aucun point bloquant en attente."
@@ -139,7 +142,7 @@ function CorrectionStats({ data }: { data: CorrectionDashboard | null }) {
   );
 }
 
-function CorrectionTable({ items, onOpen, empty }: { items: CorrectionManuscript[]; onOpen: (id: string) => void; empty: string }) {
+function CorrectionTable({ items, onOpen, empty, canAssign }: { items: CorrectionManuscript[]; onOpen: (id: string) => void; empty: string; canAssign?: boolean }) {
   // Relecture assistée par l'IA directement dans la liste de correction : une
   // ligne dépliable par manuscrit ouvre les lanceurs (1ʳᵉ / 2ᵉ correction,
   // couverture), sans avoir à ouvrir la fiche complète de l'ouvrage.
@@ -156,6 +159,7 @@ function CorrectionTable({ items, onOpen, empty }: { items: CorrectionManuscript
             <th>Avancement</th>
             <th>Points bloquants</th>
             <th>Retard</th>
+            <th>Correcteur</th>
             <th>IA</th>
           </tr>
         </thead>
@@ -187,6 +191,9 @@ function CorrectionTable({ items, onOpen, empty }: { items: CorrectionManuscript
                     <span style={{ color: "var(--muted)" }}>—</span>
                   )}
                 </td>
+                <td onClick={(e) => e.stopPropagation()} style={{ cursor: "default" }}>
+                  <CorrectorCell manuscriptId={m.id} canAssign={!!canAssign} />
+                </td>
                 <td>
                   <button
                     onClick={(e) => {
@@ -202,7 +209,7 @@ function CorrectionTable({ items, onOpen, empty }: { items: CorrectionManuscript
               </tr>
               {aiOpen === m.id && (
                 <tr>
-                  <td colSpan={7} style={{ background: "var(--paper, #FAF8F2)", padding: "6px 12px 14px" }}>
+                  <td colSpan={8} style={{ background: "var(--paper, #FAF8F2)", padding: "6px 12px 14px" }}>
                     <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 4px" }}>
                       Relecture assistée par l'IA pour « {m.title} » — les documents produits (rapport + manuscrit corrigé) sont classés dans les Documents de l'ouvrage.
                     </div>
@@ -216,6 +223,62 @@ function CorrectionTable({ items, onOpen, empty }: { items: CorrectionManuscript
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// Cellule « Correcteur assigné » : montre qui fait la correction et, pour la
+// Direction éditoriale, permet de CHOISIR / CHANGER le correcteur — parmi les
+// correcteurs UNIQUEMENT (un infographe n'apparaît jamais dans la liste).
+function CorrectorCell({ manuscriptId, canAssign }: { manuscriptId: string; canAssign: boolean }) {
+  const [data, setData] = useState<CurrentStepAssignees | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  function load() {
+    getCurrentStepAssignees(manuscriptId).then(setData).catch(() => setData(null));
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [manuscriptId]);
+
+  async function pick(id: string) {
+    if (!id) return;
+    setBusy(true); setErr(null);
+    try {
+      await assignCurrentStep(manuscriptId, id);
+      setEditing(false);
+      load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Affectation impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const current = data?.current_assignee;
+  if (editing && canAssign && data) {
+    return (
+      <div style={{ minWidth: 150 }}>
+        <select autoFocus defaultValue={current?.id ?? ""} disabled={busy} onChange={(e) => pick(e.target.value)} style={{ fontSize: 12, maxWidth: 190 }}>
+          <option value="">— Confier la correction à… —</option>
+          {data.assignees.map((a) => (
+            <option key={a.id} value={a.id}>{a.username}{a.role ? ` · ${a.role}` : ""}</option>
+          ))}
+        </select>
+        <button type="button" onClick={() => setEditing(false)} style={{ marginLeft: 4, background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 12 }}>✕</button>
+        {data.assignees.length === 0 && <div style={{ fontSize: 11, color: "var(--alert, #B23A2E)", marginTop: 2 }}>Aucune personne habilitée active (correcteur, relecteur, direction ou assistant éditorial).</div>}
+        {err && <div style={{ fontSize: 11, color: "var(--alert, #B23A2E)", marginTop: 2 }}>{err}</div>}
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: 12.5, color: current ? "var(--ink)" : "var(--muted)" }}>{current ? current.username : "Non assigné"}</span>
+      {canAssign && (
+        <button type="button" title="Choisir / changer le correcteur" onClick={() => setEditing(true)} style={{ background: "none", border: "1px solid var(--line)", borderRadius: 6, cursor: "pointer", color: "var(--eclosion-dark, #9a7a12)", fontSize: 11, padding: "1px 6px" }}>
+          {current ? "Changer" : "Assigner"}
+        </button>
+      )}
     </div>
   );
 }

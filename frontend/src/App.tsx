@@ -829,7 +829,7 @@ export function App() {
           <EditorialDecision onOpenManuscript={openManuscript} />
         )}
         {leaf && "page" in leaf && leaf.page === "correction-editorial" && (
-          <CorrectionEditorial onOpenManuscript={openManuscript} />
+          <CorrectionEditorial onOpenManuscript={openManuscript} canAssign={permissions.has("manuscripts:validation")} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-readings" && <MyReadings />}
         {leaf && "page" in leaf && leaf.page === "my-dossiers" && (

@@ -566,6 +566,21 @@ export function getNextAssignees(manuscriptId: string) {
   );
 }
 
+// Responsable + candidats de l'ÉTAPE COURANTE : pour choisir/changer la personne
+// affectée à l'étape en cours (ex. le correcteur pendant la Correction éditoriale).
+export interface CurrentStepAssignees {
+  step: { code: string; label: string } | null;
+  has_department: boolean;
+  current_assignee: { id: string; username: string } | null;
+  assignees: NextAssignee[];
+}
+export function getCurrentStepAssignees(manuscriptId: string) {
+  return request<CurrentStepAssignees>(`/api/v1/manuscripts/${manuscriptId}/current-step-assignees`);
+}
+export function assignCurrentStep(manuscriptId: string, assigneeId: string) {
+  return request<{ ok: true }>(`/api/v1/manuscripts/${manuscriptId}/current-step/assignee`, { method: "PATCH", body: JSON.stringify({ assignee_id: assigneeId }) });
+}
+
 // « Mes dossiers à traiter » : les manuscrits dont l'étape courante m'est
 // personnellement confiée (équivalent de « Mes lectures » pour toute la chaîne).
 export interface MyDossier {

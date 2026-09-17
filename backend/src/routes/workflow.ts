@@ -8,6 +8,28 @@ import { isDeliverableRequired, hasStepDeliverable, DELIVERABLE_LABELS } from ".
 import { vc1State } from "../lib/startingProof.js";
 import { isOptionalDecisionStep, stepMode, missingRealizationFields, sanitizeRealizationData, OPTIONAL_STEP_LABELS, type OptionalStepCode } from "../lib/stepRealization.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { notifyUsers } from "../lib/notify.js";
+
+// Éligibilité à l'affectation nominative d'une étape. Par défaut, ce sont les
+// personnes du SERVICE de l'étape (maquettistes → mise en page, etc.). Certaines
+// étapes admettent un ENSEMBLE DE RÔLES plus large que leur seul service — ainsi
+// la Correction éditoriale peut être confiée aux relecteurs (comité de lecture),
+// à la direction éditoriale et à l'assistant éditorial, en plus des correcteurs
+// (décision opérateur 17/09/2026). Un profil hors de cette liste (ex. infographe)
+// ne peut jamais y être affecté.
+const STEP_ASSIGNABLE_ROLES: Record<string, string[]> = {
+  CORRECTION: ["CORRECTEUR", "MEMBRE_COMITE_LECTURE", "DIR_EDITORIAL", "ASSISTANT_EDITORIAL"],
+};
+
+// Filtre Prisma sur `userRoles` désignant les personnes affectables à cette
+// étape ; null quand l'affectation nominative ne s'applique pas (pas de service
+// ni de liste de rôles).
+function assigneeRoleFilter(status: { code: string; departmentId: string | null }) {
+  const roles = STEP_ASSIGNABLE_ROLES[status.code];
+  if (roles) return { some: { revokedAt: null, role: { code: { in: roles } } } };
+  if (status.departmentId) return { some: { revokedAt: null, role: { departmentId: status.departmentId } } };
+  return null;
+}
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
 import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
 
@@ -452,18 +474,13 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         if (nextStatus.code === "COMITE_LECTURE") {
           return reply.code(409).send({ code: "dedicated_flow_required", message: "Le comité de lecture se répartit via l'affectation des relecteurs (page Comité de lecture)." });
         }
+        const roleFilter = assigneeRoleFilter(nextStatus);
         const assignee = await prisma.user.findFirst({
-          where: {
-            id: assignee_id,
-            status: "active",
-            ...(nextStatus.departmentId
-              ? { userRoles: { some: { revokedAt: null, role: { departmentId: nextStatus.departmentId } } } }
-              : {}),
-          },
+          where: { id: assignee_id, status: "active", ...(roleFilter ? { userRoles: roleFilter } : {}) },
           select: { id: true },
         });
         if (!assignee) {
-          return reply.code(400).send({ code: "invalid_assignee", message: `La personne choisie ne fait pas partie du service « ${nextStatus.label} » ou n'est plus active.` });
+          return reply.code(400).send({ code: "invalid_assignee", message: `La personne choisie n'est pas habilitée pour l'étape « ${nextStatus.label} » ou n'est plus active.` });
         }
       }
 
@@ -590,11 +607,12 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       const current = await prisma.workflowStatus.findUnique({ where: { id: manuscript.statusId } });
       if (!current) return reply.send({ next_step: null, assignees: [] });
       const nextStatus = await findNextApplicableStatus(current.stepOrder, manuscript);
-      if (!nextStatus || !nextStatus.departmentId || nextStatus.code === "COMITE_LECTURE") {
+      const roleFilter = nextStatus && nextStatus.code !== "COMITE_LECTURE" ? assigneeRoleFilter(nextStatus) : null;
+      if (!nextStatus || !roleFilter) {
         return reply.send({ next_step: nextStatus ? { code: nextStatus.code, label: nextStatus.label } : null, assignees: [] });
       }
       const users = await prisma.user.findMany({
-        where: { status: "active", userRoles: { some: { revokedAt: null, role: { departmentId: nextStatus.departmentId } } } },
+        where: { status: "active", userRoles: roleFilter },
         select: { id: true, username: true, userRoles: { where: { revokedAt: null }, select: { role: { select: { label: true, departmentId: true } } } } },
         orderBy: { username: "asc" },
       });
@@ -604,6 +622,86 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         role: u.userRoles.find((r) => r.role.departmentId === nextStatus.departmentId)?.role.label ?? u.userRoles[0]?.role.label ?? null,
       }));
       return reply.send({ next_step: { code: nextStatus.code, label: nextStatus.label }, assignees });
+    },
+  );
+
+  // Candidats + responsable actuel de l'ÉTAPE COURANTE : sert à CHOISIR ou
+  // CHANGER la personne affectée à l'étape en cours (ex. attribuer la Correction
+  // éditoriale à tel correcteur, ou corriger une affectation erronée). Le
+  // sélecteur ne propose que les personnes du SERVICE de l'étape courante — un
+  // infographe ne peut donc jamais être proposé pour la correction.
+  fastify.get(
+    "/api/v1/manuscripts/:id/current-step-assignees",
+    { preHandler: requirePermission("manuscripts", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true, statusId: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const current = await prisma.workflowStatus.findUnique({ where: { id: manuscript.statusId } });
+      if (!current) return reply.send({ step: null, has_department: false, current_assignee: null, assignees: [] });
+      const step = await prisma.manuscriptStep.findUnique({
+        where: { manuscriptId_statusId: { manuscriptId: id, statusId: manuscript.statusId } },
+        select: { responsible: { select: { id: true, username: true } } },
+      });
+      const roleFilter = assigneeRoleFilter(current);
+      let assignees: { id: string; username: string; role: string | null }[] = [];
+      if (roleFilter) {
+        const users = await prisma.user.findMany({
+          where: { status: "active", userRoles: roleFilter },
+          select: { id: true, username: true, userRoles: { where: { revokedAt: null }, select: { role: { select: { label: true, departmentId: true } } } } },
+          orderBy: { username: "asc" },
+        });
+        assignees = users.map((u) => ({ id: u.id, username: u.username, role: u.userRoles.find((r) => r.role.departmentId === current.departmentId)?.role.label ?? u.userRoles[0]?.role.label ?? null }));
+      }
+      return reply.send({
+        step: { code: current.code, label: current.label },
+        has_department: !!roleFilter,
+        current_assignee: step?.responsible ? { id: step.responsible.id, username: step.responsible.username } : null,
+        assignees,
+      });
+    },
+  );
+
+  // (Ré)affecte le responsable de l'ÉTAPE COURANTE — ex. choisir/changer le
+  // correcteur pendant la Correction éditoriale. Validé côté serveur : la
+  // personne doit appartenir au SERVICE de l'étape (sinon 400). Tracé + notifié.
+  fastify.patch(
+    "/api/v1/manuscripts/:id/current-step/assignee",
+    { preHandler: requirePermission("manuscripts", "validation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z.object({ assignee_id: z.string().uuid() }).safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Choisissez une personne à qui confier l'étape." });
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true, statusId: true, title: true, manuscriptNumber: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const current = await prisma.workflowStatus.findUnique({ where: { id: manuscript.statusId } });
+      const roleFilter = current ? assigneeRoleFilter(current) : null;
+      if (!current || !roleFilter) {
+        return reply.code(409).send({ code: "no_named_assignment", message: "Cette étape ne se confie pas nominativement à une personne." });
+      }
+      const assignee = await prisma.user.findFirst({
+        where: { id: parsed.data.assignee_id, status: "active", userRoles: roleFilter },
+        select: { id: true },
+      });
+      if (!assignee) {
+        return reply.code(400).send({ code: "invalid_assignee", message: `La personne choisie n'est pas habilitée pour l'étape « ${current.label} » ou n'est plus active.` });
+      }
+      await prisma.manuscriptStep.upsert({
+        where: { manuscriptId_statusId: { manuscriptId: id, statusId: current.id } },
+        update: { responsibleId: parsed.data.assignee_id },
+        create: { manuscriptId: id, statusId: current.id, responsibleId: parsed.data.assignee_id },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "manuscript_step", entityId: id, newValues: { step: current.code, assigned_to: parsed.data.assignee_id }, ipAddress: request.ip });
+      await notifyUsers({
+        userIds: [parsed.data.assignee_id],
+        type: "affectation",
+        priority: "high",
+        title: `Manuscrit à traiter — ${current.label}`,
+        body: `Le manuscrit « ${manuscript.title} » (${manuscript.manuscriptNumber}) vous est confié pour l'étape « ${current.label} ».`,
+        entityType: "manuscript",
+        entityId: id,
+      }).catch(() => undefined);
+      return reply.send({ ok: true });
     },
   );
 

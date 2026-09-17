@@ -805,6 +805,7 @@ export function App() {
               statusFilter={leaf.stage}
               heading={leaf.heading}
               canCreate={permissions.has("manuscripts:saisie")}
+              canAssign={permissions.has("manuscripts:validation")}
               onOpenManuscript={openManuscript}
               onGoToManuscripts={() => setView({ kind: "leaf", key: "ed-manuscrits" })}
             />

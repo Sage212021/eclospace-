@@ -18,6 +18,7 @@ import {
 } from "../api/client";
 import { Button } from "../components/Button";
 import { GuidanceNote, GuidanceSteps } from "../components/GuidanceNote";
+import { StepAssigneeControl } from "../components/StepAssigneeControl";
 
 const CATALOGUE_STORAGE_KEY = "eclospace.catalogue.filters";
 
@@ -120,9 +121,11 @@ interface ManuscriptsProps {
   heading?: string;
   // Raccourci « Aller à Manuscrits » proposé dans l'état vide d'un sous-module.
   onGoToManuscripts?: () => void;
+  // Droit d'affecter/changer la personne d'une étape (manuscripts:validation).
+  canAssign?: boolean;
 }
 
-export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, statusFilter, heading, onGoToManuscripts }: ManuscriptsProps) {
+export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, statusFilter, heading, onGoToManuscripts, canAssign }: ManuscriptsProps) {
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -191,7 +194,7 @@ export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, status
         manuscripts.length === 0 ? (
           <EmptyState isStageView={isStageView} heading={heading} onGoToManuscripts={onGoToManuscripts} />
         ) : (
-          <ManuscriptTable items={manuscripts} onOpen={onOpenManuscript} />
+          <ManuscriptTable items={manuscripts} onOpen={onOpenManuscript} showAssignee canAssign={canAssign} />
         )
       ) : (
         // Vue principale : MENU LOCAL en accordéon — chaque entrée se déplie sur
@@ -346,7 +349,7 @@ function AccordionSection({
 }
 
 // Tableau de manuscrits réutilisable (une ligne cliquable par ouvrage).
-function ManuscriptTable({ items, onOpen }: { items: Manuscript[]; onOpen: (id: string) => void }) {
+function ManuscriptTable({ items, onOpen, showAssignee, canAssign }: { items: Manuscript[]; onOpen: (id: string) => void; showAssignee?: boolean; canAssign?: boolean }) {
   return (
     <div style={{ overflowX: "auto" }}>
       <table className="ecl-table">
@@ -356,6 +359,7 @@ function ManuscriptTable({ items, onOpen }: { items: Manuscript[]; onOpen: (id: 
             <th>Titre</th>
             <th>Genre</th>
             <th>Étape</th>
+            {showAssignee && <th>Assigné à</th>}
             <th>Reçu le</th>
             <th>Paru le</th>
           </tr>
@@ -369,6 +373,11 @@ function ManuscriptTable({ items, onOpen }: { items: Manuscript[]; onOpen: (id: 
               <td>
                 <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark)", borderRadius: 999, padding: "2px 10px", fontSize: 11, whiteSpace: "nowrap" }}>{m.status.label}</span>
               </td>
+              {showAssignee && (
+                <td onClick={(e) => e.stopPropagation()} style={{ cursor: "default" }}>
+                  <StepAssigneeControl manuscriptId={m.id} canAssign={!!canAssign} />
+                </td>
+              )}
               <td className="mono">{new Date(m.receivedAt).toLocaleDateString("fr-FR")}</td>
               <td className="mono">{m.publicationDate ? new Date(m.publicationDate).toLocaleDateString("fr-FR") : "—"}</td>
             </tr>

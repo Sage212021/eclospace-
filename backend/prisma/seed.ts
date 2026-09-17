@@ -1541,6 +1541,22 @@ async function main() {
       permissionModules: ["manuscripts"],
       departmentCodes: ["DIRED", "MAQ", "INFOG"],
     },
+    {
+      slug: "2026-09-mes-corrections-ecran-complet-ia-bat",
+      version: "2026.09",
+      title: "Nouveauté — Mes corrections : l'écran complet par ouvrage (assistance IA + BAT)",
+      body: "Dans « Mes corrections », chaque ouvrage confié ouvre maintenant son écran de travail complet, sous « 🤖 Assistance IA & BAT déposés ». Vous pouvez lancer la relecture assistée (BAT1, BAT2, couverture) directement depuis votre boîte, suivre l'avancement, puis récupérer les BAT produits (manuscrit corrigé + rapport) dans « 📦 Générer les livrables » — prêts à télécharger, corriger, puis redéposer en « À remettre ». Plus besoin d'ouvrir la fiche complète de l'ouvrage : tout est là, dans votre espace.",
+      permissionModules: ["tasks"],
+      departmentCodes: ["CORR", "COMLEC", "DIRED"],
+    },
+    {
+      slug: "2026-09-etape-choisir-isbn-bat-impression",
+      version: "2026.09",
+      title: "Nouveauté — ISBN, BAT Final & Impression : choisir qui traite chaque ouvrage",
+      body: "Le choix de la personne affectée s'étend aux étapes « ISBN & dépôt légal », « BAT Final & contrôle qualité » et « Impression ». Sur chacun de ces écrans, la colonne « Assigné à » indique qui traite l'ouvrage, avec « Assigner » / « Changer » pour choisir d'un clic — par ouvrage. La liste ne propose que les profils du bon métier : le secrétariat/assistant éditorial pour l'ISBN, le contrôle qualité pour le BAT Final, la production pour l'impression. La personne choisie est notifiée. Même principe que pour la correction et la mise en page.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["SECR", "CQ", "IMPR", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

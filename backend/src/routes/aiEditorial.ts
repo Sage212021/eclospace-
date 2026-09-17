@@ -52,6 +52,18 @@ const promptSchema = z.object({
   report_template: z.any(),
 });
 
+// Porte de LECTURE des relectures IA (journal, rapport, comparaison, livrables).
+// Ouverte à qui peut consulter les manuscrits / le comité de lecture, ET au
+// correcteur désigné (droit « tâches ») : il récupère les analyses lancées
+// depuis SA boîte « Mes corrections », là où il les a déclenchées, sans exiger
+// le droit large « documents » (la GED reste réservée). Le contrôle par
+// permission suffit — même posture que le reste du module.
+const AI_JOB_READ_PERMS = [
+  { module: "comite_lecture" as const, action: "consultation" as const },
+  { module: "manuscripts" as const, action: "consultation" as const },
+  { module: "tasks" as const, action: "consultation" as const },
+];
+
 export default async function aiEditorialRoutes(fastify: FastifyInstance) {
   // — Configuration —
   fastify.get("/api/v1/ai-editorial/config", { preHandler: requireAnyRole(CONFIG_ROLES) }, async (_request, reply) => {
@@ -217,7 +229,7 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
   // — Journal des relectures IA d'un manuscrit (traçabilité + progression) —
   fastify.get(
     "/api/v1/ai-editorial/jobs",
-    { preHandler: requireAnyPermission([{ module: "comite_lecture", action: "consultation" }, { module: "manuscripts", action: "consultation" }]) },
+    { preHandler: requireAnyPermission(AI_JOB_READ_PERMS) },
     async (request, reply) => {
       const manuscriptId = (request.query as { manuscript?: string }).manuscript;
       if (!manuscriptId) return reply.code(400).send({ code: "manuscript_required", message: "Paramètre « manuscript » requis." });
@@ -238,7 +250,7 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
   // (la GED reste réservée). Le rapport est le 1er document produit par le job.
   fastify.get(
     "/api/v1/ai-editorial/jobs/:jobId/report",
-    { preHandler: requireAnyPermission([{ module: "comite_lecture", action: "consultation" }, { module: "manuscripts", action: "consultation" }]) },
+    { preHandler: requireAnyPermission(AI_JOB_READ_PERMS) },
     async (request, reply) => {
       const { jobId } = request.params as { jobId: string };
       const job = await prisma.aiReadingJob.findUnique({ where: { id: jobId } });
@@ -284,7 +296,7 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
   // « version originale / version proposée ». Même porte que le rapport.
   fastify.get(
     "/api/v1/ai-editorial/jobs/:jobId/comparison",
-    { preHandler: requireAnyPermission([{ module: "comite_lecture", action: "consultation" }, { module: "manuscripts", action: "consultation" }]) },
+    { preHandler: requireAnyPermission(AI_JOB_READ_PERMS) },
     async (request, reply) => {
       const { jobId } = request.params as { jobId: string };
       const job = await prisma.aiReadingJob.findUnique({ where: { id: jobId }, select: { workType: true, sourceText: true, rewriteText: true } });
@@ -296,7 +308,7 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
     },
   );
 
-  const READ_JOB_PERMS = [{ module: "comite_lecture" as const, action: "consultation" as const }, { module: "manuscripts" as const, action: "consultation" as const }];
+  const READ_JOB_PERMS = AI_JOB_READ_PERMS;
 
   // — Livrables produits par une relecture IA (« Générer les livrables ») —
   // Liste les documents effectivement produits par le job (rapport, version

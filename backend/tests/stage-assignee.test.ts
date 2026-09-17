@@ -5,8 +5,9 @@ import { createUserWithRole, extractSessionCookie } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 // Attribution nominative par étape : mise en page → maquettistes ; infographie →
-// infographes. On peut choisir/changer la personne, et un profil hors service
-// est refusé (chacun sa spécialité).
+// infographes ; ISBN & dépôt légal → secrétariat/assistant éditorial ; BAT Final
+// → contrôle qualité ; impression → production. On peut choisir/changer la
+// personne, et un profil hors service est refusé (chacun sa spécialité).
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
 
@@ -16,6 +17,9 @@ describe("Attribution par étape — mise en page & infographie", () => {
   let adminId: string;
   let maquettisteId: string;
   let infographeId: string;
+  let assistantId: string;
+  let qualiteId: string;
+  let imprimeurId: string;
   const s = Math.random().toString(36).slice(2, 7);
   const ids: string[] = [];
 
@@ -43,6 +47,9 @@ describe("Attribution par étape — mise en page & infographie", () => {
     adminId = (await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).id;
     maquettisteId = (await createUserWithRole(`maq_${s}`, "MAQUETTISTE", "Maq123!")).id;
     infographeId = (await createUserWithRole(`info_${s}`, "RESP_INFOGRAPHIE", "Info123!")).id;
+    assistantId = (await createUserWithRole(`ast_${s}`, "ASSISTANT_EDITORIAL", "Asst123!")).id;
+    qualiteId = (await createUserWithRole(`cq_${s}`, "RESP_QUALITE", "Qual123!")).id;
+    imprimeurId = (await createUserWithRole(`imp_${s}`, "RESP_IMPRESSION", "Impr123!")).id;
   });
 
   afterAll(async () => {
@@ -71,6 +78,38 @@ describe("Attribution par étape — mise en page & infographie", () => {
     expect(list).not.toContain(maquettisteId);
 
     expect((await assign(m, infographeId)).statusCode).toBe(200);
+    expect((await assign(m, maquettisteId)).statusCode).toBe(400);
+  });
+
+  it("ISBN & dépôt légal : propose le secrétariat/assistant éditorial, refuse un imprimeur", async () => {
+    const m = await makeManuscript("ATTRIBUTION_REFERENCES", `ISBN ${s}`);
+    const list = await assigneeIds(m);
+    expect(list).toContain(assistantId);
+    expect(list).not.toContain(imprimeurId);
+
+    expect((await assign(m, assistantId)).statusCode).toBe(200);
+    const bad = await assign(m, imprimeurId);
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().code).toBe("invalid_assignee");
+  });
+
+  it("BAT Final : propose le contrôle qualité, refuse un maquettiste", async () => {
+    const m = await makeManuscript("VALIDATION_BAT", `BAT ${s}`);
+    const list = await assigneeIds(m);
+    expect(list).toContain(qualiteId);
+    expect(list).not.toContain(maquettisteId);
+
+    expect((await assign(m, qualiteId)).statusCode).toBe(200);
+    expect((await assign(m, maquettisteId)).statusCode).toBe(400);
+  });
+
+  it("Impression : propose la production/impression, refuse un correcteur hors service", async () => {
+    const m = await makeManuscript("IMPRESSION", `Impression ${s}`);
+    const list = await assigneeIds(m);
+    expect(list).toContain(imprimeurId);
+    expect(list).not.toContain(maquettisteId);
+
+    expect((await assign(m, imprimeurId)).statusCode).toBe(200);
     expect((await assign(m, maquettisteId)).statusCode).toBe(400);
   });
 });

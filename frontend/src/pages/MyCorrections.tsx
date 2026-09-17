@@ -8,6 +8,7 @@ import {
 } from "../api/client";
 import { Button } from "../components/Button";
 import { GuidanceNote } from "../components/GuidanceNote";
+import { AiReadingLauncher } from "../components/AiReadingLauncher";
 
 // Boîte de travail personnelle du correcteur (parallèle de « Mes lectures »).
 // Menu local en accordéon : ses tâches de correction regroupées par état. Sur
@@ -62,14 +63,15 @@ export function MyCorrections() {
   ];
 
   return (
-    <div className="ecl-page" style={{ maxWidth: 720 }}>
+    <div className="ecl-page" style={{ maxWidth: 1040 }}>
       <h1 className="ecl-page__title">Mes corrections</h1>
       <p className="ecl-page__lead">Vos tâches de correction : le manuscrit à corriger, et le dépôt de votre version corrigée.</p>
 
       <GuidanceNote title="Votre boîte de correction personnelle">
         Cette page n'affiche que les corrections confiées à VOTRE compte. Sur chaque tâche : ouvrez le manuscrit à corriger
-        (« À corriger »), puis déposez votre version corrigée (« À remettre ») — elle sera reçue par la Maquette pour la
-        mise en page.
+        (« À corriger »), utilisez l'<strong>assistance IA</strong> (relecture BAT1 / BAT2 / couverture) et récupérez les
+        <strong> BAT produits</strong> dans « Assistance IA &amp; BAT », puis déposez votre version corrigée (« À remettre ») —
+        elle sera reçue par la Maquette pour la mise en page.
       </GuidanceNote>
 
       {message && (
@@ -97,6 +99,11 @@ export function MyCorrections() {
 
 function CorrectionCard({ task, onDepose, onRefresh }: { task: MyCorrectionTask; onDepose: (t: MyCorrectionTask, f: File) => void; onRefresh: () => void }) {
   const canValidate = task.status !== "terminee" && task.status !== "validee";
+  // Écran complet de correction par ouvrage : l'assistance IA (relecture BAT1 /
+  // BAT2 / couverture) et la récupération des BAT produits (« livrables »),
+  // ouverts d'un clic, sous la tâche. Déplié par défaut. Nécessite l'ouvrage.
+  const [workspace, setWorkspace] = useState(false);
+  const manuscriptId = task.manuscript?.id ?? null;
   return (
     <section className="ecl-card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -139,6 +146,33 @@ function CorrectionCard({ task, onDepose, onRefresh }: { task: MyCorrectionTask;
         </label>
         <span style={{ color: "var(--muted)", fontSize: 11.5 }}>→ reçu par la Maquette</span>
       </div>
+
+      {/* ÉCRAN COMPLET : assistance IA + BAT déposés (livrables produits). */}
+      {manuscriptId && (
+        <div style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            onClick={() => setWorkspace((v) => !v)}
+            style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: workspace ? "var(--eclosion-soft)" : "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "var(--ink)" }}
+          >
+            <span style={{ fontSize: 15 }}>🤖</span>
+            <span style={{ flex: 1 }}>Assistance IA &amp; BAT déposés</span>
+            <span style={{ color: "var(--muted)", display: "inline-block", transform: workspace ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
+          </button>
+          {workspace && (
+            <div style={{ marginTop: 8 }}>
+              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "2px 0 4px", lineHeight: 1.6 }}>
+                Lancez la relecture assistée pour « {task.manuscript?.title ?? "l'ouvrage"} » ; les BAT produits (manuscrit
+                corrigé + rapport) apparaissent dans « 📦 Générer les livrables », prêts à télécharger, puis à redéposer
+                ci-dessus (« À remettre »).
+              </p>
+              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — BAT1" hint="Produit aussi le manuscrit corrigé BAT1 (à intégrer). Récupérez-le dans « 📦 Générer les livrables »." />
+              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — BAT2" hint="Produit aussi le manuscrit corrigé BAT2 (à intégrer). Au BAT2, l'IA suit les corrections du BAT précédent." />
+              <AiReadingLauncher manuscriptId={manuscriptId} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" askCoverPass hint="Choisissez le passage : BAT1 (1ᵉʳ) ou BAT2. Au BAT2, l'IA vérifie les intégrations du BAT précédent." />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bouton de validation d'étape (avancement à 100 % / terminé). */}
       {canValidate && (

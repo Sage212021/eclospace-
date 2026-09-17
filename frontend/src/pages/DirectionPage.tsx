@@ -14,6 +14,7 @@ import {
 import { DataTable } from "../components/DataTable";
 import { BillingOrdersSection } from "../components/BillingOrdersSection";
 import { InvoiceCancellationsToValidate } from "../components/InvoiceCancellationsToValidate";
+import { ExpensesToCounterValidate } from "../components/ExpensesToCounterValidate";
 import { EmittedInvoicesForCancellation } from "../components/EmittedInvoicesForCancellation";
 import { RevenueByFamilyCard } from "../components/RevenueByFamilyCard";
 import { AnnualSummarySection } from "../components/AnnualSummarySection";
@@ -41,6 +42,8 @@ interface DirectionPageProps {
   // Le DG (ou l'administrateur général) valide la paie mensuelle préparée par le
   // RH, depuis sa propre page (rôle DIR_GENERAL / ADMIN_GENERAL).
   canValidatePayrollDg: boolean;
+  // Le DG contre-valide les DÉPENSES (palier 2) depuis son cockpit.
+  canCounterValidateExpense: boolean;
   // Navigation vers une autre rubrique (ex. « Finance » depuis une alerte).
   onNavigate?: (leafKey: string) => void;
 }
@@ -50,7 +53,7 @@ interface DirectionPageProps {
 import { useI18n } from "../i18n";
 import { PayrollMonthlySection } from "../components/PayrollMonthlySection";
 
-export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canValidateCancellation, canValidatePayrollDg, onNavigate }: DirectionPageProps) {
+export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canValidateCancellation, canValidatePayrollDg, canCounterValidateExpense, onNavigate }: DirectionPageProps) {
   const { t, lang } = useI18n();
   const [dashboard, setDashboard] = useState<DirectionDashboard | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -132,6 +135,11 @@ export function DirectionPage({ canTreatRecommendations, canInitiateOrder, canVa
           (ou le retourne au RH). Sans quoi le DG ne voyait aucune fenêtre de
           validation de la paie. */}
       {canValidatePayrollDg && <PayrollMonthlySection canManage={false} canValidateDg collapsible defaultOpen={false} />}
+
+      {/* Contre-validation des DÉPENSES (palier 2) par le DG — sur son cockpit,
+          bien distincte de « Factures à valider ». Affichée même à vide pour que
+          le DG sache où regarder. */}
+      {canCounterValidateExpense && <ExpensesToCounterValidate canCounterValidate={canCounterValidateExpense} showWhenEmpty />}
 
       {/* Décision de gouvernance du DG : annulations de factures à valider —
           présentées ici, sur la page du DG, pas seulement côté Finance. */}

@@ -1716,6 +1716,43 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // DÉTAIL des mouvements d'un commercial : la liste exacte des exemplaires
+  // reçus / rendus / vendus, pour comprendre d'où vient le « Reçus » et le « À
+  // justifier » (aucun stock sans mouvement, aucun mouvement sans trace). Répond
+  // au besoin de vérifier « le magasin a remis X mais le commercial en affiche Y ».
+  fastify.get(
+    "/api/v1/commercial-stock/:userId/movements",
+    { preHandler: requireAnyPermission([{ module: "commercial", action: "validation" }, { module: "commercial", action: "administration" }, { module: "direction", action: "consultation" }, { module: "stock", action: "administration" }]) },
+    async (request, reply) => {
+      const { userId } = request.params as { userId: string };
+      const loc = await prisma.stockLocation.findFirst({ where: { commercialUserId: userId, type: "stock_commercial" } });
+      if (!loc) return reply.send({ location_id: null, movements: [] });
+      const moves = await prisma.stockMovement.findMany({
+        where: { OR: [{ fromLocationId: loc.id }, { toLocationId: loc.id }], status: { not: "cancelled" } },
+        include: { isbn: { select: { isbn13: true, manuscript: { select: { title: true } } } }, fromLocation: { select: { label: true } }, toLocation: { select: { label: true } } },
+        orderBy: { movedAt: "desc" },
+        take: 500,
+      });
+      const actorNames = await resolveStockActorNames(moves.map((m) => m.movedBy));
+      const movements = moves.map((m) => {
+        const isIn = m.toLocationId === loc.id;
+        return {
+          id: m.id,
+          moved_at: m.movedAt,
+          type: m.type,
+          direction: isIn ? "in" : "out",
+          quantity: m.quantity,
+          title: m.isbn?.manuscript?.title ?? null,
+          isbn13: m.isbn?.isbn13 ?? null,
+          counterpart: isIn ? m.fromLocation?.label ?? null : m.toLocation?.label ?? null,
+          reason: m.reason,
+          by_name: m.movedBy ? actorNames.get(m.movedBy) ?? null : null,
+        };
+      });
+      return reply.send({ location_id: loc.id, movements });
+    },
+  );
+
   // Liste des commerciaux (pour la remise) — accessible à la saisie stock, sans
   // exiger la permission d'administration des utilisateurs.
   fastify.get("/api/v1/commercial-stock/commercials", { preHandler: requirePermission("stock", "saisie") }, async (_request, reply) => {

@@ -3016,6 +3016,23 @@ export function returnFromCommercial(userId: string, input: { isbn_id: string; q
   return request(`/api/v1/commercial-stock/${userId}/return`, { method: "POST", body: JSON.stringify(input) });
 }
 
+// Détail des mouvements d'un commercial (pour tracer le « Reçus » / « À justifier »).
+export interface CommercialMovement {
+  id: string;
+  moved_at: string;
+  type: string;
+  direction: "in" | "out";
+  quantity: number;
+  title: string | null;
+  isbn13: string | null;
+  counterpart: string | null;
+  reason: string | null;
+  by_name: string | null;
+}
+export function getCommercialMovements(userId: string) {
+  return request<{ location_id: string | null; movements: CommercialMovement[] }>(`/api/v1/commercial-stock/${userId}/movements`);
+}
+
 // Ajout rapide d'un ouvrage/bien au catalogue central depuis la remise (D-042).
 // Renvoie soit la fiche créée, soit — si un doublon (titre ou ISBN) existe déjà —
 // la fiche existante pour que l'écran propose de la sélectionner.

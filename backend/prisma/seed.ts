@@ -1509,6 +1509,14 @@ async function main() {
       permissionModules: ["paie"],
       departmentCodes: ["RH", "FIN"],
     },
+    {
+      slug: "2026-09-stock-commercial-detail-mouvements",
+      version: "2026.09",
+      title: "Nouveauté — Stock commercial : voir le détail des exemplaires d'un commercial",
+      body: "Dans « Stock commercial », cliquez sur le nom d'un commercial pour dérouler le DÉTAIL de ses mouvements : chaque remise reçue, chaque vente et chaque retour (date, ouvrage, quantité, nature, par qui). Un contrôle de cohérence est affiché : reçus − vendus − retournés − offerts − pertes = exemplaires détenus (à justifier). Vous voyez ainsi exactement d'où vient le total « Reçus » — utile pour vérifier « le magasin a remis X, le commercial en détient Y ».",
+      permissionModules: ["stock", "commercial"],
+      departmentCodes: ["STOCK", "COM"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

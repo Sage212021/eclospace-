@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { TableScroll } from "./TableScroll";
 import {
   listStockCommercials,
@@ -7,6 +7,8 @@ import {
   handoverToCommercial,
   returnFromCommercial,
   createCommercialGood,
+  getCommercialMovements,
+  type CommercialMovement,
   type CommercialPick,
   type CommercialStockRow,
   type CommercialStockReport,
@@ -32,6 +34,19 @@ export function CommercialStockSection({ isbns, locations, canManage, onMessage,
   const [rows, setRows] = useState<CommercialStockRow[] | null>(null);
   const [total, setTotal] = useState<CommercialStockReport | null>(null);
   const [dialog, setDialog] = useState<null | "handover" | "return">(null);
+  const [openDetail, setOpenDetail] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Record<string, CommercialMovement[] | "loading">>({});
+
+  function toggleDetail(row: CommercialStockRow) {
+    if (openDetail === row.location_id) { setOpenDetail(null); return; }
+    setOpenDetail(row.location_id);
+    if (!detail[row.location_id] && row.user_id) {
+      setDetail((d) => ({ ...d, [row.location_id]: "loading" }));
+      getCommercialMovements(row.user_id)
+        .then((r) => setDetail((d) => ({ ...d, [row.location_id]: r.movements })))
+        .catch(() => setDetail((d) => ({ ...d, [row.location_id]: [] })));
+    }
+  }
 
   const magasins = locations.filter((l) => l.type !== "depot_vente");
 
@@ -80,15 +95,34 @@ export function CommercialStockSection({ isbns, locations, canManage, onMessage,
             </thead>
             <tbody style={{ fontFamily: "var(--font-mono)" }}>
               {rows.map((r) => (
-                <tr key={r.location_id} style={{ borderTop: "1px solid var(--line)" }}>
-                  <td style={{ textAlign: "left", padding: "6px 8px", fontFamily: "var(--font-sans, inherit)" }}>{r.commercial_name ?? "—"}</td>
-                  <td style={{ textAlign: "right", padding: "6px 8px" }}>{fmt(r.recus)}</td>
-                  <td style={{ textAlign: "right", padding: "6px 8px" }}>{fmt(r.vendus)}</td>
-                  <td style={{ textAlign: "right", padding: "6px 8px" }}>{fmt(r.retournes)}</td>
-                  <td style={{ textAlign: "right", padding: "6px 8px" }}>{fmt(r.offerts)}</td>
-                  <td style={{ textAlign: "right", padding: "6px 8px" }}>{fmt(r.pertes)}</td>
-                  <td style={{ textAlign: "right", padding: "6px 8px", fontWeight: 700, color: r.a_justifier > 0 ? "var(--alert, #C4661F)" : "var(--ink)" }}>{fmt(r.a_justifier)}</td>
-                </tr>
+                <Fragment key={r.location_id}>
+                  <tr style={{ borderTop: "1px solid var(--line)" }}>
+                    <td style={{ textAlign: "left", padding: "6px 8px", fontFamily: "var(--font-sans, inherit)" }}>
+                      <button
+                        type="button"
+                        onClick={() => toggleDetail(r)}
+                        title="Voir le détail des mouvements"
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--ink)", font: "inherit", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}
+                      >
+                        <span style={{ color: "var(--eclosion-dark, #9a7a12)", transform: openDetail === r.location_id ? "rotate(90deg)" : "none", display: "inline-block", transition: "transform .15s" }}>▸</span>
+                        {r.commercial_name ?? "—"}
+                      </button>
+                    </td>
+                    <td style={{ textAlign: "right", padding: "6px 8px" }}>{fmt(r.recus)}</td>
+                    <td style={{ textAlign: "right", padding: "6px 8px" }}>{fmt(r.vendus)}</td>
+                    <td style={{ textAlign: "right", padding: "6px 8px" }}>{fmt(r.retournes)}</td>
+                    <td style={{ textAlign: "right", padding: "6px 8px" }}>{fmt(r.offerts)}</td>
+                    <td style={{ textAlign: "right", padding: "6px 8px" }}>{fmt(r.pertes)}</td>
+                    <td style={{ textAlign: "right", padding: "6px 8px", fontWeight: 700, color: r.a_justifier > 0 ? "var(--alert, #C4661F)" : "var(--ink)" }}>{fmt(r.a_justifier)}</td>
+                  </tr>
+                  {openDetail === r.location_id && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: "4px 8px 12px", background: "var(--ivoire, #FAF8F2)", fontFamily: "var(--font-sans, inherit)" }}>
+                        <DetailMovements data={detail[r.location_id]} recus={r.recus} vendus={r.vendus} retournes={r.retournes} offerts={r.offerts} pertes={r.pertes} detenus={r.a_justifier} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
             {total && (
@@ -147,6 +181,62 @@ export function MyCommercialStockCard() {
         {cell("À justifier", rep.a_justifier, true)}
       </div>
     </Card>
+  );
+}
+
+const MOVEMENT_FR: Record<string, string> = {
+  transfer: "Remise / transfert", supplier_in: "Entrée fournisseur", production_in: "Entrée production",
+  sale_out: "Vente", commercial_return: "Retour au magasin", consignment_out: "Dépôt-vente",
+  author_copy: "Exemplaire auteur", press_copy: "Service de presse", promotional_out: "Promotion",
+  institutional_out: "Institutionnel", event_out: "Événement", free_out: "Don / offert",
+  loss: "Perte", damage: "Détérioration", destruction: "Destruction", pulping: "Pilon",
+  inventory_adjustment: "Ajustement d'inventaire",
+};
+
+// Détail des mouvements d'un commercial : trace chaque exemplaire reçu / rendu /
+// vendu, et vérifie la cohérence « reçus − sorties = détenus (à justifier) ».
+function DetailMovements({ data, recus, vendus, retournes, offerts, pertes, detenus }: {
+  data: CommercialMovement[] | "loading" | undefined;
+  recus: number; vendus: number; retournes: number; offerts: number; pertes: number; detenus: number;
+}) {
+  if (data === "loading" || data === undefined) return <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 0" }}>Chargement du détail…</p>;
+  if (data.length === 0) return <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 0" }}>Aucun mouvement enregistré pour ce commercial.</p>;
+  const attendu = recus - vendus - retournes - offerts - pertes;
+  const ecart = detenus - attendu;
+  const fdate = (s: string) => new Date(s).toLocaleDateString("fr-FR");
+  return (
+    <div>
+      <div style={{ fontSize: 12, margin: "6px 0 8px", color: ecart === 0 ? "var(--positive, #2F7D4A)" : "var(--alert, #B23A2E)" }}>
+        Contrôle : reçus {recus} − vendus {vendus} − retournés {retournes} − offerts {offerts} − pertes {pertes} = <strong>{attendu}</strong> ; détenus (à justifier) = <strong>{detenus}</strong>
+        {ecart === 0 ? " — cohérent." : ` — écart de ${ecart} (à vérifier ci-dessous).`}
+      </div>
+      <TableScroll>
+        <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 620 }}>
+          <thead>
+            <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11.5, borderBottom: "1px solid var(--line)" }}>
+              <th style={{ padding: "4px 8px" }}>Date</th>
+              <th style={{ padding: "4px 8px" }}>Sens</th>
+              <th style={{ padding: "4px 8px" }}>Ouvrage</th>
+              <th style={{ padding: "4px 8px", textAlign: "right" }}>Quantité</th>
+              <th style={{ padding: "4px 8px" }}>Nature</th>
+              <th style={{ padding: "4px 8px" }}>Par</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((m) => (
+              <tr key={m.id} style={{ borderTop: "1px solid var(--line)" }}>
+                <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono)" }}>{fdate(m.moved_at)}</td>
+                <td style={{ padding: "4px 8px", color: m.direction === "in" ? "var(--positive, #2F7D4A)" : "var(--ink)" }}>{m.direction === "in" ? "Reçu" : "Sorti"}</td>
+                <td style={{ padding: "4px 8px" }}>{m.title ?? m.isbn13 ?? "—"}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 600 }}>{m.direction === "in" ? "+" : "−"}{m.quantity.toLocaleString("fr-FR")}</td>
+                <td style={{ padding: "4px 8px" }}>{MOVEMENT_FR[m.type] ?? m.type}{m.reason ? ` · ${m.reason}` : ""}</td>
+                <td style={{ padding: "4px 8px", color: "var(--muted)" }}>{m.by_name ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableScroll>
+    </div>
   );
 }
 

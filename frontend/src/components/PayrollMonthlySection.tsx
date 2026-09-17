@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, deletePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, submitPayrollMonth, returnPayrollMonth, requestPayrollReopen, listPayrollReopenRequests, decidePayrollReopen, getSalaryElements, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements, type PayrollExtraLine, type ReopenRequest, type SalaryElement } from "../api/client";
+import { getPayrollMonth, preparePayrollMonth, savePayrollMonthLine, deletePayrollMonthLine, validatePayrollMonth, reopenPayrollMonth, submitPayrollMonth, returnPayrollMonth, requestPayrollReopen, listPayrollReopenRequests, decidePayrollReopen, getSalaryElements, getMonthlyAnomalies, type PayrollMonth, type PayrollMonthLine, type PayrollMonthElements, type PayrollExtraLine, type ReopenRequest, type SalaryElement, type PayrollAnomalies } from "../api/client";
 import { downloadPayslipsPdf } from "../lib/payslipPdf";
 import type { PayslipPrintData } from "../lib/print";
 import { Card } from "./Card";
@@ -59,6 +59,8 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [anomalies, setAnomalies] = useState<PayrollAnomalies | null>(null);
   // Copie éditable locale des éléments par salarié (saisie fluide).
   const [draft, setDraft] = useState<Record<string, PayrollMonthElements>>({});
   // Lignes libres par salarié + salarié dont on édite les lignes (modale).
@@ -128,11 +130,24 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
   // La grille n'est saisissable qu'en brouillon (ni soumise au DG, ni validée).
   const editable = month?.status === "brouillon";
 
-  async function submit() {
-    if (!window.confirm(`Soumettre la paie de ${period} au Directeur général ?\n\nLa grille sera figée en attente de validation ; vous ne pourrez plus la modifier tant que le DG ne l'aura pas validée ou retournée.`)) return;
+  // Récapitulatif de contrôle AVANT clôture/soumission (§6) : on ouvre une
+  // fenêtre listant chaque salarié avec son net + les anomalies détectées, pour
+  // que le RH valide d'un coup d'œil la cohérence avant de figer le mois.
+  async function openReview() {
+    setReviewOpen(true);
+    setAnomalies(null);
+    try {
+      setAnomalies(await getMonthlyAnomalies(period));
+    } catch {
+      setAnomalies({ period, blocking: [], warnings: [], can_submit: true });
+    }
+  }
+
+  async function confirmSubmit() {
     setBusy(true);
     try {
       await submitPayrollMonth(period);
+      setReviewOpen(false);
       setMessage(`Paie de ${period} soumise au Directeur général.`);
       await load();
     } catch (err) {
@@ -394,7 +409,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
         )}
         {/* RH : soumettre au DG (brouillon → en attente). */}
         {month?.exists && editable && canManage && (month.lines?.length ?? 0) > 0 && (
-          <Button variant="add" size="sm" type="button" disabled={busy} onClick={submit}>➤ Soumettre au DG</Button>
+          <Button variant="add" size="sm" type="button" disabled={busy} onClick={openReview}>➤ Contrôler et soumettre au DG</Button>
         )}
         {/* DG : valider (depuis brouillon ou soumis). */}
         {month?.exists && !locked && canValidateDg && (month.lines?.length ?? 0) > 0 && (
@@ -681,6 +696,113 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
           <Field label="Motif *"><input value={reopenForm.reason} onChange={(e) => setReopenForm({ ...reopenForm, reason: e.target.value })} placeholder="ex. Erreur de saisie du salaire de base" /></Field>
         </Modal>
       )}
+
+      {/* Récapitulatif de contrôle AVANT soumission/clôture (§6). */}
+      {reviewOpen && (
+        <Modal
+          title={`Contrôle avant soumission — paie de ${period}`}
+          onClose={() => setReviewOpen(false)}
+          footer={
+            <>
+              <Button variant="view" size="sm" type="button" onClick={() => setReviewOpen(false)}>Annuler</Button>
+              <Button
+                variant="add"
+                size="sm"
+                type="button"
+                disabled={busy || anomalies === null || (anomalies?.blocking.length ?? 0) > 0}
+                onClick={confirmSubmit}
+              >
+                {busy ? "Soumission…" : "Confirmer et soumettre au DG"}
+              </Button>
+            </>
+          }
+        >
+          {anomalies === null ? (
+            <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>Contrôle en cours…</p>
+          ) : (
+            <>
+              {/* Verdict global */}
+              {(anomalies.blocking.length > 0) ? (
+                <div style={{ background: "var(--alert-soft, #f8e3df)", color: "var(--alert, #B23A2E)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10, fontWeight: 600 }}>
+                  {anomalies.blocking.length} anomalie(s) bloquante(s) : la soumission est impossible tant qu'elles ne sont pas corrigées.
+                </div>
+              ) : (
+                <div style={{ background: "#e7f1ea", color: "var(--positive, #2F7D4A)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10, fontWeight: 600 }}>
+                  Aucune anomalie bloquante — la paie peut être soumise au Directeur général.
+                </div>
+              )}
+
+              {/* Anomalies bloquantes */}
+              {anomalies.blocking.length > 0 && (
+                <ul style={{ margin: "0 0 10px", paddingLeft: 18, fontSize: 12.5, color: "var(--alert, #B23A2E)" }}>
+                  {anomalies.blocking.map((a, i) => <li key={`b${i}`}><strong>{a.employee_name}</strong> — {a.message}</li>)}
+                </ul>
+              )}
+              {/* Points signalés (non bloquants) */}
+              {anomalies.warnings.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#8a5a00", marginBottom: 2 }}>Points à vérifier (non bloquants) :</div>
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "#8a5a00" }}>
+                    {anomalies.warnings.map((a, i) => <li key={`w${i}`}><strong>{a.employee_name}</strong> — {a.message}</li>)}
+                  </ul>
+                </div>
+              )}
+              {/* Salariés avec fiche mais absents du mois */}
+              {(month?.missing_profiles?.filter((m) => m.has_fiche).length ?? 0) > 0 && (
+                <div style={{ marginBottom: 10, fontSize: 12.5, color: "var(--muted)" }}>
+                  Salarié(s) avec fiche paie mais absent(s) de ce mois : {month!.missing_profiles!.filter((m) => m.has_fiche).map((m) => m.name).join(", ")}. Utilisez « Préparer le mois » si l'un d'eux doit y figurer.
+                </div>
+              )}
+
+              {/* Totaux */}
+              {month?.totals && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                  <ReviewKpi label="Salariés" value={`${month.lines?.length ?? 0}`} />
+                  <ReviewKpi label="Total brut" value={fcfa(month.totals.brut)} />
+                  <ReviewKpi label="Total net à payer" value={fcfa(month.totals.net)} accent />
+                  <ReviewKpi label="Coût employeur" value={fcfa(month.totals.cout)} />
+                </div>
+              )}
+
+              {/* Détail par salarié : le net affiché ici = celui du bulletin ET de la clôture. */}
+              <TableScroll>
+                <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 460, width: "100%" }}>
+                  <thead>
+                    <tr style={{ textAlign: "right", color: "var(--muted)", fontSize: 11.5, borderBottom: "1px solid var(--line)" }}>
+                      <th style={{ textAlign: "left", padding: "5px 8px" }}>Salarié</th>
+                      <th style={{ padding: "5px 8px" }}>Brut</th>
+                      <th style={{ padding: "5px 8px" }}>Retenues</th>
+                      <th style={{ padding: "5px 8px" }}>Net à payer</th>
+                    </tr>
+                  </thead>
+                  <tbody style={{ fontFamily: "var(--font-mono)" }}>
+                    {(month?.lines ?? []).map((l) => (
+                      <tr key={l.employee_id} style={{ borderTop: "1px solid var(--line)" }}>
+                        <td style={{ textAlign: "left", padding: "5px 8px", fontFamily: "var(--font-sans, inherit)" }}>{l.employee_name}</td>
+                        <td style={{ textAlign: "right", padding: "5px 8px" }}>{fcfa(l.salaire_brut)}</td>
+                        <td style={{ textAlign: "right", padding: "5px 8px", color: l.total_retenues_salariales > 0 ? "#8a5a00" : "var(--muted)" }}>{fcfa(l.total_retenues_salariales)}</td>
+                        <td style={{ textAlign: "right", padding: "5px 8px", fontWeight: 700, color: l.net_a_payer < 0 ? "var(--alert, #B23A2E)" : "var(--ink)" }}>{fcfa(l.net_a_payer)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TableScroll>
+              <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>
+                Le « net à payer » ci-dessus est exactement celui du bulletin de chaque salarié et celui qui sera archivé à la clôture (source unique).
+              </p>
+            </>
+          )}
+        </Modal>
+      )}
     </Card>
+  );
+}
+
+function ReviewKpi({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "6px 12px", background: accent ? "var(--paper, #faf8f2)" : "var(--card)", minWidth: 96 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "var(--font-mono, monospace)", color: accent ? "var(--eclosion-dark, #9a7a12)" : "var(--ink)" }}>{value}</div>
+      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{label}</div>
+    </div>
   );
 }

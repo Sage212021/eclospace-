@@ -1517,6 +1517,14 @@ async function main() {
       permissionModules: ["stock", "commercial"],
       departmentCodes: ["STOCK", "COM"],
     },
+    {
+      slug: "2026-09-paie-controle-avant-cloture",
+      version: "2026.09",
+      title: "Nouveauté — Paie : récapitulatif de contrôle avant soumission",
+      body: "Avant de soumettre la paie du mois au Directeur général, un récapitulatif de contrôle s'ouvre : la liste de chaque salarié avec son brut, ses retenues et son net à payer, les totaux du mois, et les éventuelles anomalies (bloquantes ou simples points à vérifier). Le net affiché est exactement celui du bulletin et de la clôture (source unique). La soumission reste bloquée tant qu'une anomalie bloquante n'est pas corrigée — pour figer un mois sans mauvaise surprise.",
+      permissionModules: ["paie"],
+      departmentCodes: ["RH", "FIN"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

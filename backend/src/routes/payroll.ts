@@ -1537,29 +1537,45 @@ async function resolvePayslip(
   }
 
   const confidential = await prisma.employeeConfidential.findUnique({ where: { employeeId }, select: { baseSalary: true } });
-  const { base, gross } = resolveBaseGross(profile, confidential?.baseSalary != null ? num(confidential.baseSalary) : null);
-  const payslip = computePayslip(
-    {
-      base,
-      complements: Math.round(gross - base),
-      fiscalBase: profile.fiscalBase != null ? num(profile.fiscalBase) : gross,
-      fiscalParts: num(profile.fiscalParts),
-      applyFiscalParts: profile.applyFiscalParts,
-      seniorityYears: profile.seniorityYears,
-      seniorityRate: profile.seniorityRate != null ? num(profile.seniorityRate) : null,
-      seniorityThreshold: profile.seniorityThreshold ?? 0,
-      applySeniority: profile.applySeniority,
-      retenueAbsence: Math.max(manualRetenue, 0),
-      internal: {
-        avance: Math.max(internal.avance, 0),
-        pret: Math.max(internal.pret, 0),
-        retard: Math.max(internal.retard, 0),
-        autres: Math.max(internal.autres, 0),
-      },
-    },
-    ratesFrom(rateSet),
-    await loadFormulaOverlay(),
-  );
+  const confBase = confidential?.baseSalary != null ? num(confidential.baseSalary) : null;
+  const { base, gross } = resolveBaseGross(profile, confBase);
+
+  // SOURCE UNIQUE DE VÉRITÉ (correction critique) : si une paie du mois existe
+  // déjà (ligne du run pour cette période), le BULLETIN est calculé EXACTEMENT
+  // comme la grille, la soumission et la clôture — via computeMonthlyLine, qui
+  // applique TOUTES les données de la période : primes, heures sup, retenues
+  // (absence, avance, prêt, retard, sanction, autres) et lignes libres. La fiche
+  // de paie, la génération, la soumission pour clôture et la clôture affichent
+  // donc le MÊME net (règle §11). Les retenues passées en paramètres ne servent
+  // plus qu'à la PRÉVISUALISATION d'un mois PAS ENCORE PRÉPARÉ (aucune ligne),
+  // évitant qu'un bulletin ignore les retenues réellement enregistrées.
+  const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period }, select: { id: true } });
+  const line = run ? await prisma.payrollMonthlyLine.findUnique({ where: { runId_employeeId: { runId: run.id, employeeId } } }) : null;
+  const formulas = await loadFormulaOverlay();
+  const payslip: Payslip = line
+    ? computeMonthlyLine(profile, ratesFrom(rateSet), line, confBase, formulas, await activeRubriqueMap())
+    : computePayslip(
+        {
+          base,
+          complements: Math.round(gross - base),
+          fiscalBase: profile.fiscalBase != null ? num(profile.fiscalBase) : gross,
+          fiscalParts: num(profile.fiscalParts),
+          applyFiscalParts: profile.applyFiscalParts,
+          seniorityYears: profile.seniorityYears,
+          seniorityRate: profile.seniorityRate != null ? num(profile.seniorityRate) : null,
+          seniorityThreshold: profile.seniorityThreshold ?? 0,
+          applySeniority: profile.applySeniority,
+          retenueAbsence: Math.max(manualRetenue, 0),
+          internal: {
+            avance: Math.max(internal.avance, 0),
+            pret: Math.max(internal.pret, 0),
+            retard: Math.max(internal.retard, 0),
+            autres: Math.max(internal.autres, 0),
+          },
+        },
+        ratesFrom(rateSet),
+        formulas,
+      );
   return {
     employee: { id: employee.id },
     employeeName: `${employee.firstName} ${employee.lastName}`,

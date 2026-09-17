@@ -1501,6 +1501,14 @@ async function main() {
       permissionModules: ["stock", "commercial"],
       departmentCodes: ["STOCK", "COM"],
     },
+    {
+      slug: "2026-09-paie-bulletin-coherent-cloture",
+      version: "2026.09",
+      title: "Nouveauté — Paie : le bulletin, la génération et la clôture affichent le même net",
+      body: "Le bulletin de paie d'un salarié tient désormais compte de TOUTES les données du mois (primes, heures sup, absences, avances, prêts, retards, sanctions, autres retenues et lignes libres), exactement comme la grille de génération, la soumission pour clôture et la clôture mensuelle. Un même mois validé produit donc le même « net à payer » partout — fini l'écart entre la fiche de paie et le montant utilisé pour la clôture. Une seule source de vérité : la paie réellement enregistrée pour le mois.",
+      permissionModules: ["paie"],
+      departmentCodes: ["RH", "FIN"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

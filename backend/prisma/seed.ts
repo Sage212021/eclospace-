@@ -1461,6 +1461,46 @@ async function main() {
       permissionModules: ["manuscripts"],
       departmentCodes: ["DIRED", "COMLEC"],
     },
+    {
+      slug: "2026-09-paie-rattachement-periode",
+      version: "2026.09",
+      title: "Nouveauté — Paie : chaque bulletin rattaché à son mois",
+      body: "La paie d'un salarié n'apparaît plus que dans le mois où elle a été réellement créée : plus de « contamination » d'un mois sur l'autre, et aucune génération automatique pour les mois à venir (chaque mois se prépare avec « Préparer le mois »). Sur un mois encore ouvert, vous pouvez retirer un bulletin (bouton « Retirer ») ; les mois clôturés restent figés. Et la clôture liste bien TOUS les salariés ayant une fiche pour le mois — y compris un salarié parti depuis.",
+      permissionModules: ["paie"],
+      departmentCodes: ["RH", "FIN"],
+    },
+    {
+      slug: "2026-09-remise-ajout-ouvrage-catalogue",
+      version: "2026.09",
+      title: "Nouveauté — Ajouter un ouvrage au catalogue depuis la remise",
+      body: "Au moment de remettre des exemplaires à un commercial, si l'ouvrage n'est pas encore au catalogue, un lien « L'ajouter au catalogue » ouvre un mini-formulaire (titre obligatoire, ISBN / auteur / prix facultatifs). L'ouvrage est créé dans le catalogue central (pas un catalogue à part) et aussitôt sélectionné pour la remise. Un contrôle évite les doublons (par titre et par ISBN) et propose de reprendre la fiche existante le cas échéant.",
+      permissionModules: ["stock", "commercial"],
+      departmentCodes: ["STOCK", "COM"],
+    },
+    {
+      slug: "2026-09-bilan-date-encaissement",
+      version: "2026.09",
+      title: "Nouveauté — Bilan de trésorerie : date réelle de l'encaissement",
+      body: "En enregistrant un encaissement, vous pouvez indiquer sa « Date d'encaissement » réelle (par défaut aujourd'hui, date future refusée). C'est cette date qui range l'entrée dans le bon mois du bilan : le bilan de trésorerie se ventile désormais correctement par mois, trimestre et semestre (et non plus « tout dans le mois de saisie »).",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN"],
+    },
+    {
+      slug: "2026-09-depenses-contre-validation-dg",
+      version: "2026.09",
+      title: "Nouveauté — Dépenses : contre-validation de la Direction générale",
+      body: "Toute dépense est validée par deux personnes : la Finance (DAF) d'abord, la Direction générale ensuite. Pour le DG, une carte « Dépenses à contre-valider (Direction générale) » apparaît en tête de sa page Direction générale (affichée même à vide), avec le bouton « Valider (DG) » sur chaque dépense en attente — à ne pas confondre avec « Factures à valider (au-dessus du seuil) », qui est une autre fonction. Une notification est poussée au DG dès qu'une dépense attend sa contre-validation.",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN", "DG"],
+    },
+    {
+      slug: "2026-09-stock-par-ouvrage",
+      version: "2026.09",
+      title: "Nouveauté — Stock par ouvrage : tableau récapitulatif, seuils et réappro conseillé",
+      body: "Nouvel écran « Stock par ouvrage » en tête du pôle Stock : une ligne par ouvrage, tous les chiffres calculés automatiquement à partir des mouvements réels (stock initial, entrées, retours, sorties, ajustements, physique, réservé, disponible, en dépôt, en transit, défectueux). Vous réglez par ouvrage vos seuils (alerte, réapprovisionnement), le stock cible et la quantité minimale de réimpression (bouton « Paramètres »). Le statut passe automatiquement en Alerte / À réapprovisionner / Rupture. Le bouton « Détail » ouvre la fiche de l'ouvrage avec la rotation (ventes par mois, couverture en mois) et une quantité de réapprovisionnement conseillée, expliquée pas à pas. Le tableau, large, se fait glisser du doigt.",
+      permissionModules: ["stock", "commercial"],
+      departmentCodes: ["STOCK", "COM"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

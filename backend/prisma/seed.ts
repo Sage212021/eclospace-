@@ -1533,6 +1533,14 @@ async function main() {
       permissionModules: ["manuscripts"],
       departmentCodes: ["DIRED", "CORR"],
     },
+    {
+      slug: "2026-09-etape-choisir-maquettiste-infographe",
+      version: "2026.09",
+      title: "Nouveauté — Mise en page & infographie : choisir qui traite chaque ouvrage",
+      body: "Sur les écrans « Maquette & mise en page » et « Infographie & couvertures », une colonne « Assigné à » indique qui traite l'ouvrage, avec « Assigner » / « Changer » pour choisir la personne d'un clic — par ouvrage. La liste ne propose que les profils du bon métier : les maquettistes pour la mise en page, les infographes pour l'infographie (un infographe ne peut pas être affecté à la mise en page, et inversement). La personne choisie est notifiée. Même principe que le choix du correcteur en Correction éditoriale.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "MAQ", "INFOG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

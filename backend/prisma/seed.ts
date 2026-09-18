@@ -816,7 +816,7 @@ async function main() {
         REGLE_DOR +
         " Tu produis le RAPPORT DE RELECTURE — BAT1 (premier passage de correction éditoriale) selon le modèle officiel Éclosion, et les annotations permettant d'obtenir le manuscrit corrigé BAT1." +
         " La grille de notation compte EXACTEMENT 7 critères notés chacun /20 : Richesse du contenu et pertinence thématique ; Cohérence et progression argumentative ; Qualité syntaxique et grammaticale ; Maîtrise de l'orthographe et de l'accord ; Ponctuation et typographie ; Rigueur des références et notes de bas de page ; Clarté et fluidité de la lecture. La NOTE GLOBALE est la somme des 7 notes (sur 140), ramenée sur 100." +
-        " Chaque annotation de correction précise : n° (numérotation continue) · page RÉELLE du manuscrit · catégorie et sévérité · TEXTE ORIGINAL cité EXACTEMENT (la citation du passage fautif, jamais un simple numéro de page) · correction proposée · explication. Catégories : Orthographe · Accord · Syntaxe · Ponctuation · Typographie · Style (combinables, ex. « Accord+Syntaxe »). Sévérité (échelle officielle Éclosion) : C1 BLOQUANTE (à corriger avant validation du BAT) · C2 IMPORTANTE (à corriger avant impression) · C3 MINEURE (correction souhaitable, non bloquante) · S SUGGESTION (style/harmonisation — jamais présentée comme une erreur). Les annotations sont classées par ordre d'apparition dans le texte.",
+        " Chaque annotation de correction précise : n° (numérotation continue) · page RÉELLE du manuscrit · catégorie et sévérité · TEXTE ORIGINAL cité EXACTEMENT (la citation du passage fautif, jamais un simple numéro de page) · correction proposée · justification · statut (« À corriger » par défaut). Catégories : Orthographe · Accord · Syntaxe · Ponctuation · Typographie · Style (combinables, ex. « Accord+Syntaxe »). Sévérité (échelle officielle Éclosion) : C1 BLOQUANTE (à corriger avant validation du BAT) · C2 IMPORTANTE (à corriger avant impression) · C3 MINEURE (correction souhaitable, non bloquante) · S SUGGESTION (style/harmonisation — jamais présentée comme une erreur). Les annotations sont classées par ordre d'apparition dans le texte.",
       userTemplate:
         "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit à relire (BAT1 — premier passage) :\n{{manuscrit}}",
       reportTemplate: {
@@ -825,14 +825,14 @@ async function main() {
           { key: "0", title: "Informations sur le document (titre · auteur(e) · éditeur · format : pages/chapitres · ISBN · type de document · niveau de relecture · étape : BAT1 · pagination de référence)" },
           { key: "1", title: "Évaluation globale (verdict synthétique · synthèse de 2 à 4 phrases · grille de notation : 7 critères notés /20 · NOTE GLOBALE somme sur 140 ramenée sur 100)" },
           { key: "2", title: "Points forts de l'œuvre" },
-          { key: "3", title: "Annotations de correction (n° · page · catégorie + sévérité · texte original cité exactement · correction proposée · explication)" },
+          { key: "3", title: "Annotations de correction (n° · sévérité C1/C2/C3/S · page/emplacement · élément : texte original cité exactement · constat · correction proposée · justification · statut)" },
           { key: "4", title: "Observations structurelles et stylistiques" },
           { key: "5", title: "Corrections prioritaires avant publication (Priorité 1 urgente/bloquante · Priorité 2 importante · Priorité 3 recommandée)" },
           { key: "6", title: "Recommandations éditoriales générales" },
           { key: "7", title: "Conclusion et verdict" },
         ],
         guidance:
-          "Rapport de RELECTURE BAT1 (modèle officiel Éclosion). Rubrique 1 : la grille de notation est un TABLEAU à deux colonnes (CRITÈRE · NOTE) avec les 7 critères notés /20, suivie d'une ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 3 : les annotations de correction forment un TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication) ; « Texte original » cite TOUJOURS le passage fautif exact, jamais un numéro de page ; « Page » est la page réelle ; numérotation continue ; catégories Orthographe/Accord/Syntaxe/Ponctuation/Typographie/Style ; sévérité C1/C2/C3/S indiquée dans la catégorie (ex. « Accord (C1) »). Rubrique 5 : trois blocs Priorité 1/2/3. Les rubriques 0, 2, 4, 6, 7 sont rédigées en prose et listes. La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
+          "Rapport de RELECTURE BAT1 (modèle officiel Éclosion). Rubrique 1 : la grille de notation est un TABLEAU à deux colonnes (CRITÈRE · NOTE) avec les 7 critères notés /20, suivie d'une ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 3 : les annotations de correction forment un TABLEAU à 8 colonnes (N° · Sévérité · Page/emplacement · Élément (texte original, citation exacte) · Constat · Correction proposée · Justification · Statut) ; « Élément » cite TOUJOURS le passage fautif exact, jamais un numéro de page ; « Page/emplacement » est la page réelle ; numérotation continue ; « Sévérité » vaut C1 (bloquant) / C2 (important) / C3 (mineur) / S (suggestion) ; « Statut » vaut « À corriger » par défaut. Rubrique 5 : trois blocs Priorité 1/2/3. Les rubriques 0, 2, 4, 6, 7 sont rédigées en prose et listes. La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
         deliverables: ["Rapport_relecture_BAT1", "Manuscrit_corrige_BAT1"],
       },
     },
@@ -843,7 +843,7 @@ async function main() {
         REGLE_DOR +
         " Tu produis le RAPPORT DE RELECTURE — BAT2 (deuxième passage) selon le modèle officiel Éclosion. Sa particularité est la rubrique « SUIVI DES CORRECTIONS DU BAT PRÉCÉDENT » : tu reprends CHAQUE correction demandée au BAT1 et tu indiques son statut — ✔ appliquée · ✘ non appliquée · ~ partiellement appliquée — avec une observation (page à l'appui), puis tu signales les améliorations apportées par l'auteur(e) depuis le BAT précédent. Si tu ne disposes pas du détail des demandes du BAT1, tu le signales explicitement et tu déduis le suivi des corrections encore visibles." +
         " La grille de notation compte EXACTEMENT 7 critères notés chacun /20 (Richesse du contenu et pertinence thématique ; Cohérence et progression argumentative ; Qualité syntaxique et grammaticale ; Maîtrise de l'orthographe et de l'accord ; Ponctuation et typographie ; Rigueur des références et notes de bas de page ; Clarté et fluidité de la lecture) ; la NOTE GLOBALE est la somme (sur 140) ramenée sur 100." +
-        " Chaque annotation de correction précise : n° (numérotation continue) · page réelle · catégorie et sévérité · TEXTE ORIGINAL cité exactement · correction proposée · explication. Catégories : Orthographe · Accord · Syntaxe · Ponctuation · Typographie · Style. Sévérité (échelle officielle Éclosion) : C1 BLOQUANTE (à corriger avant validation du BAT) · C2 IMPORTANTE (à corriger avant impression) · C3 MINEURE (correction souhaitable, non bloquante) · S SUGGESTION (style/harmonisation — jamais présentée comme une erreur). Annotations classées par ordre d'apparition.",
+        " Chaque annotation de correction précise : n° (numérotation continue) · page réelle · catégorie et sévérité · TEXTE ORIGINAL cité exactement · correction proposée · justification · statut (« À corriger » par défaut). Catégories : Orthographe · Accord · Syntaxe · Ponctuation · Typographie · Style. Sévérité (échelle officielle Éclosion) : C1 BLOQUANTE (à corriger avant validation du BAT) · C2 IMPORTANTE (à corriger avant impression) · C3 MINEURE (correction souhaitable, non bloquante) · S SUGGESTION (style/harmonisation — jamais présentée comme une erreur). Annotations classées par ordre d'apparition.",
       userTemplate:
         "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit après BAT1 (à contrôler pour BAT2) :\n{{manuscrit}}",
       reportTemplate: {
@@ -851,16 +851,16 @@ async function main() {
         sections: [
           { key: "0", title: "Informations sur le document (titre · auteur(e) · éditeur · format · ISBN · type de document · niveau de relecture · étape : BAT2 · pagination de référence)" },
           { key: "1", title: "Évaluation globale (verdict synthétique · synthèse de 2 à 4 phrases · grille de notation : 7 critères notés /20 · NOTE GLOBALE somme sur 140 ramenée sur 100)" },
-          { key: "2", title: "Suivi des corrections du BAT précédent (tableau : N° (BAT1) · correction demandée · statut ✔ appliquée / ✘ non appliquée / ~ partielle · observation) + améliorations apportées par l'auteur(e) depuis le BAT précédent" },
+          { key: "2", title: "Suivi des corrections de la 1re relecture (tableau : N° (R1) · correction demandée en R1 · localisation · résultat en R2 : CORRIGÉE / NON CORRIGÉE / PARTIELLEMENT CORRIGÉE / CORRECTION MODIFIÉE / NOUVELLE ANOMALIE · observation) + améliorations apportées depuis le passage précédent" },
           { key: "3", title: "Points forts de l'œuvre" },
-          { key: "4", title: "Annotations de correction (n° · page · catégorie + sévérité · texte original cité exactement · correction proposée · explication)" },
+          { key: "4", title: "Annotations de correction (n° · sévérité C1/C2/C3/S · page/emplacement · élément : texte original cité exactement · constat · correction proposée · justification · statut)" },
           { key: "5", title: "Observations structurelles et stylistiques" },
           { key: "6", title: "Corrections prioritaires avant publication (Priorité 1 urgente/bloquante · Priorité 2 importante · Priorité 3 recommandée)" },
           { key: "7", title: "Recommandations éditoriales générales" },
           { key: "8", title: "Conclusion et verdict" },
         ],
         guidance:
-          "Rapport de RELECTURE BAT2 (modèle officiel Éclosion). Rubrique 1 : grille en TABLEAU (CRITÈRE · NOTE) avec les 7 critères notés /20 + ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 2 « Suivi des corrections du BAT précédent » : TABLEAU à 4 colonnes (N° (BAT1) · Correction demandée · Statut ✔/✘/~ · Observation), puis une liste des améliorations apportées par l'auteur(e). Rubrique 4 : annotations en TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication), mêmes règles qu'au BAT1 (citation exacte, page réelle, numérotation continue, sévérité C1/C2/C3/S). Rubrique 6 : blocs Priorité 1/2/3. Les rubriques 0, 3, 5, 7, 8 sont en prose et listes. La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
+          "Rapport de RELECTURE BAT2 (modèle officiel Éclosion) — deuxième relecture = CONTRÔLE APRÈS INTÉGRATION, jamais une simple répétition de la 1re. Rubrique 1 : grille en TABLEAU (CRITÈRE · NOTE) avec les 7 critères notés /20 + ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 2 « Suivi des corrections de la 1re relecture » : TABLEAU à 5 colonnes (N° (R1) · Correction demandée en R1 · Localisation · Résultat en R2 · Observation) ; le « Résultat en R2 » vaut EXACTEMENT l'un de : CORRIGÉE / NON CORRIGÉE / PARTIELLEMENT CORRIGÉE / CORRECTION MODIFIÉE / NOUVELLE ANOMALIE ; puis une liste des améliorations apportées depuis le passage précédent. Rubrique 4 : annotations en TABLEAU à 8 colonnes (N° · Sévérité C1/C2/C3/S · Page/emplacement · Élément (texte original, citation exacte) · Constat · Correction proposée · Justification · Statut), mêmes règles qu'au BAT1. Rubrique 6 : blocs Priorité 1/2/3. Les rubriques 0, 3, 5, 7, 8 sont en prose et listes. La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
         deliverables: ["Rapport_relecture_BAT2", "Manuscrit_corrige_BAT2"],
       },
     },
@@ -881,11 +881,11 @@ async function main() {
           { key: "2", title: "Suivi des corrections du BAT précédent (au BAT2 : intégrations effectuées ✔/✘/~ · ce qui manque · améliorations apportées par l'auteur ; au BAT1 : indiquer « premier passage, pas de suivi »)" },
           { key: "3", title: "Analyse par zone (1ʳᵉ de couverture · dos · 4ᵉ de couverture)" },
           { key: "4", title: "Vérifications factuelles (ISBN, code-barres EAN, cohérence couverture ↔ intérieur, mentions)" },
-          { key: "5", title: "Tableau d'annotations (sévérité · zone/emplacement · constat · recommandation)" },
+          { key: "5", title: "Tableau d'annotations (sévérité C1/C2/C3/S · face : 1ʳᵉ de couverture / dos / 4ᵉ de couverture · emplacement · constat · correction proposée · statut)" },
           { key: "6", title: "Verdict de publication" },
         ],
         guidance:
-          "Rapport de RELECTURE DE COUVERTURE (volet couverture du BAT). Rubrique 1 : grille de notation en TABLEAU (Critère · Note /20 · Observations) + note globale pondérée /20. Rubrique 2 « Suivi des corrections du BAT précédent » : au BAT2, un TABLEAU (N° (BAT précédent) · Correction demandée · Statut ✔ intégrée / ✘ non intégrée / ~ partielle · Observation) suivi de « Ce qui manque » et des « Améliorations apportées par l'auteur(e) » ; au BAT1, indiquer simplement « Premier passage — pas de suivi ». Rubrique 5 « Tableau d'annotations » : TABLEAU (Sévérité C1/C2/C3/S · Zone/emplacement · Constat · Recommandation). Rubriques 0, 3, 4, 6 en prose et listes (vérifications factuelles de la rubrique 4 en liste : ISBN, code-barres EAN, cohérence couverture ↔ intérieur). La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
+          "Rapport de RELECTURE DE COUVERTURE (volet couverture du BAT). Rubrique 1 : grille de notation en TABLEAU (Critère · Note /20 · Observations) + note globale pondérée /20. Rubrique 2 « Suivi des corrections du BAT précédent » : au BAT2, un TABLEAU (N° (BAT précédent) · Correction demandée · Statut ✔ intégrée / ✘ non intégrée / ~ partielle · Observation) suivi de « Ce qui manque » et des « Améliorations apportées par l'auteur(e) » ; au BAT1, indiquer simplement « Premier passage — pas de suivi ». Rubrique 5 « Tableau d'annotations » : TABLEAU à 6 colonnes (Sévérité C1/C2/C3/S · Face [1ʳᵉ de couverture / dos / 4ᵉ de couverture] · Emplacement · Constat · Correction proposée · Statut) ; CHAQUE annotation précise la FACE concernée ; aucune des trois faces n'est ignorée. Rubrique 3 « Analyse par zone » traite SÉPARÉMENT la 1ʳᵉ de couverture, le dos et la 4ᵉ de couverture, puis une analyse transversale de cohérence (titre, sous-titre, auteur, collection, ISBN) entre les trois faces et l'intérieur. Rubriques 0, 3, 4, 6 en prose et listes (vérifications factuelles de la rubrique 4 en liste : ISBN, code-barres EAN, cohérence couverture ↔ intérieur). La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
         deliverables: ["Rapport_couverture"],
       },
     },
@@ -897,8 +897,8 @@ async function main() {
         " Tu produis une EXPERTISE SCIENTIFIQUE du document, au nom du Service d'expertise d'Éclosion Édition. Tu analyses selon une grille en 18 points : (1) Pertinence du sujet ; (2) Clarté de la problématique ; (3) Cohérence des objectifs ; (4) Cohérence des hypothèses lorsqu'elles existent ; (5) Pertinence de la méthodologie ; (6) Cohérence entre méthode et objectifs ; (7) Qualité du raisonnement ; (8) Cohérence des arguments ; (9) Qualité des résultats ; (10) Cohérence des conclusions ; (11) Qualité des références ; (12) Actualité des références lorsque cela peut être déterminé ; (13) Cohérence des citations ; (14) Présence d'affirmations insuffisamment étayées ; (15) Contradictions internes ; (16) Lacunes ; (17) Limites scientifiques ; (18) Suggestions d'amélioration." +
         " Pour chaque problème relevé, tu distingues EXPLICITEMENT quatre niveaux : CONSTAT (ce qui est observé) · PROBLÈME (ce qui pose difficulté) · EXPLICATION (pourquoi cela pose problème) · RECOMMANDATION (comment améliorer)." +
         " GARDE-FOU SUR LES SOURCES : tu n'inventes JAMAIS de référence bibliographique. Si une information ou une source ne peut être vérifiée, tu écris « Vérification nécessaire » et tu le signales dans le rapport. Tu ne présentes aucune source non vérifiable comme certaine." +
-        " Le SCORE éventuel est une APPRÉCIATION ASSISTÉE PAR IA (Excellent · Très satisfaisant · Satisfaisant · À améliorer · Insuffisant), jamais une vérité scientifique absolue." +
-        " La PROPOSITION D'AVIS (Favorable · Favorable sous réserves · À revoir · Défavorable) est présentée comme « Proposition d'avis générée avec assistance IA » avec ses motifs — ce n'est JAMAIS une décision définitive ni une validation d'expertise.",
+        " Le SCORE éventuel est une APPRÉCIATION INDICATIVE (Excellent · Très satisfaisant · Satisfaisant · À améliorer · Insuffisant), jamais une vérité scientifique absolue." +
+        " La PROPOSITION D'AVIS (Favorable · Favorable sous réserves · À revoir · Défavorable) est présentée comme une « Proposition d'avis — à valider par un expert » avec ses motifs — ce n'est JAMAIS une décision définitive ni une validation d'expertise.",
       userTemplate:
         "Document soumis à expertise — titre : {{titre}} · auteur : {{auteur}} · domaine déclaré : {{domaine}}.\nConsigne particulière de l'éditeur (type/portée d'expertise, domaine scientifique, points à privilégier) : {{recommandation_editeur}}\n\nDocument à expertiser :\n{{manuscrit}}",
       reportTemplate: {
@@ -906,7 +906,7 @@ async function main() {
         sections: [
           { key: "A", title: "Identification (Éclosion Édition SARL · titre · auteur · référence du dossier · date · version analysée · type d'expertise · domaine scientifique)" },
           { key: "B", title: "Objet de l'expertise" },
-          { key: "C", title: "Résumé de l'appréciation (avec appréciation assistée par IA : Excellent / Très satisfaisant / Satisfaisant / À améliorer / Insuffisant)" },
+          { key: "C", title: "Résumé de l'appréciation (appréciation indicative : Excellent / Très satisfaisant / Satisfaisant / À améliorer / Insuffisant)" },
           { key: "D", title: "Points forts" },
           { key: "E", title: "Points faibles" },
           { key: "F", title: "Analyse détaillée (grille en 18 points : critère · appréciation · commentaire argumenté)" },
@@ -914,11 +914,11 @@ async function main() {
           { key: "H", title: "Références et sources (cohérence, actualité, affirmations à étayer ; toute source non vérifiable est marquée « Vérification nécessaire »)" },
           { key: "I", title: "Recommandations" },
           { key: "J", title: "Conclusion" },
-          { key: "K", title: "Proposition d'avis générée avec assistance IA (Favorable / Favorable sous réserves / À revoir / Défavorable) et ses motifs" },
+          { key: "K", title: "Proposition d'avis — à valider par un expert (Favorable / Favorable sous réserves / À revoir / Défavorable) et ses motifs" },
         ],
         guidance:
-          "Rapport d'EXPERTISE SCIENTIFIQUE. La rubrique A « Identification » est présentée en LISTE « Champ : valeur » (une ligne par élément), jamais en tableau étroit. La rubrique F « Analyse détaillée » est un TABLEAU reprenant EXACTEMENT les 18 points de la grille (N° · Critère · Appréciation · Commentaire argumenté) : le commentaire est une prose d'analyse, jamais une restitution mécanique de l'appréciation. La rubrique G « Problèmes identifiés » distingue systématiquement, pour chaque problème, les quatre niveaux Constat / Problème / Explication / Recommandation (une entrée par problème). La rubrique H signale toute source non vérifiable par « Vérification nécessaire » et n'invente AUCUNE référence. La rubrique K énonce la proposition d'avis EN LA PRÉSENTANT comme assistée par IA, avec ses motifs, sans jamais la présenter comme une décision ou une validation définitive. Les autres rubriques sont rédigées en prose et listes.",
-        footer: "Rapport généré avec assistance IA — validation humaine requise. Ce document est une aide à la décision et ne constitue ni une expertise humaine signée ni une décision éditoriale finale.",
+          "Rapport d'EXPERTISE SCIENTIFIQUE. La rubrique A « Identification » est présentée en LISTE « Champ : valeur » (une ligne par élément), jamais en tableau étroit. La rubrique F « Analyse détaillée » est un TABLEAU reprenant EXACTEMENT les 18 points de la grille (N° · Critère · Appréciation · Commentaire argumenté) : le commentaire est une prose d'analyse, jamais une restitution mécanique de l'appréciation. La rubrique G « Problèmes identifiés » distingue systématiquement, pour chaque problème, les quatre niveaux Constat / Problème / Explication / Recommandation (une entrée par problème). La rubrique H signale toute source non vérifiable par « Vérification nécessaire » et n'invente AUCUNE référence. La rubrique K énonce la proposition d'avis EN LA PRÉSENTANT comme une proposition à valider par un expert, avec ses motifs, sans jamais la présenter comme une décision ou une validation définitive. Les autres rubriques sont rédigées en prose et listes.",
+        footer: "Ce document est une aide à la décision, soumise à validation humaine ; il ne constitue ni une expertise humaine signée ni une décision éditoriale finale.",
       },
     },
     {
@@ -928,7 +928,7 @@ async function main() {
         REGLE_DOR +
         " Tu produis le RAPPORT DE RÉÉCRITURE qui accompagne la version réécrite du document (la version réécrite elle-même est produite séparément). Tu interviens selon le TYPE demandé : correction linguistique (orthographe, grammaire, conjugaison, syntaxe, ponctuation, typographie) ; amélioration stylistique (fluidité, clarté, précision, vocabulaire, suppression des lourdeurs et des répétitions, transitions) ; réécriture approfondie (reformulation, structure des paragraphes, logique, cohérence argumentative, lisibilité) ; réécriture académique (rigueur du vocabulaire, précision, cohérence scientifique, articulation des idées, neutralité) ; réécriture professionnelle (documents destinés aux entreprises, institutions, bailleurs, administrations)." +
         " RÈGLE IMPÉRATIVE : tu PRÉSERVES AU MAXIMUM LA VOIX DE L'AUTEUR (ton, rythme, vocabulaire caractéristique) ; tu ne transformes jamais le texte en prose générique." +
-        " Tu SIGNALES explicitement les passages où tu n'es pas certain (« intervention humaine nécessaire ») et les problèmes qui ne peuvent pas être corrigés automatiquement. La PROPOSITION D'AVIS ÉDITORIAL est présentée comme « Proposition générée avec assistance IA », jamais comme une décision.",
+        " Tu SIGNALES explicitement les passages où tu n'es pas certain (« intervention humaine nécessaire ») et les problèmes qui ne peuvent pas être corrigés automatiquement. La PROPOSITION D'AVIS ÉDITORIAL est présentée comme une « Proposition à valider », jamais comme une décision.",
       userTemplate:
         "Document à réécrire — titre : {{titre}} · auteur : {{auteur}}.\nConsigne particulière de l'éditeur (type de réécriture, niveau de préservation de la voix, paragraphes ciblés) : {{recommandation_editeur}}\n\nDocument à réécrire :\n{{manuscrit}}",
       reportTemplate: {
@@ -940,12 +940,12 @@ async function main() {
           { key: "4", title: "Points nécessitant une intervention humaine (passages incertains signalés)" },
           { key: "5", title: "Observations éditoriales (problèmes non corrigeables automatiquement)" },
           { key: "6", title: "Résultat (résumé de la qualité de la version produite)" },
-          { key: "7", title: "Proposition d'avis éditorial générée avec assistance IA (texte satisfaisant / corrections mineures recommandées / réécriture recommandée / restructuration nécessaire / intervention éditoriale approfondie recommandée)" },
+          { key: "7", title: "Proposition d'avis éditorial — à valider (texte satisfaisant / corrections mineures recommandées / réécriture recommandée / restructuration nécessaire / intervention éditoriale approfondie recommandée)" },
         ],
         guidance:
-          "Rapport de RÉÉCRITURE, qui accompagne la « Version réécrite (IA) » produite séparément. La rubrique 1 « Objet » est en LISTE « Champ : valeur ». La rubrique 3 « Principales interventions » est une liste à puces rédigée par catégorie d'intervention. La rubrique 4 énumère précisément les passages où l'IA n'est pas certaine (localisation + raison). La rubrique 5 signale les problèmes qui relèvent d'une décision éditoriale humaine. La rubrique 7 énonce la proposition d'avis EN LA PRÉSENTANT comme assistée par IA, jamais comme une décision. Le rapport ne réécrit pas le texte : il EXPLIQUE l'intervention (la version réécrite est un document distinct).",
+          "Rapport de RÉÉCRITURE, qui accompagne la « Version réécrite » produite séparément. La rubrique 1 « Objet » est en LISTE « Champ : valeur ». La rubrique 3 « Principales interventions » est une liste à puces rédigée par catégorie d'intervention. La rubrique 4 énumère précisément les passages incertains à revoir (localisation + raison). La rubrique 5 signale les problèmes qui relèvent d'une décision éditoriale humaine. La rubrique 7 énonce la proposition d'avis EN LA PRÉSENTANT comme une proposition à valider, jamais comme une décision. Le rapport ne réécrit pas le texte : il EXPLIQUE l'intervention (la version réécrite est un document distinct).",
         deliverables: ["Rapport_reecriture", "Version_reecrite"],
-        footer: "Rapport généré avec assistance IA — validation humaine requise. La version réécrite est une proposition : elle ne remplace pas le document original, qui est conservé.",
+        footer: "Ce document est soumis à validation humaine. La version réécrite est une proposition : elle ne remplace pas le document original, qui est conservé.",
       },
     },
   ];
@@ -1591,6 +1591,14 @@ async function main() {
       version: "2026.09",
       title: "Nouveauté — Assistance de correction éditoriale IA : la méthode s'adapte à l'ouvrage",
       body: "L'assistance IA de correction devient un vrai moteur éditorial. On choisit le TYPE d'ouvrage (roman, poésie, scientifique, jeunesse, droit…) et le SUPPORT ; la grille de contrôle adaptée se charge automatiquement, avec les sévérités officielles C1 (bloquant), C2 (important), C3 (mineur) et S (suggestion). La 2e relecture (BAT2) reçoit maintenant le rapport de la 1re et pointe, correction par correction, ce qui a été intégré, non intégré, partiellement, modifié, ou les nouvelles anomalies — au lieu de refaire la 1re. La couverture est analysée en trois faces (1ère, dos, 4ème) avec cohérence couverture/intérieur et ISBN. Les grilles par type d'ouvrage sont ENTIÈREMENT modifiables dans Paramètres, et on peut ajouter un nouveau type sans rien casser.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["CORR", "COMLEC", "DIRED", "SECR", "CQ"],
+    },
+    {
+      slug: "2026-09-correction-ia-rapports-tableaux-officiels",
+      version: "2026.09",
+      title: "Nouveauté — Rapports de correction : tableaux et statuts officiels",
+      body: "Les rapports de l'assistance de correction éditoriale suivent désormais exactement le modèle Éclosion. Les annotations sont présentées en tableau avec la Sévérité (C1 bloquant · C2 important · C3 mineur · S suggestion), l'emplacement, le constat, la correction proposée, la justification et le statut. En 2e relecture, le suivi des corrections de la 1re passe indique, pour chaque point, un résultat clair : CORRIGÉE · NON CORRIGÉE · PARTIELLEMENT CORRIGÉE · CORRECTION MODIFIÉE · NOUVELLE ANOMALIE. La couverture est analysée face par face (1ère · dos · 4ème) avec une colonne « Face » dans le tableau. Enfin, plus aucune mention d'outil n'apparaît dans les documents livrés (rapports d'expertise et de réécriture inclus) : ils sont présentés comme des propositions à valider par la maison.",
       permissionModules: ["manuscripts", "tasks"],
       departmentCodes: ["CORR", "COMLEC", "DIRED", "SECR", "CQ"],
     },

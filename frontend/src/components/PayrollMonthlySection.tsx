@@ -66,8 +66,6 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
   // Lignes libres par salarié + salarié dont on édite les lignes (modale).
   const [extraDraft, setExtraDraft] = useState<Record<string, PayrollExtraLine[]>>({});
   const [linesFor, setLinesFor] = useState<{ employeeId: string; name: string } | null>(null);
-  // Salaire de la PÉRIODE, éditable par mois (correction rattachée à la période).
-  const [baseDraft, setBaseDraft] = useState<Record<string, { base_salary: number; gross_contractual: number }>>({});
   // Rubriques « en vigueur » du catalogue (Niveau 2, étape B) : rattachables à une
   // ligne libre pour appliquer automatiquement leur traitement fiscal/CNPS.
   const [activeRubriques, setActiveRubriques] = useState<SalaryElement[]>([]);
@@ -85,15 +83,12 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       setMonth(m);
       const d: Record<string, PayrollMonthElements> = {};
       const ex: Record<string, PayrollExtraLine[]> = {};
-      const bd: Record<string, { base_salary: number; gross_contractual: number }> = {};
       for (const l of m.lines ?? []) {
         d[l.employee_id] = { ...l.elements };
         ex[l.employee_id] = (l.extra_lines ?? []).map((e) => ({ ...e }));
-        bd[l.employee_id] = { base_salary: l.period_base_salary ?? 0, gross_contractual: l.period_gross_contractual ?? 0 };
       }
       setDraft(d);
       setExtraDraft(ex);
-      setBaseDraft(bd);
       if (m.exists) listPayrollReopenRequests(period).then(setReopenReqs).catch(() => setReopenReqs([]));
       else setReopenReqs([]);
     } catch (err) {
@@ -288,7 +283,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
     const note = month?.lines?.find((l) => l.employee_id === id)?.note ?? null;
     setBusy(true);
     try {
-      await savePayrollMonthLine(period, id, draft[id], note, clean, baseDraft[id]);
+      await savePayrollMonthLine(period, id, draft[id], note, clean);
       setLinesFor(null);
       await load();
     } catch (err) {
@@ -580,7 +575,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
           nécessaire (gain imposable ou retenue nette), rien n'est codé en dur. */}
       {linesFor && (
         <Modal
-          title={`Salaire du mois & lignes libres — ${linesFor.name}`}
+          title={`Lignes libres du bulletin — ${linesFor.name}`}
           onClose={() => setLinesFor(null)}
           footer={
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -589,27 +584,6 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
             </div>
           }
         >
-          {/* Salaire de la PÉRIODE : figé sur la ligne de CE mois. Le corriger ici
-              ne touche ni les autres mois ni la fiche — la correction reste dans
-              la période ouverte (règle « période de paie ≠ date de saisie »). */}
-          <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px", margin: "0 0 12px", background: "var(--ivoire, #FAF8F2)" }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Salaire de ce mois ({period})</div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 3 }}>
-                Salaire de base
-                <input type="number" min={0} step={1000} value={baseDraft[linesFor.employeeId]?.base_salary ?? 0}
-                  onChange={(e) => setBaseDraft((cur) => ({ ...cur, [linesFor.employeeId]: { ...cur[linesFor.employeeId], base_salary: Math.max(Number(e.target.value) || 0, 0) } }))}
-                  style={{ fontFamily: "var(--font-mono, monospace)", textAlign: "right", width: 140 }} />
-              </label>
-              <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 3 }}>
-                Brut contractuel
-                <input type="number" min={0} step={1000} value={baseDraft[linesFor.employeeId]?.gross_contractual ?? 0}
-                  onChange={(e) => setBaseDraft((cur) => ({ ...cur, [linesFor.employeeId]: { ...cur[linesFor.employeeId], gross_contractual: Math.max(Number(e.target.value) || 0, 0) } }))}
-                  style={{ fontFamily: "var(--font-mono, monospace)", textAlign: "right", width: 140 }} />
-              </label>
-            </div>
-            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "6px 0 0" }}>Ce salaire ne concerne que {period}. Les autres mois et la fiche ne sont pas modifiés.</p>
-          </div>
           <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "var(--muted)" }}>
             Ajoutez des lignes personnalisées (indemnité, prime exceptionnelle, retenue particulière…). Un
             <b> gain</b> est imposable (ajouté au brut) ; une <b>retenue</b> est nette (retirée du net à payer).

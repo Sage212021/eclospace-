@@ -1642,6 +1642,14 @@ async function main() {
       permissionModules: ["stock", "commercial"],
       departmentCodes: ["STOCK", "COM"],
     },
+    {
+      slug: "2026-09-paie-retour-calcul-fiche-coherent",
+      version: "2026.09",
+      title: "Nouveauté — Paie : retour à un livre de paie cohérent",
+      body: "Le calcul de la paie revient au fonctionnement précédent : le salaire de base et le brut proviennent directement de la FICHE du salarié. La nouveauté qui figeait le salaire mois par mois a été retirée : elle rendait le livre de paie incohérent (charges patronales et coût employeur calculés sur une ancienne valeur restée figée). Désormais, corriger la fiche d'un salarié se reflète correctement dans le mois en cours. Le net à payer, les charges patronales et le coût employeur redeviennent cohérents.",
+      permissionModules: ["paie"],
+      departmentCodes: ["RH", "FIN"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

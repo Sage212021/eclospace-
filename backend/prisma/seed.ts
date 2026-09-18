@@ -1610,6 +1610,14 @@ async function main() {
       permissionModules: ["tasks", "manuscripts"],
       departmentCodes: ["CORR", "COMLEC", "DIRED", "SECR", "CQ"],
     },
+    {
+      slug: "2026-09-stock-commercial-detail-rafraichi",
+      version: "2026.09",
+      title: "Nouveauté — Stock commercial : le détail se rafraîchit à chaque clic",
+      body: "Dans « Stock commercial », quand on clique sur un commercial pour voir les livres qu'il a reçus, la liste est désormais rechargée à chaque ouverture. Correction d'un souci signalé : une remise enregistrée par le magasin n'apparaissait pas tout de suite quand on rouvrait la fiche du commercial (l'ancienne liste restait affichée). Après une remise, la fiche déjà ouverte se met aussi à jour automatiquement.",
+      permissionModules: ["stock", "commercial"],
+      departmentCodes: ["STOCK", "COM"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

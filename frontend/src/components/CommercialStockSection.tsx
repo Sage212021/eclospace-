@@ -37,22 +37,36 @@ export function CommercialStockSection({ isbns, locations, canManage, onMessage,
   const [openDetail, setOpenDetail] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, CommercialMovement[] | "loading">>({});
 
+  // Charge (ou RECHARGE) le détail des mouvements d'un commercial. On refait
+  // TOUJOURS l'appel à l'ouverture : sinon une remise enregistrée après une
+  // première consultation resterait invisible (liste en cache) — c'est le bug
+  // « le livre remis n'apparaît pas quand on clique sur le commercial ».
+  function fetchDetail(locationId: string, userId: string | null) {
+    if (!userId) { setDetail((d) => ({ ...d, [locationId]: [] })); return; }
+    setDetail((d) => ({ ...d, [locationId]: "loading" }));
+    getCommercialMovements(userId)
+      .then((r) => setDetail((d) => ({ ...d, [locationId]: r.movements })))
+      .catch(() => setDetail((d) => ({ ...d, [locationId]: [] })));
+  }
   function toggleDetail(row: CommercialStockRow) {
     if (openDetail === row.location_id) { setOpenDetail(null); return; }
     setOpenDetail(row.location_id);
-    if (!detail[row.location_id] && row.user_id) {
-      setDetail((d) => ({ ...d, [row.location_id]: "loading" }));
-      getCommercialMovements(row.user_id)
-        .then((r) => setDetail((d) => ({ ...d, [row.location_id]: r.movements })))
-        .catch(() => setDetail((d) => ({ ...d, [row.location_id]: [] })));
-    }
+    fetchDetail(row.location_id, row.user_id);
   }
 
   const magasins = locations.filter((l) => l.type !== "depot_vente");
 
   async function load() {
     // L'état global n'est visible qu'aux responsables ; on l'ignore en silence sinon.
-    getCommercialStockAll().then((d) => { setRows(d.reps); setTotal(d.total); }).catch(() => { setRows(null); setTotal(null); });
+    getCommercialStockAll().then((d) => {
+      setRows(d.reps); setTotal(d.total);
+      // Rafraîchit le détail déjà déplié (après une remise, la nouvelle ligne
+      // doit apparaître sans avoir à replier/déplier).
+      if (openDetail) {
+        const row = d.reps.find((r) => r.location_id === openDetail);
+        if (row) fetchDetail(row.location_id, row.user_id);
+      }
+    }).catch(() => { setRows(null); setTotal(null); });
     if (canManage) listStockCommercials().then(setCommercials).catch(() => setCommercials([]));
   }
   useEffect(() => { load(); }, [canManage]);

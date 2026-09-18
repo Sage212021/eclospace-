@@ -9,6 +9,7 @@ import { DEFAULT_SALARY_ELEMENTS } from "../src/lib/salaryElements.js";
 import { randomUUID } from "node:crypto";
 import { dispatchReleaseNotes, SYSTEM_SENDER_USERNAME } from "../src/lib/releaseNotes.js";
 import { BRANDING_KEY, BRANDING_DEFAULTS } from "../src/lib/branding.js";
+import { DEFAULT_BOOK_TYPES, DEFAULT_PROFILES } from "../src/lib/correctionProfile.js";
 import { readFileSync } from "node:fs";
 
 const prisma = new PrismaClient();
@@ -815,7 +816,7 @@ async function main() {
         REGLE_DOR +
         " Tu produis le RAPPORT DE RELECTURE — BAT1 (premier passage de correction éditoriale) selon le modèle officiel Éclosion, et les annotations permettant d'obtenir le manuscrit corrigé BAT1." +
         " La grille de notation compte EXACTEMENT 7 critères notés chacun /20 : Richesse du contenu et pertinence thématique ; Cohérence et progression argumentative ; Qualité syntaxique et grammaticale ; Maîtrise de l'orthographe et de l'accord ; Ponctuation et typographie ; Rigueur des références et notes de bas de page ; Clarté et fluidité de la lecture. La NOTE GLOBALE est la somme des 7 notes (sur 140), ramenée sur 100." +
-        " Chaque annotation de correction précise : n° (numérotation continue) · page RÉELLE du manuscrit · catégorie et sévérité · TEXTE ORIGINAL cité EXACTEMENT (la citation du passage fautif, jamais un simple numéro de page) · correction proposée · explication. Catégories : Orthographe · Accord · Syntaxe · Ponctuation · Typographie · Style (combinables, ex. « Accord+Syntaxe »). Sévérité : C1 mineure · C2 modérée · C3 majeure. Les annotations sont classées par ordre d'apparition dans le texte.",
+        " Chaque annotation de correction précise : n° (numérotation continue) · page RÉELLE du manuscrit · catégorie et sévérité · TEXTE ORIGINAL cité EXACTEMENT (la citation du passage fautif, jamais un simple numéro de page) · correction proposée · explication. Catégories : Orthographe · Accord · Syntaxe · Ponctuation · Typographie · Style (combinables, ex. « Accord+Syntaxe »). Sévérité (échelle officielle Éclosion) : C1 BLOQUANTE (à corriger avant validation du BAT) · C2 IMPORTANTE (à corriger avant impression) · C3 MINEURE (correction souhaitable, non bloquante) · S SUGGESTION (style/harmonisation — jamais présentée comme une erreur). Les annotations sont classées par ordre d'apparition dans le texte.",
       userTemplate:
         "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit à relire (BAT1 — premier passage) :\n{{manuscrit}}",
       reportTemplate: {
@@ -831,7 +832,7 @@ async function main() {
           { key: "7", title: "Conclusion et verdict" },
         ],
         guidance:
-          "Rapport de RELECTURE BAT1 (modèle officiel Éclosion). Rubrique 1 : la grille de notation est un TABLEAU à deux colonnes (CRITÈRE · NOTE) avec les 7 critères notés /20, suivie d'une ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 3 : les annotations de correction forment un TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication) ; « Texte original » cite TOUJOURS le passage fautif exact, jamais un numéro de page ; « Page » est la page réelle ; numérotation continue ; catégories Orthographe/Accord/Syntaxe/Ponctuation/Typographie/Style ; sévérité C1/C2/C3 indiquée dans la catégorie (ex. « Accord (C1) »). Rubrique 5 : trois blocs Priorité 1/2/3. Les rubriques 0, 2, 4, 6, 7 sont rédigées en prose et listes. La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
+          "Rapport de RELECTURE BAT1 (modèle officiel Éclosion). Rubrique 1 : la grille de notation est un TABLEAU à deux colonnes (CRITÈRE · NOTE) avec les 7 critères notés /20, suivie d'une ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 3 : les annotations de correction forment un TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication) ; « Texte original » cite TOUJOURS le passage fautif exact, jamais un numéro de page ; « Page » est la page réelle ; numérotation continue ; catégories Orthographe/Accord/Syntaxe/Ponctuation/Typographie/Style ; sévérité C1/C2/C3/S indiquée dans la catégorie (ex. « Accord (C1) »). Rubrique 5 : trois blocs Priorité 1/2/3. Les rubriques 0, 2, 4, 6, 7 sont rédigées en prose et listes. La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
         deliverables: ["Rapport_relecture_BAT1", "Manuscrit_corrige_BAT1"],
       },
     },
@@ -842,7 +843,7 @@ async function main() {
         REGLE_DOR +
         " Tu produis le RAPPORT DE RELECTURE — BAT2 (deuxième passage) selon le modèle officiel Éclosion. Sa particularité est la rubrique « SUIVI DES CORRECTIONS DU BAT PRÉCÉDENT » : tu reprends CHAQUE correction demandée au BAT1 et tu indiques son statut — ✔ appliquée · ✘ non appliquée · ~ partiellement appliquée — avec une observation (page à l'appui), puis tu signales les améliorations apportées par l'auteur(e) depuis le BAT précédent. Si tu ne disposes pas du détail des demandes du BAT1, tu le signales explicitement et tu déduis le suivi des corrections encore visibles." +
         " La grille de notation compte EXACTEMENT 7 critères notés chacun /20 (Richesse du contenu et pertinence thématique ; Cohérence et progression argumentative ; Qualité syntaxique et grammaticale ; Maîtrise de l'orthographe et de l'accord ; Ponctuation et typographie ; Rigueur des références et notes de bas de page ; Clarté et fluidité de la lecture) ; la NOTE GLOBALE est la somme (sur 140) ramenée sur 100." +
-        " Chaque annotation de correction précise : n° (numérotation continue) · page réelle · catégorie et sévérité · TEXTE ORIGINAL cité exactement · correction proposée · explication. Catégories : Orthographe · Accord · Syntaxe · Ponctuation · Typographie · Style. Sévérité : C1 mineure · C2 modérée · C3 majeure. Annotations classées par ordre d'apparition.",
+        " Chaque annotation de correction précise : n° (numérotation continue) · page réelle · catégorie et sévérité · TEXTE ORIGINAL cité exactement · correction proposée · explication. Catégories : Orthographe · Accord · Syntaxe · Ponctuation · Typographie · Style. Sévérité (échelle officielle Éclosion) : C1 BLOQUANTE (à corriger avant validation du BAT) · C2 IMPORTANTE (à corriger avant impression) · C3 MINEURE (correction souhaitable, non bloquante) · S SUGGESTION (style/harmonisation — jamais présentée comme une erreur). Annotations classées par ordre d'apparition.",
       userTemplate:
         "Recommandation spéciale de l'éditeur : {{recommandation_editeur}}\n\nManuscrit après BAT1 (à contrôler pour BAT2) :\n{{manuscrit}}",
       reportTemplate: {
@@ -859,7 +860,7 @@ async function main() {
           { key: "8", title: "Conclusion et verdict" },
         ],
         guidance:
-          "Rapport de RELECTURE BAT2 (modèle officiel Éclosion). Rubrique 1 : grille en TABLEAU (CRITÈRE · NOTE) avec les 7 critères notés /20 + ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 2 « Suivi des corrections du BAT précédent » : TABLEAU à 4 colonnes (N° (BAT1) · Correction demandée · Statut ✔/✘/~ · Observation), puis une liste des améliorations apportées par l'auteur(e). Rubrique 4 : annotations en TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication), mêmes règles qu'au BAT1 (citation exacte, page réelle, numérotation continue, sévérité C1/C2/C3). Rubrique 6 : blocs Priorité 1/2/3. Les rubriques 0, 3, 5, 7, 8 sont en prose et listes. La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
+          "Rapport de RELECTURE BAT2 (modèle officiel Éclosion). Rubrique 1 : grille en TABLEAU (CRITÈRE · NOTE) avec les 7 critères notés /20 + ligne NOTE GLOBALE (somme /140 ramenée sur 100). Rubrique 2 « Suivi des corrections du BAT précédent » : TABLEAU à 4 colonnes (N° (BAT1) · Correction demandée · Statut ✔/✘/~ · Observation), puis une liste des améliorations apportées par l'auteur(e). Rubrique 4 : annotations en TABLEAU à 6 colonnes (N° · Page · Catégorie · Texte original (citation exacte) · Correction proposée · Explication), mêmes règles qu'au BAT1 (citation exacte, page réelle, numérotation continue, sévérité C1/C2/C3/S). Rubrique 6 : blocs Priorité 1/2/3. Les rubriques 0, 3, 5, 7, 8 sont en prose et listes. La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
         deliverables: ["Rapport_relecture_BAT2", "Manuscrit_corrige_BAT2"],
       },
     },
@@ -884,7 +885,7 @@ async function main() {
           { key: "6", title: "Verdict de publication" },
         ],
         guidance:
-          "Rapport de RELECTURE DE COUVERTURE (volet couverture du BAT). Rubrique 1 : grille de notation en TABLEAU (Critère · Note /20 · Observations) + note globale pondérée /20. Rubrique 2 « Suivi des corrections du BAT précédent » : au BAT2, un TABLEAU (N° (BAT précédent) · Correction demandée · Statut ✔ intégrée / ✘ non intégrée / ~ partielle · Observation) suivi de « Ce qui manque » et des « Améliorations apportées par l'auteur(e) » ; au BAT1, indiquer simplement « Premier passage — pas de suivi ». Rubrique 5 « Tableau d'annotations » : TABLEAU (Sévérité C1/C2/C3 · Zone/emplacement · Constat · Recommandation). Rubriques 0, 3, 4, 6 en prose et listes (vérifications factuelles de la rubrique 4 en liste : ISBN, code-barres EAN, cohérence couverture ↔ intérieur). La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
+          "Rapport de RELECTURE DE COUVERTURE (volet couverture du BAT). Rubrique 1 : grille de notation en TABLEAU (Critère · Note /20 · Observations) + note globale pondérée /20. Rubrique 2 « Suivi des corrections du BAT précédent » : au BAT2, un TABLEAU (N° (BAT précédent) · Correction demandée · Statut ✔ intégrée / ✘ non intégrée / ~ partielle · Observation) suivi de « Ce qui manque » et des « Améliorations apportées par l'auteur(e) » ; au BAT1, indiquer simplement « Premier passage — pas de suivi ». Rubrique 5 « Tableau d'annotations » : TABLEAU (Sévérité C1/C2/C3/S · Zone/emplacement · Constat · Recommandation). Rubriques 0, 3, 4, 6 en prose et listes (vérifications factuelles de la rubrique 4 en liste : ISBN, code-barres EAN, cohérence couverture ↔ intérieur). La rubrique « Informations sur le document » (identification) est présentée en LISTE « Champ : valeur », une ligne par élément, jamais un tableau à colonnes étroites.",
         deliverables: ["Rapport_couverture"],
       },
     },
@@ -987,6 +988,26 @@ async function main() {
         data: { label: p.label, systemPrompt: p.systemPrompt, reportTemplate: p.reportTemplate as object, version: { increment: 1 } },
       });
     }
+  }
+
+  // Moteur de correction éditoriale IA : types d'ouvrage + grilles de contrôle.
+  // Amorce non destructive (on ne clobbe pas les modifications faites en
+  // Paramètres) : on crée seulement ce qui manque.
+  for (let i = 0; i < DEFAULT_BOOK_TYPES.length; i++) {
+    const bt = DEFAULT_BOOK_TYPES[i];
+    const existing = await prisma.bookType.findUnique({ where: { code: bt.code } });
+    if (!existing) await prisma.bookType.create({ data: { code: bt.code, label: bt.label, displayOrder: i } });
+  }
+  for (const prof of DEFAULT_PROFILES) {
+    const existing = await prisma.correctionProfile.findUnique({ where: { bookTypeCode: prof.code } });
+    if (existing) continue;
+    await prisma.correctionProfile.create({
+      data: {
+        bookTypeCode: prof.code,
+        label: prof.label,
+        controlPoints: { create: prof.points.map((p, i) => ({ label: p[0], defaultSeverity: p[1], displayOrder: i })) },
+      },
+    });
   }
 
   // Seuils du comité de lecture (Ch. 7 §7.5 : "seuils paramétrables") —
@@ -1564,6 +1585,14 @@ async function main() {
       body: "L'écran « Mes corrections » devient le poste de travail complet, cohérent du début à la fin. Sous « 🤖 Écran de correction », vous trouvez : (1) la matière à corriger (manuscrit + couvertures 1ère/dos/4ème) ; (2) le cycle en deux temps avec relais correcteur ↔ intégrateur (1re correction → version intégrée → 2e correction → version corrigée finale), chacun voyant « à qui la main » ; (3) l'assistance IA branchée sur la BONNE matière : la BAT1 lit le manuscrit à corriger, la BAT2 lit la version intégrée du 1er passage (plus jamais l'original), la couverture lit les couvertures à corriger. L'intégrateur est la Direction éditoriale ou l'Assistant éditorial. La version corrigée finale est reprise par la Maquette/Infographie.",
       permissionModules: ["tasks"],
       departmentCodes: ["CORR", "COMLEC", "DIRED", "SECR"],
+    },
+    {
+      slug: "2026-09-moteur-correction-editoriale-ia",
+      version: "2026.09",
+      title: "Nouveauté — Assistance de correction éditoriale IA : la méthode s'adapte à l'ouvrage",
+      body: "L'assistance IA de correction devient un vrai moteur éditorial. On choisit le TYPE d'ouvrage (roman, poésie, scientifique, jeunesse, droit…) et le SUPPORT ; la grille de contrôle adaptée se charge automatiquement, avec les sévérités officielles C1 (bloquant), C2 (important), C3 (mineur) et S (suggestion). La 2e relecture (BAT2) reçoit maintenant le rapport de la 1re et pointe, correction par correction, ce qui a été intégré, non intégré, partiellement, modifié, ou les nouvelles anomalies — au lieu de refaire la 1re. La couverture est analysée en trois faces (1ère, dos, 4ème) avec cohérence couverture/intérieur et ISBN. Les grilles par type d'ouvrage sont ENTIÈREMENT modifiables dans Paramètres, et on peut ajouter un nouveau type sans rien casser.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["CORR", "COMLEC", "DIRED", "SECR", "CQ"],
     },
   ];
   for (const n of releaseNotes) {

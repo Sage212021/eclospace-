@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAnyRole, requirePermission, requireAnyPermission } from "../lib/permissions.js";
 import { startAiReading, executeAiReading, AiRunError } from "../lib/aiRunner.js";
+import { SUPPORTS } from "../lib/correctionProfile.js";
 import { writeAuditLog } from "../lib/audit.js";
 import {
   loadConfig,
@@ -169,6 +170,83 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
     return reply.send(updated);
   });
 
+  // — Moteur de correction éditoriale : paramétrage (types d'ouvrage + supports +
+  // grilles de contrôle). La LECTURE des types/supports sert aux sélecteurs de
+  // l'écran de correction (accessible au correcteur : droit « tâches »).
+  fastify.get(
+    "/api/v1/ai-editorial/book-types",
+    { preHandler: requireAnyPermission(AI_JOB_READ_PERMS) },
+    async (_request, reply) => {
+      const bookTypes = await prisma.bookType.findMany({ where: { isActive: true }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }], select: { code: true, label: true } });
+      return reply.send({ book_types: bookTypes, supports: SUPPORTS });
+    },
+  );
+
+  // Grilles de correction (tous les profils + points) — pour l'écran de paramétrage.
+  fastify.get(
+    "/api/v1/ai-editorial/correction-profiles",
+    { preHandler: requirePermission("manuscripts", "administration") },
+    async (_request, reply) => {
+      const [bookTypes, profiles] = await Promise.all([
+        prisma.bookType.findMany({ orderBy: [{ displayOrder: "asc" }, { label: "asc" }] }),
+        prisma.correctionProfile.findMany({ orderBy: { label: "asc" }, include: { controlPoints: { orderBy: [{ displayOrder: "asc" }, { label: "asc" }] } } }),
+      ]);
+      return reply.send({ book_types: bookTypes, supports: SUPPORTS, profiles, severities: ["C1", "C2", "C3", "S"] });
+    },
+  );
+
+  // Créer / renommer / (dés)activer un type d'ouvrage (paramétrage éditable).
+  const bookTypeSchema = z.object({ label: z.string().trim().min(1).max(120), display_order: z.number().int().optional(), is_active: z.boolean().optional() });
+  fastify.put(
+    "/api/v1/ai-editorial/book-types/:code",
+    { preHandler: requirePermission("manuscripts", "administration") },
+    async (request, reply) => {
+      const { code } = request.params as { code: string };
+      if (!/^[a-z0-9_]{2,60}$/.test(code)) return reply.code(400).send({ code: "invalid_code", message: "Code de type invalide (lettres minuscules, chiffres, tirets bas)." });
+      const parsed = bookTypeSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "invalid_body", message: "Type d'ouvrage invalide.", details: parsed.error.flatten() });
+      const bt = await prisma.bookType.upsert({
+        where: { code },
+        update: { label: parsed.data.label, displayOrder: parsed.data.display_order ?? undefined, isActive: parsed.data.is_active ?? undefined, updatedBy: request.user!.id },
+        create: { code, label: parsed.data.label, displayOrder: parsed.data.display_order ?? 0, isActive: parsed.data.is_active ?? true, updatedBy: request.user!.id },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "book_type", entityId: bt.id, newValues: { code, label: bt.label }, ipAddress: request.ip });
+      return reply.send({ ok: true });
+    },
+  );
+
+  // Remplacer la GRILLE de correction d'un type (points de contrôle) — édition
+  // atomique. book_type_code = "__defaut__" pour la grille par défaut.
+  const profileSchema = z.object({
+    label: z.string().trim().min(1).max(160),
+    points: z.array(z.object({ label: z.string().trim().min(1).max(300), default_severity: z.enum(["C1", "C2", "C3", "S"]).default("C3"), is_active: z.boolean().optional() })).max(200),
+  });
+  fastify.put(
+    "/api/v1/ai-editorial/correction-profiles/:code",
+    { preHandler: requirePermission("manuscripts", "administration") },
+    async (request, reply) => {
+      const { code } = request.params as { code: string };
+      if (!/^[a-z0-9_]{2,60}$/.test(code)) return reply.code(400).send({ code: "invalid_code", message: "Code de type invalide." });
+      const parsed = profileSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "invalid_body", message: "Grille invalide.", details: parsed.error.flatten() });
+      await prisma.$transaction(async (tx) => {
+        const profile = await tx.correctionProfile.upsert({
+          where: { bookTypeCode: code },
+          update: { label: parsed.data.label, updatedBy: request.user!.id },
+          create: { bookTypeCode: code, label: parsed.data.label, updatedBy: request.user!.id },
+        });
+        await tx.correctionControlPoint.deleteMany({ where: { profileId: profile.id } });
+        if (parsed.data.points.length) {
+          await tx.correctionControlPoint.createMany({
+            data: parsed.data.points.map((p, i) => ({ profileId: profile.id, label: p.label, defaultSeverity: p.default_severity, displayOrder: i, isActive: p.is_active ?? true })),
+          });
+        }
+        await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "correction_profile", entityId: profile.id, newValues: { code, points: parsed.data.points.length }, ipAddress: request.ip });
+      });
+      return reply.send({ ok: true });
+    },
+  );
+
   // — Lancement d'une relecture IA (Lot IA-1) —
   const runSchema = z.object({
     manuscript_id: z.string().uuid(),
@@ -181,6 +259,10 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
     // Évaluation : type de manuscrit choisi par le relecteur pour adapter la
     // grille transmise à l'IA (sinon : domaine de l'ouvrage).
     grid_genre_id: z.string().uuid().nullable().optional(),
+    // Moteur de correction éditoriale : type d'ouvrage (charge la grille de
+    // contrôle) et support analysé. Facultatifs (repli sur la grille par défaut).
+    book_type_code: z.string().max(60).nullable().optional(),
+    support: z.string().max(60).nullable().optional(),
   });
   fastify.post(
     "/api/v1/ai-editorial/run",
@@ -205,6 +287,8 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
           stepCode: parsed.data.step_code,
           coverPass: parsed.data.cover_pass,
           gridGenreId: parsed.data.grid_genre_id ?? undefined,
+          bookTypeCode: parsed.data.book_type_code ?? undefined,
+          support: parsed.data.support ?? undefined,
           userId: request.user!.id,
           ip: request.ip,
         };

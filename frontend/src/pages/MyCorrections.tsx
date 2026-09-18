@@ -4,7 +4,10 @@ import {
   taskManuscriptFileUrl,
   uploadCorrectedFile,
   patchTask,
+  getCorrectionBookTypes,
   type MyCorrectionTask,
+  type BookTypeOption,
+  type SupportOption,
 } from "../api/client";
 import { Button } from "../components/Button";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -35,6 +38,12 @@ export function MyCorrections() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [section, setSection] = useState<string>("a_faire");
+  const [bookTypes, setBookTypes] = useState<BookTypeOption[]>([]);
+  const [supports, setSupports] = useState<SupportOption[]>([]);
+
+  useEffect(() => {
+    getCorrectionBookTypes().then((r) => { setBookTypes(r.book_types); setSupports(r.supports); }).catch(() => { setBookTypes([]); setSupports([]); });
+  }, []);
 
   const refresh = () =>
     listMyCorrections()
@@ -89,7 +98,7 @@ export function MyCorrections() {
               {items.length === 0 ? (
                 <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>{b.empty}</p>
               ) : (
-                items.map((task) => <CorrectionCard key={task.id} task={task} onDepose={depose} onRefresh={refresh} />)
+                items.map((task) => <CorrectionCard key={task.id} task={task} onDepose={depose} onRefresh={refresh} bookTypes={bookTypes} supports={supports} />)
               )}
             </AccordionSection>
           );
@@ -99,8 +108,12 @@ export function MyCorrections() {
   );
 }
 
-function CorrectionCard({ task, onDepose, onRefresh }: { task: MyCorrectionTask; onDepose: (t: MyCorrectionTask, f: File) => void; onRefresh: () => void }) {
+function CorrectionCard({ task, onDepose, onRefresh, bookTypes, supports }: { task: MyCorrectionTask; onDepose: (t: MyCorrectionTask, f: File) => void; onRefresh: () => void; bookTypes: BookTypeOption[]; supports: SupportOption[] }) {
   const canValidate = task.status !== "terminee" && task.status !== "validee";
+  // Paramètres du moteur de correction : type d'ouvrage (charge la grille) +
+  // support analysé. La grille adaptée est appliquée automatiquement à l'IA.
+  const [bookType, setBookType] = useState<string>("");
+  const [support, setSupport] = useState<string>("manuscrit_interieur");
   // Écran complet de correction par ouvrage — le circuit du début à la fin :
   //   • la matière à corriger (VC1 : manuscrit + couvertures 1ère/dos/4ème) ;
   //   • le cycle en 2 temps avec relais correcteur ↔ intégrateur (BAT1 → version
@@ -161,7 +174,7 @@ function CorrectionCard({ task, onDepose, onRefresh }: { task: MyCorrectionTask;
             style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: workspace ? "var(--eclosion-soft)" : "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "var(--ink)" }}
           >
             <span style={{ fontSize: 15 }}>🤖</span>
-            <span style={{ flex: 1 }}>Écran de correction — BAT, phases &amp; assistance IA</span>
+            <span style={{ flex: 1 }}>Assistance de correction éditoriale IA — Éditions Éclosion</span>
             <span style={{ color: "var(--muted)", display: "inline-block", transform: workspace ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
           </button>
           {workspace && (
@@ -174,16 +187,34 @@ function CorrectionCard({ task, onDepose, onRefresh }: { task: MyCorrectionTask;
                   BAT1 → version intégrée → BAT2 → version corrigée finale. */}
               <CorrectionCyclePanel manuscriptId={manuscriptId} canManage />
 
-              {/* 3 — Assistance IA, branchée sur la BONNE matière à chaque passage
-                  (voir resolveAiSourceVersion côté serveur). */}
-              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "14px 0 4px", lineHeight: 1.6 }}>
-                Assistance IA pour « {task.manuscript?.title ?? "l'ouvrage"} » — les documents produits (manuscrit corrigé +
-                rapport) apparaissent dans « 📦 Générer les livrables », prêts à télécharger puis à redéposer dans la phase
-                correspondante ci-dessus.
+              {/* 3 — Paramètres du moteur : type d'ouvrage + support. La grille de
+                  contrôle adaptée se charge automatiquement (sévérités C1/C2/C3/S). */}
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 14, padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--paper, #FAF8F2)" }}>
+                <label style={{ fontSize: 12.5, fontWeight: 600, display: "flex", flexDirection: "column", gap: 4 }}>
+                  Type d'ouvrage
+                  <select value={bookType} onChange={(e) => setBookType(e.target.value)} style={{ fontSize: 13, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, minWidth: 180 }}>
+                    <option value="">Grille par défaut</option>
+                    {bookTypes.map((b) => <option key={b.code} value={b.code}>{b.label}</option>)}
+                  </select>
+                </label>
+                <label style={{ fontSize: 12.5, fontWeight: 600, display: "flex", flexDirection: "column", gap: 4 }}>
+                  Support analysé
+                  <select value={support} onChange={(e) => setSupport(e.target.value)} style={{ fontSize: 13, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, minWidth: 180 }}>
+                    {supports.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
+                  </select>
+                </label>
+                <span style={{ fontSize: 11.5, color: "var(--muted)", flex: 1, minWidth: 160 }}>
+                  La grille de contrôle adaptée au type se charge automatiquement (sévérités C1 bloquant · C2 important · C3 mineur · S suggestion).
+                </span>
+              </div>
+
+              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "12px 0 4px", lineHeight: 1.6 }}>
+                Les documents produits (manuscrit corrigé + rapport) apparaissent dans « 📦 Générer les livrables », prêts à
+                télécharger puis à redéposer dans la phase correspondante ci-dessus.
               </p>
-              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — BAT1 (1re correction)" hint="Lit le manuscrit à corriger (VC1) et produit le rapport + le manuscrit corrigé BAT1. À intégrer ensuite en « Version intégrée »." />
-              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — BAT2 (2e correction)" hint="Lit la VERSION INTÉGRÉE du 1er passage (rendu de l'intégrateur), pas l'original, et suit les corrections du BAT1." />
-              <AiReadingLauncher manuscriptId={manuscriptId} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" askCoverPass hint="Lit les couvertures à corriger (VC1 : 1ère, dos, 4ème). Choisissez le passage : BAT1 (1ᵉʳ) ou BAT2 (suivi du passage précédent)." />
+              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_1" stepCode="CORRECTION" bookTypeCode={bookType || null} support={support} title="Correction éditoriale — BAT1 (1re relecture)" hint="Lit le manuscrit à corriger (VC1) et produit le rapport + le manuscrit corrigé BAT1. À intégrer ensuite en « Version intégrée »." />
+              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_2" stepCode="CORRECTION" bookTypeCode={bookType || null} support={support} title="Correction éditoriale — BAT2 (2e relecture, contrôle après intégration)" hint="Lit la VERSION INTÉGRÉE du 1er passage (pas l'original) et pointe, correction par correction, ce qui a été intégré / non intégré / partiel / modifié + nouvelles anomalies." />
+              <AiReadingLauncher manuscriptId={manuscriptId} workType="couverture" stepCode="CORRECTION" bookTypeCode={bookType || null} support="couverture" askCoverPass title="Correction éditoriale — Couverture (1ʳᵉ, dos, 4ᵉ)" hint="Analyse les 3 faces (1ère, dos, 4ème) + cohérence couverture/intérieur + ISBN. Choisissez le passage : BAT1 ou BAT2 (suivi du passage précédent)." />
             </div>
           )}
         </div>

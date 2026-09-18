@@ -880,7 +880,10 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
           entityType: "manuscript",
           entityId: manuscript.id,
           category: "piece_etape",
-          title: `${docLabel} (IA) — ${versionLabel}`,
+          // Règle permanente : un document LIVRÉ ne mentionne jamais qu'il a été
+          // produit par l'IA (pas de « (IA) » dans le titre). Le passage BAT
+          // (BAT1/BAT2) suffit à l'identifier.
+          title: `${docLabel} — ${versionLabel}`,
           createdBy: params.userId,
           versions: {
             create: {

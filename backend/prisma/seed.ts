@@ -1602,6 +1602,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks"],
       departmentCodes: ["CORR", "COMLEC", "DIRED", "SECR", "CQ"],
     },
+    {
+      slug: "2026-09-correction-ia-validation-par-anomalie",
+      version: "2026.09",
+      title: "Nouveauté — Correction IA : valider les anomalies une par une",
+      body: "Dans « Mes corrections », les anomalies relevées par l'assistance IA s'affichent maintenant sous forme de fiches à traiter (« Anomalies à traiter »). Pour chacune, quatre boutons : ✅ Accepter · ✏️ Modifier (on écrit la correction retenue) · ❌ Rejeter (avec motif) · 🔎 À vérifier. Un récapitulatif indique combien restent à traiter, acceptées, rejetées… et vous pouvez filtrer. « Accepter » enregistre la décision — l'intégrateur applique ensuite la correction dans le fichier. Chaque décision est tracée (qui, quand) et aucune relecture ne remplace une autre : la 1re et la 2e passe gardent leurs propres anomalies.",
+      permissionModules: ["tasks", "manuscripts"],
+      departmentCodes: ["CORR", "COMLEC", "DIRED", "SECR", "CQ"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

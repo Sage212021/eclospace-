@@ -1081,6 +1081,23 @@ export interface SupportOption { code: string; label: string; }
 export function getCorrectionBookTypes() {
   return request<{ book_types: BookTypeOption[]; supports: SupportOption[] }>(`/api/v1/ai-editorial/book-types`);
 }
+// Anomalies de correction (Lot 3) : validation humaine ligne par ligne.
+export interface CorrectionAnomaly {
+  id: string; job_id: string; work_type: AiWorkType; job_launched_at: string;
+  number: number; severity: string; face: string | null; location: string | null;
+  element: string | null; observation: string | null; proposal: string | null; justification: string | null;
+  status: string; resolution_note: string | null; decided_by_name: string | null; decided_at: string | null;
+}
+export interface AnomalySummary { total: number; a_traiter: number; acceptee: number; modifiee: number; rejetee: number; a_verifier: number; }
+export function getCorrectionAnomalies(manuscriptId: string) {
+  return request<{ summary: AnomalySummary; anomalies: CorrectionAnomaly[] }>(`/api/v1/manuscripts/${manuscriptId}/correction-anomalies`);
+}
+export function decideCorrectionAnomaly(id: string, input: { status: string; resolution_note?: string | null }) {
+  return request<{ ok: boolean }>(`/api/v1/correction-anomalies/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function extractAnomalies(jobId: string) {
+  return request<{ created: number; skipped: boolean }>(`/api/v1/ai-editorial/jobs/${jobId}/extract-anomalies`, { method: "POST" });
+}
 // Paramétrage éditable des grilles de correction (admin éditorial).
 export interface CorrectionControlPointView { id: string; label: string; defaultSeverity: string; displayOrder: number; isActive: boolean; }
 export interface CorrectionProfileView { id: string; bookTypeCode: string | null; label: string; isActive: boolean; controlPoints: CorrectionControlPointView[]; }

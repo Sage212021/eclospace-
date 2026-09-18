@@ -6,6 +6,7 @@ import { storeFile } from "./storage.js";
 import { writeAuditLog } from "./audit.js";
 import { loadConfig, readApiKey, resolveModelId, type WorkType } from "./aiConfig.js";
 import { buildCorrectionMethodText } from "./correctionProfile.js";
+import { parseAnomaliesJson, ANOMALY_EXTRACTION_SYSTEM, anomalyExtractionUser } from "./correctionAnomalies.js";
 
 // Moteur de relecture assistée (Lot IA-1). Orchestration : préparer le manuscrit,
 // appeler Claude AU NOM du relecteur d'Éclosion, générer le rapport .docx, le
@@ -945,6 +946,45 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       }
     }
 
+    // ANOMALIES STRUCTURÉES (Lot 3) — pour la correction et la couverture, on
+    // convertit le rapport rédigé en fiches d'anomalies (validation humaine :
+    // accepter / modifier / rejeter / à vérifier). Best-effort : un échec
+    // d'extraction n'invalide JAMAIS le job ni le rapport (le rapport reste le
+    // livrable). Chaque relecture a ses propres anomalies (aucune n'écrase les
+    // précédentes).
+    if (reportText && (params.workType === "correction_1" || params.workType === "correction_2" || params.workType === "couverture")) {
+      try {
+        const ex = await client.messages.create({
+          model: modelId,
+          max_tokens: 4000,
+          system: ANOMALY_EXTRACTION_SYSTEM,
+          messages: [{ role: "user", content: anomalyExtractionUser(reportText) }],
+        });
+        totalInput += ex.usage.input_tokens;
+        totalOutput += ex.usage.output_tokens;
+        const exText = ex.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
+        const anomalies = parseAnomaliesJson(exText);
+        if (anomalies.length) {
+          await prisma.correctionAnomaly.createMany({
+            data: anomalies.map((a, i) => ({
+              jobId: job.id,
+              manuscriptId: manuscript.id,
+              number: i + 1,
+              severity: a.severity,
+              face: a.face,
+              location: a.location,
+              element: a.element,
+              observation: a.observation,
+              proposal: a.proposal,
+              justification: a.justification,
+            })),
+          });
+        }
+      } catch {
+        /* extraction best-effort : on garde le rapport, sans fiches d'anomalies */
+      }
+    }
+
     const costUsd = (totalInput * price.in + totalOutput * price.out) / 1_000_000;
     const costEstimate = Math.round(costUsd * 600 * 100) / 100; // ≈ FCFA (1 USD ≈ 600 XAF)
 
@@ -968,4 +1008,40 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     }
     await prisma.aiReadingJob.update({ where: { id: jobId }, data: { status: "erreur", finishedAt: new Date(), errorMessage: message } }).catch(() => {});
   }
+}
+
+// (Re)construit les fiches d'anomalies d'un job DÉJÀ terminé à partir de son
+// rapport (utile pour les relectures lancées avant le Lot 3). Idempotent et NON
+// destructif : si le job a déjà des anomalies, on ne réextrait pas (on ne perd
+// jamais les décisions humaines déjà prises).
+export async function extractAnomaliesForJob(jobId: string): Promise<{ created: number; skipped: boolean }> {
+  const job = await prisma.aiReadingJob.findUnique({ where: { id: jobId } });
+  if (!job) throw new AiRunError("not_found", "Relecture introuvable.");
+  if (!job.reportText || !(job.workType === "correction_1" || job.workType === "correction_2" || job.workType === "couverture")) {
+    return { created: 0, skipped: true };
+  }
+  const existing = await prisma.correctionAnomaly.count({ where: { jobId } });
+  if (existing > 0) return { created: existing, skipped: true };
+
+  const cfg = await loadConfig();
+  const apiKey = readApiKey(cfg);
+  if (!cfg.enabled || !apiKey) throw new AiRunError("ai_disabled", "L'IA éditoriale est désactivée ou sans clé.");
+  const client = new Anthropic({ apiKey });
+  const ex = await client.messages.create({
+    model: job.model,
+    max_tokens: 4000,
+    system: ANOMALY_EXTRACTION_SYSTEM,
+    messages: [{ role: "user", content: anomalyExtractionUser(job.reportText) }],
+  });
+  const exText = ex.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
+  const anomalies = parseAnomaliesJson(exText);
+  if (!anomalies.length) return { created: 0, skipped: false };
+  await prisma.correctionAnomaly.createMany({
+    data: anomalies.map((a, i) => ({
+      jobId, manuscriptId: job.manuscriptId, number: i + 1,
+      severity: a.severity, face: a.face, location: a.location, element: a.element,
+      observation: a.observation, proposal: a.proposal, justification: a.justification,
+    })),
+  });
+  return { created: anomalies.length, skipped: false };
 }

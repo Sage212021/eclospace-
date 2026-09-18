@@ -14,6 +14,7 @@ import { GuidanceNote } from "../components/GuidanceNote";
 import { AiReadingLauncher } from "../components/AiReadingLauncher";
 import { StartingProofPanel } from "../components/StartingProofPanel";
 import { CorrectionCyclePanel } from "../components/CorrectionCyclePanel";
+import { CorrectionAnomaliesPanel } from "../components/CorrectionAnomaliesPanel";
 
 // Boîte de travail personnelle du correcteur (parallèle de « Mes lectures »).
 // Menu local en accordéon : ses tâches de correction regroupées par état. Sur
@@ -215,6 +216,10 @@ function CorrectionCard({ task, onDepose, onRefresh, bookTypes, supports }: { ta
               <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_1" stepCode="CORRECTION" bookTypeCode={bookType || null} support={support} title="Correction éditoriale — BAT1 (1re relecture)" hint="Lit le manuscrit à corriger (VC1) et produit le rapport + le manuscrit corrigé BAT1. À intégrer ensuite en « Version intégrée »." />
               <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_2" stepCode="CORRECTION" bookTypeCode={bookType || null} support={support} title="Correction éditoriale — BAT2 (2e relecture, contrôle après intégration)" hint="Lit la VERSION INTÉGRÉE du 1er passage (pas l'original) et pointe, correction par correction, ce qui a été intégré / non intégré / partiel / modifié + nouvelles anomalies." />
               <AiReadingLauncher manuscriptId={manuscriptId} workType="couverture" stepCode="CORRECTION" bookTypeCode={bookType || null} support="couverture" askCoverPass title="Correction éditoriale — Couverture (1ʳᵉ, dos, 4ᵉ)" hint="Analyse les 3 faces (1ère, dos, 4ème) + cohérence couverture/intérieur + ISBN. Choisissez le passage : BAT1 ou BAT2 (suivi du passage précédent)." />
+
+              {/* 4 — Validation humaine des anomalies (accepter / modifier /
+                  rejeter / à vérifier), tracée ligne par ligne. */}
+              <CorrectionAnomaliesPanel manuscriptId={manuscriptId} canDecide />
             </div>
           )}
         </div>

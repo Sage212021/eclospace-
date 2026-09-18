@@ -2,8 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAnyRole, requirePermission, requireAnyPermission } from "../lib/permissions.js";
-import { startAiReading, executeAiReading, AiRunError } from "../lib/aiRunner.js";
+import { startAiReading, executeAiReading, AiRunError, extractAnomaliesForJob } from "../lib/aiRunner.js";
 import { SUPPORTS } from "../lib/correctionProfile.js";
+import { isAnomalyStatus } from "../lib/correctionAnomalies.js";
 import { writeAuditLog } from "../lib/audit.js";
 import {
   loadConfig,
@@ -393,6 +394,98 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
   );
 
   const READ_JOB_PERMS = AI_JOB_READ_PERMS;
+
+  // — Anomalies de correction (Lot 3) : validation humaine ligne par ligne —
+  // Droit d'AGIR sur une anomalie (accepter/modifier/rejeter/à vérifier) : le
+  // correcteur/intégrateur (tâches) ou la Direction éditoriale (validation).
+  const ANOMALY_WRITE_PERMS = [
+    { module: "tasks" as const, action: "saisie" as const },
+    { module: "manuscripts" as const, action: "validation" as const },
+    { module: "manuscripts" as const, action: "administration" as const },
+  ];
+
+  // Liste des anomalies d'un ouvrage (toutes relectures confondues), avec un
+  // récapitulatif par statut. Groupables côté écran par relecture (jobId).
+  fastify.get(
+    "/api/v1/manuscripts/:id/correction-anomalies",
+    { preHandler: requireAnyPermission(AI_JOB_READ_PERMS) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const jobFilter = (request.query as { job?: string }).job;
+      const anomalies = await prisma.correctionAnomaly.findMany({
+        where: { manuscriptId: id, ...(jobFilter ? { jobId: jobFilter } : {}) },
+        orderBy: [{ createdAt: "desc" }, { number: "asc" }],
+        include: { job: { select: { id: true, workType: true, launchedAt: true } } },
+      });
+      const decidedByIds = [...new Set(anomalies.map((a) => a.decidedById).filter((v): v is string => Boolean(v)))];
+      const users = decidedByIds.length ? await prisma.user.findMany({ where: { id: { in: decidedByIds } }, select: { id: true, username: true } }) : [];
+      const nameById = new Map(users.map((u) => [u.id, u.username]));
+      const summary = { total: anomalies.length, a_traiter: 0, acceptee: 0, modifiee: 0, rejetee: 0, a_verifier: 0 } as Record<string, number>;
+      for (const a of anomalies) summary[a.status] = (summary[a.status] ?? 0) + 1;
+      return reply.send({
+        summary,
+        anomalies: anomalies.map((a) => ({
+          id: a.id, job_id: a.jobId, work_type: a.job.workType, job_launched_at: a.job.launchedAt,
+          number: a.number, severity: a.severity, face: a.face, location: a.location,
+          element: a.element, observation: a.observation, proposal: a.proposal, justification: a.justification,
+          status: a.status, resolution_note: a.resolutionNote,
+          decided_by_name: a.decidedById ? nameById.get(a.decidedById) ?? null : null, decided_at: a.decidedAt,
+        })),
+      });
+    },
+  );
+
+  // Décision humaine sur une anomalie : accepter / modifier / rejeter / à
+  // vérifier. Tracée (audit) ; on n'écrase jamais l'historique (append-only).
+  const anomalyPatchSchema = z.object({
+    status: z.string(),
+    resolution_note: z.string().max(4000).nullable().optional(),
+  });
+  fastify.patch(
+    "/api/v1/correction-anomalies/:id",
+    { preHandler: requireAnyPermission(ANOMALY_WRITE_PERMS) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = anomalyPatchSchema.safeParse(request.body);
+      if (!parsed.success || !isAnomalyStatus(parsed.data.status)) {
+        return reply.code(400).send({ code: "invalid_body", message: "Statut invalide (attendu : à traiter / acceptée / modifiée / rejetée / à vérifier)." });
+      }
+      const existing = await prisma.correctionAnomaly.findUnique({ where: { id } });
+      if (!existing) return reply.code(404).send({ code: "not_found", message: "Anomalie introuvable." });
+      const updated = await prisma.correctionAnomaly.update({
+        where: { id },
+        data: {
+          status: parsed.data.status,
+          resolutionNote: parsed.data.resolution_note ?? null,
+          decidedById: request.user!.id,
+          decidedAt: new Date(),
+        },
+      });
+      await writeAuditLog({
+        userId: request.user!.id, action: "update", entityType: "correction_anomaly", entityId: id,
+        oldValues: { status: existing.status }, newValues: { status: updated.status, resolution_note: updated.resolutionNote },
+        ipAddress: request.ip,
+      });
+      return reply.send({ ok: true });
+    },
+  );
+
+  // (Re)génère les fiches d'anomalies d'une relecture déjà terminée (best-effort ;
+  // ne réextrait pas si des anomalies existent déjà — décisions préservées).
+  fastify.post(
+    "/api/v1/ai-editorial/jobs/:jobId/extract-anomalies",
+    { preHandler: requireAnyPermission(ANOMALY_WRITE_PERMS) },
+    async (request, reply) => {
+      const { jobId } = request.params as { jobId: string };
+      try {
+        const r = await extractAnomaliesForJob(jobId);
+        return reply.send(r);
+      } catch (e) {
+        if (e instanceof AiRunError) return reply.code(e.code === "not_found" ? 404 : 400).send({ code: e.code, message: e.message });
+        return reply.code(500).send({ code: "extract_failed", message: e instanceof Error ? e.message : "Extraction impossible." });
+      }
+    },
+  );
 
   // — Livrables produits par une relecture IA (« Générer les livrables ») —
   // Liste les documents effectivement produits par le job (rapport, version

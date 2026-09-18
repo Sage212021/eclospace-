@@ -264,8 +264,10 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     await waitJob(res.json().jobId);
     const piece = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape" } });
     expect(piece).not.toBeNull();
-    // Le passage BAT1 est transmis à l'IA.
-    expect(sdkCalls[sdkCalls.length - 1]?.user ?? "").toContain("PASSAGE : BAT1");
+    // Le passage BAT1 est transmis à l'IA (on cible l'appel du RAPPORT, pas
+    // l'appel d'extraction des anomalies qui suit).
+    const reportCall1 = [...sdkCalls].reverse().find((c) => (c.user ?? "").includes("PASSAGE :"))?.user ?? "";
+    expect(reportCall1).toContain("PASSAGE : BAT1");
   });
 
   it("la couverture BAT2 reçoit le rapport du BAT précédent (suivi des corrections)", async () => {
@@ -276,9 +278,9 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     });
     expect(res.statusCode).toBe(202);
     await waitJob(res.json().jobId);
-    const lastUser = sdkCalls[sdkCalls.length - 1]?.user ?? "";
-    expect(lastUser).toContain("PASSAGE : BAT2");
-    expect(lastUser).toContain("RAPPORT DU BAT PRÉCÉDENT");
+    const reportCall2 = [...sdkCalls].reverse().find((c) => (c.user ?? "").includes("PASSAGE :"))?.user ?? "";
+    expect(reportCall2).toContain("PASSAGE : BAT2");
+    expect(reportCall2).toContain("RAPPORT DU BAT PRÉCÉDENT");
   });
 
   it("n'appelle JAMAIS l'IA avec un max_tokens au-dessus de la limite du modèle (≤ 8192)", async () => {

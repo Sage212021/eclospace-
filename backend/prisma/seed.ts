@@ -1626,6 +1626,14 @@ async function main() {
       permissionModules: ["paie"],
       departmentCodes: ["RH", "FIN"],
     },
+    {
+      slug: "2026-09-stock-commercial-agregation-multi-lieux",
+      version: "2026.09",
+      title: "Nouveauté — Stock commercial : plus aucune remise perdue",
+      body: "Correction de fond du souci récurrent « la remise à un commercial ne s'intègre pas toujours ». La cause : un commercial pouvait, par le passé, se retrouver avec deux emplacements de stock — une remise atterrissait dans l'un, l'écran lisait l'autre. Désormais l'état d'un commercial (Reçus, À justifier, détail) est calculé sur TOUS ses emplacements : aucune remise n'est perdue, une seule ligne par commercial, et les nouvelles remises visent toujours le même emplacement. Une remise datée d'un mois antérieur est bien prise en compte (c'est le mouvement qui fait foi, pas le mois de saisie).",
+      permissionModules: ["stock", "commercial"],
+      departmentCodes: ["STOCK", "COM"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

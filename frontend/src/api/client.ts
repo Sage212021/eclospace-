@@ -5600,6 +5600,9 @@ export interface PayrollMonthLine {
   payment_mode: string | null;
   account_number: string | null;
   leave_balance: number;
+  // Salaire de la PÉRIODE, figé sur la ligne du mois (indépendant des autres mois).
+  period_base_salary?: number;
+  period_gross_contractual?: number;
   elements: PayrollMonthElements;
   note: string | null;
   net_a_payer: number;
@@ -5707,12 +5710,12 @@ export function closePayrollHandoff(period: string) {
 export function reopenPayrollHandoff(period: string) {
   return request<{ period: string; closed: boolean }>(`/api/v1/payroll/monthly/${encodeURIComponent(period)}/handoff/reopen`, { method: "POST" });
 }
-export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null, extraLines?: PayrollExtraLine[]) {
+export function savePayrollMonthLine(period: string, employeeId: string, elements: PayrollMonthElements, note?: string | null, extraLines?: PayrollExtraLine[], periodBase?: { base_salary?: number; gross_contractual?: number }) {
   // Les primes sont gérées par le module « Primes du mois » (source unique) : on
   // ne renvoie jamais `primes` depuis la grille, pour ne pas écraser le total
   // des primes validées reporté sur la ligne.
   const { primes: _primes, ...rest } = elements;
-  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...rest, note: note ?? null, extra_lines: extraLines ?? [] }) });
+  return request<{ ok: boolean }>(`/api/v1/payroll/monthly/${period}/lines/${employeeId}`, { method: "PATCH", body: JSON.stringify({ ...rest, note: note ?? null, extra_lines: extraLines ?? [], ...(periodBase ?? {}) }) });
 }
 // Retire la fiche de paie d'un salarié pour CE mois (période ouverte).
 export function deletePayrollMonthLine(period: string, employeeId: string) {
@@ -5786,6 +5789,11 @@ export interface PayrollRegister {
   lines: RegisterLine[]; totals: { brut: number; net: number; charges_pat: number };
   // Source des montants : le mois préparé (grille) s'il existe, sinon les fiches.
   monthly_status: PayrollMonthStatus | null;
+  // Contrôle de cohérence (§7) : écarts entre le net du bulletin (recalculé) et
+  // le net figé à la clôture. Salariés à paie valide sans ligne ce mois (à
+  // intégrer via « Préparer le mois ») : jamais ajoutés en silence.
+  incoherences?: { employee_id: string; employee_name: string; net_bulletin: number; net_cloture: number }[];
+  missing_profiles?: { employee_id: string; employee_name: string }[];
 }
 export function getPayrollRegister(period: string) {
   return request<PayrollRegister>(`/api/v1/payroll/register?period=${period}`);

@@ -136,6 +136,23 @@ export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: {
               </span>
             )}
           </div>
+          {reg.incoherences && reg.incoherences.length > 0 && (
+            <div style={{ background: "#F6D9D3", color: "#B23A2E", border: "1px solid #B23A2E", borderRadius: 8, padding: "9px 12px", fontSize: 12.5, margin: "0 0 10px" }}>
+              <strong>Incohérence de paie</strong> : pour {reg.incoherences.length} salarié(s), le montant du bulletin ne correspond pas au montant figé à la clôture. Vérifiez avant de vous appuyer sur ce livre.
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                {reg.incoherences.map((i) => (
+                  <li key={i.employee_id} style={{ fontFamily: "var(--font-mono, monospace)" }}>
+                    {i.employee_name} — bulletin {fcfa(i.net_bulletin)} · clôture {fcfa(i.net_cloture)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {reg.missing_profiles && reg.missing_profiles.length > 0 && (
+            <div style={{ background: "var(--amber-soft, #F6E7D2)", color: "#B87400", border: "1px solid #B87400", borderRadius: 8, padding: "9px 12px", fontSize: 12.5, margin: "0 0 10px" }}>
+              <strong>{reg.missing_profiles.length} salarié(s) à paie valide ne sont pas encore dans ce mois</strong> : {reg.missing_profiles.map((m) => m.employee_name).join(", ")}. Cliquez « Préparer le mois » (grille de paie) pour les intégrer à cette période.
+            </div>
+          )}
           {reg.lines.length === 0 ? (
             <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>{t("pay.no_employee_period", "Aucun salarié avec fiche paie sur cette période.")}</p>
           ) : (

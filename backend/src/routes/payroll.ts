@@ -111,6 +111,11 @@ const formulaUpdateSchema = z.object({
 
 // Éléments variables du mois pour un salarié (grille mensuelle).
 const monthlyLineSchema = z.object({
+  // Salaire de la PÉRIODE (facultatif) : corriger le salaire de base / brut
+  // contractuel de CE mois uniquement, sans toucher aux autres périodes ni à la
+  // fiche. N'est écrit que si fourni.
+  base_salary: money.optional(),
+  gross_contractual: money.optional(),
   // Les primes sont désormais gérées par le module « Primes du mois » (source
   // unique) : ce champ reste accepté (compatibilité) mais l'interface ne l'envoie
   // plus — il n'est écrit que s'il est fourni.
@@ -619,7 +624,8 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "payroll_monthly_run", entityId: period, ipAddress: request.ip });
         const profiles = await prisma.payrollEmployeeProfile.findMany({ where: { employee: { deletedAt: null } }, select: { employeeId: true } });
         if (profiles.length > 0) {
-          await prisma.payrollMonthlyLine.createMany({ data: profiles.map((p) => ({ runId: run!.id, employeeId: p.employeeId })), skipDuplicates: true });
+          const snap = await periodBaseSnapshot(profiles.map((p) => p.employeeId));
+          await prisma.payrollMonthlyLine.createMany({ data: profiles.map((p) => ({ runId: run!.id, employeeId: p.employeeId, baseSalary: snap.get(p.employeeId)?.base ?? null, grossContractual: snap.get(p.employeeId)?.gross ?? null })), skipDuplicates: true });
         }
         // Reporte les primes validées du module sur les lignes (source unique).
         await syncRunPrimes(period, run.id);
@@ -634,10 +640,11 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         retenueAbsence: parsed.data.retenue_absence,
         avance: parsed.data.avance, pret: parsed.data.pret, retard: parsed.data.retard, autres: parsed.data.autres,
       };
+      const snapOne = await periodBaseSnapshot([employeeId]);
       await prisma.payrollMonthlyLine.upsert({
         where: { runId_employeeId: { runId: run.id, employeeId } },
         update: elems,
-        create: { runId: run.id, employeeId, ...elems },
+        create: { runId: run.id, employeeId, ...elems, baseSalary: snapOne.get(employeeId)?.base ?? null, grossContractual: snapOne.get(employeeId)?.gross ?? null },
       });
       await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payroll_monthly_line", entityId: `${period}:${employeeId}`, newValues: parsed.data, ipAddress: request.ip });
       const saved = await prisma.payrollMonthlyLine.findUnique({ where: { runId_employeeId: { runId: run.id, employeeId } } });
@@ -749,8 +756,40 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const period = normalizePeriod((request.query as { period?: string }).period);
       const reg = await computeRegister(period);
       if ("error" in reg) return reply.code(reg.status).send(reg.error);
-      const closure = await prisma.payrollClosure.findUnique({ where: { periodKey: period }, select: { closedAt: true, closedBy: true } });
-      return reply.send({ ...reg, closed: Boolean(closure), closed_at: closure?.closedAt ?? null });
+      const closure = await prisma.payrollClosure.findUnique({ where: { periodKey: period }, select: { id: true, closedAt: true, closedBy: true } });
+      // Contrôle de cohérence (§7) : pour un mois CLÔTURÉ, on compare le net
+      // RECALCULÉ (fiche/ligne actuelle) au net FIGÉ dans le journal de clôture.
+      // Un écart signale que la clôture a été faite sur d'autres données que
+      // celles en vigueur — on l'expose explicitement (jamais en silence).
+      let incoherences: { employee_id: string; employee_name: string; net_bulletin: number; net_cloture: number }[] = [];
+      if (closure) {
+        const journal = await prisma.payrollJournalLine.findMany({ where: { closureId: closure.id }, select: { employeeId: true, employeeName: true, netAPayer: true } });
+        const frozen = new Map(journal.map((j) => [j.employeeId, { name: j.employeeName, net: num(j.netAPayer) }]));
+        incoherences = reg.lines
+          .map((l) => {
+            const f = frozen.get(l.employee_id);
+            if (!f) return null;
+            return Math.round(f.net) !== Math.round(l.net_a_payer)
+              ? { employee_id: l.employee_id, employee_name: l.employee_name, net_bulletin: l.net_a_payer, net_cloture: f.net }
+              : null;
+          })
+          .filter((x): x is NonNullable<typeof x> => x !== null);
+      }
+      // Salariés dotés d'une fiche paie mais SANS ligne pour ce mois (ex. fiche
+      // créée après la préparation). On ne les ajoute PAS en silence (règle
+      // D-041) mais on les SIGNALE : « Préparer le mois » les intègre. Évite
+      // qu'un salarié à paie valide (ex. Abou Mbah Séraphine) reste invisible.
+      let missing_profiles: { employee_id: string; employee_name: string }[] = [];
+      if (!closure) {
+        const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period }, select: { id: true } });
+        const profiles = await prisma.payrollEmployeeProfile.findMany({ where: { employee: { deletedAt: null } }, select: { employeeId: true, employee: { select: { firstName: true, lastName: true } } } });
+        const lineEmp = run ? new Set((await prisma.payrollMonthlyLine.findMany({ where: { runId: run.id }, select: { employeeId: true } })).map((l) => l.employeeId)) : new Set<string>();
+        missing_profiles = profiles
+          .filter((p) => !lineEmp.has(p.employeeId))
+          .map((p) => ({ employee_id: p.employeeId, employee_name: `${p.employee.firstName} ${p.employee.lastName}` }))
+          .sort((a, b) => a.employee_name.localeCompare(b.employee_name, "fr"));
+      }
+      return reply.send({ ...reg, closed: Boolean(closure), closed_at: closure?.closedAt ?? null, incoherences, missing_profiles });
     },
   );
 
@@ -912,7 +951,9 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       const existing = new Set((await prisma.payrollMonthlyLine.findMany({ where: { runId: run.id }, select: { employeeId: true } })).map((l) => l.employeeId));
       const toCreate = profiles.filter((p) => !existing.has(p.employeeId));
       if (toCreate.length > 0) {
-        await prisma.payrollMonthlyLine.createMany({ data: toCreate.map((p) => ({ runId: run!.id, employeeId: p.employeeId })) });
+        // Fige le salaire de la période sur chaque nouvelle ligne (indépendance).
+        const snap = await periodBaseSnapshot(toCreate.map((p) => p.employeeId));
+        await prisma.payrollMonthlyLine.createMany({ data: toCreate.map((p) => ({ runId: run!.id, employeeId: p.employeeId, baseSalary: snap.get(p.employeeId)?.base ?? null, grossContractual: snap.get(p.employeeId)?.gross ?? null })) });
       }
       // Reporte les primes déjà validées du module « Primes du mois » sur les
       // lignes du mois (source unique des primes).
@@ -968,9 +1009,14 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
           const p = l.employee.payrollProfile!;
           const confBase = l.employee.confidential?.baseSalary != null ? num(l.employee.confidential.baseSalary) : null;
           const slip = computeMonthlyLine(p, rates, l, confBase, formulas, rubriques);
+          // Salaire de la PÉRIODE (figé sur la ligne) — sert à l'édition « salaire
+          // de ce mois » ; repli sur la fiche pour une ligne antérieure.
+          const periodResolved = resolveBaseGross(p, confBase);
           return {
             employee_id: l.employeeId,
             employee_name: `${l.employee.firstName} ${l.employee.lastName}`,
+            period_base_salary: l.baseSalary != null ? num(l.baseSalary) : periodResolved.base,
+            period_gross_contractual: l.grossContractual != null ? num(l.grossContractual) : periodResolved.gross,
             matricule: p.matricule,
             cnps_number: p.cnpsNumber,
             // NIU : on préfère celui saisi sur la fiche RH (identité de l'employé),
@@ -1043,6 +1089,9 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       await prisma.payrollMonthlyLine.update({
         where: { runId_employeeId: { runId: run.id, employeeId } },
         data: {
+          // Salaire de la période : corrigé pour CE mois seulement si fourni.
+          ...(b.base_salary != null ? { baseSalary: b.base_salary } : {}),
+          ...(b.gross_contractual != null ? { grossContractual: b.gross_contractual } : {}),
           // `primes` n'est écrit que s'il est explicitement fourni (compat) ;
           // sinon on préserve la valeur gérée par le module « Primes du mois ».
           ...(b.primes != null ? { primes: b.primes } : {}),
@@ -1676,8 +1725,32 @@ function monthlyElements(l: PayrollMonthlyLine) {
 // Imposables (primes, heures sup) → ajoutés au brut ET à l'assiette. Avant impôt :
 // retenue d'absence. Retenues nettes internes : retard, avance, prêt, sanction,
 // autres. (Formules ajustables ensuite par l'opérateur.)
+// Fige le salaire de la PÉRIODE pour des salariés : renvoie, par employé, le
+// salaire de base et le brut contractuel à ENREGISTRER SUR LA LIGNE du mois
+// (instantané de la fiche au moment de la préparation / saisie). Chaque mois
+// devient ainsi indépendant.
+async function periodBaseSnapshot(employeeIds: string[]): Promise<Map<string, { base: number; gross: number }>> {
+  const ids = [...new Set(employeeIds)];
+  if (ids.length === 0) return new Map();
+  const [profiles, confs] = await Promise.all([
+    prisma.payrollEmployeeProfile.findMany({ where: { employeeId: { in: ids } } }),
+    prisma.employeeConfidential.findMany({ where: { employeeId: { in: ids } }, select: { employeeId: true, baseSalary: true } }),
+  ]);
+  const confMap = new Map(confs.map((c) => [c.employeeId, c.baseSalary != null ? num(c.baseSalary) : null]));
+  const map = new Map<string, { base: number; gross: number }>();
+  for (const p of profiles) map.set(p.employeeId, resolveBaseGross(p, confMap.get(p.employeeId) ?? null));
+  return map;
+}
+
 function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine, confBase: number | null = null, formulas?: FormulaOverlay, rubriques?: Map<string, RubriqueInfo>): Payslip {
-  const { base, gross } = resolveBaseGross(p, confBase);
+  // Salaire de la PÉRIODE : on lit d'abord la valeur FIGÉE sur la ligne du mois
+  // (chaque mois garde son salaire, indépendamment de la fiche et des corrections
+  // ultérieures). Repli sur la fiche uniquement pour une ligne antérieure au
+  // correctif (base non figée). C'est la source unique et déterministe par période.
+  const resolved = resolveBaseGross(p, confBase);
+  const base = l.baseSalary != null ? num(l.baseSalary) : resolved.base;
+  const grossRaw = l.grossContractual != null ? num(l.grossContractual) : resolved.gross;
+  const gross = Math.max(grossRaw, base);
   // Lignes libres : les typées (rubrique active) suivent leur traitement légal,
   // les autres restent gain imposable+cotisable / retenue nette (historique).
   const { rubriqueBrut, rubriqueTaxable, rubriqueCotisable, extraGains, extraRetenues, avantageNatureTaxablePct, avantageNatureCotisablePct } = splitExtraLines(parseExtraLines(l.extraLines), rubriques, rates.avantagesNature);

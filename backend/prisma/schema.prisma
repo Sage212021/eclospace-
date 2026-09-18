@@ -945,6 +945,13 @@ model PayrollMonthlyLine {
   employeeId String            @map("employee_id")
   employee   Employee          @relation(fields: [employeeId], references: [id])
 
+  // Salaire de la PÉRIODE, figé sur la ligne du mois (correction critique paie) :
+  // chaque mois garde SON salaire de base et son brut contractuel, indépendamment
+  // de la fiche globale et des corrections faites plus tard. null = ligne héritée
+  // d'avant ce correctif → repli sur la fiche du salarié (compatibilité).
+  baseSalary       Decimal? @map("base_salary") @db.Decimal(12, 2)
+  grossContractual Decimal? @map("gross_contractual") @db.Decimal(12, 2)
+
   primes         Decimal @default(0) @db.Decimal(12, 2)
   heuresSup      Decimal @default(0) @map("heures_sup") @db.Decimal(12, 2)
   retenueAbsence Decimal @default(0) @map("retenue_absence") @db.Decimal(12, 2)

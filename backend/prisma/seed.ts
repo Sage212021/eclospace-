@@ -1618,6 +1618,14 @@ async function main() {
       permissionModules: ["stock", "commercial"],
       departmentCodes: ["STOCK", "COM"],
     },
+    {
+      slug: "2026-09-paie-salaire-rattache-periode",
+      version: "2026.09",
+      title: "Nouveauté — Paie : le salaire est rattaché au MOIS traité",
+      body: "Correction importante de la paie : le salaire de chaque salarié est désormais figé sur le MOIS concerné. Modifier la paie de septembre reste rattaché à septembre, même si la saisie est faite en octobre ; août garde son propre montant, octobre le sien. Concrètement : dans « Grille de paie », en ouvrant le mois puis un salarié, vous pouvez corriger « Salaire de ce mois » sans toucher aux autres périodes ni à la fiche. Le livre de clôture et le bulletin utilisent le même salaire du mois. Deux garde-fous : une alerte signale toute incohérence entre le bulletin et le montant figé à la clôture ; et les salariés à paie valide non encore inclus dans le mois sont signalés (« Préparer le mois » les intègre) — plus de salarié oublié à la clôture. L'historique des mois clôturés reste intact.",
+      permissionModules: ["paie"],
+      departmentCodes: ["RH", "FIN"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

@@ -5568,7 +5568,43 @@ model AiReadingJob {
   launchedAt           DateTime    @default(now()) @map("launched_at")
   finishedAt           DateTime?   @map("finished_at")
 
+  anomalies            CorrectionAnomaly[]
+
   @@index([manuscriptId])
   @@index([workType])
   @@map("ai_reading_jobs")
+}
+
+// Anomalie de correction ISSUE d'une relecture IA, tracée ligne par ligne pour
+// la validation humaine (Lot 3) : chaque anomalie du rapport devient une fiche
+// que le correcteur / la Direction accepte, modifie, rejette ou marque « à
+// vérifier ». On NE supprime ni n'écrase jamais une relecture antérieure (chaque
+// passage a ses propres anomalies, rattachées à son job). Option A : « accepter »
+// enregistre la décision ; l'intégrateur applique ensuite la correction.
+model CorrectionAnomaly {
+  id            String       @id @default(uuid())
+  jobId         String       @map("job_id")
+  job           AiReadingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  manuscriptId  String       @map("manuscript_id")
+  number        Int          @default(0)
+  // Sévérité officielle : C1 bloquant · C2 important · C3 mineur · S suggestion.
+  severity      String       @default("C3")
+  // Face concernée pour une couverture : « 1ere » / « dos » / « 4eme » ; null sinon.
+  face          String?
+  location      String?
+  element       String?
+  observation   String?
+  proposal      String?
+  justification String?
+  // a_traiter · acceptee · modifiee · rejetee · a_verifier.
+  status         String       @default("a_traiter")
+  resolutionNote String?      @map("resolution_note")
+  decidedById    String?      @map("decided_by_id")
+  decidedAt      DateTime?    @map("decided_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@index([manuscriptId])
+  @@index([jobId])
+  @@map("correction_anomalies")
 }

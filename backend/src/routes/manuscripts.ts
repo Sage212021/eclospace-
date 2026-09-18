@@ -916,7 +916,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     return reply.code(201).send({ id: doc.id, version_id: version.id, title: doc.title });
   });
 
-  fastify.get("/api/v1/manuscripts/:id/step-attachments", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+  fastify.get("/api/v1/manuscripts/:id/step-attachments", { preHandler: requireAnyPermission([{ module: "manuscripts", action: "consultation" }, { module: "tasks", action: "consultation" }]) }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const docs = await prisma.document.findMany({
       where: { entityType: "manuscript", entityId: id, category: "piece_etape", deletedAt: null },
@@ -937,7 +937,10 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     );
   });
 
-  fastify.get("/api/v1/manuscripts/:id/step-attachments/:versionId/download", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
+  // Téléchargement accessible aussi au CORRECTEUR / INTÉGRATEUR (droit « tâches »),
+  // pour qu'ils récupèrent les pièces de travail (VC1, versions du cycle de
+  // correction) depuis « Mes corrections » sans le droit large « documents ».
+  fastify.get("/api/v1/manuscripts/:id/step-attachments/:versionId/download", { preHandler: requireAnyPermission([{ module: "manuscripts", action: "consultation" }, { module: "tasks", action: "consultation" }]) }, async (request, reply) => {
     const { id, versionId } = request.params as { id: string; versionId: string };
     const version = await prisma.documentVersion.findFirst({
       where: { id: versionId, document: { entityType: "manuscript", entityId: id, category: "piece_etape", deletedAt: null } },

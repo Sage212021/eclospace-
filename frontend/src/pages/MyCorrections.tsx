@@ -9,6 +9,8 @@ import {
 import { Button } from "../components/Button";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { AiReadingLauncher } from "../components/AiReadingLauncher";
+import { StartingProofPanel } from "../components/StartingProofPanel";
+import { CorrectionCyclePanel } from "../components/CorrectionCyclePanel";
 
 // Boîte de travail personnelle du correcteur (parallèle de « Mes lectures »).
 // Menu local en accordéon : ses tâches de correction regroupées par état. Sur
@@ -99,9 +101,12 @@ export function MyCorrections() {
 
 function CorrectionCard({ task, onDepose, onRefresh }: { task: MyCorrectionTask; onDepose: (t: MyCorrectionTask, f: File) => void; onRefresh: () => void }) {
   const canValidate = task.status !== "terminee" && task.status !== "validee";
-  // Écran complet de correction par ouvrage : l'assistance IA (relecture BAT1 /
-  // BAT2 / couverture) et la récupération des BAT produits (« livrables »),
-  // ouverts d'un clic, sous la tâche. Déplié par défaut. Nécessite l'ouvrage.
+  // Écran complet de correction par ouvrage — le circuit du début à la fin :
+  //   • la matière à corriger (VC1 : manuscrit + couvertures 1ère/dos/4ème) ;
+  //   • le cycle en 2 temps avec relais correcteur ↔ intégrateur (BAT1 → version
+  //     intégrée → BAT2 → version corrigée finale) ;
+  //   • l'assistance IA branchée sur la bonne matière à chaque passage.
+  // Ouvert d'un clic, sous la tâche. Nécessite l'ouvrage.
   const [workspace, setWorkspace] = useState(false);
   const manuscriptId = task.manuscript?.id ?? null;
   return (
@@ -156,19 +161,29 @@ function CorrectionCard({ task, onDepose, onRefresh }: { task: MyCorrectionTask;
             style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: workspace ? "var(--eclosion-soft)" : "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "var(--ink)" }}
           >
             <span style={{ fontSize: 15 }}>🤖</span>
-            <span style={{ flex: 1 }}>Assistance IA &amp; BAT déposés</span>
+            <span style={{ flex: 1 }}>Écran de correction — BAT, phases &amp; assistance IA</span>
             <span style={{ color: "var(--muted)", display: "inline-block", transform: workspace ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
           </button>
           {workspace && (
             <div style={{ marginTop: 8 }}>
-              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "2px 0 4px", lineHeight: 1.6 }}>
-                Lancez la relecture assistée pour « {task.manuscript?.title ?? "l'ouvrage"} » ; les BAT produits (manuscrit
-                corrigé + rapport) apparaissent dans « 📦 Générer les livrables », prêts à télécharger, puis à redéposer
-                ci-dessus (« À remettre »).
+              {/* 1 — La matière à corriger (VC1) : manuscrit + couvertures. En
+                  lecture seule ici (déposée en amont à la Planification). */}
+              <StartingProofPanel manuscriptId={manuscriptId} canManage={false} />
+
+              {/* 2 — Le cycle en deux temps + relais correcteur ↔ intégrateur :
+                  BAT1 → version intégrée → BAT2 → version corrigée finale. */}
+              <CorrectionCyclePanel manuscriptId={manuscriptId} canManage />
+
+              {/* 3 — Assistance IA, branchée sur la BONNE matière à chaque passage
+                  (voir resolveAiSourceVersion côté serveur). */}
+              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "14px 0 4px", lineHeight: 1.6 }}>
+                Assistance IA pour « {task.manuscript?.title ?? "l'ouvrage"} » — les documents produits (manuscrit corrigé +
+                rapport) apparaissent dans « 📦 Générer les livrables », prêts à télécharger puis à redéposer dans la phase
+                correspondante ci-dessus.
               </p>
-              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — BAT1" hint="Produit aussi le manuscrit corrigé BAT1 (à intégrer). Récupérez-le dans « 📦 Générer les livrables »." />
-              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — BAT2" hint="Produit aussi le manuscrit corrigé BAT2 (à intégrer). Au BAT2, l'IA suit les corrections du BAT précédent." />
-              <AiReadingLauncher manuscriptId={manuscriptId} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" askCoverPass hint="Choisissez le passage : BAT1 (1ᵉʳ) ou BAT2. Au BAT2, l'IA vérifie les intégrations du BAT précédent." />
+              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_1" stepCode="CORRECTION" title="Relecture IA — BAT1 (1re correction)" hint="Lit le manuscrit à corriger (VC1) et produit le rapport + le manuscrit corrigé BAT1. À intégrer ensuite en « Version intégrée »." />
+              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_2" stepCode="CORRECTION" title="Relecture IA — BAT2 (2e correction)" hint="Lit la VERSION INTÉGRÉE du 1er passage (rendu de l'intégrateur), pas l'original, et suit les corrections du BAT1." />
+              <AiReadingLauncher manuscriptId={manuscriptId} workType="couverture" stepCode="CORRECTION" title="Relecture IA — Couverture (1ʳᵉ, dos, 4ᵉ)" askCoverPass hint="Lit les couvertures à corriger (VC1 : 1ère, dos, 4ème). Choisissez le passage : BAT1 (1ᵉʳ) ou BAT2 (suivi du passage précédent)." />
             </div>
           )}
         </div>

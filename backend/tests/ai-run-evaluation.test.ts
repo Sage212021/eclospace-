@@ -251,7 +251,7 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     const job = await waitJob(res.json().jobId);
     // Deux documents produits : le rapport + le manuscrit corrigé.
     expect((job.producedDocumentIds as string[]).length).toBe(2);
-    const corrected = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, title: { contains: "Manuscrit corrigé (IA) — BAT1" } } });
+    const corrected = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, title: { contains: "Manuscrit corrigé — BAT1" } } });
     expect(corrected).not.toBeNull();
   });
 
@@ -416,7 +416,7 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
 
     // Une VERSION RÉÉCRITE (IA) a été produite comme pièce d'étape distincte.
     const reecrit = await prisma.document.findFirst({
-      where: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape", title: { startsWith: "Version réécrite (IA)" }, deletedAt: null },
+      where: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape", title: { startsWith: "Version réécrite —" }, deletedAt: null },
       include: { versions: true },
     });
     expect(reecrit).not.toBeNull();
@@ -445,7 +445,7 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(docsRes.statusCode).toBe(200);
     const docs = (docsRes.json() as { documents: Array<{ id: string; title: string }> }).documents;
     expect(docs.length).toBeGreaterThanOrEqual(2);
-    expect(docs.some((d) => d.title.startsWith("Version réécrite (IA)"))).toBe(true);
+    expect(docs.some((d) => d.title.startsWith("Version réécrite —"))).toBe(true);
     const dl = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs/${res.json().jobId}/documents/${docs[0].id}/download`, headers: { cookie: adminCookie } });
     expect(dl.statusCode).toBe(200);
     const bad = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs/${res.json().jobId}/documents/00000000-0000-0000-0000-000000000000/download`, headers: { cookie: adminCookie } });

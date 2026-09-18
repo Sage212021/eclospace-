@@ -5,6 +5,7 @@ import { prisma } from "./prisma.js";
 import { storeFile } from "./storage.js";
 import { writeAuditLog } from "./audit.js";
 import { loadConfig, readApiKey, resolveModelId, type WorkType } from "./aiConfig.js";
+import { buildCorrectionMethodText } from "./correctionProfile.js";
 
 // Moteur de relecture assistée (Lot IA-1). Orchestration : préparer le manuscrit,
 // appeler Claude AU NOM du relecteur d'Éclosion, générer le rapport .docx, le
@@ -236,8 +237,14 @@ export function capManuscriptText(text: string): { text: string; truncated: bool
 // de couverture terminée sur cet ouvrage, autre que le job courant) — pour que le
 // BAT2 puisse suivre les corrections effectivement demandées au passage précédent.
 async function findPreviousCoverReportText(manuscriptId: string, currentJobId: string): Promise<string | null> {
+  return findPreviousReportText(manuscriptId, "couverture", currentJobId);
+}
+// Rapport de la dernière relecture TERMINÉE d'un type donné sur cet ouvrage (hors
+// job courant) — pour que la 2e relecture (BAT2) suive les corrections demandées
+// au passage précédent (couverture BAT2 ; ou R2 du manuscrit relit le rapport R1).
+async function findPreviousReportText(manuscriptId: string, workType: WorkType, currentJobId: string): Promise<string | null> {
   const prev = await prisma.aiReadingJob.findFirst({
-    where: { manuscriptId, workType: "couverture", status: "termine", id: { not: currentJobId } },
+    where: { manuscriptId, workType, status: "termine", id: { not: currentJobId } },
     orderBy: [{ finishedAt: "desc" }, { launchedAt: "desc" }],
   });
   const ids = Array.isArray(prev?.producedDocumentIds) ? (prev!.producedDocumentIds as string[]) : [];
@@ -486,6 +493,11 @@ export interface AiRunParams {
   // GRILLE transmise à l'IA. Sinon (absent), on retombe sur le domaine de
   // l'ouvrage. Doit rester cohérent avec le sélecteur de la remise manuelle.
   gridGenreId?: string | null;
+  // Moteur de correction éditoriale : type d'ouvrage (pilote la grille de
+  // contrôle) et support analysé. Le n° de relecture est porté par le workType
+  // (correction_1 = R1, correction_2 = R2 ; couverture via coverPass).
+  bookTypeCode?: string | null;
+  support?: string | null;
   userId: string;
   ip?: string;
 }
@@ -684,6 +696,31 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
           ? "\n\n=== PASSAGE : BAT2 (deuxième passage) ===\nCi-dessous le RAPPORT DE COUVERTURE DU BAT PRÉCÉDENT. Dans la rubrique « Suivi des corrections du BAT précédent », reprends CHAQUE correction qui y était demandée et indique si elle a été intégrée (✔), non intégrée (✘) ou partielle (~), ce qui manque encore, puis apprécie les améliorations apportées.\n\n--- DÉBUT RAPPORT DU BAT PRÉCÉDENT ---\n" + prevReport + "\n--- FIN RAPPORT DU BAT PRÉCÉDENT ---"
           : "\n\n=== PASSAGE : BAT2 (deuxième passage) ===\nLe rapport du BAT précédent est introuvable : signale-le dans la rubrique de suivi et déduis le suivi des corrections encore visibles sur la couverture.";
       }
+    }
+
+    // MOTEUR DE CORRECTION ÉDITORIALE — la grille se charge automatiquement selon
+    // le type d'ouvrage, le support et le n° de relecture. On l'injecte pour la
+    // correction (BAT1/BAT2) et la couverture ; l'évaluation garde sa grille de
+    // notation propre.
+    if (params.workType === "correction_1" || params.workType === "correction_2" || params.workType === "couverture") {
+      const relecture = params.workType === "correction_2" || (params.workType === "couverture" && (params.coverPass ?? "BAT1") === "BAT2") ? 2 : 1;
+      let bookTypeLabel: string | null = null;
+      if (params.bookTypeCode) {
+        const bt = await prisma.bookType.findUnique({ where: { code: params.bookTypeCode }, select: { label: true } });
+        bookTypeLabel = bt?.label ?? params.bookTypeCode;
+      }
+      userText += "\n\n" + (await buildCorrectionMethodText({ bookTypeCode: params.bookTypeCode, bookTypeLabel, support: params.support, relecture }));
+    }
+
+    // Relecture 2 du manuscrit : contrôle APRÈS intégration. On joint le rapport de
+    // la 1re relecture pour que l'IA pointe, correction par correction, ce qui a été
+    // intégré, non intégré, partiellement intégré, modifié, et les nouvelles
+    // anomalies — au lieu de refaire la 1re relecture à l'identique.
+    if (params.workType === "correction_2") {
+      const prevR1 = await findPreviousReportText(manuscript.id, "correction_1", job.id);
+      userText += prevR1
+        ? "\n\n=== CONTRÔLE APRÈS INTÉGRATION (RELECTURE 2) ===\nCi-dessous le RAPPORT DE LA 1re RELECTURE. Pour CHAQUE correction qui y était demandée, indique dans le tableau de suivi R2 son résultat : CORRIGÉE / NON CORRIGÉE / PARTIELLEMENT CORRIGÉE / CORRECTION MODIFIÉE / NOUVELLE ANOMALIE, avec sa localisation. Puis effectue une nouvelle passe de contrôle (nouvelles erreurs introduites, cohérence finale).\n\n--- DÉBUT RAPPORT RELECTURE 1 ---\n" + prevR1 + "\n--- FIN RAPPORT RELECTURE 1 ---"
+        : "\n\n=== CONTRÔLE APRÈS INTÉGRATION (RELECTURE 2) ===\nLe rapport de la 1re relecture est introuvable : signale-le, et effectue un contrôle qualité complet de la version intégrée (corrections visibles, nouvelles anomalies, cohérence finale).";
     }
 
     const content: Anthropic.MessageParam["content"] =

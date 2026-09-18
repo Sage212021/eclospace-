@@ -1071,8 +1071,28 @@ export interface AiJob {
 }
 // L'analyse est désormais lancée EN ARRIÈRE-PLAN : la requête répond aussitôt
 // avec l'identifiant du job (statut suivi via listAiJobs). Fini les erreurs 504.
-export function runAiEditorial(input: { manuscript_id: string; work_type: AiWorkType; step_code?: string; editor_recommendation?: string; cover_pass?: "BAT1" | "BAT2"; grid_genre_id?: string }) {
+export function runAiEditorial(input: { manuscript_id: string; work_type: AiWorkType; step_code?: string; editor_recommendation?: string; cover_pass?: "BAT1" | "BAT2"; grid_genre_id?: string; book_type_code?: string | null; support?: string | null }) {
   return request<{ jobId: string; started: boolean }>(`/api/v1/ai-editorial/run`, { method: "POST", body: JSON.stringify(input) });
+}
+// Moteur de correction éditoriale : types d'ouvrage + supports (pour les
+// sélecteurs). La grille adaptée se charge ensuite automatiquement côté serveur.
+export interface BookTypeOption { code: string; label: string; }
+export interface SupportOption { code: string; label: string; }
+export function getCorrectionBookTypes() {
+  return request<{ book_types: BookTypeOption[]; supports: SupportOption[] }>(`/api/v1/ai-editorial/book-types`);
+}
+// Paramétrage éditable des grilles de correction (admin éditorial).
+export interface CorrectionControlPointView { id: string; label: string; defaultSeverity: string; displayOrder: number; isActive: boolean; }
+export interface CorrectionProfileView { id: string; bookTypeCode: string | null; label: string; isActive: boolean; controlPoints: CorrectionControlPointView[]; }
+export interface BookTypeAdmin { id: string; code: string; label: string; displayOrder: number; isActive: boolean; }
+export function getCorrectionProfilesAdmin() {
+  return request<{ book_types: BookTypeAdmin[]; supports: SupportOption[]; profiles: CorrectionProfileView[]; severities: string[] }>(`/api/v1/ai-editorial/correction-profiles`);
+}
+export function saveBookType(code: string, input: { label: string; display_order?: number; is_active?: boolean }) {
+  return request<{ ok: boolean }>(`/api/v1/ai-editorial/book-types/${code}`, { method: "PUT", body: JSON.stringify(input) });
+}
+export function saveCorrectionProfile(code: string, input: { label: string; points: { label: string; default_severity: string; is_active?: boolean }[] }) {
+  return request<{ ok: boolean }>(`/api/v1/ai-editorial/correction-profiles/${code}`, { method: "PUT", body: JSON.stringify(input) });
 }
 export function listAiJobs(manuscriptId: string) {
   return request<{ jobs: AiJob[] }>(`/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`);

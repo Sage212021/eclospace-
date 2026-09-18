@@ -7,6 +7,7 @@ import { SettingCard } from "../components/SettingCard";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printBlankLetterhead, previewStampedDecisionLetter, previewStampedContract } from "../lib/print";
 import { AiEditorialConfigCard, AiPromptsCard } from "../components/AiEditorialCard";
+import { CorrectionGridsCard } from "../components/CorrectionGridsCard";
 import { StepConsistencyCard } from "../components/StepConsistencyCard";
 
 interface SettingsPageProps {
@@ -134,6 +135,8 @@ export function SettingsPage({ canAdminister, user }: SettingsPageProps) {
       <AiEditorialConfigCard canAdminister={canAdminister} />
 
       <AiPromptsCard canAdminister={canAdminister} />
+
+      <CorrectionGridsCard canAdminister={canAdminister} />
 
       <StepConsistencyCard canAdminister={canAdminister} />
 

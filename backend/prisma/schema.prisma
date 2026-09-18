@@ -2172,6 +2172,56 @@ model EvaluationCriterion {
   @@map("evaluation_criteria")
 }
 
+// Moteur de correction éditoriale IA — paramétrage éditable (§ cahier « Assistance
+// de correction éditoriale IA »). Le TYPE d'ouvrage pilote la grille de contrôle
+// appliquée (fallback sur un profil par défaut). Les libellés sont modifiables
+// sans toucher au moteur (ajout d'un type = ajout d'une ligne + son profil).
+model BookType {
+  id           String   @id @default(uuid())
+  code         String   @unique
+  label        String
+  displayOrder Int      @default(0) @map("display_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  updatedBy    String?  @map("updated_by")
+
+  @@map("book_types")
+}
+
+// Grille de correction d'un type d'ouvrage : liste de points de contrôle avec une
+// sévérité par défaut. bookTypeCode null = profil PAR DÉFAUT (commun) — un type
+// sans profil propre en hérite. Entièrement éditable en Paramètres.
+model CorrectionProfile {
+  id           String   @id @default(uuid())
+  bookTypeCode String?  @unique @map("book_type_code")
+  label        String
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  updatedBy    String?  @map("updated_by")
+
+  controlPoints CorrectionControlPoint[]
+
+  @@map("correction_profiles")
+}
+
+model CorrectionControlPoint {
+  id              String  @id @default(uuid())
+  profileId       String  @map("profile_id")
+  profile         CorrectionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  label           String
+  // Sévérité par défaut du point de contrôle : C1 (bloquant), C2 (important),
+  // C3 (mineur), S (suggestion). L'IA peut relever une anomalie à une autre
+  // sévérité selon le cas ; c'est une valeur indicative de la grille.
+  defaultSeverity String  @default("C3") @map("default_severity")
+  displayOrder    Int     @default(0) @map("display_order")
+  isActive        Boolean @default(true) @map("is_active")
+
+  @@index([profileId])
+  @@map("correction_control_points")
+}
+
 enum EvaluationRecommendation {
   accept
   accept_minor

@@ -26,7 +26,7 @@ export interface PresetGroup {
   options: string[];
 }
 
-export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hint, askCoverPass, askGrid, presetGroups }: { manuscriptId: string; workType: AiWorkType; stepCode: string; title: string; hint?: string; askCoverPass?: boolean; askGrid?: boolean; presetGroups?: PresetGroup[] }) {
+export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hint, askCoverPass, askGrid, presetGroups, bookTypeCode, support }: { manuscriptId: string; workType: AiWorkType; stepCode: string; title: string; hint?: string; askCoverPass?: boolean; askGrid?: boolean; presetGroups?: PresetGroup[]; bookTypeCode?: string | null; support?: string | null }) {
   const [jobs, setJobs] = useState<AiJob[]>([]);
   const [reco, setReco] = useState("");
   const [coverPass, setCoverPass] = useState<"BAT1" | "BAT2">("BAT1");
@@ -106,7 +106,7 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
   async function launch() {
     setBusy(true); setErr(null); setNote(null);
     try {
-      await runAiEditorial({ manuscript_id: manuscriptId, work_type: workType, step_code: stepCode, editor_recommendation: reco.trim() || undefined, cover_pass: askCoverPass ? coverPass : undefined, grid_genre_id: askGrid && selectedGenre ? selectedGenre : undefined });
+      await runAiEditorial({ manuscript_id: manuscriptId, work_type: workType, step_code: stepCode, editor_recommendation: reco.trim() || undefined, cover_pass: askCoverPass ? coverPass : undefined, grid_genre_id: askGrid && selectedGenre ? selectedGenre : undefined, book_type_code: bookTypeCode ?? undefined, support: support ?? undefined });
       setReco("");
       setNote("Analyse lancée. Le relecteur d'Éclosion travaille en arrière-plan — vous pouvez patienter ou quitter cet écran, le rapport sera classé dans les Documents de l'ouvrage.");
       // Suivi de progression (jusqu'à ~5 min).

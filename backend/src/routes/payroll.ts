@@ -1743,14 +1743,13 @@ async function periodBaseSnapshot(employeeIds: string[]): Promise<Map<string, { 
 }
 
 function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine, confBase: number | null = null, formulas?: FormulaOverlay, rubriques?: Map<string, RubriqueInfo>): Payslip {
-  // Salaire de la PÉRIODE : on lit d'abord la valeur FIGÉE sur la ligne du mois
-  // (chaque mois garde son salaire, indépendamment de la fiche et des corrections
-  // ultérieures). Repli sur la fiche uniquement pour une ligne antérieure au
-  // correctif (base non figée). C'est la source unique et déterministe par période.
-  const resolved = resolveBaseGross(p, confBase);
-  const base = l.baseSalary != null ? num(l.baseSalary) : resolved.base;
-  const grossRaw = l.grossContractual != null ? num(l.grossContractual) : resolved.gross;
-  const gross = Math.max(grossRaw, base);
+  // ANNULATION D-057 (demande opérateur) : le salaire de base/brut vient de la
+  // FICHE du salarié (résolue en direct), pas d'une valeur figée sur la ligne du
+  // mois — qui avait rendu le livre de paie incohérent (charges patronales et
+  // coût employeur calculés sur une ancienne valeur restée figée). On revient au
+  // calcul antérieur, cohérent. Les colonnes de ligne existent encore mais ne
+  // pilotent plus le calcul.
+  const { base, gross } = resolveBaseGross(p, confBase);
   // Lignes libres : les typées (rubrique active) suivent leur traitement légal,
   // les autres restent gain imposable+cotisable / retenue nette (historique).
   const { rubriqueBrut, rubriqueTaxable, rubriqueCotisable, extraGains, extraRetenues, avantageNatureTaxablePct, avantageNatureCotisablePct } = splitExtraLines(parseExtraLines(l.extraLines), rubriques, rates.avantagesNature);

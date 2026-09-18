@@ -274,6 +274,7 @@ function HandoverDialog({ mode, commercials, isbns, magasins, onClose, onDone, o
   const today = new Date().toISOString().slice(0, 10);
   const [movedAt, setMovedAt] = useState(today);
   const [busy, setBusy] = useState(false);
+  const [localErr, setLocalErr] = useState<string | null>(null);
   const isReturn = mode === "return";
 
   // Ajout rapide d'un ouvrage/bien absent du catalogue (remise uniquement).
@@ -321,8 +322,12 @@ function HandoverDialog({ mode, commercials, isbns, magasins, onClose, onDone, o
   }
 
   async function submit() {
-    if (!userId || !isbnId || !locationId || quantity <= 0) { onError("Renseignez le commercial, l'ouvrage, le magasin et une quantité."); return; }
-    if (!isReturn && movedAt && movedAt > today) { onError("La date de remise ne peut pas être postérieure à aujourd'hui."); return; }
+    setLocalErr(null);
+    if (!userId) { setLocalErr("Choisissez le commercial."); return; }
+    if (!isbnId) { setLocalErr("Choisissez l'ouvrage dans la liste (tapez le titre puis sélectionnez-le)."); return; }
+    if (!locationId) { setLocalErr("Choisissez le magasin d'origine."); return; }
+    if (quantity <= 0) { setLocalErr("Indiquez une quantité (au moins 1)."); return; }
+    if (!isReturn && movedAt && movedAt > today) { setLocalErr("La date de remise ne peut pas être postérieure à aujourd'hui."); return; }
     setBusy(true);
     try {
       const payload = { isbn_id: isbnId, quantity, location_id: locationId, reason: reason.trim() || undefined };
@@ -335,7 +340,14 @@ function HandoverDialog({ mode, commercials, isbns, magasins, onClose, onDone, o
         onDone(`Remise de ${quantity} exemplaire(s) à ${name} enregistrée.`);
       }
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Opération impossible.");
+      // Erreur AFFICHÉE DANS LA FENÊTRE (sinon, sur mobile, elle passait derrière
+      // la fenêtre et « Valider » semblait ne rien faire). Message clair pour le
+      // cas fréquent « le magasin d'origine ne détient pas ce livre ».
+      const raw = e instanceof Error ? e.message : "Opération impossible.";
+      const magasin = magasins.find((m) => m.id === locationId)?.label ?? "le magasin choisi";
+      setLocalErr(/exemplaire|détient|negative|stock/i.test(raw)
+        ? `${raw} Vérifiez que « ${magasin} » détient bien ce livre, ou choisissez le magasin qui le contient (au besoin, enregistrez d'abord une entrée en stock).`
+        : raw);
     } finally {
       setBusy(false);
     }
@@ -355,6 +367,11 @@ function HandoverDialog({ mode, commercials, isbns, magasins, onClose, onDone, o
       <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 0 }}>
         {isReturn ? "Le commercial rend des exemplaires au magasin." : "Confier des exemplaires à un commercial — ce n'est pas une vente."}
       </p>
+      {localErr && (
+        <div style={{ background: "var(--alert-soft, #F6E2DE)", color: "var(--alert, #B23A2E)", border: "1px solid var(--alert, #B23A2E)", borderRadius: 8, padding: "8px 11px", fontSize: 12.5, margin: "0 0 10px" }}>
+          {localErr}
+        </div>
+      )}
       <Field label="Commercial">
         <select value={userId} onChange={(e) => setUserId(e.target.value)}>
           {commercials.length === 0 && <option value="">Aucun commercial</option>}

@@ -1634,6 +1634,14 @@ async function main() {
       permissionModules: ["stock", "commercial"],
       departmentCodes: ["STOCK", "COM"],
     },
+    {
+      slug: "2026-09-remise-message-erreur-visible",
+      version: "2026.09",
+      title: "Nouveauté — Remise à un commercial : la raison d'un échec s'affiche",
+      body: "Quand une remise ne s'enregistre pas, la raison s'affiche maintenant DANS la fenêtre « Remettre à un commercial » (avant, le message passait derrière la fenêtre sur téléphone et « Valider » semblait ne rien faire). Le cas le plus fréquent : le magasin d'origine choisi ne détient pas ce livre — le message invite alors à choisir le bon magasin (ou à enregistrer d'abord une entrée en stock). Aucune limite sur le nombre d'ouvrages différents remis à un commercial : c'est bien la disponibilité en magasin qui conditionne la remise.",
+      permissionModules: ["stock", "commercial"],
+      departmentCodes: ["STOCK", "COM"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

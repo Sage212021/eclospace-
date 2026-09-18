@@ -1499,12 +1499,23 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     moved_at: z.coerce.date().optional(),
   });
 
-  // Lieu de stock d'un commercial, créé à la première remise.
+  // Lieu de stock CANONIQUE d'un commercial (le plus ancien), créé à la 1ʳᵉ
+  // remise. DÉTERMINISTE (orderBy createdAt asc) : toutes les remises visent
+  // toujours le MÊME lieu, ce qui évite d'éparpiller le stock d'un commercial
+  // sur plusieurs lieux (cause du « la remise ne s'intègre pas »).
   async function getOrCreateCommercialLocation(userId: string) {
-    const existing = await prisma.stockLocation.findFirst({ where: { commercialUserId: userId, type: "stock_commercial" } });
+    const existing = await prisma.stockLocation.findFirst({ where: { commercialUserId: userId, type: "stock_commercial" }, orderBy: { createdAt: "asc" } });
     if (existing) return existing;
     const names = await resolveStockActorNames([userId]);
     return prisma.stockLocation.create({ data: { type: "stock_commercial", label: `Stock commercial — ${names.get(userId) ?? "commercial"}`, commercialUserId: userId } });
+  }
+
+  // TOUS les lieux de stock d'un commercial (robustesse : si un doublon
+  // historique existe, on n'en perd aucun mouvement). L'état est ainsi agrégé
+  // sur l'ensemble, quel que soit le lieu où une remise passée a été enregistrée.
+  async function commercialLocationIds(userId: string): Promise<string[]> {
+    const locs = await prisma.stockLocation.findMany({ where: { commercialUserId: userId, type: "stock_commercial" }, select: { id: true } });
+    return locs.map((l) => l.id);
   }
 
   // Déplace des exemplaires entre un magasin et le lieu du commercial (les deux
@@ -1522,15 +1533,24 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     });
   }
 
-  // État du stock d'un commercial : agrégats par catégorie + détenus (à justifier).
-  async function commercialStockReport(locationId: string) {
-    const movements = await prisma.stockMovement.findMany({ where: { OR: [{ fromLocationId: locationId }, { toLocationId: locationId }], status: { not: "cancelled" } } });
+  // État du stock d'un commercial : agrégats par catégorie + détenus (à
+  // justifier). Calculé sur l'ENSEMBLE de ses lieux (robustesse aux doublons) —
+  // une remise datée d'un mois antérieur est comptée comme les autres (aucun
+  // filtre de mois : c'est le mouvement qui fait foi).
+  async function commercialStockReport(locationIds: string[]) {
+    const ids = new Set(locationIds);
+    if (ids.size === 0) return { recus: 0, vendus: 0, retournes: 0, offerts: 0, pertes: 0, detenus: 0, a_justifier: 0 };
+    const movements = await prisma.stockMovement.findMany({ where: { OR: [{ fromLocationId: { in: locationIds } }, { toLocationId: { in: locationIds } }], status: { not: "cancelled" } } });
     let recus = 0, vendus = 0, retournes = 0, offerts = 0, pertes = 0;
     const OFFERTS: StockMovementType[] = ["author_copy", "press_copy", "promotional_out", "free_out", "event_out", "institutional_out"];
     const PERTES: StockMovementType[] = ["loss", "damage", "destruction", "pulping"];
     for (const m of movements) {
-      if (m.toLocationId === locationId) recus += m.quantity;
-      else if (m.fromLocationId === locationId) {
+      const isIn = m.toLocationId != null && ids.has(m.toLocationId);
+      const isOut = m.fromLocationId != null && ids.has(m.fromLocationId);
+      // Transfert INTERNE entre deux lieux du même commercial : neutre (ni reçu ni sorti).
+      if (isIn && isOut) continue;
+      if (isIn) recus += m.quantity;
+      else if (isOut) {
         if (m.type === "sale_out") vendus += m.quantity;
         else if (m.type === "commercial_return" || m.type === "transfer") retournes += m.quantity;
         else if (OFFERTS.includes(m.type)) offerts += m.quantity;
@@ -1538,7 +1558,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
         else retournes += m.quantity; // toute autre sortie assimilée à une restitution
       }
     }
-    const items = await prisma.stockItem.findMany({ where: { locationId } });
+    const items = await prisma.stockItem.findMany({ where: { locationId: { in: locationIds } } });
     const detenus = items.reduce((s, it) => s + it.quantityPhysical, 0);
     return { recus, vendus, retournes, offerts, pertes, detenus, a_justifier: detenus };
   }
@@ -1702,13 +1722,23 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     "/api/v1/commercial-stock",
     { preHandler: requireAnyPermission([{ module: "commercial", action: "validation" }, { module: "commercial", action: "administration" }, { module: "direction", action: "consultation" }, { module: "stock", action: "administration" }]) },
     async (_request, reply) => {
-      const locations = await prisma.stockLocation.findMany({ where: { type: "stock_commercial", commercialUserId: { not: null } } });
-      const names = await resolveStockActorNames(locations.map((l) => l.commercialUserId));
-      const rows = await Promise.all(locations.map(async (l) => ({
-        user_id: l.commercialUserId,
-        commercial_name: l.commercialUserId ? names.get(l.commercialUserId) ?? null : null,
-        location_id: l.id,
-        ...(await commercialStockReport(l.id)),
+      const locations = await prisma.stockLocation.findMany({ where: { type: "stock_commercial", commercialUserId: { not: null } }, orderBy: { createdAt: "asc" } });
+      // Regroupe par COMMERCIAL (une seule ligne par personne), en agrégeant tous
+      // ses lieux — même s'il en existe plusieurs (doublon historique). Le
+      // location_id affiché est le lieu canonique (le plus ancien).
+      const byUser = new Map<string, string[]>();
+      const canonicalLoc = new Map<string, string>();
+      for (const l of locations) {
+        const uid = l.commercialUserId!;
+        if (!byUser.has(uid)) { byUser.set(uid, []); canonicalLoc.set(uid, l.id); }
+        byUser.get(uid)!.push(l.id);
+      }
+      const names = await resolveStockActorNames([...byUser.keys()]);
+      const rows = await Promise.all([...byUser.entries()].map(async ([uid, ids]) => ({
+        user_id: uid,
+        commercial_name: names.get(uid) ?? null,
+        location_id: canonicalLoc.get(uid)!,
+        ...(await commercialStockReport(ids)),
       })));
       rows.sort((a, b) => b.a_justifier - a.a_justifier);
       const total = rows.reduce((t, r) => ({ recus: t.recus + r.recus, vendus: t.vendus + r.vendus, retournes: t.retournes + r.retournes, offerts: t.offerts + r.offerts, pertes: t.pertes + r.pertes, detenus: t.detenus + r.detenus, a_justifier: t.a_justifier + r.a_justifier }), { recus: 0, vendus: 0, retournes: 0, offerts: 0, pertes: 0, detenus: 0, a_justifier: 0 });
@@ -1725,17 +1755,22 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     { preHandler: requireAnyPermission([{ module: "commercial", action: "validation" }, { module: "commercial", action: "administration" }, { module: "direction", action: "consultation" }, { module: "stock", action: "administration" }]) },
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
-      const loc = await prisma.stockLocation.findFirst({ where: { commercialUserId: userId, type: "stock_commercial" } });
-      if (!loc) return reply.send({ location_id: null, movements: [] });
+      const locIds = await commercialLocationIds(userId);
+      if (locIds.length === 0) return reply.send({ location_id: null, movements: [] });
+      const idSet = new Set(locIds);
       const moves = await prisma.stockMovement.findMany({
-        where: { OR: [{ fromLocationId: loc.id }, { toLocationId: loc.id }], status: { not: "cancelled" } },
+        where: { OR: [{ fromLocationId: { in: locIds } }, { toLocationId: { in: locIds } }], status: { not: "cancelled" } },
         include: { isbn: { select: { isbn13: true, manuscript: { select: { title: true } } } }, fromLocation: { select: { label: true } }, toLocation: { select: { label: true } } },
         orderBy: { movedAt: "desc" },
         take: 500,
       });
       const actorNames = await resolveStockActorNames(moves.map((m) => m.movedBy));
-      const movements = moves.map((m) => {
-        const isIn = m.toLocationId === loc.id;
+      const movements = moves
+        // Un transfert interne entre deux lieux du même commercial n'est ni un
+        // « reçu » ni un « sorti » : on ne l'affiche pas comme mouvement.
+        .filter((m) => !(m.toLocationId && idSet.has(m.toLocationId) && m.fromLocationId && idSet.has(m.fromLocationId)))
+        .map((m) => {
+        const isIn = m.toLocationId != null && idSet.has(m.toLocationId);
         return {
           id: m.id,
           moved_at: m.movedAt,
@@ -1749,7 +1784,7 @@ export default async function stockRoutes(fastify: FastifyInstance) {
           by_name: m.movedBy ? actorNames.get(m.movedBy) ?? null : null,
         };
       });
-      return reply.send({ location_id: loc.id, movements });
+      return reply.send({ location_id: locIds[0], movements });
     },
   );
 
@@ -1767,8 +1802,8 @@ export default async function stockRoutes(fastify: FastifyInstance) {
 
   // État du commercial connecté (son propre stock à justifier).
   fastify.get("/api/v1/commercial-stock/mine", { preHandler: requirePermission("commercial", "consultation") }, async (request, reply) => {
-    const loc = await prisma.stockLocation.findFirst({ where: { commercialUserId: request.user!.id, type: "stock_commercial" } });
-    if (!loc) return reply.send({ location_id: null, recus: 0, vendus: 0, retournes: 0, offerts: 0, pertes: 0, detenus: 0, a_justifier: 0 });
-    return reply.send({ location_id: loc.id, ...(await commercialStockReport(loc.id)) });
+    const locIds = await commercialLocationIds(request.user!.id);
+    if (locIds.length === 0) return reply.send({ location_id: null, recus: 0, vendus: 0, retournes: 0, offerts: 0, pertes: 0, detenus: 0, a_justifier: 0 });
+    return reply.send({ location_id: locIds[0], ...(await commercialStockReport(locIds)) });
   });
 }

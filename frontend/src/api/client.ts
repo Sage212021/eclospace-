@@ -4064,6 +4064,14 @@ export function getDuplicateEmployees() {
 export function deleteEmployee(id: string) {
   return request<{ deleted: true; name: string }>(`/api/v1/employees/${id}`, { method: "DELETE" });
 }
+// Fusion d'un doublon (`loserId`) dans la fiche à conserver (`keeperId`) :
+// déplace toutes les données rattachées puis supprime logiquement le doublon.
+export function mergeEmployees(loserId: string, keeperId: string) {
+  return request<{ merged: true; loser_name: string; keeper_name: string; moved: Record<string, number> }>(
+    `/api/v1/employees/${loserId}/merge`,
+    { method: "POST", body: JSON.stringify({ into: keeperId }) },
+  );
+}
 
 // Corbeille RH : fiches supprimées (logiquement) + restauration.
 export interface DeletedEmployee {

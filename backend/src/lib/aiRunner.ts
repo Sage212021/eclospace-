@@ -490,6 +490,50 @@ export interface AiRunParams {
   ip?: string;
 }
 
+// Source de la relecture IA selon le PASSAGE du circuit de correction. Le
+// circuit va du manuscrit à corriger à la version corrigée finale, en passant
+// par la version INTÉGRÉE du 1er passage (rendu de l'intégrateur). On lit donc
+// la bonne matière à chaque fois :
+//   • BAT1 (correction_1) → « Manuscrit à corriger » (VC1), sinon le manuscrit ;
+//   • BAT2 (correction_2) → la VERSION INTÉGRÉE du 1er passage (integration_1),
+//     sinon le manuscrit à corriger, sinon le manuscrit — JAMAIS repartir de
+//     l'original quand l'intégration du BAT1 existe ;
+//   • Couverture          → « Couvertures à corriger » (VC1 : 1ère/dos/4ème),
+//     sinon un fichier de couverture, sinon le manuscrit (textes de couverture).
+// Les autres travaux (évaluation, expertise, réécriture) lisent le manuscrit.
+type AiSourceSpec = { titlePrefix: string } | { category: string };
+function aiSourceChain(workType: string): AiSourceSpec[] {
+  switch (workType) {
+    case "couverture":
+      return [{ titlePrefix: "[vc1:couvertures]" }, { category: "couverture" }, { category: "manuscrit" }];
+    case "correction_2":
+      return [{ titlePrefix: "[correction:integration_1]" }, { titlePrefix: "[vc1:manuscrit]" }, { category: "manuscrit" }];
+    case "correction_1":
+      return [{ titlePrefix: "[vc1:manuscrit]" }, { category: "manuscrit" }];
+    default:
+      return [{ category: "manuscrit" }];
+  }
+}
+function noSourceMessage(workType: string): string {
+  if (workType === "couverture") return "Aucun fichier de couverture ni manuscrit n'a été déposé pour cet ouvrage.";
+  if (workType === "correction_2") return "Aucune version à relire : déposez le manuscrit (ou la version intégrée du 1er passage) avant de lancer la relecture BAT2.";
+  return "Aucun fichier manuscrit n'a été déposé pour cet ouvrage.";
+}
+export async function resolveAiSourceVersion(manuscriptId: string, workType: string) {
+  for (const spec of aiSourceChain(workType)) {
+    const where = "titlePrefix" in spec
+      ? { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape" as never, deletedAt: null, title: { startsWith: spec.titlePrefix } }
+      : { entityType: "manuscript", entityId: manuscriptId, category: spec.category as never, deletedAt: null };
+    const doc = await prisma.document.findFirst({
+      where,
+      orderBy: { createdAt: "desc" },
+      select: { versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { filePath: true, mimeType: true, versionNumber: true } } },
+    });
+    if (doc?.versions[0]) return doc.versions[0];
+  }
+  return undefined;
+}
+
 // PRÉ-VOL (rapide, sans appel IA) : valide la configuration et crée le job
 // « en cours ». Les erreurs (IA désactivée, pas de clé, manuscrit/fichier/prompt
 // manquant) reviennent IMMÉDIATEMENT à l'utilisateur. L'analyse elle-même, qui
@@ -507,13 +551,8 @@ export async function startAiReading(params: AiRunParams): Promise<{ jobId: stri
   if (!prompt) throw new AiRunError("no_prompt", "Aucun prompt configuré pour ce type de travail.");
 
   // Vérifie tout de suite qu'un fichier source existe (requête légère).
-  const categories = params.workType === "couverture" ? ["couverture", "manuscrit"] : ["manuscrit"];
-  let hasFile = false;
-  for (const cat of categories) {
-    const doc = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscript.id, category: cat as never, deletedAt: null, versions: { some: {} } }, select: { id: true } });
-    if (doc) { hasFile = true; break; }
-  }
-  if (!hasFile) throw new AiRunError("no_manuscript_file", params.workType === "couverture" ? "Aucun fichier de couverture ni manuscrit n'a été déposé pour cet ouvrage." : "Aucun fichier manuscrit n'a été déposé pour cet ouvrage.");
+  const src = await resolveAiSourceVersion(manuscript.id, params.workType);
+  if (!src) throw new AiRunError("no_manuscript_file", noSourceMessage(params.workType));
 
   const modelId = resolveModelId(cfg.models[params.workType]);
   const job = await prisma.aiReadingJob.create({
@@ -554,20 +593,13 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     const modelId = resolveModelId(cfg.models[params.workType]);
     const job = { id: jobId };
 
-    // Récupère le fichier source (dernière version déposée). Pour la couverture,
-    // on privilégie le fichier de couverture s'il existe (BAT), sinon le manuscrit
-    // (où vivent les textes de couverture à l'étape Correction).
-    const categories = params.workType === "couverture" ? ["couverture", "manuscrit"] : ["manuscrit"];
-    let version: { filePath: string; mimeType: string; versionNumber: number } | undefined;
-    for (const cat of categories) {
-      const doc = await prisma.document.findFirst({
-        where: { entityType: "manuscript", entityId: manuscript.id, category: cat as never, deletedAt: null },
-        select: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
-      });
-      if (doc?.versions[0]) { version = doc.versions[0]; break; }
-    }
+    // Récupère le fichier source (dernière version déposée) en lisant la BONNE
+    // matière selon le passage : BAT1 = manuscrit à corriger ; BAT2 = version
+    // INTÉGRÉE du 1er passage ; couverture = couvertures à corriger (cf.
+    // resolveAiSourceVersion / aiSourceChain).
+    const version = await resolveAiSourceVersion(manuscript.id, params.workType);
     if (!version) {
-      throw new AiRunError("no_manuscript_file", params.workType === "couverture" ? "Aucun fichier de couverture ni manuscrit n'a été déposé pour cet ouvrage." : "Aucun fichier manuscrit n'a été déposé pour cet ouvrage.");
+      throw new AiRunError("no_manuscript_file", noSourceMessage(params.workType));
     }
     const { readStoredFile } = await import("./storage.js");
     const buffer = await readStoredFile(version.filePath);

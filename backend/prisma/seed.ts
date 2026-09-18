@@ -1557,6 +1557,14 @@ async function main() {
       permissionModules: ["manuscripts"],
       departmentCodes: ["SECR", "CQ", "IMPR", "DIRED"],
     },
+    {
+      slug: "2026-09-mes-corrections-circuit-complet-bat",
+      version: "2026.09",
+      title: "Nouveauté — Mes corrections : le circuit complet BAT, du début à la fin",
+      body: "L'écran « Mes corrections » devient le poste de travail complet, cohérent du début à la fin. Sous « 🤖 Écran de correction », vous trouvez : (1) la matière à corriger (manuscrit + couvertures 1ère/dos/4ème) ; (2) le cycle en deux temps avec relais correcteur ↔ intégrateur (1re correction → version intégrée → 2e correction → version corrigée finale), chacun voyant « à qui la main » ; (3) l'assistance IA branchée sur la BONNE matière : la BAT1 lit le manuscrit à corriger, la BAT2 lit la version intégrée du 1er passage (plus jamais l'original), la couverture lit les couvertures à corriger. L'intégrateur est la Direction éditoriale ou l'Assistant éditorial. La version corrigée finale est reprise par la Maquette/Infographie.",
+      permissionModules: ["tasks"],
+      departmentCodes: ["CORR", "COMLEC", "DIRED", "SECR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

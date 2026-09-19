@@ -1,8 +1,34 @@
 import { useEffect, useState } from "react";
-import { listMyCorrectionIntegrations, type MyIntegrationItem } from "../api/client";
+import { listMyCorrectionIntegrations, getCoverCorrectionCycle, stepAttachmentDownloadUrl, type MyIntegrationItem, type CorrectionPhaseState } from "../api/client";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { CorrectionAnomaliesPanel } from "../components/CorrectionAnomaliesPanel";
 import { CorrectionCyclePanel } from "../components/CorrectionCyclePanel";
+
+// Rapports de correction de la couverture déposés par le correcteur : l'infographe
+// les télécharge ici pour les appliquer sur les fichiers de couverture.
+function CoverReports({ manuscriptId }: { manuscriptId: string }) {
+  const [phases, setPhases] = useState<CorrectionPhaseState[] | null>(null);
+  useEffect(() => { getCoverCorrectionCycle(manuscriptId).then(setPhases).catch(() => setPhases([])); }, [manuscriptId]);
+  const withFile = (phases ?? []).filter((p) => p.has_file);
+  return (
+    <section style={{ border: "1px solid var(--line)", borderRadius: 10, background: "var(--paper, #FAF8F2)", padding: 14, marginTop: 12 }}>
+      <div style={{ fontWeight: 600, fontSize: 14 }}>Rapports de correction de la couverture</div>
+      {withFile.length === 0 ? (
+        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 0" }}>Aucun rapport de couverture déposé pour l'instant par le correcteur.</p>
+      ) : (
+        <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+          {withFile.map((p) => (
+            <div key={p.key} style={{ fontSize: 12.5 }}>
+              <a href={stepAttachmentDownloadUrl(manuscriptId, p.version_id!)} download style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>⬇️ {p.label}</a>
+              <span style={{ color: "var(--muted)" }}> — {p.filename ?? "fichier"}{p.created_at ? ` · ${new Date(p.created_at).toLocaleDateString("fr-FR")}` : ""}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "8px 0 0" }}>Une fois les corrections cochées et appliquées, déposez la couverture corrigée à l'étape <strong>Infographie</strong>. Le dossier de <strong>BAT</strong> ne pourra s'ouvrir qu'une fois toutes les corrections de couverture intégrées.</p>
+    </section>
+  );
+}
 
 // Espace personnel de l'INTÉGRATEUR (parallèle de « Mes lectures » / « Mes
 // corrections »). Il voit uniquement les ouvrages qu'on lui a confiés, avec les
@@ -71,9 +97,7 @@ export function MyIntegrations() {
                 <div style={{ padding: "0 14px 14px" }}>
                   <CorrectionAnomaliesPanel manuscriptId={m.id} canDecide={false} integrationMode canIntegrate branchFilter={m.branch} />
                   {isCover ? (
-                    <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 10 }}>
-                      Une fois les corrections cochées, déposez la couverture corrigée à l'étape <strong>Infographie</strong>. Le dossier de <strong>BAT</strong> ne pourra s'ouvrir qu'une fois toutes les corrections de couverture intégrées.
-                    </p>
+                    <CoverReports manuscriptId={m.id} />
                   ) : (
                     <CorrectionCyclePanel manuscriptId={m.id} canManage />
                   )}

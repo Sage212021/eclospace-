@@ -25,9 +25,24 @@ export const CORRECTION_PHASES: (CorrectionPhase & { actor: CorrectionActor })[]
   { key: "integration_finale", label: "Version corrigée finale (VCF)", required: true, actor: "integrateur" },
 ];
 
+// Rapports de correction de la COUVERTURE (branche infographe), en parallèle du
+// texte : 1re relecture, 2e relecture, couverture corrigée finale. Facultatifs
+// (tous les ouvrages n'ont pas de couverture à corriger) et hors du relais
+// « à qui la main » du texte. Déposés par le correcteur, ils sont routés à
+// l'INFOGRAPHE qui les exploite (cf. « Mes intégrations de correction »).
+export const COVER_CORRECTION_PHASES: CorrectionPhase[] = [
+  { key: "couverture_1", label: "Rapport de correction — couverture (1ʳᵉ · dos · 4ᵉ)", required: false },
+  { key: "couverture_2", label: "Rapport de correction — couverture (2ᵉ relecture)", required: false },
+  { key: "couverture_finale", label: "Couverture corrigée finale", required: false },
+];
+
 const PHASE_KEYS = new Set(CORRECTION_PHASES.map((p) => p.key));
+const COVER_PHASE_KEYS = new Set(COVER_CORRECTION_PHASES.map((p) => p.key));
 export function isCorrectionPhase(key: string): boolean {
-  return PHASE_KEYS.has(key);
+  return PHASE_KEYS.has(key) || COVER_PHASE_KEYS.has(key);
+}
+export function isCoverCorrectionPhase(key: string): boolean {
+  return COVER_PHASE_KEYS.has(key);
 }
 
 // Titre stable d'un document de phase : « [correction:<clé>] <fichier> ».
@@ -42,7 +57,7 @@ export function parseCorrectionPhaseKey(title: string): string | null {
 
 // Livrables de correction déjà déposés pour un manuscrit, groupés par phase
 // (on garde le dépôt le plus récent par phase).
-export async function correctionCycleState(manuscriptId: string) {
+async function cycleStateFor(manuscriptId: string, phases: CorrectionPhase[]) {
   const docs = await prisma.document.findMany({
     where: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape", deletedAt: null, title: { startsWith: PREFIX } },
     orderBy: { createdAt: "desc" },
@@ -53,7 +68,7 @@ export async function correctionCycleState(manuscriptId: string) {
     const key = parseCorrectionPhaseKey(d.title);
     if (key && !latestByPhase.has(key)) latestByPhase.set(key, d);
   }
-  return CORRECTION_PHASES.map((p) => {
+  return phases.map((p) => {
     const d = latestByPhase.get(p.key);
     const v = d?.versions[0];
     const filename = d ? d.title.replace(/^\[correction:[a-z0-9_]+\]\s*/, "") : null;
@@ -70,6 +85,14 @@ export async function correctionCycleState(manuscriptId: string) {
       created_at: d?.createdAt ?? null,
     };
   });
+}
+
+export function correctionCycleState(manuscriptId: string) {
+  return cycleStateFor(manuscriptId, CORRECTION_PHASES);
+}
+// État des rapports de correction de COUVERTURE (branche infographe).
+export function coverCorrectionCycleState(manuscriptId: string) {
+  return cycleStateFor(manuscriptId, COVER_CORRECTION_PHASES);
 }
 
 // Phases obligatoires manquantes (pour bloquer la validation de l'étape).

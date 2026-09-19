@@ -31,6 +31,14 @@ async function checkBatConvergence(manuscriptId: string): Promise<string[]> {
   const isbnCompleteness = await computeIsbnCompleteness(manuscriptId);
   const missing = await checkMaquetteInfographieConvergence(manuscriptId);
   if (!isbnCompleteness.complete) missing.unshift("isbn_metadonnees_incomplet");
+  // VERROU couverture (Lot 3, branche couverture) : le BAT — épreuve finale
+  // combinant intérieur et couverture — ne s'ouvre pas tant que des corrections
+  // de COUVERTURE retenues (acceptées/modifiées) ne sont pas intégrées par
+  // l'infographe (ou écartées « non applicable » avec motif).
+  const coverPending = await prisma.correctionAnomaly.count({
+    where: { manuscriptId, status: { in: ["acceptee", "modifiee"] }, integrationStatus: { in: ["a_integrer", "a_revoir"] }, job: { workType: "couverture" } },
+  });
+  if (coverPending > 0) missing.push("corrections_couverture_non_integrees");
   return missing;
 }
 

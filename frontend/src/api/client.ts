@@ -1104,6 +1104,7 @@ export function integrateCorrectionAnomaly(id: string, input: { integration_stat
 }
 export interface MyIntegrationItem {
   id: string; manuscript_number: string; title: string; status_code: string; status_label: string;
+  branch: "texte" | "couverture";
   counts: { a_integrer: number; integree: number; a_revoir: number; non_applicable: number; total: number };
 }
 export function listMyCorrectionIntegrations() {

@@ -39,17 +39,22 @@ export function MyIntegrations() {
 
       <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
         {items.map((m) => {
+          const rowKey = `${m.branch}:${m.id}`;
           const restant = m.counts.a_integrer + m.counts.a_revoir;
-          const open = openId === m.id;
+          const open = openId === rowKey;
+          const isCover = m.branch === "couverture";
           return (
-            <div key={m.id} style={{ border: "1px solid var(--line)", borderRadius: 10, background: "#fff" }}>
+            <div key={rowKey} style={{ border: "1px solid var(--line)", borderRadius: 10, background: "#fff" }}>
               <button
                 type="button"
-                onClick={() => setOpenId(open ? null : m.id)}
+                onClick={() => setOpenId(open ? null : rowKey)}
                 style={{ width: "100%", textAlign: "left", background: "none", border: "none", padding: "12px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
               >
                 <span aria-hidden style={{ color: "var(--muted)" }}>{open ? "▾" : "▸"}</span>
                 <span style={{ fontWeight: 700 }}>{m.title}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "1px 9px", background: isCover ? "var(--eclosion-soft)" : "#E7EAF0", color: isCover ? "var(--eclosion-dark, #9A7A12)" : "#5B6472" }}>
+                  {isCover ? "Couverture" : "Texte"}
+                </span>
                 <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{m.manuscript_number}</span>
                 <span style={{ fontSize: 11.5, color: "var(--muted)" }}>· {m.status_label}</span>
                 <span
@@ -64,8 +69,14 @@ export function MyIntegrations() {
               </button>
               {open && (
                 <div style={{ padding: "0 14px 14px" }}>
-                  <CorrectionAnomaliesPanel manuscriptId={m.id} canDecide={false} integrationMode canIntegrate />
-                  <CorrectionCyclePanel manuscriptId={m.id} canManage />
+                  <CorrectionAnomaliesPanel manuscriptId={m.id} canDecide={false} integrationMode canIntegrate branchFilter={m.branch} />
+                  {isCover ? (
+                    <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 10 }}>
+                      Une fois les corrections cochées, déposez la couverture corrigée à l'étape <strong>Infographie</strong>. Le dossier de <strong>BAT</strong> ne pourra s'ouvrir qu'une fois toutes les corrections de couverture intégrées.
+                    </p>
+                  ) : (
+                    <CorrectionCyclePanel manuscriptId={m.id} canManage />
+                  )}
                 </div>
               )}
             </div>

@@ -28,6 +28,10 @@ describe("Correction — intégration par l'intégrateur désigné (Lot 3, branc
   let idAcceptee: string;
   let idModifiee: string;
   let idRejetee: string;
+  let infographId: string;
+  let infographCookie: string;
+  let idCoverA: string;
+  let idCoverB: string;
   const s = Math.random().toString(36).slice(2, 7);
 
   const login = async (username: string, password: string) => {
@@ -52,15 +56,28 @@ describe("Correction — intégration par l'intégrateur désigné (Lot 3, branc
     const mod = await prisma.correctionAnomaly.create({ data: { jobId, manuscriptId, number: 2, severity: "C2", proposal: "varier", status: "modifiee", resolutionNote: "préférer « alterner »" } });
     const rej = await prisma.correctionAnomaly.create({ data: { jobId, manuscriptId, number: 3, severity: "C3", proposal: "x", status: "rejetee" } });
     idAcceptee = acc.id; idModifiee = mod.id; idRejetee = rej.id;
+
+    // — Branche COUVERTURE : un infographe (resp. étape Infographie) + un job
+    //   couverture avec deux anomalies acceptées (1ère de couverture). —
+    const infograph = await createUserWithRole(`info_${s}`, "RESP_INFOGRAPHIE", "Info1!pass");
+    infographId = infograph.id;
+    infographCookie = await login(`info_${s}`, "Info1!pass");
+    const infoStatus = await prisma.workflowStatus.findUniqueOrThrow({ where: { code: "INFOGRAPHIE" } });
+    await prisma.manuscriptStep.create({ data: { manuscriptId, statusId: infoStatus.id, responsibleId: infographId } });
+    const jobCover = await prisma.aiReadingJob.create({ data: { manuscriptId, workType: "couverture", promptKey: "couverture", promptVersion: 1, model: "claude-haiku-4-5", status: "termine", launchedBy: adminId, reportText: "rapport couverture" } });
+    const covA = await prisma.correctionAnomaly.create({ data: { jobId: jobCover.id, manuscriptId, number: 1, severity: "C1", face: "1ere", proposal: "corriger le titre", status: "acceptee" } });
+    const covB = await prisma.correctionAnomaly.create({ data: { jobId: jobCover.id, manuscriptId, number: 2, severity: "C2", face: "4eme", proposal: "corriger le résumé", status: "acceptee" } });
+    idCoverA = covA.id; idCoverB = covB.id;
   });
 
   afterAll(async () => {
     await prisma.correctionAnomaly.deleteMany({ where: { manuscriptId } }).catch(() => {});
     await prisma.aiReadingJob.deleteMany({ where: { manuscriptId } }).catch(() => {});
+    await prisma.manuscriptStep.deleteMany({ where: { manuscriptId } }).catch(() => {});
     await prisma.document.deleteMany({ where: { entityType: "manuscript", entityId: manuscriptId } }).catch(() => {});
     await prisma.manuscript.deleteMany({ where: { id: manuscriptId } }).catch(() => {});
-    await prisma.userRole.deleteMany({ where: { userId: integId } }).catch(() => {});
-    await prisma.user.deleteMany({ where: { id: integId } }).catch(() => {});
+    await prisma.userRole.deleteMany({ where: { userId: { in: [integId, infographId] } } }).catch(() => {});
+    await prisma.user.deleteMany({ where: { id: { in: [integId, infographId] } } }).catch(() => {});
     await app.close();
     await prisma.$disconnect();
   });
@@ -115,5 +132,42 @@ describe("Correction — intégration par l'intégrateur désigné (Lot 3, branc
     const mp2 = multipart("file", "vcf.txt", "text/plain", Buffer.from("version finale"));
     const passed = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/correction-cycle/integration_finale`, headers: { cookie: adminCookie, "content-type": mp2.contentType }, payload: mp2.body });
     expect(passed.statusCode).toBe(201);
+  });
+
+  // — Branche COUVERTURE (Livraison 2) : l'infographe intègre la couverture. —
+  it("couverture : l'infographe intègre, l'intégrateur éditorial n'y touche pas (et réciproquement)", async () => {
+    // L'intégrateur éditorial (texte) ne peut pas intégrer une anomalie de couverture.
+    const wrong = await app.inject({ method: "PATCH", url: `/api/v1/correction-anomalies/${idCoverA}/integration`, headers: { cookie: integCookie }, payload: { integration_status: "integree" } });
+    expect(wrong.statusCode).toBe(403);
+    expect(wrong.json().code).toBe("not_integrator");
+    // L'infographe, lui, peut.
+    const ok = await app.inject({ method: "PATCH", url: `/api/v1/correction-anomalies/${idCoverA}/integration`, headers: { cookie: infographCookie }, payload: { integration_status: "integree" } });
+    expect(ok.statusCode).toBe(200);
+    // L'infographe ne peut PAS intégrer une anomalie de texte.
+    const cross = await app.inject({ method: "PATCH", url: `/api/v1/correction-anomalies/${idAcceptee}/integration`, headers: { cookie: infographCookie }, payload: { integration_status: "integree" } });
+    expect(cross.statusCode).toBe(403);
+  });
+
+  it("l'inbox de l'infographe liste l'ouvrage en branche « couverture »", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/v1/my-correction-integrations", headers: { cookie: infographCookie } });
+    expect(r.statusCode).toBe(200);
+    const rows = r.json().manuscripts as Array<{ id: string; branch: string; counts: { total: number } }>;
+    const cover = rows.find((x) => x.id === manuscriptId && x.branch === "couverture");
+    expect(cover).toBeTruthy();
+    expect(cover!.counts.total).toBe(2); // covA + covB
+  });
+
+  it("VERROU couverture : le BAT ne s'ouvre pas tant qu'une correction de couverture n'est pas intégrée", async () => {
+    // covB reste « à intégrer » → le BAT doit signaler la couverture non intégrée.
+    const blocked = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/bat`, headers: { cookie: adminCookie }, payload: { interior_version_id: "00000000-0000-0000-0000-000000000000", cover_version_id: "00000000-0000-0000-0000-000000000000" } });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().code).toBe("bat_convergence_incomplete");
+    expect(blocked.json().missing).toContain("corrections_couverture_non_integrees");
+
+    // Une fois covB intégrée, ce motif précis disparaît (le BAT reste bloqué par
+    // les autres prérequis amont, mais plus par la couverture).
+    await app.inject({ method: "PATCH", url: `/api/v1/correction-anomalies/${idCoverB}/integration`, headers: { cookie: infographCookie }, payload: { integration_status: "integree" } });
+    const after = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/bat`, headers: { cookie: adminCookie }, payload: { interior_version_id: "00000000-0000-0000-0000-000000000000", cover_version_id: "00000000-0000-0000-0000-000000000000" } });
+    expect(after.json().missing ?? []).not.toContain("corrections_couverture_non_integrees");
   });
 });

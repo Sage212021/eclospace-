@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getCorrectionAnomalies, decideCorrectionAnomaly, integrateCorrectionAnomaly, type CorrectionAnomaly, type AnomalySummary, type AnomalyIntegration } from "../api/client";
+import { getCorrectionAnomalies, decideCorrectionAnomaly, integrateCorrectionAnomaly, type CorrectionAnomaly, type AnomalySummary } from "../api/client";
 
 // Lot 3 en DEUX temps.
 //  • Mode DÉCISION (correcteur) : Accepter / Modifier / Rejeter / À vérifier.
@@ -24,15 +24,18 @@ export function CorrectionAnomaliesPanel({
   canDecide,
   integrationMode = false,
   canIntegrate = false,
+  branchFilter,
 }: {
   manuscriptId: string;
   canDecide: boolean;
   integrationMode?: boolean;
   canIntegrate?: boolean;
+  // En mode intégration : restreint aux anomalies « texte » (jobs correction)
+  // ou « couverture », selon le rôle de l'intégrateur qui regarde l'écran.
+  branchFilter?: "texte" | "couverture";
 }) {
   const [anomalies, setAnomalies] = useState<CorrectionAnomaly[]>([]);
   const [summary, setSummary] = useState<AnomalySummary | null>(null);
-  const [integ, setInteg] = useState<AnomalyIntegration | null>(null);
   const [filter, setFilter] = useState<string>(integrationMode ? "a_integrer" : "all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [noteFor, setNoteFor] = useState<{ id: string; status: string; text: string; kind: "decision" | "integration" } | null>(null);
@@ -40,16 +43,27 @@ export function CorrectionAnomaliesPanel({
 
   const load = () =>
     getCorrectionAnomalies(manuscriptId)
-      .then((r) => { setAnomalies(r.anomalies); setSummary(r.summary); setInteg(r.integration); })
+      .then((r) => { setAnomalies(r.anomalies); setSummary(r.summary); })
       .catch((e) => setErr(e instanceof Error ? e.message : "Chargement impossible."));
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [manuscriptId]);
 
   // En mode intégration, on ne travaille que sur les anomalies RETENUES
   // (acceptées/modifiées) — ce sont les seules à appliquer dans le fichier.
-  const base = useMemo(
-    () => (integrationMode ? anomalies.filter((a) => a.status === "acceptee" || a.status === "modifiee") : anomalies),
-    [anomalies, integrationMode],
-  );
+  const base = useMemo(() => {
+    if (!integrationMode) return anomalies;
+    return anomalies.filter((a) => {
+      if (a.status !== "acceptee" && a.status !== "modifiee") return false;
+      if (branchFilter === "couverture") return a.work_type === "couverture";
+      if (branchFilter === "texte") return a.work_type !== "couverture";
+      return true;
+    });
+  }, [anomalies, integrationMode, branchFilter]);
+  // Compteurs d'intégration calculés sur la branche affichée (et non globaux).
+  const integCounts = useMemo(() => {
+    const c = { a_integrer: 0, integree: 0, a_revoir: 0, non_applicable: 0 } as Record<string, number>;
+    for (const a of base) if (a.integration_status in c) c[a.integration_status] += 1;
+    return c;
+  }, [base]);
   const shown = useMemo(() => {
     if (filter === "all") return base;
     return integrationMode ? base.filter((a) => a.integration_status === filter) : base.filter((a) => a.status === filter);
@@ -85,25 +99,25 @@ export function CorrectionAnomaliesPanel({
   if (!summary) return null;
 
   if (integrationMode) {
-    if (!integ || base.length === 0) {
+    if (base.length === 0) {
       return (
         <section style={box}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>Corrections à intégrer</div>
-          <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 0" }}>Aucune correction retenue à intégrer pour l'instant (le correcteur n'a pas encore accepté/modifié d'anomalie).</p>
+          <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 0" }}>Aucune correction retenue à intégrer pour l'instant (le correcteur n'a pas encore accepté/modifié d'anomalie{branchFilter === "couverture" ? " de couverture" : ""}).</p>
         </section>
       );
     }
-    const restant = integ.a_integrer + integ.a_revoir;
+    const restant = integCounts.a_integrer + integCounts.a_revoir;
     const chips: { key: string; label: string; n: number }[] = [
-      { key: "a_integrer", label: "À intégrer", n: integ.a_integrer },
-      { key: "integree", label: "Intégrées", n: integ.integree },
-      { key: "a_revoir", label: "À revoir", n: integ.a_revoir },
-      { key: "non_applicable", label: "Non applicable", n: integ.non_applicable },
+      { key: "a_integrer", label: "À intégrer", n: integCounts.a_integrer },
+      { key: "integree", label: "Intégrées", n: integCounts.integree },
+      { key: "a_revoir", label: "À revoir", n: integCounts.a_revoir },
+      { key: "non_applicable", label: "Non applicable", n: integCounts.non_applicable },
       { key: "all", label: "Toutes", n: base.length },
     ];
     return (
       <section style={box}>
-        <div style={{ fontWeight: 600, fontSize: 14 }}>Corrections à intégrer — {integ.integree}/{base.length} faites{restant > 0 ? ` · ${restant} restante(s)` : " ✅"}</div>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>Corrections à intégrer — {integCounts.integree}/{base.length} faites{restant > 0 ? ` · ${restant} restante(s)` : " ✅"}</div>
         <p style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 10px" }}>
           Appliquez chaque correction retenue dans le fichier, puis cochez-la. « À revoir » la renvoie au correcteur ; « Non applicable » l'écarte (motif requis). La version finale ne peut être déposée qu'une fois tout intégré.
         </p>

@@ -1666,6 +1666,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks"],
       departmentCodes: ["CORR", "DIRED", "SECR"],
     },
+    {
+      slug: "2026-09-correction-integration-couverture-infographe",
+      version: "2026.09",
+      title: "Nouveauté — Intégration des corrections de couverture par l'infographe",
+      body: "Suite de « Mes intégrations de correction » : la couverture est maintenant gérée, en plus du texte. Le rapport de relecture de la couverture (1ʳᵉ de couverture · dos · 4ᵉ) va à l'INFOGRAPHE de l'ouvrage (celui déjà choisi pour l'infographie). Dans son écran « Mes intégrations de correction », il retrouve l'ouvrage sous l'étiquette « Couverture » et coche chaque correction appliquée sur les fichiers (avec la face concernée). Chacun son périmètre : l'intégrateur éditorial voit le texte, l'infographe voit la couverture — personne ne coche à la place de l'autre. Garde-fou : le dossier de BAT (l'épreuve finale) ne peut plus s'ouvrir tant que toutes les corrections de couverture retenues ne sont pas intégrées (ou écartées avec motif). La 2ᵉ relecture de la couverture revient au correcteur d'origine, comme pour le texte.",
+      permissionModules: ["manuscripts", "production", "tasks"],
+      departmentCodes: ["INFOG", "CORR", "DIRED", "SECR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

@@ -634,6 +634,13 @@ export default async function hrRoutes(fastify: FastifyInstance) {
   // Suppression LOGIQUE d'une fiche employé (doublon). Réversible (deletedAt) :
   // les données liées éventuelles sont conservées, jamais cassées. On renvoie
   // le volume de données liées pour information (le front demande confirmation).
+  //
+  // NETTOYAGE AUTOMATIQUE (demande opérateur) : supprimer une fiche retirait la
+  // fiche des listes RH mais LAISSAIT sa ligne de paie dans le mois — d'où des
+  // « fiches fantômes » qui restaient comptées au livre de paie (cas BIBI). On
+  // retire donc aussi, à la suppression, les lignes de paie du doublon dans les
+  // mois ENCORE OUVERTS (run en « brouillon »). Les mois soumis au DG, validés ou
+  // clôturés restent FIGÉS (jamais modifiés) : leur historique est préservé.
   fastify.delete("/api/v1/employees/:id", { preHandler: requirePermission("rh", "administration") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const emp = await prisma.employee.findFirst({
@@ -641,14 +648,25 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       select: { id: true, firstName: true, lastName: true, _count: { select: { payrollMonthlyLines: true, absences: true, hrContracts: true } } },
     });
     if (!emp) return reply.code(404).send({ code: "not_found", message: "Employé introuvable." });
-    await prisma.employee.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+
+    const openLines = await prisma.payrollMonthlyLine.findMany({
+      where: { employeeId: id, run: { status: "brouillon" } },
+      select: { id: true, run: { select: { periodKey: true } } },
+    });
+    await prisma.$transaction(async (tx) => {
+      if (openLines.length > 0) {
+        await tx.payrollMonthlyLine.deleteMany({ where: { id: { in: openLines.map((l) => l.id) } } });
+      }
+      await tx.employee.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+    });
+
     await writeAuditLog({
       userId: request.user!.id, action: "update", entityType: "employee", entityId: id,
       oldValues: { name: `${emp.firstName} ${emp.lastName}`, deletedAt: null },
-      newValues: { deletedAt: new Date().toISOString(), reason: "suppression logique (doublon)", linked: emp._count },
+      newValues: { deletedAt: new Date().toISOString(), reason: "suppression logique (doublon)", linked: emp._count, payroll_lines_removed: openLines.map((l) => l.run.periodKey) },
       ipAddress: request.ip,
     });
-    return reply.send({ deleted: true, name: `${emp.firstName} ${emp.lastName}` });
+    return reply.send({ deleted: true, name: `${emp.firstName} ${emp.lastName}`, payroll_months_cleaned: openLines.map((l) => l.run.periodKey) });
   });
 
   // Corbeille RH : fiches supprimées (logiquement). Permet de VÉRIFIER ce qui a été
@@ -685,6 +703,212 @@ export default async function hrRoutes(fastify: FastifyInstance) {
     await prisma.employee.update({ where: { id }, data: { deletedAt: null, deletedBy: null } });
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "employee", entityId: id, newValues: { restored: true, name: `${emp.firstName} ${emp.lastName}` }, ipAddress: request.ip });
     return reply.send({ restored: true, name: `${emp.firstName} ${emp.lastName}` });
+  });
+
+  // FUSION de deux fiches d'une même personne (doublon de saisie, ex. nom et
+  // prénom inversés). On ABSORBE le doublon (:id, « perdant ») dans la fiche à
+  // CONSERVER (`into`, « gagnant ») : toutes les données rattachées au doublon
+  // (contrats, absences, primes, bulletins du mois en cours, variables de paie,
+  // pointages, évaluations, formations, profil de paie…) passent sur la fiche
+  // gardée, puis le doublon est supprimé LOGIQUEMENT. Contrairement à une simple
+  // suppression, la fusion RETIRE aussi le doublon des états qui listent les
+  // lignes de paie (livre de paie du mois) — c'est ce qui fait disparaître le
+  // « salarié en double » du mois.
+  //
+  // Garde-fous (rien ne doit altérer un document figé ou casser un compte) :
+  //  • le doublon ne doit figurer dans AUCUNE paie VALIDÉE ou clôturée (livre
+  //    figé) — sinon on refuse et on demande de régulariser d'abord ce mois ;
+  //  • le doublon ne doit pas porter de COMPTE utilisateur — sinon on refuse
+  //    (le compte se gère séparément avant la fusion).
+  // Quand une donnée existe des DEUX côtés pour la même clé (même mois de paie,
+  // même période de variable, même pointage…), la version du doublon est écartée
+  // et celle de la fiche gardée est conservée (jamais de doublon technique).
+  fastify.post("/api/v1/employees/:id/merge", { preHandler: requirePermission("rh", "administration") }, async (request, reply) => {
+    const { id: loserId } = request.params as { id: string };
+    const parsed = z.object({ into: z.string().uuid() }).safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Fiche à conserver (« into ») manquante ou invalide." });
+    }
+    const keeperId = parsed.data.into;
+    if (keeperId === loserId) {
+      return reply.code(400).send({ code: "validation_error", message: "La fiche à conserver et le doublon doivent être différents." });
+    }
+
+    const loser = await prisma.employee.findFirst({
+      where: { id: loserId, deletedAt: null },
+      select: { id: true, firstName: true, lastName: true, user: { select: { id: true } } },
+    });
+    const keeper = await prisma.employee.findFirst({
+      where: { id: keeperId, deletedAt: null },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    if (!loser) return reply.code(404).send({ code: "not_found", message: "Doublon à fusionner introuvable." });
+    if (!keeper) return reply.code(404).send({ code: "not_found", message: "Fiche à conserver introuvable." });
+
+    // Garde-fou 1 : le doublon ne doit pas porter de compte utilisateur.
+    if (loser.user) {
+      return reply.code(409).send({
+        code: "loser_has_account",
+        message: `La fiche « ${loser.firstName} ${loser.lastName} » porte un compte utilisateur. Gérez d'abord le compte (le désactiver ou le rattacher à la bonne fiche) avant de fusionner.`,
+      });
+    }
+
+    // Garde-fou 2 : le doublon ne doit figurer dans aucune paie figée.
+    const frozenJournal = await prisma.payrollJournalLine.findFirst({ where: { employeeId: loserId }, select: { id: true } });
+    const validatedLine = await prisma.payrollMonthlyLine.findFirst({
+      where: { employeeId: loserId, run: { status: "valide" } },
+      select: { run: { select: { periodKey: true } } },
+    });
+    if (frozenJournal || validatedLine) {
+      const mois = validatedLine?.run.periodKey ?? "clôturé";
+      return reply.code(409).send({
+        code: "loser_in_frozen_payroll",
+        message: `Le doublon figure dans une paie validée/clôturée (mois ${mois}). Fusion impossible sans altérer un livre de paie figé. Régularisez d'abord ce mois avec la Direction générale, ou fusionnez dans l'autre sens (garder cette fiche).`,
+      });
+    }
+
+    // Fusion atomique.
+    const result = await prisma.$transaction(async (tx) => {
+      const moved: Record<string, number> = {};
+
+      // — Relations SANS contrainte d'unicité sur l'employé : on déplace tout. —
+      moved.contrats = (await tx.hrContract.updateMany({ where: { employeeId: loserId }, data: { employeeId: keeperId } })).count;
+      moved.absences = (await tx.absence.updateMany({ where: { employeeId: loserId }, data: { employeeId: keeperId } })).count;
+      moved.primes = (await tx.prime.updateMany({ where: { employeeId: loserId }, data: { employeeId: keeperId } })).count;
+      moved.plannings = (await tx.workSchedule.updateMany({ where: { employeeId: loserId }, data: { employeeId: keeperId } })).count;
+      moved.pointages = (await tx.attendanceEvent.updateMany({ where: { employeeId: loserId }, data: { employeeId: keeperId } })).count;
+      moved.formations = (await tx.trainingRequest.updateMany({ where: { employeeId: loserId }, data: { employeeId: keeperId } })).count;
+      moved.revues_sujet = (await tx.accessReviewItem.updateMany({ where: { employeeId: loserId }, data: { employeeId: keeperId } })).count;
+      moved.revues_relecteur = (await tx.accessReviewItem.updateMany({ where: { reviewerId: loserId }, data: { reviewerId: keeperId } })).count;
+      // Le doublon pouvait être le manager d'autres fiches → on reporte sur le gagnant.
+      moved.subordonnes = (await tx.employee.updateMany({ where: { managerId: loserId }, data: { managerId: keeperId } })).count;
+
+      // — Relations AVEC unicité : on écarte les lignes du doublon qui entrent
+      //   en collision avec une ligne déjà présente sur la fiche gardée, puis on
+      //   déplace le reste. `keyOf` construit la clé unique de chaque ligne. —
+      const mergeUnique = async (
+        loserRows: Array<{ id: string } & Record<string, unknown>>,
+        keeperRows: Array<Record<string, unknown>>,
+        keyOf: (r: Record<string, unknown>) => string,
+        move: (ids: string[]) => Promise<void>,
+        drop: (ids: string[]) => Promise<void>,
+      ) => {
+        const keeperKeys = new Set(keeperRows.map(keyOf));
+        const toDrop = loserRows.filter((r) => keeperKeys.has(keyOf(r))).map((r) => r.id);
+        const toMove = loserRows.filter((r) => !keeperKeys.has(keyOf(r))).map((r) => r.id);
+        if (toDrop.length) await drop(toDrop);
+        if (toMove.length) await move(toMove);
+        return { moved: toMove.length, dropped: toDrop.length };
+      };
+
+      // Bulletins du mois (payroll_monthly_lines) — clé (runId). C'EST la ligne
+      // qui fait apparaître le salarié dans le livre de paie du mois.
+      const r1 = await mergeUnique(
+        await tx.payrollMonthlyLine.findMany({ where: { employeeId: loserId }, select: { id: true, runId: true } }),
+        await tx.payrollMonthlyLine.findMany({ where: { employeeId: keeperId }, select: { runId: true } }),
+        (r) => String(r.runId),
+        async (ids) => { await tx.payrollMonthlyLine.updateMany({ where: { id: { in: ids } }, data: { employeeId: keeperId } }); },
+        async (ids) => { await tx.payrollMonthlyLine.deleteMany({ where: { id: { in: ids } } }); },
+      );
+      moved.bulletins = r1.moved; moved.bulletins_ecartes = r1.dropped;
+
+      // Variables de paie — clé (periodKey).
+      const r2 = await mergeUnique(
+        await tx.payrollVariable.findMany({ where: { employeeId: loserId }, select: { id: true, periodKey: true } }),
+        await tx.payrollVariable.findMany({ where: { employeeId: keeperId }, select: { periodKey: true } }),
+        (r) => String(r.periodKey),
+        async (ids) => { await tx.payrollVariable.updateMany({ where: { id: { in: ids } }, data: { employeeId: keeperId } }); },
+        async (ids) => { await tx.payrollVariable.deleteMany({ where: { id: { in: ids } } }); },
+      );
+      moved.variables_paie = r2.moved;
+
+      // Compétences — clé (skillId).
+      const r3 = await mergeUnique(
+        await tx.employeeSkill.findMany({ where: { employeeId: loserId }, select: { id: true, skillId: true } }),
+        await tx.employeeSkill.findMany({ where: { employeeId: keeperId }, select: { skillId: true } }),
+        (r) => String(r.skillId),
+        async (ids) => { await tx.employeeSkill.updateMany({ where: { id: { in: ids } }, data: { employeeId: keeperId } }); },
+        async (ids) => { await tx.employeeSkill.deleteMany({ where: { id: { in: ids } } }); },
+      );
+      moved.competences = r3.moved;
+
+      // Évaluations — clé (year).
+      const r4 = await mergeUnique(
+        await tx.employeeEvaluation.findMany({ where: { employeeId: loserId }, select: { id: true, year: true } }),
+        await tx.employeeEvaluation.findMany({ where: { employeeId: keeperId }, select: { year: true } }),
+        (r) => String(r.year),
+        async (ids) => { await tx.employeeEvaluation.updateMany({ where: { id: { in: ids } }, data: { employeeId: keeperId } }); },
+        async (ids) => { await tx.employeeEvaluation.deleteMany({ where: { id: { in: ids } } }); },
+      );
+      moved.evaluations = r4.moved;
+
+      // Participations aux formations — clé (sessionId).
+      const r5 = await mergeUnique(
+        await tx.trainingParticipation.findMany({ where: { employeeId: loserId }, select: { id: true, sessionId: true } }),
+        await tx.trainingParticipation.findMany({ where: { employeeId: keeperId }, select: { sessionId: true } }),
+        (r) => String(r.sessionId),
+        async (ids) => { await tx.trainingParticipation.updateMany({ where: { id: { in: ids } }, data: { employeeId: keeperId } }); },
+        async (ids) => { await tx.trainingParticipation.deleteMany({ where: { id: { in: ids } } }); },
+      );
+      moved.participations = r5.moved;
+
+      // Anomalies de pointage — clé (day|type).
+      const r6 = await mergeUnique(
+        await tx.attendanceAnomaly.findMany({ where: { employeeId: loserId }, select: { id: true, day: true, type: true } }),
+        await tx.attendanceAnomaly.findMany({ where: { employeeId: keeperId }, select: { day: true, type: true } }),
+        (r) => `${String(r.day)}|${String(r.type)}`,
+        async (ids) => { await tx.attendanceAnomaly.updateMany({ where: { id: { in: ids } }, data: { employeeId: keeperId } }); },
+        async (ids) => { await tx.attendanceAnomaly.deleteMany({ where: { id: { in: ids } } }); },
+      );
+      moved.anomalies_pointage = r6.moved;
+
+      // Lignes de paie du pointage — clé (periodId).
+      const r7 = await mergeUnique(
+        await tx.attendancePayrollLine.findMany({ where: { employeeId: loserId }, select: { id: true, periodId: true } }),
+        await tx.attendancePayrollLine.findMany({ where: { employeeId: keeperId }, select: { periodId: true } }),
+        (r) => String(r.periodId),
+        async (ids) => { await tx.attendancePayrollLine.updateMany({ where: { id: { in: ids } }, data: { employeeId: keeperId } }); },
+        async (ids) => { await tx.attendancePayrollLine.deleteMany({ where: { id: { in: ids } } }); },
+      );
+      moved.lignes_pointage = r7.moved;
+
+      // — Relations 1-1 : on déplace vers le gagnant s'il n'en a pas ; sinon on
+      //   garde la sienne et on supprime celle du doublon. —
+      const keeperConf = await tx.employeeConfidential.findUnique({ where: { employeeId: keeperId }, select: { id: true } });
+      const loserConf = await tx.employeeConfidential.findUnique({ where: { employeeId: loserId }, select: { id: true } });
+      if (loserConf) {
+        if (keeperConf) await tx.employeeConfidential.delete({ where: { employeeId: loserId } });
+        else await tx.employeeConfidential.update({ where: { employeeId: loserId }, data: { employeeId: keeperId } });
+      }
+      const keeperProfile = await tx.payrollEmployeeProfile.findUnique({ where: { employeeId: keeperId }, select: { id: true } });
+      const loserProfile = await tx.payrollEmployeeProfile.findUnique({ where: { employeeId: loserId }, select: { id: true } });
+      if (loserProfile) {
+        if (keeperProfile) await tx.payrollEmployeeProfile.delete({ where: { employeeId: loserId } });
+        else await tx.payrollEmployeeProfile.update({ where: { employeeId: loserId }, data: { employeeId: keeperId } });
+      }
+
+      // Suppression LOGIQUE du doublon (réversible via la corbeille RH).
+      await tx.employee.update({ where: { id: loserId }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+
+      return moved;
+    });
+
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "employee",
+      entityId: loserId,
+      oldValues: { name: `${loser.firstName} ${loser.lastName}` },
+      newValues: { merged_into: keeperId, keeper_name: `${keeper.firstName} ${keeper.lastName}`, moved: result, reason: "fusion de doublon" },
+      ipAddress: request.ip,
+    });
+
+    return reply.send({
+      merged: true,
+      loser_name: `${loser.firstName} ${loser.lastName}`,
+      keeper_name: `${keeper.firstName} ${keeper.lastName}`,
+      moved: result,
+    });
   });
 
   // ─── Recrutement : postes à pourvoir & candidatures (module amont RH) ───────

@@ -4062,7 +4062,15 @@ export function getDuplicateEmployees() {
   return request<{ groups: DuplicateGroup[]; total_groups: number }>("/api/v1/hr/duplicates");
 }
 export function deleteEmployee(id: string) {
-  return request<{ deleted: true; name: string }>(`/api/v1/employees/${id}`, { method: "DELETE" });
+  return request<{ deleted: true; name: string; payroll_months_cleaned: string[] }>(`/api/v1/employees/${id}`, { method: "DELETE" });
+}
+// Fusion d'un doublon (`loserId`) dans la fiche à conserver (`keeperId`) :
+// déplace toutes les données rattachées puis supprime logiquement le doublon.
+export function mergeEmployees(loserId: string, keeperId: string) {
+  return request<{ merged: true; loser_name: string; keeper_name: string; moved: Record<string, number> }>(
+    `/api/v1/employees/${loserId}/merge`,
+    { method: "POST", body: JSON.stringify({ into: keeperId }) },
+  );
 }
 
 // Corbeille RH : fiches supprimées (logiquement) + restauration.

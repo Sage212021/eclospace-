@@ -4,7 +4,7 @@ import { ManuscriptOrigin, EditorialSegment, type Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAnyPermission, requireAuth } from "../lib/permissions.js";
 import { canCorrectDeposit, isDeletableStepDoc } from "../lib/stepDocuments.js";
-import { CORRECTION_PHASES, isCorrectionPhase, correctionDocTitle, correctionCycleState, currentCorrectionActor, nextActorAfterPhase } from "../lib/correctionCycle.js";
+import { CORRECTION_PHASES, COVER_CORRECTION_PHASES, isCorrectionPhase, isCoverCorrectionPhase, correctionDocTitle, correctionCycleState, coverCorrectionCycleState, currentCorrectionActor, nextActorAfterPhase } from "../lib/correctionCycle.js";
 import { VC1_SLOTS, isVc1Slot, vc1DocTitle, vc1State } from "../lib/startingProof.js";
 import { deliverableDocTitle, stepDeliverableMeta } from "../lib/stepDeliverables.js";
 import { optionalStepMeta } from "../lib/stepRealization.js";
@@ -1039,6 +1039,24 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Rapports de correction de la COUVERTURE (branche infographe) : mêmes pièces
+  // d'étape, déposées par le correcteur et exploitées par l'infographe. Distinct
+  // du cycle texte ci-dessus (n'entre pas dans le relais « à qui la main »).
+  fastify.get(
+    "/api/v1/manuscripts/:id/cover-correction-cycle",
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "consultation" }, { module: "manuscripts", action: "consultation" }, { module: "production", action: "consultation" }]) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const phases = await coverCorrectionCycleState(id);
+      const uploaderIds = [...new Set(phases.map((p) => p.uploaded_by).filter((v): v is string => Boolean(v)))];
+      const users = uploaderIds.length ? await prisma.user.findMany({ where: { id: { in: uploaderIds } }, select: { id: true, username: true } }) : [];
+      const nameById = new Map(users.map((u) => [u.id, u.username]));
+      return reply.send(phases.map((p) => ({ ...p, uploaded_by_name: p.uploaded_by ? nameById.get(p.uploaded_by) ?? null : null, can_correct: p.has_file && canCorrectDeposit(request, p.uploaded_by) })));
+    },
+  );
+
   fastify.post(
     "/api/v1/manuscripts/:id/correction-cycle/:phase",
     { preHandler: requireAnyPermission([{ module: "tasks", action: "saisie" }, { module: "manuscripts", action: "saisie" }]) },
@@ -1063,7 +1081,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
       const buffer = await file.toBuffer();
       if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
-      const label = CORRECTION_PHASES.find((p) => p.key === phase)!.label;
+      const label = [...CORRECTION_PHASES, ...COVER_CORRECTION_PHASES].find((p) => p.key === phase)?.label ?? phase;
       const stored = await storeFile(buffer, `correction-${phase}-${id}-${file.filename}`);
       const doc = await prisma.document.create({
         data: { entityType: "manuscript", entityId: id, category: "piece_etape", confidentiality: "interne", title: correctionDocTitle(phase, file.filename), createdBy: request.user!.id, updatedBy: request.user!.id },
@@ -1072,6 +1090,17 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         data: { documentId: doc.id, versionNumber: 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: file.mimetype, sha256Hash: stored.sha256Hash, changeSummary: `Correction — ${label}`, uploadedBy: request.user!.id },
       });
       await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { correction_phase: phase }, ipAddress: request.ip });
+
+      // Rapport de correction de COUVERTURE : on notifie l'INFOGRAPHE de l'ouvrage
+      // (responsable de l'étape Infographie), qui exploitera ce rendu.
+      if (isCoverCorrectionPhase(phase)) {
+        const infoStep = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "INFOGRAPHIE" } }, orderBy: { createdAt: "desc" }, select: { responsibleId: true } });
+        const infographe = infoStep?.responsibleId ?? null;
+        if (infographe && infographe !== request.user!.id) {
+          await notifyUsers({ userIds: [infographe], type: "affectation", priority: "medium", title: `Couverture à intégrer — ${manuscript.manuscriptNumber}`, body: `Un rapport de correction de couverture est disponible — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
+        }
+        return reply.code(201).send({ version_id: version.id, phase, label });
+      }
 
       // Relais : la balle passe à l'acteur de la phase suivante. Le correcteur
       // (responsable de l'étape) et l'intégrateur (Direction/Assistant éditorial)

@@ -1690,6 +1690,14 @@ async function main() {
       permissionModules: ["manuscripts", "comite_lecture", "tasks"],
       departmentCodes: ["CORR", "COMLEC", "DIRED", "SECR", "INFOG", "EXPERT", "CQ"],
     },
+    {
+      slug: "2026-09-correction-rapports-couverture-infographe",
+      version: "2026.09",
+      title: "Nouveauté — Correction : déposer les rapports de couverture pour l'infographe",
+      body: "Le cycle de correction gère maintenant la couverture en plus du texte. Sous « Correction en deux temps », une section « Correction de la couverture (pour l'infographe) » permet de déposer : le rapport de correction de couverture (1ʳᵉ · dos · 4ᵉ), le rapport de la 2ᵉ relecture, et la couverture corrigée finale. Ces dépôts sont facultatifs et ne bloquent pas le circuit du texte. L'INFOGRAPHE désigné de l'ouvrage est notifié et retrouve ces rapports dans « Mes intégrations de correction » (branche Couverture), à télécharger pour les appliquer sur les fichiers. Chacun exploite ainsi son rendu : l'intégrateur éditorial le texte, l'infographe la couverture.",
+      permissionModules: ["manuscripts", "production", "tasks"],
+      departmentCodes: ["CORR", "INFOG", "DIRED", "SECR", "COMLEC"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

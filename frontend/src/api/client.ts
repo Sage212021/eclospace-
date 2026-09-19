@@ -736,6 +736,10 @@ export interface CorrectionPhaseState {
 export function getCorrectionCycle(manuscriptId: string) {
   return request<CorrectionPhaseState[]>(`/api/v1/manuscripts/${manuscriptId}/correction-cycle`);
 }
+// Rapports de correction de la couverture (branche infographe).
+export function getCoverCorrectionCycle(manuscriptId: string) {
+  return request<CorrectionPhaseState[]>(`/api/v1/manuscripts/${manuscriptId}/cover-correction-cycle`);
+}
 export async function uploadCorrectionPhase(manuscriptId: string, phase: string, file: File) {
   const form = new FormData();
   form.append("file", file);

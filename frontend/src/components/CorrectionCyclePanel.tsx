@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, stepAttachmentDownloadUrl, getCorrectionIntegrator, getCorrectionIntegrators, setCorrectionIntegrator, type CorrectionPhaseState, type CorrectionIntegratorState } from "../api/client";
+import { getCorrectionCycle, getCoverCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, stepAttachmentDownloadUrl, getCorrectionIntegrator, getCorrectionIntegrators, setCorrectionIntegrator, type CorrectionPhaseState, type CorrectionIntegratorState } from "../api/client";
 
 const ACTOR_LABEL: Record<string, string> = { correcteur: "au correcteur", integrateur: "à l'intégrateur (éditeur)", termine: "— cycle terminé" };
 
@@ -12,6 +12,7 @@ const ACTOR_LABEL: Record<string, string> = { correcteur: "au correcteur", integ
 // qu'aucun fichier n'est déposé.
 export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId: string; canManage: boolean }) {
   const [phases, setPhases] = useState<CorrectionPhaseState[]>([]);
+  const [coverPhases, setCoverPhases] = useState<CorrectionPhaseState[]>([]);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -20,6 +21,7 @@ export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId
 
   const load = () => Promise.all([
     getCorrectionCycle(manuscriptId).then(setPhases).catch(() => setPhases([])),
+    getCoverCorrectionCycle(manuscriptId).then(setCoverPhases).catch(() => setCoverPhases([])),
     getCorrectionIntegrator(manuscriptId).then(setInteg).catch(() => setInteg(null)),
   ]);
   useEffect(() => { load(); getCorrectionIntegrators().then(setCandidates).catch(() => setCandidates([])); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [manuscriptId]);
@@ -151,6 +153,51 @@ export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId
           Manque avant de poursuivre : {requiredMissing.map((p) => p.label).join(" ; ")}.
         </p>
       )}
+
+      {/* Rapports de correction de la COUVERTURE — déposés ici par le correcteur,
+          exploités par l'INFOGRAPHE (branche parallèle du texte). */}
+      <h3 style={{ fontSize: 15, margin: "18px 0 4px", color: "var(--ink)" }}>Correction de la couverture (pour l'infographe)</h3>
+      <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
+        Déposez ici les rapports de correction de la couverture (1ʳᵉ · dos · 4ᵉ) et la couverture corrigée finale.
+        L'infographe désigné les reçoit dans « Mes intégrations de correction » et les exploite.
+      </p>
+      <div style={{ display: "grid", gap: 8 }}>
+        {coverPhases.map((p) => (
+          <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px" }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{p.label}</div>
+              {p.has_file ? (
+                <div>
+                  <a href={stepAttachmentDownloadUrl(manuscriptId, p.version_id!)} download style={{ fontSize: 12, color: "var(--eclosion-dark)", fontWeight: 600 }}>
+                    ⬇️ {p.filename ?? "Télécharger le fichier"}
+                  </a>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                    {[
+                      p.created_at ? `Transmis le ${new Date(p.created_at).toLocaleDateString("fr-FR")}` : null,
+                      p.uploaded_by_name ? `par ${p.uploaded_by_name}` : null,
+                      p.version_number ? `v${p.version_number}` : null,
+                    ].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+              ) : (
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>Optionnel — non déposé</span>
+              )}
+            </div>
+            <span aria-hidden style={{ fontSize: 16 }}>{p.has_file ? "✅" : "—"}</span>
+            {canManage && (
+              <label style={{ cursor: busyKey === p.key ? "default" : "pointer", fontWeight: 600, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5 }}>
+                {busyKey === p.key ? "Envoi…" : p.has_file ? "Remplacer" : "Déposer"}
+                <input type="file" style={{ display: "none" }} disabled={busyKey === p.key} onChange={(e) => { const f = e.target.files?.[0]; if (f) deposit(p.key, f); e.target.value = ""; }} />
+              </label>
+            )}
+            {canManage && p.has_file && p.can_correct && p.doc_id && (
+              <button onClick={() => remove(p.key, p.doc_id!)} disabled={busyKey === p.key} style={{ fontWeight: 600, color: "var(--alert)", background: "#fff", border: "1px solid var(--alert)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5, cursor: busyKey === p.key ? "default" : "pointer" }}>
+                Retirer
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

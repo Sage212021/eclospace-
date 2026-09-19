@@ -140,6 +140,30 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // INTÉGRITÉ DU CIRCUIT ÉDITORIAL — BACKSTOP (demande opérateur) : un
+      // manuscrit ne doit jamais PROGRESSER depuis la planification tant que le
+      // rapport d'évaluation (comité de lecture) ET la décision éditoriale n'ont
+      // pas été réellement rendus. Le verrou PRINCIPAL est posé sur la décision
+      // elle-même (pas d'acceptation sans évaluation ; l'entrée en planification
+      // passe par la décision) ; ce backstop rattrape les dossiers déjà arrivés
+      // en planification sans ces pièces (données anciennes). Le back-catalogue
+      // (importé hors circuit) n'est pas concerné.
+      if (!manuscript.isBackCatalogue && targetStatus.code === "PLANIFICATION") {
+        const [evaluationDone, decisionDone] = await Promise.all([
+          prisma.evaluation.findFirst({ where: { assignment: { manuscriptId: id } }, select: { id: true } }),
+          prisma.editorialDecision.findFirst({ where: { manuscriptId: id }, select: { id: true } }),
+        ]);
+        const manque: string[] = [];
+        if (!evaluationDone) manque.push("le rapport d'évaluation du comité de lecture");
+        if (!decisionDone) manque.push("la décision éditoriale");
+        if (manque.length > 0) {
+          return reply.code(409).send({
+            code: "editorial_prerequisites_missing",
+            message: `Étapes éditoriales incomplètes — impossible de poursuivre depuis la planification tant que manque : ${manque.join(" ; ")}.`,
+          });
+        }
+      }
+
       const { observations, outcome, requires_rewrite, assignee_id, step_decision, skip_reason, realization } = parsed.data;
       const now = new Date();
 

@@ -1,6 +1,19 @@
 import argon2 from "argon2";
 import { prisma } from "../src/lib/prisma.js";
 
+// Sème un rapport d'évaluation du comité de lecture (requis, depuis le garde-fou
+// d'intégrité éditoriale, pour toute acceptation / entrée en planification).
+export async function seedEvaluation(manuscriptId: string, readerId: string) {
+  const assignment = await prisma.readingAssignment.create({ data: { manuscriptId, readerId, dueAt: new Date(), status: "submitted", submittedAt: new Date() } });
+  return prisma.evaluation.create({ data: { assignmentId: assignment.id, recommendation: "accept", globalScore: 15, rating: "good" } });
+}
+
+// Sème une décision éditoriale d'acceptation (pour les tests qui placent un
+// manuscrit directement en planification, sans passer par l'endpoint décision).
+export async function seedEditorialDecision(manuscriptId: string, decidedById: string) {
+  return prisma.editorialDecision.create({ data: { manuscriptId, decision: "acceptation", decidedById, motivation: "Décision (seed de test)." } });
+}
+
 // Pas d'endpoint de création de compte au Lot 0 (RH complet = Lot 6) : les
 // tests provisionnent directement via Prisma, comme le fait le seed.
 export async function createUserWithRole(username: string, roleCode: string, password: string) {

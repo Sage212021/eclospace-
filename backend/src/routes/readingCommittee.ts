@@ -727,6 +727,18 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
       const evaluations = await prisma.evaluation.findMany({
         where: { assignment: { manuscriptId: id } },
       });
+      // INTÉGRITÉ DU CIRCUIT (demande opérateur) : une décision d'ACCEPTATION —
+      // qui fait entrer le manuscrit en planification — ne peut être rendue sans
+      // qu'au moins un RAPPORT D'ÉVALUATION du comité de lecture existe. Empêche
+      // un ouvrage d'atteindre la planification sans évaluation ni décision
+      // fondée. Les décisions non terminales (révision, attente) et le refus ne
+      // sont pas concernés (ils n'envoient pas en production).
+      if ((parsed.data.decision === "acceptation" || parsed.data.decision === "acceptation_conditions") && evaluations.length === 0) {
+        return reply.code(409).send({
+          code: "evaluation_report_missing",
+          message: "Aucun rapport d'évaluation du comité de lecture n'a été rendu pour ce manuscrit : une acceptation (passage en planification) est impossible tant qu'il n'a pas été évalué.",
+        });
+      }
       const scores = evaluations.map((e) => Number(e.globalScore));
       const scoreGapSetting = await prisma.setting.findUnique({ where: { key: "evaluation_score_gap_threshold" } });
       const gapThreshold = (scoreGapSetting?.value as number | undefined) ?? DEFAULT_SCORE_GAP_THRESHOLD;

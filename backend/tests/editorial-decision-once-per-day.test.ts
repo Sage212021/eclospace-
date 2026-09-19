@@ -84,6 +84,10 @@ describe("décision éditoriale — une seule par manuscrit et par jour", () => 
     const yesterday = new Date(Date.now() - 24 * 3600 * 1000);
     await prisma.editorialDecision.updateMany({ where: { manuscriptId: id }, data: { decidedAt: yesterday } });
 
+    // Une acceptation exige un rapport d'évaluation du comité (garde-fou circuit).
+    const assignment = await prisma.readingAssignment.create({ data: { manuscriptId: id, readerId: adminId, dueAt: new Date(), status: "submitted", submittedAt: new Date() } });
+    await prisma.evaluation.create({ data: { assignmentId: assignment.id, recommendation: "accept", globalScore: 15, rating: "good" } });
+
     const today = await app.inject({
       method: "POST", url: `/api/v1/manuscripts/${id}/editorial-decision`, headers: { cookie },
       payload: { decision: "acceptation", motivation: "Version révisée acceptée." },

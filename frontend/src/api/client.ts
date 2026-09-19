@@ -1087,13 +1087,27 @@ export interface CorrectionAnomaly {
   number: number; severity: string; face: string | null; location: string | null;
   element: string | null; observation: string | null; proposal: string | null; justification: string | null;
   status: string; resolution_note: string | null; decided_by_name: string | null; decided_at: string | null;
+  // 2ᵉ temps — intégration (a_integrer · integree · a_revoir · non_applicable).
+  integration_status: string; integration_note: string | null; integrated_by_name: string | null; integrated_at: string | null;
 }
 export interface AnomalySummary { total: number; a_traiter: number; acceptee: number; modifiee: number; rejetee: number; a_verifier: number; }
+export interface AnomalyIntegration { a_integrer: number; integree: number; a_revoir: number; non_applicable: number; }
 export function getCorrectionAnomalies(manuscriptId: string) {
-  return request<{ summary: AnomalySummary; anomalies: CorrectionAnomaly[] }>(`/api/v1/manuscripts/${manuscriptId}/correction-anomalies`);
+  return request<{ summary: AnomalySummary; integration: AnomalyIntegration; anomalies: CorrectionAnomaly[] }>(`/api/v1/manuscripts/${manuscriptId}/correction-anomalies`);
 }
 export function decideCorrectionAnomaly(id: string, input: { status: string; resolution_note?: string | null }) {
   return request<{ ok: boolean }>(`/api/v1/correction-anomalies/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+// 2ᵉ temps — l'intégrateur coche l'application de la correction dans le fichier.
+export function integrateCorrectionAnomaly(id: string, input: { integration_status: string; note?: string | null }) {
+  return request<{ ok: boolean }>(`/api/v1/correction-anomalies/${id}/integration`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export interface MyIntegrationItem {
+  id: string; manuscript_number: string; title: string; status_code: string; status_label: string;
+  counts: { a_integrer: number; integree: number; a_revoir: number; non_applicable: number; total: number };
+}
+export function listMyCorrectionIntegrations() {
+  return request<{ manuscripts: MyIntegrationItem[] }>("/api/v1/my-correction-integrations");
 }
 export function extractAnomalies(jobId: string) {
   return request<{ created: number; skipped: boolean }>(`/api/v1/ai-editorial/jobs/${jobId}/extract-anomalies`, { method: "POST" });

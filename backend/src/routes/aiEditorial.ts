@@ -417,19 +417,28 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
         orderBy: [{ createdAt: "desc" }, { number: "asc" }],
         include: { job: { select: { id: true, workType: true, launchedAt: true } } },
       });
-      const decidedByIds = [...new Set(anomalies.map((a) => a.decidedById).filter((v): v is string => Boolean(v)))];
-      const users = decidedByIds.length ? await prisma.user.findMany({ where: { id: { in: decidedByIds } }, select: { id: true, username: true } }) : [];
+      const peopleIds = [...new Set(anomalies.flatMap((a) => [a.decidedById, a.integratedById]).filter((v): v is string => Boolean(v)))];
+      const users = peopleIds.length ? await prisma.user.findMany({ where: { id: { in: peopleIds } }, select: { id: true, username: true } }) : [];
       const nameById = new Map(users.map((u) => [u.id, u.username]));
       const summary = { total: anomalies.length, a_traiter: 0, acceptee: 0, modifiee: 0, rejetee: 0, a_verifier: 0 } as Record<string, number>;
       for (const a of anomalies) summary[a.status] = (summary[a.status] ?? 0) + 1;
+      // Compteurs d'INTÉGRATION (2ᵉ temps) : seules les anomalies acceptées ou
+      // modifiées se comptent (les autres n'ont rien à intégrer).
+      const integration = { a_integrer: 0, integree: 0, a_revoir: 0, non_applicable: 0 } as Record<string, number>;
+      for (const a of anomalies) {
+        if (a.status === "acceptee" || a.status === "modifiee") integration[a.integrationStatus] = (integration[a.integrationStatus] ?? 0) + 1;
+      }
       return reply.send({
         summary,
+        integration,
         anomalies: anomalies.map((a) => ({
           id: a.id, job_id: a.jobId, work_type: a.job.workType, job_launched_at: a.job.launchedAt,
           number: a.number, severity: a.severity, face: a.face, location: a.location,
           element: a.element, observation: a.observation, proposal: a.proposal, justification: a.justification,
           status: a.status, resolution_note: a.resolutionNote,
           decided_by_name: a.decidedById ? nameById.get(a.decidedById) ?? null : null, decided_at: a.decidedAt,
+          integration_status: a.integrationStatus, integration_note: a.integrationNote,
+          integrated_by_name: a.integratedById ? nameById.get(a.integratedById) ?? null : null, integrated_at: a.integratedAt,
         })),
       });
     },
@@ -467,6 +476,91 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
       });
       return reply.send({ ok: true });
+    },
+  );
+
+  // — INTÉGRATION (2ᵉ temps du Lot 3) : geste de l'intégrateur DÉSIGNÉ, distinct
+  // de la décision du correcteur. Il applique la correction retenue dans le
+  // fichier puis coche l'état. Ne concerne que les anomalies acceptées/modifiées.
+  const INTEGRATION_STATUSES = ["a_integrer", "integree", "a_revoir", "non_applicable"] as const;
+  const anomalyIntegrationSchema = z.object({
+    integration_status: z.enum(INTEGRATION_STATUSES),
+    note: z.string().max(4000).nullable().optional(),
+  });
+  fastify.patch(
+    "/api/v1/correction-anomalies/:id/integration",
+    { preHandler: requireAnyPermission(AI_JOB_READ_PERMS) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = anomalyIntegrationSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "invalid_body", message: "État d'intégration invalide (attendu : à intégrer / intégrée / à revoir / non applicable)." });
+      const existing = await prisma.correctionAnomaly.findUnique({ where: { id } });
+      if (!existing) return reply.code(404).send({ code: "not_found", message: "Anomalie introuvable." });
+      if (existing.status !== "acceptee" && existing.status !== "modifiee") {
+        return reply.code(409).send({ code: "not_integrable", message: "Seule une anomalie acceptée ou modifiée peut être intégrée." });
+      }
+      // Habilitation : l'intégrateur DÉSIGNÉ de l'ouvrage, ou une administration
+      // des manuscrits.
+      const manuscript = await prisma.manuscript.findUnique({ where: { id: existing.manuscriptId }, select: { correctionIntegratorId: true } });
+      const isAdmin = request.user!.permissions.has("manuscripts:administration");
+      if (!isAdmin && manuscript?.correctionIntegratorId !== request.user!.id) {
+        return reply.code(403).send({ code: "not_integrator", message: "Seul l'intégrateur désigné de cet ouvrage peut cocher l'intégration." });
+      }
+      if (parsed.data.integration_status === "non_applicable" && !(parsed.data.note && parsed.data.note.trim())) {
+        return reply.code(400).send({ code: "note_required", message: "Indiquez le motif pour écarter une correction (« non applicable »)." });
+      }
+      const updated = await prisma.correctionAnomaly.update({
+        where: { id },
+        data: {
+          integrationStatus: parsed.data.integration_status,
+          integrationNote: parsed.data.note ?? null,
+          integratedById: request.user!.id,
+          integratedAt: new Date(),
+        },
+      });
+      await writeAuditLog({
+        userId: request.user!.id, action: "update", entityType: "correction_anomaly", entityId: id,
+        oldValues: { integration_status: existing.integrationStatus }, newValues: { integration_status: updated.integrationStatus, integration_note: updated.integrationNote },
+        ipAddress: request.ip,
+      });
+      return reply.send({ ok: true });
+    },
+  );
+
+  // Inbox personnel de l'intégrateur : les ouvrages qu'on lui a confiés, avec le
+  // nombre de corrections à intégrer (branche TEXTE — la couverture en 2ᵉ temps).
+  // Alimente l'écran « Mes intégrations de correction ».
+  fastify.get(
+    "/api/v1/my-correction-integrations",
+    { preHandler: requireAnyPermission(AI_JOB_READ_PERMS) },
+    async (request, reply) => {
+      const manuscripts = await prisma.manuscript.findMany({
+        where: { deletedAt: null, correctionIntegratorId: request.user!.id },
+        select: { id: true, manuscriptNumber: true, title: true, status: { select: { code: true, label: true } } },
+        orderBy: { updatedAt: "desc" },
+      });
+      const ids = manuscripts.map((m) => m.id);
+      const anomalies = ids.length
+        ? await prisma.correctionAnomaly.findMany({
+            where: { manuscriptId: { in: ids }, status: { in: ["acceptee", "modifiee"] }, job: { workType: { in: ["correction_1", "correction_2"] } } },
+            select: { manuscriptId: true, integrationStatus: true },
+          })
+        : [];
+      const emptyCounts = () => ({ a_integrer: 0, integree: 0, a_revoir: 0, non_applicable: 0, total: 0 });
+      const byM = new Map<string, ReturnType<typeof emptyCounts>>();
+      for (const m of manuscripts) byM.set(m.id, emptyCounts());
+      for (const a of anomalies) {
+        const c = byM.get(a.manuscriptId)!;
+        c.total += 1;
+        if (a.integrationStatus in c) (c as Record<string, number>)[a.integrationStatus] += 1;
+      }
+      return reply.send({
+        manuscripts: manuscripts.map((m) => ({
+          id: m.id, manuscript_number: m.manuscriptNumber, title: m.title,
+          status_code: m.status.code, status_label: m.status.label,
+          counts: byM.get(m.id)!,
+        })),
+      });
     },
   );
 

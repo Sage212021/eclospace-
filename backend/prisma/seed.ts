@@ -1658,6 +1658,14 @@ async function main() {
       permissionModules: ["rh"],
       departmentCodes: ["RH"],
     },
+    {
+      slug: "2026-09-correction-mes-integrations-texte",
+      version: "2026.09",
+      title: "Nouveauté — Correction : l'espace « Mes intégrations de correction »",
+      body: "La correction se fait maintenant en deux temps clairs. 1) Le CORRECTEUR décide chaque anomalie (Accepter / Modifier / Rejeter / À vérifier), comme avant. 2) L'INTÉGRATEUR (assistant ou directeur éditorial désigné pour l'ouvrage) reçoit un nouvel espace personnel « Mes intégrations de correction » (à côté de « Mes lectures » et « Mes corrections ») : il y voit uniquement les ouvrages qu'on lui a confiés, applique dans le fichier (le BAT1) chaque correction acceptée/modifiée, puis la coche — ✔️ Intégrée · ↩️ À revoir (renvoi au correcteur) · 🚫 Non applicable (avec motif) — avec un compteur d'avancement. Garde-fou : la version corrigée finale (VCF) ne peut plus être déposée tant que toutes les corrections retenues ne sont pas intégrées. La désignation de l'intégrateur se fait depuis le cycle de correction (le correcteur, ou le directeur éditorial en amont). Cette première étape couvre le TEXTE ; la couverture (via l'infographe) arrive juste après.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["CORR", "DIRED", "SECR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

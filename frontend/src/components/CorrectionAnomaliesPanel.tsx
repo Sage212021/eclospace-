@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { getCorrectionAnomalies, decideCorrectionAnomaly, type CorrectionAnomaly, type AnomalySummary } from "../api/client";
+import { getCorrectionAnomalies, decideCorrectionAnomaly, integrateCorrectionAnomaly, type CorrectionAnomaly, type AnomalySummary, type AnomalyIntegration } from "../api/client";
 
-// Validation humaine des anomalies de correction (Lot 3, option A). Chaque
-// anomalie produite par l'assistance IA devient une fiche : Accepter / Modifier
-// / Rejeter / À vérifier. « Accepter » enregistre la décision ; l'intégrateur
-// applique ensuite la correction. Rien n'est écrasé (l'historique est tracé).
+// Lot 3 en DEUX temps.
+//  • Mode DÉCISION (correcteur) : Accepter / Modifier / Rejeter / À vérifier.
+//  • Mode INTÉGRATION (intégrateur) : sur les anomalies acceptées/modifiées, il
+//    applique la correction dans le fichier puis coche Intégrée / À revoir /
+//    Non applicable. Rien n'est écrasé (l'historique est tracé).
 const SEV_COLOR: Record<string, { bg: string; fg: string }> = {
   C1: { bg: "#F6D9D3", fg: "#B23A2E" },
   C2: { bg: "var(--amber-soft, #F6E7D2)", fg: "#B87400" },
@@ -13,25 +14,46 @@ const SEV_COLOR: Record<string, { bg: string; fg: string }> = {
 };
 const STATUS_LABEL: Record<string, string> = { a_traiter: "À traiter", acceptee: "Acceptée", modifiee: "Modifiée", rejetee: "Rejetée", a_verifier: "À vérifier" };
 const STATUS_COLOR: Record<string, string> = { a_traiter: "var(--muted)", acceptee: "#2F7D4A", modifiee: "#B87400", rejetee: "#B23A2E", a_verifier: "#5B6472" };
+const INTEG_LABEL: Record<string, string> = { a_integrer: "À intégrer", integree: "Intégrée", a_revoir: "À revoir", non_applicable: "Non applicable" };
+const INTEG_COLOR: Record<string, string> = { a_integrer: "#B87400", integree: "#2F7D4A", a_revoir: "#B23A2E", non_applicable: "#5B6472" };
 const WORKTYPE_LABEL: Record<string, string> = { correction_1: "Relecture 1 (BAT1)", correction_2: "Relecture 2 (BAT2)", couverture: "Couverture" };
 const FACE_LABEL: Record<string, string> = { "1ere": "1ʳᵉ de couverture", dos: "Dos", "4eme": "4ᵉ de couverture" };
 
-export function CorrectionAnomaliesPanel({ manuscriptId, canDecide }: { manuscriptId: string; canDecide: boolean }) {
+export function CorrectionAnomaliesPanel({
+  manuscriptId,
+  canDecide,
+  integrationMode = false,
+  canIntegrate = false,
+}: {
+  manuscriptId: string;
+  canDecide: boolean;
+  integrationMode?: boolean;
+  canIntegrate?: boolean;
+}) {
   const [anomalies, setAnomalies] = useState<CorrectionAnomaly[]>([]);
   const [summary, setSummary] = useState<AnomalySummary | null>(null);
-  const [filter, setFilter] = useState<string>("all");
+  const [integ, setInteg] = useState<AnomalyIntegration | null>(null);
+  const [filter, setFilter] = useState<string>(integrationMode ? "a_integrer" : "all");
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [noteFor, setNoteFor] = useState<{ id: string; status: string; text: string } | null>(null);
+  const [noteFor, setNoteFor] = useState<{ id: string; status: string; text: string; kind: "decision" | "integration" } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const load = () =>
     getCorrectionAnomalies(manuscriptId)
-      .then((r) => { setAnomalies(r.anomalies); setSummary(r.summary); })
+      .then((r) => { setAnomalies(r.anomalies); setSummary(r.summary); setInteg(r.integration); })
       .catch((e) => setErr(e instanceof Error ? e.message : "Chargement impossible."));
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [manuscriptId]);
 
-  const shown = useMemo(() => (filter === "all" ? anomalies : anomalies.filter((a) => a.status === filter)), [anomalies, filter]);
-  // Regroupe par relecture (job), la plus récente d'abord (déjà trié côté serveur).
+  // En mode intégration, on ne travaille que sur les anomalies RETENUES
+  // (acceptées/modifiées) — ce sont les seules à appliquer dans le fichier.
+  const base = useMemo(
+    () => (integrationMode ? anomalies.filter((a) => a.status === "acceptee" || a.status === "modifiee") : anomalies),
+    [anomalies, integrationMode],
+  );
+  const shown = useMemo(() => {
+    if (filter === "all") return base;
+    return integrationMode ? base.filter((a) => a.integration_status === filter) : base.filter((a) => a.status === filter);
+  }, [base, filter, integrationMode]);
   const groups = useMemo(() => {
     const m = new Map<string, CorrectionAnomaly[]>();
     for (const a of shown) { const k = a.job_id; if (!m.has(k)) m.set(k, []); m.get(k)!.push(a); }
@@ -46,12 +68,104 @@ export function CorrectionAnomaliesPanel({ manuscriptId, canDecide }: { manuscri
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Décision impossible.");
-    } finally {
-      setBusyId(null);
-    }
+    } finally { setBusyId(null); }
+  }
+
+  async function integrate(a: CorrectionAnomaly, integration_status: string, note?: string) {
+    setBusyId(a.id); setErr(null);
+    try {
+      await integrateCorrectionAnomaly(a.id, { integration_status, note: note ?? null });
+      setNoteFor(null);
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Intégration impossible.");
+    } finally { setBusyId(null); }
   }
 
   if (!summary) return null;
+
+  if (integrationMode) {
+    if (!integ || base.length === 0) {
+      return (
+        <section style={box}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>Corrections à intégrer</div>
+          <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 0" }}>Aucune correction retenue à intégrer pour l'instant (le correcteur n'a pas encore accepté/modifié d'anomalie).</p>
+        </section>
+      );
+    }
+    const restant = integ.a_integrer + integ.a_revoir;
+    const chips: { key: string; label: string; n: number }[] = [
+      { key: "a_integrer", label: "À intégrer", n: integ.a_integrer },
+      { key: "integree", label: "Intégrées", n: integ.integree },
+      { key: "a_revoir", label: "À revoir", n: integ.a_revoir },
+      { key: "non_applicable", label: "Non applicable", n: integ.non_applicable },
+      { key: "all", label: "Toutes", n: base.length },
+    ];
+    return (
+      <section style={box}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>Corrections à intégrer — {integ.integree}/{base.length} faites{restant > 0 ? ` · ${restant} restante(s)` : " ✅"}</div>
+        <p style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 10px" }}>
+          Appliquez chaque correction retenue dans le fichier, puis cochez-la. « À revoir » la renvoie au correcteur ; « Non applicable » l'écarte (motif requis). La version finale ne peut être déposée qu'une fois tout intégré.
+        </p>
+        {err && <div style={{ background: "var(--alert-soft, #F6E2DE)", color: "var(--alert, #B23A2E)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+          {chips.map((c) => (
+            <button key={c.key} type="button" onClick={() => setFilter(c.key)}
+              style={{ background: filter === c.key ? "var(--eclosion)" : "#fff", color: filter === c.key ? "#0B0B0C" : "var(--ink)", border: "1px solid var(--line)", borderRadius: 999, padding: "3px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              {c.label} · {c.n}
+            </button>
+          ))}
+        </div>
+        {groups.map(([jobId, list]) => (
+          <div key={jobId} style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", margin: "0 0 6px" }}>
+              {WORKTYPE_LABEL[list[0].work_type] ?? list[0].work_type} · {new Date(list[0].job_launched_at).toLocaleDateString("fr-FR")}
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {list.map((a) => {
+                const sev = SEV_COLOR[a.severity] ?? SEV_COLOR.C3;
+                const retenue = a.status === "modifiee" && a.resolution_note ? a.resolution_note : a.proposal;
+                return (
+                  <div key={a.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px", background: "#fff" }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
+                      <span style={{ background: sev.bg, color: sev.fg, borderRadius: 999, padding: "1px 9px", fontSize: 11, fontWeight: 700 }}>{a.severity}</span>
+                      {a.face && <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9A7A12)", borderRadius: 999, padding: "1px 9px", fontSize: 11 }}>{FACE_LABEL[a.face] ?? a.face}</span>}
+                      {a.location && <span style={{ fontSize: 11.5, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{a.location}</span>}
+                      <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 700, color: INTEG_COLOR[a.integration_status] }}>{INTEG_LABEL[a.integration_status] ?? a.integration_status}</span>
+                    </div>
+                    {a.element && <div style={{ fontSize: 12.5, margin: "2px 0" }}><span style={{ color: "var(--muted)" }}>Texte : </span>« {a.element} »</div>}
+                    <div style={{ fontSize: 12.5, margin: "2px 0" }}><span style={{ color: "var(--muted)" }}>Correction à appliquer : </span><strong>{retenue ?? "—"}</strong></div>
+                    {a.integration_note && <div style={{ fontSize: 11.5, color: "var(--ink)", margin: "4px 0 0", fontStyle: "italic" }}>Note : {a.integration_note}{a.integrated_by_name ? ` — ${a.integrated_by_name}` : ""}</div>}
+                    {canIntegrate && (
+                      noteFor?.id === a.id && noteFor.kind === "integration" ? (
+                        <div style={{ marginTop: 8 }}>
+                          <textarea value={noteFor.text} onChange={(e) => setNoteFor({ ...noteFor, text: e.target.value })}
+                            placeholder={noteFor.status === "non_applicable" ? "Motif : pourquoi cette correction n'est pas applicable…" : "Précision pour le correcteur…"}
+                            style={{ width: "100%", minHeight: 48, fontSize: 12.5, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, boxSizing: "border-box" }} />
+                          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                            <button type="button" disabled={busyId === a.id} onClick={() => integrate(a, noteFor.status, noteFor.text.trim() || undefined)} style={btnPrimary}>Enregistrer</button>
+                            <button type="button" onClick={() => setNoteFor(null)} style={btnGhost}>Annuler</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                          <button type="button" disabled={busyId === a.id} onClick={() => integrate(a, "integree")} style={btn("#2F7D4A")}>✔️ Intégrée</button>
+                          <button type="button" disabled={busyId === a.id} onClick={() => setNoteFor({ id: a.id, status: "a_revoir", text: a.integration_note ?? "", kind: "integration" })} style={btn("#B23A2E")}>↩️ À revoir</button>
+                          <button type="button" disabled={busyId === a.id} onClick={() => setNoteFor({ id: a.id, status: "non_applicable", text: a.integration_note ?? "", kind: "integration" })} style={btn("#5B6472")}>🚫 Non applicable</button>
+                        </div>
+                      )
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </section>
+    );
+  }
+
+  // — Mode DÉCISION (correcteur) —
   if (summary.total === 0) {
     return (
       <section style={box}>
@@ -60,7 +174,6 @@ export function CorrectionAnomaliesPanel({ manuscriptId, canDecide }: { manuscri
       </section>
     );
   }
-
   const chips: { key: string; label: string; n: number }[] = [
     { key: "all", label: "Toutes", n: summary.total },
     { key: "a_traiter", label: "À traiter", n: summary.a_traiter },
@@ -111,7 +224,7 @@ export function CorrectionAnomaliesPanel({ manuscriptId, canDecide }: { manuscri
                   {a.resolution_note && <div style={{ fontSize: 11.5, color: "var(--ink)", margin: "4px 0 0", fontStyle: "italic" }}>Note : {a.resolution_note}{a.decided_by_name ? ` — ${a.decided_by_name}` : ""}</div>}
 
                   {canDecide && (
-                    noteFor?.id === a.id ? (
+                    noteFor?.id === a.id && noteFor.kind === "decision" ? (
                       <div style={{ marginTop: 8 }}>
                         <textarea value={noteFor.text} onChange={(e) => setNoteFor({ ...noteFor, text: e.target.value })}
                           placeholder={noteFor.status === "modifiee" ? "Correction retenue (à la place de la proposition)…" : "Motif du rejet / précision…"}
@@ -124,8 +237,8 @@ export function CorrectionAnomaliesPanel({ manuscriptId, canDecide }: { manuscri
                     ) : (
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                         <button type="button" disabled={busyId === a.id} onClick={() => decide(a, "acceptee")} style={btn("#2F7D4A")}>✅ Accepter</button>
-                        <button type="button" disabled={busyId === a.id} onClick={() => setNoteFor({ id: a.id, status: "modifiee", text: a.resolution_note ?? "" })} style={btn("#B87400")}>✏️ Modifier</button>
-                        <button type="button" disabled={busyId === a.id} onClick={() => setNoteFor({ id: a.id, status: "rejetee", text: a.resolution_note ?? "" })} style={btn("#B23A2E")}>❌ Rejeter</button>
+                        <button type="button" disabled={busyId === a.id} onClick={() => setNoteFor({ id: a.id, status: "modifiee", text: a.resolution_note ?? "", kind: "decision" })} style={btn("#B87400")}>✏️ Modifier</button>
+                        <button type="button" disabled={busyId === a.id} onClick={() => setNoteFor({ id: a.id, status: "rejetee", text: a.resolution_note ?? "", kind: "decision" })} style={btn("#B23A2E")}>❌ Rejeter</button>
                         <button type="button" disabled={busyId === a.id} onClick={() => decide(a, "a_verifier")} style={btn("#5B6472")}>🔎 À vérifier</button>
                       </div>
                     )

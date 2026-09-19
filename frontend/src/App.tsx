@@ -18,6 +18,7 @@ const ReadingCommittee = lazy(() => import("./pages/ReadingCommittee").then((m) 
 const EditorialDecision = lazy(() => import("./pages/EditorialDecision").then((m) => ({ default: m.EditorialDecision })));
 const CorrectionEditorial = lazy(() => import("./pages/CorrectionEditorial").then((m) => ({ default: m.CorrectionEditorial })));
 const MyCorrections = lazy(() => import("./pages/MyCorrections").then((m) => ({ default: m.MyCorrections })));
+const MyIntegrations = lazy(() => import("./pages/MyIntegrations").then((m) => ({ default: m.MyIntegrations })));
 const CatalogueReferencePage = lazy(() => import("./pages/CatalogueReferencePage").then((m) => ({ default: m.CatalogueReferencePage })));
 const EditorialQuotesInbox = lazy(() => import("./components/EditorialQuotesInbox").then((m) => ({ default: m.EditorialQuotesInbox })));
 const ArchivesPage = lazy(() => import("./pages/ArchivesPage").then((m) => ({ default: m.ArchivesPage })));
@@ -87,6 +88,7 @@ type PageId =
   | "editorial-decision"
   | "correction-editorial"
   | "my-corrections"
+  | "my-correction-integrations"
   | "my-readings"
   | "my-dossiers"
   | "editorial-quotes-inbox"
@@ -168,6 +170,7 @@ const NAV_POLES: NavPole[] = [
       { key: "ed-comite", label: "Comité de lecture", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-mes-lectures", label: "Mes lectures", permission: "comite_lecture:saisie" },
       { key: "ed-mes-corrections", label: "Mes corrections", permission: "tasks:saisie" },
+      { key: "ed-mes-integrations", label: "Mes intégrations de correction", anyRole: ["DIR_EDITORIAL", "ASSISTANT_EDITORIAL"] },
       { key: "ed-direction", label: "Direction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-correction", label: "Correction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-expertise", label: "Expertise scientifique", permission: "tasks:consultation" },
@@ -282,6 +285,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-comite": { page: "reading-committee" },
   "ed-mes-lectures": { page: "my-readings" },
   "ed-mes-corrections": { page: "my-corrections" },
+  "ed-mes-integrations": { page: "my-correction-integrations" },
   "ed-direction": { page: "editorial-decision" },
   "ed-correction": { page: "correction-editorial" },
   "ed-expertise": { stage: "EXPERTISE", heading: "Expertise scientifique (si nécessaire)" },
@@ -837,6 +841,7 @@ export function App() {
           <MyDossiers onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation")} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-corrections" && <MyCorrections />}
+        {leaf && "page" in leaf && leaf.page === "my-correction-integrations" && <MyIntegrations />}
         {leaf && "page" in leaf && leaf.page === "editorial-quotes-inbox" && <EditorialQuotesInbox />}
         {leaf && "page" in leaf && leaf.page === "catalogue-ref" && (
           <CatalogueReferencePage canManage={permissions.has("manuscripts:administration")} />

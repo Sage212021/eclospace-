@@ -4062,7 +4062,7 @@ export function getDuplicateEmployees() {
   return request<{ groups: DuplicateGroup[]; total_groups: number }>("/api/v1/hr/duplicates");
 }
 export function deleteEmployee(id: string) {
-  return request<{ deleted: true; name: string }>(`/api/v1/employees/${id}`, { method: "DELETE" });
+  return request<{ deleted: true; name: string; payroll_months_cleaned: string[] }>(`/api/v1/employees/${id}`, { method: "DELETE" });
 }
 // Fusion d'un doublon (`loserId`) dans la fiche à conserver (`keeperId`) :
 // déplace toutes les données rattachées puis supprime logiquement le doublon.

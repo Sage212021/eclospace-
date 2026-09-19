@@ -634,6 +634,13 @@ export default async function hrRoutes(fastify: FastifyInstance) {
   // Suppression LOGIQUE d'une fiche employé (doublon). Réversible (deletedAt) :
   // les données liées éventuelles sont conservées, jamais cassées. On renvoie
   // le volume de données liées pour information (le front demande confirmation).
+  //
+  // NETTOYAGE AUTOMATIQUE (demande opérateur) : supprimer une fiche retirait la
+  // fiche des listes RH mais LAISSAIT sa ligne de paie dans le mois — d'où des
+  // « fiches fantômes » qui restaient comptées au livre de paie (cas BIBI). On
+  // retire donc aussi, à la suppression, les lignes de paie du doublon dans les
+  // mois ENCORE OUVERTS (run en « brouillon »). Les mois soumis au DG, validés ou
+  // clôturés restent FIGÉS (jamais modifiés) : leur historique est préservé.
   fastify.delete("/api/v1/employees/:id", { preHandler: requirePermission("rh", "administration") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const emp = await prisma.employee.findFirst({
@@ -641,14 +648,25 @@ export default async function hrRoutes(fastify: FastifyInstance) {
       select: { id: true, firstName: true, lastName: true, _count: { select: { payrollMonthlyLines: true, absences: true, hrContracts: true } } },
     });
     if (!emp) return reply.code(404).send({ code: "not_found", message: "Employé introuvable." });
-    await prisma.employee.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+
+    const openLines = await prisma.payrollMonthlyLine.findMany({
+      where: { employeeId: id, run: { status: "brouillon" } },
+      select: { id: true, run: { select: { periodKey: true } } },
+    });
+    await prisma.$transaction(async (tx) => {
+      if (openLines.length > 0) {
+        await tx.payrollMonthlyLine.deleteMany({ where: { id: { in: openLines.map((l) => l.id) } } });
+      }
+      await tx.employee.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+    });
+
     await writeAuditLog({
       userId: request.user!.id, action: "update", entityType: "employee", entityId: id,
       oldValues: { name: `${emp.firstName} ${emp.lastName}`, deletedAt: null },
-      newValues: { deletedAt: new Date().toISOString(), reason: "suppression logique (doublon)", linked: emp._count },
+      newValues: { deletedAt: new Date().toISOString(), reason: "suppression logique (doublon)", linked: emp._count, payroll_lines_removed: openLines.map((l) => l.run.periodKey) },
       ipAddress: request.ip,
     });
-    return reply.send({ deleted: true, name: `${emp.firstName} ${emp.lastName}` });
+    return reply.send({ deleted: true, name: `${emp.firstName} ${emp.lastName}`, payroll_months_cleaned: openLines.map((l) => l.run.periodKey) });
   });
 
   // Corbeille RH : fiches supprimées (logiquement). Permet de VÉRIFIER ce qui a été

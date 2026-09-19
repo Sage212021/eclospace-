@@ -128,4 +128,28 @@ describe("RH — fusion d'un doublon employé", () => {
     const res = await app.inject({ method: "POST", url: `/api/v1/employees/${e.id}/merge`, headers: { cookie }, payload: { into: e.id } });
     expect(res.statusCode).toBe(400);
   });
+
+  it("supprimer un doublon retire sa paie des mois OUVERTS mais garde les mois FIGÉS", async () => {
+    const emp = await prisma.employee.create({ data: { firstName: `${tag} PHANTOME`, lastName: "FICHE" } });
+    created.push(emp.id);
+    await prisma.payrollEmployeeProfile.create({ data: { employeeId: emp.id, grossContractual: 150000, basePct: 1 } });
+    const brouillon = await prisma.payrollMonthlyRun.create({ data: { periodKey: "2034-06", status: "brouillon" } });
+    const valide = await prisma.payrollMonthlyRun.create({ data: { periodKey: "2034-07", status: "valide" } });
+    await prisma.payrollMonthlyLine.create({ data: { runId: brouillon.id, employeeId: emp.id } });
+    await prisma.payrollMonthlyLine.create({ data: { runId: valide.id, employeeId: emp.id } });
+
+    try {
+      const res = await app.inject({ method: "DELETE", url: `/api/v1/employees/${emp.id}`, headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().payroll_months_cleaned).toEqual(["2034-06"]);
+
+      // La fiche est supprimée logiquement.
+      expect((await prisma.employee.findUnique({ where: { id: emp.id } }))?.deletedAt).not.toBeNull();
+      // Ligne du mois OUVERT retirée ; ligne du mois FIGÉ conservée.
+      expect(await prisma.payrollMonthlyLine.findUnique({ where: { runId_employeeId: { runId: brouillon.id, employeeId: emp.id } } })).toBeNull();
+      expect(await prisma.payrollMonthlyLine.findUnique({ where: { runId_employeeId: { runId: valide.id, employeeId: emp.id } } })).not.toBeNull();
+    } finally {
+      await prisma.payrollMonthlyRun.deleteMany({ where: { periodKey: { in: ["2034-06", "2034-07"] } } }).catch(() => {});
+    }
+  });
 });

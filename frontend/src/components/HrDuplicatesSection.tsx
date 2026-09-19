@@ -80,19 +80,23 @@ export function HrDuplicatesSection({ canDelete, collapsible, defaultOpen }: { c
 
   async function remove(employeeId: string, name: string, linkedTotal: number) {
     const warn = linkedTotal > 0
-      ? `\n\n⚠️ Cette fiche possède ${linkedTotal} donnée(s) liée(s) (bulletins, absences, contrats…). Pour ne rien perdre, préférez la FUSION. La suppression seule laisse ces données rattachées au doublon (elles ne rejoignent PAS la fiche conservée).`
+      ? `\n\n⚠️ Cette fiche possède ${linkedTotal} donnée(s) liée(s) (absences, contrats…). Pour REGROUPER ces données sur la fiche conservée, préférez la FUSION. La suppression seule ne les transfère pas.`
       : "";
     const ok = await confirm({
       title: "Supprimer cette fiche en doublon ?",
-      message: `« ${name} » sera retirée des listes.${warn}\n\nVérifiez bien que vous supprimez le DOUBLON et non la fiche principale.`,
+      message: `« ${name} » sera retirée des listes, et sa paie sera automatiquement retirée des mois encore ouverts (les mois validés/clôturés restent figés).${warn}\n\nVérifiez bien que vous supprimez le DOUBLON et non la fiche principale.`,
       confirmLabel: "Supprimer le doublon",
       tone: "danger",
     });
     if (!ok) return;
     setBusy(true);
     try {
-      await deleteEmployee(employeeId);
-      setMessage(`Fiche « ${name} » supprimée (doublon).`);
+      const r = await deleteEmployee(employeeId);
+      const cleaned = r.payroll_months_cleaned ?? [];
+      setMessage(
+        `Fiche « ${name} » supprimée (doublon).` +
+          (cleaned.length > 0 ? ` Paie retirée du/des mois ouvert(s) : ${cleaned.join(", ")}.` : ""),
+      );
       setError(null);
       await load();
     } catch (e) {

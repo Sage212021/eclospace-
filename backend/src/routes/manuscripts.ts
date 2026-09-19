@@ -1047,6 +1047,18 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       if (!isCorrectionPhase(phase)) return reply.code(400).send({ code: "invalid_phase", message: "Phase de correction inconnue." });
       const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
       if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      // VERROU (Lot 3) : la version corrigée finale (VCF) ne peut être déposée que
+      // si toutes les corrections retenues (acceptées/modifiées) sont INTÉGRÉES
+      // (ou écartées « non applicable » avec motif). Empêche une correction
+      // oubliée entre la décision et le fichier livré. Branche TEXTE.
+      if (phase === "integration_finale") {
+        const pending = await prisma.correctionAnomaly.count({
+          where: { manuscriptId: id, status: { in: ["acceptee", "modifiee"] }, integrationStatus: { in: ["a_integrer", "a_revoir"] }, job: { workType: { in: ["correction_1", "correction_2"] } } },
+        });
+        if (pending > 0) {
+          return reply.code(409).send({ code: "integration_incomplete", message: `Version finale bloquée : ${pending} correction(s) acceptée(s) ne sont pas encore intégrée(s). Cochez-les « intégrée » (ou « non applicable » avec motif) dans « Mes intégrations de correction » avant de déposer la version finale.` });
+        }
+      }
       const file = await request.file();
       if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
       const buffer = await file.toBuffer();

@@ -5608,6 +5608,17 @@ model CorrectionAnomaly {
   resolutionNote String?      @map("resolution_note")
   decidedById    String?      @map("decided_by_id")
   decidedAt      DateTime?    @map("decided_at")
+
+  // 2ᵉ temps du Lot 3 — INTÉGRATION (geste de l'intégrateur, distinct de la
+  // DÉCISION du correcteur ci-dessus). Ne concerne que les anomalies acceptées
+  // ou modifiées : l'intégrateur applique la correction dans le fichier puis
+  // coche l'état. a_integrer (par défaut) · integree · a_revoir (renvoi au
+  // correcteur) · non_applicable (écartée à l'intégration, motif requis).
+  integrationStatus String    @default("a_integrer") @map("integration_status")
+  integratedById    String?   @map("integrated_by_id")
+  integratedAt      DateTime? @map("integrated_at")
+  integrationNote   String?   @map("integration_note")
+
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 

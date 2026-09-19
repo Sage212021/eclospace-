@@ -170,7 +170,7 @@ const NAV_POLES: NavPole[] = [
       { key: "ed-comite", label: "Comité de lecture", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-mes-lectures", label: "Mes lectures", permission: "comite_lecture:saisie" },
       { key: "ed-mes-corrections", label: "Mes corrections", permission: "tasks:saisie" },
-      { key: "ed-mes-integrations", label: "Mes intégrations de correction", anyRole: ["DIR_EDITORIAL", "ASSISTANT_EDITORIAL"] },
+      { key: "ed-mes-integrations", label: "Mes intégrations de correction", anyRole: ["DIR_EDITORIAL", "ASSISTANT_EDITORIAL", "RESP_INFOGRAPHIE"] },
       { key: "ed-direction", label: "Direction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-correction", label: "Correction éditoriale", anyRole: EDITORIAL_PILOTAGE_ROLES },
       { key: "ed-expertise", label: "Expertise scientifique", permission: "tasks:consultation" },

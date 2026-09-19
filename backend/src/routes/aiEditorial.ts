@@ -66,6 +66,18 @@ const AI_JOB_READ_PERMS = [
   { module: "tasks" as const, action: "consultation" as const },
 ];
 
+// L'INFOGRAPHE d'un ouvrage = le responsable de l'étape Infographie (déjà choisi
+// à l'étape « maquettiste/infographe »). C'est lui qui intègre les corrections
+// de COUVERTURE.
+async function manuscriptInfographeId(manuscriptId: string): Promise<string | null> {
+  const step = await prisma.manuscriptStep.findFirst({
+    where: { manuscriptId, status: { code: "INFOGRAPHIE" } },
+    orderBy: { createdAt: "desc" },
+    select: { responsibleId: true },
+  });
+  return step?.responsibleId ?? null;
+}
+
 export default async function aiEditorialRoutes(fastify: FastifyInstance) {
   // — Configuration —
   fastify.get("/api/v1/ai-editorial/config", { preHandler: requireAnyRole(CONFIG_ROLES) }, async (_request, reply) => {
@@ -494,17 +506,28 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
       const parsed = anomalyIntegrationSchema.safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ code: "invalid_body", message: "État d'intégration invalide (attendu : à intégrer / intégrée / à revoir / non applicable)." });
-      const existing = await prisma.correctionAnomaly.findUnique({ where: { id } });
+      const existing = await prisma.correctionAnomaly.findUnique({ where: { id }, include: { job: { select: { workType: true } } } });
       if (!existing) return reply.code(404).send({ code: "not_found", message: "Anomalie introuvable." });
       if (existing.status !== "acceptee" && existing.status !== "modifiee") {
         return reply.code(409).send({ code: "not_integrable", message: "Seule une anomalie acceptée ou modifiée peut être intégrée." });
       }
-      // Habilitation : l'intégrateur DÉSIGNÉ de l'ouvrage, ou une administration
-      // des manuscrits.
-      const manuscript = await prisma.manuscript.findUnique({ where: { id: existing.manuscriptId }, select: { correctionIntegratorId: true } });
+      // Habilitation selon la BRANCHE : couverture → l'INFOGRAPHE de l'ouvrage
+      // (responsable de l'étape Infographie) ; texte → l'intégrateur ÉDITORIAL
+      // désigné. Une administration des manuscrits passe dans les deux cas.
+      const isCover = existing.job.workType === "couverture";
       const isAdmin = request.user!.permissions.has("manuscripts:administration");
-      if (!isAdmin && manuscript?.correctionIntegratorId !== request.user!.id) {
-        return reply.code(403).send({ code: "not_integrator", message: "Seul l'intégrateur désigné de cet ouvrage peut cocher l'intégration." });
+      if (!isAdmin) {
+        const authorized = isCover
+          ? (await manuscriptInfographeId(existing.manuscriptId)) === request.user!.id
+          : (await prisma.manuscript.findUnique({ where: { id: existing.manuscriptId }, select: { correctionIntegratorId: true } }))?.correctionIntegratorId === request.user!.id;
+        if (!authorized) {
+          return reply.code(403).send({
+            code: "not_integrator",
+            message: isCover
+              ? "Seul l'infographe de cet ouvrage peut cocher l'intégration de la couverture."
+              : "Seul l'intégrateur désigné de cet ouvrage peut cocher l'intégration.",
+          });
+        }
       }
       if (parsed.data.integration_status === "non_applicable" && !(parsed.data.note && parsed.data.note.trim())) {
         return reply.code(400).send({ code: "note_required", message: "Indiquez le motif pour écarter une correction (« non applicable »)." });
@@ -528,39 +551,56 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
   );
 
   // Inbox personnel de l'intégrateur : les ouvrages qu'on lui a confiés, avec le
-  // nombre de corrections à intégrer (branche TEXTE — la couverture en 2ᵉ temps).
-  // Alimente l'écran « Mes intégrations de correction ».
+  // nombre de corrections à intégrer. Deux branches :
+  //  • TEXTE — ouvrages dont il est l'intégrateur éditorial désigné (jobs
+  //    correction_1/2) ;
+  //  • COUVERTURE — ouvrages dont il est l'infographe (jobs couverture).
+  // Un même ouvrage peut apparaître sous les deux branches si la personne cumule
+  // les deux rôles. Alimente l'écran « Mes intégrations de correction ».
   fastify.get(
     "/api/v1/my-correction-integrations",
     { preHandler: requireAnyPermission(AI_JOB_READ_PERMS) },
     async (request, reply) => {
-      const manuscripts = await prisma.manuscript.findMany({
-        where: { deletedAt: null, correctionIntegratorId: request.user!.id },
+      const me = request.user!.id;
+      const emptyCounts = () => ({ a_integrer: 0, integree: 0, a_revoir: 0, non_applicable: 0, total: 0 });
+
+      const tally = async (manuscriptIds: string[], workTypes: ("correction_1" | "correction_2" | "couverture")[]) => {
+        if (manuscriptIds.length === 0) return new Map<string, ReturnType<typeof emptyCounts>>();
+        const rows = await prisma.correctionAnomaly.findMany({
+          where: { manuscriptId: { in: manuscriptIds }, status: { in: ["acceptee", "modifiee"] }, job: { workType: { in: workTypes } } },
+          select: { manuscriptId: true, integrationStatus: true },
+        });
+        const m = new Map<string, ReturnType<typeof emptyCounts>>();
+        for (const r of rows) {
+          if (!m.has(r.manuscriptId)) m.set(r.manuscriptId, emptyCounts());
+          const c = m.get(r.manuscriptId)!;
+          c.total += 1;
+          if (r.integrationStatus in c) (c as Record<string, number>)[r.integrationStatus] += 1;
+        }
+        return m;
+      };
+
+      // Branche TEXTE : ouvrages où je suis l'intégrateur éditorial désigné.
+      const texteManuscripts = await prisma.manuscript.findMany({
+        where: { deletedAt: null, correctionIntegratorId: me },
         select: { id: true, manuscriptNumber: true, title: true, status: { select: { code: true, label: true } } },
         orderBy: { updatedAt: "desc" },
       });
-      const ids = manuscripts.map((m) => m.id);
-      const anomalies = ids.length
-        ? await prisma.correctionAnomaly.findMany({
-            where: { manuscriptId: { in: ids }, status: { in: ["acceptee", "modifiee"] }, job: { workType: { in: ["correction_1", "correction_2"] } } },
-            select: { manuscriptId: true, integrationStatus: true },
-          })
-        : [];
-      const emptyCounts = () => ({ a_integrer: 0, integree: 0, a_revoir: 0, non_applicable: 0, total: 0 });
-      const byM = new Map<string, ReturnType<typeof emptyCounts>>();
-      for (const m of manuscripts) byM.set(m.id, emptyCounts());
-      for (const a of anomalies) {
-        const c = byM.get(a.manuscriptId)!;
-        c.total += 1;
-        if (a.integrationStatus in c) (c as Record<string, number>)[a.integrationStatus] += 1;
-      }
-      return reply.send({
-        manuscripts: manuscripts.map((m) => ({
-          id: m.id, manuscript_number: m.manuscriptNumber, title: m.title,
-          status_code: m.status.code, status_label: m.status.label,
-          counts: byM.get(m.id)!,
-        })),
+      const texteCounts = await tally(texteManuscripts.map((m) => m.id), ["correction_1", "correction_2"]);
+
+      // Branche COUVERTURE : ouvrages où je suis l'infographe (resp. étape Infographie).
+      const infoSteps = await prisma.manuscriptStep.findMany({
+        where: { responsibleId: me, status: { code: "INFOGRAPHIE" }, manuscript: { deletedAt: null } },
+        select: { manuscript: { select: { id: true, manuscriptNumber: true, title: true, status: { select: { code: true, label: true } } } } },
       });
+      const coverManuscripts = infoSteps.map((s) => s.manuscript);
+      const coverCounts = await tally(coverManuscripts.map((m) => m.id), ["couverture"]);
+
+      const items = [
+        ...texteManuscripts.map((m) => ({ id: m.id, manuscript_number: m.manuscriptNumber, title: m.title, status_code: m.status.code, status_label: m.status.label, branch: "texte" as const, counts: texteCounts.get(m.id) ?? emptyCounts() })),
+        ...coverManuscripts.map((m) => ({ id: m.id, manuscript_number: m.manuscriptNumber, title: m.title, status_code: m.status.code, status_label: m.status.label, branch: "couverture" as const, counts: coverCounts.get(m.id) ?? emptyCounts() })),
+      ];
+      return reply.send({ manuscripts: items });
     },
   );
 

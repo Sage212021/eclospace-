@@ -988,8 +988,11 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     const costUsd = (totalInput * price.in + totalOutput * price.out) / 1_000_000;
     const costEstimate = Math.round(costUsd * 600 * 100) / 100; // ≈ FCFA (1 USD ≈ 600 XAF)
 
-    await prisma.aiReadingJob.update({
-      where: { id: job.id },
+    // On ne conclut QUE si le job est toujours « en cours » : s'il a été ARRÊTÉ
+    // par l'opérateur (annulé) ou marqué interrompu entre-temps, on ne le
+    // ressuscite pas en « terminé ».
+    await prisma.aiReadingJob.updateMany({
+      where: { id: job.id, status: "en_cours" },
       data: { status: "termine", finishedAt: new Date(), producedDocumentIds: producedIds, reportVersion: 1, costEstimate, reportText, sourceText: comparisonSource, rewriteText: comparisonRewrite },
     });
     await writeAuditLog({
@@ -1006,7 +1009,8 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     if (/100 PDF pages/i.test(message)) {
       message = "Le manuscrit PDF dépasse 100 pages, refusé par l'IA. Déposez le manuscrit au format Word (.docx) : il sera analysé intégralement.";
     }
-    await prisma.aiReadingJob.update({ where: { id: jobId }, data: { status: "erreur", finishedAt: new Date(), errorMessage: message } }).catch(() => {});
+    // Idem : ne pas écraser un job déjà arrêté (annulé) par l'opérateur.
+    await prisma.aiReadingJob.updateMany({ where: { id: jobId, status: "en_cours" }, data: { status: "erreur", finishedAt: new Date(), errorMessage: message } }).catch(() => {});
   }
 }
 

@@ -66,6 +66,32 @@ const AI_JOB_READ_PERMS = [
   { module: "tasks" as const, action: "consultation" as const },
 ];
 
+// Permissions autorisant le lancement — et donc l'ARRÊT — d'une relecture IA.
+const AI_JOB_LAUNCH_PERMS = [
+  { module: "comite_lecture" as const, action: "saisie" as const },
+  { module: "manuscripts" as const, action: "validation" as const },
+  { module: "manuscripts" as const, action: "saisie" as const },
+  { module: "manuscripts" as const, action: "administration" as const },
+  { module: "tasks" as const, action: "saisie" as const },
+  { module: "bat" as const, action: "saisie" as const },
+];
+
+// Un lancement IA tourne EN ARRIÈRE-PLAN : si le conteneur redémarre (déploiement)
+// ou si l'appel est interrompu, le job pouvait rester « en cours » indéfiniment
+// (statut jamais résolu → l'opérateur relançait, consommant du crédit). Balayage
+// paresseux : au-delà de ce délai sans conclusion, un job « en cours » est
+// considéré comme interrompu et marqué en erreur (résolu, non bloquant).
+const AI_JOB_STALE_MINUTES = 15;
+async function sweepStaleAiJobs(manuscriptId?: string): Promise<void> {
+  const cutoff = new Date(Date.now() - AI_JOB_STALE_MINUTES * 60 * 1000);
+  await prisma.aiReadingJob
+    .updateMany({
+      where: { status: { in: ["en_cours", "en_attente"] }, launchedAt: { lt: cutoff }, ...(manuscriptId ? { manuscriptId } : {}) },
+      data: { status: "erreur", finishedAt: new Date(), errorMessage: `Lancement interrompu (aucune réponse après ${AI_JOB_STALE_MINUTES} min — souvent un redémarrage du serveur). Relancez si besoin.` },
+    })
+    .catch(() => {});
+}
+
 // L'INFOGRAPHE d'un ouvrage = le responsable de l'étape Infographie (déjà choisi
 // à l'étape « maquettiste/infographe »). C'est lui qui intègre les corrections
 // de COUVERTURE.
@@ -330,6 +356,10 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const manuscriptId = (request.query as { manuscript?: string }).manuscript;
       if (!manuscriptId) return reply.code(400).send({ code: "manuscript_required", message: "Paramètre « manuscript » requis." });
+      // Résout d'abord les lancements restés « en cours » anormalement longtemps
+      // (serveur redémarré, appel interrompu) pour que l'historique n'affiche
+      // jamais un « en cours » perpétuel.
+      await sweepStaleAiJobs(manuscriptId);
       const jobs = await prisma.aiReadingJob.findMany({ where: { manuscriptId }, orderBy: { launchedAt: "desc" } });
       // Signale au lanceur qu'un rapport est téléchargeable (1er document produit).
       const withReport = jobs.map((j) => ({
@@ -337,6 +367,32 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
         reportAvailable: j.status === "termine" && Array.isArray(j.producedDocumentIds) && (j.producedDocumentIds as unknown[]).length > 0,
       }));
       return reply.send({ jobs: withReport });
+    },
+  );
+
+  // — Arrêt d'un lancement IA (bouton « Stopper ») : l'opérateur interrompt une
+  // relecture qui ne lui convient plus ou qui traîne. On marque le job « annulé »
+  // s'il est encore en attente / en cours (l'appel IA en arrière-plan, s'il se
+  // termine tard, ne réécrira pas un job annulé — cf. garde dans aiRunner). —
+  fastify.post(
+    "/api/v1/ai-editorial/jobs/:jobId/cancel",
+    { preHandler: requireAnyPermission(AI_JOB_LAUNCH_PERMS) },
+    async (request, reply) => {
+      const { jobId } = request.params as { jobId: string };
+      const job = await prisma.aiReadingJob.findUnique({ where: { id: jobId } });
+      if (!job) return reply.code(404).send({ code: "not_found", message: "Relecture introuvable." });
+      if (job.status !== "en_cours" && job.status !== "en_attente") {
+        return reply.code(409).send({ code: "not_cancellable", message: "Ce lancement est déjà terminé (ou arrêté) : il n'y a rien à interrompre." });
+      }
+      const done = await prisma.aiReadingJob.updateMany({
+        where: { id: jobId, status: { in: ["en_cours", "en_attente"] } },
+        data: { status: "annule", finishedAt: new Date(), errorMessage: "Lancement arrêté par l'opérateur." },
+      });
+      if (done.count === 0) {
+        return reply.code(409).send({ code: "not_cancellable", message: "Le lancement vient de se terminer : rien à interrompre." });
+      }
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "ai_reading_job", entityId: jobId, oldValues: { status: job.status }, newValues: { status: "annule" }, ipAddress: request.ip });
+      return reply.send({ ok: true });
     },
   );
 

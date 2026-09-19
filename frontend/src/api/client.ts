@@ -1060,7 +1060,7 @@ export function saveAiPrompt(workType: AiWorkType, input: { label: string; syste
 export interface AiJob {
   id: string;
   workType: AiWorkType;
-  status: "en_attente" | "en_cours" | "termine" | "erreur";
+  status: "en_attente" | "en_cours" | "termine" | "erreur" | "annule";
   model: string;
   costEstimate: string | null;
   editorRecommendation: string | null;
@@ -1128,6 +1128,10 @@ export function saveCorrectionProfile(code: string, input: { label: string; poin
 }
 export function listAiJobs(manuscriptId: string) {
   return request<{ jobs: AiJob[] }>(`/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`);
+}
+// Arrête un lancement IA en cours (bouton « Stopper »).
+export function cancelAiJob(jobId: string) {
+  return request<{ ok: boolean }>(`/api/v1/ai-editorial/jobs/${jobId}/cancel`, { method: "POST" });
 }
 // Comparaison avant/après d'une réécriture IA : texte original vs texte réécrit.
 export function aiJobComparison(jobId: string) {

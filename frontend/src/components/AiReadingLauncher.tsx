@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { runAiEditorial, listAiJobs, aiJobReportDownloadUrl, aiJobComparison, aiJobDocuments, aiJobDocumentDownloadUrl, listGenres, type AiJob, type AiJobDocument, type AiWorkType, type Genre } from "../api/client";
+import { runAiEditorial, listAiJobs, cancelAiJob, aiJobReportDownloadUrl, aiJobComparison, aiJobDocuments, aiJobDocumentDownloadUrl, listGenres, type AiJob, type AiJobDocument, type AiWorkType, type Genre } from "../api/client";
 
 // Lot IA-1 : lancer une relecture assistée à l'étape courante. Le rapport produit
 // (au nom du relecteur d'Éclosion) est classé dans les Documents de l'ouvrage.
@@ -9,12 +9,14 @@ const STATUS_LABELS: Record<AiJob["status"], string> = {
   en_cours: "En cours…",
   termine: "Terminé",
   erreur: "Erreur",
+  annule: "Arrêté",
 };
 const STATUS_COLORS: Record<AiJob["status"], string> = {
   en_attente: "var(--muted)",
   en_cours: "#B87400",
   termine: "#2F7D4A",
   erreur: "var(--alert, #B23A2E)",
+  annule: "var(--muted)",
 };
 
 // Groupes de « chips » d'objectifs (facultatifs) : cliquer une puce insère la
@@ -127,6 +129,11 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
             setBusy(false);
             return;
           }
+          if (latest && latest.status === "annule") {
+            setNote("Lancement arrêté.");
+            setBusy(false);
+            return;
+          }
         }
         if (Date.now() - started > 5 * 60_000) {
           setBusy(false); // on arrête le suivi actif ; le job continue côté serveur
@@ -139,6 +146,21 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Lancement impossible.");
       setBusy(false);
+    }
+  }
+
+  // Arrêt d'un lancement qui traîne ou ne convient plus : le job passe « Arrêté »
+  // et on cesse le suivi actif (plus de consommation de crédit inutile).
+  async function stop(jobId: string) {
+    try {
+      await cancelAiJob(jobId);
+      setBusy(false);
+      setErr(null);
+      setNote("Lancement arrêté.");
+      const list = await load().catch(() => null);
+      if (list) setJobs(list);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Arrêt impossible.");
     }
   }
 
@@ -234,6 +256,16 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
               <div key={j.id} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 12, flexWrap: "wrap" }}>
                 <span style={{ fontFamily: "var(--font-mono)" }}>{new Date(j.launchedAt).toLocaleString("fr-FR")}</span>
                 <span style={{ fontWeight: 700, color: STATUS_COLORS[j.status] }}>{STATUS_LABELS[j.status]}</span>
+                {(j.status === "en_cours" || j.status === "en_attente") && (
+                  <button
+                    type="button"
+                    onClick={() => stop(j.id)}
+                    style={{ background: "none", border: "1px solid var(--alert, #B23A2E)", color: "var(--alert, #B23A2E)", borderRadius: 6, padding: "1px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                    title="Arrêter ce lancement"
+                  >
+                    ⏹ Stopper
+                  </button>
+                )}
                 {j.status === "termine" && (
                   // Production IA : jamais présentée comme une décision. Reste « à
                   // valider » jusqu'à intervention d'un responsable habilité.

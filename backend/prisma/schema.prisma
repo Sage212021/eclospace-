@@ -5535,6 +5535,8 @@ enum AiJobStatus {
   en_cours
   termine
   erreur
+  // Lancement arrêté par l'opérateur (bouton « Stopper »).
+  annule
 }
 
 // Bibliothèque de prompts + modèle de rapport imposé, éditable et versionnée.

@@ -1682,6 +1682,14 @@ async function main() {
       permissionModules: ["decision_editoriale", "comite_lecture", "manuscripts"],
       departmentCodes: ["DIRED", "COMLEC"],
     },
+    {
+      slug: "2026-09-ia-stopper-lancement-jobs-bloques",
+      version: "2026.09",
+      title: "Nouveauté — Assistance IA : bouton « Stopper » et fin des « En cours » perpétuels",
+      body: "Deux corrections sur les lancements de l'assistance IA (relecture, correction, couverture…). (1) Bouton « ⏹ Stopper » : dans l'historique, à côté d'un lancement « En cours… », vous pouvez maintenant l'arrêter s'il ne convient plus ou traîne — il passe « Arrêté » et le suivi s'interrompt (plus de crédit consommé inutilement). (2) Plus de « En cours… » qui reste indéfiniment : si un lancement est interrompu (souvent un redémarrage du serveur au moment d'un déploiement), il se résout tout seul en « Erreur » au bout d'un quart d'heure, à la simple ouverture de l'écran — vous n'avez plus besoin de relancer pour « débloquer » l'affichage. Un lancement arrêté n'est jamais ré-écrit en « Terminé » même si le travail se finissait tard.",
+      permissionModules: ["manuscripts", "comite_lecture", "tasks"],
+      departmentCodes: ["CORR", "COMLEC", "DIRED", "SECR", "INFOG", "EXPERT", "CQ"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, realizationPayload, seedVc1 } from "./helpers.js";
+import { extractSessionCookie, realizationPayload, seedVc1, seedEvaluation, seedEditorialDecision } from "./helpers.js";
 
 // Verrou « livrable de sortie » : une étape soumise au verrou (Planification…)
 // ne se valide pas tant que son fichier livrable n'est pas déposé.
@@ -19,9 +19,16 @@ function multipart(field: string, filename: string, content: string) {
 async function manuscriptAt(code: string) {
   const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code } });
   const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
-  return prisma.manuscript.create({
+  const m = await prisma.manuscript.create({
     data: { manuscriptNumber: `MS-LIV-${rnd()}`, title: `Livrable ${rnd()}`, statusId: status.id, ownerId: admin.id, origin: "soumission", language: "fr", receivedAt: new Date() },
   });
+  // Un manuscrit en planification (ou au-delà) a forcément été évalué et accepté :
+  // on sème ces prérequis pour satisfaire le garde-fou d'intégrité éditoriale.
+  if (code === "PLANIFICATION") {
+    await seedEvaluation(m.id, admin.id);
+    await seedEditorialDecision(m.id, admin.id);
+  }
+  return m;
 }
 
 describe("verrou « livrable de sortie » d'étape", () => {

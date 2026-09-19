@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, seedStepDeliverable, realizationPayload , seedVc1 } from "./helpers.js";
+import { extractSessionCookie, seedStepDeliverable, realizationPayload , seedVc1, seedEvaluation, seedEditorialDecision } from "./helpers.js";
 
 // Étapes « à option » (Expertise, Réécriture, Projet) — demande opérateur
 // 20/08/2026 : l'opérateur choisit « Réaliser » (avec les éléments) ou
@@ -14,9 +14,15 @@ const rnd = () => Math.random().toString(36).slice(2, 7);
 async function manuscriptAt(code: string) {
   const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code } });
   const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
-  return prisma.manuscript.create({
+  const m = await prisma.manuscript.create({
     data: { manuscriptNumber: `MS-OPT-${rnd()}`, title: `Option ${rnd()}`, statusId: status.id, ownerId: admin.id, origin: "soumission", language: "fr", receivedAt: new Date() },
   });
+  // Prérequis d'intégrité éditoriale pour un dossier déjà en planification.
+  if (code === "PLANIFICATION") {
+    await seedEvaluation(m.id, admin.id);
+    await seedEditorialDecision(m.id, admin.id);
+  }
+  return m;
 }
 
 describe("étapes « à option » : Réaliser / Passer", () => {

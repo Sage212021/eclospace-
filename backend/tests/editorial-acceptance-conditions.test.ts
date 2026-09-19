@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie } from "./helpers.js";
+import { extractSessionCookie, seedEvaluation } from "./helpers.js";
 
 // Suivi des acceptations « sous conditions » (audit éditorial, point n°2) : les
 // conditions posées par le comité sont listées, levées une à une (datées,
@@ -41,6 +41,8 @@ describe("acceptation sous conditions — suivi des conditions", () => {
     });
     const partner = await prisma.partner.create({ data: { category: "auteur", firstName: "Ada", lastName: "Cond", email: "ada@example.com" } });
     await prisma.workContributor.create({ data: { manuscriptId: m.id, partnerId: partner.id, role: "author", displayOrder: 0 } });
+    // Rapport d'évaluation requis pour toute acceptation (garde-fou circuit).
+    if (code === "DECISION_EDITORIALE") await seedEvaluation(m.id, adminId);
     return m.id;
   }
 

@@ -785,6 +785,16 @@ export function getCorrectionIntegrator(manuscriptId: string) {
 export function setCorrectionIntegrator(manuscriptId: string, userId: string | null) {
   return request<{ ok: boolean }>(`/api/v1/manuscripts/${manuscriptId}/correction-integrator`, { method: "PUT", body: JSON.stringify({ user_id: userId }) });
 }
+// Infographe désigné pour l'intégration de la correction de COUVERTURE.
+export function getCoverIntegrators() {
+  return request<{ id: string; name: string }[]>(`/api/v1/cover-integrators`);
+}
+export function getCoverIntegrator(manuscriptId: string) {
+  return request<{ integrator: { id: string; name: string } | null }>(`/api/v1/manuscripts/${manuscriptId}/cover-integrator`);
+}
+export function setCoverIntegrator(manuscriptId: string, userId: string | null) {
+  return request<{ ok: boolean }>(`/api/v1/manuscripts/${manuscriptId}/cover-integrator`, { method: "PUT", body: JSON.stringify({ user_id: userId }) });
+}
 
 // Livrable de sortie d'une étape (verrou « pas d'avancement sans le fichier »).
 export interface StepDeliverableMeta {

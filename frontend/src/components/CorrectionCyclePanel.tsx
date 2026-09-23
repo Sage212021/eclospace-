@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getCorrectionCycle, getCoverCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, stepAttachmentDownloadUrl, getCorrectionIntegrator, getCorrectionIntegrators, setCorrectionIntegrator, type CorrectionPhaseState, type CorrectionIntegratorState } from "../api/client";
+import { getCorrectionCycle, getCoverCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, stepAttachmentDownloadUrl, getCorrectionIntegrator, getCorrectionIntegrators, setCorrectionIntegrator, getCoverIntegrator, getCoverIntegrators, setCoverIntegrator, type CorrectionPhaseState, type CorrectionIntegratorState } from "../api/client";
 
 const ACTOR_LABEL: Record<string, string> = { correcteur: "au correcteur", integrateur: "à l'intégrateur (éditeur)", termine: "— cycle terminé" };
 
@@ -18,18 +18,36 @@ export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
   const [integ, setInteg] = useState<CorrectionIntegratorState | null>(null);
   const [candidates, setCandidates] = useState<{ id: string; name: string }[]>([]);
+  const [coverInteg, setCoverInteg] = useState<{ id: string; name: string } | null>(null);
+  const [coverCandidates, setCoverCandidates] = useState<{ id: string; name: string }[]>([]);
 
   const load = () => Promise.all([
     getCorrectionCycle(manuscriptId).then(setPhases).catch(() => setPhases([])),
     getCoverCorrectionCycle(manuscriptId).then(setCoverPhases).catch(() => setCoverPhases([])),
     getCorrectionIntegrator(manuscriptId).then(setInteg).catch(() => setInteg(null)),
+    getCoverIntegrator(manuscriptId).then((r) => setCoverInteg(r.integrator)).catch(() => setCoverInteg(null)),
   ]);
-  useEffect(() => { load(); getCorrectionIntegrators().then(setCandidates).catch(() => setCandidates([])); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [manuscriptId]);
+  useEffect(() => {
+    load();
+    getCorrectionIntegrators().then(setCandidates).catch(() => setCandidates([]));
+    getCoverIntegrators().then(setCoverCandidates).catch(() => setCoverCandidates([]));
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [manuscriptId]);
 
   async function chooseInteg(userId: string) {
     setError(null);
     try {
       await setCorrectionIntegrator(manuscriptId, userId || null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Désignation impossible.");
+    }
+  }
+
+  async function chooseCoverInteg(userId: string) {
+    setError(null);
+    try {
+      await setCoverIntegrator(manuscriptId, userId || null);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Désignation impossible.");
@@ -161,6 +179,20 @@ export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId
         Déposez ici les rapports de correction de la couverture (1ʳᵉ · dos · 4ᵉ) et la couverture corrigée finale.
         L'infographe désigné les reçoit dans « Mes intégrations de correction » et les exploite.
       </p>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 12px", margin: "6px 0 10px" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600 }}>Infographe (couverture) :</span>
+        {canManage ? (
+          <select value={coverInteg?.id ?? ""} onChange={(e) => chooseCoverInteg(e.target.value)} style={{ fontSize: 12.5 }}>
+            <option value="">— À désigner —</option>
+            {coverCandidates.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        ) : (
+          <span style={{ fontSize: 12.5 }}>{coverInteg?.name ?? "— non désigné —"}</span>
+        )}
+      </div>
+      {!coverInteg && (
+        <p style={{ fontSize: 12, color: "var(--eclosion-retard, #C4661F)", marginTop: 0 }}>Désignez l'infographe pour que le rapport de correction de couverture lui parvienne.</p>
+      )}
       <div style={{ display: "grid", gap: 8 }}>
         {coverPhases.map((p) => (
           <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px" }}>

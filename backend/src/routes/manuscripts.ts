@@ -1091,11 +1091,15 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       });
       await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { correction_phase: phase }, ipAddress: request.ip });
 
-      // Rapport de correction de COUVERTURE : on notifie l'INFOGRAPHE de l'ouvrage
-      // (responsable de l'étape Infographie), qui exploitera ce rendu.
+      // Rapport de correction de COUVERTURE : on notifie l'INFOGRAPHE — celui
+      // DÉSIGNÉ pour l'ouvrage en priorité, sinon le responsable de l'étape
+      // Infographie —, qui exploitera ce rendu.
       if (isCoverCorrectionPhase(phase)) {
-        const infoStep = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "INFOGRAPHIE" } }, orderBy: { createdAt: "desc" }, select: { responsibleId: true } });
-        const infographe = infoStep?.responsibleId ?? null;
+        let infographe = manuscript.coverIntegratorId ?? null;
+        if (!infographe) {
+          const infoStep = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "INFOGRAPHIE" } }, orderBy: { createdAt: "desc" }, select: { responsibleId: true } });
+          infographe = infoStep?.responsibleId ?? null;
+        }
         if (infographe && infographe !== request.user!.id) {
           await notifyUsers({ userIds: [infographe], type: "affectation", priority: "medium", title: `Couverture à intégrer — ${manuscript.manuscriptNumber}`, body: `Un rapport de correction de couverture est disponible — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
         }
@@ -1208,6 +1212,53 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "manuscript", entityId: id, newValues: { correction_integrator_id: userId }, ipAddress: request.ip });
       if (userId && userId !== request.user!.id) {
         await notifyUsers({ userIds: [userId], type: "affectation", priority: "medium", title: `Intégration des corrections — ${m.manuscriptNumber}`, body: `Vous êtes désigné intégrateur des corrections du manuscrit « ${m.title} ».`, entityType: "manuscript", entityId: id });
+      }
+      return reply.send({ ok: true });
+    },
+  );
+
+  // Infographe désigné pour l'intégration de la CORRECTION DE COUVERTURE : la
+  // liste des infographes désignables (département Infographie), et la
+  // désignation par ouvrage. C'est lui qui reçoit le rapport de correction de
+  // couverture. Miroir de l'intégrateur (texte) ci-dessus.
+  fastify.get("/api/v1/cover-integrators", { preHandler: requireAuth }, async (_request, reply) => {
+    const users = await prisma.user.findMany({
+      where: { status: "active", deletedAt: null, userRoles: { some: { revokedAt: null, role: { department: { code: "INFOG" } } } } },
+      select: { id: true, username: true },
+      orderBy: { username: "asc" },
+    });
+    return reply.send(users.map((u) => ({ id: u.id, name: u.username })));
+  });
+
+  fastify.get(
+    "/api/v1/manuscripts/:id/cover-integrator",
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "consultation" }, { module: "manuscripts", action: "consultation" }, { module: "production", action: "consultation" }]) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const m = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { coverIntegrator: { select: { id: true, username: true } } } });
+      if (!m) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      return reply.send({ integrator: m.coverIntegrator ? { id: m.coverIntegrator.id, name: m.coverIntegrator.username } : null });
+    },
+  );
+
+  fastify.put(
+    "/api/v1/manuscripts/:id/cover-integrator",
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "saisie" }, { module: "manuscripts", action: "saisie" }]) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = z.object({ user_id: z.string().uuid().nullable() }).safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides." });
+      const m = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!m) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const userId = parsed.data.user_id;
+      if (userId) {
+        const ok = await prisma.user.findFirst({ where: { id: userId, status: "active", deletedAt: null, userRoles: { some: { revokedAt: null, role: { department: { code: "INFOG" } } } } }, select: { id: true } });
+        if (!ok) return reply.code(400).send({ code: "invalid_integrator", message: "L'intégrateur de couverture doit être un infographe (département Infographie)." });
+      }
+      await prisma.manuscript.update({ where: { id }, data: { coverIntegratorId: userId, updatedBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "manuscript", entityId: id, newValues: { cover_integrator_id: userId }, ipAddress: request.ip });
+      if (userId && userId !== request.user!.id) {
+        await notifyUsers({ userIds: [userId], type: "affectation", priority: "medium", title: `Correction de couverture — ${m.manuscriptNumber}`, body: `Vous êtes désigné infographe pour l'intégration de la correction de couverture du manuscrit « ${m.title} ».`, entityType: "manuscript", entityId: id });
       }
       return reply.send({ ok: true });
     },

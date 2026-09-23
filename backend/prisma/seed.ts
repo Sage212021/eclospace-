@@ -1706,6 +1706,14 @@ async function main() {
       permissionModules: ["paie"],
       departmentCodes: ["RH", "FIN"],
     },
+    {
+      slug: "2026-09-correction-choisir-infographe-couverture",
+      version: "2026.09",
+      title: "Nouveauté — Correction : choisir l'infographe de la couverture",
+      body: "Dans « Correction en deux temps », la section « Correction de la couverture (pour l'infographe) » permet maintenant de CHOISIR l'infographe destinataire, comme on choisit déjà l'intégrateur pour le texte. L'infographe désigné reçoit une notification et retrouve le rapport de correction de couverture dans « Mes intégrations de correction » (branche Couverture). À défaut de choix, on retombe automatiquement sur l'infographe responsable de l'étape Infographie. Ainsi le rapport de couverture part toujours à la bonne personne.",
+      permissionModules: ["manuscripts", "tasks", "production"],
+      departmentCodes: ["CORR", "DIRED", "SECR", "INFOG", "COMLEC"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

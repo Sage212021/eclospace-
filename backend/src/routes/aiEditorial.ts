@@ -92,10 +92,12 @@ async function sweepStaleAiJobs(manuscriptId?: string): Promise<void> {
     .catch(() => {});
 }
 
-// L'INFOGRAPHE d'un ouvrage = le responsable de l'étape Infographie (déjà choisi
-// à l'étape « maquettiste/infographe »). C'est lui qui intègre les corrections
-// de COUVERTURE.
+// L'INFOGRAPHE qui intègre les corrections de COUVERTURE : celui DÉSIGNÉ pour
+// l'ouvrage (rubrique « correction de couverture ») en priorité, sinon le
+// responsable de l'étape Infographie.
 async function manuscriptInfographeId(manuscriptId: string): Promise<string | null> {
+  const m = await prisma.manuscript.findUnique({ where: { id: manuscriptId }, select: { coverIntegratorId: true } });
+  if (m?.coverIntegratorId) return m.coverIntegratorId;
   const step = await prisma.manuscriptStep.findFirst({
     where: { manuscriptId, status: { code: "INFOGRAPHIE" } },
     orderBy: { createdAt: "desc" },
@@ -644,12 +646,20 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
       });
       const texteCounts = await tally(texteManuscripts.map((m) => m.id), ["correction_1", "correction_2"]);
 
-      // Branche COUVERTURE : ouvrages où je suis l'infographe (resp. étape Infographie).
+      // Branche COUVERTURE : ouvrages où je suis l'infographe — désigné pour la
+      // correction de couverture, OU responsable de l'étape Infographie.
       const infoSteps = await prisma.manuscriptStep.findMany({
         where: { responsibleId: me, status: { code: "INFOGRAPHIE" }, manuscript: { deletedAt: null } },
         select: { manuscript: { select: { id: true, manuscriptNumber: true, title: true, status: { select: { code: true, label: true } } } } },
       });
-      const coverManuscripts = infoSteps.map((s) => s.manuscript);
+      const designated = await prisma.manuscript.findMany({
+        where: { deletedAt: null, coverIntegratorId: me },
+        select: { id: true, manuscriptNumber: true, title: true, status: { select: { code: true, label: true } } },
+      });
+      const coverById = new Map<string, { id: string; manuscriptNumber: string; title: string; status: { code: string; label: string } }>();
+      for (const s of infoSteps) coverById.set(s.manuscript.id, s.manuscript);
+      for (const m of designated) coverById.set(m.id, m); // le désigné prime / dédoublonne
+      const coverManuscripts = [...coverById.values()];
       const coverCounts = await tally(coverManuscripts.map((m) => m.id), ["couverture"]);
 
       const items = [

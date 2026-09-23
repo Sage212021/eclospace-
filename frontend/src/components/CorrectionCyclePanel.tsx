@@ -10,7 +10,11 @@ const ACTOR_LABEL: Record<string, string> = { correcteur: "au correcteur", integ
 //   4. Version finale intégrée
 // Les phases marquées « obligatoire » bloquent la validation de l'étape tant
 // qu'aucun fichier n'est déposé.
-export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId: string; canManage: boolean }) {
+// `showCover` (défaut : true) affiche la section « Correction de la couverture
+// (pour l'infographe) ». On la masque sur l'écran de l'INTÉGRATEUR TEXTE
+// (assistant / directeur éditorial), qui ne gère que le texte : la couverture est
+// pilotée par le correcteur et reçue par l'infographe dans sa propre branche.
+export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true }: { manuscriptId: string; canManage: boolean; showCover?: boolean }) {
   const [phases, setPhases] = useState<CorrectionPhaseState[]>([]);
   const [coverPhases, setCoverPhases] = useState<CorrectionPhaseState[]>([]);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -173,7 +177,9 @@ export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId
       )}
 
       {/* Rapports de correction de la COUVERTURE — déposés ici par le correcteur,
-          exploités par l'INFOGRAPHE (branche parallèle du texte). */}
+          exploités par l'INFOGRAPHE (branche parallèle du texte). Masqués pour
+          l'intégrateur texte, qui ne gère que le texte. */}
+      {showCover && (<>
       <h3 style={{ fontSize: 15, margin: "18px 0 4px", color: "var(--ink)" }}>Correction de la couverture (pour l'infographe)</h3>
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
         Déposez ici les rapports de correction de la couverture (1ʳᵉ · dos · 4ᵉ) et la couverture corrigée finale.
@@ -230,6 +236,7 @@ export function CorrectionCyclePanel({ manuscriptId, canManage }: { manuscriptId
           </div>
         ))}
       </div>
+      </>)}
     </section>
   );
 }

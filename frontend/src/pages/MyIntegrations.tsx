@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { listMyCorrectionIntegrations, getCoverCorrectionCycle, uploadCorrectionPhase, stepAttachmentDownloadUrl, type MyIntegrationItem, type CorrectionPhaseState } from "../api/client";
+import { listMyCorrectionIntegrations, getCoverCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, stepAttachmentDownloadUrl, type MyIntegrationItem, type CorrectionPhaseState } from "../api/client";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { CorrectionAnomaliesPanel } from "../components/CorrectionAnomaliesPanel";
 import { CorrectionCyclePanel } from "../components/CorrectionCyclePanel";
@@ -30,6 +30,23 @@ function CoverReports({ manuscriptId }: { manuscriptId: string }) {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Dépôt impossible.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  // Retirer un fichier déposé par erreur (suppression logique). Réservé à
+  // l'auteur du dépôt (garde-fou serveur `canCorrectDeposit`) ; on pourra en
+  // redéposer un aussitôt.
+  async function remove(key: string, docId: string) {
+    if (!window.confirm("Retirer ce fichier déposé par erreur ? Vous pourrez en redéposer un.")) return;
+    setBusyKey(key);
+    setError(null);
+    try {
+      await deleteStepDocument(manuscriptId, docId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Retrait impossible.");
     } finally {
       setBusyKey(null);
     }
@@ -88,10 +105,15 @@ function CoverReports({ manuscriptId }: { manuscriptId: string }) {
               {busyKey === p.key ? "Envoi…" : p.has_file ? "Remplacer" : "Déposer"}
               <input ref={(el) => { inputs.current[p.key] = el; }} type="file" style={{ display: "none" }} disabled={busyKey === p.key} onChange={(e) => { const f = e.target.files?.[0]; if (f) deposit(p.key, f); e.target.value = ""; }} />
             </label>
+            {p.has_file && p.can_correct && p.doc_id && (
+              <button onClick={() => remove(p.key, p.doc_id!)} disabled={busyKey === p.key} style={{ fontWeight: 600, color: "var(--alert)", background: "#fff", border: "1px solid var(--alert)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5, cursor: busyKey === p.key ? "default" : "pointer" }}>
+                Retirer
+              </button>
+            )}
           </div>
         ))}
       </div>
-      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>Une fois la couverture corrigée finale déposée et validée par le correcteur, le dossier de <strong>BAT</strong> pourra s'ouvrir.</p>
+      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>Mauvais fichier déposé ? Cliquez <strong>Remplacer</strong> (nouveau fichier) ou <strong>Retirer</strong>. Une fois la couverture corrigée finale déposée et validée par le correcteur, le dossier de <strong>BAT</strong> pourra s'ouvrir.</p>
     </section>
   );
 }

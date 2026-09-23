@@ -1698,6 +1698,14 @@ async function main() {
       permissionModules: ["manuscripts", "production", "tasks"],
       departmentCodes: ["CORR", "INFOG", "DIRED", "SECR", "COMLEC"],
     },
+    {
+      slug: "2026-09-paie-mois-de-travail-imputation",
+      version: "2026.09",
+      title: "Nouveauté — Paie : le « mois traité » ne se confond plus avec le mois en cours",
+      body: "Quand vous finalisez la paie d'un mois au début du mois suivant (ex. août bouclé début septembre), il ne faut pas qu'une saisie faite en septembre s'impute par erreur à septembre. Améliorations : (1) les écrans de paie (Grille, Livre de paie, Primes) s'ouvrent par défaut sur le dernier mois ENCORE OUVERT (non validé) — souvent le mois précédent en début de mois — et non sur le mois calendaire ; (2) le mois choisi est mémorisé et repris à l'identique d'un écran à l'autre et après rechargement (il ne « saute » plus au mois en cours) ; (3) un bandeau ambre s'affiche quand vous travaillez sur un mois différent du mois en cours (« Vous traitez la paie d'AOÛT 2026 ») ; (4) une confirmation apparaît à l'ajout d'une prime, à la validation et à la clôture d'un mois passé (« rattaché à AOÛT, pas au mois en cours »). L'imputation reste toujours faite sur le mois choisi ; la date d'une prime reste indicative et ne change pas le mois.",
+      permissionModules: ["paie"],
+      departmentCodes: ["RH", "FIN"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

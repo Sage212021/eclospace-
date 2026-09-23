@@ -15,6 +15,8 @@ import { Card } from "./Card";
 import { Button } from "./Button";
 import { Modal, Field } from "./Modal";
 import { useConfirm } from "./ConfirmProvider";
+import { PayrollMonthBanner } from "./PayrollMonthBanner";
+import { usePayrollWorkingPeriod, frMonth, calendarPeriod } from "../lib/payrollPeriod";
 
 // Module « Primes du mois » (demande opérateur 09/09/2026). Le RH ajoute des
 // primes individuelles (type, montant, motif, date, observation), les gère tant
@@ -37,11 +39,6 @@ const STATUS_META: Record<Prime["status"], { label: string; color: string }> = {
   annulee: { label: "Annulée", color: "var(--muted)" },
 };
 
-function currentPeriod(): string {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
 interface PrimeForm {
   id?: string;
   employee_id: string;
@@ -55,7 +52,7 @@ interface PrimeForm {
 
 export function PrimesSection({ employees, canManage }: { employees: Employee[]; canManage: boolean }) {
   const confirm = useConfirm();
-  const [period, setPeriod] = useState(currentPeriod());
+  const { period, setPeriod } = usePayrollWorkingPeriod();
   const [primes, setPrimes] = useState<Prime[]>([]);
   // Liste des salariés chargée par la section elle-même (indépendante du reste de
   // la page RH) : si le chargement groupé de la page a échoué, le sélecteur reste
@@ -110,6 +107,16 @@ export function PrimesSection({ employees, canManage }: { employees: Employee[];
     if (!form.employee_id) { setError("Choisissez un salarié."); return; }
     const amount = Number(form.amount);
     if (!Number.isFinite(amount) || amount <= 0) { setError("Le montant doit être supérieur à zéro."); return; }
+    // Confirmation d'imputation si la prime vise un mois autre que le mois en cours
+    // (ex. finalisation d'août début septembre) — pour ne pas se tromper de mois.
+    if (form.period !== calendarPeriod()) {
+      const ok = await confirm({
+        title: "Mois d'imputation",
+        message: `Cette prime sera rattachée à ${frMonth(form.period)} — et NON au mois en cours (${frMonth(calendarPeriod())}). Confirmer ?`,
+        confirmLabel: `Rattacher à ${frMonth(form.period)}`,
+      });
+      if (!ok) return;
+    }
     const payload = {
       type: form.type,
       amount,
@@ -196,6 +203,7 @@ export function PrimesSection({ employees, canManage }: { employees: Employee[];
         </div>
       }
     >
+      <PayrollMonthBanner period={period} />
       {error && <div style={banner("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={banner("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 

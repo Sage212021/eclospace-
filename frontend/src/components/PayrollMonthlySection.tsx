@@ -7,6 +7,8 @@ import { TableScroll } from "./TableScroll";
 import { Field, Modal } from "./Modal";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
+import { PayrollMonthBanner } from "./PayrollMonthBanner";
+import { usePayrollWorkingPeriod, frMonth, calendarPeriod } from "../lib/payrollPeriod";
 
 // Cycle mensuel de paie (chantier 07/08/2026) — Étape 1 : grille éditable.
 // Le RH prépare le mois pour tous les salariés, saisit les éléments variables
@@ -15,10 +17,6 @@ import { IconAdmin } from "./icons";
 
 function fcfa(n: number): string {
   return `${Math.round(n).toLocaleString("fr-FR")} FCFA`;
-}
-function currentPeriod(): string {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 // Décale une période « AAAA-MM » de `delta` mois (robuste : passage d'année).
 // Utilisé par les boutons « ◀ mois précédent / mois suivant ▶ » — plus fiables
@@ -54,7 +52,7 @@ const COLS: { key: keyof PayrollMonthElements; label: string; hint: string }[] =
 ];
 
 export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, defaultOpen }: { canManage: boolean; canValidateDg?: boolean; collapsible?: boolean; defaultOpen?: boolean }) {
-  const [period, setPeriod] = useState(currentPeriod());
+  const { period, setPeriod } = usePayrollWorkingPeriod();
   const [month, setMonth] = useState<PayrollMonth | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -312,7 +310,8 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
   }
 
   async function validate() {
-    if (!window.confirm(`Valider définitivement la paie de ${period} ?\n\nLe mois sera figé et les bulletins pourront être imprimés. Vous pourrez le rouvrir si besoin.`)) return;
+    const pastWarn = period !== calendarPeriod() ? `\n\n⚠️ Ce mois (${frMonth(period)}) n'est PAS le mois en cours (${frMonth(calendarPeriod())}). La validation portera bien sur ${frMonth(period)}.` : "";
+    if (!window.confirm(`Valider définitivement la paie de ${frMonth(period)} ?${pastWarn}\n\nLe mois sera figé et les bulletins pourront être imprimés. Vous pourrez le rouvrir si besoin.`)) return;
     setBusy(true);
     try {
       await validatePayrollMonth(period);
@@ -387,6 +386,7 @@ export function PayrollMonthlySection({ canManage, canValidateDg, collapsible, d
       collapsible={collapsible}
       defaultOpen={defaultOpen}
     >
+      <PayrollMonthBanner period={period} />
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
         <Field label="Mois de paie (AAAA-MM)">
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>

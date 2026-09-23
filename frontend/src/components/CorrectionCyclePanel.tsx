@@ -157,7 +157,7 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
                   type="file"
                   style={{ display: "none" }}
                   disabled={busyKey === p.key}
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) deposit(p.key, f); e.target.value = ""; }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f && (!p.has_file || window.confirm("Remplacer le fichier déjà déposé ? L'ancien reste dans l'historique."))) deposit(p.key, f); e.target.value = ""; }}
                 />
               </label>
             )}
@@ -225,7 +225,7 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
             {canManage && (
               <label style={{ cursor: busyKey === p.key ? "default" : "pointer", fontWeight: 600, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5 }}>
                 {busyKey === p.key ? "Envoi…" : p.has_file ? "Remplacer" : "Déposer"}
-                <input type="file" style={{ display: "none" }} disabled={busyKey === p.key} onChange={(e) => { const f = e.target.files?.[0]; if (f) deposit(p.key, f); e.target.value = ""; }} />
+                <input type="file" style={{ display: "none" }} disabled={busyKey === p.key} onChange={(e) => { const f = e.target.files?.[0]; if (f && (!p.has_file || window.confirm("Remplacer le fichier déjà déposé ? L'ancien reste dans l'historique."))) deposit(p.key, f); e.target.value = ""; }} />
               </label>
             )}
             {canManage && p.has_file && p.can_correct && p.doc_id && (

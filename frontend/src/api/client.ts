@@ -1120,9 +1120,17 @@ export interface MyIntegrationItem {
   id: string; manuscript_number: string; title: string; status_code: string; status_label: string;
   branch: "texte" | "couverture";
   counts: { a_integrer: number; integree: number; a_revoir: number; non_applicable: number; total: number };
+  // Clôture perso de l'intégration (rangement vers l'accordéon « Historique »).
+  closed_at: string | null;
+  // Le fichier final de la branche est déposé → la clôture est autorisée.
+  can_close: boolean;
 }
 export function listMyCorrectionIntegrations() {
   return request<{ manuscripts: MyIntegrationItem[] }>("/api/v1/my-correction-integrations");
+}
+// Clore / rouvrir l'intégration d'un ouvrage (par branche texte / couverture).
+export function setIntegrationClosure(manuscriptId: string, branch: "texte" | "couverture", closed: boolean) {
+  return request<{ id: string; branch: string; closed: boolean }>(`/api/v1/manuscripts/${manuscriptId}/integration-closure`, { method: "PUT", body: JSON.stringify({ branch, closed }) });
 }
 export function extractAnomalies(jobId: string) {
   return request<{ created: number; skipped: boolean }>(`/api/v1/ai-editorial/jobs/${jobId}/extract-anomalies`, { method: "POST" });

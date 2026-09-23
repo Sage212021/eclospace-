@@ -1738,6 +1738,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks", "production"],
       departmentCodes: ["CORR", "INFOG", "DIRED", "SECR"],
     },
+    {
+      slug: "2026-09-integrations-clore-historique-confirmations",
+      version: "2026.09",
+      title: "Nouveauté — Mes intégrations : bouton « Clore », historique, et confirmations",
+      body: "Votre écran « Mes intégrations de correction » se range tout seul. (1) Nouveau bouton « Clore mon intégration » sur chaque ouvrage : dès que le fichier final est déposé (version corrigée finale pour le texte, couverture finale pour la couverture), vous cliquez et l'ouvrage QUITTE la liste principale pour rejoindre un accordéon « Historique des intégrations » (replié) — l'écran ne se remplit plus au fil du temps. Vous pouvez rouvrir l'historique et « Rouvrir » un ouvrage à tout moment. Tant que le fichier final n'est pas déposé, le bouton reste inactif (on ne clôt pas un travail inachevé). Cette clôture est un rangement personnel : elle ne remplace pas la validation de l'étape par le correcteur. (2) Sécurité anti-erreur : retirer OU remplacer un fichier déposé demande maintenant une confirmation (« Êtes-vous sûr ? »), pour l'infographe comme pour l'intégrateur de texte. Rien n'est jamais effacé définitivement.",
+      permissionModules: ["manuscripts", "tasks", "production"],
+      departmentCodes: ["DIRED", "SECR", "INFOG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

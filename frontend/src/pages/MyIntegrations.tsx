@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { listMyCorrectionIntegrations, getCoverCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, stepAttachmentDownloadUrl, type MyIntegrationItem, type CorrectionPhaseState } from "../api/client";
+import { listMyCorrectionIntegrations, getCoverCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, setIntegrationClosure, stepAttachmentDownloadUrl, type MyIntegrationItem, type CorrectionPhaseState } from "../api/client";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { CorrectionAnomaliesPanel } from "../components/CorrectionAnomaliesPanel";
 import { CorrectionCyclePanel } from "../components/CorrectionCyclePanel";
@@ -103,7 +103,7 @@ function CoverReports({ manuscriptId }: { manuscriptId: string }) {
             <span aria-hidden style={{ fontSize: 16 }}>{p.has_file ? "✅" : "—"}</span>
             <label style={{ cursor: busyKey === p.key ? "default" : "pointer", fontWeight: 600, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5 }}>
               {busyKey === p.key ? "Envoi…" : p.has_file ? "Remplacer" : "Déposer"}
-              <input ref={(el) => { inputs.current[p.key] = el; }} type="file" style={{ display: "none" }} disabled={busyKey === p.key} onChange={(e) => { const f = e.target.files?.[0]; if (f) deposit(p.key, f); e.target.value = ""; }} />
+              <input ref={(el) => { inputs.current[p.key] = el; }} type="file" style={{ display: "none" }} disabled={busyKey === p.key} onChange={(e) => { const f = e.target.files?.[0]; if (f && (!p.has_file || window.confirm("Remplacer le fichier déjà déposé ? L'ancien reste dans l'historique."))) deposit(p.key, f); e.target.value = ""; }} />
             </label>
             {p.has_file && p.can_correct && p.doc_id && (
               <button onClick={() => remove(p.key, p.doc_id!)} disabled={busyKey === p.key} style={{ fontWeight: 600, color: "var(--alert)", background: "#fff", border: "1px solid var(--alert)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5, cursor: busyKey === p.key ? "default" : "pointer" }}>
@@ -129,12 +129,104 @@ export function MyIntegrations() {
   const [items, setItems] = useState<MyIntegrationItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const refresh = () =>
     listMyCorrectionIntegrations()
       .then((r) => { setItems(r.manuscripts); setError(null); })
       .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
   useEffect(() => { refresh(); }, []);
+
+  const active = items.filter((m) => !m.closed_at);
+  const history = items.filter((m) => m.closed_at);
+
+  async function toggleClosure(m: MyIntegrationItem, closed: boolean) {
+    const rowKey = `${m.branch}:${m.id}`;
+    if (closed && !window.confirm(`Clore votre intégration de « ${m.title} » (${m.branch === "couverture" ? "couverture" : "texte"}) ? L'ouvrage rejoindra l'historique ; vous pourrez le rouvrir.`)) return;
+    setBusyId(rowKey);
+    setError(null);
+    try {
+      await setIntegrationClosure(m.id, m.branch, closed);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Opération impossible.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const renderItem = (m: MyIntegrationItem, inHistory: boolean) => {
+    const rowKey = `${m.branch}:${m.id}`;
+    const restant = m.counts.a_integrer + m.counts.a_revoir;
+    const open = openId === rowKey;
+    const isCover = m.branch === "couverture";
+    const busy = busyId === rowKey;
+    return (
+      <div key={rowKey} style={{ border: "1px solid var(--line)", borderRadius: 10, background: inHistory ? "var(--paper, #FAF8F2)" : "#fff" }}>
+        <button
+          type="button"
+          onClick={() => setOpenId(open ? null : rowKey)}
+          style={{ width: "100%", textAlign: "left", background: "none", border: "none", padding: "12px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
+        >
+          <span aria-hidden style={{ color: "var(--muted)" }}>{open ? "▾" : "▸"}</span>
+          <span style={{ fontWeight: 700 }}>{m.title}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "1px 9px", background: isCover ? "var(--eclosion-soft)" : "#E7EAF0", color: isCover ? "var(--eclosion-dark, #9A7A12)" : "#5B6472" }}>
+            {isCover ? "Couverture" : "Texte"}
+          </span>
+          <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{m.manuscript_number}</span>
+          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>· {m.status_label}</span>
+          {inHistory ? (
+            <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--muted)" }}>Clos le {m.closed_at ? new Date(m.closed_at).toLocaleDateString("fr-FR") : ""}</span>
+          ) : (
+            <span
+              style={{
+                marginLeft: "auto", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "2px 10px",
+                background: restant > 0 ? "var(--amber-soft, #F6E7D2)" : "var(--eclosion-soft)",
+                color: restant > 0 ? "#B87400" : "#2F7D4A",
+              }}
+            >
+              {m.counts.total === 0 ? "aucune correction retenue" : restant > 0 ? `${restant} à intégrer` : "tout intégré ✅"}
+            </span>
+          )}
+        </button>
+        {open && (
+          <div style={{ padding: "0 14px 14px" }}>
+            <CorrectionAnomaliesPanel manuscriptId={m.id} canDecide={false} integrationMode canIntegrate branchFilter={m.branch} />
+            {isCover ? (
+              <CoverReports manuscriptId={m.id} />
+            ) : (
+              /* Intégrateur TEXTE : on masque la section couverture
+                 (pilotée par le correcteur, reçue par l'infographe). */
+              <CorrectionCyclePanel manuscriptId={m.id} canManage showCover={false} />
+            )}
+            {/* Clôture / réouverture : range l'ouvrage dans l'historique pour
+                libérer l'écran. La clôture n'est possible qu'une fois le fichier
+                final déposé (can_close). */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 12, paddingTop: 10, borderTop: "1px dashed var(--line)" }}>
+              {inHistory ? (
+                <>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>Intégration close — rangée dans l'historique.</span>
+                  <button onClick={() => toggleClosure(m, false)} disabled={busy} style={{ marginLeft: "auto", fontWeight: 600, color: "var(--eclosion-dark)", background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "5px 12px", fontSize: 12.5, cursor: busy ? "default" : "pointer" }}>
+                    {busy ? "…" : "Rouvrir l'intégration"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                    {m.can_close ? "Travail terminé ? Clôturez pour ranger cet ouvrage dans l'historique." : `Clôture possible une fois le fichier final déposé (${isCover ? "couverture corrigée finale" : "version corrigée finale (VCF)"}).`}
+                  </span>
+                  <button onClick={() => toggleClosure(m, true)} disabled={busy || !m.can_close} title={m.can_close ? "" : "Déposez d'abord le fichier final."} style={{ marginLeft: "auto", fontWeight: 700, color: m.can_close ? "#fff" : "var(--muted)", background: m.can_close ? "var(--eclosion, #D9B21A)" : "var(--paper, #FAF8F2)", border: "1px solid " + (m.can_close ? "var(--eclosion, #D9B21A)" : "var(--line)"), borderRadius: 6, padding: "5px 12px", fontSize: 12.5, cursor: busy || !m.can_close ? "default" : "pointer" }}>
+                    {busy ? "…" : "Clore mon intégration"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <section>
@@ -143,60 +235,39 @@ export function MyIntegrations() {
         Vous recevez ici les ouvrages dont on vous a confié l'intégration des corrections. Pour chacun : appliquez dans le fichier
         les corrections <strong>acceptées / modifiées</strong> par le correcteur, puis <strong>cochez</strong> chaque correction
         (Intégrée · À revoir · Non applicable). Déposez ensuite la version intégrée (BAT2) puis la version finale (VCF) — la version
-        finale ne se dépose qu'une fois <strong>tout intégré</strong>.
+        finale ne se dépose qu'une fois <strong>tout intégré</strong>. Une fois le fichier final déposé, cliquez <strong>« Clore mon
+        intégration »</strong> : l'ouvrage rejoint l'<strong>Historique</strong> et votre écran se libère.
       </GuidanceNote>
 
       {error && <div style={{ fontSize: 13, color: "var(--alert, #B23A2E)", margin: "8px 0" }}>{error}</div>}
-      {items.length === 0 && !error && (
+      {active.length === 0 && !error && (
         <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 10 }}>Aucun ouvrage à intégrer pour l'instant. Dès qu'un correcteur vous confie un manuscrit et accepte des corrections, il apparaîtra ici.</div>
       )}
 
       <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-        {items.map((m) => {
-          const rowKey = `${m.branch}:${m.id}`;
-          const restant = m.counts.a_integrer + m.counts.a_revoir;
-          const open = openId === rowKey;
-          const isCover = m.branch === "couverture";
-          return (
-            <div key={rowKey} style={{ border: "1px solid var(--line)", borderRadius: 10, background: "#fff" }}>
-              <button
-                type="button"
-                onClick={() => setOpenId(open ? null : rowKey)}
-                style={{ width: "100%", textAlign: "left", background: "none", border: "none", padding: "12px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
-              >
-                <span aria-hidden style={{ color: "var(--muted)" }}>{open ? "▾" : "▸"}</span>
-                <span style={{ fontWeight: 700 }}>{m.title}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "1px 9px", background: isCover ? "var(--eclosion-soft)" : "#E7EAF0", color: isCover ? "var(--eclosion-dark, #9A7A12)" : "#5B6472" }}>
-                  {isCover ? "Couverture" : "Texte"}
-                </span>
-                <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{m.manuscript_number}</span>
-                <span style={{ fontSize: 11.5, color: "var(--muted)" }}>· {m.status_label}</span>
-                <span
-                  style={{
-                    marginLeft: "auto", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "2px 10px",
-                    background: restant > 0 ? "var(--amber-soft, #F6E7D2)" : "var(--eclosion-soft)",
-                    color: restant > 0 ? "#B87400" : "#2F7D4A",
-                  }}
-                >
-                  {m.counts.total === 0 ? "aucune correction retenue" : restant > 0 ? `${restant} à intégrer` : "tout intégré ✅"}
-                </span>
-              </button>
-              {open && (
-                <div style={{ padding: "0 14px 14px" }}>
-                  <CorrectionAnomaliesPanel manuscriptId={m.id} canDecide={false} integrationMode canIntegrate branchFilter={m.branch} />
-                  {isCover ? (
-                    <CoverReports manuscriptId={m.id} />
-                  ) : (
-                    /* Intégrateur TEXTE : on masque la section couverture
-                       (pilotée par le correcteur, reçue par l'infographe). */
-                    <CorrectionCyclePanel manuscriptId={m.id} canManage showCover={false} />
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {active.map((m) => renderItem(m, false))}
       </div>
+
+      {/* Historique des intégrations closes — accordéon replié pour ne pas
+          saturer l'écran. On peut rouvrir un ouvrage pour tout revoir. */}
+      {history.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+            style={{ width: "100%", textAlign: "left", background: historyOpen ? "var(--eclosion-soft)" : "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: "var(--ink)" }}
+          >
+            <span aria-hidden>🗂️</span>
+            <span style={{ flex: 1 }}>Historique des intégrations ({history.length})</span>
+            <span style={{ color: "var(--muted)", display: "inline-block", transform: historyOpen ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
+          </button>
+          {historyOpen && (
+            <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+              {history.map((m) => renderItem(m, true))}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

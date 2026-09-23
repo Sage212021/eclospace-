@@ -625,7 +625,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
         const profiles = await prisma.payrollEmployeeProfile.findMany({ where: { employee: { deletedAt: null } }, select: { employeeId: true } });
         if (profiles.length > 0) {
           const snap = await periodBaseSnapshot(profiles.map((p) => p.employeeId));
-          await prisma.payrollMonthlyLine.createMany({ data: profiles.map((p) => ({ runId: run!.id, employeeId: p.employeeId, baseSalary: snap.get(p.employeeId)?.base ?? null, grossContractual: snap.get(p.employeeId)?.gross ?? null })), skipDuplicates: true });
+          await prisma.payrollMonthlyLine.createMany({ data: profiles.map((p) => ({ runId: run!.id, employeeId: p.employeeId, ...(snap.get(p.employeeId) ?? {}) })), skipDuplicates: true });
         }
         // Reporte les primes validées du module sur les lignes (source unique).
         await syncRunPrimes(period, run.id);
@@ -644,7 +644,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       await prisma.payrollMonthlyLine.upsert({
         where: { runId_employeeId: { runId: run.id, employeeId } },
         update: elems,
-        create: { runId: run.id, employeeId, ...elems, baseSalary: snapOne.get(employeeId)?.base ?? null, grossContractual: snapOne.get(employeeId)?.gross ?? null },
+        create: { runId: run.id, employeeId, ...elems, ...(snapOne.get(employeeId) ?? {}) },
       });
       await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "payroll_monthly_line", entityId: `${period}:${employeeId}`, newValues: parsed.data, ipAddress: request.ip });
       const saved = await prisma.payrollMonthlyLine.findUnique({ where: { runId_employeeId: { runId: run.id, employeeId } } });
@@ -974,7 +974,7 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       if (toCreate.length > 0) {
         // Fige le salaire de la période sur chaque nouvelle ligne (indépendance).
         const snap = await periodBaseSnapshot(toCreate.map((p) => p.employeeId));
-        await prisma.payrollMonthlyLine.createMany({ data: toCreate.map((p) => ({ runId: run!.id, employeeId: p.employeeId, baseSalary: snap.get(p.employeeId)?.base ?? null, grossContractual: snap.get(p.employeeId)?.gross ?? null })) });
+        await prisma.payrollMonthlyLine.createMany({ data: toCreate.map((p) => ({ runId: run!.id, employeeId: p.employeeId, ...(snap.get(p.employeeId) ?? {}) })) });
       }
       // Reporte les primes déjà validées du module « Primes du mois » sur les
       // lignes du mois (source unique des primes).
@@ -1030,14 +1030,15 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
           const p = l.employee.payrollProfile!;
           const confBase = l.employee.confidential?.baseSalary != null ? num(l.employee.confidential.baseSalary) : null;
           const slip = computeMonthlyLine(p, rates, l, confBase, formulas, rubriques);
-          // Salaire de la PÉRIODE (figé sur la ligne) — sert à l'édition « salaire
-          // de ce mois » ; repli sur la fiche pour une ligne antérieure.
-          const periodResolved = resolveBaseGross(p, confBase);
+          // Salaire de la PÉRIODE (figé sur la ligne) — MÊME assiette que le calcul
+          // du net (resolveLineBasis) : ce qui est affiché « salaire de ce mois »
+          // est exactement ce qui produit le net. Repli fiche pour ligne ancienne.
+          const periodBasis = resolveLineBasis(p, l, confBase);
           return {
             employee_id: l.employeeId,
             employee_name: `${l.employee.firstName} ${l.employee.lastName}`,
-            period_base_salary: l.baseSalary != null ? num(l.baseSalary) : periodResolved.base,
-            period_gross_contractual: l.grossContractual != null ? num(l.grossContractual) : periodResolved.gross,
+            period_base_salary: periodBasis.base,
+            period_gross_contractual: periodBasis.gross,
             matricule: p.matricule,
             cnps_number: p.cnpsNumber,
             // NIU : on préfère celui saisi sur la fiche RH (identité de l'employé),
@@ -1750,7 +1751,13 @@ function monthlyElements(l: PayrollMonthlyLine) {
 // salaire de base et le brut contractuel à ENREGISTRER SUR LA LIGNE du mois
 // (instantané de la fiche au moment de la préparation / saisie). Chaque mois
 // devient ainsi indépendant.
-async function periodBaseSnapshot(employeeIds: string[]): Promise<Map<string, { base: number; gross: number }>> {
+// Champs de PRISMA à écrire sur une nouvelle ligne pour figer l'assiette de la
+// période (photographie de la fiche au moment de la préparation / ajout).
+type FrozenBasisFields = {
+  baseSalary: number; grossContractual: number; fiscalBase: number | null; fiscalParts: number;
+  applyFiscalParts: boolean; seniorityYears: number; seniorityRate: number | null; seniorityThreshold: number; applySeniority: boolean;
+};
+async function periodBaseSnapshot(employeeIds: string[]): Promise<Map<string, FrozenBasisFields>> {
   const ids = [...new Set(employeeIds)];
   if (ids.length === 0) return new Map();
   const [profiles, confs] = await Promise.all([
@@ -1758,34 +1765,81 @@ async function periodBaseSnapshot(employeeIds: string[]): Promise<Map<string, { 
     prisma.employeeConfidential.findMany({ where: { employeeId: { in: ids } }, select: { employeeId: true, baseSalary: true } }),
   ]);
   const confMap = new Map(confs.map((c) => [c.employeeId, c.baseSalary != null ? num(c.baseSalary) : null]));
-  const map = new Map<string, { base: number; gross: number }>();
-  for (const p of profiles) map.set(p.employeeId, resolveBaseGross(p, confMap.get(p.employeeId) ?? null));
-  return map;
-}
-
-function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine, confBase: number | null = null, formulas?: FormulaOverlay, rubriques?: Map<string, RubriqueInfo>): Payslip {
-  // ANNULATION D-057 (demande opérateur) : le salaire de base/brut vient de la
-  // FICHE du salarié (résolue en direct), pas d'une valeur figée sur la ligne du
-  // mois — qui avait rendu le livre de paie incohérent (charges patronales et
-  // coût employeur calculés sur une ancienne valeur restée figée). On revient au
-  // calcul antérieur, cohérent. Les colonnes de ligne existent encore mais ne
-  // pilotent plus le calcul.
-  const { base, gross } = resolveBaseGross(p, confBase);
-  // Lignes libres : les typées (rubrique active) suivent leur traitement légal,
-  // les autres restent gain imposable+cotisable / retenue nette (historique).
-  const { rubriqueBrut, rubriqueTaxable, rubriqueCotisable, extraGains, extraRetenues, avantageNatureTaxablePct, avantageNatureCotisablePct } = splitExtraLines(parseExtraLines(l.extraLines), rubriques, rates.avantagesNature);
-  const extraTaxable = num(l.primes) + num(l.heuresSup) + extraGains;
-  return computePayslip(
-    {
-      base,
-      complements: Math.round(gross - base) + extraTaxable,
-      fiscalBase: (p.fiscalBase != null ? num(p.fiscalBase) : gross) + extraTaxable,
+  const map = new Map<string, FrozenBasisFields>();
+  for (const p of profiles) {
+    const { base, gross } = resolveBaseGross(p, confMap.get(p.employeeId) ?? null);
+    map.set(p.employeeId, {
+      baseSalary: base,
+      grossContractual: gross,
+      fiscalBase: p.fiscalBase != null ? num(p.fiscalBase) : null,
       fiscalParts: num(p.fiscalParts),
       applyFiscalParts: p.applyFiscalParts,
       seniorityYears: p.seniorityYears,
       seniorityRate: p.seniorityRate != null ? num(p.seniorityRate) : null,
       seniorityThreshold: p.seniorityThreshold ?? 0,
       applySeniority: p.applySeniority,
+    });
+  }
+  return map;
+}
+
+// Assiette de calcul d'un mois : PHOTOGRAPHIE de la période figée sur la ligne
+// (isolation stricte D-070). Si la ligne porte l'assiette figée (baseSalary non
+// nul), on l'utilise INTÉGRALEMENT — la fiche du salarié ne pilote plus le
+// calcul d'un mois déjà préparé. Chaque champ non figé (null, lignes anciennes)
+// retombe individuellement sur la fiche. Une ligne SANS base figée (héritée) suit
+// encore la fiche (compatibilité), jusqu'à sa prochaine préparation/saisie.
+export interface PeriodBasis {
+  base: number; gross: number; fiscalBase: number; fiscalParts: number; applyFiscalParts: boolean;
+  seniorityYears: number; seniorityRate: number | null; seniorityThreshold: number; applySeniority: boolean;
+}
+function resolveLineBasis(
+  p: { grossContractual: unknown; basePct: unknown; fiscalBase: unknown; fiscalParts: unknown; applyFiscalParts: boolean; seniorityYears: number; seniorityRate: unknown; seniorityThreshold: number | null; applySeniority: boolean },
+  l: { baseSalary: unknown; grossContractual: unknown; fiscalBase: unknown; fiscalParts: unknown; applyFiscalParts: boolean | null; seniorityYears: number | null; seniorityRate: unknown; seniorityThreshold: number | null; applySeniority: boolean | null },
+  confBase: number | null,
+): PeriodBasis {
+  const fromProfile = resolveBaseGross(p, confBase);
+  const frozen = l.baseSalary != null; // ligne préparée après le correctif période
+  const base = frozen ? num(l.baseSalary) : fromProfile.base;
+  const gross = frozen ? (l.grossContractual != null ? num(l.grossContractual) : base) : fromProfile.gross;
+  const pick = <T>(lineVal: T | null | undefined, profVal: T): T => (frozen && lineVal != null ? lineVal : profVal);
+  return {
+    base,
+    gross,
+    fiscalBase: frozen
+      ? (l.fiscalBase != null ? num(l.fiscalBase) : (p.fiscalBase != null ? num(p.fiscalBase) : gross))
+      : (p.fiscalBase != null ? num(p.fiscalBase) : gross),
+    fiscalParts: frozen && l.fiscalParts != null ? num(l.fiscalParts) : num(p.fiscalParts),
+    applyFiscalParts: pick(l.applyFiscalParts, p.applyFiscalParts),
+    seniorityYears: pick(l.seniorityYears, p.seniorityYears),
+    seniorityRate: frozen && l.seniorityRate != null ? num(l.seniorityRate) : (p.seniorityRate != null ? num(p.seniorityRate) : null),
+    seniorityThreshold: pick(l.seniorityThreshold, p.seniorityThreshold ?? 0),
+    applySeniority: pick(l.applySeniority, p.applySeniority),
+  };
+}
+
+function computeMonthlyLine(p: PayrollEmployeeProfile, rates: PayrollRates, l: PayrollMonthlyLine, confBase: number | null = null, formulas?: FormulaOverlay, rubriques?: Map<string, RubriqueInfo>): Payslip {
+  // ISOLATION STRICTE (D-070) : le salaire de base/brut ET toute l'assiette
+  // fiscale/ancienneté proviennent de la PHOTOGRAPHIE figée sur la ligne du mois
+  // (resolveLineBasis). Une modification ultérieure de la fiche du salarié — ou
+  // d'un autre mois — ne recalcule donc JAMAIS un mois déjà préparé. Les lignes
+  // anciennes (sans base figée) retombent sur la fiche (compatibilité).
+  const basis = resolveLineBasis(p, l, confBase);
+  // Lignes libres : les typées (rubrique active) suivent leur traitement légal,
+  // les autres restent gain imposable+cotisable / retenue nette (historique).
+  const { rubriqueBrut, rubriqueTaxable, rubriqueCotisable, extraGains, extraRetenues, avantageNatureTaxablePct, avantageNatureCotisablePct } = splitExtraLines(parseExtraLines(l.extraLines), rubriques, rates.avantagesNature);
+  const extraTaxable = num(l.primes) + num(l.heuresSup) + extraGains;
+  return computePayslip(
+    {
+      base: basis.base,
+      complements: Math.round(basis.gross - basis.base) + extraTaxable,
+      fiscalBase: basis.fiscalBase + extraTaxable,
+      fiscalParts: basis.fiscalParts,
+      applyFiscalParts: basis.applyFiscalParts,
+      seniorityYears: basis.seniorityYears,
+      seniorityRate: basis.seniorityRate,
+      seniorityThreshold: basis.seniorityThreshold,
+      applySeniority: basis.applySeniority,
       retenueAbsence: num(l.retenueAbsence),
       internal: { avance: num(l.avance), pret: num(l.pret), retard: num(l.retard), autres: num(l.autres) + num(l.sanction) + extraRetenues },
       rubriqueBrut, rubriqueTaxable, rubriqueCotisable,

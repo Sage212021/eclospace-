@@ -4,7 +4,7 @@ import { ManuscriptOrigin, EditorialSegment, type Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAnyPermission, requireAuth } from "../lib/permissions.js";
 import { canCorrectDeposit, isDeletableStepDoc } from "../lib/stepDocuments.js";
-import { CORRECTION_PHASES, COVER_CORRECTION_PHASES, isCorrectionPhase, isCoverCorrectionPhase, correctionDocTitle, correctionCycleState, coverCorrectionCycleState, currentCorrectionActor, nextActorAfterPhase } from "../lib/correctionCycle.js";
+import { CORRECTION_PHASES, COVER_CORRECTION_PHASES, isCorrectionPhase, isCoverCorrectionPhase, isCoverIntegrationDeposit, correctionDocTitle, correctionCycleState, coverCorrectionCycleState, currentCorrectionActor, nextActorAfterPhase } from "../lib/correctionCycle.js";
 import { VC1_SLOTS, isVc1Slot, vc1DocTitle, vc1State } from "../lib/startingProof.js";
 import { deliverableDocTitle, stepDeliverableMeta } from "../lib/stepDeliverables.js";
 import { optionalStepMeta } from "../lib/stepRealization.js";
@@ -1059,12 +1059,35 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
 
   fastify.post(
     "/api/v1/manuscripts/:id/correction-cycle/:phase",
-    { preHandler: requireAnyPermission([{ module: "tasks", action: "saisie" }, { module: "manuscripts", action: "saisie" }]) },
+    // `production:saisie` autorise l'INFOGRAPHE à déposer ses retours de
+    // couverture (contrôle fin dans le handler) ; les rôles éditoriaux gardent
+    // l'accès complet au cycle.
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "saisie" }, { module: "manuscripts", action: "saisie" }, { module: "production", action: "saisie" }]) },
     async (request, reply) => {
       const { id, phase } = request.params as { id: string; phase: string };
       if (!isCorrectionPhase(phase)) return reply.code(400).send({ code: "invalid_phase", message: "Phase de correction inconnue." });
       const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
       if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+
+      // L'infographe de l'ouvrage — désigné, sinon responsable étape Infographie.
+      const infographeId = await (async () => {
+        if (manuscript.coverIntegratorId) return manuscript.coverIntegratorId;
+        const st = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "INFOGRAPHIE" } }, orderBy: { createdAt: "desc" }, select: { responsibleId: true } });
+        return st?.responsibleId ?? null;
+      })();
+      // Habilitation de dépôt : les rôles éditoriaux (tasks/manuscripts:saisie)
+      // gèrent tout le cycle ; un utilisateur seulement « production » (infographe)
+      // ne peut déposer QUE ses retours de couverture (retour intégration, finale)
+      // et seulement s'il est l'infographe de l'ouvrage.
+      const canEditCycle = request.user!.permissions.has("tasks:saisie") || request.user!.permissions.has("manuscripts:saisie");
+      if (!canEditCycle) {
+        if (!isCoverIntegrationDeposit(phase)) {
+          return reply.code(403).send({ code: "forbidden_phase", message: "Vous ne pouvez déposer ici que la couverture intégrée (retour infographie) et la couverture finale." });
+        }
+        if (infographeId !== request.user!.id) {
+          return reply.code(403).send({ code: "not_integrator", message: "Seul l'infographe désigné de cet ouvrage peut déposer le retour de couverture." });
+        }
+      }
       // VERROU (Lot 3) : la version corrigée finale (VCF) ne peut être déposée que
       // si toutes les corrections retenues (acceptées/modifiées) sont INTÉGRÉES
       // (ou écartées « non applicable » avec motif). Empêche une correction
@@ -1095,13 +1118,17 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       // DÉSIGNÉ pour l'ouvrage en priorité, sinon le responsable de l'étape
       // Infographie —, qui exploitera ce rendu.
       if (isCoverCorrectionPhase(phase)) {
-        let infographe = manuscript.coverIntegratorId ?? null;
-        if (!infographe) {
-          const infoStep = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "INFOGRAPHIE" } }, orderBy: { createdAt: "desc" }, select: { responsibleId: true } });
-          infographe = infoStep?.responsibleId ?? null;
-        }
-        if (infographe && infographe !== request.user!.id) {
-          await notifyUsers({ userIds: [infographe], type: "affectation", priority: "medium", title: `Couverture à intégrer — ${manuscript.manuscriptNumber}`, body: `Un rapport de correction de couverture est disponible — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
+        if (isCoverIntegrationDeposit(phase)) {
+          // RETOUR de l'infographe → on notifie le CORRECTEUR (responsable de
+          // l'étape Correction) : sa couverture intégrée / finale est prête.
+          const step = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "CORRECTION" }, validatedAt: null }, select: { responsibleId: true } });
+          const correcteur = step?.responsibleId ?? null;
+          if (correcteur && correcteur !== request.user!.id) {
+            await notifyUsers({ userIds: [correcteur], type: "affectation", priority: "medium", title: `Retour couverture — ${manuscript.manuscriptNumber}`, body: `L'infographe a déposé la couverture ${phase === "couverture_finale" ? "corrigée finale" : "intégrée (BAT2)"} — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
+          }
+        } else if (infographeId && infographeId !== request.user!.id) {
+          // RAPPORT de couverture (déposé par le correcteur) → on notifie l'infographe.
+          await notifyUsers({ userIds: [infographeId], type: "affectation", priority: "medium", title: `Couverture à intégrer — ${manuscript.manuscriptNumber}`, body: `Un rapport de correction de couverture est disponible — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
         }
         return reply.code(201).send({ version_id: version.id, phase, label });
       }

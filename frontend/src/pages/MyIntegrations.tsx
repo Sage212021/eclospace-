@@ -1,23 +1,52 @@
-import { useEffect, useState } from "react";
-import { listMyCorrectionIntegrations, getCoverCorrectionCycle, stepAttachmentDownloadUrl, type MyIntegrationItem, type CorrectionPhaseState } from "../api/client";
+import { useEffect, useRef, useState } from "react";
+import { listMyCorrectionIntegrations, getCoverCorrectionCycle, uploadCorrectionPhase, stepAttachmentDownloadUrl, type MyIntegrationItem, type CorrectionPhaseState } from "../api/client";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { CorrectionAnomaliesPanel } from "../components/CorrectionAnomaliesPanel";
 import { CorrectionCyclePanel } from "../components/CorrectionCyclePanel";
 
-// Rapports de correction de la couverture déposés par le correcteur : l'infographe
-// les télécharge ici pour les appliquer sur les fichiers de couverture.
+// Phases de couverture DÉPOSÉES PAR L'INFOGRAPHE (retour vers le correcteur) —
+// doit rester aligné sur COVER_INTEGRATION_KEYS (backend correctionCycle.ts).
+const COVER_DEPOT_KEYS = new Set(["couverture_integration_1", "couverture_finale"]);
+
+// Espace COUVERTURE de l'infographe : il télécharge ici les rapports de correction
+// déposés par le correcteur (1ʳᵉ · dos · 4ᵉ, puis 2ᵉ relecture) ET dépose en retour
+// sa couverture intégrée (BAT2) puis la couverture corrigée finale — que le
+// correcteur récupère aussitôt dans « Mes corrections ». Circuit aller-retour
+// complet (D-069), symétrique de la branche texte.
 function CoverReports({ manuscriptId }: { manuscriptId: string }) {
   const [phases, setPhases] = useState<CorrectionPhaseState[] | null>(null);
-  useEffect(() => { getCoverCorrectionCycle(manuscriptId).then(setPhases).catch(() => setPhases([])); }, [manuscriptId]);
-  const withFile = (phases ?? []).filter((p) => p.has_file);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const inputs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const load = () => getCoverCorrectionCycle(manuscriptId).then(setPhases).catch(() => setPhases([]));
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [manuscriptId]);
+
+  async function deposit(key: string, file: File) {
+    setBusyKey(key);
+    setError(null);
+    try {
+      await uploadCorrectionPhase(manuscriptId, key, file);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Dépôt impossible.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  const reports = (phases ?? []).filter((p) => !COVER_DEPOT_KEYS.has(p.key));
+  const depots = (phases ?? []).filter((p) => COVER_DEPOT_KEYS.has(p.key));
+  const withReport = reports.filter((p) => p.has_file);
+
   return (
     <section style={{ border: "1px solid var(--line)", borderRadius: 10, background: "var(--paper, #FAF8F2)", padding: 14, marginTop: 12 }}>
-      <div style={{ fontWeight: 600, fontSize: 14 }}>Rapports de correction de la couverture</div>
-      {withFile.length === 0 ? (
+      <div style={{ fontWeight: 600, fontSize: 14 }}>Rapports de correction reçus du correcteur</div>
+      {withReport.length === 0 ? (
         <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 0" }}>Aucun rapport de couverture déposé pour l'instant par le correcteur.</p>
       ) : (
         <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
-          {withFile.map((p) => (
+          {withReport.map((p) => (
             <div key={p.key} style={{ fontSize: 12.5 }}>
               <a href={stepAttachmentDownloadUrl(manuscriptId, p.version_id!)} download style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>⬇️ {p.label}</a>
               <span style={{ color: "var(--muted)" }}> — {p.filename ?? "fichier"}{p.created_at ? ` · ${new Date(p.created_at).toLocaleDateString("fr-FR")}` : ""}</span>
@@ -25,7 +54,44 @@ function CoverReports({ manuscriptId }: { manuscriptId: string }) {
           ))}
         </div>
       )}
-      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "8px 0 0" }}>Une fois les corrections cochées et appliquées, déposez la couverture corrigée à l'étape <strong>Infographie</strong>. Le dossier de <strong>BAT</strong> ne pourra s'ouvrir qu'une fois toutes les corrections de couverture intégrées.</p>
+
+      {/* Retours de l'infographe → renvoyés au correcteur (couverture intégrée BAT2,
+          puis couverture corrigée finale). */}
+      <div style={{ fontWeight: 600, fontSize: 14, marginTop: 14 }}>Vos retours à déposer (renvoyés au correcteur)</div>
+      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+        Après avoir appliqué les corrections sur les fichiers (1ʳᵉ · dos · 4ᵉ), déposez ici votre <strong>couverture intégrée</strong> :
+        le correcteur la voit aussitôt dans « Mes corrections » et lance la 2ᵉ relecture dessus. Déposez ensuite la <strong>couverture corrigée finale</strong>.
+      </p>
+      {error && <div style={{ background: "var(--alert-soft, #F6E0DC)", color: "var(--alert, #B23A2E)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 8 }}>{error}</div>}
+      <div style={{ display: "grid", gap: 8 }}>
+        {depots.map((p) => (
+          <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, background: "#fff", padding: "9px 12px" }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{p.label}</div>
+              {p.has_file ? (
+                <div>
+                  <a href={stepAttachmentDownloadUrl(manuscriptId, p.version_id!)} download style={{ fontSize: 12, color: "var(--eclosion-dark)", fontWeight: 600 }}>⬇️ {p.filename ?? "Télécharger le fichier"}</a>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                    {[
+                      p.created_at ? `Renvoyé le ${new Date(p.created_at).toLocaleDateString("fr-FR")}` : null,
+                      p.uploaded_by_name ? `par ${p.uploaded_by_name}` : null,
+                      p.version_number ? `v${p.version_number}` : null,
+                    ].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+              ) : (
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>À déposer quand vous êtes prêt</span>
+              )}
+            </div>
+            <span aria-hidden style={{ fontSize: 16 }}>{p.has_file ? "✅" : "—"}</span>
+            <label style={{ cursor: busyKey === p.key ? "default" : "pointer", fontWeight: 600, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5 }}>
+              {busyKey === p.key ? "Envoi…" : p.has_file ? "Remplacer" : "Déposer"}
+              <input ref={(el) => { inputs.current[p.key] = el; }} type="file" style={{ display: "none" }} disabled={busyKey === p.key} onChange={(e) => { const f = e.target.files?.[0]; if (f) deposit(p.key, f); e.target.value = ""; }} />
+            </label>
+          </div>
+        ))}
+      </div>
+      <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "10px 0 0" }}>Une fois la couverture corrigée finale déposée et validée par le correcteur, le dossier de <strong>BAT</strong> pourra s'ouvrir.</p>
     </section>
   );
 }

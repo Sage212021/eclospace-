@@ -515,10 +515,15 @@ export interface AiRunParams {
 //     sinon un fichier de couverture, sinon le manuscrit (textes de couverture).
 // Les autres travaux (évaluation, expertise, réécriture) lisent le manuscrit.
 type AiSourceSpec = { titlePrefix: string } | { category: string };
-function aiSourceChain(workType: string): AiSourceSpec[] {
+function aiSourceChain(workType: string, coverPass?: "BAT1" | "BAT2"): AiSourceSpec[] {
   switch (workType) {
     case "couverture":
-      return [{ titlePrefix: "[vc1:couvertures]" }, { category: "couverture" }, { category: "manuscrit" }];
+      // 2ᵉ passage (BAT2) : on lit d'abord le RETOUR de l'infographe (couverture
+      // intégrée), jamais les couvertures d'origine quand cette intégration
+      // existe — symétrique du texte (correction_2 lit la version intégrée).
+      return coverPass === "BAT2"
+        ? [{ titlePrefix: "[correction:couverture_integration_1]" }, { titlePrefix: "[vc1:couvertures]" }, { category: "couverture" }, { category: "manuscrit" }]
+        : [{ titlePrefix: "[vc1:couvertures]" }, { category: "couverture" }, { category: "manuscrit" }];
     case "correction_2":
       return [{ titlePrefix: "[correction:integration_1]" }, { titlePrefix: "[vc1:manuscrit]" }, { category: "manuscrit" }];
     case "correction_1":
@@ -532,8 +537,8 @@ function noSourceMessage(workType: string): string {
   if (workType === "correction_2") return "Aucune version à relire : déposez le manuscrit (ou la version intégrée du 1er passage) avant de lancer la relecture BAT2.";
   return "Aucun fichier manuscrit n'a été déposé pour cet ouvrage.";
 }
-export async function resolveAiSourceVersion(manuscriptId: string, workType: string) {
-  for (const spec of aiSourceChain(workType)) {
+export async function resolveAiSourceVersion(manuscriptId: string, workType: string, coverPass?: "BAT1" | "BAT2") {
+  for (const spec of aiSourceChain(workType, coverPass)) {
     const where = "titlePrefix" in spec
       ? { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape" as never, deletedAt: null, title: { startsWith: spec.titlePrefix } }
       : { entityType: "manuscript", entityId: manuscriptId, category: spec.category as never, deletedAt: null };
@@ -564,7 +569,7 @@ export async function startAiReading(params: AiRunParams): Promise<{ jobId: stri
   if (!prompt) throw new AiRunError("no_prompt", "Aucun prompt configuré pour ce type de travail.");
 
   // Vérifie tout de suite qu'un fichier source existe (requête légère).
-  const src = await resolveAiSourceVersion(manuscript.id, params.workType);
+  const src = await resolveAiSourceVersion(manuscript.id, params.workType, params.coverPass);
   if (!src) throw new AiRunError("no_manuscript_file", noSourceMessage(params.workType));
 
   const modelId = resolveModelId(cfg.models[params.workType]);
@@ -610,7 +615,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // matière selon le passage : BAT1 = manuscrit à corriger ; BAT2 = version
     // INTÉGRÉE du 1er passage ; couverture = couvertures à corriger (cf.
     // resolveAiSourceVersion / aiSourceChain).
-    const version = await resolveAiSourceVersion(manuscript.id, params.workType);
+    const version = await resolveAiSourceVersion(manuscript.id, params.workType, params.coverPass);
     if (!version) {
       throw new AiRunError("no_manuscript_file", noSourceMessage(params.workType));
     }

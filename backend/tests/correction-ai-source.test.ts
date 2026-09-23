@@ -63,4 +63,19 @@ describe("Source IA selon le passage de correction", () => {
     await deposit({ category: "piece_etape", title: "[vc1:couvertures] couv_1ere_dos_4eme.txt", tag: "vc1couv" });
     expect(await tagOf("couverture")).toBe("vc1couv");
   });
+
+  it("Couverture BAT2 lit le RETOUR d'intégration infographie, pas les couvertures VC1", async () => {
+    // Avant retour infographe : BAT2 se replie sur les couvertures VC1.
+    const before = await resolveAiSourceVersion(manuscriptId, "couverture", "BAT2");
+    expect(before?.filePath.includes("vc1couv")).toBe(true);
+
+    // L'infographe dépose son retour d'intégration (couverture intégrée, BAT2).
+    await deposit({ category: "piece_etape", title: "[correction:couverture_integration_1] couv_integree.txt", tag: "covinteg1" });
+    const after = await resolveAiSourceVersion(manuscriptId, "couverture", "BAT2");
+    expect(after?.filePath.includes("covinteg1")).toBe(true);
+
+    // BAT1 continue de lire les couvertures VC1 (inchangé).
+    const bat1 = await resolveAiSourceVersion(manuscriptId, "couverture", "BAT1");
+    expect(bat1?.filePath.includes("vc1couv")).toBe(true);
+  });
 });

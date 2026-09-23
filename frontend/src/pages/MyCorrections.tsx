@@ -5,9 +5,13 @@ import {
   uploadCorrectedFile,
   patchTask,
   getCorrectionBookTypes,
+  getCorrectionCycle,
+  getCoverCorrectionCycle,
+  stepAttachmentDownloadUrl,
   type MyCorrectionTask,
   type BookTypeOption,
   type SupportOption,
+  type CorrectionPhaseState,
 } from "../api/client";
 import { Button } from "../components/Button";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -109,6 +113,49 @@ export function MyCorrections() {
   );
 }
 
+// Versions RENVOYÉES au correcteur : par l'intégrateur de texte (version intégrée,
+// version corrigée finale) et par l'infographe (couverture intégrée BAT2, couverture
+// corrigée finale). Toujours affiché pour que le correcteur les repère d'un coup
+// d'œil sans déplier l'assistance IA (D-069). N'affiche rien si aucun retour.
+const RETURN_KEYS = new Set(["integration_1", "integration_finale", "couverture_integration_1", "couverture_finale"]);
+function IntegrationReturns({ manuscriptId }: { manuscriptId: string }) {
+  const [returns, setReturns] = useState<{ from: "texte" | "couverture"; p: CorrectionPhaseState }[]>([]);
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      getCorrectionCycle(manuscriptId).catch(() => [] as CorrectionPhaseState[]),
+      getCoverCorrectionCycle(manuscriptId).catch(() => [] as CorrectionPhaseState[]),
+    ]).then(([txt, cov]) => {
+      if (!alive) return;
+      const rows: { from: "texte" | "couverture"; p: CorrectionPhaseState }[] = [];
+      for (const p of txt) if (RETURN_KEYS.has(p.key) && p.has_file) rows.push({ from: "texte", p });
+      for (const p of cov) if (RETURN_KEYS.has(p.key) && p.has_file) rows.push({ from: "couverture", p });
+      setReturns(rows);
+    });
+    return () => { alive = false; };
+  }, [manuscriptId]);
+
+  if (returns.length === 0) return null;
+  return (
+    <div style={{ marginTop: 12, border: "1px solid var(--line)", borderRadius: 10, background: "var(--eclosion-soft)", padding: "10px 12px" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink)", display: "flex", alignItems: "center", gap: 6 }}>
+        <span aria-hidden>📥</span> Retours reçus (à relire pour le passage suivant)
+      </div>
+      <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+        {returns.map(({ from, p }) => (
+          <div key={`${from}:${p.key}`} style={{ fontSize: 12.5 }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "1px 8px", marginRight: 6, background: from === "couverture" ? "#E7EAF0" : "var(--paper, #FAF8F2)", color: "#5B6472" }}>
+              {from === "couverture" ? "Couverture" : "Texte"}
+            </span>
+            <a href={stepAttachmentDownloadUrl(manuscriptId, p.version_id!)} download style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>⬇️ {p.label}</a>
+            <span style={{ color: "var(--muted)" }}> — {p.filename ?? "fichier"}{p.uploaded_by_name ? ` · par ${p.uploaded_by_name}` : ""}{p.created_at ? ` · ${new Date(p.created_at).toLocaleDateString("fr-FR")}` : ""}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CorrectionCard({ task, onDepose, onRefresh, bookTypes, supports }: { task: MyCorrectionTask; onDepose: (t: MyCorrectionTask, f: File) => void; onRefresh: () => void; bookTypes: BookTypeOption[]; supports: SupportOption[] }) {
   const canValidate = task.status !== "terminee" && task.status !== "validee";
   // Paramètres du moteur de correction : type d'ouvrage (charge la grille) +
@@ -165,6 +212,11 @@ function CorrectionCard({ task, onDepose, onRefresh, bookTypes, supports }: { ta
         </label>
         <span style={{ color: "var(--muted)", fontSize: 11.5 }}>→ reçu par la Maquette</span>
       </div>
+
+      {/* RETOURS REÇUS (toujours visibles) : versions renvoyées par l'intégrateur
+          de texte et par l'infographe. Évite d'avoir à déplier l'assistance IA
+          pour retrouver la version intégrée ou la couverture intégrée (D-069). */}
+      {manuscriptId && <IntegrationReturns manuscriptId={manuscriptId} />}
 
       {/* ÉCRAN COMPLET : assistance IA + BAT déposés (livrables produits). */}
       {manuscriptId && (

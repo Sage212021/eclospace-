@@ -1770,6 +1770,22 @@ async function main() {
       permissionModules: ["commercial"],
       departmentCodes: ["COM"],
     },
+    {
+      slug: "2026-09-eval-recommandation-choix-exclusif",
+      version: "2026.09",
+      title: "Nouveauté — Rapport d'évaluation : recommandation prédéfinie OU personnalisée",
+      body: "Dans le rapport d'évaluation, la recommandation est désormais un CHOIX EXCLUSIF : soit une recommandation prédéfinie (dans la liste), soit une recommandation personnalisée en texte libre — jamais les deux. Concrètement : choisissez « ✍️ Recommandation personnalisée » dans la liste pour activer le champ libre ; tant qu'une recommandation prédéfinie est choisie, le champ libre est grisé (désactivé) et son contenu ignoré. Un garde-fou empêche d'enregistrer les deux en même temps, même en cas de contournement. Le rapport et le bulletin affichent la bonne recommandation (le texte personnalisé quand c'est le mode choisi).",
+      permissionModules: ["comite_lecture"],
+      departmentCodes: ["COMLEC", "DIRED", "SECR"],
+    },
+    {
+      slug: "2026-09-ia-message-pdf-image-clair",
+      version: "2026.09",
+      title: "Nouveauté — Assistance IA : message plus clair pour les PDF « image »",
+      body: "Quand un fichier envoyé à l'assistance IA est un PDF « image » (texte non sélectionnable) que l'IA ne peut pas analyser directement, le message d'erreur était trompeur (il pouvait afficher « 1 pages … trop volumineux », ce qui n'avait pas de sens). Désormais le message indique la vraie cause : soit trop de pages, soit un fichier trop lourd (avec sa taille en Mo). Il parle de « fichier » (valable aussi pour une couverture) et rappelle la solution : fournir une version texte (.docx), un PDF au texte sélectionnable, ou une image plus légère pour une couverture.",
+      permissionModules: ["tasks", "production"],
+      departmentCodes: ["CORR", "INFOG", "DIRED", "SECR", "COMLEC"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

@@ -286,7 +286,7 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
   const [criteria, setCriteria] = useState<EvaluationCriterion[]>([]);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [comment, setComment] = useState("");
-  const [recommendation, setRecommendation] = useState<"accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject" | "reject_encourage">("accept");
+  const [recommendation, setRecommendation] = useState<"accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject" | "reject_encourage" | "personnalisee">("accept");
   // Recommandation en texte libre (précisions du relecteur) + nom du relecteur
   // (défaut « Comité de lecture d'Éclosion Édition »), tous deux facultatifs.
   const [recommendationNote, setRecommendationNote] = useState("");
@@ -360,12 +360,18 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
       setError("Précisez la nature du conflit d'intérêt signalé.");
       return;
     }
+    // Choix exclusif : en mode personnalisé, le texte est obligatoire.
+    if (recommendation === "personnalisee" && !recommendationNote.trim()) {
+      setError("Recommandation personnalisée : saisissez son texte, ou choisissez une recommandation prédéfinie.");
+      return;
+    }
     try {
       await submitEvaluation(assignmentId, {
         scores: criteria.map((c) => ({ criterion_id: c.id, score: scores[c.id] ?? 0 })),
         overall_comment: comment,
         recommendation,
-        ...(recommendationNote.trim() ? { recommendation_note: recommendationNote.trim() } : {}),
+        // Exclusivité : le texte libre n'est envoyé qu'en mode personnalisé.
+        ...(recommendation === "personnalisee" && recommendationNote.trim() ? { recommendation_note: recommendationNote.trim() } : {}),
         ...(reviewerName.trim() ? { reviewer_name: reviewerName.trim() } : {}),
         ...(selectedGenre ? { grid_genre_id: selectedGenre } : {}),
         ...(conflictRequired
@@ -447,8 +453,19 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
         )}
       </div>
 
+      {/* CHOIX EXCLUSIF (demande opérateur) : une recommandation PRÉDÉFINIE OU une
+          recommandation PERSONNALISÉE (texte libre), jamais les deux. Choisir
+          « Recommandation personnalisée » active le champ libre et neutralise les
+          prédéfinies ; choisir une prédéfinie grise et vide le champ libre. */}
       <Field label={t("myr.recommendation", "Recommandation")}>
-        <select value={recommendation} onChange={(e) => setRecommendation(e.target.value as typeof recommendation)}>
+        <select
+          value={recommendation}
+          onChange={(e) => {
+            const v = e.target.value as typeof recommendation;
+            setRecommendation(v);
+            if (v !== "personnalisee") setRecommendationNote(""); // exclusivité : on vide le libre
+          }}
+        >
           <option value="accept">{t("myr.reco.accept", "Acceptation sans modification")}</option>
           <option value="accept_minor">{t("myr.reco.accept_minor", "Acceptation sous réserve de corrections mineures")}</option>
           <option value="accept_major">{t("myr.reco.accept_major", "Acceptation sous réserve de corrections majeures")}</option>
@@ -456,16 +473,21 @@ function EvaluationForm({ assignmentId, manuscriptId, onSubmitted }: { assignmen
           <option value="new_expertise">{t("myr.reco.new_expertise", "Nouvelle expertise")}</option>
           <option value="reject">{t("myr.reco.reject", "Refus motivé")}</option>
           <option value="reject_encourage">{t("myr.reco.reject_encourage", "Rejet avec encouragement à retravailler")}</option>
+          <option value="personnalisee">{t("myr.reco.personnalisee", "✍️ Recommandation personnalisée (texte libre)")}</option>
         </select>
+        <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>
+          Choix exclusif : une recommandation prédéfinie <strong>ou</strong> une recommandation personnalisée.
+        </div>
       </Field>
 
-      <div style={{ marginTop: 12 }}>
-        <Field label={t("myr.recommendation_note", "Recommandation — précisions (texte libre, facultatif)")}>
+      <div style={{ marginTop: 12, opacity: recommendation === "personnalisee" ? 1 : 0.55 }}>
+        <Field label={t("myr.recommendation_note", "Recommandation personnalisée (texte libre)")}>
           <textarea
             value={recommendationNote}
             onChange={(e) => setRecommendationNote(e.target.value)}
             rows={2}
-            placeholder="Précisez votre recommandation dans vos propres mots (facultatif)."
+            disabled={recommendation !== "personnalisee"}
+            placeholder={recommendation === "personnalisee" ? "Saisissez votre recommandation dans vos propres mots." : "Sélectionnez « Recommandation personnalisée » ci-dessus pour écrire ici."}
           />
         </Field>
       </div>
@@ -539,13 +561,21 @@ const RECO_LABELS: Record<string, string> = {
   rewrite: "Demande de réécriture",
   new_expertise: "Nouvelle expertise",
   reject: "Refus motivé",
+  reject_encourage: "Rejet avec encouragement à retravailler",
+  personnalisee: "Recommandation personnalisée",
 };
+
+// Libellé affichable d'une recommandation : le texte libre en mode personnalisé.
+function recoDisplay(reco: string, note?: string | null): string {
+  if (reco === "personnalisee") return note?.trim() || "Recommandation personnalisée";
+  return RECO_LABELS[reco] ?? reco;
+}
 
 function reportSummary(a: ReadingAssignment): string {
   const e = a.evaluation;
   const lines = [`Rapport de lecture — « ${a.manuscript?.title ?? ""} »`];
   if (e) {
-    lines.push(`Recommandation : ${RECO_LABELS[e.recommendation] ?? e.recommendation}`);
+    lines.push(`Recommandation : ${recoDisplay(e.recommendation, e.recommendationNote)}`);
     lines.push(`Score global : ${Number(e.globalScore).toFixed(2)}/10`);
     if (e.overallComment) lines.push(`Appréciation : ${e.overallComment}`);
     for (const s of e.scores) lines.push(`• ${s.criterion.label} : ${s.score}/10`);

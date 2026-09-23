@@ -130,13 +130,15 @@ describe("Notes IA → curseurs d'évaluation (Mes lectures)", () => {
       expect(res.statusCode).toBe(403);
     });
 
-    it("accepte la recommandation « reject_encourage » + champs libres (relecteur, note)", async () => {
+    it("accepte « reject_encourage » + relecteur ; la note libre est IGNORÉE (choix exclusif prédéfinie OU personnalisée)", async () => {
       const criteria = await prisma.evaluationCriterion.findMany({ where: { genreId: null, isActive: true } });
       const res = await app.inject({
         method: "POST", url: `/api/v1/reading-assignments/${assignmentId}/evaluation`, headers: { cookie: adminCookie },
         payload: {
           scores: criteria.map((c) => ({ criterion_id: c.id, score: 6 })),
           recommendation: "reject_encourage",
+          // Exclusivité (D-072) : avec une recommandation PRÉDÉFINIE, tout texte
+          // libre est ignoré (non stocké). Le relecteur, lui, reste enregistré.
           recommendation_note: "Beau potentiel — à retravailler puis resoumettre.",
           reviewer_name: "Jury interne test",
         },
@@ -144,7 +146,7 @@ describe("Notes IA → curseurs d'évaluation (Mes lectures)", () => {
       expect(res.statusCode).toBe(201);
       const evalRow = await prisma.evaluation.findUniqueOrThrow({ where: { assignmentId } });
       expect(evalRow.recommendation).toBe("reject_encourage");
-      expect(evalRow.recommendationNote).toContain("resoumettre");
+      expect(evalRow.recommendationNote).toBeNull();
       expect(evalRow.reviewerName).toBe("Jury interne test");
     });
 

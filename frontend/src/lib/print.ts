@@ -1388,6 +1388,8 @@ export interface ReadingReportData {
   readerName: string;
   submittedAt: string;
   recommendation: string;
+  // Texte de la recommandation PERSONNALISÉE (quand recommendation = personnalisee).
+  recommendationNote?: string | null;
   globalScore: number;
   overallComment: string | null;
   scores: { label: string; coefficient: number; score: number; comment: string | null }[];
@@ -1423,7 +1425,7 @@ export function printReadingReport(d: ReadingReportData, opts?: PrintOpts): void
     </tbody></table>
     <div class="party" style="margin-top:16px">
       <div class="party__label">${tr("Recommandation", "Recommendation")}</div>
-      <div class="party__name">${escapeHtml(label(READING_RECO_LABELS, d.recommendation))}</div>
+      <div class="party__name">${escapeHtml(d.recommendation === "personnalisee" ? (d.recommendationNote?.trim() || tr("Recommandation personnalisée", "Custom recommendation")) : label(READING_RECO_LABELS, d.recommendation))}</div>
     </div>
     ${
       d.overallComment

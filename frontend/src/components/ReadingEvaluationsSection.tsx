@@ -16,6 +16,7 @@ const RECO_SHORT: Record<string, string> = {
   new_expertise: "Nouvelle expertise",
   reject: "Refus motivé",
   reject_encourage: "Rejet — encouragé à retravailler",
+  personnalisee: "Recommandation personnalisée",
 };
 
 export function ReadingEvaluationsSection({

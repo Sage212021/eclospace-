@@ -100,7 +100,7 @@ export async function buildReadingReportPdf(d: ReadingReportData): Promise<Uint8
     doc.setFontSize(10.5); doc.setTextColor(11, 11, 12);
     // On rend paragraphe par paragraphe : la recommandation et l'avertissement
     // de portée (« Ce rapport constitue un avis argumenté… ») sont en GRAS.
-    const isReco = value === RECO_LABELS[d.recommendation];
+    const isReco = label === "Recommandation";
     value.split("\n").forEach((para) => {
       const bold = isReco || isReportDisclaimer(para);
       doc.setFont("helvetica", bold ? "bold" : "normal");
@@ -109,7 +109,7 @@ export async function buildReadingReportPdf(d: ReadingReportData): Promise<Uint8
     });
     y += 4;
   };
-  block("Recommandation", RECO_LABELS[d.recommendation] ?? d.recommendation);
+  block("Recommandation", d.recommendation === "personnalisee" ? (d.recommendationNote?.trim() || "Recommandation personnalisée") : (RECO_LABELS[d.recommendation] ?? d.recommendation));
   if (d.overallComment) block("Appréciation générale", d.overallComment);
 
   // Pied de page légal.

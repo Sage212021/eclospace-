@@ -36,7 +36,8 @@ const evaluationSchema = z.object({
   grid_genre_id: z.string().uuid().nullable().optional(),
   overall_comment: z.string().optional(),
   recommendation: z.nativeEnum(EvaluationRecommendation),
-  // Recommandation en texte libre (précisions du relecteur), en complément.
+  // Recommandation en TEXTE LIBRE. Exclusive des prédéfinies : requise quand
+  // `recommendation = personnalisee`, ignorée sinon (choix « prédéfinie OU personnalisée »).
   recommendation_note: z.string().max(4000).optional(),
   // Nom du relecteur (défaut applicatif si vide : « Comité de lecture d'Éclosion Édition »).
   reviewer_name: z.string().max(200).optional(),
@@ -599,6 +600,17 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // CHOIX EXCLUSIF (demande opérateur) : recommandation PRÉDÉFINIE OU
+      // PERSONNALISÉE, jamais les deux. Garde-fou métier (même en cas de
+      // contournement de l'interface) : en mode personnalisé, le texte libre est
+      // OBLIGATOIRE ; en mode prédéfini, tout texte libre est IGNORÉ (non stocké).
+      const isCustomReco = parsed.data.recommendation === "personnalisee";
+      const trimmedRecoNote = parsed.data.recommendation_note?.trim() || null;
+      if (isCustomReco && !trimmedRecoNote) {
+        return reply.code(400).send({ code: "custom_reco_required", message: "Recommandation personnalisée : saisissez son texte, ou choisissez une recommandation prédéfinie." });
+      }
+      const storedRecoNote = isCustomReco ? trimmedRecoNote : null;
+
       const coefficientById = new Map(activeCriteria.map((c) => [c.id, Number(c.coefficient)]));
       const totalCoefficient = activeCriteria.reduce((sum, c) => sum + Number(c.coefficient), 0);
       const weightedSum = parsed.data.scores.reduce((sum, s) => sum + s.score * (coefficientById.get(s.criterion_id) ?? 0), 0);
@@ -613,7 +625,7 @@ export default async function readingCommitteeRoutes(fastify: FastifyInstance) {
             assignmentId: id,
             overallComment: parsed.data.overall_comment,
             recommendation: parsed.data.recommendation,
-            recommendationNote: parsed.data.recommendation_note?.trim() || null,
+            recommendationNote: storedRecoNote,
             reviewerName: parsed.data.reviewer_name?.trim() || "Comité de lecture d'Éclosion Édition",
             globalScore,
             rating,

@@ -637,10 +637,21 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         // page ≈ 1 500–2 000 tokens en vision). Au-delà d'un seuil prudent, on
         // refuse PROPREMENT avec un message clair plutôt qu'une erreur brute 400.
         const pages = extracted?.pages ?? Math.ceil(buffer.length / 120_000); // ~120 Ko/page à défaut
-        if (pages > 80 || buffer.length > 24 * 1024 * 1024) {
+        const tooManyPages = pages > 80;
+        const tooHeavy = buffer.length > 24 * 1024 * 1024;
+        if (tooManyPages || tooHeavy) {
+          // Message CLAIR selon la vraie cause : trop de pages OU fichier trop
+          // lourd (octets). On n'affiche plus « 1 pages … trop volumineux »
+          // (contradictoire) : un fichier d'une page peut être refusé pour son
+          // POIDS, pas pour son nombre de pages. « Fichier » (et non « manuscrit »)
+          // car cela vaut aussi pour une couverture.
+          const sizeMo = (buffer.length / (1024 * 1024)).toFixed(1);
+          const reason = tooManyPages
+            ? `il compte ${pages} pages, trop pour l'analyse directe par l'IA`
+            : `il est trop lourd (${sizeMo} Mo) pour l'analyse directe par l'IA`;
           throw new AiRunError(
             "manuscript_too_large",
-            `Ce manuscrit est un PDF « image » (texte non sélectionnable) de ${pages} pages : il est trop volumineux pour l'analyse directe par l'IA. Fournissez une version texte (.docx) ou un PDF dont le texte est sélectionnable, puis relancez.`,
+            `Ce fichier est un PDF « image » (texte non sélectionnable) : ${reason}. Fournissez une version texte (.docx) ou un PDF dont le texte est sélectionnable (ou une image plus légère pour une couverture), puis relancez.`,
           );
         }
         prepared = { kind: "pdf", base64: buffer.toString("base64") };

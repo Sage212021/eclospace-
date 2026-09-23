@@ -1762,6 +1762,14 @@ async function main() {
       permissionModules: ["paie"],
       departmentCodes: ["RH", "FIN"],
     },
+    {
+      slug: "2026-09-commercial-suivi-ventes-onglet-integre",
+      version: "2026.09",
+      title: "Nouveauté — Commercial : le « Suivi des ventes par ouvrage » est intégré à la page",
+      body: "Le « Suivi des ventes par ouvrage » n'est plus un écran séparé dans le menu : il est désormais un ONGLET directement dans la page « Commercial & ventes ». En haut de la page, deux onglets : « Ventes & clients » (clients, commandes, ventes) et « Suivi des ventes par ouvrage » (exemplaires sortis vs vendus, montant encaissé, écart). Un seul endroit pour tout le pôle Commercial, sans changer de page.",
+      permissionModules: ["commercial"],
+      departmentCodes: ["COM"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

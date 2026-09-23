@@ -42,6 +42,7 @@ import { Button } from "../components/Button";
 import { IconCommercial } from "../components/icons";
 import { IsbnCombobox } from "../components/IsbnCombobox";
 import { PeriodFilter, currentPeriod, inPeriod, type Period } from "../components/PeriodFilter";
+import { SalesByBookPage } from "./SalesByBookPage";
 
 const CATEGORY_LABELS: Record<CustomerCategory, string> = {
   librairie: "Librairie",
@@ -88,6 +89,9 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder, canSe
   const [newCustomer, setNewCustomer] = useState<{ name: string; category: CustomerCategory; zone: string } | null>(null);
   // Rafraîchit le registre « Mes ventes » et le récap annuel après chaque vente.
   const [salesKey, setSalesKey] = useState(0);
+  // Écrans internes du pôle Commercial & ventes, en onglets (demande opérateur) :
+  // le « Suivi des ventes par ouvrage » vit désormais ici, comme onglet.
+  const [tab, setTab] = useState<"ventes" | "suivi">("ventes");
 
   const refresh = async () => {
     const [customerList, orderList, isbnList, locationList] = await Promise.all([
@@ -147,6 +151,24 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder, canSe
       {error && <div style={bannerStyle("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={bannerStyle("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}
 
+      {/* Onglets internes du pôle : Ventes & clients ↔ Suivi des ventes par ouvrage. */}
+      <div style={{ display: "inline-flex", border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden", margin: "4px 0 16px" }}>
+        {([["ventes", "Ventes & clients"], ["suivi", "Suivi des ventes par ouvrage"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            style={{ border: "none", padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", background: tab === key ? "var(--eclosion, #d9b21a)" : "transparent", color: tab === key ? "#fff" : "var(--muted)" }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "suivi" ? (
+        <SalesByBookPage />
+      ) : (
+      <>
       {/* Commandes à facturer (ex. livre scolaire) : le commercial les initie ; la
           Finance établit la facture. */}
       <BillingOrdersSection canCreate={canInitiateOrder} canInvoice={false} canValidateThreshold={false} />
@@ -293,6 +315,8 @@ export function CommercialPage({ canManage, canValidate, canInitiateOrder, canSe
             </select>
           </Field>
         </Modal>
+      )}
+      </>
       )}
     </div>
   );

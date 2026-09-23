@@ -49,7 +49,6 @@ const CalendarPage = lazy(() => import("./pages/CalendarPage").then((m) => ({ de
 const NewsFeedPage = lazy(() => import("./pages/NewsFeedPage").then((m) => ({ default: m.NewsFeedPage })));
 const NewslettersPage = lazy(() => import("./pages/NewslettersPage").then((m) => ({ default: m.NewslettersPage })));
 const ProductionTrackingPage = lazy(() => import("./pages/ProductionTrackingPage").then((m) => ({ default: m.ProductionTrackingPage })));
-const SalesByBookPage = lazy(() => import("./pages/SalesByBookPage").then((m) => ({ default: m.SalesByBookPage })));
 const CommercialPerformancePage = lazy(() => import("./pages/CommercialPerformancePage").then((m) => ({ default: m.CommercialPerformancePage })));
 const CommissionsPage = lazy(() => import("./pages/CommissionsPage").then((m) => ({ default: m.CommissionsPage })));
 const AuthorRoyaltiesPage = lazy(() => import("./pages/AuthorRoyaltiesPage").then((m) => ({ default: m.AuthorRoyaltiesPage })));
@@ -115,7 +114,6 @@ type PageId =
   | "newsletters"
   | "diagnostics"
   | "production-tracking"
-  | "sales-by-book"
   | "commercial-performance"
   | "commissions"
   | "author-royalties"
@@ -223,9 +221,10 @@ const NAV_POLES: NavPole[] = [
   {
     label: "Commercial",
     items: [
+      // « Suivi des ventes par ouvrage » n'est plus une entrée séparée : c'est un
+      // onglet À L'INTÉRIEUR de « Commercial & ventes » (demande opérateur).
       { key: "co-ventes", label: "Commercial & ventes", permission: "commercial:consultation" },
       { key: "co-mes-performances", label: "Mes performances", permission: "commercial:consultation" },
-      { key: "co-suivi-ventes", label: "Suivi des ventes par ouvrage", permission: "commercial:consultation" },
     ],
   },
   {
@@ -306,7 +305,6 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "co-stock": { page: "stock" },
   "co-ventes": { page: "commercial" },
   "co-mes-performances": { page: "commercial-performance" },
-  "co-suivi-ventes": { page: "sales-by-book" },
   "co-commissions": { page: "commissions" },
   "jf-contrats": { stage: "CONTRACTUALISATION", heading: "Contrats & droits d'auteur" },
   "jf-finance": { page: "finance" },
@@ -939,7 +937,6 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
         {leaf && "page" in leaf && leaf.page === "production-tracking" && <ProductionTrackingPage />}
-        {leaf && "page" in leaf && leaf.page === "sales-by-book" && <SalesByBookPage />}
         {leaf && "page" in leaf && leaf.page === "commercial-performance" && <CommercialPerformancePage canManage={permissions.has("commercial:validation") || permissions.has("commercial:administration")} />}
         {leaf && "page" in leaf && leaf.page === "commissions" && <CommissionsPage canSetRate={permissions.has("finance:administration")} />}
         {leaf && "page" in leaf && leaf.page === "author-royalties" && <AuthorRoyaltiesPage canConfigure={permissions.has("finance:administration")} canGenerate={permissions.has("royalties:validation")} />}

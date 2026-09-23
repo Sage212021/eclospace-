@@ -110,4 +110,28 @@ describe("Mes corrections — entrée/sortie du correcteur", () => {
     await app.inject({ method: "GET", url: "/api/v1/my-corrections", headers: { cookie } });
     expect(await prisma.task.count({ where: { manuscriptId: m.id, assigneeId: user.id, type: "correction" } })).toBe(1);
   });
+
+  it("correctionOpen : tâche « terminée » mais ouvrage encore à l'étape Correction → reste ouverte (En cours)", async () => {
+    const u = `corr4_${rnd()}`;
+    const user = await createUserWithRole(u, "CORRECTEUR", PWD);
+    const cookie = await login(app, u);
+    const corrStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "CORRECTION" } });
+    const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+    const m = await prisma.manuscript.create({
+      data: { manuscriptNumber: `MS-OPEN-${rnd()}`, title: `Ouvert ${rnd()}`, statusId: corrStatus.id, ownerId: admin.id, origin: "soumission", language: "fr", receivedAt: new Date() },
+    });
+    await prisma.task.create({ data: { manuscriptId: m.id, title: "Correction éditoriale", type: "correction", assigneeId: user.id, status: "terminee", progressPct: 100 } });
+
+    let res = await app.inject({ method: "GET", url: "/api/v1/my-corrections", headers: { cookie } });
+    let mine = res.json().find((t: { manuscript: { id: string } | null }) => t.manuscript?.id === m.id);
+    expect(mine.status).toBe("terminee");
+    expect(mine.correctionOpen).toBe(true); // ouvrage encore à l'étape Correction
+
+    // Une fois l'ouvrage sorti de l'étape Correction (correction réellement close) :
+    const next = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "MISE_EN_PAGE" } });
+    await prisma.manuscript.update({ where: { id: m.id }, data: { statusId: next.id } });
+    res = await app.inject({ method: "GET", url: "/api/v1/my-corrections", headers: { cookie } });
+    mine = res.json().find((t: { manuscript: { id: string } | null }) => t.manuscript?.id === m.id);
+    expect(mine.correctionOpen).toBe(false); // range en « Terminées »
+  });
 });

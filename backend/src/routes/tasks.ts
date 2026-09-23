@@ -191,7 +191,7 @@ export default async function taskRoutes(fastify: FastifyInstance) {
           { status: { in: ["terminee", "validee"] } },
         ],
       },
-      include: { manuscript: { select: { id: true, manuscriptNumber: true, title: true } } },
+      include: { manuscript: { select: { id: true, manuscriptNumber: true, title: true, status: { select: { code: true } } } } },
       orderBy: { plannedEnd: "asc" },
     });
     const manuscriptIds = Array.from(new Set(tasks.map((t) => t.manuscriptId)));
@@ -216,9 +216,14 @@ export default async function taskRoutes(fastify: FastifyInstance) {
         status: t.status,
         progressPct: t.progressPct,
         plannedEnd: t.plannedEnd,
-        manuscript: t.manuscript,
+        manuscript: { id: t.manuscript.id, manuscriptNumber: t.manuscript.manuscriptNumber, title: t.manuscript.title },
         manuscriptHasFile: hasSource.has(t.manuscriptId),
         correctedHasFile: hasCorrected.has(t.manuscriptId),
+        // La correction éditoriale est encore OUVERTE tant que le manuscrit est à
+        // l'étape Correction (cycle non clôturé : retours d'intégration en attente,
+        // 2ᵉ relecture, VCF…). Une tâche marquée « terminée » mais dont l'ouvrage
+        // reste à cette étape doit rester « En cours », cliquable pour poursuivre.
+        correctionOpen: t.manuscript.status.code === "CORRECTION",
       })),
     );
   });

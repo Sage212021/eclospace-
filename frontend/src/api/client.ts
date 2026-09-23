@@ -2049,6 +2049,9 @@ export interface MyCorrectionTask {
   manuscript: { id: string; manuscriptNumber: string; title: string } | null;
   manuscriptHasFile: boolean;
   correctedHasFile: boolean;
+  // Correction encore ouverte (manuscrit toujours à l'étape Correction) : une
+  // tâche marquée « terminée » mais non clôturée reste classée « En cours ».
+  correctionOpen: boolean;
 }
 export function listMyCorrections() {
   return request<MyCorrectionTask[]>("/api/v1/my-corrections");

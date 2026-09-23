@@ -1339,6 +1339,7 @@ model User {
   ownedManuscripts       Manuscript[]        @relation("ManuscriptOwner")
   managedManuscripts     Manuscript[]        @relation("ManuscriptProjectManager")
   correctionIntegrations Manuscript[]        @relation("ManuscriptCorrectionIntegrator")
+  coverIntegrations      Manuscript[]        @relation("ManuscriptCoverIntegrator")
   manuscriptSteps        ManuscriptStep[]
   readingAssignments     ReadingAssignment[]
   editorialDecisions     EditorialDecision[]
@@ -1947,6 +1948,11 @@ model Manuscript {
   // reçoit le relais après chaque passage du correcteur (cycle de correction).
   correctionIntegratorId String? @map("correction_integrator_id")
   correctionIntegrator   User?   @relation("ManuscriptCorrectionIntegrator", fields: [correctionIntegratorId], references: [id])
+  // Infographe désigné pour l'INTÉGRATION de la CORRECTION DE COUVERTURE :
+  // reçoit le rapport de correction de couverture et l'exploite. À défaut, on
+  // retombe sur l'infographe responsable de l'étape Infographie.
+  coverIntegratorId      String? @map("cover_integrator_id")
+  coverIntegrator        User?   @relation("ManuscriptCoverIntegrator", fields: [coverIntegratorId], references: [id])
 
   receivedAt        DateTime  @map("received_at")
   // Date de parution réelle de l'ouvrage (spéc. fonctionnelle §5/§8). Nulle

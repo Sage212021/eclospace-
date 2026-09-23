@@ -945,12 +945,22 @@ model PayrollMonthlyLine {
   employeeId String            @map("employee_id")
   employee   Employee          @relation(fields: [employeeId], references: [id])
 
-  // Salaire de la PÉRIODE, figé sur la ligne du mois (correction critique paie) :
-  // chaque mois garde SON salaire de base et son brut contractuel, indépendamment
-  // de la fiche globale et des corrections faites plus tard. null = ligne héritée
-  // d'avant ce correctif → repli sur la fiche du salarié (compatibilité).
-  baseSalary       Decimal? @map("base_salary") @db.Decimal(12, 2)
-  grossContractual Decimal? @map("gross_contractual") @db.Decimal(12, 2)
+  // ASSIETTE de la PÉRIODE, FIGÉE sur la ligne du mois (isolation stricte, D-070) :
+  // chaque mois garde SON salaire de base, son brut contractuel ET toute l'assiette
+  // fiscale/ancienneté du salarié AU MOMENT de la préparation. Une modification
+  // ultérieure de la fiche du salarié (ou d'un autre mois) ne recalcule JAMAIS un
+  // mois déjà préparé : la paie d'une période est une photographie autonome.
+  // `baseSalary` null = ligne héritée d'AVANT ce correctif → repli sur la fiche
+  // (compatibilité). Chaque champ null retombe individuellement sur la fiche.
+  baseSalary         Decimal? @map("base_salary") @db.Decimal(12, 2)
+  grossContractual   Decimal? @map("gross_contractual") @db.Decimal(12, 2)
+  fiscalBase         Decimal? @map("fiscal_base") @db.Decimal(12, 2)
+  fiscalParts        Decimal? @map("fiscal_parts") @db.Decimal(4, 1)
+  applyFiscalParts   Boolean? @map("apply_fiscal_parts")
+  seniorityYears     Int?     @map("seniority_years")
+  seniorityRate      Decimal? @map("seniority_rate") @db.Decimal(6, 4)
+  seniorityThreshold Int?     @map("seniority_threshold")
+  applySeniority     Boolean? @map("apply_seniority")
 
   primes         Decimal @default(0) @db.Decimal(12, 2)
   heuresSup      Decimal @default(0) @map("heures_sup") @db.Decimal(12, 2)

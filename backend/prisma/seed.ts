@@ -1754,6 +1754,14 @@ async function main() {
       permissionModules: ["tasks"],
       departmentCodes: ["CORR"],
     },
+    {
+      slug: "2026-09-paie-isolation-stricte-par-periode",
+      version: "2026.09",
+      title: "Nouveauté — Paie : chaque mois est désormais figé et indépendant",
+      body: "Correction importante : la paie d'un mois est maintenant une photographie autonome. Avant, modifier le salaire (ou l'assiette) dans la fiche d'un salarié recalculait aussi les mois PASSÉS : par exemple, passer le salaire à 100 000 F (effet août) affichait aussi 100 000 F en juillet, juin… — ce qui était faux. Désormais, au moment où un mois est préparé, le salaire de base, le brut, l'assiette fiscale, les parts et l'ancienneté sont FIGÉS sur ce mois. Une modification faite sur la fiche (ou sur un autre mois) ne touche plus jamais un mois déjà préparé : juillet reste à 75 000 F, août à 100 000 F, chacun de son côté. Le bulletin et la clôture d'un mois utilisent exclusivement les données de CE mois. Pour changer le salaire d'un mois précis, ouvrez la grille de ce mois et corrigez sa ligne — les autres mois ne bougent pas. La fiche du salarié reste sa situation ACTUELLE (elle sert de base aux PROCHAINS mois préparés). Les mois déjà en base ont été gelés sur leur valeur courante : si un mois ancien affiche une base erronée, corrigez-la directement dans la grille de ce mois.",
+      permissionModules: ["paie"],
+      departmentCodes: ["RH", "FIN"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

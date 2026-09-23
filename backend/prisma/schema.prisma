@@ -1953,6 +1953,14 @@ model Manuscript {
   // retombe sur l'infographe responsable de l'étape Infographie.
   coverIntegratorId      String? @map("cover_integrator_id")
   coverIntegrator        User?   @relation("ManuscriptCoverIntegrator", fields: [coverIntegratorId], references: [id])
+  // Clôture de l'intégration de correction PAR L'INTÉGRATEUR lui-même, pour
+  // libérer son écran « Mes intégrations de correction » : l'ouvrage clos part
+  // dans l'accordéon « Historique ». Une clôture par branche (texte / couverture),
+  // car l'intégrateur texte et l'infographe closent chacun de leur côté. Ne clôt
+  // PAS l'étape Correction (validée par le correcteur) — c'est un rangement perso,
+  // réversible (« Rouvrir »).
+  correctionIntegrationClosedAt DateTime? @map("correction_integration_closed_at")
+  coverIntegrationClosedAt      DateTime? @map("cover_integration_closed_at")
 
   receivedAt        DateTime  @map("received_at")
   // Date de parution réelle de l'ouvrage (spéc. fonctionnelle §5/§8). Nulle

@@ -6,6 +6,7 @@ import { startAiReading, executeAiReading, AiRunError, extractAnomaliesForJob } 
 import { SUPPORTS } from "../lib/correctionProfile.js";
 import { isAnomalyStatus } from "../lib/correctionAnomalies.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { isDirection } from "../lib/stepDocuments.js";
 import {
   loadConfig,
   saveConfig,
@@ -638,35 +639,88 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
         return m;
       };
 
+      // Présence du FICHIER FINAL par branche (autorise la clôture) : on cherche
+      // les pièces d'étape « [correction:integration_finale] » (texte) ou
+      // « [correction:couverture_finale] » (couverture) déposées, non supprimées.
+      const withFinalFile = async (manuscriptIds: string[], phaseKey: string) => {
+        if (manuscriptIds.length === 0) return new Set<string>();
+        const docs = await prisma.document.findMany({
+          where: { entityType: "manuscript", entityId: { in: manuscriptIds }, category: "piece_etape", deletedAt: null, title: { startsWith: `[correction:${phaseKey}]` } },
+          select: { entityId: true },
+        });
+        return new Set(docs.map((d) => d.entityId));
+      };
+
       // Branche TEXTE : ouvrages où je suis l'intégrateur éditorial désigné.
       const texteManuscripts = await prisma.manuscript.findMany({
         where: { deletedAt: null, correctionIntegratorId: me },
-        select: { id: true, manuscriptNumber: true, title: true, status: { select: { code: true, label: true } } },
+        select: { id: true, manuscriptNumber: true, title: true, correctionIntegrationClosedAt: true, status: { select: { code: true, label: true } } },
         orderBy: { updatedAt: "desc" },
       });
       const texteCounts = await tally(texteManuscripts.map((m) => m.id), ["correction_1", "correction_2"]);
+      const texteFinal = await withFinalFile(texteManuscripts.map((m) => m.id), "integration_finale");
 
       // Branche COUVERTURE : ouvrages où je suis l'infographe — désigné pour la
       // correction de couverture, OU responsable de l'étape Infographie.
       const infoSteps = await prisma.manuscriptStep.findMany({
         where: { responsibleId: me, status: { code: "INFOGRAPHIE" }, manuscript: { deletedAt: null } },
-        select: { manuscript: { select: { id: true, manuscriptNumber: true, title: true, status: { select: { code: true, label: true } } } } },
+        select: { manuscript: { select: { id: true, manuscriptNumber: true, title: true, coverIntegrationClosedAt: true, status: { select: { code: true, label: true } } } } },
       });
       const designated = await prisma.manuscript.findMany({
         where: { deletedAt: null, coverIntegratorId: me },
-        select: { id: true, manuscriptNumber: true, title: true, status: { select: { code: true, label: true } } },
+        select: { id: true, manuscriptNumber: true, title: true, coverIntegrationClosedAt: true, status: { select: { code: true, label: true } } },
       });
-      const coverById = new Map<string, { id: string; manuscriptNumber: string; title: string; status: { code: string; label: string } }>();
+      type CoverM = { id: string; manuscriptNumber: string; title: string; coverIntegrationClosedAt: Date | null; status: { code: string; label: string } };
+      const coverById = new Map<string, CoverM>();
       for (const s of infoSteps) coverById.set(s.manuscript.id, s.manuscript);
       for (const m of designated) coverById.set(m.id, m); // le désigné prime / dédoublonne
       const coverManuscripts = [...coverById.values()];
       const coverCounts = await tally(coverManuscripts.map((m) => m.id), ["couverture"]);
+      const coverFinal = await withFinalFile(coverManuscripts.map((m) => m.id), "couverture_finale");
 
       const items = [
-        ...texteManuscripts.map((m) => ({ id: m.id, manuscript_number: m.manuscriptNumber, title: m.title, status_code: m.status.code, status_label: m.status.label, branch: "texte" as const, counts: texteCounts.get(m.id) ?? emptyCounts() })),
-        ...coverManuscripts.map((m) => ({ id: m.id, manuscript_number: m.manuscriptNumber, title: m.title, status_code: m.status.code, status_label: m.status.label, branch: "couverture" as const, counts: coverCounts.get(m.id) ?? emptyCounts() })),
+        ...texteManuscripts.map((m) => ({ id: m.id, manuscript_number: m.manuscriptNumber, title: m.title, status_code: m.status.code, status_label: m.status.label, branch: "texte" as const, counts: texteCounts.get(m.id) ?? emptyCounts(), closed_at: m.correctionIntegrationClosedAt?.toISOString() ?? null, can_close: texteFinal.has(m.id) })),
+        ...coverManuscripts.map((m) => ({ id: m.id, manuscript_number: m.manuscriptNumber, title: m.title, status_code: m.status.code, status_label: m.status.label, branch: "couverture" as const, counts: coverCounts.get(m.id) ?? emptyCounts(), closed_at: m.coverIntegrationClosedAt?.toISOString() ?? null, can_close: coverFinal.has(m.id) })),
       ];
       return reply.send({ manuscripts: items });
+    },
+  );
+
+  // Clôture (ou réouverture) de l'intégration par l'intégrateur, pour ranger
+  // l'ouvrage dans l'accordéon « Historique » et libérer son écran. Une clôture
+  // par branche (texte / couverture). NE clôt PAS l'étape Correction (validée par
+  // le correcteur) : rangement personnel, réversible. Garde-fou : on ne peut clore
+  // que si le FICHIER FINAL de la branche est déposé.
+  fastify.put(
+    "/api/v1/manuscripts/:id/integration-closure",
+    { preHandler: requireAnyPermission(AI_JOB_READ_PERMS) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parse = z.object({ branch: z.enum(["texte", "couverture"]), closed: z.boolean() }).safeParse(request.body);
+      if (!parse.success) return reply.code(400).send({ code: "validation_error", message: "Requête invalide." });
+      const { branch, closed } = parse.data;
+      const me = request.user!.id;
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true, correctionIntegratorId: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+
+      // Habilitation : l'intégrateur désigné de la branche (ou la direction).
+      let allowed = isDirection(request);
+      if (!allowed) {
+        allowed = branch === "texte" ? manuscript.correctionIntegratorId === me : (await manuscriptInfographeId(id)) === me;
+      }
+      if (!allowed) return reply.code(403).send({ code: "forbidden", message: "Seul l'intégrateur désigné de cet ouvrage peut clore cette intégration." });
+
+      if (closed) {
+        const phaseKey = branch === "texte" ? "integration_finale" : "couverture_finale";
+        const finalDoc = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: id, category: "piece_etape", deletedAt: null, title: { startsWith: `[correction:${phaseKey}]` } }, select: { id: true } });
+        if (!finalDoc) {
+          return reply.code(409).send({ code: "final_missing", message: branch === "texte" ? "Déposez d'abord la version corrigée finale (VCF) avant de clore l'intégration." : "Déposez d'abord la couverture corrigée finale avant de clore l'intégration." });
+        }
+      }
+      const data = branch === "texte" ? { correctionIntegrationClosedAt: closed ? new Date() : null } : { coverIntegrationClosedAt: closed ? new Date() : null };
+      await prisma.manuscript.update({ where: { id }, data });
+      await writeAuditLog({ userId: me, action: "update", entityType: "manuscript", entityId: id, newValues: { integration_closure: { branch, closed } }, ipAddress: request.ip });
+      return reply.send({ id, branch, closed });
     },
   );
 

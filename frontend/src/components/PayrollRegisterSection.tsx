@@ -6,16 +6,14 @@ import { Field } from "./Modal";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
 import { useI18n } from "../i18n";
+import { PayrollMonthBanner } from "./PayrollMonthBanner";
+import { usePayrollWorkingPeriod, frMonth, calendarPeriod } from "../lib/payrollPeriod";
 
 // Livre de paie mensuel + clôture/gel + exports déclarations CNPS/fiscales
 // (D-007, incrément 5). La clôture fige la période (journal immuable).
 
 function fcfa(n: number): string {
   return `${Math.round(n).toLocaleString("fr-FR")} FCFA`;
-}
-function currentPeriod(): string {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 // Décale une période « AAAA-MM » de `delta` mois (robuste au passage d'année).
 function shiftMonth(period: string, delta: number): string {
@@ -38,7 +36,7 @@ function downloadCsv(name: string, header: string[], rows: (string | number)[][]
 
 export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: { canClose: boolean; collapsible?: boolean; defaultOpen?: boolean }) {
   const { t, lang } = useI18n();
-  const [period, setPeriod] = useState(currentPeriod());
+  const { period, setPeriod } = usePayrollWorkingPeriod();
   const [reg, setReg] = useState<PayrollRegister | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +56,13 @@ export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: {
   }
 
   async function close() {
+    const pastWarn = period !== calendarPeriod()
+      ? (lang === "en" ? `\n\nThis month (${frMonth(period)}) is NOT the current month (${frMonth(calendarPeriod())}).` : `\n\n⚠️ Ce mois (${frMonth(period)}) n'est PAS le mois en cours (${frMonth(calendarPeriod())}). La clôture portera bien sur ${frMonth(period)}.`)
+      : "";
+    const msg = lang === "en"
+      ? `Close and freeze the payroll of ${frMonth(period)}?${pastWarn}`
+      : `Clôturer définitivement la paie de ${frMonth(period)} ? Le journal sera figé.${pastWarn}`;
+    if (!window.confirm(msg)) return;
     setBusy(true);
     try {
       const r = await closePayrollPeriod(period);
@@ -104,6 +109,7 @@ export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: {
       collapsible={collapsible}
       defaultOpen={defaultOpen}
     >
+      <PayrollMonthBanner period={period} />
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
         <Field label={t("pay.period_field", "Période (AAAA-MM)")}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>

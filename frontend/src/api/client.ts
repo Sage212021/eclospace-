@@ -5673,6 +5673,13 @@ export function returnPayrollMonth(period: string, reason: string) {
 export function getPayrollMonth(period: string) {
   return request<PayrollMonth>(`/api/v1/payroll/monthly/${period}`);
 }
+// « Mois de travail » par défaut : le mois le plus récent encore ouvert
+// (brouillon / soumis DG), sinon le mois calendaire — pour que la finalisation
+// d'un mois faite le mois suivant ne s'impute pas au mauvais mois.
+export interface PayrollWorkingPeriod { period: string; calendar_month: string; is_past: boolean; open_status: string | null }
+export function getPayrollWorkingPeriod() {
+  return request<PayrollWorkingPeriod>("/api/v1/payroll/working-period");
+}
 
 // DIPE mensuel CNPS : colonnes exactes du formulaire de télédéclaration.
 export interface DipeRow {

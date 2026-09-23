@@ -930,6 +930,27 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
   // Étape 1 : préparer le mois pour tous les salariés (brouillon modifiable),
   // saisir les éléments variables par employé, recalcul du net en direct.
 
+  // « Mois de travail » : le RH finalise souvent la paie d'un mois AU DÉBUT du
+  // mois suivant (ex. août bouclé début septembre). Pour éviter d'imputer par
+  // erreur à septembre des éléments d'août, les écrans se calent par défaut sur
+  // le MOIS le plus récent ENCORE OUVERT (brouillon / soumis au DG, non validé),
+  // et non sur le mois calendaire. À défaut d'un mois ouvert, on prend le mois
+  // calendaire. L'imputation reste toujours faite sur le mois choisi.
+  fastify.get(
+    "/api/v1/payroll/working-period",
+    { preHandler: requirePermission("paie", "consultation") },
+    async (_request, reply) => {
+      const calendarMonth = new Date().toISOString().slice(0, 7);
+      const openRun = await prisma.payrollMonthlyRun.findFirst({
+        where: { status: { in: ["brouillon", "soumis_dg"] } },
+        orderBy: { periodKey: "desc" },
+        select: { periodKey: true, status: true },
+      });
+      const period = openRun?.periodKey ?? calendarMonth;
+      return reply.send({ period, calendar_month: calendarMonth, is_past: period !== calendarMonth, open_status: openRun?.status ?? null });
+    },
+  );
+
   // Prépare (ou récupère) le mois : une ligne par salarié doté d'une fiche paie.
   fastify.post(
     "/api/v1/payroll/monthly/:period/prepare",

@@ -1722,6 +1722,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks", "production"],
       departmentCodes: ["CORR", "DIRED", "SECR", "INFOG", "COMLEC"],
     },
+    {
+      slug: "2026-09-integration-texte-sans-section-couverture",
+      version: "2026.09",
+      title: "Nouveauté — Mes intégrations : l'intégrateur de texte ne voit plus la couverture",
+      body: "Correction d'affichage : sur la page « Mes intégrations de correction » de l'assistant / directeur éditorial (branche Texte), la section « Correction de la couverture (pour l'infographe) » s'affichait par erreur. Elle ne concerne pas l'intégrateur de texte : la couverture est pilotée par le correcteur et reçue par l'infographe dans sa propre branche « Couverture ». Désormais l'intégrateur de texte ne voit que le cycle du texte (version intégrée, version corrigée finale). Rien ne change pour le correcteur, qui garde la main sur la couverture.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["DIRED", "SECR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

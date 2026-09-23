@@ -165,7 +165,9 @@ export function MyIntegrations() {
                   {isCover ? (
                     <CoverReports manuscriptId={m.id} />
                   ) : (
-                    <CorrectionCyclePanel manuscriptId={m.id} canManage />
+                    /* Intégrateur TEXTE : on masque la section couverture
+                       (pilotée par le correcteur, reçue par l'infographe). */
+                    <CorrectionCyclePanel manuscriptId={m.id} canManage showCover={false} />
                   )}
                 </div>
               )}

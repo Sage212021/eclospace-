@@ -72,10 +72,15 @@ export function MyCorrections() {
     }
   }
 
+  // Une tâche « terminée/validée » mais dont la correction éditoriale n'est PAS
+  // clôturée (ouvrage encore à l'étape Correction : retours du cycle en attente,
+  // 2ᵉ relecture, VCF…) reste « En cours » et cliquable — on ne la range en
+  // « Terminées » qu'une fois la correction réellement close (demande opérateur).
+  const isDone = (t: MyCorrectionTask) => (t.status === "terminee" || t.status === "validee") && !t.correctionOpen;
   const buckets: { key: string; label: string; icon: string; match: (t: MyCorrectionTask) => boolean; empty: string }[] = [
     { key: "a_faire", label: "À faire", icon: "📝", match: (t) => t.status === "non_commencee", empty: "Aucune correction à démarrer." },
-    { key: "en_cours", label: "En cours", icon: "🔧", match: (t) => t.status === "en_cours" || t.status === "suspendue", empty: "Aucune correction en cours." },
-    { key: "terminees", label: "Terminées", icon: "✅", match: (t) => t.status === "terminee" || t.status === "validee", empty: "Aucune correction terminée." },
+    { key: "en_cours", label: "En cours", icon: "🔧", match: (t) => !isDone(t) && t.status !== "non_commencee", empty: "Aucune correction en cours." },
+    { key: "terminees", label: "Terminées", icon: "✅", match: (t) => isDone(t), empty: "Aucune correction terminée." },
   ];
 
   return (
@@ -191,6 +196,15 @@ function CorrectionCard({ task, onDepose, onRefresh, bookTypes, supports }: { ta
           </div>
         </div>
       </div>
+
+      {/* Tâche marquée terminée mais correction PAS encore clôturée (ouvrage
+          toujours à l'étape Correction) : on l'affiche en « En cours » et on
+          explique qu'il faut poursuivre le cycle. */}
+      {(task.status === "terminee" || task.status === "validee") && task.correctionOpen && (
+        <div style={{ marginTop: 8, background: "var(--amber-soft, #F6E7D2)", color: "#8A5A00", border: "1px solid #E7C98A", borderRadius: 8, padding: "8px 11px", fontSize: 12.5, lineHeight: 1.5 }}>
+          Correction marquée « terminée », mais le cycle n'est <strong>pas encore clôturé</strong> (retours d'intégration, 2ᵉ relecture ou version finale en attente). Poursuivez le travail ci-dessous — l'ouvrage rejoindra « Terminées » une fois la correction réellement close.
+        </div>
+      )}
 
       {/* ENTRÉE : le manuscrit à corriger. */}
       <div style={handoffRow}>

@@ -118,6 +118,14 @@ export function MyCorrections() {
 // corrigée finale). Toujours affiché pour que le correcteur les repère d'un coup
 // d'œil sans déplier l'assistance IA (D-069). N'affiche rien si aucun retour.
 const RETURN_KEYS = new Set(["integration_1", "integration_finale", "couverture_integration_1", "couverture_finale"]);
+// Phrase d'action : dit au correcteur quoi faire du retour reçu, sans ajouter de
+// bouton « valider » (la validation reste la 2ᵉ relecture puis la clôture de
+// l'étape). Choix opérateur : guider plutôt que multiplier les validations.
+function returnAction(key: string): string {
+  if (key === "integration_1") return "→ Lancez la 2ᵉ relecture (assistance IA) sur ce fichier.";
+  if (key === "couverture_integration_1") return "→ Lancez la 2ᵉ relecture de la couverture (assistance IA) sur ce fichier.";
+  return "→ Vérifiez ce fichier, puis validez l'étape Correction pour clôturer.";
+}
 function IntegrationReturns({ manuscriptId }: { manuscriptId: string }) {
   const [returns, setReturns] = useState<{ from: "texte" | "couverture"; p: CorrectionPhaseState }[]>([]);
   useEffect(() => {
@@ -149,6 +157,7 @@ function IntegrationReturns({ manuscriptId }: { manuscriptId: string }) {
             </span>
             <a href={stepAttachmentDownloadUrl(manuscriptId, p.version_id!)} download style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>⬇️ {p.label}</a>
             <span style={{ color: "var(--muted)" }}> — {p.filename ?? "fichier"}{p.uploaded_by_name ? ` · par ${p.uploaded_by_name}` : ""}{p.created_at ? ` · ${new Date(p.created_at).toLocaleDateString("fr-FR")}` : ""}</span>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--eclosion-dark, #9A7A12)", marginTop: 2 }}>{returnAction(p.key)}</div>
           </div>
         ))}
       </div>

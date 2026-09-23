@@ -1730,6 +1730,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks"],
       departmentCodes: ["DIRED", "SECR"],
     },
+    {
+      slug: "2026-09-correction-retours-phrase-action-corriger-depot",
+      version: "2026.09",
+      title: "Nouveauté — Correction : que faire du retour reçu + corriger un fichier déposé par erreur",
+      body: "Deux améliorations autour des retours d'intégration. (1) Côté correcteur (« Mes corrections »), dans l'encart « Retours reçus », chaque fichier renvoyé indique maintenant clairement l'étape suivante : « → Lancez la 2ᵉ relecture sur ce fichier » pour une version/couverture intégrée, ou « → Vérifiez, puis validez l'étape Correction pour clôturer » pour une version finale. Pas de nouveau bouton à cliquer : la validation reste la 2ᵉ relecture puis la clôture de l'étape. (2) Côté infographe (« Mes intégrations de correction », branche Couverture), si le mauvais fichier a été déposé, on peut désormais le RETIRER (en plus de le Remplacer) — comme le peuvent déjà l'intégrateur de texte et le correcteur. Seul l'auteur du dépôt (ou la direction) peut le faire, et rien n'est effacé définitivement (suppression logique).",
+      permissionModules: ["manuscripts", "tasks", "production"],
+      departmentCodes: ["CORR", "INFOG", "DIRED", "SECR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

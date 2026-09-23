@@ -1750,7 +1750,7 @@ async function main() {
       slug: "2026-09-mes-corrections-terminee-vs-en-cours",
       version: "2026.09",
       title: "Nouveauté — Mes corrections : une correction pas encore clôturée reste « En cours »",
-      body: "Dans « Mes corrections », un ouvrage dont la correction éditoriale N'EST PAS encore clôturée (l'ouvrage est toujours à l'étape Correction : retours d'intégration en attente, 2ᵉ relecture ou version finale à venir) ne passe plus dans « Terminées » même si vous avez cliqué « Marquer la correction terminée ». Il reste dans « En cours », cliquable, pour que vous puissiez poursuivre le cycle. Un bandeau vous le rappelle sur la tâche. L'ouvrage ne rejoint « Terminées » qu'une fois la correction réellement close (l'ouvrage a quitté l'étape Correction).",
+      body: "Dans « Mes corrections », un ouvrage dont la correction éditoriale N'EST PAS encore clôturée (étape Correction non validée : retours d'intégration en attente, 2ᵉ relecture ou version finale à venir) ne passe plus dans « Terminées » même si vous avez cliqué « Marquer la correction terminée » et même si l'ouvrage a avancé de statut. Il reste dans « En cours », cliquable, pour que vous puissiez poursuivre le cycle. Un bandeau vous le rappelle sur la tâche. L'ouvrage ne rejoint « Terminées » qu'une fois l'étape Correction réellement validée (clôturée).",
       permissionModules: ["tasks"],
       departmentCodes: ["CORR"],
     },

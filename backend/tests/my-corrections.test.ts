@@ -134,4 +134,29 @@ describe("Mes corrections — entrée/sortie du correcteur", () => {
     mine = res.json().find((t: { manuscript: { id: string } | null }) => t.manuscript?.id === m.id);
     expect(mine.correctionOpen).toBe(false); // range en « Terminées »
   });
+
+  it("correctionOpen : ouvrage avancé mais étape Correction NON validée → reste ouverte ; validée → close", async () => {
+    const u = `corr5_${rnd()}`;
+    const user = await createUserWithRole(u, "CORRECTEUR", PWD);
+    const cookie = await login(app, u);
+    const corrStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "CORRECTION" } });
+    const layout = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "MISE_EN_PAGE" } });
+    const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+    // L'ouvrage a AVANCÉ (statut Mise en page) mais garde une étape Correction NON validée.
+    const m = await prisma.manuscript.create({
+      data: { manuscriptNumber: `MS-STEP-${rnd()}`, title: `Étape ${rnd()}`, statusId: layout.id, ownerId: admin.id, origin: "soumission", language: "fr", receivedAt: new Date() },
+    });
+    const step = await prisma.manuscriptStep.create({ data: { manuscriptId: m.id, statusId: corrStatus.id, responsibleId: user.id } });
+    await prisma.task.create({ data: { manuscriptId: m.id, stepId: step.id, title: "Correction éditoriale", type: "correction", assigneeId: user.id, status: "terminee", progressPct: 100 } });
+
+    let res = await app.inject({ method: "GET", url: "/api/v1/my-corrections", headers: { cookie } });
+    let mine = res.json().find((t: { manuscript: { id: string } | null }) => t.manuscript?.id === m.id);
+    expect(mine.correctionOpen).toBe(true); // étape Correction non validée → encore ouverte
+
+    // Le correcteur valide l'étape Correction → clôture réelle.
+    await prisma.manuscriptStep.update({ where: { id: step.id }, data: { validatedAt: new Date(), validationBy: user.id } });
+    res = await app.inject({ method: "GET", url: "/api/v1/my-corrections", headers: { cookie } });
+    mine = res.json().find((t: { manuscript: { id: string } | null }) => t.manuscript?.id === m.id);
+    expect(mine.correctionOpen).toBe(false); // range en « Terminées »
+  });
 });

@@ -208,6 +208,19 @@ export default async function taskRoutes(fastify: FastifyInstance) {
       if (d.title === CORRECTED_DOC_TITLE) hasCorrected.add(d.entityId);
       else hasSource.add(d.entityId);
     }
+    // Correction encore OUVERTE (non clôturée) : le vrai repère est l'étape
+    // Correction NON VALIDÉE (validatedAt null). La clôture réelle = le correcteur
+    // valide l'étape Correction. Tant que ce n'est pas fait (retours d'intégration
+    // en attente, 2ᵉ relecture, VCF…), la tâche reste « En cours » — même si son
+    // statut a été marqué « terminée » et même si le manuscrit a avancé de statut.
+    // (On garde aussi « manuscrit au statut CORRECTION » par sécurité.)
+    const openSteps = manuscriptIds.length
+      ? await prisma.manuscriptStep.findMany({
+          where: { manuscriptId: { in: manuscriptIds }, validatedAt: null, status: { code: "CORRECTION" } },
+          select: { manuscriptId: true },
+        })
+      : [];
+    const correctionOpenSet = new Set(openSteps.map((s) => s.manuscriptId));
     return reply.send(
       tasks.map((t) => ({
         id: t.id,
@@ -219,11 +232,7 @@ export default async function taskRoutes(fastify: FastifyInstance) {
         manuscript: { id: t.manuscript.id, manuscriptNumber: t.manuscript.manuscriptNumber, title: t.manuscript.title },
         manuscriptHasFile: hasSource.has(t.manuscriptId),
         correctedHasFile: hasCorrected.has(t.manuscriptId),
-        // La correction éditoriale est encore OUVERTE tant que le manuscrit est à
-        // l'étape Correction (cycle non clôturé : retours d'intégration en attente,
-        // 2ᵉ relecture, VCF…). Une tâche marquée « terminée » mais dont l'ouvrage
-        // reste à cette étape doit rester « En cours », cliquable pour poursuivre.
-        correctionOpen: t.manuscript.status.code === "CORRECTION",
+        correctionOpen: correctionOpenSet.has(t.manuscriptId) || t.manuscript.status.code === "CORRECTION",
       })),
     );
   });

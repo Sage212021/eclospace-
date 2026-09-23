@@ -68,7 +68,8 @@ function extractDocxXml(buffer: Buffer): string | null {
   return null;
 }
 
-type ManuscriptInput = { kind: "text"; text: string } | { kind: "pdf"; base64: string };
+type PageImage = { base64: string; mediaType: "image/jpeg" };
+type ManuscriptInput = { kind: "text"; text: string } | { kind: "pdf"; base64: string } | { kind: "images"; images: PageImage[] };
 
 function isPdfBuffer(mime: string, buffer: Buffer): boolean {
   return mime === "application/pdf" || buffer.subarray(0, 5).toString("latin1") === "%PDF-";
@@ -98,6 +99,73 @@ export async function extractPdfText(buffer: Buffer, charBudget: number): Promis
     await doc.cleanup?.();
     const text = parts.join("\n\n").trim();
     return { text, pages: doc.numPages };
+  } catch {
+    return null;
+  }
+}
+
+// Extraction des IMAGES d'un PDF « image » (scanné, couverture haute définition)
+// pour les REDIMENSIONNER (jimp) et les envoyer à l'IA en VISION. Permet de faire
+// LIRE par l'IA un PDF-image trop LOURD pour être transmis tel quel (au-delà de la
+// limite d'API ≈ 32 Mo) : une couverture 300 dpi de 30 Mo devient un JPEG léger et
+// lisible. Aucune dépendance nouvelle (pdfjs-dist + jimp déjà présents ; pas de
+// rendu canvas : on lit directement les objets image du PDF). Renvoie null si rien
+// d'exploitable (on retombe alors sur le refus explicite). Best-effort, jamais bloquant.
+export async function extractPdfImages(buffer: Buffer, opts?: { maxPages?: number; maxDim?: number }): Promise<PageImage[] | null> {
+  const maxPages = opts?.maxPages ?? 30;
+  const maxDim = opts?.maxDim ?? 1600; // dimension max conseillée pour la vision
+  try {
+    const { Jimp } = await import("jimp");
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer), isEvalSupported: false, useSystemFonts: true, disableFontFace: true }).promise;
+    const pageCount = Math.min(doc.numPages, maxPages);
+    const out: PageImage[] = [];
+    for (let p = 1; p <= pageCount; p++) {
+      const page = await doc.getPage(p);
+      const ops = await page.getOperatorList();
+      // Objet image le PLUS GRAND de la page (une couverture = une grande image).
+      let best: { width: number; height: number; kind: number; data: Uint8ClampedArray | Uint8Array } | null = null;
+      for (let i = 0; i < ops.fnArray.length; i++) {
+        const fn = ops.fnArray[i];
+        const isXObject = fn === pdfjs.OPS.paintImageXObject;
+        const isInline = fn === pdfjs.OPS.paintInlineImageXObject;
+        if (!isXObject && !isInline) continue;
+        try {
+          const arg = ops.argsArray[i][0];
+          const img: unknown = isInline ? arg : await new Promise((res) => { try { page.objs.get(arg as string, res); } catch { res(null); } });
+          const o = img as { width?: number; height?: number; kind?: number; data?: Uint8ClampedArray | Uint8Array } | null;
+          if (o && o.width && o.height && o.data && (o.kind === 1 || o.kind === 2 || o.kind === 3)) {
+            if (!best || o.width * o.height > best.width * best.height) best = { width: o.width, height: o.height, kind: o.kind, data: o.data };
+          }
+        } catch { /* image illisible : on ignore */ }
+      }
+      if (!best) continue;
+      // Conversion vers RGBA (attendu par jimp). kind pdfjs : 1=gris 1 bit, 2=RGB, 3=RGBA.
+      const { width, height, kind, data } = best;
+      const rgba = Buffer.alloc(width * height * 4);
+      if (kind === 3) {
+        for (let k = 0; k < width * height * 4; k++) rgba[k] = data[k] ?? 0;
+      } else if (kind === 2) {
+        for (let s = 0, d = 0; d < rgba.length; s += 3, d += 4) { rgba[d] = data[s]; rgba[d + 1] = data[s + 1]; rgba[d + 2] = data[s + 2]; rgba[d + 3] = 255; }
+      } else {
+        // 1 bit par pixel (bitonal), lignes alignées à l'octet.
+        const stride = Math.ceil(width / 8);
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const bit = (data[y * stride + (x >> 3)] >> (7 - (x & 7))) & 1;
+            const v = bit ? 255 : 0;
+            const d = (y * width + x) * 4;
+            rgba[d] = rgba[d + 1] = rgba[d + 2] = v; rgba[d + 3] = 255;
+          }
+        }
+      }
+      const image = new Jimp({ width, height, data: rgba });
+      if (Math.max(width, height) > maxDim) image.scaleToFit({ w: maxDim, h: maxDim });
+      const jpeg = await image.getBuffer("image/jpeg");
+      out.push({ base64: Buffer.from(jpeg).toString("base64"), mediaType: "image/jpeg" });
+    }
+    await doc.cleanup?.();
+    return out.length > 0 ? out : null;
   } catch {
     return null;
   }
@@ -637,24 +705,33 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         // page ≈ 1 500–2 000 tokens en vision). Au-delà d'un seuil prudent, on
         // refuse PROPREMENT avec un message clair plutôt qu'une erreur brute 400.
         const pages = extracted?.pages ?? Math.ceil(buffer.length / 120_000); // ~120 Ko/page à défaut
-        const tooManyPages = pages > 80;
-        const tooHeavy = buffer.length > 24 * 1024 * 1024;
-        if (tooManyPages || tooHeavy) {
-          // Message CLAIR selon la vraie cause : trop de pages OU fichier trop
-          // lourd (octets). On n'affiche plus « 1 pages … trop volumineux »
-          // (contradictoire) : un fichier d'une page peut être refusé pour son
-          // POIDS, pas pour son nombre de pages. « Fichier » (et non « manuscrit »)
-          // car cela vaut aussi pour une couverture.
-          const sizeMo = (buffer.length / (1024 * 1024)).toFixed(1);
-          const reason = tooManyPages
-            ? `il compte ${pages} pages, trop pour l'analyse directe par l'IA`
-            : `il est trop lourd (${sizeMo} Mo) pour l'analyse directe par l'IA`;
-          throw new AiRunError(
-            "manuscript_too_large",
-            `Ce fichier est un PDF « image » (texte non sélectionnable) : ${reason}. Fournissez une version texte (.docx) ou un PDF dont le texte est sélectionnable (ou une image plus légère pour une couverture), puis relancez.`,
-          );
+        const tooHeavy = buffer.length > 24 * 1024 * 1024; // au-delà, le PDF brut dépasse la limite d'API (base64 ≈ 32 Mo)
+        const IMAGE_PAGE_CAP = 30; // au-delà, trop d'images pour la vision → on préfère demander du texte
+        if (tooHeavy || pages > 80) {
+          // Le PDF brut est trop lourd/long pour être transmis tel quel. Plutôt que
+          // de refuser d'emblée, on tente de FAIRE LIRE le document par l'IA en le
+          // convertissant en IMAGES redimensionnées (vision) — idéal pour une
+          // couverture haute définition. On ne le fait que si le nombre de pages
+          // reste raisonnable (sinon trop de jetons vision).
+          const images = pages <= IMAGE_PAGE_CAP ? await extractPdfImages(buffer, { maxPages: IMAGE_PAGE_CAP, maxDim: 1600 }) : null;
+          if (images && images.length > 0) {
+            prepared = { kind: "images", images };
+          } else {
+            // Impossible de convertir : message CLAIR selon la vraie cause (trop de
+            // pages OU fichier trop lourd). On n'affiche plus « 1 pages … trop
+            // volumineux » (contradictoire). « Fichier » vaut aussi pour une couverture.
+            const sizeMo = (buffer.length / (1024 * 1024)).toFixed(1);
+            const reason = pages > IMAGE_PAGE_CAP
+              ? `il compte ${pages} pages, trop pour l'analyse directe par l'IA`
+              : `il est trop lourd (${sizeMo} Mo) et n'a pas pu être converti pour l'IA`;
+            throw new AiRunError(
+              "manuscript_too_large",
+              `Ce fichier est un PDF « image » (texte non sélectionnable) : ${reason}. Fournissez une version texte (.docx) ou un PDF dont le texte est sélectionnable (ou une image plus légère pour une couverture), puis relancez.`,
+            );
+          }
+        } else {
+          prepared = { kind: "pdf", base64: buffer.toString("base64") };
         }
-        prepared = { kind: "pdf", base64: buffer.toString("base64") };
       }
     } else {
       prepared = prepareManuscript(version.mimeType, `f${version.versionNumber}`, buffer);
@@ -666,7 +743,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
 
     const capped = prepared.kind === "text" ? capManuscriptText(prepared.text) : { text: "", truncated: false };
     let userText = fillTemplate(prompt.userTemplate, {
-      manuscrit: prepared.kind === "text" ? capped.text : "(le manuscrit est joint en PDF ci-dessous)",
+      manuscrit: prepared.kind === "text" ? capped.text : prepared.kind === "images" ? "(le document est joint sous forme d'images ci-dessus — analyse-les visuellement)" : "(le manuscrit est joint en PDF ci-dessous)",
       domaines_collections: await domainesCollectionsText(),
       titre: manuscript.title,
       auteur: authorName,
@@ -746,7 +823,13 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
             { type: "document", source: { type: "base64", media_type: "application/pdf", data: prepared.base64 } },
             { type: "text", text: userText },
           ]
-        : userText;
+        : prepared.kind === "images"
+          ? [
+              // PDF « image » lourd converti en pages redimensionnées (vision).
+              ...prepared.images.map((im) => ({ type: "image" as const, source: { type: "base64" as const, media_type: im.mediaType, data: im.base64 } })),
+              { type: "text", text: userText },
+            ]
+          : userText;
 
     // Structure imposée : on TRANSMET réellement à l'IA la liste des rubriques du
     // gabarit (reportTemplate.sections). Sans cela, la règle d'or « tu remplis

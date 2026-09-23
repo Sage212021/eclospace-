@@ -1779,10 +1779,10 @@ async function main() {
       departmentCodes: ["COMLEC", "DIRED", "SECR"],
     },
     {
-      slug: "2026-09-ia-message-pdf-image-clair",
+      slug: "2026-09-ia-lit-pdf-image-lourd",
       version: "2026.09",
-      title: "Nouveauté — Assistance IA : message plus clair pour les PDF « image »",
-      body: "Quand un fichier envoyé à l'assistance IA est un PDF « image » (texte non sélectionnable) que l'IA ne peut pas analyser directement, le message d'erreur était trompeur (il pouvait afficher « 1 pages … trop volumineux », ce qui n'avait pas de sens). Désormais le message indique la vraie cause : soit trop de pages, soit un fichier trop lourd (avec sa taille en Mo). Il parle de « fichier » (valable aussi pour une couverture) et rappelle la solution : fournir une version texte (.docx), un PDF au texte sélectionnable, ou une image plus légère pour une couverture.",
+      title: "Nouveauté — Assistance IA : elle lit maintenant les PDF « image » lourds (couvertures)",
+      body: "Avant, un PDF « image » (texte non sélectionnable) trop lourd — typiquement une couverture haute définition — était REFUSÉ par l'assistance IA (message parfois trompeur du genre « 1 pages… trop volumineux »). Désormais, au lieu de refuser, le système convertit automatiquement ces pages en images allégées et les fait LIRE à l'IA (analyse visuelle) : la relecture de couverture fonctionne même avec un fichier de plusieurs dizaines de Mo. Le refus n'arrive plus qu'en dernier recours (document illisible ou trop de pages), avec un message clair indiquant la vraie cause et la solution (fournir un .docx, un PDF au texte sélectionnable, ou un fichier plus léger).",
       permissionModules: ["tasks", "production"],
       departmentCodes: ["CORR", "INFOG", "DIRED", "SECR", "COMLEC"],
     },

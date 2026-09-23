@@ -1714,6 +1714,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks", "production"],
       departmentCodes: ["CORR", "DIRED", "SECR", "INFOG", "COMLEC"],
     },
+    {
+      slug: "2026-09-correction-couverture-aller-retour-infographe",
+      version: "2026.09",
+      title: "Nouveauté — Correction : l'aller-retour complet de la couverture avec l'infographe",
+      body: "La couverture suit maintenant le même circuit aller-retour que le texte. (1) L'infographe, dans « Mes intégrations de correction » (branche Couverture), ne fait plus que télécharger les rapports : il DÉPOSE en retour sa « couverture intégrée » puis la « couverture corrigée finale ». (2) Ce retour arrive aussitôt chez le correcteur, dans « Mes corrections », en haut de la tâche, dans un encart « Retours reçus » (toujours visible, sans avoir à déplier l'assistance IA) — avec aussi la version intégrée du texte renvoyée par l'intégrateur. (3) La 2ᵉ relecture IA de couverture repart automatiquement de la couverture intégrée par l'infographe (et non des fichiers d'origine), exactement comme la 2ᵉ relecture du texte repart de la version intégrée. Chaque dépôt prévient l'autre par une notification. Bref : correcteur → infographe → correcteur, jusqu'à la couverture finale.",
+      permissionModules: ["manuscripts", "tasks", "production"],
+      departmentCodes: ["CORR", "DIRED", "SECR", "INFOG", "COMLEC"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

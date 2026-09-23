@@ -32,9 +32,16 @@ export const CORRECTION_PHASES: (CorrectionPhase & { actor: CorrectionActor })[]
 // l'INFOGRAPHE qui les exploite (cf. « Mes intégrations de correction »).
 export const COVER_CORRECTION_PHASES: CorrectionPhase[] = [
   { key: "couverture_1", label: "Rapport de correction — couverture (1ʳᵉ · dos · 4ᵉ)", required: false },
+  { key: "couverture_integration_1", label: "Retour intégration infographie (couverture BAT2)", required: false },
   { key: "couverture_2", label: "Rapport de correction — couverture (2ᵉ relecture)", required: false },
   { key: "couverture_finale", label: "Couverture corrigée finale", required: false },
 ];
+// Phases de couverture DÉPOSÉES PAR L'INFOGRAPHE (retour vers le correcteur),
+// par opposition aux rapports déposés par le correcteur.
+const COVER_INTEGRATION_KEYS = new Set(["couverture_integration_1", "couverture_finale"]);
+export function isCoverIntegrationDeposit(key: string): boolean {
+  return COVER_INTEGRATION_KEYS.has(key);
+}
 
 const PHASE_KEYS = new Set(CORRECTION_PHASES.map((p) => p.key));
 const COVER_PHASE_KEYS = new Set(COVER_CORRECTION_PHASES.map((p) => p.key));

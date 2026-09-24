@@ -1770,6 +1770,22 @@ async function main() {
       permissionModules: ["commercial"],
       departmentCodes: ["COM"],
     },
+    {
+      slug: "2026-09-eval-recommandation-choix-exclusif",
+      version: "2026.09",
+      title: "Nouveauté — Rapport d'évaluation : recommandation prédéfinie OU personnalisée",
+      body: "Dans le rapport d'évaluation, la recommandation est désormais un CHOIX EXCLUSIF : soit une recommandation prédéfinie (dans la liste), soit une recommandation personnalisée en texte libre — jamais les deux. Concrètement : choisissez « ✍️ Recommandation personnalisée » dans la liste pour activer le champ libre ; tant qu'une recommandation prédéfinie est choisie, le champ libre est grisé (désactivé) et son contenu ignoré. Un garde-fou empêche d'enregistrer les deux en même temps, même en cas de contournement. Le rapport et le bulletin affichent la bonne recommandation (le texte personnalisé quand c'est le mode choisi).",
+      permissionModules: ["comite_lecture"],
+      departmentCodes: ["COMLEC", "DIRED", "SECR"],
+    },
+    {
+      slug: "2026-09-ia-lit-pdf-image-lourd",
+      version: "2026.09",
+      title: "Nouveauté — Assistance IA : elle lit maintenant les PDF « image » lourds (couvertures)",
+      body: "Avant, un PDF « image » (texte non sélectionnable) trop lourd — typiquement une couverture haute définition — était REFUSÉ par l'assistance IA (message parfois trompeur du genre « 1 pages… trop volumineux »). Désormais, au lieu de refuser, le système convertit automatiquement ces pages en images allégées et les fait LIRE à l'IA (analyse visuelle) : la relecture de couverture fonctionne même avec un fichier de plusieurs dizaines de Mo. Le refus n'arrive plus qu'en dernier recours (document illisible ou trop de pages), avec un message clair indiquant la vraie cause et la solution (fournir un .docx, un PDF au texte sélectionnable, ou un fichier plus léger).",
+      permissionModules: ["tasks", "production"],
+      departmentCodes: ["CORR", "INFOG", "DIRED", "SECR", "COMLEC"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

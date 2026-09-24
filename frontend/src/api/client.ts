@@ -995,7 +995,7 @@ export function submitEvaluation(
   input: {
     scores: { criterion_id: string; score: number; comment?: string }[];
     overall_comment?: string;
-    recommendation: "accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject" | "reject_encourage";
+    recommendation: "accept" | "accept_minor" | "accept_major" | "rewrite" | "new_expertise" | "reject" | "reject_encourage" | "personnalisee";
     recommendation_note?: string;
     reviewer_name?: string;
     conflict_declaration?: { has_conflict: boolean; details?: string };

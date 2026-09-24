@@ -12,6 +12,7 @@ export function buildReadingReport(a: ReadingAssignment): ReadingReportData {
     readerName: a.reader?.username ?? "—",
     submittedAt: e.submittedAt,
     recommendation: e.recommendation,
+    recommendationNote: e.recommendationNote ?? null,
     globalScore: Number(e.globalScore),
     // Remise en forme des textes collés « à plat » (retours à la ligne perdus,
     // phrases/intertitres soudés) — sans effet sur un texte déjà propre.

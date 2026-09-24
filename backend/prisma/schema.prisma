@@ -2262,6 +2262,9 @@ enum EvaluationRecommendation {
   reject
   // Refus, mais l'auteur est explicitement encouragé à retravailler et resoumettre.
   reject_encourage
+  // Recommandation PERSONNALISÉE (texte libre) : exclusive des prédéfinies. Le
+  // texte est porté par `recommendationNote`. Choix « prédéfinie OU personnalisée ».
+  personnalisee
 }
 
 // Excellent / Très bon / Bon / À retravailler / Refusé (Ch. 7 §7.5).

@@ -4,7 +4,7 @@ import {
   controlAuthorReceipt, accountAuthorReceipt, getAuthorReceiptStats, cancelAuthorReceipt, getAuthorReceiptAlerts,
   type AuthorReceiptRow, type AuthorReceiptDetail, type AuthorReceiptType, type ReceiptManuscriptOption, type AuthorReceiptStats, type AuthorReceiptAlert,
 } from "../api/client";
-import { printAuthorReceipt } from "../lib/print";
+import { printAuthorReceipt, printReceiptsGuide } from "../lib/print";
 import { Card } from "../components/Card";
 import { Button } from "../components/Button";
 import { Modal, Field } from "../components/Modal";
@@ -70,7 +70,10 @@ export function AuthorReceiptsPage({ canCreate = false, canValidate = false, fin
 
   return (
     <div className="ecl-page" style={{ maxWidth: 1100 }}>
-      <h1 className="ecl-page__title">{financeView ? "Encaissements éditoriaux" : "Paiements auteurs & Reçus"}</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <h1 className="ecl-page__title">{financeView ? "Encaissements éditoriaux" : "Paiements auteurs & Reçus"}</h1>
+        <Button variant="subtle" size="sm" onClick={() => printReceiptsGuide()}>📄 Mode d'emploi</Button>
+      </div>
       <p className="ecl-page__lead">
         {financeView
           ? "Les reçus enregistrés par l'éditorial, visibles ici sans ressaisie : à contrôler, rapprocher et intégrer en comptabilité."

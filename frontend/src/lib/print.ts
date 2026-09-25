@@ -2203,7 +2203,8 @@ export function printAuthorReceipt(r: AuthorReceiptDetail, opts?: PrintOpts): vo
         <div style="font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#6b7280">${tr("Enregistré / émis par", "Recorded / issued by")}</div>
         <div style="font-size:12.5px; margin-top:2px">${genLine}</div>
         <div style="font-size:11px; color:#6b7280">${tr("Le", "On")} ${genAt}</div>
-        <div style="border-top:1px solid #0b0b0c; margin-top:34px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature / cachet", "Signature / stamp")}</div>
+        <div style="font-size:11.5px; font-weight:700; margin-top:28px">${tr("Pour", "For")} Éclosion Édition Sarl</div>
+        <div style="border-top:1px solid #0b0b0c; margin-top:30px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature et cachet", "Signature and stamp")}</div>
       </div>
       <div style="flex:1; min-width:220px">
         <div style="font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#6b7280">${tr("L'auteur", "The author")}</div>
@@ -2214,4 +2215,84 @@ export function printAuthorReceipt(r: AuthorReceiptDetail, opts?: PrintOpts): vo
     <div style="margin-top:16px; font-size:10px; color:#9ca3af">${tr("Référence de l'opération dans l'ERP", "Operation reference in the ERP")} : ${escapeHtml(r.receipt_number)} · ${escapeHtml(r.id)}</div>
   `;
   openPrintWindow(`${tr("Reçu", "Receipt")} ${r.receipt_number}`, body, opts);
+}
+
+// Mode d'emploi imprimable de la rubrique « Paiements auteurs & Reçus » : lexique
+// + pas-à-pas, aux couleurs Éclosion, accessible à tous depuis la rubrique.
+// Aucune donnée dynamique : c'est un document d'aide, imprimable / téléchargeable.
+export function printReceiptsGuide(opts?: PrintOpts): void {
+  const gold = "#D9B21A";
+  const h2 = (t: string) => `<h2 style="font-family:Georgia,serif; font-size:15px; margin:20px 0 6px; padding-bottom:4px; border-bottom:2px solid ${gold}">${t}</h2>`;
+  const term = (t: string, d: string) => `<div style="margin:6px 0"><b>${t}</b> — <span style="color:#374151">${d}</span></div>`;
+  const step = (n: number, t: string) => `<div style="display:flex; gap:10px; margin:6px 0; align-items:flex-start"><div style="flex:0 0 22px; height:22px; border-radius:50%; background:#0b0b0c; color:#fff; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center">${n}</div><div style="font-size:12.5px; padding-top:1px">${t}</div></div>`;
+  const chip = (t: string, color: string) => `<span style="display:inline-block; border:1px solid ${color}; color:${color}; border-radius:999px; padding:0 8px; font-size:11px; font-weight:700; white-space:nowrap">${t}</span>`;
+
+  const body = `
+    <div style="border-top:2px solid ${gold}; padding-top:10px">
+      <div style="font-family:Georgia,serif; font-size:24px; font-weight:700">Mode d'emploi — Paiements auteurs &amp; Reçus</div>
+      <div style="font-size:12.5px; color:#6b7280; margin-top:3px">Comment enregistrer un paiement d'auteur, émettre son reçu et le suivre jusqu'à la comptabilité. Fiche destinée aux pôles Éditorial, Secrétariat et Finance.</div>
+    </div>
+
+    <div style="margin-top:14px; background:#FAF8F2; border:1px solid #E7E1D2; border-radius:8px; padding:11px 13px; font-size:12.5px">
+      <b>Le principe à retenir :</b> un paiement = <b>une seule opération</b> = <b>un seul reçu</b>.
+      L'éditorial enregistre le paiement une fois ; la Finance voit aussitôt la même opération (aucune double saisie).
+      Le reçu est le <b>justificatif</b>, avec un numéro unique (REC-2026-000001) et la trace de qui a fait quoi.
+    </div>
+
+    ${h2("À quoi sert chaque zone de l'écran")}
+    ${term("Bouton « + Enregistrer un paiement / Émettre un reçu »", "c'est LÀ qu'on saisit un reçu : il ouvre le formulaire. C'est la seule action qui crée un reçu.")}
+    ${term("« Du … Au … »", "filtre de <b>dates</b> : n'affiche que les reçus payés entre deux dates. Laisser vide = tout afficher. Ne sert pas à saisir.")}
+    ${term("« Type » / « Statut »", "filtres : n'afficher que les frais de dépôt ou les prestations ; ou que les reçus d'un certain statut.")}
+    ${term("« Recherche »", "retrouve un reçu par n° de reçu, auteur, manuscrit, référence de transaction, prestation ou référence comptable.")}
+    ${term("« Filtrer »", "applique les filtres/recherche choisis à la liste.")}
+    ${term("Clic sur un auteur / un manuscrit dans la liste", "affiche tout son historique de reçus (tous les paiements le concernant).")}
+
+    ${h2("Le vocabulaire (lexique)")}
+    ${term("Frais de dépôt", "somme versée par l'auteur au dépôt de son manuscrit, pour son évaluation. Reçu direct, sans facture.")}
+    ${term("Prestation éditoriale", "paiement d'un service rendu à l'auteur (correction, réécriture, expertise…). Le libellé de la prestation est obligatoire.")}
+    ${term("Mode de paiement", "comment l'argent a été reçu (espèces, Mobile Money, virement…).")}
+    ${term("Référence de transaction", "l'identifiant du paiement chez l'opérateur (n° Mobile Money, n° de virement). Facultatif mais recommandé.")}
+    ${term("Référence comptable", "repère donné par la Finance au moment de l'intégration en comptabilité (n° de pièce, lot d'export). Facultatif.")}
+    ${term("NIU", "numéro d'identifiant unique fiscal de l'auteur. Utile sur les prestations (pièce fiscalement complète).")}
+    ${term("Reçu de remplacement", "en cas d'erreur, nouveau reçu qui recopie et corrige un reçu annulé ; les deux restent reliés.")}
+    ${term("Doublon", "deux reçus qui se ressemblent trop (même auteur, montant, à quelques jours) : signalé, jamais bloqué.")}
+
+    ${h2("Les statuts d'un reçu")}
+    <div style="font-size:12.5px; line-height:2">
+      ${chip("Enregistré", "#B87400")} le reçu vient d'être créé (éditorial). &nbsp;
+      ${chip("Contrôlé", "#2F7D4A")} la Finance a vérifié le paiement. &nbsp;
+      ${chip("Comptabilisé", "#2F7D4A")} intégré en comptabilité (définitif). &nbsp;
+      ${chip("Annulé", "#B23A2E")} annulé avec motif (jamais supprimé).
+    </div>
+
+    ${h2("Enregistrer un paiement et émettre le reçu (Éditorial / Secrétariat)")}
+    ${step(1, "Cliquez sur le bouton jaune « + Enregistrer un paiement / Émettre un reçu ».")}
+    ${step(2, "Cherchez le <b>manuscrit</b> concerné : l'auteur se remplit automatiquement.")}
+    ${step(3, "Choisissez le <b>type</b> (frais de dépôt ou prestation). Pour une prestation, précisez laquelle.")}
+    ${step(4, "Saisissez le <b>montant</b>, le <b>mode de paiement</b> et la <b>date</b> réelle du paiement. Ajoutez la référence de transaction si vous l'avez.")}
+    ${step(5, "Validez : le reçu apparaît dans la liste (et côté Finance), avec son numéro. Vous pouvez l'<b>imprimer / enregistrer en PDF</b>.")}
+
+    ${h2("Le circuit Finance (Finance)")}
+    ${step(1, "Ouvrez un reçu « Enregistré » et vérifiez le paiement (montant, mode, référence).")}
+    ${step(2, "Cliquez « <b>Marquer contrôlé</b> » → le reçu passe « Contrôlé ».")}
+    ${step(3, "Cliquez « <b>Intégrer en comptabilité</b> » (référence comptable facultative) → « Comptabilisé ». On ne peut pas comptabiliser sans avoir d'abord contrôlé.")}
+
+    ${h2("Corriger une erreur : annuler & remplacer (Finance)")}
+    ${step(1, "Ouvrez le reçu erroné, cliquez « Annuler le reçu… », saisissez un <b>motif</b> (obligatoire).")}
+    ${step(2, "Cochez « <b>Émettre un reçu de remplacement</b> » si vous voulez ré-émettre corrigé : un nouveau reçu est créé, relié à l'ancien.")}
+    ${step(3, "Le reçu n'est jamais supprimé : il reste « Annulé » avec le motif. Un reçu déjà comptabilisé ne s'annule pas ici (régularisation comptable).")}
+
+    ${h2("Les points à vérifier (alertes)")}
+    <div style="font-size:12.5px">En haut de la page, un bandeau signale — <b>sans rien bloquer</b> — les doublons possibles, les frais de dépôt en double sur un manuscrit et les NIU manquants sur une prestation. C'est une aide : à vous de vérifier et de corriger si besoin.</div>
+
+    ${h2("Qui peut faire quoi")}
+    ${term("Éditorial / Secrétariat", "consulter et enregistrer des reçus.")}
+    ${term("Finance (comptable, responsable)", "en plus : contrôler, intégrer en comptabilité, annuler / remplacer.")}
+    ${term("Direction générale", "tout consulter et valider.")}
+
+    <div style="margin-top:20px; font-size:11.5px; color:#6b7280; border-top:1px solid #e7e2d4; padding-top:8px">
+      Astuce : ce mode d'emploi est accessible à tout moment depuis le bouton « Mode d'emploi » de la rubrique, et s'imprime ou s'enregistre en PDF.
+    </div>
+  `;
+  openPrintWindow("Mode d'emploi — Paiements auteurs & Reçus", body, opts);
 }

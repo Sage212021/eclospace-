@@ -1828,6 +1828,22 @@ async function main() {
       permissionModules: ["paiements_auteurs"],
       departmentCodes: ["FIN", "DIRED", "SECR"],
     },
+    {
+      slug: "2026-09-recu-signature-cachet-eclosion",
+      version: "2026.09",
+      title: "Nouveauté — Reçu auteur : emplacement « signature et cachet » Éclosion",
+      body: "Le reçu de paiement imprimé/PDF porte désormais clairement, en bas à gauche du recto, la mention « Pour Éclosion Édition Sarl » avec sa ligne « Signature et cachet » — l'endroit réservé au visa et au tampon de la maison. À droite, l'espace « L'auteur — Reçu, signature » reste pour l'auteur. Rien à faire de votre côté : c'est automatique à l'impression.",
+      permissionModules: ["paiements_auteurs"],
+      departmentCodes: ["FIN", "DIRED", "SECR"],
+    },
+    {
+      slug: "2026-09-paiements-auteurs-mode-emploi",
+      version: "2026.09",
+      title: "Nouveauté — Paiements auteurs & Reçus : mode d'emploi + lexique",
+      body: "Pour bien exploiter la rubrique « Paiements auteurs & Reçus », un mode d'emploi complet est désormais disponible : cliquez sur le bouton « Mode d'emploi » en haut de la rubrique — il s'ouvre, s'imprime et s'enregistre en PDF. Le voici en résumé. LE PRINCIPE : un paiement = une seule opération = un seul reçu ; l'éditorial enregistre, la Finance voit aussitôt la même donnée (aucune double saisie). LES ZONES DE L'ÉCRAN : le bouton jaune « + Enregistrer un paiement / Émettre un reçu » est le SEUL qui crée un reçu (il ouvre le formulaire) ; « Du … Au … » est un filtre de DATES (n'affiche que les reçus d'une période, ne sert pas à saisir) ; « Type / Statut / Recherche / Filtrer » servent à retrouver des reçus ; cliquer sur un auteur ou un manuscrit montre tout son historique. LE VOCABULAIRE : frais de dépôt = versé au dépôt du manuscrit pour son évaluation ; prestation éditoriale = service rendu (correction, réécriture…) avec libellé obligatoire ; mode de paiement = espèces/Mobile Money/virement ; référence de transaction = n° chez l'opérateur ; référence comptable = repère donné par la Finance à l'intégration ; NIU = identifiant fiscal de l'auteur ; reçu de remplacement = nouveau reçu qui corrige un reçu annulé (les deux restent reliés) ; doublon = reçus trop semblables, signalés sans blocage. LES STATUTS : Enregistré (créé) → Contrôlé (vérifié par la Finance) → Comptabilisé (définitif) ; Annulé (avec motif, jamais supprimé). QUI FAIT QUOI : Éditorial/Secrétariat consultent et enregistrent ; la Finance contrôle, comptabilise, annule/remplace ; la Direction générale consulte et valide tout.",
+      permissionModules: ["paiements_auteurs"],
+      departmentCodes: ["FIN", "DIRED", "SECR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

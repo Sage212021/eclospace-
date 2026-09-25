@@ -1786,6 +1786,14 @@ async function main() {
       permissionModules: ["tasks", "production"],
       departmentCodes: ["CORR", "INFOG", "DIRED", "SECR", "COMLEC"],
     },
+    {
+      slug: "2026-09-integrations-badge-reste-fichier-final",
+      version: "2026.09",
+      title: "Nouveauté — Mes intégrations : le badge ne dit plus « tout intégré » tant que le fichier final manque",
+      body: "Clarification pour éviter une confusion. Dans « Mes intégrations de correction », le badge vert « tout intégré ✅ » signifiait seulement « toutes les corrections cochées », même si la version finale (VCF / couverture corrigée finale) n'était pas encore déposée — on pouvait croire à tort que le travail était terminé. Désormais : tant que le fichier final n'est pas déposé, le badge affiche « reste le fichier final » (ambre) ; il ne passe au vert « prêt à clore ✅ » qu'une fois le fichier final déposé. Le bouton « Clore mon intégration » reste, comme avant, bloqué (cadenas 🔒) tant que le fichier final n'est pas là — la clôture était déjà impossible sans lui, c'est juste plus lisible maintenant.",
+      permissionModules: ["manuscripts", "tasks", "production"],
+      departmentCodes: ["DIRED", "SECR", "INFOG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

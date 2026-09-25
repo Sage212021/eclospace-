@@ -179,15 +179,28 @@ export function MyIntegrations() {
           {inHistory ? (
             <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--muted)" }}>Clos le {m.closed_at ? new Date(m.closed_at).toLocaleDateString("fr-FR") : ""}</span>
           ) : (
-            <span
-              style={{
-                marginLeft: "auto", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "2px 10px",
-                background: restant > 0 ? "var(--amber-soft, #F6E7D2)" : "var(--eclosion-soft)",
-                color: restant > 0 ? "#B87400" : "#2F7D4A",
-              }}
-            >
-              {m.counts.total === 0 ? "aucune correction retenue" : restant > 0 ? `${restant} à intégrer` : "tout intégré ✅"}
-            </span>
+            (() => {
+              // Badge HONNÊTE : « tout intégré » (vert) ne s'affiche QUE si le fichier
+              // final est déposé (prêt à clore). Corrections toutes cochées mais fichier
+              // final manquant → « reste le fichier final » (ambre), pour ne pas laisser
+              // croire que le travail est terminé alors qu'il reste à déposer la VCF /
+              // couverture finale (remontée opérateur).
+              const done = m.counts.total > 0 && restant === 0;
+              const ready = done && m.can_close;
+              const amber = restant > 0 || (done && !m.can_close);
+              const label = m.counts.total === 0 ? "aucune correction retenue" : restant > 0 ? `${restant} à intégrer` : m.can_close ? "prêt à clore ✅" : "reste le fichier final";
+              return (
+                <span
+                  style={{
+                    marginLeft: "auto", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "2px 10px",
+                    background: ready ? "var(--eclosion-soft)" : amber ? "var(--amber-soft, #F6E7D2)" : "var(--paper, #FAF8F2)",
+                    color: ready ? "#2F7D4A" : amber ? "#B87400" : "var(--muted)",
+                  }}
+                >
+                  {label}
+                </span>
+              );
+            })()
           )}
         </button>
         {open && (
@@ -216,8 +229,8 @@ export function MyIntegrations() {
                   <span style={{ fontSize: 12, color: "var(--muted)" }}>
                     {m.can_close ? "Travail terminé ? Clôturez pour ranger cet ouvrage dans l'historique." : `Clôture possible une fois le fichier final déposé (${isCover ? "couverture corrigée finale" : "version corrigée finale (VCF)"}).`}
                   </span>
-                  <button onClick={() => toggleClosure(m, true)} disabled={busy || !m.can_close} title={m.can_close ? "" : "Déposez d'abord le fichier final."} style={{ marginLeft: "auto", fontWeight: 700, color: m.can_close ? "#fff" : "var(--muted)", background: m.can_close ? "var(--eclosion, #D9B21A)" : "var(--paper, #FAF8F2)", border: "1px solid " + (m.can_close ? "var(--eclosion, #D9B21A)" : "var(--line)"), borderRadius: 6, padding: "5px 12px", fontSize: 12.5, cursor: busy || !m.can_close ? "default" : "pointer" }}>
-                    {busy ? "…" : "Clore mon intégration"}
+                  <button onClick={() => toggleClosure(m, true)} disabled={busy || !m.can_close} title={m.can_close ? "" : "Déposez d'abord le fichier final."} style={{ marginLeft: "auto", fontWeight: 700, color: m.can_close ? "#fff" : "var(--muted)", background: m.can_close ? "var(--eclosion, #D9B21A)" : "var(--paper, #FAF8F2)", border: "1px solid " + (m.can_close ? "var(--eclosion, #D9B21A)" : "var(--line)"), borderRadius: 6, padding: "5px 12px", fontSize: 12.5, opacity: !m.can_close && !busy ? 0.5 : 1, cursor: busy || !m.can_close ? "not-allowed" : "pointer" }}>
+                    {busy ? "…" : m.can_close ? "Clore mon intégration" : "🔒 Clore mon intégration"}
                   </button>
                 </>
               )}

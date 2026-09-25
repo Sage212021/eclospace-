@@ -1844,6 +1844,14 @@ async function main() {
       permissionModules: ["paiements_auteurs"],
       departmentCodes: ["FIN", "DIRED", "SECR"],
     },
+    {
+      slug: "2026-09-recu-prestations-liste-champ-libre",
+      version: "2026.09",
+      title: "Nouveauté — Reçu auteur : plus de prestations suggérées",
+      body: "À l'enregistrement d'un reçu de type « prestation éditoriale », le champ « Prestation concernée » propose désormais PLUS de suggestions, en plus de celles déjà présentes : mise en page / maquette, couverture / infographie, traduction, accompagnement / coaching d'écriture, publication à compte d'auteur, expertise éditoriale… Le champ reste à SAISIE LIBRE : vous pouvez toujours taper vous-même n'importe quelle prestation qui n'est pas dans la liste. Rien n'a été retiré, ce sont uniquement des ajouts. Rien ne change pour les frais de dépôt.",
+      permissionModules: ["paiements_auteurs"],
+      departmentCodes: ["FIN", "DIRED", "SECR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

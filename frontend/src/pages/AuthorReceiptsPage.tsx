@@ -170,13 +170,33 @@ export function AuthorReceiptsPage({ canCreate = false, canValidate = false, fin
   );
 }
 
+// Prestations éditoriales proposées en SUGGESTIONS. Le champ reste à saisie
+// LIBRE (on peut taper n'importe quelle prestation) : les suggestions ne font
+// qu'aider. Les 5 premières sont celles qui existaient déjà (inchangées) ; les
+// suivantes sont des AJOUTS.
+const PRESTATIONS = [
+  // — existantes (ne pas retirer) —
+  "Correction éditoriale",
+  "Réécriture",
+  "Expertise scientifique",
+  "Relecture",
+  "Préparation éditoriale",
+  // — ajouts —
+  "Expertise éditoriale",
+  "Mise en page / maquette",
+  "Couverture / infographie",
+  "Traduction",
+  "Accompagnement / coaching d'écriture",
+  "Publication à compte d'auteur",
+];
+
 function CreateReceiptModal({ onClose, onCreated }: { onClose: () => void; onCreated: (printNow: boolean, id: string) => void }) {
   const [methods, setMethods] = useState<{ code: string; label: string }[]>([]);
   const [q, setQ] = useState("");
   const [options, setOptions] = useState<ReceiptManuscriptOption[]>([]);
   const [selected, setSelected] = useState<ReceiptManuscriptOption | null>(null);
   const [type, setType] = useState<AuthorReceiptType>("frais_depot");
-  const [service, setService] = useState("");
+  const [service, setService] = useState(""); // prestation : saisie libre + suggestions
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("");
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
@@ -198,7 +218,7 @@ function CreateReceiptModal({ onClose, onCreated }: { onClose: () => void; onCre
     if (!selected.author) { setErr("Ce manuscrit n'a pas d'auteur enregistré."); return; }
     const amt = Number(amount);
     if (!(amt > 0)) { setErr("Montant invalide."); return; }
-    if (type === "prestation_editoriale" && !service.trim()) { setErr("Précisez la prestation éditoriale."); return; }
+    if (type === "prestation_editoriale" && !service.trim()) { setErr("Précisez la prestation éditoriale (choisissez une suggestion ou saisissez-la)."); return; }
     setBusy(true);
     try {
       const res = await createAuthorReceipt({
@@ -262,9 +282,9 @@ function CreateReceiptModal({ onClose, onCreated }: { onClose: () => void; onCre
         </Field>
         {type === "prestation_editoriale" && (
           <Field label="Prestation concernée">
-            <input value={service} onChange={(e) => setService(e.target.value)} placeholder="Correction, réécriture, expertise…" list="ar-prestations" />
+            <input value={service} onChange={(e) => setService(e.target.value)} placeholder="Choisir une suggestion ou saisir librement…" list="ar-prestations" />
             <datalist id="ar-prestations">
-              {["Correction éditoriale", "Réécriture", "Expertise scientifique", "Relecture", "Préparation éditoriale"].map((p) => <option key={p} value={p} />)}
+              {PRESTATIONS.map((p) => <option key={p} value={p} />)}
             </datalist>
           </Field>
         )}

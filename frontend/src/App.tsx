@@ -50,6 +50,7 @@ const NewsFeedPage = lazy(() => import("./pages/NewsFeedPage").then((m) => ({ de
 const NewslettersPage = lazy(() => import("./pages/NewslettersPage").then((m) => ({ default: m.NewslettersPage })));
 const ProductionTrackingPage = lazy(() => import("./pages/ProductionTrackingPage").then((m) => ({ default: m.ProductionTrackingPage })));
 const CommercialPerformancePage = lazy(() => import("./pages/CommercialPerformancePage").then((m) => ({ default: m.CommercialPerformancePage })));
+const AuthorReceiptsPage = lazy(() => import("./pages/AuthorReceiptsPage").then((m) => ({ default: m.AuthorReceiptsPage })));
 const CommissionsPage = lazy(() => import("./pages/CommissionsPage").then((m) => ({ default: m.CommissionsPage })));
 const AuthorRoyaltiesPage = lazy(() => import("./pages/AuthorRoyaltiesPage").then((m) => ({ default: m.AuthorRoyaltiesPage })));
 const ChatPage = lazy(() => import("./pages/ChatPage").then((m) => ({ default: m.ChatPage })));
@@ -115,6 +116,8 @@ type PageId =
   | "diagnostics"
   | "production-tracking"
   | "commercial-performance"
+  | "author-receipts"
+  | "author-receipts-finance"
   | "commissions"
   | "author-royalties"
   | "chat"
@@ -176,6 +179,7 @@ const NAV_POLES: NavPole[] = [
       // Devis (compte d'auteur) transmis par la Finance : l'éditorial les envoie
       // au client et remonte la validation (circuit devis→éditorial→facture).
       { key: "ed-devis-editorial", label: "Devis (compte d'auteur)", anyPermission: ["manuscripts:saisie", "manuscripts:validation"] },
+      { key: "ed-paiements-auteurs", label: "Paiements auteurs & Reçus", permission: "paiements_auteurs:consultation" },
       // Contrats & droits d'auteur : rattachés au pôle Éditorial (décision
       // opérateur du 06/08/2026) — la contractualisation prolonge la relation
       // éditoriale avec l'auteur. Clé interne inchangée (« jf-contrats ») pour
@@ -236,6 +240,7 @@ const NAV_POLES: NavPole[] = [
       // affichée à deux endroits — le juridique la retrouve comme auparavant.
       { key: "jf-contrats", label: "Contrats & droits d'auteur", permission: "manuscripts:consultation" },
       { key: "jf-finance", label: "Finance & comptabilité", permission: "finance:consultation" },
+      { key: "jf-encaissements-editoriaux", label: "Encaissements éditoriaux", permission: "paiements_auteurs:consultation" },
       { key: "jf-paie-suivi", label: "Paie — validation (DG) & suivi (DAF)", anyPermission: ["finance:validation", "paie:consultation"] },
       // Stock & magasin rattaché au pôle Finance (décision opérateur 13/08/2026) :
       // la gestion des stocks quitte le Commercial pour la Finance.
@@ -305,6 +310,8 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "co-stock": { page: "stock" },
   "co-ventes": { page: "commercial" },
   "co-mes-performances": { page: "commercial-performance" },
+  "ed-paiements-auteurs": { page: "author-receipts" },
+  "jf-encaissements-editoriaux": { page: "author-receipts-finance" },
   "co-commissions": { page: "commissions" },
   "jf-contrats": { stage: "CONTRACTUALISATION", heading: "Contrats & droits d'auteur" },
   "jf-finance": { page: "finance" },
@@ -938,6 +945,8 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
         {leaf && "page" in leaf && leaf.page === "production-tracking" && <ProductionTrackingPage />}
         {leaf && "page" in leaf && leaf.page === "commercial-performance" && <CommercialPerformancePage canManage={permissions.has("commercial:validation") || permissions.has("commercial:administration")} />}
+        {leaf && "page" in leaf && leaf.page === "author-receipts" && <AuthorReceiptsPage canCreate={permissions.has("paiements_auteurs:saisie")} />}
+        {leaf && "page" in leaf && leaf.page === "author-receipts-finance" && <AuthorReceiptsPage canCreate={permissions.has("paiements_auteurs:saisie")} financeView />}
         {leaf && "page" in leaf && leaf.page === "commissions" && <CommissionsPage canSetRate={permissions.has("finance:administration")} />}
         {leaf && "page" in leaf && leaf.page === "author-royalties" && <AuthorRoyaltiesPage canConfigure={permissions.has("finance:administration")} canGenerate={permissions.has("royalties:validation")} />}
         </Suspense>

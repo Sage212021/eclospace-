@@ -40,6 +40,7 @@ import marketingRoutes from "./routes/marketing.js";
 import financeRoutes from "./routes/finance.js";
 import financeRequestRoutes from "./routes/financeRequests.js";
 import editorialQuoteRoutes from "./routes/editorialQuotes.js";
+import authorReceiptRoutes from "./routes/authorReceipts.js";
 import weeklyReportRoutes from "./routes/weeklyReports.js";
 import royaltiesRoutes from "./routes/royalties.js";
 import hrRoutes from "./routes/hr.js";
@@ -219,6 +220,7 @@ export async function buildApp() {
   await app.register(financeRoutes);
   await app.register(financeRequestRoutes);
   await app.register(editorialQuoteRoutes);
+  await app.register(authorReceiptRoutes);
   await app.register(weeklyReportRoutes);
   await app.register(royaltiesRoutes);
   await app.register(hrRoutes);

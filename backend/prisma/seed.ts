@@ -72,7 +72,7 @@ const lot5Modules = ["finance", "royalties"];
 const lot6Modules = ["rh", "rh_confidentiel", "direction", "pilotage", "rapports"];
 // Évolution : modules « Présences & Temps de travail » et « Paie » (D-007),
 // indépendants et désactivables.
-const evolutionModules = ["presences", "paie", "communication", "service_auteurs", "marketing"];
+const evolutionModules = ["presences", "paie", "communication", "service_auteurs", "marketing", "paiements_auteurs"];
 const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules, ...lot5Modules, ...lot6Modules, ...evolutionModules];
 const actions = Object.values(PermissionAction);
 
@@ -408,6 +408,16 @@ async function main() {
   await grant("COMPTABLE", ["finance:consultation", "finance:saisie", "finance:validation"]);
   await grant("RESP_FINANCE", ["finance:consultation", "finance:saisie", "finance:validation", "finance:administration"]);
   await grant("DIR_GENERAL", ["finance:consultation", "finance:validation", "finance:administration"]);
+
+  // Paiements auteurs & Reçus (chantier 25/09/2026) — séparation des fonctions :
+  // l'ÉDITORIAL enregistre/émet (saisie) ; la FINANCE consulte, contrôle et intègre
+  // en comptabilité (validation) ; l'administration (annulation, paramétrage) reste
+  // à l'encadrement finance / direction. Création → contrôle → intégration → annulation.
+  await grant("ASSISTANT_EDITORIAL", ["paiements_auteurs:consultation", "paiements_auteurs:saisie"]);
+  await grant("DIR_EDITORIAL", ["paiements_auteurs:consultation", "paiements_auteurs:saisie"]);
+  await grant("COMPTABLE", ["paiements_auteurs:consultation", "paiements_auteurs:saisie", "paiements_auteurs:validation"]);
+  await grant("RESP_FINANCE", ["paiements_auteurs:consultation", "paiements_auteurs:saisie", "paiements_auteurs:validation", "paiements_auteurs:administration"]);
+  await grant("DIR_GENERAL", ["paiements_auteurs:consultation", "paiements_auteurs:validation", "paiements_auteurs:administration"]);
 
   // Droits d'auteur — exécution financière (Ch. 9 §9.5, Ch. 18 §18.7).
   await grant("RESP_FINANCE", ["royalties:consultation", "royalties:saisie", "royalties:validation"]);
@@ -1793,6 +1803,14 @@ async function main() {
       body: "Clarification pour éviter une confusion. Dans « Mes intégrations de correction », le badge vert « tout intégré ✅ » signifiait seulement « toutes les corrections cochées », même si la version finale (VCF / couverture corrigée finale) n'était pas encore déposée — on pouvait croire à tort que le travail était terminé. Désormais : tant que le fichier final n'est pas déposé, le badge affiche « reste le fichier final » (ambre) ; il ne passe au vert « prêt à clore ✅ » qu'une fois le fichier final déposé. Le bouton « Clore mon intégration » reste, comme avant, bloqué (cadenas 🔒) tant que le fichier final n'est pas là — la clôture était déjà impossible sans lui, c'est juste plus lisible maintenant.",
       permissionModules: ["manuscripts", "tasks", "production"],
       departmentCodes: ["DIRED", "SECR", "INFOG"],
+    },
+    {
+      slug: "2026-09-paiements-auteurs-recus",
+      version: "2026.09",
+      title: "Nouveauté — Paiements auteurs & Reçus (Éditorial ↔ Finance)",
+      body: "Nouvel écran « Paiements auteurs & Reçus » au pôle Éditorial : enregistrez un paiement d'auteur (frais de dépôt pour évaluation ou prestation éditoriale) et émettez son reçu imprimable/téléchargeable en un geste. On choisit le manuscrit et l'auteur, le montant et la date se remplissent automatiquement. Chaque reçu porte un numéro unique (REC-2026-000001) et une traçabilité complète (qui a initié, généré…). Point clé : c'est UNE SEULE opération — la Finance la voit aussitôt dans « Encaissements éditoriaux » (même donnée, aucune ressaisie) pour la contrôler puis l'intégrer en comptabilité. (Premier incrément : enregistrement, reçu PDF, écran éditorial et vue finance. Le contrôle/intégration comptable, les états et l'annulation arrivent ensuite.)",
+      permissionModules: ["paiements_auteurs"],
+      departmentCodes: ["DIRED", "SECR", "FIN"],
     },
   ];
   for (const n of releaseNotes) {

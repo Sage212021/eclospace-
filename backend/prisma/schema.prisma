@@ -1589,22 +1589,22 @@ model Notification {
 // (par pôle/département, par rôle, ou pour tous). `slug` unique = idempotence :
 // une note n'est distribuée qu'UNE fois, quels que soient les redéploiements.
 model ReleaseNote {
-  id              String    @id @default(uuid())
-  slug            String    @unique
-  version         String
-  title           String
-  body            String
-  audienceAll     Boolean   @default(false) @map("audience_all")
+  id                String    @id @default(uuid())
+  slug              String    @unique
+  version           String
+  title             String
+  body              String
+  audienceAll       Boolean   @default(false) @map("audience_all")
   // Ciblage par ACCÈS (recommandé) : modules de permission concernés — une
   // personne reçoit la note si l'un de ses rôles actifs lui donne un droit sur
   // l'un de ces modules. C'est la façon dont l'application modélise réellement
   // « qui a accès à quoi » (la plupart des comptes n'ont pas de département).
-  permissionModules String[] @map("permission_modules")
+  permissionModules String[]  @map("permission_modules")
   // Ciblages complémentaires (facultatifs) : par pôle ou par rôle nominatif.
-  departmentCodes String[]  @map("department_codes")
-  roleCodes       String[]  @map("role_codes")
-  dispatchedAt    DateTime? @map("dispatched_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
+  departmentCodes   String[]  @map("department_codes")
+  roleCodes         String[]  @map("role_codes")
+  dispatchedAt      DateTime? @map("dispatched_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
 
   @@map("release_notes")
 }
@@ -1823,6 +1823,7 @@ model Partner {
   authorFiles          AuthorFile[]
   serviceThreads       ServiceThread[]
   authorCopies         AuthorCopyEntry[]
+  authorReceipts       AuthorReceipt[]
 
   @@map("partners")
 }
@@ -1950,19 +1951,19 @@ model Manuscript {
   priorityOverride              Decimal?       @map("priority_override") @db.Decimal(6, 2)
   priorityOverrideJustification String?        @map("priority_override_justification")
 
-  ownerId                String  @map("owner_id")
-  owner                  User    @relation("ManuscriptOwner", fields: [ownerId], references: [id])
-  projectManagerId       String? @map("project_manager_id")
-  projectManager         User?   @relation("ManuscriptProjectManager", fields: [projectManagerId], references: [id])
+  ownerId                       String    @map("owner_id")
+  owner                         User      @relation("ManuscriptOwner", fields: [ownerId], references: [id])
+  projectManagerId              String?   @map("project_manager_id")
+  projectManager                User?     @relation("ManuscriptProjectManager", fields: [projectManagerId], references: [id])
   // Intégrateur des corrections (Direction éditoriale / Assistant éditorial) :
   // reçoit le relais après chaque passage du correcteur (cycle de correction).
-  correctionIntegratorId String? @map("correction_integrator_id")
-  correctionIntegrator   User?   @relation("ManuscriptCorrectionIntegrator", fields: [correctionIntegratorId], references: [id])
+  correctionIntegratorId        String?   @map("correction_integrator_id")
+  correctionIntegrator          User?     @relation("ManuscriptCorrectionIntegrator", fields: [correctionIntegratorId], references: [id])
   // Infographe désigné pour l'INTÉGRATION de la CORRECTION DE COUVERTURE :
   // reçoit le rapport de correction de couverture et l'exploite. À défaut, on
   // retombe sur l'infographe responsable de l'étape Infographie.
-  coverIntegratorId      String? @map("cover_integrator_id")
-  coverIntegrator        User?   @relation("ManuscriptCoverIntegrator", fields: [coverIntegratorId], references: [id])
+  coverIntegratorId             String?   @map("cover_integrator_id")
+  coverIntegrator               User?     @relation("ManuscriptCoverIntegrator", fields: [coverIntegratorId], references: [id])
   // Clôture de l'intégration de correction PAR L'INTÉGRATEUR lui-même, pour
   // libérer son écran « Mes intégrations de correction » : l'ouvrage clos part
   // dans l'accordéon « Historique ». Une clôture par branche (texte / couverture),
@@ -2021,6 +2022,7 @@ model Manuscript {
   financeRequests      ManuscriptFinanceRequest[]
   marketingPlan        MarketingPlan?
   marketingCampaigns   MarketingCampaign[]
+  authorReceipts       AuthorReceipt[]
 
   @@map("manuscripts")
 }
@@ -2238,16 +2240,16 @@ model CorrectionProfile {
 }
 
 model CorrectionControlPoint {
-  id              String  @id @default(uuid())
-  profileId       String  @map("profile_id")
+  id              String            @id @default(uuid())
+  profileId       String            @map("profile_id")
   profile         CorrectionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   label           String
   // Sévérité par défaut du point de contrôle : C1 (bloquant), C2 (important),
   // C3 (mineur), S (suggestion). L'IA peut relever une anomalie à une autre
   // sévérité selon le cas ; c'est une valeur indicative de la grille.
-  defaultSeverity String  @default("C3") @map("default_severity")
-  displayOrder    Int     @default(0) @map("display_order")
-  isActive        Boolean @default(true) @map("is_active")
+  defaultSeverity String            @default("C3") @map("default_severity")
+  displayOrder    Int               @default(0) @map("display_order")
+  isActive        Boolean           @default(true) @map("is_active")
 
   @@index([profileId])
   @@map("correction_control_points")
@@ -2285,20 +2287,20 @@ enum EvaluationVisibility {
 }
 
 model Evaluation {
-  id             String                   @id @default(uuid())
-  assignmentId   String                   @unique @map("assignment_id")
-  assignment     ReadingAssignment        @relation(fields: [assignmentId], references: [id])
-  overallComment String?                  @map("overall_comment")
-  recommendation EvaluationRecommendation
+  id                 String                   @id @default(uuid())
+  assignmentId       String                   @unique @map("assignment_id")
+  assignment         ReadingAssignment        @relation(fields: [assignmentId], references: [id])
+  overallComment     String?                  @map("overall_comment")
+  recommendation     EvaluationRecommendation
   // Recommandation en TEXTE LIBRE (précisions/justification propres au relecteur),
   // en complément de la recommandation typée ci-dessus.
-  recommendationNote String?              @map("recommendation_note")
+  recommendationNote String?                  @map("recommendation_note")
   // Nom du relecteur (défaut applicatif : « Comité de lecture d'Éclosion Édition »).
-  reviewerName   String?                  @map("reviewer_name")
-  globalScore    Decimal                  @map("global_score") @db.Decimal(6, 2)
-  rating         EvaluationRating
-  visibility     EvaluationVisibility     @default(comite)
-  submittedAt    DateTime                 @default(now()) @map("submitted_at")
+  reviewerName       String?                  @map("reviewer_name")
+  globalScore        Decimal                  @map("global_score") @db.Decimal(6, 2)
+  rating             EvaluationRating
+  visibility         EvaluationVisibility     @default(comite)
+  submittedAt        DateTime                 @default(now()) @map("submitted_at")
 
   scores EvaluationScore[]
 
@@ -2413,9 +2415,9 @@ enum ProjectActivityStatus {
 }
 
 model ProjectPlanActivity {
-  id       String      @id @default(uuid())
-  planId   String      @map("plan_id")
-  plan     ProjectPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  id     String      @id @default(uuid())
+  planId String      @map("plan_id")
+  plan   ProjectPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   label        String
   responsible  String? // responsable de l'activité (nominatif)
@@ -2426,7 +2428,7 @@ model ProjectPlanActivity {
   status       ProjectActivityStatus   @default(a_faire)
   dependencies String? // dépendances éventuelles (texte libre)
   observations String?
-  displayOrder Int @default(0) @map("display_order")
+  displayOrder Int                     @default(0) @map("display_order")
 
   @@index([planId])
   @@map("project_plan_activities")
@@ -2446,16 +2448,16 @@ enum DecisionLetterStatus {
 }
 
 model DecisionLetter {
-  id           String            @id @default(uuid())
-  decisionId   String            @unique @map("decision_id")
-  decision     EditorialDecision @relation(fields: [decisionId], references: [id])
-  manuscriptId String            @map("manuscript_id")
-  letterKey    String            @map("letter_key")
-  status       DecisionLetterStatus @default(a_valider)
-  version      Int               @default(1)
-  subject         String   @default("")
-  textBody        String   @default("") @map("text_body")
-  recipientEmail  String?  @map("recipient_email")
+  id             String               @id @default(uuid())
+  decisionId     String               @unique @map("decision_id")
+  decision       EditorialDecision    @relation(fields: [decisionId], references: [id])
+  manuscriptId   String               @map("manuscript_id")
+  letterKey      String               @map("letter_key")
+  status         DecisionLetterStatus @default(a_valider)
+  version        Int                  @default(1)
+  subject        String               @default("")
+  textBody       String               @default("") @map("text_body")
+  recipientEmail String?              @map("recipient_email")
 
   generatedById String?   @map("generated_by")
   generatedAt   DateTime  @default(now()) @map("generated_at")
@@ -3489,14 +3491,14 @@ model StockItem {
 // le calcul de réapprovisionnement (cahier §18). Distincte du stock lui-même
 // (qui, lui, ne vient que des mouvements). Un seul jeu de réglages par ISBN.
 model StockPolicy {
-  id              String @id @default(uuid())
-  isbnId          String @unique @map("isbn_id")
-  isbn            Isbn   @relation(fields: [isbnId], references: [id])
-  alertThreshold  Int?   @map("alert_threshold")   // seuil d'alerte (stock faible)
-  reorderThreshold Int?  @map("reorder_threshold") // seuil de réapprovisionnement
-  targetStock     Int?   @map("target_stock")      // stock cible (réappro → ce niveau)
-  minReprintQty   Int?   @map("min_reprint_qty")   // quantité minimale de réimpression
-  reprintLeadDays Int?   @map("reprint_lead_days") // délai moyen de réimpression (jours)
+  id               String @id @default(uuid())
+  isbnId           String @unique @map("isbn_id")
+  isbn             Isbn   @relation(fields: [isbnId], references: [id])
+  alertThreshold   Int?   @map("alert_threshold") // seuil d'alerte (stock faible)
+  reorderThreshold Int?   @map("reorder_threshold") // seuil de réapprovisionnement
+  targetStock      Int?   @map("target_stock") // stock cible (réappro → ce niveau)
+  minReprintQty    Int?   @map("min_reprint_qty") // quantité minimale de réimpression
+  reprintLeadDays  Int?   @map("reprint_lead_days") // délai moyen de réimpression (jours)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -5257,17 +5259,17 @@ enum AnnualEventStatus {
 }
 
 model AnnualEvent {
-  id          String            @id @default(uuid())
-  title       String
-  description String? // ex. « atelier de lecture pour enfants »
-  startDate   DateTime          @map("start_date")
-  endDate     DateTime?         @map("end_date")
-  location    String?
-  dgPresent   Boolean           @default(false) @map("dg_present")
-  status      AnnualEventStatus @default(a_venir)
+  id           String            @id @default(uuid())
+  title        String
+  description  String? // ex. « atelier de lecture pour enfants »
+  startDate    DateTime          @map("start_date")
+  endDate      DateTime?         @map("end_date")
+  location     String?
+  dgPresent    Boolean           @default(false) @map("dg_present")
+  status       AnnualEventStatus @default(a_venir)
   // Faire défiler cet événement dans le bandeau « À venir » du Hall. Coché par
   // défaut ; on le décoche pour les événements internes (ex. voyages du DG).
-  showInBanner Boolean          @default(true) @map("show_in_banner")
+  showInBanner Boolean           @default(true) @map("show_in_banner")
 
   // Affiche de l'événement (image légère, affichée directement). Stockée hors
   // base (disque en dev, stockage objet durable en prod) comme la GED.
@@ -5326,18 +5328,18 @@ model MarketingAction {
   planId String        @map("plan_id")
   plan   MarketingPlan @relation(fields: [planId], references: [id])
 
-  canal       MarketingCanal
-  action      String
-  responsable String? // équipe ou personne (texte libre : « Marketing », « Communication »…)
-  dateDebut   DateTime?             @map("date_debut")
-  echeance    DateTime?
-  budgetPrevu  Decimal?             @map("budget_prevu") @db.Decimal(12, 2)
-  budgetEngage Decimal?             @map("budget_engage") @db.Decimal(12, 2)
-  statut      MarketingActionStatus @default(a_faire)
-  priorite    MarketingPriorite     @default(normale)
-  lien        String? // lien vers publication / support
-  resultat    String?
-  commentaire String?
+  canal        MarketingCanal
+  action       String
+  responsable  String? // équipe ou personne (texte libre : « Marketing », « Communication »…)
+  dateDebut    DateTime?             @map("date_debut")
+  echeance     DateTime?
+  budgetPrevu  Decimal?              @map("budget_prevu") @db.Decimal(12, 2)
+  budgetEngage Decimal?              @map("budget_engage") @db.Decimal(12, 2)
+  statut       MarketingActionStatus @default(a_faire)
+  priorite     MarketingPriorite     @default(normale)
+  lien         String? // lien vers publication / support
+  resultat     String?
+  commentaire  String?
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -5378,19 +5380,19 @@ enum MarketingPriorite {
 // Communication & Distribution). Distinct des « clients » du Commercial : c'est
 // le carnet d'adresses de la mise en marché (librairies, écoles, distributeurs…).
 model MarketingPartner {
-  id              String                @id @default(uuid())
+  id              String               @id @default(uuid())
   type            MarketingPartnerType
   name            String
   city            String?
   country         String?
-  contactName     String?               @map("contact_name")
+  contactName     String?              @map("contact_name")
   phone           String?
   email           String?
   website         String?
-  partnershipType String?               @map("partnership_type") // ex. dépôt-vente, achat ferme, convention
+  partnershipType String?              @map("partnership_type") // ex. dépôt-vente, achat ferme, convention
   conditions      String?
   notes           String?
-  active          Boolean               @default(true)
+  active          Boolean              @default(true)
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by")
@@ -5604,7 +5606,7 @@ model AiReadingJob {
   launchedAt           DateTime    @default(now()) @map("launched_at")
   finishedAt           DateTime?   @map("finished_at")
 
-  anomalies            CorrectionAnomaly[]
+  anomalies CorrectionAnomaly[]
 
   @@index([manuscriptId])
   @@index([workType])
@@ -5618,20 +5620,20 @@ model AiReadingJob {
 // passage a ses propres anomalies, rattachées à son job). Option A : « accepter »
 // enregistre la décision ; l'intégrateur applique ensuite la correction.
 model CorrectionAnomaly {
-  id            String       @id @default(uuid())
-  jobId         String       @map("job_id")
-  job           AiReadingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  manuscriptId  String       @map("manuscript_id")
-  number        Int          @default(0)
+  id             String       @id @default(uuid())
+  jobId          String       @map("job_id")
+  job            AiReadingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  manuscriptId   String       @map("manuscript_id")
+  number         Int          @default(0)
   // Sévérité officielle : C1 bloquant · C2 important · C3 mineur · S suggestion.
-  severity      String       @default("C3")
+  severity       String       @default("C3")
   // Face concernée pour une couverture : « 1ere » / « dos » / « 4eme » ; null sinon.
-  face          String?
-  location      String?
-  element       String?
-  observation   String?
-  proposal      String?
-  justification String?
+  face           String?
+  location       String?
+  element        String?
+  observation    String?
+  proposal       String?
+  justification  String?
   // a_traiter · acceptee · modifiee · rejetee · a_verifier.
   status         String       @default("a_traiter")
   resolutionNote String?      @map("resolution_note")
@@ -5648,10 +5650,91 @@ model CorrectionAnomaly {
   integratedAt      DateTime? @map("integrated_at")
   integrationNote   String?   @map("integration_note")
 
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([manuscriptId])
   @@index([jobId])
   @@map("correction_anomalies")
+}
+
+// ============================================================================
+// PAIEMENTS AUTEURS & REÇUS (module éditorial ↔ finance, chantier 25/09/2026).
+// « Un paiement = une opération financière unique = un reçu unique = une
+// traçabilité unique. » Le REÇU est l'opération centrale (source de vérité) :
+// l'éditorial l'enregistre, la finance le voit (mêmes données, aucune ressaisie),
+// le contrôle et l'intègre en comptabilité. Immuable : jamais supprimé (annulation
+// tracée), numéro non modifiable, traçabilité append-only (via audit_log).
+// ============================================================================
+
+// Séquence de numérotation des reçus (REC-AAAA-NNNNNN), atomique et continue.
+model ReceiptNumberCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("receipt_number_counters")
+}
+
+enum AuthorReceiptType {
+  frais_depot // Frais de dépôt de manuscrit pour évaluation
+  prestation_editoriale // Frais de prestations éditoriales (correction, réécriture, expertise…)
+}
+
+// Cycle métier (éditorial → finance) : enregistré → à contrôler → contrôlé →
+// comptabilisé ; annulé à tout moment (avec motif), sans suppression.
+enum AuthorReceiptStatus {
+  enregistre
+  a_controler
+  controle
+  comptabilise
+  annule
+}
+
+model AuthorReceipt {
+  id            String              @id @default(uuid())
+  receiptNumber String              @unique @map("receipt_number")
+  type          AuthorReceiptType
+  status        AuthorReceiptStatus @default(enregistre)
+
+  // Auteur (Partner) — auto-rempli depuis le manuscrit ; manuscrit rattaché.
+  partnerId    String      @map("partner_id")
+  partner      Partner     @relation(fields: [partnerId], references: [id])
+  manuscriptId String?     @map("manuscript_id")
+  manuscript   Manuscript? @relation(fields: [manuscriptId], references: [id])
+  // Prestation concernée (libellé) quand type = prestation_editoriale.
+  serviceLabel String?     @map("service_label")
+
+  // Éléments financiers.
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("XAF")
+  method      String // code d'un mode de paiement (payment_methods.code)
+  paidAt      DateTime @map("paid_at") // date effective du paiement
+  txReference String?  @map("tx_reference") // référence de transaction (Mobile Money, virement…)
+  comment     String?
+
+  // Traçabilité des responsabilités (identités NON modifiables ; horodatage figé).
+  initiatedBy  String?   @map("initiated_by") // initiateur = créateur de l'opération
+  initiatedAt  DateTime  @default(now()) @map("initiated_at")
+  generatedBy  String?   @map("generated_by") // générateur du reçu (souvent = initiateur)
+  generatedAt  DateTime? @map("generated_at")
+  controlledBy String?   @map("controlled_by") // contrôleur (finance)
+  controlledAt DateTime? @map("controlled_at")
+  accountedBy  String?   @map("accounted_by") // intégrateur comptable
+  accountedAt  DateTime? @map("accounted_at")
+
+  // Annulation (jamais de suppression physique).
+  cancelledBy         String?   @map("cancelled_by")
+  cancelledAt         DateTime? @map("cancelled_at")
+  cancelReason        String?   @map("cancel_reason")
+  replacedByReceiptId String?   @map("replaced_by_receipt_id") // reçu émis en remplacement
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([partnerId])
+  @@index([manuscriptId])
+  @@index([status])
+  @@index([type])
+  @@index([paidAt])
+  @@map("author_receipts")
 }

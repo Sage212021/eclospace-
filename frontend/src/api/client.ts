@@ -6966,3 +6966,45 @@ export interface MarketingDashboard {
 export function getMarketingDashboard() {
   return request<MarketingDashboard>("/api/v1/marketing/dashboard");
 }
+
+// — Paiements auteurs & Reçus (module éditorial ↔ finance) —
+export type AuthorReceiptType = "frais_depot" | "prestation_editoriale";
+export type AuthorReceiptStatus = "enregistre" | "a_controler" | "controle" | "comptabilise" | "annule";
+export interface AuthorReceiptRow {
+  id: string; receipt_number: string; type: AuthorReceiptType; status: AuthorReceiptStatus;
+  author: string; manuscript: string | null; manuscript_number: string | null; service_label: string | null;
+  amount: number; currency: string; method: string; method_label: string;
+  paid_at: string; created_at: string; registered_by: string | null;
+}
+export interface ReceiptManuscriptOption {
+  id: string; manuscript_number: string; title: string; collection: string | null;
+  author: { id: string; name: string; phone: string | null } | null;
+}
+export interface AuthorReceiptActor { name: string | null; role: string | null; dept: string | null; at: string | null }
+export interface AuthorReceiptDetail {
+  id: string; receipt_number: string; type: AuthorReceiptType; status: AuthorReceiptStatus;
+  service_label: string | null; amount: number; currency: string; method: string; method_label: string;
+  paid_at: string; tx_reference: string | null; comment: string | null;
+  author: { id: string; name: string; phone: string | null; email: string | null; address: string | null; niu: string | null };
+  manuscript: { id: string; number: string; title: string; collection: string | null } | null;
+  traceability: { initiated: AuthorReceiptActor | null; generated: AuthorReceiptActor | null; controlled: AuthorReceiptActor | null; accounted: AuthorReceiptActor | null; cancelled: AuthorReceiptActor | null; cancel_reason: string | null };
+  created_at: string;
+}
+export function getReceiptMethods() {
+  return request<{ code: string; label: string }[]>("/api/v1/author-receipts/form/methods");
+}
+export function searchReceiptManuscripts(q: string) {
+  return request<ReceiptManuscriptOption[]>(`/api/v1/author-receipts/form/manuscripts?q=${encodeURIComponent(q)}`);
+}
+export function listAuthorReceipts(filters: { from?: string; to?: string; partner_id?: string; manuscript_id?: string; type?: string; method?: string; status?: string; q?: string } = {}) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) if (v) p.set(k, v);
+  const qs = p.toString();
+  return request<AuthorReceiptRow[]>(`/api/v1/author-receipts${qs ? `?${qs}` : ""}`);
+}
+export function getAuthorReceipt(id: string) {
+  return request<AuthorReceiptDetail>(`/api/v1/author-receipts/${id}`);
+}
+export function createAuthorReceipt(input: { manuscript_id: string; partner_id?: string; type: AuthorReceiptType; service_label?: string; amount: number; currency?: string; method: string; paid_at: string; tx_reference?: string; comment?: string }) {
+  return request<{ id: string; receipt_number: string }>("/api/v1/author-receipts", { method: "POST", body: JSON.stringify(input) });
+}

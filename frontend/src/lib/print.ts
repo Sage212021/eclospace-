@@ -5,7 +5,7 @@
 // **« Enregistrer au format PDF »** (option native de tous les navigateurs).
 // Aucune bibliothèque PDF lourde, fonctionne avec une connexion modeste.
 
-import type { AuthorWithdrawalVoucher, BookReceiptVoucher, ContractDetail, EditorialQuote, InvoiceDetail, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
+import type { AuthorReceiptDetail, AuthorWithdrawalVoucher, BookReceiptVoucher, ContractDetail, EditorialQuote, InvoiceDetail, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
 import { isReportDisclaimer } from "./tidyProse";
 
 // Coordonnées officielles de la maison — source unique pour tous les documents
@@ -2111,4 +2111,107 @@ export function printStockMovements(d: { headers: string[]; rows: (string | numb
     <div class="meta"><span>${d.count} ${tr("mouvement(s)", "movement(s)")}</span><span>${escapeHtml(new Date().toLocaleString(locale()))}</span></div>
     <table class="lines" style="font-size:10px"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${d.headers.length}">${tr("Aucun mouvement.", "No movement.")}</td></tr>`}</tbody></table>`;
   openPrintWindow(tr("Mouvements de stock", "Stock movements"), html, opts);
+}
+
+// Montant entier en toutes lettres (français), pour les reçus FCFA (jusqu'aux
+// milliards). Les FCFA n'ont pas de centimes : on écrit l'entier.
+function frToWords(n: number): string {
+  n = Math.round(Math.abs(n));
+  if (n === 0) return "zéro";
+  const u = ["", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze", "treize", "quatorze", "quinze", "seize", "dix-sept", "dix-huit", "dix-neuf"];
+  const t = ["", "", "vingt", "trente", "quarante", "cinquante", "soixante", "soixante", "quatre-vingt", "quatre-vingt"];
+  const below100 = (x: number): string => {
+    if (x < 20) return u[x];
+    const d = Math.floor(x / 10), r = x % 10;
+    if (d === 7 || d === 9) { const base = t[d]; const rest = below100(10 + r); return (d === 7 && r === 1 ? `${base}-et-${u[11]}` : `${base}-${rest}`); }
+    let s = t[d];
+    if (r === 1 && d !== 8) s += "-et-un"; else if (r > 0) s += "-" + u[r]; else if (d === 8) s += "s";
+    return s;
+  };
+  const below1000 = (x: number): string => {
+    if (x < 100) return below100(x);
+    const c = Math.floor(x / 100), r = x % 100;
+    const cent = c === 1 ? "cent" : `${u[c]} cent`;
+    return r === 0 ? (c > 1 ? cent + "s" : cent) : `${cent} ${below100(r)}`;
+  };
+  const parts: string[] = [];
+  const scales: [number, string, string][] = [[1_000_000_000, "milliard", "milliards"], [1_000_000, "million", "millions"], [1000, "mille", "mille"]];
+  let rest = n;
+  for (const [val, sing, plur] of scales) {
+    const q = Math.floor(rest / val);
+    if (q > 0) {
+      if (val === 1000) parts.push(q === 1 ? "mille" : `${below1000(q)} mille`);
+      else parts.push(`${below1000(q)} ${q === 1 ? sing : plur}`);
+      rest %= val;
+    }
+  }
+  if (rest > 0) parts.push(below1000(rest));
+  return parts.join(" ");
+}
+
+const RECEIPT_TYPE_LABEL: Record<string, string> = {
+  frais_depot: "Frais de dépôt de manuscrit pour évaluation",
+  prestation_editoriale: "Frais de prestations éditoriales",
+};
+const RECEIPT_STATUS_LABEL: Record<string, string> = {
+  enregistre: "Enregistré", a_controler: "À contrôler", controle: "Contrôlé", comptabilise: "Comptabilisé", annule: "Annulé",
+};
+
+// Reçu de paiement auteur : justificatif documentaire d'une opération financière
+// enregistrée dans l'ERP (en-tête Éclosion + corps + validation + traçabilité).
+export function printAuthorReceipt(r: AuthorReceiptDetail, opts?: PrintOpts): void {
+  const nature = r.type === "prestation_editoriale" && r.service_label
+    ? `${RECEIPT_TYPE_LABEL[r.type]} — ${escapeHtml(r.service_label)}`
+    : (RECEIPT_TYPE_LABEL[r.type] ?? r.type);
+  const montantChiffres = `${fnum(r.amount)} ${escapeHtml(r.currency)}`;
+  const montantLettres = `${frToWords(r.amount)} francs CFA`;
+  const gen = r.traceability.generated ?? r.traceability.initiated;
+  const genLine = gen ? `${escapeHtml(gen.name ?? "—")}${gen.role ? " — " + escapeHtml(gen.role) : ""}` : "—";
+  const genAt = gen?.at ? new Date(gen.at).toLocaleString(locale()) : "—";
+  const box = (label: string, value: string) => `<div style="flex:1; min-width:200px"><div style="font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#6b7280">${label}</div><div style="font-size:13px; margin-top:2px">${value}</div></div>`;
+
+  const body = `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; border-top:2px solid #D9B21A; padding-top:10px">
+      <div><div style="font-family:Georgia,serif; font-size:22px; font-weight:700; letter-spacing:.02em">${tr("REÇU DE PAIEMENT", "PAYMENT RECEIPT")}</div>
+        <div style="font-size:12px; color:#6b7280; margin-top:2px">${tr("N°", "No.")} <b style="font-family:ui-monospace,monospace; color:#0b0b0c">${escapeHtml(r.receipt_number)}</b>${r.status === "annule" ? ` · <b style="color:#B23A2E">${RECEIPT_STATUS_LABEL.annule}</b>` : ""}</div>
+      </div>
+      <div style="text-align:right; font-size:12px"><div style="color:#6b7280">${tr("Date du paiement", "Payment date")}</div><div style="font-weight:700">${fdate(r.paid_at)}</div></div>
+    </div>
+
+    <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:16px">
+      ${box(tr("Reçu de (auteur)", "Received from (author)"), `<b>${escapeHtml(r.author.name)}</b>${r.author.phone ? `<br>${tr("Tél.", "Phone")} ${escapeHtml(r.author.phone)}` : ""}${r.author.address ? `<br>${escapeHtml(r.author.address)}` : ""}${r.author.niu ? `<br>NIU ${escapeHtml(r.author.niu)}` : ""}`)}
+      ${box(tr("Mode de paiement", "Payment method"), `${escapeHtml(r.method_label)}${r.tx_reference ? `<br>${tr("Réf.", "Ref.")} ${escapeHtml(r.tx_reference)}` : ""}`)}
+    </div>
+
+    ${r.manuscript ? `<div style="margin-top:14px; font-size:12.5px; background:#FAF8F2; border:1px solid #E7E1D2; border-radius:8px; padding:10px 12px">
+      <span style="color:#6b7280">${tr("Manuscrit / ouvrage", "Manuscript / work")} :</span> <b>${escapeHtml(r.manuscript.title)}</b>
+      <span style="color:#6b7280"> · ${tr("Réf.", "Ref.")}</span> <span style="font-family:ui-monospace,monospace">${escapeHtml(r.manuscript.number)}</span>${r.manuscript.collection ? ` <span style="color:#6b7280">· ${tr("Collection", "Collection")}</span> ${escapeHtml(r.manuscript.collection)}` : ""}
+    </div>` : ""}
+
+    <div style="margin-top:16px; font-size:13px">
+      <div>${tr("Reçu pour paiement de", "Received as payment for")} : <b>${nature}</b></div>
+      ${r.comment ? `<div style="color:#4b5563; margin-top:4px">${escapeHtml(r.comment)}</div>` : ""}
+    </div>
+
+    <div style="margin-top:14px; border:1px solid #0b0b0c; border-radius:8px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap">
+      <div style="font-size:12.5px; color:#4b5563">${tr("Montant en toutes lettres", "Amount in words")} :<br><i>${montantLettres}</i></div>
+      <div style="font-size:22px; font-weight:800; font-family:ui-monospace,monospace">${montantChiffres}</div>
+    </div>
+
+    <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:22px">
+      <div style="flex:1; min-width:220px">
+        <div style="font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#6b7280">${tr("Enregistré / émis par", "Recorded / issued by")}</div>
+        <div style="font-size:12.5px; margin-top:2px">${genLine}</div>
+        <div style="font-size:11px; color:#6b7280">${tr("Le", "On")} ${genAt}</div>
+        <div style="border-top:1px solid #0b0b0c; margin-top:34px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature / cachet", "Signature / stamp")}</div>
+      </div>
+      <div style="flex:1; min-width:220px">
+        <div style="font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#6b7280">${tr("L'auteur", "The author")}</div>
+        <div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Reçu — signature", "Received — signature")}</div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px; font-size:10px; color:#9ca3af">${tr("Référence de l'opération dans l'ERP", "Operation reference in the ERP")} : ${escapeHtml(r.receipt_number)} · ${escapeHtml(r.id)}</div>
+  `;
+  openPrintWindow(`${tr("Reçu", "Receipt")} ${r.receipt_number}`, body, opts);
 }

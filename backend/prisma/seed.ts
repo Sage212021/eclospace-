@@ -1832,7 +1832,7 @@ async function main() {
       slug: "2026-09-recu-signature-cachet-eclosion",
       version: "2026.09",
       title: "Nouveauté — Reçu auteur : emplacement « signature et cachet » Éclosion",
-      body: "Le reçu de paiement imprimé/PDF porte désormais clairement, en bas à gauche du recto, la mention « Pour Éclosion Édition Sarl » avec sa ligne « Signature et cachet » — l'endroit réservé au visa et au tampon de la maison. À droite, l'espace « L'auteur — Reçu, signature » reste pour l'auteur. Rien à faire de votre côté : c'est automatique à l'impression.",
+      body: "Le reçu de paiement imprimé/PDF porte désormais clairement, en bas du recto, la mention « Pour Éclosion Édition Sarl » avec sa ligne « Signature et cachet » — l'endroit réservé au visa et au tampon de la maison. C'est le seul bloc de signature : le reçu atteste un paiement reçu PAR la maison, la signature de l'auteur n'est pas requise. Rien à faire de votre côté : c'est automatique à l'impression.",
       permissionModules: ["paiements_auteurs"],
       departmentCodes: ["FIN", "DIRED", "SECR"],
     },

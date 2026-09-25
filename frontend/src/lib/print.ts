@@ -2198,17 +2198,13 @@ export function printAuthorReceipt(r: AuthorReceiptDetail, opts?: PrintOpts): vo
       <div style="font-size:22px; font-weight:800; font-family:ui-monospace,monospace">${montantChiffres}</div>
     </div>
 
-    <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:22px">
-      <div style="flex:1; min-width:220px">
+    <div style="display:flex; justify-content:flex-end; margin-top:22px">
+      <div style="width:320px; max-width:100%">
         <div style="font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#6b7280">${tr("Enregistré / émis par", "Recorded / issued by")}</div>
         <div style="font-size:12.5px; margin-top:2px">${genLine}</div>
         <div style="font-size:11px; color:#6b7280">${tr("Le", "On")} ${genAt}</div>
         <div style="font-size:11.5px; font-weight:700; margin-top:28px">${tr("Pour", "For")} Éclosion Édition Sarl</div>
         <div style="border-top:1px solid #0b0b0c; margin-top:30px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Signature et cachet", "Signature and stamp")}</div>
-      </div>
-      <div style="flex:1; min-width:220px">
-        <div style="font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#6b7280">${tr("L'auteur", "The author")}</div>
-        <div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">${tr("Reçu — signature", "Received — signature")}</div>
       </div>
     </div>
 

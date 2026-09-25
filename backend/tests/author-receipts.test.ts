@@ -132,4 +132,70 @@ describe("Paiements auteurs & Reçus", () => {
     expect(stats.total_amount).toBeGreaterThan(0);
     expect(stats.by_type.some((t) => t.key === "frais_depot")).toBe(true);
   });
+
+  // ANNULATION TRACÉE + REÇU DE REMPLACEMENT (incrément 3) : jamais de suppression ;
+  // motif obligatoire ; le remplaçant reprend les données et est relié à l'annulé.
+  it("annule un reçu avec remplacement : motif tracé, nouveau reçu relié, ancien figé", async () => {
+    const { id, receipt_number } = (await create({ type: "prestation_editoriale", service_label: "Correction éditoriale", amount: 12000 })).json() as { id: string; receipt_number: string };
+
+    // Motif absent → 400.
+    const noReason = await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/cancel`, headers: { cookie }, payload: { reason: "x" } });
+    expect(noReason.statusCode).toBe(400);
+    expect(noReason.json().code).toBe("reason_required");
+
+    // Annulation avec remplacement.
+    const res = await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/cancel`, headers: { cookie }, payload: { reason: "Montant erroné", issue_replacement: true } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { status: string; replacement: { id: string; receipt_number: string } | null };
+    expect(body.status).toBe("annule");
+    expect(body.replacement).not.toBeNull();
+    expect(body.replacement!.receipt_number).toMatch(/^REC-\d{4}-\d{6}$/);
+    expect(body.replacement!.receipt_number).not.toBe(receipt_number);
+
+    // Ancien reçu : annulé, motif tracé, relié au remplaçant.
+    const old = (await app.inject({ method: "GET", url: `/api/v1/author-receipts/${id}`, headers: { cookie } })).json();
+    expect(old.status).toBe("annule");
+    expect(old.traceability.cancelled.name).toBe("admin");
+    expect(old.traceability.cancel_reason).toBe("Montant erroné");
+    expect(old.replaced_by.receipt_number).toBe(body.replacement!.receipt_number);
+
+    // Remplaçant : reprend les données et pointe vers l'ancien.
+    const rep = (await app.inject({ method: "GET", url: `/api/v1/author-receipts/${body.replacement!.id}`, headers: { cookie } })).json();
+    expect(rep.status).toBe("enregistre");
+    expect(rep.amount).toBe(12000);
+    expect(rep.service_label).toBe("Correction éditoriale");
+    expect(rep.replaces.receipt_number).toBe(receipt_number);
+
+    // Un reçu déjà annulé ne se ré-annule pas.
+    const again = await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/cancel`, headers: { cookie }, payload: { reason: "encore" } });
+    expect(again.statusCode).toBe(409);
+    expect(again.json().code).toBe("already_cancelled");
+  });
+
+  it("un reçu comptabilisé ne s'annule pas (régularisation comptable requise)", async () => {
+    const { id } = (await create({ type: "frais_depot", amount: 4000 })).json() as { id: string };
+    await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/control`, headers: { cookie }, payload: {} });
+    await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/account`, headers: { cookie }, payload: {} });
+    const res = await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/cancel`, headers: { cookie }, payload: { reason: "trop tard" } });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe("accounted_no_cancel");
+  });
+
+  it("les contrôles de cohérence signalent les frais de dépôt en double sur un manuscrit", async () => {
+    // Deux frais de dépôt distincts sur le même manuscrit (via beforeAll) → doit être signalé.
+    await create({ type: "frais_depot", amount: 3100 });
+    await create({ type: "frais_depot", amount: 3200 });
+    const res = await app.inject({ method: "GET", url: `/api/v1/author-receipts/alerts`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { count: number; alerts: Array<{ code: string; receipt_numbers: string[] }> };
+    expect(body.alerts.some((a) => a.code === "multiple_deposit_fees")).toBe(true);
+  });
+
+  it("la recherche universelle retrouve un reçu par sa prestation", async () => {
+    await create({ type: "prestation_editoriale", service_label: `Expertise ${s}`, amount: 8000 });
+    const res = await app.inject({ method: "GET", url: `/api/v1/author-receipts?q=${encodeURIComponent(`Expertise ${s}`)}`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const rows = res.json() as Array<{ service_label: string | null }>;
+    expect(rows.some((r) => r.service_label === `Expertise ${s}`)).toBe(true);
+  });
 });

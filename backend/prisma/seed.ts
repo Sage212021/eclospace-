@@ -1820,6 +1820,14 @@ async function main() {
       permissionModules: ["paiements_auteurs"],
       departmentCodes: ["FIN", "DIRED"],
     },
+    {
+      slug: "2026-09-paiements-auteurs-annulation-coherence",
+      version: "2026.09",
+      title: "Nouveauté — Reçus auteurs : annulation tracée, remplacement & alertes",
+      body: "Trois ajouts sur les reçus auteurs. 1) Annulation : en cas d'erreur, un reçu peut être annulé avec un motif obligatoire (il n'est jamais supprimé, tout reste tracé : qui a annulé, quand, pourquoi). On peut d'un clic émettre un « reçu de remplacement » qui recopie les données pour correction — l'ancien et le nouveau restent reliés. Un reçu déjà intégré en comptabilité ne s'annule pas ici (il faut une régularisation). 2) Alertes de cohérence en haut de page : doublons possibles (même auteur/manuscrit/montant à quelques jours), frais de dépôt en double sur un manuscrit, NIU manquant sur une prestation — rien n'est bloqué, on vous signale seulement ce qui mérite un œil. 3) Historique : cliquez sur le nom d'un auteur ou sur un manuscrit pour voir tous ses reçus, et la recherche retrouve aussi par prestation et référence comptable.",
+      permissionModules: ["paiements_auteurs"],
+      departmentCodes: ["FIN", "DIRED", "SECR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

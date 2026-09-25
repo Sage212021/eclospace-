@@ -6988,6 +6988,8 @@ export interface AuthorReceiptDetail {
   author: { id: string; name: string; phone: string | null; email: string | null; address: string | null; niu: string | null };
   manuscript: { id: string; number: string; title: string; collection: string | null } | null;
   traceability: { initiated: AuthorReceiptActor | null; generated: AuthorReceiptActor | null; controlled: AuthorReceiptActor | null; accounted: AuthorReceiptActor | null; cancelled: AuthorReceiptActor | null; cancel_reason: string | null };
+  replaced_by: { id: string; receipt_number: string; status: AuthorReceiptStatus } | null;
+  replaces: { id: string; receipt_number: string } | null;
   created_at: string;
 }
 export function getReceiptMethods() {
@@ -7026,4 +7028,18 @@ export function getAuthorReceiptStats(filters: { from?: string; to?: string; typ
   for (const [k, v] of Object.entries(filters)) if (v) p.set(k, v);
   const qs = p.toString();
   return request<AuthorReceiptStats>(`/api/v1/author-receipts/stats${qs ? `?${qs}` : ""}`);
+}
+
+// — Annulation tracée + reçu de remplacement —
+export function cancelAuthorReceipt(id: string, reason: string, issueReplacement: boolean) {
+  return request<{ id: string; status: string; replacement: { id: string; receipt_number: string } | null }>(
+    `/api/v1/author-receipts/${id}/cancel`,
+    { method: "POST", body: JSON.stringify({ reason, issue_replacement: issueReplacement }) },
+  );
+}
+
+// — Contrôles de cohérence & alertes —
+export interface AuthorReceiptAlert { code: string; severity: "warning" | "info"; message: string; receipt_ids: string[]; receipt_numbers: string[] }
+export function getAuthorReceiptAlerts() {
+  return request<{ count: number; alerts: AuthorReceiptAlert[] }>("/api/v1/author-receipts/alerts");
 }

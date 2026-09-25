@@ -5721,6 +5721,8 @@ model AuthorReceipt {
   controlledAt DateTime? @map("controlled_at")
   accountedBy  String?   @map("accounted_by") // intégrateur comptable
   accountedAt  DateTime? @map("accounted_at")
+  // Référence comptable saisie à l'intégration (journal/exercice/pièce), libre.
+  accountingRef String?  @map("accounting_ref")
 
   // Annulation (jamais de suppression physique).
   cancelledBy         String?   @map("cancelled_by")

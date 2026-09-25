@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   listAuthorReceipts, getAuthorReceipt, createAuthorReceipt, getReceiptMethods, searchReceiptManuscripts,
-  type AuthorReceiptRow, type AuthorReceiptDetail, type AuthorReceiptType, type ReceiptManuscriptOption,
+  controlAuthorReceipt, accountAuthorReceipt, getAuthorReceiptStats,
+  type AuthorReceiptRow, type AuthorReceiptDetail, type AuthorReceiptType, type ReceiptManuscriptOption, type AuthorReceiptStats,
 } from "../api/client";
 import { printAuthorReceipt } from "../lib/print";
 import { Card } from "../components/Card";
@@ -27,17 +28,23 @@ const fdatetime = (s: string | null) => (s ? new Date(s).toLocaleString("fr-FR")
 // Écran « Paiements auteurs & Reçus » (pôle Éditorial) et sa vue miroir
 // « Encaissements éditoriaux » (pôle Finance) : MÊME donnée, filtres métier.
 // `financeView` change les libellés/l'accent ; `canCreate` ouvre l'enregistrement.
-export function AuthorReceiptsPage({ canCreate = false, financeView = false }: { canCreate?: boolean; financeView?: boolean }) {
+export function AuthorReceiptsPage({ canCreate = false, canValidate = false, financeView = false }: { canCreate?: boolean; canValidate?: boolean; financeView?: boolean }) {
   const [rows, setRows] = useState<AuthorReceiptRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<{ from: string; to: string; type: string; status: string; q: string }>({ from: "", to: "", type: "", status: "", q: "" });
   const [creating, setCreating] = useState(false);
   const [detail, setDetail] = useState<AuthorReceiptDetail | null>(null);
+  const [stats, setStats] = useState<AuthorReceiptStats | null>(null);
 
-  const refresh = () =>
+  const refresh = () => {
     listAuthorReceipts({ from: filters.from || undefined, to: filters.to || undefined, type: filters.type || undefined, status: filters.status || undefined, q: filters.q || undefined })
       .then((r) => { setRows(r); setError(null); })
       .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
+    if (financeView) {
+      getAuthorReceiptStats({ from: filters.from || undefined, to: filters.to || undefined, type: filters.type || undefined })
+        .then(setStats).catch(() => setStats(null));
+    }
+  };
   useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const total = useMemo(() => rows.filter((r) => r.status !== "annule").reduce((s, r) => s + r.amount, 0), [rows]);
@@ -65,6 +72,15 @@ export function AuthorReceiptsPage({ canCreate = false, financeView = false }: {
       </GuidanceNote>
 
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 13px", fontSize: 13, margin: "10px 0" }}>{error}</div>}
+
+      {/* États (vue Finance) : totaux sur le périmètre filtré (hors annulés). */}
+      {financeView && stats && (
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "12px 0" }}>
+          <StatTile label="Total encaissé" value={money(stats.total_amount, "XAF")} accent big />
+          <StatTile label="Nombre de reçus" value={String(stats.count)} />
+          {stats.by_type.map((t) => <StatTile key={t.key} label={t.label} value={money(t.amount, "XAF")} sub={`${t.count} reçu(s)`} />)}
+        </div>
+      )}
 
       {/* Filtres */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", margin: "12px 0" }}>
@@ -113,7 +129,7 @@ export function AuthorReceiptsPage({ canCreate = false, financeView = false }: {
       </Card>
 
       {creating && <CreateReceiptModal onClose={() => setCreating(false)} onCreated={(printNow, id) => { setCreating(false); refresh(); if (printNow) printOne(id); }} />}
-      {detail && <ReceiptDetailModal detail={detail} onClose={() => setDetail(null)} onPrint={() => printAuthorReceipt(detail)} />}
+      {detail && <ReceiptDetailModal detail={detail} canValidate={canValidate} onClose={() => setDetail(null)} onPrint={() => printAuthorReceipt(detail)} onChanged={async () => { const d = await getAuthorReceipt(detail.id); setDetail(d); refresh(); }} />}
     </div>
   );
 }
@@ -234,9 +250,30 @@ function CreateReceiptModal({ onClose, onCreated }: { onClose: () => void; onCre
   );
 }
 
-function ReceiptDetailModal({ detail: r, onClose, onPrint }: { detail: AuthorReceiptDetail; onClose: () => void; onPrint: () => void }) {
+function ReceiptDetailModal({ detail: r, canValidate, onClose, onPrint, onChanged }: { detail: AuthorReceiptDetail; canValidate: boolean; onClose: () => void; onPrint: () => void; onChanged: () => void | Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [accRef, setAccRef] = useState("");
   const line = (label: string, v: React.ReactNode) => <div style={{ fontSize: 13, margin: "3px 0" }}><span style={{ color: "var(--muted)" }}>{label} :</span> {v}</div>;
   const actor = (a: AuthorReceiptDetail["traceability"]["initiated"]) => a ? <>{a.name ?? "—"}{a.role ? ` — ${a.role}` : ""}{a.dept ? ` (${a.dept})` : ""}{a.at ? ` · ${fdatetime(a.at)}` : ""}</> : "—";
+
+  // Circuit Finance : contrôle puis intégration comptable, chaque étape tracée.
+  const canControl = canValidate && (r.status === "enregistre" || r.status === "a_controler");
+  const canAccount = canValidate && r.status === "controle";
+
+  async function doControl() {
+    setBusy(true); setErr(null);
+    try { await controlAuthorReceipt(r.id); await onChanged(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Contrôle impossible."); }
+    finally { setBusy(false); }
+  }
+  async function doAccount() {
+    setBusy(true); setErr(null);
+    try { await accountAuthorReceipt(r.id, accRef.trim() || undefined); await onChanged(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Intégration comptable impossible."); }
+    finally { setBusy(false); }
+  }
+
   return (
     <Modal title={`Reçu ${r.receipt_number}`} onClose={onClose} wide footer={<><Button variant="subtle" size="sm" onClick={onClose}>Fermer</Button><Button variant="add" size="sm" onClick={onPrint}>Imprimer / Télécharger</Button></>}>
       {line("Statut", <strong style={{ color: STATUS_COLOR[r.status] }}>{STATUS_LABEL[r.status]}</strong>)}
@@ -247,6 +284,7 @@ function ReceiptDetailModal({ detail: r, onClose, onPrint }: { detail: AuthorRec
       {line("Mode", r.method_label + (r.tx_reference ? ` · Réf. ${r.tx_reference}` : ""))}
       {line("Date du paiement", fdate(r.paid_at))}
       {r.comment && line("Commentaire", r.comment)}
+      {r.accounting_ref && line("Référence comptable", <span style={{ fontFamily: "var(--font-mono)" }}>{r.accounting_ref}</span>)}
 
       <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--line)", fontWeight: 700, fontSize: 13 }}>Traçabilité de l'opération</div>
       {line("Initié par", actor(r.traceability.initiated))}
@@ -254,7 +292,43 @@ function ReceiptDetailModal({ detail: r, onClose, onPrint }: { detail: AuthorRec
       {line("Contrôlé par", actor(r.traceability.controlled))}
       {line("Intégré en comptabilité par", actor(r.traceability.accounted))}
       {r.traceability.cancelled && line("Annulé par", <>{actor(r.traceability.cancelled)}{r.traceability.cancel_reason ? ` — motif : ${r.traceability.cancel_reason}` : ""}</>)}
+
+      {(canControl || canAccount) && (
+        <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Circuit Finance</div>
+          {err && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "8px 11px", fontSize: 12.5, marginBottom: 8 }}>{err}</div>}
+          {canControl && (
+            <div style={{ marginBottom: 10 }}>
+              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>Vérifiez le paiement (montant, mode, référence) puis marquez le reçu comme contrôlé.</p>
+              <Button variant="add" size="sm" onClick={doControl} disabled={busy}>{busy ? "…" : "Marquer contrôlé"}</Button>
+            </div>
+          )}
+          {canAccount && (
+            <div>
+              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>Reçu contrôlé : intégrez-le en comptabilité (référence de rapprochement facultative).</p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <label style={lbl}>Référence comptable (facultatif)<input value={accRef} onChange={(e) => setAccRef(e.target.value)} placeholder="N° pièce, lot d'export…" style={inp} /></label>
+                <Button variant="add" size="sm" onClick={doAccount} disabled={busy}>{busy ? "…" : "Intégrer en comptabilité"}</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </Modal>
+  );
+}
+
+function StatTile({ label, value, sub, accent = false, big = false }: { label: string; value: string; sub?: string; accent?: boolean; big?: boolean }) {
+  return (
+    <div style={{
+      border: `1px solid ${accent ? "var(--eclosion-gold, #D9B21A)" : "var(--line)"}`,
+      background: accent ? "var(--ivoire, #FAF8F2)" : "var(--card, #FFFFFF)",
+      borderRadius: 10, padding: "12px 16px", minWidth: 150, flex: big ? "1 1 220px" : "0 1 auto",
+    }}>
+      <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: big ? 24 : 19, fontWeight: 800, fontFamily: "var(--font-mono)", marginTop: 3, color: "var(--ink)" }}>{value}</div>
+      {sub && <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>{sub}</div>}
+    </div>
   );
 }
 

@@ -198,6 +198,7 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
       amount: num(r.amount), currency: r.currency,
       method: r.method, method_label: methods.get(r.method) ?? r.method,
       paid_at: r.paidAt.toISOString(), tx_reference: r.txReference, comment: r.comment,
+      accounting_ref: r.accountingRef,
       author: { id: r.partner.id, name: `${r.partner.firstName} ${r.partner.lastName}`.trim(), phone: r.partner.phone, email: r.partner.email, address: r.partner.address, niu: r.partner.niu },
       manuscript: r.manuscript ? { id: r.manuscript.id, number: r.manuscript.manuscriptNumber, title: r.manuscript.title, collection: r.manuscript.collection?.label ?? null } : null,
       traceability: {
@@ -209,6 +210,67 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
         cancel_reason: r.cancelReason,
       },
       created_at: r.createdAt.toISOString(),
+    });
+  });
+
+  // — Circuit Finance : contrôle puis intégration comptable (séparation des
+  // fonctions). Réservé à la finance (validation). Un reçu annulé n'évolue plus ;
+  // l'intégration comptable exige un reçu préalablement contrôlé. Chaque étape
+  // fige son acteur et son horodatage, et est tracée au journal d'audit.
+  fastify.post("/api/v1/author-receipts/:id/control", { preHandler: requirePermission("paiements_auteurs", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const r = await prisma.authorReceipt.findUnique({ where: { id }, select: { status: true } });
+    if (!r) return reply.code(404).send({ code: "not_found", message: "Reçu introuvable." });
+    if (r.status === "annule") return reply.code(409).send({ code: "receipt_cancelled", message: "Ce reçu est annulé : il n'évolue plus." });
+    if (r.status === "comptabilise") return reply.code(409).send({ code: "already_accounted", message: "Ce reçu est déjà intégré en comptabilité." });
+    const me = request.user!.id;
+    await prisma.authorReceipt.update({ where: { id }, data: { status: "controle", controlledBy: me, controlledAt: new Date() } });
+    await writeAuditLog({ userId: me, action: "update", entityType: "author_receipt", entityId: id, newValues: { status: "controle" }, ipAddress: request.ip });
+    return reply.send({ id, status: "controle" });
+  });
+
+  const accountSchema = z.object({ accounting_ref: z.string().max(120).optional() });
+  fastify.post("/api/v1/author-receipts/:id/account", { preHandler: requirePermission("paiements_auteurs", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = accountSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Référence comptable invalide." });
+    const r = await prisma.authorReceipt.findUnique({ where: { id }, select: { status: true } });
+    if (!r) return reply.code(404).send({ code: "not_found", message: "Reçu introuvable." });
+    if (r.status === "annule") return reply.code(409).send({ code: "receipt_cancelled", message: "Ce reçu est annulé : il n'évolue plus." });
+    if (r.status !== "controle") return reply.code(409).send({ code: "not_controlled", message: "Contrôlez d'abord le reçu avant de l'intégrer en comptabilité." });
+    const me = request.user!.id;
+    await prisma.authorReceipt.update({ where: { id }, data: { status: "comptabilise", accountedBy: me, accountedAt: new Date(), accountingRef: parsed.data.accounting_ref?.trim() || null } });
+    await writeAuditLog({ userId: me, action: "update", entityType: "author_receipt", entityId: id, newValues: { status: "comptabilise", accountingRef: parsed.data.accounting_ref ?? null }, ipAddress: request.ip });
+    return reply.send({ id, status: "comptabilise" });
+  });
+
+  // — États / tableaux de bord : agrégats sur le périmètre filtré (par type, par
+  // mode, total). Les montants sont calculés sur les opérations réellement
+  // enregistrées, hors reçus annulés.
+  fastify.get("/api/v1/author-receipts/stats", { preHandler: requirePermission("paiements_auteurs", "consultation") }, async (request, reply) => {
+    const q = request.query as { from?: string; to?: string; type?: string; method?: string };
+    const paidAt: { gte?: Date; lte?: Date } = {};
+    if (q.from) { const d = new Date(q.from); if (!Number.isNaN(d.getTime())) paidAt.gte = d; }
+    if (q.to) { const d = new Date(q.to); if (!Number.isNaN(d.getTime())) { d.setUTCHours(23, 59, 59, 999); paidAt.lte = d; } }
+    const where = {
+      status: { not: "annule" as const },
+      ...(paidAt.gte || paidAt.lte ? { paidAt } : {}),
+      ...(q.type ? { type: q.type as AuthorReceiptType } : {}),
+      ...(q.method ? { method: q.method } : {}),
+    };
+    const rows = await prisma.authorReceipt.findMany({ where, select: { type: true, method: true, status: true, amount: true } });
+    const methods = new Map((await prisma.paymentMethodDef.findMany({ select: { code: true, label: true } })).map((m) => [m.code, m.label]));
+    const sumBy = (key: (r: (typeof rows)[number]) => string, label?: (k: string) => string) => {
+      const m = new Map<string, { amount: number; count: number }>();
+      for (const r of rows) { const k = key(r); const c = m.get(k) ?? { amount: 0, count: 0 }; c.amount += num(r.amount); c.count += 1; m.set(k, c); }
+      return [...m.entries()].map(([k, v]) => ({ key: k, label: label ? label(k) : k, amount: v.amount, count: v.count })).sort((a, b) => b.amount - a.amount);
+    };
+    const TYPE_LABEL: Record<string, string> = { frais_depot: "Frais de dépôt (évaluation)", prestation_editoriale: "Prestations éditoriales" };
+    return reply.send({
+      total_amount: rows.reduce((s, r) => s + num(r.amount), 0),
+      count: rows.length,
+      by_type: sumBy((r) => r.type, (k) => TYPE_LABEL[k] ?? k),
+      by_method: sumBy((r) => r.method, (k) => methods.get(k) ?? k),
     });
   });
 }

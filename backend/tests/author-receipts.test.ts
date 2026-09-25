@@ -91,4 +91,45 @@ describe("Paiements auteurs & Reçus", () => {
     expect(rows.length).toBeGreaterThanOrEqual(1);
     expect(rows.every((r) => r.registered_by === "admin")).toBe(true);
   });
+
+  // CIRCUIT FINANCE (incrément 2) : contrôle → comptabilisation, chaque étape tracée,
+  // impossible de comptabiliser sans contrôle préalable.
+  it("comptabiliser sans contrôle → 409 ; contrôle puis intégration comptable tracés", async () => {
+    const { id } = (await create({ type: "frais_depot", amount: 7000 })).json() as { id: string };
+
+    // On ne peut pas comptabiliser un reçu qui n'a pas été contrôlé.
+    const tooSoon = await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/account`, headers: { cookie }, payload: {} });
+    expect(tooSoon.statusCode).toBe(409);
+    expect(tooSoon.json().code).toBe("not_controlled");
+
+    // Contrôle.
+    const ctrl = await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/control`, headers: { cookie }, payload: {} });
+    expect(ctrl.statusCode).toBe(200);
+    expect(ctrl.json().status).toBe("controle");
+
+    // Intégration comptable avec référence.
+    const acc = await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/account`, headers: { cookie }, payload: { accounting_ref: "PIECE-2026-42" } });
+    expect(acc.statusCode).toBe(200);
+    expect(acc.json().status).toBe("comptabilise");
+
+    const detail = (await app.inject({ method: "GET", url: `/api/v1/author-receipts/${id}`, headers: { cookie } })).json();
+    expect(detail.status).toBe("comptabilise");
+    expect(detail.accounting_ref).toBe("PIECE-2026-42");
+    expect(detail.traceability.controlled.name).toBe("admin");
+    expect(detail.traceability.accounted.name).toBe("admin");
+
+    // Reçu déjà comptabilisé → ne se re-contrôle plus.
+    const reCtrl = await app.inject({ method: "POST", url: `/api/v1/author-receipts/${id}/control`, headers: { cookie }, payload: {} });
+    expect(reCtrl.statusCode).toBe(409);
+    expect(reCtrl.json().code).toBe("already_accounted");
+  });
+
+  it("les statistiques agrègent le périmètre filtré (total, nombre, par type)", async () => {
+    const res = await app.inject({ method: "GET", url: `/api/v1/author-receipts/stats?type=frais_depot`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const stats = res.json() as { total_amount: number; count: number; by_type: Array<{ key: string; amount: number; count: number }> };
+    expect(stats.count).toBeGreaterThanOrEqual(1);
+    expect(stats.total_amount).toBeGreaterThan(0);
+    expect(stats.by_type.some((t) => t.key === "frais_depot")).toBe(true);
+  });
 });

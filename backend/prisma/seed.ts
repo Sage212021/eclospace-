@@ -1812,6 +1812,14 @@ async function main() {
       permissionModules: ["paiements_auteurs"],
       departmentCodes: ["DIRED", "SECR", "FIN"],
     },
+    {
+      slug: "2026-09-paiements-auteurs-circuit-finance",
+      version: "2026.09",
+      title: "Nouveauté — Reçus auteurs : contrôle & intégration comptable (Finance)",
+      body: "Le circuit Finance des reçus auteurs est en place. Dans « Encaissements éditoriaux », un reçu enregistré par l'éditorial peut maintenant être : 1) vérifié puis marqué « Contrôlé » (montant, mode, référence) ; 2) « Intégré en comptabilité » avec une référence de rapprochement facultative (n° de pièce, lot d'export). Impossible d'intégrer un reçu qui n'a pas d'abord été contrôlé, et chaque étape reste tracée (qui a contrôlé, qui a comptabilisé, quand). La page Finance affiche aussi des états en haut : total encaissé, nombre de reçus et répartition par type sur la période filtrée. Toujours une seule et même opération, aucune ressaisie.",
+      permissionModules: ["paiements_auteurs"],
+      departmentCodes: ["FIN", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

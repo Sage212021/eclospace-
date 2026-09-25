@@ -6984,7 +6984,7 @@ export interface AuthorReceiptActor { name: string | null; role: string | null; 
 export interface AuthorReceiptDetail {
   id: string; receipt_number: string; type: AuthorReceiptType; status: AuthorReceiptStatus;
   service_label: string | null; amount: number; currency: string; method: string; method_label: string;
-  paid_at: string; tx_reference: string | null; comment: string | null;
+  paid_at: string; tx_reference: string | null; comment: string | null; accounting_ref: string | null;
   author: { id: string; name: string; phone: string | null; email: string | null; address: string | null; niu: string | null };
   manuscript: { id: string; number: string; title: string; collection: string | null } | null;
   traceability: { initiated: AuthorReceiptActor | null; generated: AuthorReceiptActor | null; controlled: AuthorReceiptActor | null; accounted: AuthorReceiptActor | null; cancelled: AuthorReceiptActor | null; cancel_reason: string | null };
@@ -7007,4 +7007,23 @@ export function getAuthorReceipt(id: string) {
 }
 export function createAuthorReceipt(input: { manuscript_id: string; partner_id?: string; type: AuthorReceiptType; service_label?: string; amount: number; currency?: string; method: string; paid_at: string; tx_reference?: string; comment?: string }) {
   return request<{ id: string; receipt_number: string }>("/api/v1/author-receipts", { method: "POST", body: JSON.stringify(input) });
+}
+
+// — Circuit Finance des reçus (contrôle, intégration comptable, états) —
+export function controlAuthorReceipt(id: string) {
+  return request<{ id: string; status: string }>(`/api/v1/author-receipts/${id}/control`, { method: "POST" });
+}
+export function accountAuthorReceipt(id: string, accountingRef?: string) {
+  return request<{ id: string; status: string }>(`/api/v1/author-receipts/${id}/account`, { method: "POST", body: JSON.stringify(accountingRef ? { accounting_ref: accountingRef } : {}) });
+}
+export interface AuthorReceiptStats {
+  total_amount: number; count: number;
+  by_type: { key: string; label: string; amount: number; count: number }[];
+  by_method: { key: string; label: string; amount: number; count: number }[];
+}
+export function getAuthorReceiptStats(filters: { from?: string; to?: string; type?: string; method?: string } = {}) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) if (v) p.set(k, v);
+  const qs = p.toString();
+  return request<AuthorReceiptStats>(`/api/v1/author-receipts/stats${qs ? `?${qs}` : ""}`);
 }

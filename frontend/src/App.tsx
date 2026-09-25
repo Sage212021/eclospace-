@@ -945,8 +945,8 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "diagnostics" && <DiagnosticsPage user={user} />}
         {leaf && "page" in leaf && leaf.page === "production-tracking" && <ProductionTrackingPage />}
         {leaf && "page" in leaf && leaf.page === "commercial-performance" && <CommercialPerformancePage canManage={permissions.has("commercial:validation") || permissions.has("commercial:administration")} />}
-        {leaf && "page" in leaf && leaf.page === "author-receipts" && <AuthorReceiptsPage canCreate={permissions.has("paiements_auteurs:saisie")} />}
-        {leaf && "page" in leaf && leaf.page === "author-receipts-finance" && <AuthorReceiptsPage canCreate={permissions.has("paiements_auteurs:saisie")} financeView />}
+        {leaf && "page" in leaf && leaf.page === "author-receipts" && <AuthorReceiptsPage canCreate={permissions.has("paiements_auteurs:saisie")} canValidate={permissions.has("paiements_auteurs:validation")} />}
+        {leaf && "page" in leaf && leaf.page === "author-receipts-finance" && <AuthorReceiptsPage canCreate={permissions.has("paiements_auteurs:saisie")} canValidate={permissions.has("paiements_auteurs:validation")} financeView />}
         {leaf && "page" in leaf && leaf.page === "commissions" && <CommissionsPage canSetRate={permissions.has("finance:administration")} />}
         {leaf && "page" in leaf && leaf.page === "author-royalties" && <AuthorRoyaltiesPage canConfigure={permissions.has("finance:administration")} canGenerate={permissions.has("royalties:validation")} />}
         </Suspense>

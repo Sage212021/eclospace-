@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   listAuthorReceipts, getAuthorReceipt, createAuthorReceipt, getReceiptMethods, searchReceiptManuscripts,
-  controlAuthorReceipt, accountAuthorReceipt, getAuthorReceiptStats,
-  type AuthorReceiptRow, type AuthorReceiptDetail, type AuthorReceiptType, type ReceiptManuscriptOption, type AuthorReceiptStats,
+  controlAuthorReceipt, accountAuthorReceipt, getAuthorReceiptStats, cancelAuthorReceipt, getAuthorReceiptAlerts,
+  type AuthorReceiptRow, type AuthorReceiptDetail, type AuthorReceiptType, type ReceiptManuscriptOption, type AuthorReceiptStats, type AuthorReceiptAlert,
 } from "../api/client";
 import { printAuthorReceipt } from "../lib/print";
 import { Card } from "../components/Card";
@@ -35,17 +35,29 @@ export function AuthorReceiptsPage({ canCreate = false, canValidate = false, fin
   const [creating, setCreating] = useState(false);
   const [detail, setDetail] = useState<AuthorReceiptDetail | null>(null);
   const [stats, setStats] = useState<AuthorReceiptStats | null>(null);
+  const [alerts, setAlerts] = useState<AuthorReceiptAlert[]>([]);
+  const [alertsOpen, setAlertsOpen] = useState(false);
 
   const refresh = () => {
     listAuthorReceipts({ from: filters.from || undefined, to: filters.to || undefined, type: filters.type || undefined, status: filters.status || undefined, q: filters.q || undefined })
       .then((r) => { setRows(r); setError(null); })
       .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
+    getAuthorReceiptAlerts().then((a) => setAlerts(a.alerts)).catch(() => setAlerts([]));
     if (financeView) {
       getAuthorReceiptStats({ from: filters.from || undefined, to: filters.to || undefined, type: filters.type || undefined })
         .then(setStats).catch(() => setStats(null));
     }
   };
   useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  // Historique par auteur / par manuscrit : un clic remplit la recherche et relance.
+  const searchFor = (text: string) => {
+    const next = { from: "", to: "", type: "", status: "", q: text };
+    setFilters(next);
+    listAuthorReceipts({ q: text })
+      .then((r) => { setRows(r); setError(null); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
+  };
 
   const total = useMemo(() => rows.filter((r) => r.status !== "annule").reduce((s, r) => s + r.amount, 0), [rows]);
 
@@ -72,6 +84,27 @@ export function AuthorReceiptsPage({ canCreate = false, canValidate = false, fin
       </GuidanceNote>
 
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 13px", fontSize: 13, margin: "10px 0" }}>{error}</div>}
+
+      {/* Contrôles de cohérence : rien n'est bloqué, on signale ce qui mérite un œil
+          (doublons possibles, frais de dépôt en double, NIU manquant). */}
+      {alerts.length > 0 && (
+        <div style={{ border: "1px solid #B87400", background: "rgba(184,116,0,0.08)", borderRadius: 10, padding: "10px 14px", margin: "10px 0" }}>
+          <button onClick={() => setAlertsOpen((o) => !o)} style={{ background: "none", border: "none", cursor: "pointer", color: "#B87400", fontWeight: 700, fontSize: 13, padding: 0, display: "flex", alignItems: "center", gap: 6 }}>
+            {alertsOpen ? "▾" : "▸"} {alerts.length} point(s) à vérifier
+          </button>
+          {alertsOpen && (
+            <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12.5, color: "var(--ink)" }}>
+              {alerts.map((a, i) => (
+                <li key={i} style={{ margin: "3px 0" }}>
+                  <span style={{ color: a.severity === "warning" ? "#B87400" : "var(--muted)", fontWeight: 700, marginRight: 6 }}>{a.severity === "warning" ? "⚠" : "ℹ"}</span>
+                  {a.message}{" "}
+                  <button onClick={() => searchFor(a.receipt_numbers[0])} style={{ ...linkBtn, marginRight: 0 }}>voir</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* États (vue Finance) : totaux sur le périmètre filtré (hors annulés). */}
       {financeView && stats && (
@@ -109,8 +142,8 @@ export function AuthorReceiptsPage({ canCreate = false, canValidate = false, fin
                 <tr key={r.id} style={{ opacity: r.status === "annule" ? 0.6 : 1 }}>
                   <td style={{ ...td, fontFamily: "var(--font-mono)" }}>{r.receipt_number}</td>
                   <td style={td}>{fdate(r.paid_at)}</td>
-                  <td style={td}>{r.author}</td>
-                  <td style={td}>{r.manuscript_number ? <span><span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{r.manuscript_number}</span> {r.manuscript}</span> : "—"}</td>
+                  <td style={td}><button onClick={() => searchFor(r.author)} style={linkBtn} title="Voir l'historique de cet auteur">{r.author}</button></td>
+                  <td style={td}>{r.manuscript_number ? <button onClick={() => searchFor(r.manuscript_number!)} style={linkBtn} title="Voir l'historique de ce manuscrit"><span style={{ fontFamily: "var(--font-mono)" }}>{r.manuscript_number}</span> {r.manuscript}</button> : "—"}</td>
                   <td style={td}>{TYPE_LABEL[r.type]}</td>
                   <td style={td}>{r.service_label ?? "—"}</td>
                   <td style={{ ...td, textAlign: "right", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>{money(r.amount, r.currency)}</td>
@@ -254,12 +287,17 @@ function ReceiptDetailModal({ detail: r, canValidate, onClose, onPrint, onChange
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [accRef, setAccRef] = useState("");
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelReplace, setCancelReplace] = useState(false);
   const line = (label: string, v: React.ReactNode) => <div style={{ fontSize: 13, margin: "3px 0" }}><span style={{ color: "var(--muted)" }}>{label} :</span> {v}</div>;
   const actor = (a: AuthorReceiptDetail["traceability"]["initiated"]) => a ? <>{a.name ?? "—"}{a.role ? ` — ${a.role}` : ""}{a.dept ? ` (${a.dept})` : ""}{a.at ? ` · ${fdatetime(a.at)}` : ""}</> : "—";
 
   // Circuit Finance : contrôle puis intégration comptable, chaque étape tracée.
   const canControl = canValidate && (r.status === "enregistre" || r.status === "a_controler");
   const canAccount = canValidate && r.status === "controle";
+  // Annulation : possible tant que le reçu n'est ni annulé ni comptabilisé.
+  const canCancel = canValidate && r.status !== "annule" && r.status !== "comptabilise";
 
   async function doControl() {
     setBusy(true); setErr(null);
@@ -271,6 +309,13 @@ function ReceiptDetailModal({ detail: r, canValidate, onClose, onPrint, onChange
     setBusy(true); setErr(null);
     try { await accountAuthorReceipt(r.id, accRef.trim() || undefined); await onChanged(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Intégration comptable impossible."); }
+    finally { setBusy(false); }
+  }
+  async function doCancel() {
+    if (cancelReason.trim().length < 3) { setErr("Indiquez le motif de l'annulation."); return; }
+    setBusy(true); setErr(null);
+    try { await cancelAuthorReceipt(r.id, cancelReason.trim(), cancelReplace); setCancelOpen(false); await onChanged(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Annulation impossible."); }
     finally { setBusy(false); }
   }
 
@@ -285,6 +330,8 @@ function ReceiptDetailModal({ detail: r, canValidate, onClose, onPrint, onChange
       {line("Date du paiement", fdate(r.paid_at))}
       {r.comment && line("Commentaire", r.comment)}
       {r.accounting_ref && line("Référence comptable", <span style={{ fontFamily: "var(--font-mono)" }}>{r.accounting_ref}</span>)}
+      {r.replaced_by && line("Remplacé par", <strong style={{ fontFamily: "var(--font-mono)" }}>{r.replaced_by.receipt_number}</strong>)}
+      {r.replaces && line("Remplace le reçu", <span style={{ fontFamily: "var(--font-mono)" }}>{r.replaces.receipt_number}</span>)}
 
       <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--line)", fontWeight: 700, fontSize: 13 }}>Traçabilité de l'opération</div>
       {line("Initié par", actor(r.traceability.initiated))}
@@ -293,7 +340,7 @@ function ReceiptDetailModal({ detail: r, canValidate, onClose, onPrint, onChange
       {line("Intégré en comptabilité par", actor(r.traceability.accounted))}
       {r.traceability.cancelled && line("Annulé par", <>{actor(r.traceability.cancelled)}{r.traceability.cancel_reason ? ` — motif : ${r.traceability.cancel_reason}` : ""}</>)}
 
-      {(canControl || canAccount) && (
+      {(canControl || canAccount || canCancel) && (
         <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
           <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Circuit Finance</div>
           {err && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "8px 11px", fontSize: 12.5, marginBottom: 8 }}>{err}</div>}
@@ -304,11 +351,33 @@ function ReceiptDetailModal({ detail: r, canValidate, onClose, onPrint, onChange
             </div>
           )}
           {canAccount && (
-            <div>
+            <div style={{ marginBottom: 10 }}>
               <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>Reçu contrôlé : intégrez-le en comptabilité (référence de rapprochement facultative).</p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
                 <label style={lbl}>Référence comptable (facultatif)<input value={accRef} onChange={(e) => setAccRef(e.target.value)} placeholder="N° pièce, lot d'export…" style={inp} /></label>
                 <Button variant="add" size="sm" onClick={doAccount} disabled={busy}>{busy ? "…" : "Intégrer en comptabilité"}</Button>
+              </div>
+            </div>
+          )}
+          {canCancel && !cancelOpen && (
+            <div>
+              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 6px" }}>En cas d'erreur, annulez ce reçu (le reçu n'est jamais supprimé : il reste tracé). Vous pouvez émettre un reçu de remplacement.</p>
+              <Button variant="danger" size="sm" onClick={() => setCancelOpen(true)} disabled={busy}>Annuler le reçu…</Button>
+            </div>
+          )}
+          {canCancel && cancelOpen && (
+            <div style={{ border: "1px solid #B23A2E", borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ fontWeight: 700, fontSize: 12.5, color: "#B23A2E", marginBottom: 6 }}>Annulation du reçu {r.receipt_number}</div>
+              <label style={{ ...lbl, marginBottom: 8 }}>Motif de l'annulation (obligatoire)
+                <textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows={2} placeholder="Ex. : montant erroné, doublon, mauvais auteur…" style={{ ...inp, resize: "vertical" }} />
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, marginBottom: 10, cursor: "pointer" }}>
+                <input type="checkbox" checked={cancelReplace} onChange={(e) => setCancelReplace(e.target.checked)} />
+                Émettre aussitôt un reçu de remplacement (copie corrigeable)
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button variant="danger" size="sm" onClick={doCancel} disabled={busy}>{busy ? "…" : "Confirmer l'annulation"}</Button>
+                <Button variant="subtle" size="sm" onClick={() => { setCancelOpen(false); setErr(null); }} disabled={busy}>Renoncer</Button>
               </div>
             </div>
           )}

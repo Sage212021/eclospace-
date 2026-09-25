@@ -150,6 +150,8 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
         ...(text ? { OR: [
           { receiptNumber: { contains: text, mode: "insensitive" } },
           { txReference: { contains: text, mode: "insensitive" } },
+          { serviceLabel: { contains: text, mode: "insensitive" } },
+          { accountingRef: { contains: text, mode: "insensitive" } },
           { partner: { OR: [{ firstName: { contains: text, mode: "insensitive" } }, { lastName: { contains: text, mode: "insensitive" } }] } },
           { manuscript: { OR: [{ title: { contains: text, mode: "insensitive" } }, { manuscriptNumber: { contains: text, mode: "insensitive" } }] } },
         ] } : {}),
@@ -190,6 +192,11 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
     });
     if (!r) return reply.code(404).send({ code: "not_found", message: "Reçu introuvable." });
     const methods = new Map((await prisma.paymentMethodDef.findMany({ select: { code: true, label: true } })).map((m) => [m.code, m.label]));
+    // Chaînage annulation ↔ remplacement (dans les deux sens).
+    const [replacedBy, replaces] = await Promise.all([
+      r.replacedByReceiptId ? prisma.authorReceipt.findUnique({ where: { id: r.replacedByReceiptId }, select: { id: true, receiptNumber: true, status: true } }) : Promise.resolve(null),
+      prisma.authorReceipt.findFirst({ where: { replacedByReceiptId: r.id }, select: { id: true, receiptNumber: true } }),
+    ]);
     const actors = await resolveActors([r.initiatedBy, r.generatedBy, r.controlledBy, r.accountedBy, r.cancelledBy]);
     const actor = (uid: string | null, at: Date | null) => uid ? { name: actors.get(uid)?.name ?? null, role: actors.get(uid)?.role ?? null, dept: actors.get(uid)?.dept ?? null, at: at?.toISOString() ?? null } : null;
     return reply.send({
@@ -199,6 +206,8 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
       method: r.method, method_label: methods.get(r.method) ?? r.method,
       paid_at: r.paidAt.toISOString(), tx_reference: r.txReference, comment: r.comment,
       accounting_ref: r.accountingRef,
+      replaced_by: replacedBy ? { id: replacedBy.id, receipt_number: replacedBy.receiptNumber, status: replacedBy.status } : null,
+      replaces: replaces ? { id: replaces.id, receipt_number: replaces.receiptNumber } : null,
       author: { id: r.partner.id, name: `${r.partner.firstName} ${r.partner.lastName}`.trim(), phone: r.partner.phone, email: r.partner.email, address: r.partner.address, niu: r.partner.niu },
       manuscript: r.manuscript ? { id: r.manuscript.id, number: r.manuscript.manuscriptNumber, title: r.manuscript.title, collection: r.manuscript.collection?.label ?? null } : null,
       traceability: {
@@ -242,6 +251,135 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
     await prisma.authorReceipt.update({ where: { id }, data: { status: "comptabilise", accountedBy: me, accountedAt: new Date(), accountingRef: parsed.data.accounting_ref?.trim() || null } });
     await writeAuditLog({ userId: me, action: "update", entityType: "author_receipt", entityId: id, newValues: { status: "comptabilise", accountingRef: parsed.data.accounting_ref ?? null }, ipAddress: request.ip });
     return reply.send({ id, status: "comptabilise" });
+  });
+
+  // — Annulation tracée (+ reçu de remplacement optionnel). JAMAIS de suppression
+  // physique : un reçu erroné est annulé (motif obligatoire, acteur + horodatage
+  // figés) et peut être remplacé par un nouveau reçu (copie corrigeable) relié à
+  // l'ancien. Un reçu déjà intégré en comptabilité ne s'annule pas ici (il faut
+  // une régularisation comptable) ; un reçu déjà annulé n'est pas ré-annulé.
+  const cancelSchema = z.object({
+    reason: z.string().min(3).max(500),
+    issue_replacement: z.boolean().optional().default(false),
+  });
+  fastify.post("/api/v1/author-receipts/:id/cancel", { preHandler: requirePermission("paiements_auteurs", "validation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = cancelSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "reason_required", message: "Indiquez le motif de l'annulation (au moins quelques mots)." });
+    const r = await prisma.authorReceipt.findUnique({ where: { id } });
+    if (!r) return reply.code(404).send({ code: "not_found", message: "Reçu introuvable." });
+    if (r.status === "annule") return reply.code(409).send({ code: "already_cancelled", message: "Ce reçu est déjà annulé." });
+    if (r.status === "comptabilise") return reply.code(409).send({ code: "accounted_no_cancel", message: "Ce reçu est intégré en comptabilité : il ne s'annule pas ici. Passez par une régularisation comptable." });
+
+    const me = request.user!.id;
+    const now = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      let replacement: { id: string; receiptNumber: string } | null = null;
+      if (parsed.data.issue_replacement) {
+        const receiptNumber = await nextReceiptNumber(tx);
+        const rep = await tx.authorReceipt.create({
+          data: {
+            receiptNumber,
+            type: r.type,
+            status: "enregistre",
+            partnerId: r.partnerId,
+            manuscriptId: r.manuscriptId,
+            serviceLabel: r.serviceLabel,
+            amount: r.amount,
+            currency: r.currency,
+            method: r.method,
+            paidAt: r.paidAt,
+            txReference: r.txReference,
+            comment: `Reçu de remplacement du reçu ${r.receiptNumber} (annulé : ${parsed.data.reason.trim()}).` + (r.comment ? ` — ${r.comment}` : ""),
+            initiatedBy: me,
+            initiatedAt: now,
+            generatedBy: me,
+            generatedAt: now,
+          },
+          select: { id: true, receiptNumber: true },
+        });
+        replacement = rep;
+      }
+      await tx.authorReceipt.update({
+        where: { id },
+        data: { status: "annule", cancelledBy: me, cancelledAt: now, cancelReason: parsed.data.reason.trim(), replacedByReceiptId: replacement?.id ?? null },
+      });
+      return replacement;
+    });
+
+    await writeAuditLog({ userId: me, action: "update", entityType: "author_receipt", entityId: id, newValues: { status: "annule", cancelReason: parsed.data.reason.trim(), replacedByReceiptId: result?.id ?? null }, ipAddress: request.ip });
+    if (result) {
+      await writeAuditLog({ userId: me, action: "create", entityType: "author_receipt", entityId: result.id, newValues: { receiptNumber: result.receiptNumber, replaces: r.receiptNumber }, ipAddress: request.ip });
+    }
+    return reply.send({ id, status: "annule", replacement: result ? { id: result.id, receipt_number: result.receiptNumber } : null });
+  });
+
+  // — Contrôles de cohérence & alertes : signale les situations à vérifier sans
+  // rien bloquer. Sur les reçus non annulés. Aide la finance à repérer les
+  // doublons, les frais de dépôt en double et les pièces fiscalement incomplètes.
+  fastify.get("/api/v1/author-receipts/alerts", { preHandler: requirePermission("paiements_auteurs", "consultation") }, async (_request, reply) => {
+    const rows = await prisma.authorReceipt.findMany({
+      where: { status: { not: "annule" } },
+      select: {
+        id: true, receiptNumber: true, type: true, amount: true, method: true, paidAt: true,
+        partnerId: true, manuscriptId: true,
+        partner: { select: { firstName: true, lastName: true, niu: true } },
+        manuscript: { select: { manuscriptNumber: true, title: true } },
+      },
+      orderBy: { paidAt: "asc" },
+    });
+    const nameOf = (r: (typeof rows)[number]) => r.partner ? `${r.partner.firstName} ${r.partner.lastName}`.trim() : "—";
+    const alerts: { code: string; severity: "warning" | "info"; message: string; receipt_ids: string[]; receipt_numbers: string[] }[] = [];
+
+    // 1) Doublon potentiel : même auteur + manuscrit + type + montant + mode, à ≤ 7 jours.
+    const DAY = 86_400_000;
+    const groups = new Map<string, (typeof rows)[number][]>();
+    for (const r of rows) {
+      const k = `${r.partnerId}|${r.manuscriptId ?? "-"}|${r.type}|${num(r.amount)}|${r.method}`;
+      (groups.get(k) ?? groups.set(k, []).get(k)!).push(r);
+    }
+    for (const grp of groups.values()) {
+      if (grp.length < 2) continue;
+      for (let i = 1; i < grp.length; i++) {
+        const a = grp[i - 1], b = grp[i];
+        if (Math.abs(b.paidAt.getTime() - a.paidAt.getTime()) <= 7 * DAY) {
+          alerts.push({
+            code: "possible_duplicate", severity: "warning",
+            message: `Doublon possible : ${nameOf(b)} — ${num(b.amount).toLocaleString("fr-FR")} FCFA, même type/mode à moins de 7 jours (${a.receiptNumber} et ${b.receiptNumber}).`,
+            receipt_ids: [a.id, b.id], receipt_numbers: [a.receiptNumber, b.receiptNumber],
+          });
+        }
+      }
+    }
+
+    // 2) Frais de dépôt multiples pour un même manuscrit.
+    const depotByMs = new Map<string, (typeof rows)[number][]>();
+    for (const r of rows) {
+      if (r.type !== "frais_depot" || !r.manuscriptId) continue;
+      (depotByMs.get(r.manuscriptId) ?? depotByMs.set(r.manuscriptId, []).get(r.manuscriptId)!).push(r);
+    }
+    for (const grp of depotByMs.values()) {
+      if (grp.length < 2) continue;
+      const m = grp[0].manuscript;
+      alerts.push({
+        code: "multiple_deposit_fees", severity: "warning",
+        message: `Frais de dépôt multiples (${grp.length}) pour le manuscrit ${m?.manuscriptNumber ?? "?"} — ${m?.title ?? ""} : à vérifier.`,
+        receipt_ids: grp.map((x) => x.id), receipt_numbers: grp.map((x) => x.receiptNumber),
+      });
+    }
+
+    // 3) NIU manquant sur une prestation éditoriale (pièce fiscalement incomplète).
+    for (const r of rows) {
+      if (r.type === "prestation_editoriale" && !r.partner?.niu) {
+        alerts.push({
+          code: "missing_niu", severity: "info",
+          message: `NIU manquant pour ${nameOf(r)} sur une prestation éditoriale (${r.receiptNumber}) : complétez la fiche auteur.`,
+          receipt_ids: [r.id], receipt_numbers: [r.receiptNumber],
+        });
+      }
+    }
+
+    return reply.send({ count: alerts.length, alerts });
   });
 
   // — États / tableaux de bord : agrégats sur le périmètre filtré (par type, par

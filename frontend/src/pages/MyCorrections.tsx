@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   listMyCorrections,
   taskManuscriptFileUrl,
+  manuscriptCorrectedFileUrl,
   uploadCorrectedFile,
   patchTask,
   getCorrectionBookTypes,
@@ -189,10 +190,34 @@ function CorrectionCard({ task, onDepose, onRefresh, onMessage, bookTypes, suppo
   //   • l'assistance IA branchée sur la bonne matière à chaque passage.
   // Ouvert d'un clic, sous la tâche. Nécessite l'ouvrage.
   const [workspace, setWorkspace] = useState(false);
+  // Correction clôturée (rangée en « Terminées ») : la carte s'affiche REPLIÉE
+  // (juste le statut). « Réouvrir la correction » la déplie en CONSULTATION SEULE
+  // (téléchargement des fichiers déposés possible, aucune modification).
+  const [reopened, setReopened] = useState(false);
   const manuscriptId = task.manuscript?.id ?? null;
+  const readOnly = done; // une correction terminée ne se modifie plus (consultation)
+
+  // Vue REPLIÉE d'une correction terminée : titre + « Terminé » + « Réouvrir ».
+  if (done && !reopened) {
+    return (
+      <section className="ecl-card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 14.5, color: "var(--ink)" }}>{task.manuscript?.title ?? "—"}</div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <span>{TYPE_LABELS[task.type] ?? task.type}</span>
+              <span style={{ color: "#2E6B4F", fontWeight: 700 }}>· ✅ Terminé</span>
+            </div>
+          </div>
+          <Button variant="subtle" size="sm" onClick={() => setReopened(true)}>Réouvrir la correction</Button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="ecl-card">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 14.5, color: "var(--ink)" }}>{task.manuscript?.title ?? "—"}</div>
           <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -201,7 +226,15 @@ function CorrectionCard({ task, onDepose, onRefresh, onMessage, bookTypes, suppo
             <span style={{ fontFamily: "var(--font-mono)" }}>· {task.progressPct} %</span>
           </div>
         </div>
+        {done && reopened && <Button variant="subtle" size="sm" onClick={() => setReopened(false)}>Replier</Button>}
       </div>
+
+      {/* Correction clôturée, rouverte pour CONSULTATION : lecture seule. */}
+      {readOnly && (
+        <div style={{ marginTop: 8, background: "#DDF0E5", color: "#1E5A3C", border: "1px solid #A9D3BC", borderRadius: 8, padding: "8px 11px", fontSize: 12.5, lineHeight: 1.5 }}>
+          Correction <strong>clôturée</strong> — consultation seule : vous pouvez <strong>télécharger</strong> les fichiers déposés, mais plus les modifier ni en retirer.
+        </div>
+      )}
 
       {/* Tâche marquée terminée mais correction PAS encore clôturée (ouvrage
           toujours à l'étape Correction) : on l'affiche en « En cours » et on
@@ -224,22 +257,33 @@ function CorrectionCard({ task, onDepose, onRefresh, onMessage, bookTypes, suppo
         )}
       </div>
 
-      {/* SORTIE : la version corrigée, reçue par la Maquette. */}
+      {/* SORTIE : la version corrigée, reçue par la Maquette. En consultation
+          (correction clôturée), on ne peut que TÉLÉCHARGER le fichier déposé. */}
       <div style={handoffRow}>
-        <span style={handoffTag("out")}>À remettre</span>
-        <label style={fileBtnStyle}>
-          {task.correctedHasFile ? "Remplacer la version corrigée" : "Déposer la version corrigée (fichier)"}
-          <input
-            type="file"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onDepose(task, f);
-              e.target.value = "";
-            }}
-          />
-        </label>
-        <span style={{ color: "var(--muted)", fontSize: 11.5 }}>→ reçu par la Maquette</span>
+        <span style={handoffTag("out")}>{readOnly ? "Remise" : "À remettre"}</span>
+        {readOnly ? (
+          task.correctedHasFile && manuscriptId ? (
+            <a href={manuscriptCorrectedFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>⬇️ Télécharger la version corrigée remise</a>
+          ) : (
+            <span style={{ color: "var(--muted)" }}>Aucune version corrigée déposée.</span>
+          )
+        ) : (
+          <>
+            <label style={fileBtnStyle}>
+              {task.correctedHasFile ? "Remplacer la version corrigée" : "Déposer la version corrigée (fichier)"}
+              <input
+                type="file"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onDepose(task, f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <span style={{ color: "var(--muted)", fontSize: 11.5 }}>→ reçu par la Maquette</span>
+          </>
+        )}
       </div>
 
       {/* RETOURS REÇUS (toujours visibles) : versions renvoyées par l'intégrateur
@@ -271,41 +315,46 @@ function CorrectionCard({ task, onDepose, onRefresh, onMessage, bookTypes, suppo
               <StartingProofPanel manuscriptId={manuscriptId} canManage={false} />
 
               {/* 2 — Le cycle en deux temps + relais correcteur ↔ intégrateur :
-                  BAT1 → version intégrée → BAT2 → version corrigée finale. */}
-              <CorrectionCyclePanel manuscriptId={manuscriptId} canManage />
+                  BAT1 → version intégrée → BAT2 → version corrigée finale.
+                  Lecture seule quand la correction est clôturée. */}
+              <CorrectionCyclePanel manuscriptId={manuscriptId} canManage={!readOnly} />
 
-              {/* 3 — Paramètres du moteur : type d'ouvrage + support. La grille de
-                  contrôle adaptée se charge automatiquement (sévérités C1/C2/C3/S). */}
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 14, padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--paper, #FAF8F2)" }}>
-                <label style={{ fontSize: 12.5, fontWeight: 600, display: "flex", flexDirection: "column", gap: 4 }}>
-                  Type d'ouvrage
-                  <select value={bookType} onChange={(e) => setBookType(e.target.value)} style={{ fontSize: 13, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, minWidth: 180 }}>
-                    <option value="">Grille par défaut</option>
-                    {bookTypes.map((b) => <option key={b.code} value={b.code}>{b.label}</option>)}
-                  </select>
-                </label>
-                <label style={{ fontSize: 12.5, fontWeight: 600, display: "flex", flexDirection: "column", gap: 4 }}>
-                  Support analysé
-                  <select value={support} onChange={(e) => setSupport(e.target.value)} style={{ fontSize: 13, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, minWidth: 180 }}>
-                    {supports.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
-                  </select>
-                </label>
-                <span style={{ fontSize: 11.5, color: "var(--muted)", flex: 1, minWidth: 160 }}>
-                  La grille de contrôle adaptée au type se charge automatiquement (sévérités C1 bloquant · C2 important · C3 mineur · S suggestion).
-                </span>
-              </div>
+              {/* 3 — Paramètres du moteur + lancement de l'IA : uniquement quand la
+                  correction est ACTIVE (pas en consultation). */}
+              {!readOnly && (
+                <>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 14, padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--paper, #FAF8F2)" }}>
+                    <label style={{ fontSize: 12.5, fontWeight: 600, display: "flex", flexDirection: "column", gap: 4 }}>
+                      Type d'ouvrage
+                      <select value={bookType} onChange={(e) => setBookType(e.target.value)} style={{ fontSize: 13, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, minWidth: 180 }}>
+                        <option value="">Grille par défaut</option>
+                        {bookTypes.map((b) => <option key={b.code} value={b.code}>{b.label}</option>)}
+                      </select>
+                    </label>
+                    <label style={{ fontSize: 12.5, fontWeight: 600, display: "flex", flexDirection: "column", gap: 4 }}>
+                      Support analysé
+                      <select value={support} onChange={(e) => setSupport(e.target.value)} style={{ fontSize: 13, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, minWidth: 180 }}>
+                        {supports.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
+                      </select>
+                    </label>
+                    <span style={{ fontSize: 11.5, color: "var(--muted)", flex: 1, minWidth: 160 }}>
+                      La grille de contrôle adaptée au type se charge automatiquement (sévérités C1 bloquant · C2 important · C3 mineur · S suggestion).
+                    </span>
+                  </div>
 
-              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "12px 0 4px", lineHeight: 1.6 }}>
-                Les documents produits (manuscrit corrigé + rapport) apparaissent dans « 📦 Générer les livrables », prêts à
-                télécharger puis à redéposer dans la phase correspondante ci-dessus.
-              </p>
-              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_1" stepCode="CORRECTION" bookTypeCode={bookType || null} support={support} title="Correction éditoriale — BAT1 (1re relecture)" hint="Lit le manuscrit à corriger (VC1) et produit le rapport + le manuscrit corrigé BAT1. À intégrer ensuite en « Version intégrée »." />
-              <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_2" stepCode="CORRECTION" bookTypeCode={bookType || null} support={support} title="Correction éditoriale — BAT2 (2e relecture, contrôle après intégration)" hint="Lit la VERSION INTÉGRÉE du 1er passage (pas l'original) et pointe, correction par correction, ce qui a été intégré / non intégré / partiel / modifié + nouvelles anomalies." />
-              <AiReadingLauncher manuscriptId={manuscriptId} workType="couverture" stepCode="CORRECTION" bookTypeCode={bookType || null} support="couverture" askCoverPass title="Correction éditoriale — Couverture (1ʳᵉ, dos, 4ᵉ)" hint="Analyse les 3 faces (1ère, dos, 4ème) + cohérence couverture/intérieur + ISBN. Choisissez le passage : BAT1 ou BAT2 (suivi du passage précédent)." />
+                  <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "12px 0 4px", lineHeight: 1.6 }}>
+                    Les documents produits (manuscrit corrigé + rapport) apparaissent dans « 📦 Générer les livrables », prêts à
+                    télécharger puis à redéposer dans la phase correspondante ci-dessus.
+                  </p>
+                  <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_1" stepCode="CORRECTION" bookTypeCode={bookType || null} support={support} title="Correction éditoriale — BAT1 (1re relecture)" hint="Lit le manuscrit à corriger (VC1) et produit le rapport + le manuscrit corrigé BAT1. À intégrer ensuite en « Version intégrée »." />
+                  <AiReadingLauncher manuscriptId={manuscriptId} workType="correction_2" stepCode="CORRECTION" bookTypeCode={bookType || null} support={support} title="Correction éditoriale — BAT2 (2e relecture, contrôle après intégration)" hint="Lit la VERSION INTÉGRÉE du 1er passage (pas l'original) et pointe, correction par correction, ce qui a été intégré / non intégré / partiel / modifié + nouvelles anomalies." />
+                  <AiReadingLauncher manuscriptId={manuscriptId} workType="couverture" stepCode="CORRECTION" bookTypeCode={bookType || null} support="couverture" askCoverPass title="Correction éditoriale — Couverture (1ʳᵉ, dos, 4ᵉ)" hint="Analyse les 3 faces (1ère, dos, 4ème) + cohérence couverture/intérieur + ISBN. Choisissez le passage : BAT1 ou BAT2 (suivi du passage précédent)." />
+                </>
+              )}
 
               {/* 4 — Validation humaine des anomalies (accepter / modifier /
-                  rejeter / à vérifier), tracée ligne par ligne. */}
-              <CorrectionAnomaliesPanel manuscriptId={manuscriptId} canDecide />
+                  rejeter / à vérifier), tracée ligne par ligne. Lecture seule si clôturée. */}
+              <CorrectionAnomaliesPanel manuscriptId={manuscriptId} canDecide={!readOnly} />
             </div>
           )}
         </div>

@@ -566,6 +566,21 @@ export function getNextAssignees(manuscriptId: string) {
   );
 }
 
+// Clôture de la correction (écran « Mes corrections ») : étape suivante,
+// maquettistes destinataires, et état des fichiers exigés (texte VCF + couverture
+// finale). Accessible au correcteur (droit « tasks »).
+export interface CorrectionCloseInfo {
+  at_correction: boolean;
+  next_step: { code: string; label: string } | null;
+  maquettistes: NextAssignee[];
+  text_missing: string[];
+  cover_missing: boolean;
+  ready: boolean;
+}
+export function getCorrectionCloseInfo(manuscriptId: string) {
+  return request<CorrectionCloseInfo>(`/api/v1/manuscripts/${manuscriptId}/correction/close-info`);
+}
+
 // Responsable + candidats de l'ÉTAPE COURANTE : pour choisir/changer la personne
 // affectée à l'étape en cours (ex. le correcteur pendant la Correction éditoriale).
 export interface CurrentStepAssignees {

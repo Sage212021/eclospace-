@@ -7,11 +7,14 @@ import {
   getCorrectionBookTypes,
   getCorrectionCycle,
   getCoverCorrectionCycle,
+  getCorrectionCloseInfo,
+  validateStep,
   stepAttachmentDownloadUrl,
   type MyCorrectionTask,
   type BookTypeOption,
   type SupportOption,
   type CorrectionPhaseState,
+  type CorrectionCloseInfo,
 } from "../api/client";
 import { Button } from "../components/Button";
 import { GuidanceNote } from "../components/GuidanceNote";
@@ -108,7 +111,7 @@ export function MyCorrections() {
               {items.length === 0 ? (
                 <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>{b.empty}</p>
               ) : (
-                items.map((task) => <CorrectionCard key={task.id} task={task} onDepose={depose} onRefresh={refresh} bookTypes={bookTypes} supports={supports} />)
+                items.map((task) => <CorrectionCard key={task.id} task={task} onDepose={depose} onRefresh={refresh} onMessage={setMessage} bookTypes={bookTypes} supports={supports} />)
               )}
             </AccordionSection>
           );
@@ -170,8 +173,11 @@ function IntegrationReturns({ manuscriptId }: { manuscriptId: string }) {
   );
 }
 
-function CorrectionCard({ task, onDepose, onRefresh, bookTypes, supports }: { task: MyCorrectionTask; onDepose: (t: MyCorrectionTask, f: File) => void; onRefresh: () => void; bookTypes: BookTypeOption[]; supports: SupportOption[] }) {
+function CorrectionCard({ task, onDepose, onRefresh, onMessage, bookTypes, supports }: { task: MyCorrectionTask; onDepose: (t: MyCorrectionTask, f: File) => void; onRefresh: () => void; onMessage: (m: string) => void; bookTypes: BookTypeOption[]; supports: SupportOption[] }) {
   const canValidate = task.status !== "terminee" && task.status !== "validee";
+  // Correction close (juger terminée) : le manuscrit est encore à l'étape et il
+  // reste des fichiers/un destinataire à traiter → on propose la clôture.
+  const done = (task.status === "terminee" || task.status === "validee") && !task.correctionOpen;
   // Paramètres du moteur de correction : type d'ouvrage (charge la grille) +
   // support analysé. La grille adaptée est appliquée automatiquement à l'IA.
   const [bookType, setBookType] = useState<string>("");
@@ -240,6 +246,11 @@ function CorrectionCard({ task, onDepose, onRefresh, bookTypes, supports }: { ta
           de texte et par l'infographe. Évite d'avoir à déplier l'assistance IA
           pour retrouver la version intégrée ou la couverture intégrée (D-069). */}
       {manuscriptId && <IntegrationReturns manuscriptId={manuscriptId} />}
+
+      {/* CLÔTURE : quand le correcteur juge la correction finie, il choisit le
+          maquettiste et transmet l'ouvrage (texte + couverture finalisés) à la
+          mise en page. Bloqué tant que les fichiers exigés manquent. */}
+      {manuscriptId && !done && <CorrectionCloseBlock manuscriptId={manuscriptId} taskId={task.id} onDone={(m) => { onMessage(m); onRefresh(); }} />}
 
       {/* ÉCRAN COMPLET : assistance IA + BAT déposés (livrables produits). */}
       {manuscriptId && (
@@ -316,6 +327,62 @@ function CorrectionCard({ task, onDepose, onRefresh, bookTypes, supports }: { ta
         </div>
       )}
     </section>
+  );
+}
+
+// Bloc de CLÔTURE de la correction : choisir le maquettiste destinataire et
+// transmettre l'ouvrage à la mise en page. Refuse tant que le texte version
+// finale ET la couverture corrigée finale ne sont pas déposés (garde serveur).
+function CorrectionCloseBlock({ manuscriptId, taskId, onDone }: { manuscriptId: string; taskId: string; onDone: (msg: string) => void }) {
+  const [info, setInfo] = useState<CorrectionCloseInfo | null>(null);
+  const [assignee, setAssignee] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getCorrectionCloseInfo(manuscriptId).then((i) => { if (alive) setInfo(i); }).catch(() => { if (alive) setInfo(null); });
+    return () => { alive = false; };
+  }, [manuscriptId]);
+
+  if (!info || !info.at_correction || !info.next_step) return null;
+
+  const missing = [...info.text_missing];
+  if (info.cover_missing) missing.push("Couverture corrigée finale (1ʳᵉ, dos, 4ᵉ)");
+  const canClose = info.ready && !!assignee && !busy;
+
+  async function close() {
+    if (!assignee) { setErr("Choisissez le maquettiste qui recevra l'ouvrage."); return; }
+    setBusy(true); setErr(null);
+    try {
+      await patchTask(taskId, { status: "terminee", progress_pct: 100 });
+      await validateStep(manuscriptId, "CORRECTION", { assignee_id: assignee });
+      onDone("Correction clôturée — l'ouvrage (texte final + couverture finale) est transmis à la mise en page.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Clôture impossible.");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{ marginTop: 12, border: `1px solid ${info.ready ? "#2E6B4F" : "#E7C98A"}`, borderRadius: 10, padding: "10px 12px", background: info.ready ? "#DDF0E5" : "var(--amber-soft, #F6E7D2)" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink)" }}>✅ Clôturer la correction → {info.next_step.label}</div>
+      {info.ready ? (
+        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>Texte version finale et couverture finale déposés. Choisissez le maquettiste qui recevra l'ouvrage, puis transmettez.</div>
+      ) : (
+        <div style={{ fontSize: 12, color: "#8A5A00", marginTop: 6 }}>
+          À déposer avant de pouvoir clôturer : <strong>{missing.join(" ; ")}</strong>.
+        </div>
+      )}
+      {err && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "6px 10px", fontSize: 12, marginTop: 6 }}>{err}</div>}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+        <select value={assignee} onChange={(e) => setAssignee(e.target.value)} disabled={!info.ready} style={{ fontSize: 13, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, minWidth: 210 }}>
+          <option value="">— Maquettiste (mise en page) —</option>
+          {info.maquettistes.map((m) => <option key={m.id} value={m.id}>{m.username}{m.role ? ` — ${m.role}` : ""}</option>)}
+        </select>
+        <Button variant="add" size="sm" onClick={close} disabled={!canClose}>{busy ? "…" : "Clôturer et transmettre à la mise en page"}</Button>
+      </div>
+      {info.ready && info.maquettistes.length === 0 && <div style={{ fontSize: 11.5, color: "#8A5A00", marginTop: 6 }}>Aucun maquettiste actif disponible — voyez avec l'administrateur.</div>}
+    </div>
   );
 }
 

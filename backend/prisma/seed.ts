@@ -1852,6 +1852,14 @@ async function main() {
       permissionModules: ["paiements_auteurs"],
       departmentCodes: ["FIN", "DIRED", "SECR"],
     },
+    {
+      slug: "2026-09-cloture-correction-mise-en-page",
+      version: "2026.09",
+      title: "Nouveauté — Clôturer la correction et l'envoyer en mise en page",
+      body: "Dans « Mes corrections », quand vous jugez la correction terminée, un nouveau bloc « Clôturer la correction → Mise en page » apparaît. Vous y choisissez le MAQUETTISTE qui recevra l'ouvrage, puis vous cliquez sur « Clôturer et transmettre à la mise en page » : l'ouvrage (texte final + couverture finale) part chez lui et votre tâche passe en « Terminées ». Le bouton reste bloqué tant que les fichiers exigés ne sont pas déposés : la VERSION CORRIGÉE FINALE du texte ET la COUVERTURE corrigée finale (1ʳᵉ, dos, 4ᵉ) — le motif précis s'affiche. Le correcteur affecté peut désormais clôturer lui-même (la Direction éditoriale le peut toujours aussi).",
+      permissionModules: ["tasks"],
+      departmentCodes: ["CORR", "DIRED", "MAQ"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

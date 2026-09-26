@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { Manuscript } from "@prisma/client";
+import type { Manuscript, TaskType } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
-import { missingRequiredCorrectionPhases } from "../lib/correctionCycle.js";
+import { missingRequiredCorrectionPhases, coverFinaleMissing } from "../lib/correctionCycle.js";
 import { isDeliverableRequired, hasStepDeliverable, DELIVERABLE_LABELS } from "../lib/stepDeliverables.js";
 import { vc1State } from "../lib/startingProof.js";
 import { isOptionalDecisionStep, stepMode, missingRealizationFields, sanitizeRealizationData, OPTIONAL_STEP_LABELS, type OptionalStepCode } from "../lib/stepRealization.js";
@@ -29,6 +29,25 @@ function assigneeRoleFilter(status: { code: string; departmentId: string | null 
   if (roles) return { some: { revokedAt: null, role: { code: { in: roles } } } };
   if (status.departmentId) return { some: { revokedAt: null, role: { departmentId: status.departmentId } } };
   return null;
+}
+
+// Types de tâches de correction (parallèle de la boîte « Mes corrections »).
+const CORRECTION_TASK_TYPE_CODES = ["correction", "correction_ortho", "correction_gramm", "correction_typo", "correction_syntaxe", "correction_style", "harmonisation", "verif_biblio", "coherence"] as unknown as TaskType[];
+
+// Le correcteur AFFECTÉ à l'ouvrage : responsable de l'étape courante OU porteur
+// d'une tâche de correction assignée sur ce manuscrit (mêmes critères que « Mes
+// corrections »). Sert à l'autoriser à CLÔTURER lui-même sa correction.
+async function isAssignedCorrector(manuscriptId: string, statusId: string, userId: string): Promise<boolean> {
+  const step = await prisma.manuscriptStep.findUnique({
+    where: { manuscriptId_statusId: { manuscriptId, statusId } },
+    select: { responsibleId: true },
+  });
+  if (step?.responsibleId === userId) return true;
+  const task = await prisma.task.findFirst({
+    where: { manuscriptId, deletedAt: null, assigneeId: userId, type: { in: CORRECTION_TASK_TYPE_CODES } },
+    select: { id: true },
+  });
+  return !!task;
 }
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
 import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
@@ -104,7 +123,7 @@ const DEDICATED_FLOW_STEPS = new Set(["COMITE_LECTURE", "DECISION_EDITORIALE"]);
 export default async function workflowRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/api/v1/manuscripts/:id/steps/:step/validate",
-    { preHandler: requirePermission("manuscripts", "validation") },
+    { preHandler: requireAuth },
     async (request, reply) => {
       const { id, step } = request.params as { id: string; step: string };
       const parsed = validateStepSchema.safeParse(request.body ?? {});
@@ -120,6 +139,18 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       const targetStatus = await prisma.workflowStatus.findUnique({ where: { code: step } });
       if (!targetStatus) {
         return reply.code(404).send({ code: "not_found", message: `Étape inconnue : ${step}.` });
+      }
+
+      // PERMISSION — la validation d'étape exige « manuscripts:validation ».
+      // EXCEPTION (demande opérateur 26/09/2026) : le CORRECTEUR AFFECTÉ peut
+      // CLÔTURER lui-même sa correction (uniquement l'étape CORRECTION de SON
+      // ouvrage). Aucune autre étape n'est ouverte aux non-validateurs.
+      if (!request.user!.permissions.has("manuscripts:validation")) {
+        const allowed = targetStatus.code === "CORRECTION" && (await isAssignedCorrector(id, manuscript.statusId, request.user!.id));
+        if (!allowed) {
+          void writeAuditLog({ userId: request.user!.id, action: "access_denied", entityType: "permission", entityId: "manuscripts:validation", newValues: { method: request.method, url: request.url }, ipAddress: request.ip }).catch(() => {});
+          return reply.code(403).send({ code: "forbidden", message: "Action non autorisée : réservé à la direction éditoriale — ou au correcteur affecté, pour clôturer sa propre correction." });
+        }
       }
 
       if (DEDICATED_FLOW_STEPS.has(targetStatus.code)) {
@@ -281,10 +312,15 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         // pas à la mise en page tant que le rapport de correction ET la version
         // finale intégrée (après 2e relecture) ne sont pas déposés.
         const missingPhases = await missingRequiredCorrectionPhases(id);
-        if (missingPhases.length > 0) {
+        // Clôture (demande opérateur 26/09/2026) : la COUVERTURE corrigée finale
+        // (1ʳᵉ, dos, 4ᵉ) est exigée en plus du texte — rien ne part en mise en
+        // page sans le texte ET la couverture finalisés.
+        const missingAll = [...missingPhases];
+        if (await coverFinaleMissing(id)) missingAll.push("Couverture corrigée finale (1ʳᵉ, dos, 4ᵉ)");
+        if (missingAll.length > 0) {
           return reply.code(409).send({
             code: "correction_cycle_incomplete",
-            message: `Correction incomplète — déposez, dans le cycle de correction, avant de poursuivre : ${missingPhases.join(" ; ")}.`,
+            message: `Correction incomplète — déposez, dans le cycle de correction, avant de poursuivre : ${missingAll.join(" ; ")}.`,
           });
         }
       }
@@ -611,6 +647,43 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       });
 
       return reply.send({ advanced: true, status: nextStatus?.code ?? null, realization_mode: realizationMode });
+    },
+  );
+
+  // Écran « Mes corrections » — infos de CLÔTURE de la correction, accessibles au
+  // CORRECTEUR (droit « tasks »). Donne l'étape suivante (mise en page), les
+  // maquettistes destinataires possibles, et l'état des fichiers exigés (texte
+  // VCF + couverture finale) pour savoir si l'on peut clôturer. Lecture seule.
+  fastify.get(
+    "/api/v1/manuscripts/:id/correction/close-info",
+    { preHandler: requirePermission("tasks", "consultation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true, statusId: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const current = await prisma.workflowStatus.findUnique({ where: { id: manuscript.statusId } });
+      const atCorrection = current?.code === "CORRECTION";
+      const nextStatus = current ? await findNextApplicableStatus(current.stepOrder, manuscript as unknown as Manuscript) : null;
+      const roleFilter = nextStatus ? assigneeRoleFilter(nextStatus) : null;
+      let maquettistes: { id: string; username: string; role: string | null }[] = [];
+      if (atCorrection && nextStatus && roleFilter) {
+        const users = await prisma.user.findMany({
+          where: { status: "active", userRoles: roleFilter },
+          select: { id: true, username: true, userRoles: { where: { revokedAt: null }, select: { role: { select: { label: true, departmentId: true } } } } },
+          orderBy: { username: "asc" },
+        });
+        maquettistes = users.map((u) => ({ id: u.id, username: u.username, role: u.userRoles.find((r) => r.role.departmentId === nextStatus.departmentId)?.role.label ?? u.userRoles[0]?.role.label ?? null }));
+      }
+      const textMissing = atCorrection ? await missingRequiredCorrectionPhases(id) : [];
+      const coverMissing = atCorrection ? await coverFinaleMissing(id) : false;
+      return reply.send({
+        at_correction: atCorrection,
+        next_step: nextStatus ? { code: nextStatus.code, label: nextStatus.label } : null,
+        maquettistes,
+        text_missing: textMissing,
+        cover_missing: coverMissing,
+        ready: atCorrection && textMissing.length === 0 && !coverMissing,
+      });
     },
   );
 

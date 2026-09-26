@@ -67,10 +67,19 @@ describe("correction éditoriale en deux temps", () => {
     expect(stillBlocked.statusCode).toBe(409);
     expect(stillBlocked.json().message).toContain("Version corrigée finale");
 
-    // Dépôt de la version finale intégrée → validation possible.
+    // Dépôt de la version finale intégrée → toujours refusé : la couverture
+    // corrigée finale (1ʳᵉ, dos, 4ᵉ) est désormais exigée pour clôturer.
     const up2 = multipart("file", "final.txt", "Version finale intégrée.");
     const r2 = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/integration_finale`, headers: { cookie, ...up2.headers }, payload: up2.body });
     expect(r2.statusCode).toBe(201);
+    const coverStill = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/CORRECTION/validate`, headers: { cookie }, payload: {} });
+    expect(coverStill.statusCode).toBe(409);
+    expect(coverStill.json().message).toContain("Couverture corrigée finale");
+
+    // Dépôt de la couverture corrigée finale → validation possible.
+    const up3 = multipart("file", "cover.txt", "Couverture corrigée finale.");
+    const r3 = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/couverture_finale`, headers: { cookie, ...up3.headers }, payload: up3.body });
+    expect(r3.statusCode).toBe(201);
 
     const meta = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/correction-cycle`, headers: { cookie } });
     const rows = meta.json() as { key: string; has_file: boolean; uploaded_by_name: string | null; version_number: number | null; created_at: string | null }[];

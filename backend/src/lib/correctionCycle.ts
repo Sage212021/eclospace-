@@ -108,6 +108,14 @@ export async function missingRequiredCorrectionPhases(manuscriptId: string): Pro
   return state.filter((p) => p.required && !p.has_file).map((p) => p.label);
 }
 
+// Clôture de l'étape Correction (demande opérateur 26/09/2026) : la COUVERTURE
+// corrigée finale (1ʳᵉ, dos, 4ᵉ) doit être déposée, en plus du texte, pour que
+// l'ouvrage parte en mise en page. Vrai tant que ce fichier manque.
+export async function coverFinaleMissing(manuscriptId: string): Promise<boolean> {
+  const state = await coverCorrectionCycleState(manuscriptId);
+  return !state.find((p) => p.key === "couverture_finale")?.has_file;
+}
+
 // « À qui la main » : premier maillon du relais dont le fichier manque encore.
 // Correcteur → Intégrateur → Correcteur → Intégrateur → terminé.
 export async function currentCorrectionActor(manuscriptId: string): Promise<CorrectionActor | "termine"> {

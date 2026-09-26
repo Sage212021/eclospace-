@@ -1860,6 +1860,14 @@ async function main() {
       permissionModules: ["tasks"],
       departmentCodes: ["CORR", "DIRED", "MAQ"],
     },
+    {
+      slug: "2026-09-corrections-terminees-repliees-reouvrir",
+      version: "2026.09",
+      title: "Nouveauté — Corrections terminées repliées + « Réouvrir la correction »",
+      body: "Dans « Mes corrections », une correction déjà clôturée (dans « Terminées ») s'affiche désormais REPLIÉE : on ne voit que le titre et la mention « Terminé », sans dérouler tout le contenu de travail. Un bouton « Réouvrir la correction » la déplie à la demande, en CONSULTATION SEULE : vous pouvez télécharger les fichiers déposés (manuscrit, version corrigée remise, retours) mais vous ne pouvez plus rien modifier, remplacer ni retirer. Un bouton « Replier » referme la carte. Les corrections « En cours » ne changent pas : elles restent pleinement modifiables.",
+      permissionModules: ["tasks"],
+      departmentCodes: ["CORR", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

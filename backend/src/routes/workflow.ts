@@ -8,7 +8,7 @@ import { isDeliverableRequired, hasStepDeliverable, DELIVERABLE_LABELS } from ".
 import { vc1State } from "../lib/startingProof.js";
 import { isOptionalDecisionStep, stepMode, missingRealizationFields, sanitizeRealizationData, OPTIONAL_STEP_LABELS, type OptionalStepCode } from "../lib/stepRealization.js";
 import { writeAuditLog } from "../lib/audit.js";
-import { notifyUsers } from "../lib/notify.js";
+import { notifyUsers, notifyRole } from "../lib/notify.js";
 
 // Éligibilité à l'affectation nominative d'une étape. Par défaut, ce sont les
 // personnes du SERVICE de l'étape (maquettistes → mise en page, etc.). Certaines
@@ -631,6 +631,22 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
           }
         }
       });
+
+      // CLÔTURE PAR LE CORRECTEUR (demande opérateur 26/09/2026) : quand c'est le
+      // correcteur affecté — et non la Direction — qui clôture la correction, le
+      // Directeur éditorial est notifié automatiquement de la clôture et du
+      // passage en mise en page. (Inutile si c'est la Direction elle-même.)
+      if (nextStatus && targetStatus.code === "CORRECTION" && !request.user!.permissions.has("manuscripts:validation")) {
+        await notifyRole({
+          roleCode: "DIR_EDITORIAL",
+          type: "autre",
+          priority: "high",
+          title: `Correction clôturée — ${manuscript.manuscriptNumber}`,
+          body: `${request.user!.username} a clôturé la correction de « ${manuscript.title} » : l'ouvrage (texte + couverture finalisés) passe en « ${nextStatus.label} ».`,
+          entityType: "manuscript",
+          entityId: id,
+        });
+      }
 
       await writeAuditLog({
         userId: request.user!.id,

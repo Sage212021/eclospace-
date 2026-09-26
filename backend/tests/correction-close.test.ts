@@ -73,6 +73,7 @@ describe("clôture de la correction par le correcteur", () => {
   it("bloque tant que texte final + couverture finale ne sont pas déposés, puis clôture et transmet au maquettiste", async () => {
     const corr = await createUserWithRole(`corr_${rnd()}`, "CORRECTEUR", "Corr123!");
     const maq = await createUserWithRole(`maq_${rnd()}`, "MAQUETTISTE", "Maq123!");
+    const dir = await createUserWithRole(`dir_${rnd()}`, "DIR_EDITORIAL", "Dir123!");
     const corrCookie = await login(corr.username, "Corr123!");
     const m = await manuscriptAtCorrectionWithCorrector(corr.id);
 
@@ -101,6 +102,9 @@ describe("clôture de la correction par le correcteur", () => {
     expect(nextStep?.responsibleId).toBe(maq.id);
     const notif = await prisma.notification.count({ where: { userId: maq.id, entityId: m.id } });
     expect(notif).toBeGreaterThan(0);
+    // Clôture par le correcteur → le Directeur éditorial est notifié.
+    const dirNotif = await prisma.notification.count({ where: { userId: dir.id, entityId: m.id, title: { contains: "Correction clôturée" } } });
+    expect(dirNotif).toBeGreaterThan(0);
   });
 
   it("un correcteur NON affecté ne peut pas clôturer (403)", async () => {

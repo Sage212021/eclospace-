@@ -1856,7 +1856,7 @@ async function main() {
       slug: "2026-09-cloture-correction-mise-en-page",
       version: "2026.09",
       title: "Nouveauté — Clôturer la correction et l'envoyer en mise en page",
-      body: "Dans « Mes corrections », quand vous jugez la correction terminée, un nouveau bloc « Clôturer la correction → Mise en page » apparaît. Vous y choisissez le MAQUETTISTE qui recevra l'ouvrage, puis vous cliquez sur « Clôturer et transmettre à la mise en page » : l'ouvrage (texte final + couverture finale) part chez lui et votre tâche passe en « Terminées ». Le bouton reste bloqué tant que les fichiers exigés ne sont pas déposés : la VERSION CORRIGÉE FINALE du texte ET la COUVERTURE corrigée finale (1ʳᵉ, dos, 4ᵉ) — le motif précis s'affiche. Le correcteur affecté peut désormais clôturer lui-même (la Direction éditoriale le peut toujours aussi).",
+      body: "Dans « Mes corrections », quand vous jugez la correction terminée, un nouveau bloc « Clôturer la correction → Mise en page » apparaît. Vous y choisissez le MAQUETTISTE qui recevra l'ouvrage, puis vous cliquez sur « Clôturer et transmettre à la mise en page » : l'ouvrage (texte final + couverture finale) part chez lui et votre tâche passe en « Terminées ». Le bouton reste bloqué tant que les fichiers exigés ne sont pas déposés : la VERSION CORRIGÉE FINALE du texte ET la COUVERTURE corrigée finale (1ʳᵉ, dos, 4ᵉ) — le motif précis s'affiche. Le correcteur affecté peut désormais clôturer lui-même (la Direction éditoriale le peut toujours aussi) ; lorsque c'est le correcteur qui clôture, le DIRECTEUR ÉDITORIAL est notifié automatiquement de la clôture et du passage en mise en page.",
       permissionModules: ["tasks"],
       departmentCodes: ["CORR", "DIRED", "MAQ"],
     },

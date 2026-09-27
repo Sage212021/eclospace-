@@ -60,6 +60,7 @@ import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printEditorialDecisionLetter, type PrintOpts } from "../lib/print";
 import { Spine } from "../components/Spine";
 import { CorrectionReturns } from "../components/CorrectionReturns";
+import { IncomingDeliverable } from "../components/IncomingDeliverable";
 import { ContractsSection } from "../components/ContractsSection";
 import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
 import { TasksSection } from "../components/TasksSection";
@@ -422,6 +423,12 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           s'il n'y a aucun retour. */}
       {manuscript.status.code !== "CORRECTION" && (permissions.has("manuscripts:consultation") || permissions.has("tasks:consultation")) && (
         <CorrectionReturns manuscriptId={manuscript.id} />
+      )}
+
+      {/* À l'INFOGRAPHIE : l'infographe récupère la MAQUETTE déposée par le
+          maquettiste (livrable de la mise en page), pour caler la couverture. */}
+      {manuscript.status.code === "INFOGRAPHIE" && (permissions.has("manuscripts:consultation") || permissions.has("tasks:consultation")) && (
+        <IncomingDeliverable manuscriptId={manuscript.id} fromStepCode="MISE_EN_PAGE" title="Maquette reçue de la mise en page" />
       )}
 
       {message && (

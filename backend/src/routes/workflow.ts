@@ -35,8 +35,9 @@ function assigneeRoleFilter(status: { code: string; departmentId: string | null 
 const CORRECTION_TASK_TYPE_CODES = ["correction", "correction_ortho", "correction_gramm", "correction_typo", "correction_syntaxe", "correction_style", "harmonisation", "verif_biblio", "coherence"] as unknown as TaskType[];
 
 // Étapes qu'un opérateur AFFECTÉ (sans droit de validation large) peut clôturer
-// lui-même : la correction par le correcteur, la mise en page par le maquettiste.
-const SELF_CLOSE_STEPS = new Set(["CORRECTION", "MISE_EN_PAGE"]);
+// lui-même : la correction par le correcteur, la mise en page par le maquettiste,
+// l'infographie par l'infographe.
+const SELF_CLOSE_STEPS = new Set(["CORRECTION", "MISE_EN_PAGE", "INFOGRAPHIE"]);
 
 // L'opérateur AFFECTÉ à l'étape courante : responsable de l'étape OU (pour la
 // correction) porteur d'une tâche de correction assignée. Sert à l'autoriser à
@@ -647,19 +648,27 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       //   • Correction (par le correcteur) → Directeur éditorial.
       //   • Mise en page (par le maquettiste) → Directeur éditorial + Responsable
       //     production/impression.
+      //   • Infographie (par l'infographe) → Directeur éditorial + Responsable
+      //     production/impression.
       if (nextStatus && SELF_CLOSE_STEPS.has(targetStatus.code) && !request.user!.permissions.has("manuscripts:validation")) {
-        const roleCodes = targetStatus.code === "MISE_EN_PAGE" ? ["DIR_EDITORIAL", "RESP_IMPRESSION"] : ["DIR_EDITORIAL"];
-        const étape = targetStatus.code === "MISE_EN_PAGE" ? "mise en page" : "correction";
-        for (const roleCode of roleCodes) {
-          await notifyRole({
-            roleCode,
-            type: "autre",
-            priority: "high",
-            title: `${targetStatus.code === "MISE_EN_PAGE" ? "Mise en page" : "Correction"} clôturée — ${manuscript.manuscriptNumber}`,
-            body: `${request.user!.username} a clôturé la ${étape} de « ${manuscript.title} » : l'ouvrage passe en « ${nextStatus.label} ».`,
-            entityType: "manuscript",
-            entityId: id,
-          });
+        const SELF_CLOSE_NOTIFY: Record<string, { label: string; roles: string[] }> = {
+          CORRECTION: { label: "Correction", roles: ["DIR_EDITORIAL"] },
+          MISE_EN_PAGE: { label: "Mise en page", roles: ["DIR_EDITORIAL", "RESP_IMPRESSION"] },
+          INFOGRAPHIE: { label: "Infographie", roles: ["DIR_EDITORIAL", "RESP_IMPRESSION"] },
+        };
+        const cfg = SELF_CLOSE_NOTIFY[targetStatus.code];
+        if (cfg) {
+          for (const roleCode of cfg.roles) {
+            await notifyRole({
+              roleCode,
+              type: "autre",
+              priority: "high",
+              title: `${cfg.label} clôturée — ${manuscript.manuscriptNumber}`,
+              body: `${request.user!.username} a clôturé la ${cfg.label.toLowerCase()} de « ${manuscript.title} » : l'ouvrage passe en « ${nextStatus.label} ».`,
+              entityType: "manuscript",
+              entityId: id,
+            });
+          }
         }
       }
 

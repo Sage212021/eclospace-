@@ -826,7 +826,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     // correction, le maquettiste la mise en page (demande opérateur 26–27/09).
     // Sert à afficher le panneau « valider + choisir la suite » au bon profil.
     let canSelfClose = false;
-    if (!request.user!.permissions.has("manuscripts:validation") && ["CORRECTION", "MISE_EN_PAGE"].includes(manuscript.status.code)) {
+    if (!request.user!.permissions.has("manuscripts:validation") && ["CORRECTION", "MISE_EN_PAGE", "INFOGRAPHIE"].includes(manuscript.status.code)) {
       const currentStep = manuscript.steps.find((s) => s.statusId === manuscript.statusId);
       canSelfClose = currentStep?.responsibleId === request.user!.id;
       if (!canSelfClose && manuscript.status.code === "CORRECTION") {

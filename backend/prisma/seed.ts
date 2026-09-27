@@ -1876,6 +1876,14 @@ async function main() {
       permissionModules: ["production"],
       departmentCodes: ["MAQ", "DIRED", "INFOG", "IMPR"],
     },
+    {
+      slug: "2026-09-infographie-espace-infographe",
+      version: "2026.09",
+      title: "Nouveauté — Infographie : l'infographe valide et transmet lui-même",
+      body: "L'étape Infographie fonctionne maintenant comme la mise en page. Sur la fiche d'un ouvrage à l'étape « Infographie » (depuis « Infographie & couvertures »), l'infographe voit l'essentiel — le texte final et la couverture finale en téléchargement (« Retours de correction ») — dépose son livrable, puis dispose du panneau « Valider l'étape » avec le choix de qui reçoit la suite (Attribution des références — secrétariat) : l'infographe affecté valide et transmet sans attendre la direction (la convergence maquette/infographie reste exigée). À sa clôture, la Direction éditoriale ET le Responsable production/impression sont notifiés. La liste « Documents de l'étape » y est aussi allégée (seuls les vrais fichiers/scans déposés à la main s'affichent).",
+      permissionModules: ["production"],
+      departmentCodes: ["INFOG", "DIRED", "SECR", "IMPR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

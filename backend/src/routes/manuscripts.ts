@@ -820,7 +820,21 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     }
     // Verrou de la fiche : figée dès qu'un contrat est signé (voir édition fiche).
     const signed = await prisma.contract.findFirst({ where: { manuscriptId: id, deletedAt: null, OR: [{ signedAt: { not: null } }, { status: "active" }] }, select: { id: true } });
-    return reply.send({ ...manuscript, registrationLocked: Boolean(signed), sealed: Boolean(manuscript.sealedAt) });
+
+    // « Peut clôturer l'étape courante lui-même » : sans le droit large de
+    // validation, l'opérateur AFFECTÉ ferme son étape — le correcteur la
+    // correction, le maquettiste la mise en page (demande opérateur 26–27/09).
+    // Sert à afficher le panneau « valider + choisir la suite » au bon profil.
+    let canSelfClose = false;
+    if (!request.user!.permissions.has("manuscripts:validation") && ["CORRECTION", "MISE_EN_PAGE"].includes(manuscript.status.code)) {
+      const currentStep = manuscript.steps.find((s) => s.statusId === manuscript.statusId);
+      canSelfClose = currentStep?.responsibleId === request.user!.id;
+      if (!canSelfClose && manuscript.status.code === "CORRECTION") {
+        const task = await prisma.task.findFirst({ where: { manuscriptId: id, deletedAt: null, assigneeId: request.user!.id, type: { in: ["correction", "correction_ortho", "correction_gramm", "correction_typo", "correction_syntaxe", "correction_style", "harmonisation", "verif_biblio", "coherence"] as never } }, select: { id: true } });
+        canSelfClose = !!task;
+      }
+    }
+    return reply.send({ ...manuscript, registrationLocked: Boolean(signed), sealed: Boolean(manuscript.sealedAt), canSelfClose });
   });
 
   // Dépôt à la RÉCEPTION : le fichier source du manuscrit. C'est l'entrée du
@@ -919,7 +933,11 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/manuscripts/:id/step-attachments", { preHandler: requireAnyPermission([{ module: "manuscripts", action: "consultation" }, { module: "tasks", action: "consultation" }]) }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const docs = await prisma.document.findMany({
-      where: { entityType: "manuscript", entityId: id, category: "piece_etape", deletedAt: null },
+      // On exclut les pièces INTERNES à préfixe technique ([correction:…],
+      // [vc1:…], [livrable:…]) : elles ont leurs écrans dédiés (cycle de
+      // correction, VC1, livrable de l'étape). La liste « Documents de l'étape »
+      // ne montre que les vrais dépôts/scans libres (sinon elle est illisible).
+      where: { entityType: "manuscript", entityId: id, category: "piece_etape", deletedAt: null, NOT: { title: { startsWith: "[" } } },
       orderBy: { createdAt: "desc" },
       select: { id: true, title: true, createdAt: true, createdBy: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true, fileSize: true, mimeType: true } } },
     });

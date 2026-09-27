@@ -34,20 +34,28 @@ function assigneeRoleFilter(status: { code: string; departmentId: string | null 
 // Types de tâches de correction (parallèle de la boîte « Mes corrections »).
 const CORRECTION_TASK_TYPE_CODES = ["correction", "correction_ortho", "correction_gramm", "correction_typo", "correction_syntaxe", "correction_style", "harmonisation", "verif_biblio", "coherence"] as unknown as TaskType[];
 
-// Le correcteur AFFECTÉ à l'ouvrage : responsable de l'étape courante OU porteur
-// d'une tâche de correction assignée sur ce manuscrit (mêmes critères que « Mes
-// corrections »). Sert à l'autoriser à CLÔTURER lui-même sa correction.
-async function isAssignedCorrector(manuscriptId: string, statusId: string, userId: string): Promise<boolean> {
+// Étapes qu'un opérateur AFFECTÉ (sans droit de validation large) peut clôturer
+// lui-même : la correction par le correcteur, la mise en page par le maquettiste.
+const SELF_CLOSE_STEPS = new Set(["CORRECTION", "MISE_EN_PAGE"]);
+
+// L'opérateur AFFECTÉ à l'étape courante : responsable de l'étape OU (pour la
+// correction) porteur d'une tâche de correction assignée. Sert à l'autoriser à
+// CLÔTURER lui-même son étape (correction → mise en page, mise en page →
+// infographie).
+async function isAssignedForStep(manuscriptId: string, statusId: string, userId: string, stepCode: string): Promise<boolean> {
   const step = await prisma.manuscriptStep.findUnique({
     where: { manuscriptId_statusId: { manuscriptId, statusId } },
     select: { responsibleId: true },
   });
   if (step?.responsibleId === userId) return true;
-  const task = await prisma.task.findFirst({
-    where: { manuscriptId, deletedAt: null, assigneeId: userId, type: { in: CORRECTION_TASK_TYPE_CODES } },
-    select: { id: true },
-  });
-  return !!task;
+  if (stepCode === "CORRECTION") {
+    const task = await prisma.task.findFirst({
+      where: { manuscriptId, deletedAt: null, assigneeId: userId, type: { in: CORRECTION_TASK_TYPE_CODES } },
+      select: { id: true },
+    });
+    return !!task;
+  }
+  return false;
 }
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
 import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
@@ -142,11 +150,12 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       }
 
       // PERMISSION — la validation d'étape exige « manuscripts:validation ».
-      // EXCEPTION (demande opérateur 26/09/2026) : le CORRECTEUR AFFECTÉ peut
-      // CLÔTURER lui-même sa correction (uniquement l'étape CORRECTION de SON
-      // ouvrage). Aucune autre étape n'est ouverte aux non-validateurs.
+      // EXCEPTION (demande opérateur 26–27/09/2026) : l'opérateur AFFECTÉ peut
+      // CLÔTURER lui-même son étape — le CORRECTEUR sa correction, le MAQUETTISTE
+      // sa mise en page (uniquement SON ouvrage, à SON étape). Aucune autre étape
+      // n'est ouverte aux non-validateurs.
       if (!request.user!.permissions.has("manuscripts:validation")) {
-        const allowed = targetStatus.code === "CORRECTION" && (await isAssignedCorrector(id, manuscript.statusId, request.user!.id));
+        const allowed = SELF_CLOSE_STEPS.has(targetStatus.code) && (await isAssignedForStep(id, manuscript.statusId, request.user!.id, targetStatus.code));
         if (!allowed) {
           void writeAuditLog({ userId: request.user!.id, action: "access_denied", entityType: "permission", entityId: "manuscripts:validation", newValues: { method: request.method, url: request.url }, ipAddress: request.ip }).catch(() => {});
           return reply.code(403).send({ code: "forbidden", message: "Action non autorisée : réservé à la direction éditoriale — ou au correcteur affecté, pour clôturer sa propre correction." });
@@ -632,20 +641,26 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         }
       });
 
-      // CLÔTURE PAR LE CORRECTEUR (demande opérateur 26/09/2026) : quand c'est le
-      // correcteur affecté — et non la Direction — qui clôture la correction, le
-      // Directeur éditorial est notifié automatiquement de la clôture et du
-      // passage en mise en page. (Inutile si c'est la Direction elle-même.)
-      if (nextStatus && targetStatus.code === "CORRECTION" && !request.user!.permissions.has("manuscripts:validation")) {
-        await notifyRole({
-          roleCode: "DIR_EDITORIAL",
-          type: "autre",
-          priority: "high",
-          title: `Correction clôturée — ${manuscript.manuscriptNumber}`,
-          body: `${request.user!.username} a clôturé la correction de « ${manuscript.title} » : l'ouvrage (texte + couverture finalisés) passe en « ${nextStatus.label} ».`,
-          entityType: "manuscript",
-          entityId: id,
-        });
+      // CLÔTURE PAR L'OPÉRATEUR AFFECTÉ (demande opérateur 26–27/09/2026) : quand
+      // c'est l'affecté — et non la Direction — qui clôture, les responsables sont
+      // notifiés automatiquement de la clôture et du passage à l'étape suivante.
+      //   • Correction (par le correcteur) → Directeur éditorial.
+      //   • Mise en page (par le maquettiste) → Directeur éditorial + Responsable
+      //     production/impression.
+      if (nextStatus && SELF_CLOSE_STEPS.has(targetStatus.code) && !request.user!.permissions.has("manuscripts:validation")) {
+        const roleCodes = targetStatus.code === "MISE_EN_PAGE" ? ["DIR_EDITORIAL", "RESP_IMPRESSION"] : ["DIR_EDITORIAL"];
+        const étape = targetStatus.code === "MISE_EN_PAGE" ? "mise en page" : "correction";
+        for (const roleCode of roleCodes) {
+          await notifyRole({
+            roleCode,
+            type: "autre",
+            priority: "high",
+            title: `${targetStatus.code === "MISE_EN_PAGE" ? "Mise en page" : "Correction"} clôturée — ${manuscript.manuscriptNumber}`,
+            body: `${request.user!.username} a clôturé la ${étape} de « ${manuscript.title} » : l'ouvrage passe en « ${nextStatus.label} ».`,
+            entityType: "manuscript",
+            entityId: id,
+          });
+        }
       }
 
       await writeAuditLog({

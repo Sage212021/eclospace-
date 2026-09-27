@@ -590,7 +590,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
 
         {/* Acceptation sous conditions (audit éditorial, point n°2) : suivi des
             conditions à lever avant l'entrée en production (mise en page). */}
-        {manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && manuscript.status.stepOrder < MISE_EN_PAGE_STEP_ORDER && (
+        {permissions.has("decision_editoriale:consultation") && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER && manuscript.status.stepOrder < MISE_EN_PAGE_STEP_ORDER && (
           <AcceptanceConditionsPanel manuscriptId={manuscript.id} canManage={canDecide} confirm={confirm} onError={setError} />
         )}
 
@@ -624,7 +624,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           />
         )}
 
-        {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && canValidate && (
+        {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && (canValidate || manuscript.canSelfClose) && (
           <GenericStepValidation
             manuscriptId={manuscript.id}
             stepCode={manuscript.status.code}

@@ -401,6 +401,9 @@ export type ManuscriptDetail = Manuscript & {
   registrationLocked?: boolean;
   sealed?: boolean;
   sealedAt?: string | null;
+  // Le profil AFFECTÉ (correcteur, maquettiste) peut clôturer lui-même l'étape
+  // courante sans le droit large de validation.
+  canSelfClose?: boolean;
   workContributors: { role?: string; partner: ManuscriptAuthorPartner }[];
   owner: UserSummary;
 };

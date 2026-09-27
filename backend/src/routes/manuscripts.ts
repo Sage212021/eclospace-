@@ -920,31 +920,35 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     const q = request.query as { step_label?: string };
     const stepLabel = (q.step_label?.trim() || manuscript.status.label).slice(0, 80);
     const stored = await storeFile(buffer, `piece-etape-${id}-${file.filename}`);
+    // Marqueur stable « [scan] » : identifie un VRAI dépôt libre (scan/fichier)
+    // par opposition aux pièces générées (livrables IA, planning, cycle de
+    // correction…). La liste « Documents de l'étape » n'affiche que ces dépôts.
     const doc = await prisma.document.create({
-      data: { entityType: "manuscript", entityId: id, category: "piece_etape", confidentiality: "interne", title: `${stepLabel} — ${file.filename}`, createdBy: request.user!.id, updatedBy: request.user!.id },
+      data: { entityType: "manuscript", entityId: id, category: "piece_etape", confidentiality: "interne", title: `[scan] ${stepLabel} — ${file.filename}`, createdBy: request.user!.id, updatedBy: request.user!.id },
     });
     const version = await prisma.documentVersion.create({
       data: { documentId: doc.id, versionNumber: 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: file.mimetype, sha256Hash: stored.sha256Hash, changeSummary: `Pièce déposée à l'étape « ${stepLabel} »`, uploadedBy: request.user!.id },
     });
     await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { step_attachment: true, step: stepLabel }, ipAddress: request.ip });
-    return reply.code(201).send({ id: doc.id, version_id: version.id, title: doc.title });
+    return reply.code(201).send({ id: doc.id, version_id: version.id, title: doc.title.replace(/^\[scan\]\s*/, "") });
   });
 
   fastify.get("/api/v1/manuscripts/:id/step-attachments", { preHandler: requireAnyPermission([{ module: "manuscripts", action: "consultation" }, { module: "tasks", action: "consultation" }]) }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const docs = await prisma.document.findMany({
-      // On exclut les pièces INTERNES à préfixe technique ([correction:…],
-      // [vc1:…], [livrable:…]) : elles ont leurs écrans dédiés (cycle de
-      // correction, VC1, livrable de l'étape). La liste « Documents de l'étape »
-      // ne montre que les vrais dépôts/scans libres (sinon elle est illisible).
-      where: { entityType: "manuscript", entityId: id, category: "piece_etape", deletedAt: null, NOT: { title: { startsWith: "[" } } },
+      // La liste « Documents de l'étape » ne montre QUE les vrais dépôts libres
+      // (scans/fichiers), marqués « [scan] » à l'enregistrement. Toutes les autres
+      // pièces d'étape (livrables IA « Manuscrit corrigé », rapports de relecture,
+      // planning, cycle de correction, VC1…) ont leurs écrans dédiés et ne
+      // polluent plus cette liste.
+      where: { entityType: "manuscript", entityId: id, category: "piece_etape", deletedAt: null, title: { startsWith: "[scan] " } },
       orderBy: { createdAt: "desc" },
       select: { id: true, title: true, createdAt: true, createdBy: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true, fileSize: true, mimeType: true } } },
     });
     return reply.send(
       docs.map((d) => ({
         id: d.id,
-        title: d.title,
+        title: d.title.replace(/^\[scan\]\s*/, ""),
         created_at: d.createdAt,
         version_id: d.versions[0]?.id ?? null,
         file_size: d.versions[0]?.fileSize ?? null,

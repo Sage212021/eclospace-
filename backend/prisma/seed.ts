@@ -1868,6 +1868,14 @@ async function main() {
       permissionModules: ["tasks"],
       departmentCodes: ["CORR", "DIRED"],
     },
+    {
+      slug: "2026-09-mise-en-page-espace-maquettiste",
+      version: "2026.09",
+      title: "Nouveauté — Mise en page : le maquettiste valide et choisit l'infographe",
+      body: "Sur la fiche d'un ouvrage à l'étape « Mise en page » (ouverte depuis « Maquette & mise en page »), le maquettiste a désormais l'essentiel et peut clôturer lui-même. 1) « Retours de correction » montre maintenant le TEXTE final (VCF) ET la COUVERTURE finale, en téléchargement. 2) Il dépose sa maquette dans « Livrable de l'étape » (déjà en place). 3) Nouveau pour lui : le panneau « Valider l'étape » avec le choix de l'INFOGRAPHE qui reçoit la suite — le maquettiste affecté peut valider et transmettre sans attendre la direction. À sa clôture, la Direction éditoriale ET le Responsable production/impression sont notifiés. La liste « Documents de l'étape » est allégée (les pièces internes de correction, qui ont leurs propres écrans, n'y apparaissent plus), et un message d'erreur qui s'affichait à tort (« decision_editoriale ») est corrigé.",
+      permissionModules: ["production"],
+      departmentCodes: ["MAQ", "DIRED", "INFOG", "IMPR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

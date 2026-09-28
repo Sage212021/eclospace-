@@ -1884,6 +1884,14 @@ async function main() {
       permissionModules: ["production"],
       departmentCodes: ["INFOG", "DIRED", "SECR", "IMPR"],
     },
+    {
+      slug: "2026-09-catalogue-couverture-infographe-auto",
+      version: "2026.09",
+      title: "Nouveauté — La couverture de l'infographe alimente le catalogue automatiquement",
+      body: "Au catalogue marketing, la couverture d'un ouvrage s'affiche désormais automatiquement à partir du travail de l'infographe : si aucune image « couverture » dédiée n'a été déposée, le catalogue utilise la couverture (1ʳᵉ) validée par l'infographe (visuel image). Aucun bouton à cliquer, aucune ressaisie. Rappel : un ouvrage entre au catalogue quand il atteint l'étape Commercialisation (inchangé). Note : si la couverture de l'infographe n'existe que sous forme de PDF d'impression (pas d'image web), il faut encore une image pour le catalogue.",
+      permissionModules: ["production"],
+      departmentCodes: ["INFOG", "MKT", "COM", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

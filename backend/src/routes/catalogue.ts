@@ -83,15 +83,24 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
       },
     });
 
-    // Présence d'une couverture image, en une requête (pièce « couverture »).
+    // Présence d'une couverture image : soit une pièce « couverture » dédiée,
+    // soit — automatiquement — la couverture (1ʳᵉ) produite par l'infographe
+    // (ImageAsset couverture_1) quand elle est une image. Ainsi le travail de
+    // l'infographe alimente le catalogue sans dépôt manuel (demande opérateur 28/09).
     const ids = works.map((w) => w.id);
-    const coverDocs = ids.length
-      ? await prisma.document.findMany({
-          where: { entityType: "manuscript", entityId: { in: ids }, category: "couverture", deletedAt: null, versions: { some: { mimeType: { startsWith: "image/" } } } },
-          select: { entityId: true },
-        })
-      : [];
-    const withCover = new Set(coverDocs.map((d) => d.entityId));
+    const [coverDocs, coverAssets] = ids.length
+      ? await Promise.all([
+          prisma.document.findMany({
+            where: { entityType: "manuscript", entityId: { in: ids }, category: "couverture", deletedAt: null, versions: { some: { mimeType: { startsWith: "image/" } } } },
+            select: { entityId: true },
+          }),
+          prisma.imageAsset.findMany({
+            where: { manuscriptId: { in: ids }, type: "couverture_1", deletedAt: null, documentVersion: { mimeType: { startsWith: "image/" } } },
+            select: { manuscriptId: true },
+          }),
+        ])
+      : [[], []];
+    const withCover = new Set<string>([...coverDocs.map((d) => d.entityId), ...coverAssets.map((a) => a.manuscriptId)]);
 
     let rows: Row[] = works.map((w) => {
       const authors = w.workContributors
@@ -174,10 +183,19 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
       select: { versions: { where: { mimeType: { startsWith: "image/" } }, orderBy: { versionNumber: "desc" }, take: 1, select: { filePath: true, mimeType: true } } },
       orderBy: { createdAt: "desc" },
     });
-    const version = doc?.versions[0];
-    if (!version) return reply.code(404).send({ code: "no_cover", message: "Pas de couverture pour cet ouvrage." });
-    const buffer = await readStoredFile(version.filePath);
-    reply.header("content-type", version.mimeType);
+    let cover: { filePath: string; mimeType: string } | null = doc?.versions[0] ?? null;
+    // Repli automatique : la couverture (1ʳᵉ) de l'infographe, si c'est une image.
+    if (!cover) {
+      const asset = await prisma.imageAsset.findFirst({
+        where: { manuscriptId: id, type: "couverture_1", deletedAt: null, documentVersion: { mimeType: { startsWith: "image/" } } },
+        orderBy: { createdAt: "desc" },
+        select: { documentVersion: { select: { filePath: true, mimeType: true } } },
+      });
+      if (asset?.documentVersion) cover = { filePath: asset.documentVersion.filePath, mimeType: asset.documentVersion.mimeType };
+    }
+    if (!cover) return reply.code(404).send({ code: "no_cover", message: "Pas de couverture pour cet ouvrage." });
+    const buffer = await readStoredFile(cover.filePath);
+    reply.header("content-type", cover.mimeType);
     reply.header("cache-control", "private, max-age=3600");
     return reply.send(buffer);
   });

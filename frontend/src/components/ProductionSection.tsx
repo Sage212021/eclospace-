@@ -97,7 +97,7 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
   }
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
+    <div id="fiche-technique-fabrication" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16, scrollMarginTop: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Fiche technique de fabrication</div>
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
 

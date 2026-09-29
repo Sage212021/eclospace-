@@ -1892,6 +1892,14 @@ async function main() {
       permissionModules: ["production"],
       departmentCodes: ["INFOG", "MKT", "COM", "DIRED"],
     },
+    {
+      slug: "2026-09-mise-en-page-rappel-fiche-technique",
+      version: "2026.09",
+      title: "Nouveauté — Mise en page : rappel clair « remplir la fiche technique avant de valider »",
+      body: "À l'étape Mise en page (et Infographie), la validation reste bloquée tant que la FICHE TECHNIQUE DE FABRICATION n'est pas remplie (format, nombre de pages, papier, dos, reliure) — c'est ce que disait le message rouge « Aucune fiche technique de fabrication n'a été ouverte ». Pour éviter de valider dans le vide, un rappel apparaît désormais juste au-dessus du bouton « Valider », avec un lien « Aller à la fiche technique ↓ » qui vous amène directement à la section à remplir. Une fois la fiche technique enregistrée, la validation passe normalement.",
+      permissionModules: ["production"],
+      departmentCodes: ["MAQ", "INFOG", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

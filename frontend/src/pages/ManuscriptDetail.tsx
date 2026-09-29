@@ -2165,6 +2165,14 @@ function GenericStepValidation({
           </span>
         </label>
       )}
+      {(stepCode === "MISE_EN_PAGE" || stepCode === "INFOGRAPHIE") && (
+        <div style={{ background: "var(--amber-soft, #F6E7D2)", border: "1px solid #E7C98A", color: "#8A5A00", borderRadius: 8, padding: "9px 12px", fontSize: 12.5, marginBottom: 10, lineHeight: 1.5 }}>
+          ⚠ La <strong>fiche technique de fabrication</strong> (format, nombre de pages, papier, dos, reliure) doit être remplie <strong>avant</strong> de valider — sinon le passage à l'étape suivante est refusé.{" "}
+          <button type="button" onClick={() => document.getElementById("fiche-technique-fabrication")?.scrollIntoView({ behavior: "smooth", block: "center" })} style={{ background: "none", border: "none", color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700, textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: 12.5 }}>
+            Aller à la fiche technique ↓
+          </button>
+        </div>
+      )}
       <ActionButton onClick={handleValidate}>{isOptional && decision === "passe" ? "Passer l'étape" : label}</ActionButton>
     </div>
   );

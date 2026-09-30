@@ -36,8 +36,8 @@ const CORRECTION_TASK_TYPE_CODES = ["correction", "correction_ortho", "correctio
 
 // Étapes qu'un opérateur AFFECTÉ (sans droit de validation large) peut clôturer
 // lui-même : la correction par le correcteur, la mise en page par le maquettiste,
-// l'infographie par l'infographe.
-const SELF_CLOSE_STEPS = new Set(["CORRECTION", "MISE_EN_PAGE", "INFOGRAPHIE"]);
+// l'infographie par l'infographe, l'attribution des références par le secrétariat.
+const SELF_CLOSE_STEPS = new Set(["CORRECTION", "MISE_EN_PAGE", "INFOGRAPHIE", "ATTRIBUTION_REFERENCES"]);
 
 // L'opérateur AFFECTÉ à l'étape courante : responsable de l'étape OU (pour la
 // correction) porteur d'une tâche de correction assignée. Sert à l'autoriser à
@@ -655,6 +655,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
           CORRECTION: { label: "Correction", roles: ["DIR_EDITORIAL"] },
           MISE_EN_PAGE: { label: "Mise en page", roles: ["DIR_EDITORIAL", "RESP_IMPRESSION"] },
           INFOGRAPHIE: { label: "Infographie", roles: ["DIR_EDITORIAL", "RESP_IMPRESSION"] },
+          ATTRIBUTION_REFERENCES: { label: "Attribution des références", roles: ["DIR_EDITORIAL"] },
         };
         const cfg = SELF_CLOSE_NOTIFY[targetStatus.code];
         if (cfg) {

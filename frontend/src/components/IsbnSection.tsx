@@ -141,7 +141,7 @@ export function IsbnSection({ manuscriptId, canManage }: IsbnSectionProps) {
   }
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
+    <div id="isbn-references" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16, scrollMarginTop: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>ISBN, dépôt légal et métadonnées</div>
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
 

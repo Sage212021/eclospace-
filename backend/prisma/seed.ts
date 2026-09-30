@@ -1956,6 +1956,14 @@ async function main() {
       permissionModules: ["production", "manuscripts", "bat"],
       departmentCodes: ["MAQ", "INFOG", "CQ", "DIRED"],
     },
+    {
+      slug: "2026-09-infographie-cloture-non-assigne-livrable-recu",
+      version: "2026.09",
+      title: "Nouveauté — Infographie : bouton clair pour transmettre, et « livrable reçu » bien visible",
+      body: "Deux améliorations à l'infographie : (1) même quand un dossier a été transmis « à tout le service » (donc à personne en particulier), l'infographe qui le prend en charge dispose maintenant du bouton « Valider + choisir qui reçoit la suite » (le secrétariat, pour l'attribution des références) — avant, ce bouton n'apparaissait que pour la personne nommément désignée. (2) Le bloc « Maquette reçue de la mise en page » a un nouveau design bien distinct (liseré doré, badge « 📥 Reçu ») pour ne plus le confondre avec les dépôts de fichiers de l'étape.",
+      permissionModules: ["production", "manuscripts"],
+      departmentCodes: ["MAQ", "INFOG", "SECR", "CQ", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

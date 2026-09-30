@@ -873,6 +873,15 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         const task = await prisma.task.findFirst({ where: { manuscriptId: id, deletedAt: null, assigneeId: request.user!.id, type: { in: ["correction", "correction_ortho", "correction_gramm", "correction_typo", "correction_syntaxe", "correction_style", "harmonisation", "verif_biblio", "coherence"] as never } }, select: { id: true } });
         canSelfClose = !!task;
       }
+      // Dossier NON assigné (« transmis à tout le service ») : l'exécutant du
+      // métier de l'étape peut le prendre en charge et le clôturer lui-même —
+      // sinon il resterait bloqué sans validateur. Aligné sur canSelfCloseStep
+      // (workflow.ts) : production:saisie pour mise en page/infographie,
+      // isbn:saisie pour l'attribution des références.
+      if (!canSelfClose && (!currentStep || currentStep.responsibleId == null)) {
+        const perm = { MISE_EN_PAGE: "production:saisie", INFOGRAPHIE: "production:saisie", ATTRIBUTION_REFERENCES: "isbn:saisie" }[manuscript.status.code];
+        canSelfClose = !!perm && request.user!.permissions.has(perm);
+      }
     }
     // Responsable de l'ÉTAPE COURANTE + « ce dossier m'est-il confié ? ». Sert
     // au verrou « consultation » : un dossier confié à un collègue est en

@@ -1916,6 +1916,14 @@ async function main() {
       permissionModules: ["isbn"],
       departmentCodes: ["SECR", "DIRED"],
     },
+    {
+      slug: "2026-09-lien-section-remplir-fiable",
+      version: "2026.09",
+      title: "Nouveauté — Le lien « Aller à la section à remplir » fonctionne maintenant sur téléphone",
+      body: "Quand on valide une étape et qu'un rappel demande de remplir la fiche technique de fabrication ou la liste de contrôle ISBN, le lien « Aller à la section à remplir ↓ » fait désormais bien défiler la page jusqu'à la bonne section, y compris sur téléphone (le défilement restait parfois bloqué). La section visée clignote brièvement en or pour la repérer d'un coup d'œil.",
+      permissionModules: ["production", "isbn"],
+      departmentCodes: ["MAQ", "INFOG", "SECR", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

@@ -1940,6 +1940,14 @@ async function main() {
       permissionModules: ["production", "manuscripts", "isbn", "bat"],
       departmentCodes: ["MAQ", "INFOG", "SECR", "CQ", "DIRED"],
     },
+    {
+      slug: "2026-09-fiche-technique-repli-rangement-visible",
+      version: "2026.09",
+      title: "Nouveauté — Fiche technique repliée après enregistrement + rangement toujours visible",
+      body: "Deux améliorations : (1) une fois la fiche technique enregistrée, elle se REPLIE en un résumé avec la mention verte « ✓ Fiche technique enregistrée » et un bouton « Modifier » pour la rouvrir — plus de grand formulaire ouvert en permanence. (2) Dans les listes par étape, un dossier confié à un collègue est TOUJOURS rangé sous « Confiés à un collègue — consultation », même s'il est seul à l'écran (avant, un dossier isolé s'affichait sans précision).",
+      permissionModules: ["production", "manuscripts"],
+      departmentCodes: ["MAQ", "INFOG", "SECR", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

@@ -145,6 +145,15 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   const activeFocus = showAll ? null : focus;
   const show = (mod: string) => activeFocus === null || activeFocus === mod;
 
+  // Amène à la fiche technique de fabrication : si elle est masquée par la vue
+  // centrée, on révèle d'abord toute la fiche puis on défile jusqu'à elle.
+  const goToFicheTechnique = () => {
+    const scroll = () => document.getElementById("fiche-technique-fabrication")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (document.getElementById("fiche-technique-fabrication")) { scroll(); return; }
+    setShowAll(true);
+    setTimeout(scroll, 200);
+  };
+
   const refresh = async () => {
     const [m, t] = await Promise.all([getManuscript(manuscriptId), getManuscriptTimeline(manuscriptId)]);
     setManuscript(m);
@@ -638,6 +647,8 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             confirm={confirm}
             onValidated={(_status, opts) => advanceAfterValidation(opts?.confided ?? false)}
             onError={setError}
+            canSeeFicheTechnique={permissions.has("production:consultation")}
+            onGoToFicheTechnique={goToFicheTechnique}
           />
         )}
 
@@ -2025,12 +2036,16 @@ function GenericStepValidation({
   confirm,
   onValidated,
   onError,
+  canSeeFicheTechnique = false,
+  onGoToFicheTechnique,
 }: {
   manuscriptId: string;
   stepCode: string;
   confirm: (opts: { title: string; message: string; detail?: string; confirmLabel?: string }) => Promise<boolean>;
   onValidated: (status: string | null, opts?: { confided?: boolean }) => void;
   onError: (message: string) => void;
+  canSeeFicheTechnique?: boolean;
+  onGoToFicheTechnique?: () => void;
 }) {
   const [requiresRewrite, setRequiresRewrite] = useState(false);
   const [assignees, setAssignees] = useState<NextAssignee[]>([]);
@@ -2168,9 +2183,13 @@ function GenericStepValidation({
       {(stepCode === "MISE_EN_PAGE" || stepCode === "INFOGRAPHIE") && (
         <div style={{ background: "var(--amber-soft, #F6E7D2)", border: "1px solid #E7C98A", color: "#8A5A00", borderRadius: 8, padding: "9px 12px", fontSize: 12.5, marginBottom: 10, lineHeight: 1.5 }}>
           ⚠ La <strong>fiche technique de fabrication</strong> (format, nombre de pages, papier, dos, reliure) doit être remplie <strong>avant</strong> de valider — sinon le passage à l'étape suivante est refusé.{" "}
-          <button type="button" onClick={() => document.getElementById("fiche-technique-fabrication")?.scrollIntoView({ behavior: "smooth", block: "center" })} style={{ background: "none", border: "none", color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700, textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: 12.5 }}>
-            Aller à la fiche technique ↓
-          </button>
+          {canSeeFicheTechnique ? (
+            <button type="button" onClick={() => onGoToFicheTechnique?.()} style={{ background: "none", border: "none", color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700, textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: 12.5 }}>
+              Aller à la fiche technique ↓
+            </button>
+          ) : (
+            <span style={{ fontWeight: 600 }}>Elle est renseignée par le maquettiste (pôle Maquette).</span>
+          )}
         </div>
       )}
       <ActionButton onClick={handleValidate}>{isOptional && decision === "passe" ? "Passer l'étape" : label}</ActionButton>

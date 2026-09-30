@@ -154,17 +154,44 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
     let tries = 0;
     const attempt = () => {
       const el = document.getElementById(anchor);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-        const prev = el.style.boxShadow;
-        el.style.transition = "box-shadow .25s";
-        el.style.boxShadow = "0 0 0 3px var(--eclosion, #D9B21A)";
-        window.setTimeout(() => { el.style.boxShadow = prev; }, 1600);
+      if (!el) {
+        if (tries++ < 15) window.setTimeout(attempt, 120);
         return;
       }
-      if (tries++ < 12) window.setTimeout(attempt, 120);
+      // IMPORTANT : ne PAS utiliser scrollIntoView ici. « .app-main » porte
+      // overflow-x: hidden, ce qui force le navigateur à calculer overflow-y à
+      // « auto » : il devient un conteneur de défilement que scrollIntoView
+      // cible, alors qu'il ne défile pas (le vrai défilement est sur la
+      // fenêtre). Résultat sur mobile : le lien semblait inerte. On défile donc
+      // la fenêtre en calculant la position absolue de la section — fiable
+      // partout, y compris Samsung Internet.
+      const y = el.getBoundingClientRect().top + window.pageYOffset - 16;
+      try {
+        window.scrollTo({ top: y, behavior: "smooth" });
+      } catch {
+        window.scrollTo(0, y);
+      }
+      // Filet de sécurité : si malgré tout un ancêtre est le vrai conteneur de
+      // défilement, on l'aligne aussi.
+      let p = el.parentElement;
+      while (p) {
+        if (p.scrollHeight > p.clientHeight + 4) {
+          const oy = window.getComputedStyle(p).overflowY;
+          if (oy === "auto" || oy === "scroll") {
+            p.scrollTop = Math.max(0, el.offsetTop - p.offsetTop - 16);
+            break;
+          }
+        }
+        p = p.parentElement;
+      }
+      // Repère visuel doré pour situer la section.
+      const prev = el.style.boxShadow;
+      el.style.transition = "box-shadow .25s";
+      el.style.boxShadow = "0 0 0 3px var(--eclosion, #D9B21A)";
+      window.setTimeout(() => { el.style.boxShadow = prev; }, 1600);
     };
-    attempt();
+    // On laisse une frame pour que « toute la fiche » soit montée avant de viser.
+    window.setTimeout(attempt, 0);
   };
 
   const refresh = async () => {

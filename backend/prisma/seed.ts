@@ -1924,6 +1924,14 @@ async function main() {
       permissionModules: ["production", "isbn"],
       departmentCodes: ["MAQ", "INFOG", "SECR", "DIRED"],
     },
+    {
+      slug: "2026-09-prerequis-depliage-sur-place",
+      version: "2026.09",
+      title: "Nouveauté — La fiche technique s'ouvre directement dans le panneau de validation",
+      body: "Fini le lien qui ne réagissait pas ! Quand un rappel demande de remplir la fiche technique de fabrication (mise en page, infographie) ou la liste de contrôle ISBN (secrétariat) avant de valider, il suffit de cliquer sur « Remplir la section ici ▾ » : la fiche s'ouvre juste en dessous, dans le même panneau. On la remplit sur place, puis on valide — sans avoir à chercher la section ailleurs dans la page ni faire défiler l'écran. Un second clic la referme.",
+      permissionModules: ["production", "isbn"],
+      departmentCodes: ["MAQ", "INFOG", "SECR", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

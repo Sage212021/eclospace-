@@ -141,6 +141,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   // l'ouvrage a été ouvert. « Voir toute la fiche » lève la restriction.
   const [showAll, setShowAll] = useState(false);
   const [editFiche, setEditFiche] = useState(false);
+  // Dépliage sur place du pré-requis (fiche technique / liste ISBN) DANS le
+  // panneau de validation : on n'essaie plus de « défiler » vers une section
+  // ailleurs dans la page (peu fiable selon le navigateur/téléphone) — la
+  // section s'ouvre directement sous le rappel.
+  const [prereqOpen, setPrereqOpen] = useState(false);
   const focus = originKey ? FOCUS_BY_ORIGIN[originKey] ?? null : null;
   const activeFocus = showAll ? null : focus;
   const show = (mod: string) => activeFocus === null || activeFocus === mod;
@@ -149,51 +154,6 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   // cas où la section est masquée par la vue centrée), puis on ATTEND que la
   // section soit montée (petite boucle — le scroll partait parfois trop tôt),
   // on défile, et on fait clignoter un contour doré pour bien la repérer.
-  const goToAnchor = (anchor: string) => {
-    setShowAll(true);
-    let tries = 0;
-    const attempt = () => {
-      const el = document.getElementById(anchor);
-      if (!el) {
-        if (tries++ < 15) window.setTimeout(attempt, 120);
-        return;
-      }
-      // IMPORTANT : ne PAS utiliser scrollIntoView ici. « .app-main » porte
-      // overflow-x: hidden, ce qui force le navigateur à calculer overflow-y à
-      // « auto » : il devient un conteneur de défilement que scrollIntoView
-      // cible, alors qu'il ne défile pas (le vrai défilement est sur la
-      // fenêtre). Résultat sur mobile : le lien semblait inerte. On défile donc
-      // la fenêtre en calculant la position absolue de la section — fiable
-      // partout, y compris Samsung Internet.
-      const y = el.getBoundingClientRect().top + window.pageYOffset - 16;
-      try {
-        window.scrollTo({ top: y, behavior: "smooth" });
-      } catch {
-        window.scrollTo(0, y);
-      }
-      // Filet de sécurité : si malgré tout un ancêtre est le vrai conteneur de
-      // défilement, on l'aligne aussi.
-      let p = el.parentElement;
-      while (p) {
-        if (p.scrollHeight > p.clientHeight + 4) {
-          const oy = window.getComputedStyle(p).overflowY;
-          if (oy === "auto" || oy === "scroll") {
-            p.scrollTop = Math.max(0, el.offsetTop - p.offsetTop - 16);
-            break;
-          }
-        }
-        p = p.parentElement;
-      }
-      // Repère visuel doré pour situer la section.
-      const prev = el.style.boxShadow;
-      el.style.transition = "box-shadow .25s";
-      el.style.boxShadow = "0 0 0 3px var(--eclosion, #D9B21A)";
-      window.setTimeout(() => { el.style.boxShadow = prev; }, 1600);
-    };
-    // On laisse une frame pour que « toute la fiche » soit montée avant de viser.
-    window.setTimeout(attempt, 0);
-  };
-
   const refresh = async () => {
     const [m, t] = await Promise.all([getManuscript(manuscriptId), getManuscriptTimeline(manuscriptId)]);
     setManuscript(m);
@@ -215,6 +175,10 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   // Pré-requis obligatoire à remplir AVANT de valider l'étape courante (fiche
   // technique, liste ISBN…), selon l'étape.
   const stepPrereq = STEP_PREREQ[manuscript.status.code];
+  const canSeePrereq = stepPrereq ? permissions.has(stepPrereq.perm) : false;
+  // Le pré-requis est déplié sur place dans le panneau de validation.
+  const prereqInlineProduction = prereqOpen && canSeePrereq && stepPrereq?.anchor === "fiche-technique-fabrication";
+  const prereqInlineIsbn = prereqOpen && canSeePrereq && stepPrereq?.anchor === "isbn-references";
 
   async function handle(action: () => Promise<unknown>, successMessage: string) {
     setError(null);
@@ -684,16 +648,32 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         )}
 
         {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && (canValidate || manuscript.canSelfClose) && (
-          <GenericStepValidation
-            manuscriptId={manuscript.id}
-            stepCode={manuscript.status.code}
-            confirm={confirm}
-            onValidated={(_status, opts) => advanceAfterValidation(opts?.confided ?? false)}
-            onError={setError}
-            prereqLabel={stepPrereq?.label ?? null}
-            prereqCanSee={stepPrereq ? permissions.has(stepPrereq.perm) : false}
-            onGoToPrereq={() => stepPrereq && goToAnchor(stepPrereq.anchor)}
-          />
+          <>
+            <GenericStepValidation
+              manuscriptId={manuscript.id}
+              stepCode={manuscript.status.code}
+              confirm={confirm}
+              onValidated={(_status, opts) => advanceAfterValidation(opts?.confided ?? false)}
+              onError={setError}
+              prereqLabel={stepPrereq?.label ?? null}
+              prereqCanSee={canSeePrereq}
+              prereqOpen={prereqOpen}
+              onGoToPrereq={() => setPrereqOpen((v) => !v)}
+            />
+            {/* Le pré-requis s'ouvre SUR PLACE, juste sous le rappel : on remplit
+                la fiche technique / la liste ISBN sans quitter le panneau ni
+                chercher la section ailleurs dans la page. */}
+            {prereqInlineProduction && (
+              <div style={{ marginTop: 10 }}>
+                <ProductionSection manuscriptId={manuscript.id} canManage={permissions.has("production:saisie")} />
+              </div>
+            )}
+            {prereqInlineIsbn && (
+              <div style={{ marginTop: 10 }}>
+                <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie")} />
+              </div>
+            )}
+          </>
         )}
 
         {!["RECEPTION", "VERIF_ADMIN", "COMITE_LECTURE", "DECISION_EDITORIALE", ...GENERIC_VALIDATION_STEPS].includes(
@@ -856,11 +836,15 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             onMessage={setMessage}
             onError={setError}
           />
-          <ProductionSection manuscriptId={manuscript.id} canManage={permissions.has("production:saisie")} />
+          {/* Évite le doublon quand la fiche technique est déjà dépliée dans le
+              panneau de validation ci-dessus. */}
+          {!prereqInlineProduction && (
+            <ProductionSection manuscriptId={manuscript.id} canManage={permissions.has("production:saisie")} />
+          )}
         </>
       )}
 
-      {show("isbn") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("isbn:consultation") && (
+      {show("isbn") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("isbn:consultation") && !prereqInlineIsbn && (
         <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie")} />
       )}
 
@@ -2091,6 +2075,7 @@ function GenericStepValidation({
   onError,
   prereqLabel = null,
   prereqCanSee = false,
+  prereqOpen = false,
   onGoToPrereq,
 }: {
   manuscriptId: string;
@@ -2100,6 +2085,7 @@ function GenericStepValidation({
   onError: (message: string) => void;
   prereqLabel?: string | null;
   prereqCanSee?: boolean;
+  prereqOpen?: boolean;
   onGoToPrereq?: () => void;
 }) {
   const [requiresRewrite, setRequiresRewrite] = useState(false);
@@ -2239,8 +2225,8 @@ function GenericStepValidation({
         <div style={{ background: "var(--amber-soft, #F6E7D2)", border: "1px solid #E7C98A", color: "#8A5A00", borderRadius: 8, padding: "9px 12px", fontSize: 12.5, marginBottom: 10, lineHeight: 1.5 }}>
           ⚠ <strong>{prereqLabel}</strong> doit être renseigné(e) <strong>avant</strong> de valider — sinon le passage à l'étape suivante est refusé.{" "}
           {prereqCanSee ? (
-            <button type="button" onClick={() => onGoToPrereq?.()} style={{ background: "none", border: "none", color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700, textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: 12.5 }}>
-              Aller à la section à remplir ↓
+            <button type="button" onClick={() => onGoToPrereq?.()} style={{ background: prereqOpen ? "var(--eclosion, #D9B21A)" : "#fff", border: "1px solid var(--eclosion, #D9B21A)", color: prereqOpen ? "#0B0B0C" : "var(--eclosion-dark, #9a7a12)", fontWeight: 700, borderRadius: 6, cursor: "pointer", padding: "4px 10px", fontSize: 12.5 }}>
+              {prereqOpen ? "Masquer la section ▴" : "Remplir la section ici ▾"}
             </button>
           ) : (
             <span style={{ fontWeight: 600 }}>Renseigné(e) par le pôle responsable de l'étape.</span>

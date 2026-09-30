@@ -31,6 +31,7 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
   const [specs, setSpecs] = useState<ProductionSpecs | null>(null);
   const [assets, setAssets] = useState<ImageAsset[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const [form, setForm] = useState({ trim_format: "", final_pages: "", paper_interior: "", paper_interior_gsm: "", paper_cover: "", binding: "", lamination: "", typeface: "", font_size_pt: "", leading: "", margins: "", layout_name: "" });
 
   const refresh = async () => {
@@ -61,6 +62,8 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
+    setError(null);
+    setSaved(false);
     try {
       await updateProductionSpecs(manuscriptId, {
         trim_format: form.trim_format || undefined,
@@ -77,6 +80,8 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
         layout_name: form.layout_name || undefined,
       });
       await refresh();
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 4000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de l'enregistrement.");
     }
@@ -165,9 +170,14 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
           </label>
         </div>
         {canManage && (
-          <button type="submit" style={{ ...secondaryButtonStyle, marginTop: 10, background: "var(--eclosion)", color: "#fff", border: "none" }}>
-            Enregistrer
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
+            <button type="submit" style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>
+              Enregistrer
+            </button>
+            {saved && (
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--valid, #2F7D4A)" }}>✓ Fiche technique enregistrée</span>
+            )}
+          </div>
         )}
       </form>
 

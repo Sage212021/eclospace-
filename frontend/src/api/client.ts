@@ -257,6 +257,11 @@ export interface Manuscript {
   quoteDecisionNote?: string | null;
   // Segment éditorial (base de la ventilation du CA livre). Null = non classé.
   editorialSegment?: EditorialSegment | null;
+  // Responsable de l'étape courante (renseigné par la liste par étape) + « ce
+  // dossier m'est-il confié ? » — sert au rangement (mes dossiers / confiés à
+  // un collègue) et au verrou « consultation ».
+  currentAssignee?: { id: string; username: string } | null;
+  assignedToMe?: boolean;
 }
 
 export type EditorialSegment = "scolaire" | "general";
@@ -408,11 +413,19 @@ export type ManuscriptDetail = Manuscript & {
   // Le profil AFFECTÉ (correcteur, maquettiste) peut clôturer lui-même l'étape
   // courante sans le droit large de validation.
   canSelfClose?: boolean;
+  // « Ce dossier est-il confié à un collègue ? » — verrou consultation, et
+  // droit de « prendre le dossier » (responsable, motif + traçabilité).
+  canTakeOver?: boolean;
   workContributors: { role?: string; partner: ManuscriptAuthorPartner }[];
   owner: UserSummary;
 };
 export function getManuscript(id: string) {
   return request<ManuscriptDetail>(`/api/v1/manuscripts/${id}`);
+}
+// « Prendre le dossier » confié à un collègue : motif obligatoire, tracé au
+// journal, collègue notifié. Réservé aux responsables (production/direction).
+export function takeOverStep(id: string, motif: string) {
+  return request<{ ok: true }>(`/api/v1/manuscripts/${id}/step/take-over`, { method: "POST", body: JSON.stringify({ motif }) });
 }
 
 // Scellé d'archivage définitif : verrouille le dossier en lecture seule.

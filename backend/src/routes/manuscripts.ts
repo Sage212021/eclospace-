@@ -583,6 +583,11 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
             ? { receivedAt: order ?? "desc" }
             : { priorityScore: order ?? "desc" };
 
+    // Étape courante demandée : on résout son id une fois pour rattacher, à
+    // chaque ouvrage, le responsable de CETTE étape (rangement de la liste :
+    // « mes dossiers » / « non assignés » / « confiés à un collègue »).
+    const statusRow = status ? await prisma.workflowStatus.findUnique({ where: { code: status }, select: { id: true } }) : null;
+
     const manuscripts = await prisma.manuscript.findMany({
       where: {
         deletedAt: null,
@@ -596,10 +601,27 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         ...(priority_min !== undefined ? { priorityScore: { gte: priority_min } } : {}),
         ...mineFilter,
       },
-      include: { status: true, genre: true, collection: true },
+      include: {
+        status: true,
+        genre: true,
+        collection: true,
+        ...(statusRow
+          ? { steps: { where: { statusId: statusRow.id }, select: { responsible: { select: { id: true, username: true } } } } }
+          : {}),
+      },
       orderBy: orderByField,
     });
-    return reply.send(manuscripts);
+
+    const meId = request.user!.id;
+    const withAssignee = manuscripts.map((m) => {
+      const steps = (m as unknown as { steps?: { responsible: { id: string; username: string } | null }[] }).steps;
+      const resp = steps?.[0]?.responsible ?? null;
+      const currentAssignee = resp ? { id: resp.id, username: resp.username } : null;
+      const rest: Record<string, unknown> = { ...(m as Record<string, unknown>) };
+      delete rest.steps;
+      return { ...rest, currentAssignee, assignedToMe: currentAssignee?.id === meId };
+    });
+    return reply.send(withAssignee);
   });
 
   // Historique des manuscrits REÇUS / INSCRITS, groupés PAR JOUR (demande
@@ -830,7 +852,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         owner: { select: { id: true, username: true } },
         projectManager: { select: { id: true, username: true } },
         workContributors: { include: { partner: true } },
-        steps: { include: { status: true }, orderBy: { status: { stepOrder: "asc" } } },
+        steps: { include: { status: true, responsible: { select: { id: true, username: true } } }, orderBy: { status: { stepOrder: "asc" } } },
       },
     });
     if (!manuscript) {
@@ -852,7 +874,77 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         canSelfClose = !!task;
       }
     }
-    return reply.send({ ...manuscript, registrationLocked: Boolean(signed), sealed: Boolean(manuscript.sealedAt), canSelfClose });
+    // Responsable de l'ÉTAPE COURANTE + « ce dossier m'est-il confié ? ». Sert
+    // au verrou « consultation » : un dossier confié à un collègue est en
+    // lecture seule pour les autres (pas de modification accidentelle) ; un
+    // responsable peut « prendre le dossier » (motif + traçabilité).
+    const currentStepNow = manuscript.steps.find((s) => s.statusId === manuscript.statusId);
+    const currentAssignee = currentStepNow?.responsible
+      ? { id: currentStepNow.responsible.id, username: currentStepNow.responsible.username }
+      : null;
+    const assignedToMe = currentAssignee?.id === request.user!.id;
+    const elevated =
+      request.user!.permissions.has("manuscripts:validation") ||
+      request.user!.permissions.has("manuscripts:administration") ||
+      request.user!.permissions.has("production:administration");
+    // On ne peut « prendre » qu'un dossier confié à quelqu'un d'AUTRE, et
+    // seulement aux étapes qui se confient nominativement à une personne.
+    const canTakeOver = Boolean(currentAssignee) && !assignedToMe && elevated;
+    return reply.send({ ...manuscript, registrationLocked: Boolean(signed), sealed: Boolean(manuscript.sealedAt), canSelfClose, currentAssignee, assignedToMe, canTakeOver });
+  });
+
+  // « Prendre le dossier » : un responsable (production/direction) intervient sur
+  // un dossier CONFIÉ À UN COLLÈGUE. Motif OBLIGATOIRE, action TRACÉE au journal,
+  // et le collègue précédent est notifié — « qui fait quoi » (demande opérateur
+  // 30/09). Après reprise, le dossier lui est confié : il quitte la pile « en
+  // consultation » et rejoint « ses dossiers à traiter » (plus de confusion).
+  fastify.post("/api/v1/manuscripts/:id/step/take-over", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ motif: z.string().trim().min(5, "Motif trop court") }).safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "motif_required", message: "Un motif d'au moins 5 caractères est obligatoire pour prendre un dossier confié à un collègue." });
+    }
+    const elevated =
+      request.user!.permissions.has("manuscripts:validation") ||
+      request.user!.permissions.has("manuscripts:administration") ||
+      request.user!.permissions.has("production:administration");
+    if (!elevated) {
+      return reply.code(403).send({ code: "forbidden", message: "Seul un responsable peut prendre un dossier confié à un collègue." });
+    }
+    const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true, title: true, statusId: true, status: { select: { label: true } } } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+    const step = await prisma.manuscriptStep.findUnique({
+      where: { manuscriptId_statusId: { manuscriptId: id, statusId: manuscript.statusId } },
+      select: { id: true, responsibleId: true },
+    });
+    if (!step || !step.responsibleId) {
+      return reply.code(409).send({ code: "not_assigned", message: "Ce dossier n'est confié à personne : vous pouvez le traiter directement, aucune reprise n'est nécessaire." });
+    }
+    if (step.responsibleId === request.user!.id) {
+      return reply.code(409).send({ code: "already_mine", message: "Ce dossier vous est déjà confié." });
+    }
+    const previousId = step.responsibleId;
+    const me = await prisma.user.findUnique({ where: { id: request.user!.id }, select: { username: true } });
+    await prisma.manuscriptStep.update({ where: { id: step.id }, data: { responsibleId: request.user!.id } });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "update",
+      entityType: "manuscript_step",
+      entityId: id,
+      oldValues: { step: manuscript.status.label, assigned_to: previousId },
+      newValues: { step: manuscript.status.label, assigned_to: request.user!.id, take_over: true, motif: parsed.data.motif },
+      ipAddress: request.ip,
+    });
+    await notifyUsers({
+      userIds: [previousId],
+      type: "autre",
+      priority: "high",
+      title: "Dossier repris par un responsable",
+      body: `Le dossier « ${manuscript.title} » (étape « ${manuscript.status.label} ») qui vous était confié a été repris par ${me?.username ?? "un responsable"}. Motif : ${parsed.data.motif}`,
+      entityType: "manuscript",
+      entityId: id,
+    });
+    return reply.send({ ok: true });
   });
 
   // Dépôt à la RÉCEPTION : le fichier source du manuscrit. C'est l'entrée du

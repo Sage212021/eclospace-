@@ -58,6 +58,36 @@ async function isAssignedForStep(manuscriptId: string, statusId: string, userId:
   }
   return false;
 }
+
+// Permission « métier » de l'étape : qui peut la traiter quand le dossier n'est
+// confié à PERSONNE (transmis « à tout le service »). Un exécutant du bon pôle
+// peut alors prendre en charge et CLÔTURER lui-même le dossier non assigné —
+// sinon un dossier « à tout le service » resterait bloqué sans validateur.
+const STEP_SAISIE_PERM: Record<string, string> = {
+  MISE_EN_PAGE: "production:saisie",
+  INFOGRAPHIE: "production:saisie",
+  ATTRIBUTION_REFERENCES: "isbn:saisie",
+};
+
+// Un utilisateur SANS « manuscripts:validation » peut-il clôturer cette étape ?
+// Oui s'il y est affecté (ou porte une tâche de correction), OU si le dossier
+// n'est confié à personne et qu'il est du métier de l'étape.
+async function canSelfCloseStep(
+  manuscriptId: string,
+  statusId: string,
+  user: { id: string; permissions: Set<string> },
+  stepCode: string,
+): Promise<boolean> {
+  if (!SELF_CLOSE_STEPS.has(stepCode)) return false;
+  if (await isAssignedForStep(manuscriptId, statusId, user.id, stepCode)) return true;
+  const perm = STEP_SAISIE_PERM[stepCode];
+  if (!perm || !user.permissions.has(perm)) return false;
+  const step = await prisma.manuscriptStep.findUnique({
+    where: { manuscriptId_statusId: { manuscriptId, statusId } },
+    select: { responsibleId: true },
+  });
+  return !step || step.responsibleId == null; // dossier non assigné → l'exécutant du pôle peut le clôturer
+}
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
 import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
 
@@ -156,7 +186,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       // sa mise en page (uniquement SON ouvrage, à SON étape). Aucune autre étape
       // n'est ouverte aux non-validateurs.
       if (!request.user!.permissions.has("manuscripts:validation")) {
-        const allowed = SELF_CLOSE_STEPS.has(targetStatus.code) && (await isAssignedForStep(id, manuscript.statusId, request.user!.id, targetStatus.code));
+        const allowed = await canSelfCloseStep(id, manuscript.statusId, request.user!, targetStatus.code);
         if (!allowed) {
           void writeAuditLog({ userId: request.user!.id, action: "access_denied", entityType: "permission", entityId: "manuscripts:validation", newValues: { method: request.method, url: request.url }, ipAddress: request.ip }).catch(() => {});
           return reply.code(403).send({ code: "forbidden", message: "Action non autorisée : réservé à la direction éditoriale — ou au correcteur affecté, pour clôturer sa propre correction." });

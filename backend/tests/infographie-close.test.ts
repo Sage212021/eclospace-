@@ -71,6 +71,30 @@ describe("clôture de l'infographie par l'infographe", () => {
     expect(res.json().code).toBe("maquette_infographie_incomplete");
   });
 
+  it("dossier NON assigné (« à tout le service ») : un infographe du métier peut le clôturer (200)", async () => {
+    const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "INFOGRAPHIE" } });
+    const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
+    const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Info123!");
+    const secr = await createUserWithRole(`secr_${rnd()}`, "ASSISTANT_EDITORIAL", "Secr123!");
+    const m = await prisma.manuscript.create({
+      data: { manuscriptNumber: `MS-INF-${rnd()}`, title: `Infographie ${rnd()}`, statusId: status.id, ownerId: admin.id, origin: "soumission", language: "fr", receivedAt: new Date() },
+    });
+    // Étape SANS responsable (transmise « à tout le service »).
+    await prisma.manuscriptStep.create({ data: { manuscriptId: m.id, statusId: status.id, responsibleId: null, actualStart: new Date() } });
+    await prisma.productionSpecs.create({ data: { manuscriptId: m.id, trimFormat: "14x21", finalPages: 200, paperInterior: "Offset 80g", paperCover: "Couché 250g", binding: "broche", spineNeedsRecalc: false } });
+    await prisma.imageAsset.create({ data: { manuscriptId: m.id, type: "couverture_1", technicalOk: true, rightsOrigin: "creation_interne" } });
+    await seedStepDeliverable(m.id, "INFOGRAPHIE");
+
+    const infoCookie = await login(info.username, "Info123!");
+    // La fiche doit annoncer canSelfClose = true pour cet infographe non affecté.
+    const fiche = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}`, headers: { cookie: infoCookie } });
+    expect(fiche.json().canSelfClose).toBe(true);
+
+    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/INFOGRAPHIE/validate`, headers: { cookie: infoCookie }, payload: { assignee_id: secr.id } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().status).toBe("ATTRIBUTION_REFERENCES");
+  });
+
   it("un infographe NON affecté ne peut pas clôturer (403)", async () => {
     const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Info123!");
     const other = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Info123!");

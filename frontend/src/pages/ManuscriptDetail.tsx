@@ -145,11 +145,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   const activeFocus = showAll ? null : focus;
   const show = (mod: string) => activeFocus === null || activeFocus === mod;
 
-  // Amène à la fiche technique de fabrication : si elle est masquée par la vue
-  // centrée, on révèle d'abord toute la fiche puis on défile jusqu'à elle.
-  const goToFicheTechnique = () => {
-    const scroll = () => document.getElementById("fiche-technique-fabrication")?.scrollIntoView({ behavior: "smooth", block: "center" });
-    if (document.getElementById("fiche-technique-fabrication")) { scroll(); return; }
+  // Amène à une section (ancre) : si elle est masquée par la vue centrée, on
+  // révèle d'abord toute la fiche puis on défile jusqu'à elle.
+  const goToAnchor = (anchor: string) => {
+    const scroll = () => document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (document.getElementById(anchor)) { scroll(); return; }
     setShowAll(true);
     setTimeout(scroll, 200);
   };
@@ -172,6 +172,9 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   const canAssignReader = permissions.has("comite_lecture:saisie");
   const canCloseCommittee = permissions.has("comite_lecture:validation");
   const canDecide = permissions.has("decision_editoriale:validation");
+  // Pré-requis obligatoire à remplir AVANT de valider l'étape courante (fiche
+  // technique, liste ISBN…), selon l'étape.
+  const stepPrereq = STEP_PREREQ[manuscript.status.code];
 
   async function handle(action: () => Promise<unknown>, successMessage: string) {
     setError(null);
@@ -647,8 +650,9 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
             confirm={confirm}
             onValidated={(_status, opts) => advanceAfterValidation(opts?.confided ?? false)}
             onError={setError}
-            canSeeFicheTechnique={permissions.has("production:consultation")}
-            onGoToFicheTechnique={goToFicheTechnique}
+            prereqLabel={stepPrereq?.label ?? null}
+            prereqCanSee={stepPrereq ? permissions.has(stepPrereq.perm) : false}
+            onGoToPrereq={() => stepPrereq && goToAnchor(stepPrereq.anchor)}
           />
         )}
 
@@ -1907,6 +1911,15 @@ const STEP_ACTION_LABELS: Record<string, string> = {
 // bon de commande, prix public… et renvoie un message clair si l'un manque).
 // Les étapes à flux dédié (réception, vérif. admin, comité, décision) ont leur
 // propre bloc d'action ; l'archivage est terminal.
+// Pré-requis obligatoire à remplir AVANT de valider certaines étapes (sinon le
+// passage est refusé côté serveur) : libellé, ancre de la section à remplir, et
+// droit qui permet de la voir. Sert au rappel actionnable près du bouton Valider.
+const STEP_PREREQ: Record<string, { label: string; anchor: string; perm: string }> = {
+  MISE_EN_PAGE: { label: "la fiche technique de fabrication (format, nombre de pages, papier, dos, reliure)", anchor: "fiche-technique-fabrication", perm: "production:consultation" },
+  INFOGRAPHIE: { label: "la fiche technique de fabrication (format, nombre de pages, papier, dos, reliure)", anchor: "fiche-technique-fabrication", perm: "production:consultation" },
+  ATTRIBUTION_REFERENCES: { label: "la liste de contrôle ISBN / dépôt légal / métadonnées", anchor: "isbn-references", perm: "isbn:consultation" },
+};
+
 const GENERIC_VALIDATION_STEPS = [
   "PLANIFICATION",
   "CORRECTION",
@@ -2036,16 +2049,18 @@ function GenericStepValidation({
   confirm,
   onValidated,
   onError,
-  canSeeFicheTechnique = false,
-  onGoToFicheTechnique,
+  prereqLabel = null,
+  prereqCanSee = false,
+  onGoToPrereq,
 }: {
   manuscriptId: string;
   stepCode: string;
   confirm: (opts: { title: string; message: string; detail?: string; confirmLabel?: string }) => Promise<boolean>;
   onValidated: (status: string | null, opts?: { confided?: boolean }) => void;
   onError: (message: string) => void;
-  canSeeFicheTechnique?: boolean;
-  onGoToFicheTechnique?: () => void;
+  prereqLabel?: string | null;
+  prereqCanSee?: boolean;
+  onGoToPrereq?: () => void;
 }) {
   const [requiresRewrite, setRequiresRewrite] = useState(false);
   const [assignees, setAssignees] = useState<NextAssignee[]>([]);
@@ -2180,15 +2195,15 @@ function GenericStepValidation({
           </span>
         </label>
       )}
-      {(stepCode === "MISE_EN_PAGE" || stepCode === "INFOGRAPHIE") && (
+      {prereqLabel && (
         <div style={{ background: "var(--amber-soft, #F6E7D2)", border: "1px solid #E7C98A", color: "#8A5A00", borderRadius: 8, padding: "9px 12px", fontSize: 12.5, marginBottom: 10, lineHeight: 1.5 }}>
-          ⚠ La <strong>fiche technique de fabrication</strong> (format, nombre de pages, papier, dos, reliure) doit être remplie <strong>avant</strong> de valider — sinon le passage à l'étape suivante est refusé.{" "}
-          {canSeeFicheTechnique ? (
-            <button type="button" onClick={() => onGoToFicheTechnique?.()} style={{ background: "none", border: "none", color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700, textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: 12.5 }}>
-              Aller à la fiche technique ↓
+          ⚠ <strong>{prereqLabel}</strong> doit être renseigné(e) <strong>avant</strong> de valider — sinon le passage à l'étape suivante est refusé.{" "}
+          {prereqCanSee ? (
+            <button type="button" onClick={() => onGoToPrereq?.()} style={{ background: "none", border: "none", color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700, textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: 12.5 }}>
+              Aller à la section à remplir ↓
             </button>
           ) : (
-            <span style={{ fontWeight: 600 }}>Elle est renseignée par le maquettiste (pôle Maquette).</span>
+            <span style={{ fontWeight: 600 }}>Renseigné(e) par le pôle responsable de l'étape.</span>
           )}
         </div>
       )}

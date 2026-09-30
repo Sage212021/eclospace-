@@ -1908,6 +1908,14 @@ async function main() {
       permissionModules: ["production"],
       departmentCodes: ["MAQ", "INFOG", "DIRED"],
     },
+    {
+      slug: "2026-09-attribution-references-cloture-secretariat",
+      version: "2026.09",
+      title: "Nouveauté — Attribution des références (ISBN) : le secrétariat valide et transmet lui-même",
+      body: "L'étape « Attribution des références » (ISBN, dépôt légal, métadonnées) suit maintenant le même principe que la mise en page et l'infographie. Le secrétaire affecté peut CLÔTURER lui-même l'étape et choisir qui reçoit la suite (Validation du BAT — contrôle qualité), sans attendre la direction. La validation reste bloquée tant que la LISTE DE CONTRÔLE ISBN / dépôt légal / métadonnées n'est pas complète : un rappel apparaît au-dessus du bouton « Valider » avec un lien « Aller à la section à remplir ↓ ». À la clôture par le secrétariat, la Direction éditoriale est notifiée.",
+      permissionModules: ["isbn"],
+      departmentCodes: ["SECR", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

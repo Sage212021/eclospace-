@@ -194,11 +194,12 @@ export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, status
       {error && <p style={{ color: "var(--alert)", fontSize: 13 }}>{error}</p>}
 
       {isStageView ? (
-        // Vue par étape (ouverte depuis le menu latéral) : liste directe, inchangée.
+        // Vue par étape : liste RANGÉE en trois piles pour ne pas confondre ses
+        // propres dossiers (à traiter) avec ceux d'un collègue (consultation).
         manuscripts.length === 0 ? (
           <EmptyState isStageView={isStageView} heading={heading} onGoToManuscripts={onGoToManuscripts} />
         ) : (
-          <ManuscriptTable items={manuscripts} onOpen={onOpenManuscript} showAssignee canAssign={canAssign} />
+          <StageGroups items={manuscripts} onOpen={onOpenManuscript} canAssign={canAssign} />
         )
       ) : (
         // Vue principale : MENU LOCAL en accordéon — chaque entrée se déplie sur
@@ -348,6 +349,39 @@ function AccordionSection({
         <span style={{ color: "var(--muted)", display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>
       </button>
       {open && <div style={{ padding: 14, borderTop: "1px solid var(--line)" }}>{children}</div>}
+    </div>
+  );
+}
+
+// Rangement de la vue par étape en trois piles claires, pour qu'un responsable
+// (qui voit tout) ne confonde JAMAIS ses dossiers à traiter avec ceux d'un
+// collègue (qu'il ne fait que consulter). Un exécutant ne voit, lui, que ses
+// dossiers + les non-assignés (filtre serveur) : la 3ᵉ pile reste vide.
+function StageGroups({ items, onOpen, canAssign }: { items: Manuscript[]; onOpen: (id: string) => void; canAssign?: boolean }) {
+  const mine = items.filter((m) => m.assignedToMe);
+  const unassigned = items.filter((m) => !m.currentAssignee);
+  const others = items.filter((m) => m.currentAssignee && !m.assignedToMe);
+  // S'il n'y a qu'une seule pile pertinente (cas de l'exécutant), on n'alourdit
+  // pas l'écran avec des en-têtes : liste simple.
+  const groupsUsed = [mine.length > 0, unassigned.length > 0, others.length > 0].filter(Boolean).length;
+  if (groupsUsed <= 1) {
+    return <ManuscriptTable items={items} onOpen={onOpen} showAssignee canAssign={canAssign} />;
+  }
+  const Section = ({ title, hint, tone, list }: { title: string; hint: string; tone: string; list: Manuscript[] }) =>
+    list.length === 0 ? null : (
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "0 0 6px" }}>
+          <h2 style={{ fontFamily: "var(--font-title)", fontSize: 15, margin: 0, color: tone }}>{title}</h2>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>{list.length} · {hint}</span>
+        </div>
+        <ManuscriptTable items={list} onOpen={onOpen} showAssignee canAssign={canAssign} />
+      </div>
+    );
+  return (
+    <div>
+      <Section title="📌 Mes dossiers à traiter" hint="qui vous sont confiés" tone="var(--eclosion-dark, #9a7a12)" list={mine} />
+      <Section title="🆕 Non assignés — à confier / à prendre" hint="en attente d'attribution" tone="var(--ink)" list={unassigned} />
+      <Section title="👥 Confiés à un collègue — consultation" hint="lecture seule (ne pas modifier sans reprise)" tone="var(--muted)" list={others} />
     </div>
   );
 }

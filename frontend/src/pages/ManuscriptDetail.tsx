@@ -7,6 +7,7 @@ import {
   sealManuscript,
   unsealManuscript,
   getManuscript,
+  takeOverStep,
   getManuscriptSourceFileMeta,
   manuscriptSourceFileUrl,
   uploadManuscriptSourceFile,
@@ -146,6 +147,9 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   // ailleurs dans la page (peu fiable selon le navigateur/téléphone) — la
   // section s'ouvre directement sous le rappel.
   const [prereqOpen, setPrereqOpen] = useState(false);
+  // Reprise d'un dossier confié à un collègue (motif obligatoire + traçabilité).
+  const [takeoverMotif, setTakeoverMotif] = useState("");
+  const [takeoverBusy, setTakeoverBusy] = useState(false);
   const focus = originKey ? FOCUS_BY_ORIGIN[originKey] ?? null : null;
   const activeFocus = showAll ? null : focus;
   const show = (mod: string) => activeFocus === null || activeFocus === mod;
@@ -179,6 +183,25 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   // Le pré-requis est déplié sur place dans le panneau de validation.
   const prereqInlineProduction = prereqOpen && canSeePrereq && stepPrereq?.anchor === "fiche-technique-fabrication";
   const prereqInlineIsbn = prereqOpen && canSeePrereq && stepPrereq?.anchor === "isbn-references";
+
+  // Dossier CONFIÉ À UN COLLÈGUE : lecture seule pour les autres (pas de
+  // modification accidentelle du travail d'autrui). Un responsable peut le
+  // « prendre » (motif obligatoire, tracé, collègue notifié).
+  const confieAutrui = !!manuscript.currentAssignee && manuscript.assignedToMe === false;
+  async function handleTakeOver() {
+    if (takeoverMotif.trim().length < 5) { setError("Indiquez un motif d'au moins 5 caractères pour prendre ce dossier."); return; }
+    setTakeoverBusy(true); setError(null);
+    try {
+      await takeOverStep(manuscriptId, takeoverMotif.trim());
+      setTakeoverMotif("");
+      const m = await refresh();
+      setMessage(`Dossier repris. ${m.currentAssignee?.username ?? "Vous"} en êtes désormais responsable — l'action est tracée et le collègue a été notifié.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Reprise impossible.");
+    } finally {
+      setTakeoverBusy(false);
+    }
+  }
 
   async function handle(action: () => Promise<unknown>, successMessage: string) {
     setError(null);
@@ -617,7 +640,39 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           <AcceptanceConditionsPanel manuscriptId={manuscript.id} canManage={canDecide} confirm={confirm} onError={setError} />
         )}
 
-        {manuscript.status.code === "CORRECTION" && (
+        {confieAutrui && (
+          <div style={{ background: "var(--ivory, #FAF8F2)", border: "1px solid var(--eclosion, #D9B21A)", borderRadius: 8, padding: "11px 13px", marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.5 }}>
+              📁 <strong>Dossier confié à {manuscript.currentAssignee?.username}.</strong> Vous le <strong>consultez</strong> — les modifications sont verrouillées pour ne pas empiéter sur son travail.
+            </div>
+            {manuscript.canTakeOver ? (
+              <div style={{ marginTop: 9 }}>
+                <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>
+                  Pour intervenir, <strong>prenez le dossier</strong> (motif obligatoire — action tracée au journal, {manuscript.currentAssignee?.username} sera notifié) :
+                </label>
+                <textarea
+                  value={takeoverMotif}
+                  onChange={(e) => setTakeoverMotif(e.target.value)}
+                  rows={2}
+                  placeholder="Ex. : maquettiste absent, échéance imprimeur demain — je reprends la mise en page."
+                  style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }}
+                />
+                <button
+                  type="button"
+                  disabled={takeoverBusy || takeoverMotif.trim().length < 5}
+                  onClick={handleTakeOver}
+                  style={{ marginTop: 6, background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "7px 14px", fontSize: 13, fontWeight: 700, cursor: takeoverBusy || takeoverMotif.trim().length < 5 ? "not-allowed" : "pointer", opacity: takeoverBusy || takeoverMotif.trim().length < 5 ? 0.6 : 1 }}
+                >
+                  {takeoverBusy ? "Reprise…" : "Prendre le dossier"}
+                </button>
+              </div>
+            ) : (
+              <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>Seul un responsable peut prendre ce dossier confié à un collègue.</div>
+            )}
+          </div>
+        )}
+
+        {manuscript.status.code === "CORRECTION" && !confieAutrui && (
           <div style={{ background: "var(--eclosion-soft)", border: "1px solid var(--eclosion)", borderRadius: 8, padding: "10px 13px", fontSize: 12.5, color: "var(--ink)", marginBottom: 12 }}>
             <strong>Étape de correction — dans l'ordre :</strong>
             <ol style={{ margin: "6px 0 0", paddingLeft: 18, lineHeight: 1.6 }}>
@@ -632,7 +687,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           <StepAttachments
             manuscriptId={manuscript.id}
             stepLabel={manuscript.status.label}
-            canDeposit={canEditFiche}
+            canDeposit={canEditFiche && !confieAutrui}
             onError={setError}
           />
         )}
@@ -643,11 +698,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
           <StepDeliverableBlock
             manuscriptId={manuscript.id}
             stepCode={manuscript.status.code}
-            canManage={canEditFiche || permissions.has("tasks:saisie")}
+            canManage={(canEditFiche || permissions.has("tasks:saisie")) && !confieAutrui}
           />
         )}
 
-        {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && (canValidate || manuscript.canSelfClose) && (
+        {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && (canValidate || manuscript.canSelfClose) && !confieAutrui && (
           <>
             <GenericStepValidation
               manuscriptId={manuscript.id}
@@ -832,34 +887,34 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         <>
           <MaquetteHandoffBlock
             manuscriptId={manuscript.id}
-            canDeposit={permissions.has("production:saisie")}
+            canDeposit={permissions.has("production:saisie") && !confieAutrui}
             onMessage={setMessage}
             onError={setError}
           />
           {/* Évite le doublon quand la fiche technique est déjà dépliée dans le
               panneau de validation ci-dessus. */}
           {!prereqInlineProduction && (
-            <ProductionSection manuscriptId={manuscript.id} canManage={permissions.has("production:saisie")} />
+            <ProductionSection manuscriptId={manuscript.id} canManage={permissions.has("production:saisie") && !confieAutrui} />
           )}
         </>
       )}
 
       {show("isbn") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("isbn:consultation") && !prereqInlineIsbn && (
-        <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie")} />
+        <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie") && !confieAutrui} />
       )}
 
       {show("bat") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("bat:consultation") && (
         <>
           <BatHandoffBlock
             manuscriptId={manuscript.id}
-            canDeposit={permissions.has("bat:saisie")}
+            canDeposit={permissions.has("bat:saisie") && !confieAutrui}
             onMessage={setMessage}
             onError={setError}
           />
           <BatSection
             manuscriptId={manuscript.id}
-            canManage={permissions.has("bat:saisie")}
-            canValidate={permissions.has("bat:validation")}
+            canManage={permissions.has("bat:saisie") && !confieAutrui}
+            canValidate={permissions.has("bat:validation") && !confieAutrui}
           />
           {permissions.has("bat:saisie") && (
             <AiReadingLauncher manuscriptId={manuscript.id} workType="couverture" stepCode="VALIDATION_BAT" title="Relecture IA — Couverture (BAT Final)" />

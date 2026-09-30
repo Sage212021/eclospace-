@@ -1932,6 +1932,14 @@ async function main() {
       permissionModules: ["production", "isbn"],
       departmentCodes: ["MAQ", "INFOG", "SECR", "DIRED"],
     },
+    {
+      slug: "2026-09-dossier-collegue-consultation-reprise",
+      version: "2026.09",
+      title: "Nouveauté — Dossiers d'un collègue : rangés, en consultation, repris avec motif",
+      body: "Les listes par étape (Maquette, Infographie, Références…) sont maintenant RANGÉES en trois piles : « Mes dossiers à traiter », « Non assignés (à confier / à prendre) » et « Confiés à un collègue (consultation) ». Un responsable voit toujours tout, mais ne confond plus ses dossiers avec ceux des autres. Un dossier confié à un collègue s'ouvre en LECTURE SEULE : on ne peut pas le modifier par erreur. Pour intervenir, un responsable clique « Prendre le dossier » et indique un MOTIF : l'action est tracée au journal (qui a fait quoi) et le collègue est prévenu.",
+      permissionModules: ["production", "manuscripts", "isbn", "bat"],
+      departmentCodes: ["MAQ", "INFOG", "SECR", "CQ", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

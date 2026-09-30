@@ -361,10 +361,11 @@ function StageGroups({ items, onOpen, canAssign }: { items: Manuscript[]; onOpen
   const mine = items.filter((m) => m.assignedToMe);
   const unassigned = items.filter((m) => !m.currentAssignee);
   const others = items.filter((m) => m.currentAssignee && !m.assignedToMe);
-  // S'il n'y a qu'une seule pile pertinente (cas de l'exécutant), on n'alourdit
-  // pas l'écran avec des en-têtes : liste simple.
+  // On n'affiche une liste simple (sans en-têtes) QUE lorsque tout est à moi ou
+  // tout est non assigné : dès qu'un dossier est confié à un collègue, il DOIT
+  // être clairement rangé dans sa pile « consultation » (même s'il est seul).
   const groupsUsed = [mine.length > 0, unassigned.length > 0, others.length > 0].filter(Boolean).length;
-  if (groupsUsed <= 1) {
+  if (groupsUsed <= 1 && others.length === 0) {
     return <ManuscriptTable items={items} onOpen={onOpen} showAssignee canAssign={canAssign} />;
   }
   const Section = ({ title, hint, tone, list }: { title: string; hint: string; tone: string; list: Manuscript[] }) =>

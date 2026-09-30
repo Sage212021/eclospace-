@@ -32,6 +32,8 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
   const [assets, setAssets] = useState<ImageAsset[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Fiche repliée (résumé) une fois enregistrée ; « Modifier » la rouvre.
+  const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ trim_format: "", final_pages: "", paper_interior: "", paper_interior_gsm: "", paper_cover: "", binding: "", lamination: "", typeface: "", font_size_pt: "", leading: "", margins: "", layout_name: "" });
 
   const refresh = async () => {
@@ -80,6 +82,7 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
         layout_name: form.layout_name || undefined,
       });
       await refresh();
+      setEditing(false); // la fiche se replie en résumé après enregistrement
       setSaved(true);
       window.setTimeout(() => setSaved(false), 4000);
     } catch (err) {
@@ -101,6 +104,10 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
     }
   }
 
+  // La fiche est considérée « renseignée » dès que l'essentiel est saisi → on
+  // la présente alors repliée (résumé) plutôt qu'en grand formulaire ouvert.
+  const hasFilledSpecs = !!(specs && (specs.trimFormat || specs.finalPages || specs.paperInterior || specs.paperCover || specs.binding));
+
   return (
     <div id="fiche-technique-fabrication" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16, scrollMarginTop: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Fiche technique de fabrication</div>
@@ -112,6 +119,33 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
         </div>
       )}
 
+      {hasFilledSpecs && !editing ? (
+        // Fiche REPLIÉE : résumé rassurant + « Modifier ». Évite de laisser un
+        // grand formulaire ouvert une fois la fiche renseignée (demande opérateur).
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--valid, #2F7D4A)" }}>✓ Fiche technique enregistrée</span>
+            {canManage && (
+              <button type="button" onClick={() => { setEditing(true); setSaved(false); }} style={{ ...secondaryButtonStyle }}>
+                Modifier
+              </button>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px", fontSize: 12.5 }}>
+            <SummaryRow label="Format" value={specs?.trimFormat} />
+            <SummaryRow label="Pages" value={specs?.finalPages?.toString()} />
+            <SummaryRow label="Papier intérieur" value={[specs?.paperInterior, specs?.paperInteriorGsm ? `${specs.paperInteriorGsm} g/m²` : null].filter(Boolean).join(" · ")} />
+            <SummaryRow label="Papier couverture" value={specs?.paperCover} />
+            <SummaryRow label="Façonnage" value={specs?.binding} />
+            <SummaryRow label="Pelliculage" value={specs?.lamination} />
+            <SummaryRow label="Gabarit / collection" value={specs?.layoutName} />
+            <SummaryRow label="Police" value={specs?.typeface} />
+            <SummaryRow label="Corps de texte" value={specs?.fontSizePt} />
+            <SummaryRow label="Interlignage" value={specs?.leading} />
+            <SummaryRow label="Marges" value={specs?.margins} />
+          </div>
+        </div>
+      ) : (
       <form onSubmit={handleSave}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
           <label style={{ fontSize: 12 }}>
@@ -174,12 +208,18 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
             <button type="submit" style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>
               Enregistrer
             </button>
+            {hasFilledSpecs && (
+              <button type="button" onClick={() => { setEditing(false); refresh().catch(() => {}); }} style={secondaryButtonStyle}>
+                Annuler
+              </button>
+            )}
             {saved && (
-              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--valid, #2F7D4A)" }}>✓ Fiche technique enregistrée</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--valid, #2F7D4A)" }}>✓ Enregistré</span>
             )}
           </div>
         )}
       </form>
+      )}
 
       {specs?.spineWidthMm && (
         <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, marginTop: 10 }}>Épaisseur du dos calculée : {specs.spineWidthMm} mm</p>
@@ -240,3 +280,13 @@ const secondaryButtonStyle: React.CSSProperties = {
   fontSize: 12,
   cursor: "pointer",
 };
+
+// Ligne de résumé de la fiche repliée (libellé + valeur, ou « — » si vide).
+function SummaryRow({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div style={{ display: "flex", gap: 6, minWidth: 0 }}>
+      <span style={{ color: "var(--muted)", flexShrink: 0 }}>{label} :</span>
+      <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value && value.trim() ? value : "—"}</span>
+    </div>
+  );
+}

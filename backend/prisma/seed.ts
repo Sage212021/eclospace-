@@ -1900,6 +1900,14 @@ async function main() {
       permissionModules: ["production"],
       departmentCodes: ["MAQ", "INFOG", "DIRED"],
     },
+    {
+      slug: "2026-09-liste-etape-perimetre-personnel",
+      version: "2026.09",
+      title: "Nouveauté — Listes par étape : chacun voit ses ouvrages, pas ceux des collègues",
+      body: "Dans les écrans par étape (Maquette & mise en page, Infographie & couvertures, etc.), un exécutant ne voit plus les ouvrages CONFIÉS À UN COLLÈGUE : sa liste affiche uniquement les ouvrages qui lui sont assignés et ceux qui ne sont pas encore assignés (à prendre). Exemple : un ouvrage en mise en page confié à Herman n'apparaît plus dans la liste d'un autre maquettiste. Les responsables (direction, responsable production/infographie) continuent de voir TOUS les ouvrages de l'étape.",
+      permissionModules: ["production"],
+      departmentCodes: ["MAQ", "INFOG", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

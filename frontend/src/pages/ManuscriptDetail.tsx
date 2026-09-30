@@ -145,13 +145,26 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   const activeFocus = showAll ? null : focus;
   const show = (mod: string) => activeFocus === null || activeFocus === mod;
 
-  // Amène à une section (ancre) : si elle est masquée par la vue centrée, on
-  // révèle d'abord toute la fiche puis on défile jusqu'à elle.
+  // Amène à une section (ancre) de façon FIABLE : on révèle toute la fiche (au
+  // cas où la section est masquée par la vue centrée), puis on ATTEND que la
+  // section soit montée (petite boucle — le scroll partait parfois trop tôt),
+  // on défile, et on fait clignoter un contour doré pour bien la repérer.
   const goToAnchor = (anchor: string) => {
-    const scroll = () => document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    if (document.getElementById(anchor)) { scroll(); return; }
     setShowAll(true);
-    setTimeout(scroll, 200);
+    let tries = 0;
+    const attempt = () => {
+      const el = document.getElementById(anchor);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        const prev = el.style.boxShadow;
+        el.style.transition = "box-shadow .25s";
+        el.style.boxShadow = "0 0 0 3px var(--eclosion, #D9B21A)";
+        window.setTimeout(() => { el.style.boxShadow = prev; }, 1600);
+        return;
+      }
+      if (tries++ < 12) window.setTimeout(attempt, 120);
+    };
+    attempt();
   };
 
   const refresh = async () => {

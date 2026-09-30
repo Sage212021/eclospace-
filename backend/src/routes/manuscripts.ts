@@ -267,6 +267,10 @@ const listQuerySchema = z.object({
   priority_min: z.coerce.number().optional(),
   sort: z.enum(["priority", "received_at", "publication_date", "title"]).optional(),
   order: z.enum(["asc", "desc"]).optional(),
+  // « mine » : ne renvoie, à l'étape demandée, que les ouvrages CONFIÉS à
+  // l'utilisateur OU pas encore assignés (à prendre) — pour qu'un exécutant
+  // (maquettiste…) ne voie pas les dossiers d'un collègue. Exige `status`.
+  mine: z.enum(["true", "false"]).optional(),
 });
 
 // Secrétariat éditorial (Ch. 6) : point d'entrée unique de tout manuscrit.
@@ -548,7 +552,20 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     if (!parsed.success) {
       return reply.code(400).send({ code: "validation_error", message: "Paramètres invalides.", details: parsed.error.issues });
     }
-    const { status, collection, genre, language, back_catalogue, published_from, published_to, q, priority_min, sort, order } = parsed.data;
+    const { status, collection, genre, language, back_catalogue, published_from, published_to, q, priority_min, sort, order, mine } = parsed.data;
+
+    // Périmètre personnel (exécutant) : à l'étape demandée, uniquement les
+    // ouvrages qui me sont confiés (responsable de l'étape courante) ou pas
+    // encore assignés (à prendre). Sans effet si aucune étape n'est demandée.
+    const mineFilter =
+      mine === "true" && status
+        ? {
+            OR: [
+              { steps: { some: { status: { code: status }, responsibleId: request.user!.id } } },
+              { steps: { none: { status: { code: status }, responsibleId: { not: null } } } },
+            ],
+          }
+        : {};
 
     // Bornes de période sur la date de parution (raccourci « cette année »,
     // « ce mois-ci »… traduits en dates par le client).
@@ -577,6 +594,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}),
         ...publicationDateFilter,
         ...(priority_min !== undefined ? { priorityScore: { gte: priority_min } } : {}),
+        ...mineFilter,
       },
       include: { status: true, genre: true, collection: true },
       orderBy: orderByField,

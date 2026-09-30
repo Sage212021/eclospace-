@@ -317,12 +317,16 @@ export interface CatalogueFilters {
   q?: string;
   sort?: "priority" | "received_at" | "publication_date" | "title";
   order?: "asc" | "desc";
+  // Périmètre personnel : à une étape donnée, ne renvoyer que les ouvrages qui
+  // me sont confiés ou pas encore assignés (exécutant qui ne voit pas les
+  // dossiers d'un collègue).
+  mine?: "true" | "false";
 }
 
 export function listManuscripts(filters?: CatalogueFilters) {
   const params = new URLSearchParams();
   params.set("sort", filters?.sort ?? "priority");
-  for (const key of ["status", "genre", "collection", "language", "back_catalogue", "published_from", "published_to", "q", "order"] as const) {
+  for (const key of ["status", "genre", "collection", "language", "back_catalogue", "published_from", "published_to", "q", "order", "mine"] as const) {
     const value = filters?.[key];
     if (value) params.set(key, value);
   }

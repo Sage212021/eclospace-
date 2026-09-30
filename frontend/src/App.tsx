@@ -815,6 +815,11 @@ export function App() {
               heading={leaf.heading}
               canCreate={permissions.has("manuscripts:saisie")}
               canAssign={permissions.has("manuscripts:validation")}
+              // Exécutant (ni validation manuscrits, ni administration production/
+              // manuscrits) : ne voit, à cette étape, que SES ouvrages ou ceux
+              // pas encore assignés — pas ceux d'un collègue. Les responsables
+              // (direction, resp. production/infographie) voient tout.
+              scopeMine={!(permissions.has("manuscripts:validation") || permissions.has("manuscripts:administration") || permissions.has("production:administration"))}
               onOpenManuscript={openManuscript}
               onGoToManuscripts={() => setView({ kind: "leaf", key: "ed-manuscrits" })}
             />

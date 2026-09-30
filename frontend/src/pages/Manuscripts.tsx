@@ -123,9 +123,13 @@ interface ManuscriptsProps {
   onGoToManuscripts?: () => void;
   // Droit d'affecter/changer la personne d'une étape (manuscripts:validation).
   canAssign?: boolean;
+  // Périmètre personnel : sur une vue par étape, n'afficher que les ouvrages
+  // confiés à l'utilisateur ou pas encore assignés (exécutant qui ne doit pas
+  // voir les dossiers d'un collègue). Les responsables voient tout.
+  scopeMine?: boolean;
 }
 
-export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, statusFilter, heading, onGoToManuscripts, canAssign }: ManuscriptsProps) {
+export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, statusFilter, heading, onGoToManuscripts, canAssign, scopeMine }: ManuscriptsProps) {
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -154,14 +158,14 @@ export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, status
   }, [filtersKey, isStageView]);
 
   const refresh = () =>
-    listManuscripts(statusFilter ? { status: statusFilter } : filters)
+    listManuscripts(statusFilter ? { status: statusFilter, ...(scopeMine ? { mine: "true" as const } : {}) } : filters)
       .then(setManuscripts)
       .catch((e) => setError(e.message));
 
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, filtersKey]);
+  }, [statusFilter, filtersKey, scopeMine]);
 
   // Vue principale : liste complète pour alimenter le menu local (compteurs +
   // regroupements par étape), rechargée après création/import.

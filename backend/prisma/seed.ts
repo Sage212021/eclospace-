@@ -1948,6 +1948,14 @@ async function main() {
       permissionModules: ["production", "manuscripts"],
       departmentCodes: ["MAQ", "INFOG", "SECR", "DIRED"],
     },
+    {
+      slug: "2026-09-maquette-depot-unique-bat-branche",
+      version: "2026.09",
+      title: "Nouveauté — Maquette : un seul dépôt, reçu par l'infographie ET le BAT",
+      body: "Fin du double emploi sur la maquette. Le maquettiste dépose la maquette à UN SEUL endroit : « Livrable de l'étape — Maquette mise en page ». L'ancien bloc « Maquette — mise en page » (dépôt parallèle qui restait bloqué sur « à remettre ») a été retiré. Ce fichier unique est reçu automatiquement par l'infographe (« Maquette reçue de la mise en page ») ET par le BAT (« Maquette reçue » + « Couverture reçue de l'infographie ») — ils la reçoivent, ils ne la redéposent pas. Plus d'incohérence « déposé d'un côté, à remettre de l'autre ».",
+      permissionModules: ["production", "manuscripts", "bat"],
+      departmentCodes: ["MAQ", "INFOG", "CQ", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

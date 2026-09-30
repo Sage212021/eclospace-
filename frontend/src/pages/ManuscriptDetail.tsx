@@ -16,10 +16,6 @@ import {
   deleteStepDocument,
   stepAttachmentDownloadUrl,
   type StepAttachment,
-  getManuscriptLayoutMeta,
-  manuscriptCorrectedFileUrl,
-  manuscriptLayoutFileUrl,
-  uploadManuscriptLayoutFile,
   getManuscriptBatMeta,
   manuscriptBatFileUrl,
   uploadManuscriptBatFile,
@@ -884,19 +880,15 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
       )}
 
       {show("production") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("production:consultation") && (
-        <>
-          <MaquetteHandoffBlock
-            manuscriptId={manuscript.id}
-            canDeposit={permissions.has("production:saisie") && !confieAutrui}
-            onMessage={setMessage}
-            onError={setError}
-          />
-          {/* Évite le doublon quand la fiche technique est déjà dépliée dans le
-              panneau de validation ci-dessus. */}
-          {!prereqInlineProduction && (
-            <ProductionSection manuscriptId={manuscript.id} canManage={permissions.has("production:saisie") && !confieAutrui} />
-          )}
-        </>
+        // La maquette se dépose à UN SEUL endroit : « Livrable de l'étape —
+        // Maquette mise en page » (plus haut). L'ancien bloc « Maquette — mise
+        // en page » (dépôt parallèle débranché) a été retiré pour éviter le
+        // double emploi et l'incohérence « à remettre ».
+        // Évite le doublon quand la fiche technique est déjà dépliée dans le
+        // panneau de validation ci-dessus.
+        !prereqInlineProduction && (
+          <ProductionSection manuscriptId={manuscript.id} canManage={permissions.has("production:saisie") && !confieAutrui} />
+        )
       )}
 
       {show("isbn") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("isbn:consultation") && !prereqInlineIsbn && (
@@ -905,6 +897,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
 
       {show("bat") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("bat:consultation") && (
         <>
+          {/* Le BAT REÇOIT (lecture seule) la maquette du maquettiste et la
+              couverture de l'infographe — les mêmes livrables, un seul dépôt en
+              amont ; il ne les redépose pas. */}
+          <IncomingDeliverable manuscriptId={manuscript.id} fromStepCode="MISE_EN_PAGE" title="Maquette reçue de la mise en page" />
+          <IncomingDeliverable manuscriptId={manuscript.id} fromStepCode="INFOGRAPHIE" title="Couverture reçue de l'infographie" />
           <BatHandoffBlock
             manuscriptId={manuscript.id}
             canDeposit={permissions.has("bat:saisie") && !confieAutrui}
@@ -1102,122 +1099,6 @@ function SourceFileBlock({
   );
 }
 
-// Étape Maquette (mise en page) : entrée = le manuscrit corrigé (produit par
-// la correction), sortie = la maquette mise en page (reçue par le BAT et
-// l'infographie). Le maquettiste (production:saisie) dépose sans droit « documents ».
-function MaquetteHandoffBlock({
-  manuscriptId,
-  canDeposit,
-  onMessage,
-  onError,
-}: {
-  manuscriptId: string;
-  canDeposit: boolean;
-  onMessage: (m: string) => void;
-  onError: (m: string) => void;
-}) {
-  const [meta, setMeta] = useState<Awaited<ReturnType<typeof getManuscriptLayoutMeta>> | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const load = () => getManuscriptLayoutMeta(manuscriptId).then(setMeta).catch(() => setMeta(null));
-
-  async function removeLayout() {
-    if (!meta?.layout_doc_id) return;
-    if (!window.confirm("Retirer la maquette déposée par erreur ? Vous pourrez en déposer une autre ensuite.")) return;
-    setBusy(true);
-    try {
-      await deleteStepDocument(manuscriptId, meta.layout_doc_id);
-      onMessage("Maquette retirée. Vous pouvez déposer le bon fichier.");
-      await load();
-    } catch (e) {
-      onError(e instanceof Error ? e.message : "Retrait impossible.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manuscriptId]);
-
-  async function deposit(file: File) {
-    setBusy(true);
-    try {
-      await uploadManuscriptLayoutFile(manuscriptId, file);
-      onMessage("Maquette déposée — elle sera reçue par le BAT et l'infographie.");
-      await load();
-    } catch (e) {
-      onError(e instanceof Error ? e.message : "Dépôt impossible.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const tag = (dir: "in" | "out"): React.CSSProperties => ({
-    fontSize: 10.5,
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    color: dir === "in" ? "var(--eclosion-dark, #9a7a12)" : "#2E6B4F",
-    background: dir === "in" ? "var(--eclosion-soft)" : "#DDF0E5",
-    borderRadius: 999,
-    padding: "2px 9px",
-    whiteSpace: "nowrap",
-  });
-  const row: React.CSSProperties = { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", fontSize: 13 };
-
-  return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ fontSize: 13, fontWeight: 600 }}>Maquette — mise en page</div>
-      {/* ENTRÉE : le manuscrit corrigé. */}
-      <div style={row}>
-        <span style={tag("in")}>À mettre en page</span>
-        {meta?.corrected_has_file ? (
-          <>
-            <a href={manuscriptCorrectedFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
-              📖 Ouvrir le manuscrit corrigé
-            </a>
-            <a href={manuscriptCorrectedFileUrl(manuscriptId)} download style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
-              ⬇️ Télécharger
-            </a>
-          </>
-        ) : (
-          <span style={{ color: "var(--muted)" }}>Le manuscrit corrigé n'a pas encore été déposé par la correction.</span>
-        )}
-      </div>
-      {/* SORTIE : la maquette. */}
-      <div style={row}>
-        <span style={tag("out")}>À remettre</span>
-        {meta?.layout_has_file && (
-          <a href={manuscriptLayoutFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
-            📄 Ouvrir la maquette déposée
-          </a>
-        )}
-        {canDeposit && (
-          <label style={{ cursor: busy ? "default" : "pointer", fontWeight: 600, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5 }}>
-            {busy ? "Envoi…" : meta?.layout_has_file ? "Remplacer la maquette" : "Déposer la maquette (fichier mis en page)"}
-            <input
-              type="file"
-              style={{ display: "none" }}
-              disabled={busy}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) deposit(f);
-                e.target.value = "";
-              }}
-            />
-          </label>
-        )}
-        {canDeposit && meta?.layout_has_file && meta?.layout_can_correct && (
-          <button onClick={removeLayout} disabled={busy} style={{ fontWeight: 600, color: "var(--alert)", background: "#fff", border: "1px solid var(--alert)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5, cursor: busy ? "default" : "pointer" }}>
-            Retirer la maquette
-          </button>
-        )}
-        <span style={{ color: "var(--muted)", fontSize: 11.5 }}>→ reçue par le BAT et l'infographie</span>
-      </div>
-    </div>
-  );
-}
 
 // Étape BAT : entrée = la maquette (produite par la mise en page), sortie = le
 // BAT signé (reçu par l'impression). La qualité (bat:saisie) dépose sans droit
@@ -1274,21 +1155,8 @@ function BatHandoffBlock({
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ fontSize: 13, fontWeight: 600 }}>BAT — bon à tirer</div>
-      <div style={row}>
-        <span style={handoffTag("in")}>À vérifier</span>
-        {meta?.layout_has_file ? (
-          <>
-            <a href={manuscriptLayoutFileUrl(manuscriptId)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
-              📄 Ouvrir la maquette
-            </a>
-            <a href={manuscriptLayoutFileUrl(manuscriptId)} download style={{ color: "var(--eclosion-dark)", fontWeight: 600 }}>
-              ⬇️ Télécharger
-            </a>
-          </>
-        ) : (
-          <span style={{ color: "var(--muted)" }}>La maquette n'a pas encore été déposée par la mise en page.</span>
-        )}
-      </div>
+      {/* La maquette et la couverture reçues sont affichées au-dessus (blocs
+          « … reçue de … »), lues sur le livrable unique de chaque étape. */}
       <div style={row}>
         <span style={handoffTag("out")}>À remettre</span>
         {meta?.bat_has_file && (

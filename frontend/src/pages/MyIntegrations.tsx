@@ -211,7 +211,7 @@ export function MyIntegrations() {
             ) : (
               /* Intégrateur TEXTE : on masque la section couverture
                  (pilotée par le correcteur, reçue par l'infographe). */
-              <CorrectionCyclePanel manuscriptId={m.id} canManage showCover={false} />
+              <CorrectionCyclePanel manuscriptId={m.id} manuscriptTitle={m.title} canManage showCover={false} />
             )}
             {/* Clôture / réouverture : range l'ouvrage dans l'historique pour
                 libérer l'écran. La clôture n'est possible qu'une fois le fichier

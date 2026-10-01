@@ -1982,6 +1982,22 @@ async function main() {
       permissionModules: ["manuscripts"],
       departmentCodes: ["DIRED", "SECR"],
     },
+    {
+      slug: "2026-10-correction-garde-fous",
+      version: "2026.10",
+      title: "Nouveauté — Correction : garde-fous contre les mauvais fichiers",
+      body: "Trois sécurités à la correction : (1) si le nom du fichier déposé ne ressemble pas au titre de l'ouvrage, une alerte demande confirmation (évite de déposer le fichier d'un autre livre). (2) On ne peut plus déposer la « version corrigée finale » tant que la 1re correction n'a pas été déposée. (3) Les « retours reçus » (version finale, etc.) ne s'affichent plus tant qu'aucune vraie passe de correction n'a eu lieu — fini les « versions finales » qui apparaissaient sur un dossier non commencé.",
+      permissionModules: ["tasks", "manuscripts"],
+      departmentCodes: ["CORR", "DIRED", "INFOG"],
+    },
+    {
+      slug: "2026-10-acces-fiche-etapes-parcourues",
+      version: "2026.10",
+      title: "Nouveauté — Accès à la fiche : chacun voit les étapes parcourues, l'admin et le DG voient tout",
+      body: "L'éditeur et son assistant ne voient plus les sections des étapes FUTURES d'un ouvrage : ils voient les sections des étapes déjà parcourues et de l'étape en cours (le planning reste accessible à toute étape). Seuls l'administrateur et le Directeur général voient toute la fiche, y compris les étapes à venir. Objectif : éviter d'agir sur des étapes pas encore atteintes.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

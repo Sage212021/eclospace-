@@ -120,6 +120,10 @@ describe("Correction — intégration par l'intégrateur désigné (Lot 3, branc
   });
 
   it("VERROU : la version finale est bloquée tant qu'une correction retenue n'est pas intégrée", async () => {
+    // Pré-requis (règle 01/10) : la VCF exige d'abord une 1re correction déposée.
+    const mpr = multipart("file", "rapport1.txt", "text/plain", Buffer.from("1re correction"));
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/correction-cycle/rapport_1`, headers: { cookie: adminCookie, "content-type": mpr.contentType }, payload: mpr.body });
+
     const mp = multipart("file", "vcf.txt", "text/plain", Buffer.from("version finale"));
     const blocked = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/correction-cycle/integration_finale`, headers: { cookie: adminCookie, "content-type": mp.contentType }, payload: mp.body });
     expect(blocked.statusCode).toBe(409);

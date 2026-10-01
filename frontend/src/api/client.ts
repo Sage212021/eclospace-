@@ -416,6 +416,8 @@ export type ManuscriptDetail = Manuscript & {
   // « Ce dossier est-il confié à un collègue ? » — verrou consultation, et
   // droit de « prendre le dossier » (responsable, motif + traçabilité).
   canTakeOver?: boolean;
+  // Étapes franchies (pour l'accès « étapes parcourues / en cours seulement »).
+  steps?: { status: { code: string; stepOrder: number } }[];
   workContributors: { role?: string; partner: ManuscriptAuthorPartner }[];
   owner: UserSummary;
 };

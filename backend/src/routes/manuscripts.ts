@@ -1234,6 +1234,14 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       // (ou écartées « non applicable » avec motif). Empêche une correction
       // oubliée entre la décision et le fichier livré. Branche TEXTE.
       if (phase === "integration_finale") {
+        // ORDRE DU CYCLE : la version corrigée finale (VCF) ne peut être déposée
+        // qu'une fois la 1re correction faite (sinon une « finale » apparaîtrait
+        // sur un dossier non corrigé — incohérence signalée le 01/10).
+        const cycle = await correctionCycleState(id);
+        const firstDone = cycle.find((p) => p.key === "rapport_1")?.has_file;
+        if (!firstDone) {
+          return reply.code(409).send({ code: "first_correction_missing", message: "Impossible de déposer la version corrigée finale : la 1re correction n'a pas encore été déposée. Déposez d'abord la 1re correction." });
+        }
         const pending = await prisma.correctionAnomaly.count({
           where: { manuscriptId: id, status: { in: ["acceptee", "modifiee"] }, integrationStatus: { in: ["a_integrer", "a_revoir"] }, job: { workType: { in: ["correction_1", "correction_2"] } } },
         });

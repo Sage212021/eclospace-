@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getCorrectionCycle, getCoverCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, stepAttachmentDownloadUrl, getCorrectionIntegrator, getCorrectionIntegrators, setCorrectionIntegrator, getCoverIntegrator, getCoverIntegrators, setCoverIntegrator, type CorrectionPhaseState, type CorrectionIntegratorState } from "../api/client";
+import { confirmFileBelongs } from "../lib/filenameMatch";
 
 const ACTOR_LABEL: Record<string, string> = { correcteur: "au correcteur", integrateur: "à l'intégrateur (éditeur)", termine: "— cycle terminé" };
 
@@ -14,7 +15,7 @@ const ACTOR_LABEL: Record<string, string> = { correcteur: "au correcteur", integ
 // (pour l'infographe) ». On la masque sur l'écran de l'INTÉGRATEUR TEXTE
 // (assistant / directeur éditorial), qui ne gère que le texte : la couverture est
 // pilotée par le correcteur et reçue par l'infographe dans sa propre branche.
-export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true }: { manuscriptId: string; canManage: boolean; showCover?: boolean }) {
+export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true, manuscriptTitle }: { manuscriptId: string; canManage: boolean; showCover?: boolean; manuscriptTitle?: string }) {
   const [phases, setPhases] = useState<CorrectionPhaseState[]>([]);
   const [coverPhases, setCoverPhases] = useState<CorrectionPhaseState[]>([]);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -59,6 +60,9 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
   }
 
   async function deposit(key: string, file: File) {
+    // Garde-fou « mauvais fichier » : si le nom ne correspond pas à l'ouvrage,
+    // on demande confirmation avant d'envoyer.
+    if (!confirmFileBelongs(manuscriptTitle, file.name)) return;
     setBusyKey(key);
     setError(null);
     try {

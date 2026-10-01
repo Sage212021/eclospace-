@@ -50,6 +50,14 @@ describe("correction éditoriale en deux temps", () => {
     expect(phases.every((p) => !p.has_file)).toBe(true);
   });
 
+  it("interdit de déposer la version finale (VCF) avant la 1re correction (garde-fou 01/10)", async () => {
+    const m = await manuscriptAtCorrection();
+    const mp = multipart("file", "vcf.pdf", "VCF sans 1re correction");
+    const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/integration_finale`, headers: { cookie, ...mp.headers }, payload: mp.body });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe("first_correction_missing");
+  });
+
   it("bloque la validation tant que rapport + version finale intégrée manquent, puis autorise", async () => {
     const m = await manuscriptAtCorrection();
 

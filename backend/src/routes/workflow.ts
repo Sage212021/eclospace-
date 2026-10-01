@@ -19,6 +19,11 @@ import { notifyUsers, notifyRole } from "../lib/notify.js";
 // ne peut jamais y être affecté.
 const STEP_ASSIGNABLE_ROLES: Record<string, string[]> = {
   CORRECTION: ["CORRECTEUR", "MEMBRE_COMITE_LECTURE", "DIR_EDITORIAL", "ASSISTANT_EDITORIAL"],
+  // Attribution des références (ISBN/dépôt légal) : le secrétariat, mais AUSSI
+  // les maquettistes — dans les faits ils s'en chargent parfois (demande
+  // opérateur 01/10/2026). Ils reçoivent le droit ISBN au seed pour pouvoir le
+  // faire réellement une fois le dossier transmis.
+  ATTRIBUTION_REFERENCES: ["ASSISTANT_EDITORIAL", "DIR_EDITORIAL", "MAQUETTISTE"],
 };
 
 // Filtre Prisma sur `userRoles` désignant les personnes affectables à cette

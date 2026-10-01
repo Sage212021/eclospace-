@@ -328,8 +328,10 @@ async function main() {
   // Correction éditoriale (Ch. 10) : le correcteur voit et exécute ses tâches.
   await grant("CORRECTEUR", ["tasks:consultation", "tasks:saisie"]);
 
-  // Maquette (Ch. 11) et Infographie (Ch. 12).
-  await grant("MAQUETTISTE", ["production:consultation", "production:saisie", "manuscripts:consultation"]);
+  // Maquette (Ch. 11) et Infographie (Ch. 12). Les maquettistes reçoivent aussi
+  // le droit ISBN : dans les faits ils prennent parfois en charge l'attribution
+  // des références (demande opérateur 01/10/2026), et peuvent y être transmis.
+  await grant("MAQUETTISTE", ["production:consultation", "production:saisie", "manuscripts:consultation", "isbn:consultation", "isbn:saisie"]);
   await grant("RESP_INFOGRAPHIE", [
     "production:consultation",
     "production:saisie",
@@ -1963,6 +1965,14 @@ async function main() {
       body: "Deux améliorations à l'infographie : (1) même quand un dossier a été transmis « à tout le service » (donc à personne en particulier), l'infographe qui le prend en charge dispose maintenant du bouton « Valider + choisir qui reçoit la suite » (le secrétariat, pour l'attribution des références) — avant, ce bouton n'apparaissait que pour la personne nommément désignée. (2) Le bloc « Maquette reçue de la mise en page » a un nouveau design bien distinct (liseré doré, badge « 📥 Reçu ») pour ne plus le confondre avec les dépôts de fichiers de l'étape.",
       permissionModules: ["production", "manuscripts"],
       departmentCodes: ["MAQ", "INFOG", "SECR", "CQ", "DIRED"],
+    },
+    {
+      slug: "2026-10-couverture-image-site-impression-references",
+      version: "2026.10",
+      title: "Nouveauté — Couverture : image pour le site, fiche technique imprimable, références ouvertes aux maquettistes",
+      body: "Plusieurs améliorations à la mise en page / infographie : (1) l'infographe peut enfin TÉLÉVERSER la vraie image de la 1ère de couverture — c'est elle qui s'affichera sur le catalogue du site (avant, on ne pouvait saisir que des informations, sans image). (2) Au choix, il dépose la couverture en UN SEUL fichier ou en PIÈCES SÉPARÉES (1ère, 4e, dos), via un panneau dépliable. (3) La fiche technique de fabrication a un bouton « 🖨️ Imprimer ». (4) On peut désormais transmettre l'attribution des références (ISBN) à un MAQUETTISTE (en plus du secrétariat), et les maquettistes ont reçu le droit de remplir les références.",
+      permissionModules: ["production", "manuscripts", "isbn"],
+      departmentCodes: ["MAQ", "INFOG", "SECR", "COM", "MKT", "DIRED"],
     },
   ];
   for (const n of releaseNotes) {

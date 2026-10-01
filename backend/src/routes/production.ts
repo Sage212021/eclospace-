@@ -5,6 +5,23 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { canCorrectDeposit } from "../lib/stepDocuments.js";
+import { storeFile, readStoredFile } from "../lib/storage.js";
+import type { DocumentCategory } from "@prisma/client";
+
+// Catégorie de document selon le type de visuel : la 1ère/4e/dos/rabat sont des
+// « couverture » (la 1ère alimente le site), le reste des « visuel ».
+function categoryForImageType(type: ImageAssetType): DocumentCategory {
+  return (["couverture_1", "couverture_4", "dos", "rabat"] as ImageAssetType[]).includes(type) ? "couverture" : "visuel";
+}
+
+const IMAGE_TYPE_TITLES: Record<string, string> = {
+  couverture_1: "1ère de couverture",
+  couverture_4: "4e de couverture",
+  dos: "Dos",
+  rabat: "Rabat",
+  illustration_interieure: "Illustration intérieure",
+  visuel_marketing: "Visuel marketing",
+};
 
 // Seuil de résolution minimal pour l'impression (Ch. 11 §11.7), paramétrable
 // via settings — valeur de départ conforme au texte ("300 dpi").
@@ -218,13 +235,82 @@ export default async function productionRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Dépôt d'un visuel AVEC SON IMAGE (multipart). L'infographe téléverse le
+  // vrai fichier (ex. la 1ère de couverture qui alimente le site) : on stocke le
+  // fichier, on crée un document « couverture »/« visuel » versionné, et le
+  // visuel (ImageAsset) pointe dessus. Un visuel du même type remplace l'ancien.
+  fastify.post(
+    "/api/v1/manuscripts/:id/image-assets/upload",
+    { preHandler: requirePermission("production", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const file = await request.file();
+      if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+      const fields = file.fields as Record<string, { value?: string } | undefined>;
+      const typeRaw = fields.type?.value;
+      if (!typeRaw || !(typeRaw in ImageAssetType)) {
+        return reply.code(400).send({ code: "validation_error", message: "Type de visuel invalide." });
+      }
+      const type = typeRaw as ImageAssetType;
+      if (!file.mimetype.startsWith("image/")) {
+        return reply.code(400).send({ code: "not_an_image", message: "Le fichier doit être une image (JPEG, PNG…), pour pouvoir l'afficher sur le site." });
+      }
+      const buffer = await file.toBuffer();
+      if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+
+      const rightsOriginRaw = fields.rights_origin?.value;
+      const rightsOrigin = rightsOriginRaw && rightsOriginRaw in RightsOrigin ? (rightsOriginRaw as RightsOrigin) : undefined;
+
+      const stored = await storeFile(buffer, `visuel-${type}-${id}-${file.filename}`);
+      const category = categoryForImageType(type);
+      const title = `${IMAGE_TYPE_TITLES[type] ?? "Visuel"} — ${file.filename}`.slice(0, 200);
+      let doc = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: id, category, title: { startsWith: `${IMAGE_TYPE_TITLES[type] ?? "Visuel"} —` }, deletedAt: null } });
+      if (!doc) {
+        doc = await prisma.document.create({ data: { entityType: "manuscript", entityId: id, category, title, createdBy: request.user!.id, updatedBy: request.user!.id } });
+      }
+      const last = await prisma.documentVersion.findFirst({ where: { documentId: doc.id }, orderBy: { versionNumber: "desc" } });
+      const version = await prisma.documentVersion.create({
+        data: { documentId: doc.id, versionNumber: (last?.versionNumber ?? 0) + 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: file.mimetype, sha256Hash: stored.sha256Hash, changeSummary: `Visuel ${type} déposé`, uploadedBy: request.user!.id },
+      });
+
+      // Un seul visuel actif par type : on remplace l'éventuel précédent.
+      await prisma.imageAsset.updateMany({ where: { manuscriptId: id, type, deletedAt: null }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+      const asset = await prisma.imageAsset.create({
+        data: { manuscriptId: id, type, technicalOk: true, rightsOrigin, documentVersionId: version.id, createdBy: request.user!.id },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "image_asset", entityId: asset.id, newValues: { manuscriptId: id, type, uploaded: true }, ipAddress: request.ip });
+      return reply.code(201).send({ ...asset, has_file: true, filename: file.filename, mime_type: file.mimetype });
+    },
+  );
+
+  // Sert l'image d'un visuel (aperçu/téléchargement sur la fiche).
+  fastify.get(
+    "/api/v1/manuscripts/:id/image-assets/:assetId/file",
+    { preHandler: requirePermission("production", "consultation") },
+    async (request, reply) => {
+      const { id, assetId } = request.params as { id: string; assetId: string };
+      const asset = await prisma.imageAsset.findFirst({ where: { id: assetId, manuscriptId: id, deletedAt: null }, include: { documentVersion: true } });
+      if (!asset?.documentVersion) return reply.code(404).send({ code: "no_file", message: "Aucune image pour ce visuel." });
+      const buffer = await readStoredFile(asset.documentVersion.filePath);
+      reply.header("content-type", asset.documentVersion.mimeType);
+      return reply.send(buffer);
+    },
+  );
+
   fastify.get(
     "/api/v1/manuscripts/:id/image-assets",
     { preHandler: requirePermission("production", "consultation") },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const assets = await prisma.imageAsset.findMany({ where: { manuscriptId: id, deletedAt: null }, orderBy: { createdAt: "desc" } });
-      return reply.send(assets.map((a) => ({ ...a, can_correct: canCorrectDeposit(request, a.createdBy) })));
+      const assets = await prisma.imageAsset.findMany({ where: { manuscriptId: id, deletedAt: null }, orderBy: { createdAt: "desc" }, include: { documentVersion: { select: { mimeType: true } } } });
+      return reply.send(assets.map((a) => ({
+        ...a,
+        can_correct: canCorrectDeposit(request, a.createdBy),
+        has_file: Boolean(a.documentVersionId),
+        mime_type: a.documentVersion?.mimeType ?? null,
+      })));
     },
   );
 

@@ -439,6 +439,18 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
         {manuscript.genre?.label ?? "—"} · Responsable : {manuscript.owner.username}
       </p>
 
+      {/* Statut global du CYCLE de correction éditoriale (demande opérateur
+          01/10) : visible tant que le cycle n'est pas clôturé, à travers tous les
+          allers-retours. Rappelle qu'un seul cycle est ouvert à la fois. */}
+      {manuscript.correctionOpen && (
+        <div style={{ marginTop: 12, background: "var(--eclosion-soft, #f6efd8)", border: "2px solid var(--eclosion, #D9B21A)", borderRadius: 10, padding: "12px 14px" }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#0B0B0C", letterSpacing: 0.3 }}>🔵 CORRECTION ÉDITORIALE EN COURS</div>
+          <div style={{ fontSize: 12.5, color: "var(--ink)", marginTop: 4, lineHeight: 1.5 }}>
+            Un seul cycle de correction est ouvert pour cet ouvrage. Tous les allers-retours (correcteur, éditeur, infographe) appartiennent à ce même cycle — il reste actif jusqu'à sa clôture (validation finale de la correction). Aucune seconde fiche de correction ne peut être créée en parallèle.
+          </div>
+        </div>
+      )}
+
       {permissions.has("stock:consultation") && show("stock") && (
         <ManuscriptStockSection manuscriptId={manuscript.id} canManage={permissions.has("stock:saisie")} />
       )}

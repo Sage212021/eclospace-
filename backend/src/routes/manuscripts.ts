@@ -899,7 +899,13 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     // On ne peut « prendre » qu'un dossier confié à quelqu'un d'AUTRE, et
     // seulement aux étapes qui se confient nominativement à une personne.
     const canTakeOver = Boolean(currentAssignee) && !assignedToMe && elevated;
-    return reply.send({ ...manuscript, registrationLocked: Boolean(signed), sealed: Boolean(manuscript.sealedAt), canSelfClose, currentAssignee, assignedToMe, canTakeOver });
+    // CYCLE DE CORRECTION ÉDITORIALE EN COURS (demande opérateur 01/10) : un
+    // cycle reste ouvert tant que l'étape Correction n'est pas validée — à
+    // travers tous les allers-retours (correcteur, éditeur, infographe). Sert au
+    // badge « CORRECTION ÉDITORIALE EN COURS » et au blocage d'un second cycle.
+    const openCorrectionStep = manuscript.steps.find((s) => s.status.code === "CORRECTION" && !s.validatedAt);
+    const correctionOpen = Boolean(openCorrectionStep) || manuscript.status.code === "CORRECTION";
+    return reply.send({ ...manuscript, registrationLocked: Boolean(signed), sealed: Boolean(manuscript.sealedAt), canSelfClose, currentAssignee, assignedToMe, canTakeOver, correctionOpen });
   });
 
   // « Prendre le dossier » : un responsable (production/direction) intervient sur

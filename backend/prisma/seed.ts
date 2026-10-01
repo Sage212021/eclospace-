@@ -2006,6 +2006,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks"],
       departmentCodes: ["CORR", "DIRED", "DG", "SECR"],
     },
+    {
+      slug: "2026-10-cycle-correction-en-cours-unique",
+      version: "2026.10",
+      title: "Nouveauté — « Correction éditoriale EN COURS » : un seul cycle à la fois",
+      body: "La fiche d'un ouvrage envoyé en correction affiche désormais un bandeau bien visible « 🔵 CORRECTION ÉDITORIALE EN COURS », qui reste actif pendant TOUT le cycle — à travers tous les allers-retours (correcteur, éditeur, infographe) — jusqu'à la clôture (validation finale de la correction). Surtout : il n'est plus possible de créer une SECONDE fiche de correction tant qu'un cycle est ouvert. Si on tente d'en ouvrir une autre, l'ERP refuse avec un message clair et invite à reprendre le cycle existant. Un seul cycle actif par ouvrage ; un nouveau cycle ne peut être ouvert qu'après la clôture du précédent.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

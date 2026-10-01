@@ -983,7 +983,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
       {/* Site vitrine : publication de l'ouvrage sur la boutique WordPress
           (action du maquettiste), à partir de la mise en page. */}
       {show("production") && stageReached(["MISE_EN_PAGE", "INFOGRAPHIE"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("manuscripts:consultation") && (
-        <SitePublicationSection manuscriptId={manuscript.id} canPublish={permissions.has("manuscripts:saisie")} />
+        <SitePublicationSection manuscriptId={manuscript.id} canPublish={permissions.has("production:administration")} />
       )}
 
       {/* Pièces jointes : disponibles à toutes les étapes, pour tous les pôles

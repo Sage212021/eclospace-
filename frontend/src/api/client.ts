@@ -6379,6 +6379,30 @@ export function setSitePublished(manuscriptId: string, published: boolean, url?:
   );
 }
 
+// Compléter la fiche site (résumé + prix) — réservé à l'infographe.
+export function setSiteFiche(manuscriptId: string, input: { summary?: string; price?: number }) {
+  return request<SiteFicheView>(`/api/v1/manuscripts/${manuscriptId}/site-fiche`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+// File « À publier (site) » : ouvrages arrivés à l'infographie, non publiés.
+export interface PendingSitePublication {
+  id: string;
+  manuscriptNumber: string;
+  title: string;
+  stepLabel: string;
+  author: string | null;
+  genre: string | null;
+  price: number | null;
+  summary: string | null;
+  isbn: string | null;
+  cover: { available: boolean; version_id: string | null; mime_type: string | null; is_image: boolean };
+  missing: string[];
+  status: "non_publie" | "publie" | "erreur";
+}
+export function listPendingSitePublications() {
+  return request<PendingSitePublication[]>(`/api/v1/site-publications/pending`);
+}
+
 // ── Suivi des ventes par ouvrage (sorties vs ventes réelles + écart) ─────────
 export interface SalesTrackingRow {
   key: string;

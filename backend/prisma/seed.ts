@@ -2014,6 +2014,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks"],
       departmentCodes: ["CORR", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-rubrique-a-publier-site",
+      version: "2026.10",
+      title: "Nouveauté — Rubrique « À publier (site) »",
+      body: "Nouvelle liste « À publier (site) » (pôle Production) : tous les ouvrages arrivés à l'infographie et pas encore publiés y restent affichés — même si l'étape a avancé — jusqu'à publication. Pour chacun : état de complétude (couverture, ISBN, prix, résumé). L'infographe peut y compléter le résumé et le prix, puis cliquer « Publier » (le livre partira sur le site avec ses références ET son résumé). Marketing, commercial et direction consultent la liste mais ne publient pas — seul l'infographe publie. La publication ne bloque jamais l'avancement du manuscrit. Le branchement automatique au site se fera quand son API sera disponible.",
+      permissionModules: ["production", "marketing", "commercial", "manuscripts"],
+      departmentCodes: ["INFOG", "MKT", "COM", "DG", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

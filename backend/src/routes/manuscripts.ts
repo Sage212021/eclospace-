@@ -1904,10 +1904,12 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
 
   // Marque l'ouvrage comme publié (ou non) sur le site, avec le lien éventuel de
   // la fiche en ligne — pour que l'ERP garde la trace de ce qui est sur le site.
+  // Publier (marquer publié) : réservé à l'INFOGRAPHE (production:administration) —
+  // « seul l'infographe publie » (demande opérateur 01/10). L'admin l'a aussi.
   const markSchema = z.object({ published: z.boolean(), url: z.string().url().optional().or(z.literal("")) });
   fastify.post(
     "/api/v1/manuscripts/:id/site-publication",
-    { preHandler: requirePermission("manuscripts", "saisie") },
+    { preHandler: requirePermission("production", "administration") },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = markSchema.safeParse(request.body ?? {});
@@ -1918,6 +1920,87 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       } catch (err) {
         return reply.code(404).send({ code: "not_found", message: err instanceof Error ? err.message : "Ouvrage introuvable." });
       }
+    },
+  );
+
+  // Compléter la fiche site (résumé + prix) AVANT publication — réservé à
+  // l'infographe (production:administration). Le prix est stocké dans
+  // priceByCountry { XAF } ; le résumé dans le manuscrit.
+  const siteFicheSchema = z.object({ summary: z.string().max(5000).optional(), price: z.number().positive().optional() });
+  fastify.patch(
+    "/api/v1/manuscripts/:id/site-fiche",
+    { preHandler: requirePermission("production", "administration") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = siteFicheSchema.safeParse(request.body ?? {});
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const { summary, price } = parsed.data;
+      if (summary !== undefined) {
+        await prisma.manuscript.update({ where: { id }, data: { summary: summary.trim() || null } });
+      }
+      if (price !== undefined) {
+        await prisma.workMetadata.upsert({
+          where: { manuscriptId: id },
+          create: { manuscriptId: id, priceByCountry: { XAF: price } },
+          update: { priceByCountry: { XAF: price } },
+        });
+      }
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "site_fiche", entityId: id, newValues: { summary: summary !== undefined, price: price ?? null }, ipAddress: request.ip });
+      return reply.send(await previewSiteFiche(id));
+    },
+  );
+
+  // File « À publier (site) » : ouvrages arrivés à l'infographie (ou au-delà) et
+  // NON encore publiés — ils restent ici, même si l'étape a avancé, jusqu'à
+  // publication. Visible en consultation par l'infographe, le marketing, le
+  // commercial et la direction ; seule la publication/édition est réservée à
+  // l'infographe (gérée par les endpoints ci-dessus). N'impacte jamais le
+  // workflow (on peut valider l'infographie sans publier).
+  fastify.get(
+    "/api/v1/site-publications/pending",
+    {
+      preHandler: requireAnyPermission([
+        { module: "production", action: "consultation" },
+        { module: "commercial", action: "consultation" },
+        { module: "marketing", action: "consultation" },
+        { module: "communication", action: "consultation" },
+        { module: "manuscripts", action: "validation" },
+        { module: "manuscripts", action: "administration" },
+      ]),
+    },
+    async (_request, reply) => {
+      const infoStatus = await prisma.workflowStatus.findUnique({ where: { code: "INFOGRAPHIE" }, select: { stepOrder: true } });
+      const minOrder = infoStatus?.stepOrder ?? 10;
+      const published = await prisma.sitePublication.findMany({ where: { status: "publie" }, select: { manuscriptId: true } });
+      const publishedSet = new Set(published.map((p) => p.manuscriptId));
+      const manuscripts = await prisma.manuscript.findMany({
+        where: { deletedAt: null, status: { stepOrder: { gte: minOrder } } },
+        select: { id: true, manuscriptNumber: true, title: true, status: { select: { label: true, stepOrder: true } } },
+        orderBy: { status: { stepOrder: "asc" } },
+      });
+      const pending = manuscripts.filter((m) => !publishedSet.has(m.id));
+      const rows = await Promise.all(
+        pending.map(async (m) => {
+          const f = await previewSiteFiche(m.id);
+          return {
+            id: m.id,
+            manuscriptNumber: m.manuscriptNumber,
+            title: m.title,
+            stepLabel: m.status.label,
+            author: f.payload.author,
+            genre: f.payload.genre,
+            price: f.payload.price,
+            summary: f.payload.summary,
+            isbn: f.payload.isbn,
+            cover: f.cover,
+            missing: f.missing,
+            status: f.status,
+          };
+        }),
+      );
+      return reply.send(rows);
     },
   );
 

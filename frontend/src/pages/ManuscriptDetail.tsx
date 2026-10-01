@@ -86,6 +86,10 @@ import { pasteTidied } from "../lib/tidyProse";
 interface ManuscriptDetailProps {
   manuscriptId: string;
   permissions: Set<string>;
+  // Rôles de l'utilisateur : seuls ADMIN_GENERAL et DIR_GENERAL voient TOUTE la
+  // fiche (toutes les étapes, même futures). Les autres — dont l'éditeur et son
+  // assistant — ne voient que les étapes déjà parcourues ou en cours.
+  roles?: Set<string>;
   // Rubrique d'où l'ouvrage a été ouvert : sert à ne montrer QUE les tâches de
   // cette étape (le reste est masqué, avec une échappatoire « toute la fiche »).
   originKey?: string;
@@ -128,7 +132,7 @@ const CONTRACTUALISATION_STEP_ORDER = 5;
 const PLANIFICATION_STEP_ORDER = 6;
 const MISE_EN_PAGE_STEP_ORDER = 10;
 
-export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack }: ManuscriptDetailProps) {
+export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, onBack }: ManuscriptDetailProps) {
   const confirm = useConfirm();
   const [manuscript, setManuscript] = useState<ManuscriptWithExtras | null>(null);
   const [timeline, setTimeline] = useState<TimelineStep[]>([]);
@@ -188,6 +192,15 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
   // éditorial (manuscripts:saisie) ou le chef de projet (tasks:saisie), à toute
   // étape tant que l'ouvrage n'est pas à l'archivage.
   const canManagePlan = (permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")) && manuscript.status.code !== "ARCHIVAGE";
+
+  // ACCÈS À LA FICHE (demande opérateur 01/10) : seuls l'administrateur et le
+  // Directeur général voient TOUTE la fiche (toutes les étapes, même futures).
+  // Les autres — éditeur, assistant, pôles — ne voient que les sections des
+  // étapes DÉJÀ PARCOURUES ou EN COURS (pas les étapes futures). On se base sur
+  // les étapes réellement franchies (manuscript.steps), pas sur des numéros.
+  const fullFicheAccess = !!roles && (roles.has("ADMIN_GENERAL") || roles.has("DIR_GENERAL"));
+  const reachedSteps = new Set((manuscript.steps ?? []).map((s) => s.status.code));
+  const stageReached = (codes: string[]) => fullFicheAccess || codes.some((c) => reachedSteps.has(c));
   async function handleTakeOver() {
     if (takeoverMotif.trim().length < 5) { setError("Indiquez un motif d'au moins 5 caractères pour prendre ce dossier."); return; }
     setTakeoverBusy(true); setError(null);
@@ -838,7 +851,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         && permissions.has("tasks:consultation") && (
         <>
           <TasksSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
-          <CorrectionCyclePanel manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")} />
+          <CorrectionCyclePanel manuscriptId={manuscript.id} manuscriptTitle={manuscript.title} canManage={permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")} />
           {(permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")) && (
             <>
               {/* Chaque assistant IA n'apparaît QU'À son étape (demande opérateur
@@ -888,7 +901,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         </>
       )}
 
-      {show("production") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("production:consultation") && (
+      {show("production") && stageReached(["MISE_EN_PAGE", "INFOGRAPHIE"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("production:consultation") && (
         // La maquette se dépose à UN SEUL endroit : « Livrable de l'étape —
         // Maquette mise en page » (plus haut). L'ancien bloc « Maquette — mise
         // en page » (dépôt parallèle débranché) a été retiré pour éviter le
@@ -900,11 +913,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         )
       )}
 
-      {show("isbn") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("isbn:consultation") && !prereqInlineIsbn && (
+      {show("isbn") && stageReached(["ATTRIBUTION_REFERENCES"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("isbn:consultation") && !prereqInlineIsbn && (
         <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie") && !confieAutrui} />
       )}
 
-      {show("bat") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("bat:consultation") && (
+      {show("bat") && stageReached(["VALIDATION_BAT"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("bat:consultation") && (
         <>
           {/* Le BAT REÇOIT (lecture seule) la maquette du maquettiste et la
               couverture de l'infographe — les mêmes livrables, un seul dépôt en
@@ -928,7 +941,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
         </>
       )}
 
-      {show("printing") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("printing:consultation") && (
+      {show("printing") && stageReached(["IMPRESSION", "CONTROLE_QUALITE_IMPRESSION"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("printing:consultation") && (
         <>
           <ImpressionHandoffBlock manuscriptId={manuscript.id} />
           <PrintingSection
@@ -941,7 +954,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, originKey, onBack 
 
       {/* Site vitrine : publication de l'ouvrage sur la boutique WordPress
           (action du maquettiste), à partir de la mise en page. */}
-      {show("production") && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("manuscripts:consultation") && (
+      {show("production") && stageReached(["MISE_EN_PAGE", "INFOGRAPHIE"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("manuscripts:consultation") && (
         <SitePublicationSection manuscriptId={manuscript.id} canPublish={permissions.has("manuscripts:saisie")} />
       )}
 

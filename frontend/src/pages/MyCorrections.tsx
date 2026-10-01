@@ -145,8 +145,13 @@ function IntegrationReturns({ manuscriptId }: { manuscriptId: string }) {
     ]).then(([txt, cov]) => {
       if (!alive) return;
       const rows: { from: "texte" | "couverture"; p: CorrectionPhaseState }[] = [];
-      for (const p of txt) if (RETURN_KEYS.has(p.key) && p.has_file) rows.push({ from: "texte", p });
-      for (const p of cov) if (RETURN_KEYS.has(p.key) && p.has_file) rows.push({ from: "couverture", p });
+      // Garde-fou : on n'affiche des « retours à relire » que si une VRAIE passe
+      // a eu lieu — 1re correction déposée (texte) / 1er rapport couverture déposé.
+      // Évite d'afficher une « version finale » sur un dossier qui n'a pas démarré.
+      const textStarted = txt.some((p) => p.key === "rapport_1" && p.has_file);
+      const coverStarted = cov.some((p) => p.key === "couverture_1" && p.has_file);
+      if (textStarted) for (const p of txt) if (RETURN_KEYS.has(p.key) && p.has_file) rows.push({ from: "texte", p });
+      if (coverStarted) for (const p of cov) if (RETURN_KEYS.has(p.key) && p.has_file) rows.push({ from: "couverture", p });
       setReturns(rows);
     });
     return () => { alive = false; };
@@ -317,7 +322,7 @@ function CorrectionCard({ task, onDepose, onRefresh, onMessage, bookTypes, suppo
               {/* 2 — Le cycle en deux temps + relais correcteur ↔ intégrateur :
                   BAT1 → version intégrée → BAT2 → version corrigée finale.
                   Lecture seule quand la correction est clôturée. */}
-              <CorrectionCyclePanel manuscriptId={manuscriptId} canManage={!readOnly} />
+              <CorrectionCyclePanel manuscriptId={manuscriptId} manuscriptTitle={task.manuscript?.title} canManage={!readOnly} />
 
               {/* 3 — Paramètres du moteur + lancement de l'IA : uniquement quand la
                   correction est ACTIVE (pas en consultation). */}

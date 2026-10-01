@@ -2030,6 +2030,14 @@ async function main() {
       departmentCodes: ["INFOG", "MKT", "COM", "DG", "DIRED"],
     },
     {
+      slug: "2026-10-mes-travaux-de-production",
+      version: "2026.10",
+      title: "Nouveauté — « Mes travaux de production » : un seul espace pour toute la production",
+      body: "Fini de chercher son travail dans plusieurs écrans (Maquette, Infographie, ISBN, BAT…). Nouvel espace « Mes travaux de production » dans le pôle Production : il regroupe TOUS les ouvrages qui vous sont confiés en production, classés par état — En cours, À traiter, En attente, Terminés. Pour chaque ouvrage : la tâche à réaliser, une barre de progression, et un bouton « Ouvrir » qui mène directement à la fiche sur la bonne tâche. Les ouvrages « En attente » affichent ce qui manque pour avancer. Les anciens écrans par étape restent disponibles pour l'instant : rien n'est retiré, on ajoute simplement le point d'entrée unique.",
+      permissionModules: ["production", "isbn", "bat"],
+      departmentCodes: ["INFOG", "MAQ", "IMPR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-couverture-origine-droits-infographie",
       version: "2026.10",
       title: "Nouveauté — Couverture : indiquer l'origine des droits (débloque la validation infographie)",

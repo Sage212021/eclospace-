@@ -636,6 +636,26 @@ export function getMyDossiers() {
   return request<MyDossier[]>("/api/v1/my-dossiers");
 }
 
+// « Mes travaux de production » : travaux de prod confiés à l'utilisateur,
+// classés par état (en_cours / a_traiter / en_attente / termine), avec la tâche
+// active et une progression sur le segment de production.
+export type ProductionBucket = "en_cours" | "a_traiter" | "en_attente" | "termine";
+export interface MyProductionWork {
+  manuscript_id: string;
+  manuscript_number: string;
+  title: string;
+  step_code: string;
+  step_label: string;
+  bucket: ProductionBucket;
+  started: boolean;
+  blocked_reason: string | null;
+  progression: { done: number; total: number };
+  since: string;
+}
+export function getMyProductionWork() {
+  return request<MyProductionWork[]>("/api/v1/my-production-work");
+}
+
 // Retour à l'étape précédente (correction d'une validation faite par erreur).
 export function revertManuscriptStep(manuscriptId: string, reason?: string) {
   return request<{ reverted: boolean; status: string | null; statusLabel: string }>(

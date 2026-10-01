@@ -27,6 +27,7 @@ const RightsMatrixPage = lazy(() => import("./pages/RightsMatrixPage").then((m) 
 const ManuscriptDetail = lazy(() => import("./pages/ManuscriptDetail").then((m) => ({ default: m.ManuscriptDetail })));
 const MyReadings = lazy(() => import("./pages/MyReadings").then((m) => ({ default: m.MyReadings })));
 const MyDossiers = lazy(() => import("./pages/MyDossiers").then((m) => ({ default: m.MyDossiers })));
+const MyProductionWork = lazy(() => import("./pages/MyProductionWork").then((m) => ({ default: m.MyProductionWork })));
 const StockPage = lazy(() => import("./pages/StockPage").then((m) => ({ default: m.StockPage })));
 const CommercialPage = lazy(() => import("./pages/CommercialPage").then((m) => ({ default: m.CommercialPage })));
 const CataloguePage = lazy(() => import("./pages/CataloguePage").then((m) => ({ default: m.CataloguePage })));
@@ -92,6 +93,7 @@ type PageId =
   | "my-correction-integrations"
   | "my-readings"
   | "my-dossiers"
+  | "my-production-work"
   | "editorial-quotes-inbox"
   | "catalogue-ref"
   | "archives"
@@ -203,6 +205,7 @@ const NAV_POLES: NavPole[] = [
     // droits de supervision dans le seed pour garder la vue complète.
     label: "Production",
     items: [
+      { key: "pr-mes-travaux", label: "Mes travaux de production", anyPermission: ["production:consultation", "isbn:consultation", "bat:consultation", "printing:consultation"] },
       { key: "pr-maquette", label: "Maquette", permission: "production:consultation" },
       { key: "pr-infographie", label: "Infographie & couvertures", permission: "production:consultation" },
       { key: "pr-a-publier", label: "À publier (site)", anyPermission: ["production:consultation", "marketing:consultation", "commercial:consultation", "communication:consultation", "manuscripts:administration", "manuscripts:validation"] },
@@ -300,6 +303,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-devis-editorial": { page: "editorial-quotes-inbox" },
   "ed-catalogue-ref": { page: "catalogue-ref" },
   "ed-archives": { page: "archives" },
+  "pr-mes-travaux": { page: "my-production-work" },
   "pr-a-publier": { page: "site-publish" },
   "pr-maquette": { stage: "MISE_EN_PAGE", heading: "Maquette & mise en page" },
   "pr-infographie": { stage: "INFOGRAPHIE", heading: "Infographie & couvertures" },
@@ -854,6 +858,9 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "my-readings" && <MyReadings />}
         {leaf && "page" in leaf && leaf.page === "my-dossiers" && (
           <MyDossiers onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation")} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "my-production-work" && (
+          <MyProductionWork onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation")} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-corrections" && <MyCorrections />}
         {leaf && "page" in leaf && leaf.page === "my-correction-integrations" && <MyIntegrations />}

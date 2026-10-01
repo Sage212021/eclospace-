@@ -943,6 +943,116 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
     return reply.send(rows);
   });
 
+  // « Mes travaux de production » (demande opérateur 01/10) — ESPACE UNIQUE du
+  // pôle Production : regroupe, pour l'utilisateur connecté, les ouvrages dont
+  // une étape DE PRODUCTION lui est confiée, classés par état, avec la tâche
+  // active et une progression. Ne crée aucune logique parallèle : on lit les
+  // étapes du workflow existant (manuscript_steps) et on réutilise les contrôles
+  // de pré-requis (convergence, complétude ISBN) pour détecter « en attente ».
+  fastify.get("/api/v1/my-production-work", { preHandler: requireAuth }, async (request, reply) => {
+    const me = request.user!.id;
+    // Segment « production » du workflow (vraies étapes, dans l'ordre). Sert à la
+    // progression X/N et à ne montrer ici que les travaux de production.
+    const SEGMENT = ["MISE_EN_PAGE", "INFOGRAPHIE", "ATTRIBUTION_REFERENCES", "VALIDATION_BAT", "IMPRESSION", "CONTROLE_QUALITE_IMPRESSION"];
+    const total = SEGMENT.length;
+
+    // Étapes de production ACTIVES qui me sont confiées (étape courante, non validée).
+    const activeSteps = await prisma.manuscriptStep.findMany({
+      where: { responsibleId: me, validatedAt: null, status: { code: { in: SEGMENT } }, manuscript: { deletedAt: null } },
+      include: {
+        status: { select: { code: true, label: true } },
+        manuscript: { select: { id: true, manuscriptNumber: true, title: true, statusId: true } },
+      },
+      orderBy: [{ plannedStart: "asc" }, { createdAt: "asc" }],
+    });
+    const active = activeSteps.filter((s) => s.manuscript.statusId === s.statusId);
+
+    // Étapes de production que j'ai VALIDÉES récemment (bac « Terminés »).
+    const doneSteps = await prisma.manuscriptStep.findMany({
+      where: { validationBy: me, validatedAt: { not: null }, status: { code: { in: SEGMENT } }, manuscript: { deletedAt: null } },
+      include: {
+        status: { select: { code: true, label: true } },
+        manuscript: { select: { id: true, manuscriptNumber: true, title: true } },
+      },
+      orderBy: { validatedAt: "desc" },
+      take: 20,
+    });
+
+    // Progression : nombre d'étapes du segment déjà VALIDÉES pour chaque ouvrage.
+    const manuscriptIds = [...new Set([...active.map((s) => s.manuscript.id), ...doneSteps.map((s) => s.manuscript.id)])];
+    const validatedBySegment = manuscriptIds.length
+      ? await prisma.manuscriptStep.groupBy({
+          by: ["manuscriptId"],
+          where: { manuscriptId: { in: manuscriptIds }, validatedAt: { not: null }, status: { code: { in: SEGMENT } } },
+          _count: { _all: true },
+        })
+      : [];
+    const doneCountById = new Map(validatedBySegment.map((g) => [g.manuscriptId, g._count._all]));
+    const progressionFor = (manuscriptId: string) => ({ done: doneCountById.get(manuscriptId) ?? 0, total });
+
+    // « En attente » : l'étape m'est confiée mais ne peut pas être validée car un
+    // pré-requis manque (document/convergence/complétude) — on réutilise les
+    // contrôles exacts du workflow pour que le motif soit fiable et explicite.
+    const BLOCK_LABELS: Record<string, string> = {
+      fiche_technique_incomplete: "fiche technique de fabrication incomplète",
+      dos_a_recalculer: "dos à recalculer",
+      couverture_non_conforme_ou_sans_droits: "1re de couverture (image + droits) à finaliser",
+    };
+    async function blockReason(stepCode: string, manuscriptId: string): Promise<string | null> {
+      if (stepCode === "INFOGRAPHIE") {
+        const missing = await checkMaquetteInfographieConvergence(manuscriptId);
+        if (missing.length > 0) return missing.map((m) => BLOCK_LABELS[m] ?? m).join(" ; ");
+      }
+      if (stepCode === "ATTRIBUTION_REFERENCES") {
+        const c = await computeIsbnCompleteness(manuscriptId);
+        if (!c.complete) return "référencement ISBN / dépôt légal incomplet";
+      }
+      return null;
+    }
+
+    const activeRows = await Promise.all(
+      active.map(async (s) => {
+        const started = Boolean(s.actualStart);
+        const reason = await blockReason(s.status.code, s.manuscript.id);
+        const bucket = reason ? "en_attente" : started ? "en_cours" : "a_traiter";
+        return {
+          manuscript_id: s.manuscript.id,
+          manuscript_number: s.manuscript.manuscriptNumber,
+          title: s.manuscript.title,
+          step_code: s.status.code,
+          step_label: s.status.label,
+          bucket,
+          started,
+          blocked_reason: reason,
+          progression: progressionFor(s.manuscript.id),
+          since: (s.plannedStart ?? s.createdAt).toISOString(),
+        };
+      }),
+    );
+
+    // Un ouvrage ne figure dans « Terminés » que s'il n'a pas d'étape active à moi
+    // (sinon il est déjà dans un bac actif) ; on garde le dernier validé par ouvrage.
+    const activeIds = new Set(active.map((s) => s.manuscript.id));
+    const seenDone = new Set<string>();
+    const doneRows = doneSteps
+      .filter((s) => !activeIds.has(s.manuscript.id))
+      .filter((s) => (seenDone.has(s.manuscript.id) ? false : (seenDone.add(s.manuscript.id), true)))
+      .map((s) => ({
+        manuscript_id: s.manuscript.id,
+        manuscript_number: s.manuscript.manuscriptNumber,
+        title: s.manuscript.title,
+        step_code: s.status.code,
+        step_label: s.status.label,
+        bucket: "termine" as const,
+        started: true,
+        blocked_reason: null as string | null,
+        progression: progressionFor(s.manuscript.id),
+        since: (s.validatedAt ?? s.createdAt).toISOString(),
+      }));
+
+    return reply.send([...activeRows, ...doneRows]);
+  });
+
   // Retour à l'étape précédente (Ch. 4 §4.5, correction d'erreur) : ramène le
   // manuscrit à l'étape applicable immédiatement précédente et « rouvre » cette
   // étape (sa validation est effacée pour pouvoir être refaite). Tracé au

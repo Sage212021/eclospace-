@@ -198,6 +198,22 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
   // Les autres — éditeur, assistant, pôles — ne voient que les sections des
   // étapes DÉJÀ PARCOURUES ou EN COURS (pas les étapes futures). On se base sur
   // les étapes réellement franchies (manuscript.steps), pas sur des numéros.
+  // Espace de travail éditorial (tâches, cycle de correction, assistants IA
+  // Correction/Expertise/Réécriture) : visible pour TOUT profil pouvant agir sur
+  // l'ouvrage (correcteur, assistant/éditeur, direction générale, admin) — pas
+  // seulement ceux qui ont « tasks » (demande opérateur 01/10). Les outils
+  // (lancer l'IA…) suivent le même périmètre d'action.
+  const canSeeEditorialWorkspace =
+    permissions.has("tasks:consultation") ||
+    permissions.has("manuscripts:saisie") ||
+    permissions.has("manuscripts:validation") ||
+    permissions.has("manuscripts:administration");
+  const canUseEditorialTools =
+    permissions.has("tasks:saisie") ||
+    permissions.has("manuscripts:saisie") ||
+    permissions.has("manuscripts:validation") ||
+    permissions.has("manuscripts:administration");
+
   const fullFicheAccess = !!roles && (roles.has("ADMIN_GENERAL") || roles.has("DIR_GENERAL"));
   const reachedSteps = new Set((manuscript.steps ?? []).map((s) => s.status.code));
   const stageReached = (codes: string[]) => fullFicheAccess || codes.some((c) => reachedSteps.has(c));
@@ -848,11 +864,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
           IA apparaissent toujours au bon endroit). */}
       {(((show("correction") || show("expertise") || show("reecriture")) && manuscript.status.stepOrder >= PLANIFICATION_STEP_ORDER)
         || ["EXPERTISE", "REECRITURE", "CORRECTION"].includes(manuscript.status.code))
-        && permissions.has("tasks:consultation") && (
+        && canSeeEditorialWorkspace && (
         <>
           <TasksSection manuscriptId={manuscript.id} canManage={permissions.has("tasks:saisie")} />
-          <CorrectionCyclePanel manuscriptId={manuscript.id} manuscriptTitle={manuscript.title} canManage={permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")} />
-          {(permissions.has("tasks:saisie") || permissions.has("manuscripts:saisie")) && (
+          <CorrectionCyclePanel manuscriptId={manuscript.id} manuscriptTitle={manuscript.title} canManage={canUseEditorialTools} />
+          {canUseEditorialTools && (
             <>
               {/* Chaque assistant IA n'apparaît QU'À son étape (demande opérateur
                   12/09/2026) : Correction en Correction, Expertise en Expertise,

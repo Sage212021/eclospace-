@@ -389,9 +389,18 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       if (targetStatus.code === "INFOGRAPHIE") {
         const missing = await checkMaquetteInfographieConvergence(id);
         if (missing.length > 0) {
+          // Message EXPLICITE (charte §5 « jamais une erreur est survenue ») : on
+          // dit précisément ce qui manque, en clair, pour que l'infographe sache
+          // quoi compléter — sinon le bouton « Valider » semble sans effet.
+          const LABELS: Record<string, string> = {
+            fiche_technique_incomplete: "la fiche technique de fabrication est incomplète (format, nombre de pages, papier intérieur, papier couverture, reliure)",
+            dos_a_recalculer: "le dos doit être recalculé (épaisseur à mettre à jour)",
+            couverture_non_conforme_ou_sans_droits: "la 1re de couverture doit être déposée comme IMAGE (JPEG/PNG) via « Déposer la couverture », avec l'origine de ses droits — le dépôt d'un PDF en livrable ne suffit pas",
+          };
+          const details = missing.map((m) => LABELS[m] ?? m).join(" ; ");
           return reply.code(409).send({
             code: "maquette_infographie_incomplete",
-            message: "La convergence Maquette/Infographie n'est pas atteinte.",
+            message: `Impossible de valider l'infographie — à compléter avant de poursuivre : ${details}.`,
             missing,
           });
         }

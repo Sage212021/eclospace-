@@ -2030,6 +2030,14 @@ async function main() {
       departmentCodes: ["INFOG", "MKT", "COM", "DG", "DIRED"],
     },
     {
+      slug: "2026-10-infographie-validation-message-explicite",
+      version: "2026.10",
+      title: "Nouveauté — Infographie : on sait enfin POURQUOI « Valider » est refusé",
+      body: "Quand l'infographe cliquait « Valider l'infographie » sans que tout soit prêt, rien ne semblait se passer : le message d'erreur apparaissait tout en haut de la page, hors de l'écran sur téléphone. Désormais : (1) le motif du refus s'affiche JUSTE à côté du bouton, et (2) il est EXPLICITE — il dit précisément ce qui manque. Les trois points de contrôle de l'étape (convergence Maquette/Infographie) : la fiche technique de fabrication complète (format, pages, papier, dos, reliure) ; le dos à jour ; et la 1re de couverture déposée comme IMAGE (JPEG/PNG) via « Déposer la couverture » avec l'origine de ses droits (un PDF déposé en livrable ne suffit pas pour le contrôle couverture). Tant que ces points ne sont pas réglés, l'étape ne peut pas passer — mais on voit maintenant clairement lesquels compléter.",
+      permissionModules: ["production"],
+      departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-pieces-jointes-editorial-cni-niu",
       version: "2026.10",
       title: "Nouveauté — Pièces jointes : dépôt ouvert à l'éditorial + types CNI et NIU",

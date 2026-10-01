@@ -2093,6 +2093,10 @@ function GenericStepValidation({
   const [decision, setDecision] = useState<"realise" | "passe">("realise");
   const [skipReason, setSkipReason] = useState("");
   const [realization, setRealization] = useState<Record<string, string>>({});
+  // Erreur affichée JUSTE à côté du bouton (en plus du bandeau haut de page) :
+  // sur mobile, le refus apparaissait tout en haut, hors de l'écran — d'où
+  // l'impression que « Valider » ne faisait rien.
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const label = STEP_ACTION_LABELS[stepCode] ?? "Valider cette étape";
 
@@ -2126,6 +2130,7 @@ function GenericStepValidation({
       confirmLabel: passing ? "Passer l'étape" : label,
     });
     if (!ok) return;
+    setLocalError(null);
     try {
       const result = await validateStep(manuscriptId, stepCode, {
         ...(stepCode === "CORRECTION" ? { requires_rewrite: requiresRewrite } : {}),
@@ -2140,7 +2145,9 @@ function GenericStepValidation({
       // suivante → on n'enchaîne pas automatiquement côté validateur.
       onValidated(result.status, { confided: Boolean(assigneeId) });
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Échec de la validation.");
+      const msg = err instanceof Error ? err.message : "Échec de la validation.";
+      setLocalError(msg);
+      onError(msg);
     }
   }
 
@@ -2227,6 +2234,11 @@ function GenericStepValidation({
           ) : (
             <span style={{ fontWeight: 600 }}>Renseigné(e) par le pôle responsable de l'étape.</span>
           )}
+        </div>
+      )}
+      {localError && (
+        <div style={{ marginTop: 10, background: "var(--alert-soft)", color: "var(--alert)", border: "1px solid var(--alert)", borderRadius: 8, padding: "9px 12px", fontSize: 12.5, lineHeight: 1.5 }}>
+          ⚠ {localError}
         </div>
       )}
       <ActionButton onClick={handleValidate}>{isOptional && decision === "passe" ? "Passer l'étape" : label}</ActionButton>

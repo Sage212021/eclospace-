@@ -2023,6 +2023,14 @@ async function main() {
       departmentCodes: ["INFOG", "MKT", "COM", "DG", "DIRED"],
     },
     {
+      slug: "2026-10-reecriture-carre-passer-etape-confie",
+      version: "2026.10",
+      title: "Nouveauté — Réécriture : le carré « réaliser / passer l'étape » revient, même dossier confié",
+      body: "Correctif : à l'étape Réécriture (comme à l'Expertise), le carré de décision « Réaliser l'étape / Passer l'étape » n'apparaissait plus dès qu'un responsable était désigné pour l'ouvrage — la direction se retrouvait bloquée, sans pouvoir passer l'étape. Désormais, décider de réaliser OU de passer une étape éditoriale à option (Expertise, Réécriture, Planification) reste toujours possible pour la direction éditoriale, même quand le dossier est nominativement confié à un collègue : c'est une décision de direction, elle n'oblige plus à « prendre le dossier » d'abord. Le reste du dossier confié demeure en consultation seule pour ne pas empiéter sur le travail du collègue.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "DG"],
+    },
+    {
       slug: "2026-10-cycle-correction-historique-cloture",
       version: "2026.10",
       title: "Nouveauté — Cycle de correction : référence, historique et fiche de clôture",

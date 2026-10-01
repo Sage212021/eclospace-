@@ -1998,6 +1998,14 @@ async function main() {
       permissionModules: ["manuscripts"],
       departmentCodes: ["DIRED", "DG"],
     },
+    {
+      slug: "2026-10-espace-editorial-affichage-harmonise",
+      version: "2026.10",
+      title: "Nouveauté — Les cartes Correction / Expertise / Réécriture s'affichent de façon cohérente",
+      body: "L'espace de travail éditorial (tâches, cycle de correction, assistants IA Correction / Expertise / Réécriture) s'affiche désormais pour TOUT profil pouvant agir sur l'ouvrage — correcteur, assistant éditorial, directeur éditorial, direction générale et administrateur — et plus seulement ceux qui avaient le droit « tâches ». Fini le « carré Réécriture » qui apparaissait sur certaines fiches et pas sur d'autres selon le compte.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["CORR", "DIRED", "DG", "SECR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

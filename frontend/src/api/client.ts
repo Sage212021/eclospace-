@@ -2355,6 +2355,14 @@ export function listImageAssets(manuscriptId: string) {
   return request<ImageAsset[]>(`/api/v1/manuscripts/${manuscriptId}/image-assets`);
 }
 
+// Renseigner l'origine des droits d'un visuel déjà déposé (sans re-téléverser).
+export function setImageAssetRights(manuscriptId: string, assetId: string, rightsOrigin: RightsOrigin) {
+  return request<ImageAsset>(`/api/v1/manuscripts/${manuscriptId}/image-assets/${assetId}/rights`, {
+    method: "PATCH",
+    body: JSON.stringify({ rights_origin: rightsOrigin }),
+  });
+}
+
 // Dépôt d'un visuel AVEC son image (la 1ère de couverture alimente le site).
 export async function uploadImageAssetFile(manuscriptId: string, type: ImageAssetType, file: File, rightsOrigin?: RightsOrigin) {
   const form = new FormData();

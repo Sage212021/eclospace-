@@ -2030,6 +2030,14 @@ async function main() {
       departmentCodes: ["INFOG", "MKT", "COM", "DG", "DIRED"],
     },
     {
+      slug: "2026-10-couverture-origine-droits-infographie",
+      version: "2026.10",
+      title: "Nouveauté — Couverture : indiquer l'origine des droits (débloque la validation infographie)",
+      body: "On a trouvé pourquoi, même avec la fiche technique remplie et la couverture déposée, « Valider l'infographie » restait refusé : la 1re de couverture doit porter son ORIGINE DES DROITS (création interne / banque d'images sous licence / fournie par l'auteur), et l'écran ne permettait pas de la renseigner. C'est corrigé : dans « Couverture (impression + site) », un menu « Origine des droits (1re de couverture) » est disponible. Il s'applique au dépôt d'une nouvelle couverture, et — si la couverture est déjà déposée — un bouton « Enregistrer les droits » permet de l'ajouter SANS re-téléverser l'image. Une pastille indique « ✓ droits renseignés » ou « ⚠ droits à renseigner ». Une fois l'origine indiquée (et la fiche technique complète), l'infographie se valide normalement.",
+      permissionModules: ["production"],
+      departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-infographie-validation-message-explicite",
       version: "2026.10",
       title: "Nouveauté — Infographie : on sait enfin POURQUOI « Valider » est refusé",

@@ -333,6 +333,24 @@ export default async function productionRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Renseigner l'ORIGINE DES DROITS d'un visuel déjà déposé (Ch. 12 §12.5), sans
+  // devoir le re-téléverser. La convergence Maquette/Infographie exige que la
+  // 1re de couverture porte cette origine ; on permet de la fixer directement.
+  fastify.patch(
+    "/api/v1/manuscripts/:id/image-assets/:assetId/rights",
+    { preHandler: requirePermission("production", "saisie") },
+    async (request, reply) => {
+      const { id, assetId } = request.params as { id: string; assetId: string };
+      const body = z.object({ rights_origin: z.nativeEnum(RightsOrigin) }).safeParse(request.body);
+      if (!body.success) return reply.code(400).send({ code: "validation_error", message: "Origine des droits invalide (création interne, banque d'images, ou fourni par l'auteur)." });
+      const asset = await prisma.imageAsset.findFirst({ where: { id: assetId, manuscriptId: id, deletedAt: null } });
+      if (!asset) return reply.code(404).send({ code: "not_found", message: "Visuel introuvable." });
+      const updated = await prisma.imageAsset.update({ where: { id: assetId }, data: { rightsOrigin: body.data.rights_origin } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "image_asset", entityId: assetId, newValues: { rights_origin: body.data.rights_origin }, ipAddress: request.ip });
+      return reply.send({ ...updated, has_file: Boolean(updated.documentVersionId) });
+    },
+  );
+
   fastify.get("/api/v1/layout-templates", { preHandler: requireAuth }, async (request, reply) => {
     const { collection } = request.query as { collection?: string };
     const templates = await prisma.layoutTemplate.findMany({

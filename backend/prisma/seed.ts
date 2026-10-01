@@ -2022,6 +2022,22 @@ async function main() {
       permissionModules: ["production", "marketing", "commercial", "manuscripts"],
       departmentCodes: ["INFOG", "MKT", "COM", "DG", "DIRED"],
     },
+    {
+      slug: "2026-10-reecriture-carre-passer-etape-confie",
+      version: "2026.10",
+      title: "Nouveauté — Réécriture : le carré « réaliser / passer l'étape » revient, même dossier confié",
+      body: "Correctif : à l'étape Réécriture (comme à l'Expertise), le carré de décision « Réaliser l'étape / Passer l'étape » n'apparaissait plus dès qu'un responsable était désigné pour l'ouvrage — la direction se retrouvait bloquée, sans pouvoir passer l'étape. Désormais, décider de réaliser OU de passer une étape éditoriale à option (Expertise, Réécriture, Planification) reste toujours possible pour la direction éditoriale, même quand le dossier est nominativement confié à un collègue : c'est une décision de direction, elle n'oblige plus à « prendre le dossier » d'abord. Le reste du dossier confié demeure en consultation seule pour ne pas empiéter sur le travail du collègue.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "DG"],
+    },
+    {
+      slug: "2026-10-cycle-correction-historique-cloture",
+      version: "2026.10",
+      title: "Nouveauté — Cycle de correction : référence, historique et fiche de clôture",
+      body: "Chaque correction d'un ouvrage reçoit maintenant une RÉFÉRENCE claire (ex. COR-2026-001) et un numéro (Correction #1, #2…), affichés sur la fiche à côté du bandeau « correction en cours ». Nouveau panneau « 🗂️ Historique du cycle de correction » : on y voit, pour chaque cycle, la FRISE complète de tous les mouvements — date et heure, qui a déposé, son rôle, à qui le dossier a été renvoyé, le motif, les observations, le fichier concerné et l'étape. Les allers-retours (correcteur ↔ éditeur ↔ infographe) ne créent plus de « nouvelle correction » : ce sont des mouvements du MÊME cycle. Quand la correction est validée, le cycle passe « Terminée » avec une fiche de clôture (qui a clôturé, quand, quelle version finale). Après clôture, si l'ouvrage repasse un jour en correction, un nouveau cycle (#2) s'ouvre avec sa propre référence. Plus de confusion : on sait toujours qui a fait quoi, et dans quel cycle.",
+      permissionModules: ["manuscripts", "tasks", "production"],
+      departmentCodes: ["CORR", "DIRED", "INFOG", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

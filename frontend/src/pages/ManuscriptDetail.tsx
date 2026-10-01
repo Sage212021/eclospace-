@@ -63,6 +63,7 @@ import { EditorialQuotesSection } from "../components/EditorialQuotesSection";
 import { TasksSection } from "../components/TasksSection";
 import { CorrectionSection } from "../components/CorrectionSection";
 import { CorrectionCyclePanel } from "../components/CorrectionCyclePanel";
+import { CorrectionCycleHistoryPanel } from "../components/CorrectionCycleHistoryPanel";
 import { StepDeliverableBlock } from "../components/StepDeliverableBlock";
 import { ProductionSection } from "../components/ProductionSection";
 import { IsbnSection } from "../components/IsbnSection";
@@ -444,11 +445,24 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
           allers-retours. Rappelle qu'un seul cycle est ouvert à la fois. */}
       {manuscript.correctionOpen && (
         <div style={{ marginTop: 12, background: "var(--eclosion-soft, #f6efd8)", border: "2px solid var(--eclosion, #D9B21A)", borderRadius: 10, padding: "12px 14px" }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: "#0B0B0C", letterSpacing: 0.3 }}>🔵 CORRECTION ÉDITORIALE EN COURS</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#0B0B0C", letterSpacing: 0.3 }}>🔵 CORRECTION ÉDITORIALE EN COURS</div>
+            {manuscript.correctionCycle && (
+              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, fontWeight: 700, color: "#0B0B0C", background: "#fff", border: "1px solid var(--eclosion, #D9B21A)", borderRadius: 6, padding: "2px 8px" }}>
+                Correction #{manuscript.correctionCycle.cycleNumber} · {manuscript.correctionCycle.reference}
+              </span>
+            )}
+          </div>
           <div style={{ fontSize: 12.5, color: "var(--ink)", marginTop: 4, lineHeight: 1.5 }}>
             Un seul cycle de correction est ouvert pour cet ouvrage. Tous les allers-retours (correcteur, éditeur, infographe) appartiennent à ce même cycle — il reste actif jusqu'à sa clôture (validation finale de la correction). Aucune seconde fiche de correction ne peut être créée en parallèle.
           </div>
         </div>
+      )}
+
+      {/* Historique des cycles de correction (Phase 2) : référence, statut
+          (En cours / Terminée), frise des mouvements et fiche de clôture. */}
+      {(manuscript.correctionOpen || stageReached(["CORRECTION"])) && (
+        <CorrectionCycleHistoryPanel manuscriptId={manuscript.id} />
       )}
 
       {permissions.has("stock:consultation") && show("stock") && (
@@ -748,7 +762,8 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
           />
         )}
 
-        {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && (canValidate || manuscript.canSelfClose) && !confieAutrui && (
+        {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code) && (canValidate || manuscript.canSelfClose)
+          && (!confieAutrui || (canValidate && OPTIONAL_DECISION_STEPS.includes(manuscript.status.code))) && (
           <>
             <GenericStepValidation
               manuscriptId={manuscript.id}
@@ -1916,6 +1931,14 @@ const STEP_PREREQ: Record<string, { label: string; anchor: string; perm: string 
   INFOGRAPHIE: { label: "la fiche technique de fabrication (format, nombre de pages, papier, dos, reliure)", anchor: "fiche-technique-fabrication", perm: "production:consultation" },
   ATTRIBUTION_REFERENCES: { label: "la liste de contrôle ISBN / dépôt légal / métadonnées", anchor: "isbn-references", perm: "isbn:consultation" },
 };
+
+// Étapes éditoriales « à option » : RÉALISER ou PASSER est une décision de la
+// DIRECTION ÉDITORIALE. Même quand l'ouvrage est nominativement confié à un
+// collègue pour cette étape, un validateur doit pouvoir trancher (réaliser /
+// passer) sans avoir à « prendre le dossier » — sinon le carré de décision
+// (comme en Expertise) disparaît dès qu'un responsable est désigné (constat
+// opérateur 01/10 sur la Réécriture).
+const OPTIONAL_DECISION_STEPS = ["EXPERTISE", "REECRITURE", "PLANIFICATION"];
 
 const GENERIC_VALIDATION_STEPS = [
   "PLANIFICATION",

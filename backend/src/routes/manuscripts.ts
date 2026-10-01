@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAnyPermission, requireAuth } from "../lib/permissions.js";
 import { canCorrectDeposit, isDeletableStepDoc } from "../lib/stepDocuments.js";
 import { CORRECTION_PHASES, COVER_CORRECTION_PHASES, isCorrectionPhase, isCoverCorrectionPhase, isCoverIntegrationDeposit, correctionDocTitle, correctionCycleState, coverCorrectionCycleState, currentCorrectionActor, nextActorAfterPhase } from "../lib/correctionCycle.js";
+import { recordCorrectionMovement, recordCorrectionMovementIfOpen, listCorrectionCycles, openCorrectionCycle } from "../lib/correctionCycleEntity.js";
 import { VC1_SLOTS, isVc1Slot, vc1DocTitle, vc1State } from "../lib/startingProof.js";
 import { deliverableDocTitle, stepDeliverableMeta } from "../lib/stepDeliverables.js";
 import { optionalStepMeta } from "../lib/stepRealization.js";
@@ -905,7 +906,13 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     // badge « CORRECTION ÉDITORIALE EN COURS » et au blocage d'un second cycle.
     const openCorrectionStep = manuscript.steps.find((s) => s.status.code === "CORRECTION" && !s.validatedAt);
     const correctionOpen = Boolean(openCorrectionStep) || manuscript.status.code === "CORRECTION";
-    return reply.send({ ...manuscript, registrationLocked: Boolean(signed), sealed: Boolean(manuscript.sealedAt), canSelfClose, currentAssignee, assignedToMe, canTakeOver, correctionOpen });
+    // Cycle de correction actif (référence COR-AAAA-NNN + n° Correction #N) pour
+    // afficher l'identité du cycle en cours à côté du badge.
+    const activeCycle = await openCorrectionCycle(id);
+    const correctionCycle = activeCycle
+      ? { id: activeCycle.id, reference: activeCycle.reference, cycleNumber: activeCycle.cycleNumber, status: activeCycle.status }
+      : null;
+    return reply.send({ ...manuscript, registrationLocked: Boolean(signed), sealed: Boolean(manuscript.sealedAt), canSelfClose, currentAssignee, assignedToMe, canTakeOver, correctionOpen, correctionCycle });
   });
 
   // « Prendre le dossier » : un responsable (production/direction) intervient sur
@@ -1186,6 +1193,23 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // HISTORIQUE DES CYCLES DE CORRECTION (demande opérateur 01/10/2026) : la liste
+  // des cycles éditoriaux de l'ouvrage (référence COR-AAAA-NNN, n° Correction #N,
+  // statut En cours/Terminée) avec la frise de tous leurs mouvements (date/heure,
+  // utilisateur, rôle, destinataire, motif, observations, version, statut étape)
+  // et, pour les cycles clos, la fiche de clôture.
+  fastify.get(
+    "/api/v1/manuscripts/:id/correction-cycles",
+    { preHandler: requireAnyPermission([{ module: "tasks", action: "consultation" }, { module: "manuscripts", action: "consultation" }, { module: "production", action: "consultation" }]) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const cycles = await listCorrectionCycles(id);
+      return reply.send(cycles);
+    },
+  );
+
   // Rapports de correction de la COUVERTURE (branche infographe) : mêmes pièces
   // d'étape, déposées par le correcteur et exploitées par l'infographe. Distinct
   // du cycle texte ci-dessus (n'entre pas dans le relais « à qui la main »).
@@ -1213,7 +1237,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id, phase } = request.params as { id: string; phase: string };
       if (!isCorrectionPhase(phase)) return reply.code(400).send({ code: "invalid_phase", message: "Phase de correction inconnue." });
-      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, include: { status: { select: { code: true } } } });
       if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
 
       // L'infographe de l'ouvrage — désigné, sinon responsable étape Infographie.
@@ -1269,22 +1293,35 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       });
       await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "document_version", entityId: version.id, newValues: { correction_phase: phase }, ipAddress: request.ip });
 
+      // Motif / observations éventuels envoyés avec le dépôt (champs multipart).
+      const fields = file.fields as Record<string, { value?: string } | undefined> | undefined;
+      const motive = fields?.motive?.value?.toString().trim() || null;
+      const observations = fields?.observations?.value?.toString().trim() || null;
+      const userRole = request.user!.roles[0] ?? null;
+
       // Rapport de correction de COUVERTURE : on notifie l'INFOGRAPHE — celui
       // DÉSIGNÉ pour l'ouvrage en priorité, sinon le responsable de l'étape
       // Infographie —, qui exploitera ce rendu.
       if (isCoverCorrectionPhase(phase)) {
+        let coverRecipient: string | null = null;
         if (isCoverIntegrationDeposit(phase)) {
           // RETOUR de l'infographe → on notifie le CORRECTEUR (responsable de
           // l'étape Correction) : sa couverture intégrée / finale est prête.
           const step = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "CORRECTION" }, validatedAt: null }, select: { responsibleId: true } });
           const correcteur = step?.responsibleId ?? null;
+          coverRecipient = correcteur;
           if (correcteur && correcteur !== request.user!.id) {
             await notifyUsers({ userIds: [correcteur], type: "affectation", priority: "medium", title: `Retour couverture — ${manuscript.manuscriptNumber}`, body: `L'infographe a déposé la couverture ${phase === "couverture_finale" ? "corrigée finale" : "intégrée (BAT2)"} — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
           }
         } else if (infographeId && infographeId !== request.user!.id) {
           // RAPPORT de couverture (déposé par le correcteur) → on notifie l'infographe.
+          coverRecipient = infographeId;
           await notifyUsers({ userIds: [infographeId], type: "affectation", priority: "medium", title: `Couverture à intégrer — ${manuscript.manuscriptNumber}`, body: `Un rapport de correction de couverture est disponible — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
         }
+        // Mouvement du cycle (branche couverture) — historisé UNIQUEMENT si un
+        // cycle de correction est ouvert (sinon, dépôt infographie post-clôture :
+        // on n'ouvre pas de cycle de correction fantôme).
+        await recordCorrectionMovementIfOpen(id, { kind: "deposit", userId: request.user!.id, userRole, recipientId: coverRecipient, motive, observations, documentVersionId: version.id, stepStatus: manuscript.status.code });
         return reply.code(201).send({ version_id: version.id, phase, label });
       }
 
@@ -1292,6 +1329,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       // (responsable de l'étape) et l'intégrateur (Direction/Assistant éditorial)
       // se renvoient le dossier ; chaque dépôt notifie l'autre.
       const nextActor = nextActorAfterPhase(phase);
+      let textRecipient: string | null = null;
       if (nextActor) {
         let targetId: string | null = null;
         let message = "";
@@ -1303,10 +1341,13 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           targetId = step?.responsibleId ?? null;
           message = "Version intégrée à relire (2e passage)";
         }
+        textRecipient = targetId;
         if (targetId && targetId !== request.user!.id) {
           await notifyUsers({ userIds: [targetId], type: "affectation", priority: "medium", title: `Correction — ${manuscript.manuscriptNumber}`, body: `${message} — manuscrit « ${manuscript.title} ».`, entityType: "manuscript", entityId: id });
         }
       }
+      // Mouvement du cycle (branche texte) — historisé sur le cycle actif.
+      await recordCorrectionMovement(id, { kind: "deposit", userId: request.user!.id, userRole, recipientId: textRecipient, motive, observations, documentVersionId: version.id, stepStatus: manuscript.status.code });
       return reply.code(201).send({ version_id: version.id, phase, label });
     },
   );

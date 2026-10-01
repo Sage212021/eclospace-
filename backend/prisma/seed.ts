@@ -296,6 +296,10 @@ async function main() {
     "comite_lecture:consultation",
     "comite_lecture:saisie",
     "users:consultation",
+    // Dépôt de pièces jointes de l'ouvrage, y compris CNI / NIU de l'auteur
+    // (demande opérateur 01/10/2026). La consultation est déjà dans la base
+    // transverse ; on ajoute le dépôt.
+    "documents:saisie",
   ]);
   await grant("MEMBRE_COMITE_LECTURE", ["comite_lecture:consultation", "comite_lecture:saisie"]);
   await grant("DIR_EDITORIAL", [
@@ -312,6 +316,9 @@ async function main() {
     "tasks:consultation",
     "tasks:saisie",
     "tasks:validation",
+    // Dépôt de pièces jointes de l'ouvrage, y compris CNI / NIU de l'auteur
+    // (demande opérateur 01/10/2026).
+    "documents:saisie",
   ]);
 
   // Juridique et contrats (Ch. 9 §9.11 : accès réservé aux profils listés).
@@ -2021,6 +2028,14 @@ async function main() {
       body: "Nouvelle liste « À publier (site) » (pôle Production) : tous les ouvrages arrivés à l'infographie et pas encore publiés y restent affichés — même si l'étape a avancé — jusqu'à publication. Pour chacun : état de complétude (couverture, ISBN, prix, résumé). L'infographe peut y compléter le résumé et le prix, puis cliquer « Publier » (le livre partira sur le site avec ses références ET son résumé). Marketing, commercial et direction consultent la liste mais ne publient pas — seul l'infographe publie. La publication ne bloque jamais l'avancement du manuscrit. Le branchement automatique au site se fera quand son API sera disponible.",
       permissionModules: ["production", "marketing", "commercial", "manuscripts"],
       departmentCodes: ["INFOG", "MKT", "COM", "DG", "DIRED"],
+    },
+    {
+      slug: "2026-10-pieces-jointes-editorial-cni-niu",
+      version: "2026.10",
+      title: "Nouveauté — Pièces jointes : dépôt ouvert à l'éditorial + types CNI et NIU",
+      body: "La rubrique « Documents de l'ouvrage (pièces jointes) » de la fiche manuscrit permet désormais au Directeur éditorial et à l'Assistant éditorial de DÉPOSER des pièces (ils pouvaient déjà les consulter) : couvertures, contrats scannés, et surtout les pièces d'identité de l'auteur. Deux nouveaux types de pièces sont disponibles dans la liste « Type de pièce » : « Pièce d'identité — CNI » et « NIU (numéro d'identification unique) ». On dépose le scan/la photo comme n'importe quelle autre pièce (glisser-déposer ou « choisir un fichier »), avec le niveau de confidentialité voulu.",
+      permissionModules: ["manuscripts", "documents"],
+      departmentCodes: ["DIRED", "SECR", "DG"],
     },
     {
       slug: "2026-10-reecriture-carre-passer-etape-confie",

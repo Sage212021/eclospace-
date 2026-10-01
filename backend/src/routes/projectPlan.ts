@@ -121,8 +121,13 @@ export default async function projectPlanRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
       const parsed = planSchema.safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
-      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true, status: { select: { code: true } } } });
       if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      // Le planning est modifiable à TOUTE étape (demande opérateur 01/10) SAUF
+      // une fois l'ouvrage arrivé à l'archivage : le dossier y est figé.
+      if (manuscript.status.code === "ARCHIVAGE") {
+        return reply.code(409).send({ code: "manuscript_archived", message: "L'ouvrage est à l'archivage : le planning du projet n'est plus modifiable." });
+      }
       const d = parsed.data;
 
       const saved = await prisma.$transaction(async (tx) => {

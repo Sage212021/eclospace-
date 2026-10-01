@@ -133,6 +133,31 @@ describe("planification du projet — planning lié au manuscrit", () => {
     expect(dl.headers["content-type"]).toContain("application/pdf");
   });
 
+  async function manuscriptAtStatus(code: string) {
+    const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code } });
+    const m = await prisma.manuscript.create({
+      data: { manuscriptNumber: `MS-PLAN-${rnd()}`, title: `Projet ${rnd()}`, statusId: status.id, ownerId: adminId, origin: "soumission", language: "fr", receivedAt: new Date() },
+    });
+    return m.id;
+  }
+
+  it("l'Assistant éditorial peut modifier le planning à une étape AVANCÉE (ex. mise en page)", async () => {
+    const id = await manuscriptAtStatus("MISE_EN_PAGE");
+    await createUserWithRole(`assist_${rnd()}`, "ASSISTANT_EDITORIAL", "Assist123!");
+    const u = (await prisma.user.findFirst({ where: { username: { startsWith: "assist_" } }, orderBy: { createdAt: "desc" } }))!;
+    const c = await login(app, u.username, "Assist123!");
+    const res = await app.inject({ method: "PUT", url: `/api/v1/manuscripts/${id}/project-plan`, headers: { cookie: c }, payload: { manager_name: "Noah", activities: [{ label: "Suivi", priority: "normale", status: "a_faire" }] } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().version).toBe(1);
+  });
+
+  it("à l'ARCHIVAGE, le planning n'est plus modifiable (409)", async () => {
+    const id = await manuscriptAtStatus("ARCHIVAGE");
+    const res = await app.inject({ method: "PUT", url: `/api/v1/manuscripts/${id}/project-plan`, headers: { cookie }, payload: { activities: [] } });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe("manuscript_archived");
+  });
+
   it("refuse l'enregistrement sans droit de saisie manuscrits (403)", async () => {
     const id = await manuscriptAtPlanification();
     await createUserWithRole(`corr_plan_${rnd()}`, "CORRECTEUR", "Plan123!");

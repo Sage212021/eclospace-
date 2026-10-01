@@ -29,6 +29,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   bat: "BAT Final",
   manuscrit: "Manuscrit",
   rapport_lecture: "Rapports de lecture",
+  cni: "Pièce d'identité — CNI",
+  niu: "NIU (numéro d'identification unique)",
   piece_archivage: "Pièces d'archivage",
   autre: "Autres pièces",
 };
@@ -43,6 +45,8 @@ const CATEGORY_ORDER = [
   "bat",
   "manuscrit",
   "rapport_lecture",
+  "cni",
+  "niu",
   "piece_archivage",
   "autre",
 ];

@@ -1629,6 +1629,10 @@ enum DocumentCategory {
   // Justificatif d'un mouvement de stock (photo, PV, constat) — surtout pour les
   // destructions, détériorations, pertes et dons (§6).
   justificatif_stock
+  // Pièces d'identité de l'auteur fournies au dossier : CNI (carte nationale
+  // d'identité) et NIU (numéro d'identification unique).
+  cni
+  niu
   autre
 }
 

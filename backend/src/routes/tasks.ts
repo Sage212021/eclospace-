@@ -80,6 +80,23 @@ export default async function taskRoutes(fastify: FastifyInstance) {
       }
 
       const body = parsed.data;
+
+      // RÈGLE : un ouvrage = UN SEUL cycle de correction éditoriale actif à la
+      // fois (demande opérateur 01/10). Si une correction est déjà ouverte
+      // (étape Correction non validée ou tâche de correction en cours), on refuse
+      // la création d'une SECONDE fiche de correction — l'éditeur doit reprendre
+      // le cycle existant, pas en ouvrir un parallèle.
+      if (CORRECTION_TASK_TYPES.includes(body.type)) {
+        const openStep = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, validatedAt: null, status: { code: "CORRECTION" } }, select: { id: true } });
+        const openTask = await prisma.task.findFirst({ where: { manuscriptId: id, deletedAt: null, type: { in: CORRECTION_TASK_TYPES }, status: { notIn: ["terminee", "validee"] } }, select: { id: true } });
+        if (openStep || openTask) {
+          return reply.code(409).send({
+            code: "correction_already_open",
+            message:
+              "Correction éditoriale déjà en cours. Cet ouvrage fait actuellement l'objet d'un cycle de correction éditoriale ouvert. Il n'est pas possible de créer une nouvelle fiche de correction tant que le cycle actuel n'est pas clôturé.",
+          });
+        }
+      }
       const task = await prisma.task.create({
         data: {
           manuscriptId: id,

@@ -418,6 +418,8 @@ export type ManuscriptDetail = Manuscript & {
   canTakeOver?: boolean;
   // Cycle de correction éditoriale ouvert (badge « EN COURS » + blocage 2e cycle).
   correctionOpen?: boolean;
+  // Cycle de correction ACTIF (référence COR-AAAA-NNN + n° Correction #N).
+  correctionCycle?: { id: string; reference: string; cycleNumber: number; status: "en_cours" | "terminee" } | null;
   // Étapes franchies (pour l'accès « étapes parcourues / en cours seulement »).
   steps?: { status: { code: string; stepOrder: number } }[];
   workContributors: { role?: string; partner: ManuscriptAuthorPartner }[];
@@ -779,12 +781,47 @@ export function getCorrectionCycle(manuscriptId: string) {
 export function getCoverCorrectionCycle(manuscriptId: string) {
   return request<CorrectionPhaseState[]>(`/api/v1/manuscripts/${manuscriptId}/cover-correction-cycle`);
 }
-export async function uploadCorrectionPhase(manuscriptId: string, phase: string, file: File) {
+export async function uploadCorrectionPhase(manuscriptId: string, phase: string, file: File, extra?: { motive?: string; observations?: string }) {
   const form = new FormData();
   form.append("file", file);
+  if (extra?.motive) form.append("motive", extra.motive);
+  if (extra?.observations) form.append("observations", extra.observations);
   const response = await fetch(`${API_BASE}/api/v1/manuscripts/${manuscriptId}/correction-cycle/${phase}`, { method: "POST", credentials: "include", body: form });
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Dépôt impossible.");
   return response.json() as Promise<{ version_id: string; phase: string; label: string }>;
+}
+
+// Historique des cycles de correction éditoriale (Phase 2) : référence, statut,
+// frise des mouvements et fiche de clôture.
+export interface CorrectionCycleMovement {
+  id: string;
+  at: string;
+  kind: "opened" | "deposit" | "reassign" | "closed" | "note";
+  userId: string | null;
+  userName: string | null;
+  userRole: string | null;
+  recipientId: string | null;
+  recipientName: string | null;
+  motive: string | null;
+  observations: string | null;
+  documentVersionId: string | null;
+  stepStatus: string | null;
+}
+export interface CorrectionCycleHistory {
+  id: string;
+  cycleNumber: number;
+  reference: string;
+  status: "en_cours" | "terminee";
+  openedAt: string;
+  openedByName: string | null;
+  closedAt: string | null;
+  closedByName: string | null;
+  closureNote: string | null;
+  finalVersionId: string | null;
+  movements: CorrectionCycleMovement[];
+}
+export function getCorrectionCycles(manuscriptId: string) {
+  return request<CorrectionCycleHistory[]>(`/api/v1/manuscripts/${manuscriptId}/correction-cycles`);
 }
 
 // « Version à corriger » (VC1) — dossier de départ déposé à la Décision

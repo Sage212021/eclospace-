@@ -3,7 +3,8 @@ import { z } from "zod";
 import type { Manuscript, TaskType } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
-import { missingRequiredCorrectionPhases, coverFinaleMissing } from "../lib/correctionCycle.js";
+import { missingRequiredCorrectionPhases, coverFinaleMissing, correctionCycleState } from "../lib/correctionCycle.js";
+import { closeCorrectionCycle, ensureOpenCorrectionCycle } from "../lib/correctionCycleEntity.js";
 import { isDeliverableRequired, hasStepDeliverable, DELIVERABLE_LABELS } from "../lib/stepDeliverables.js";
 import { vc1State } from "../lib/startingProof.js";
 import { isOptionalDecisionStep, stepMode, missingRealizationFields, sanitizeRealizationData, OPTIONAL_STEP_LABELS, type OptionalStepCode } from "../lib/stepRealization.js";
@@ -676,6 +677,30 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
           }
         }
       });
+
+      // OUVERTURE DU CYCLE DE CORRECTION (demande opérateur 01/10/2026) : dès que
+      // l'ouvrage ENTRE en correction, on ouvre (si besoin) son cycle éditorial —
+      // la référence COR-AAAA-NNN existe ainsi avant le premier dépôt.
+      if (nextStatus?.code === "CORRECTION") {
+        await ensureOpenCorrectionCycle(id, { userId: request.user!.id, userRole: request.user!.roles[0] ?? null });
+      }
+
+      // CLÔTURE DU CYCLE DE CORRECTION (demande opérateur 01/10/2026) : valider
+      // l'étape Correction clôt le cycle éditorial actif de l'ouvrage — statut
+      // TERMINÉE, date/heure, qui a clôturé, dernière version corrigée (VCF) et
+      // observations historisées. Un nouveau cycle (#2…) pourra être ouvert si
+      // l'ouvrage repasse un jour en correction.
+      if (targetStatus.code === "CORRECTION") {
+        const state = await correctionCycleState(id);
+        const finalVersionId = state.find((p) => p.key === "integration_finale")?.version_id ?? null;
+        await closeCorrectionCycle(id, {
+          userId: request.user!.id,
+          userRole: request.user!.roles[0] ?? null,
+          finalVersionId,
+          closureNote: observations ?? null,
+          stepStatus: targetStatus.code,
+        });
+      }
 
       // CLÔTURE PAR L'OPÉRATEUR AFFECTÉ (demande opérateur 26–27/09/2026) : quand
       // c'est l'affecté — et non la Direction — qui clôture, les responsables sont

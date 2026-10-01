@@ -2023,6 +2023,7 @@ model Manuscript {
   marketingPlan        MarketingPlan?
   marketingCampaigns   MarketingCampaign[]
   authorReceipts       AuthorReceipt[]
+  correctionCycles     CorrectionCycle[]
 
   @@map("manuscripts")
 }
@@ -3203,6 +3204,59 @@ model BatRecord {
 
   @@unique([manuscriptId, cycleNumber])
   @@map("bat_records")
+}
+
+// CYCLE DE CORRECTION ÉDITORIALE (demande opérateur 01/10) : un cycle global qui
+// reste OUVERT à travers tous les allers-retours (correcteur, éditeur,
+// infographe) jusqu'à la validation finale. Un ouvrage = un seul cycle actif à
+// la fois ; après clôture, un nouveau cycle (#2…) peut être ouvert. La référence
+// (ex. COR-2026-001) identifie le cycle ; cycleNumber = n° du cycle POUR CET
+// ouvrage (Correction #1, #2…).
+enum CorrectionCycleStatus {
+  en_cours
+  terminee
+}
+
+model CorrectionCycle {
+  id            String                @id @default(uuid())
+  manuscriptId  String                @map("manuscript_id")
+  manuscript    Manuscript            @relation(fields: [manuscriptId], references: [id])
+  cycleNumber   Int                   @map("cycle_number")
+  reference     String                @unique
+  status        CorrectionCycleStatus @default(en_cours)
+  openedAt      DateTime              @default(now()) @map("opened_at")
+  openedBy      String?               @map("opened_by")
+  closedAt      DateTime?             @map("closed_at")
+  closedBy      String?               @map("closed_by")
+  closureNote   String?               @map("closure_note")
+  finalVersionId String?              @map("final_version_id")
+
+  movements CorrectionCycleMovement[]
+
+  @@unique([manuscriptId, cycleNumber])
+  @@index([manuscriptId, status])
+  @@map("correction_cycles")
+}
+
+// Mouvement (itération) d'un cycle : chaque passage/échange est historisé — date,
+// utilisateur, rôle, destinataire, motif, observations, version concernée, statut
+// de l'étape. Les allers-retours ne créent PAS de nouveau cycle, mais un mouvement.
+model CorrectionCycleMovement {
+  id                String          @id @default(uuid())
+  cycleId           String          @map("cycle_id")
+  cycle             CorrectionCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  at                DateTime        @default(now())
+  kind              String // opened | deposit | reassign | closed | note
+  userId            String?         @map("user_id")
+  userRole          String?         @map("user_role")
+  recipientId       String?         @map("recipient_id")
+  motive            String?
+  observations      String?
+  documentVersionId String?         @map("document_version_id")
+  stepStatus        String?         @map("step_status")
+
+  @@index([cycleId, at])
+  @@map("correction_cycle_movements")
 }
 
 enum AnomalySeverity {

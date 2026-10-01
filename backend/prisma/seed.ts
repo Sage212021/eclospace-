@@ -1974,6 +1974,14 @@ async function main() {
       permissionModules: ["production", "manuscripts", "isbn"],
       departmentCodes: ["MAQ", "INFOG", "SECR", "COM", "MKT", "DIRED"],
     },
+    {
+      slug: "2026-10-planning-modifiable-toute-etape",
+      version: "2026.10",
+      title: "Nouveauté — Planning du projet modifiable à toute étape (jusqu'à l'archivage)",
+      body: "La fiche de planification du projet n'est plus réservée à l'étape « Planification ». Le Directeur éditorial et l'Assistant éditorial (ainsi que le chef de projet) peuvent désormais la consulter et la MODIFIER à N'IMPORTE QUELLE étape de la vie de l'ouvrage — tant qu'il n'est pas arrivé à l'archivage. Une fois à l'archivage, le dossier est figé et le planning n'est plus modifiable.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "SECR"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

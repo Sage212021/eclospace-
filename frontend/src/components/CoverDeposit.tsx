@@ -2,11 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import {
   listImageAssets,
   uploadImageAssetFile,
+  setImageAssetRights,
   deleteImageAsset,
   imageAssetFileUrl,
   type ImageAsset,
   type ImageAssetType,
+  type RightsOrigin,
 } from "../api/client";
+
+// Origine des droits de la couverture (Ch. 12 §12.5) : la convergence
+// Maquette/Infographie exige que la 1re de couverture porte cette origine.
+const RIGHTS_LABELS: Record<RightsOrigin, string> = {
+  creation_interne: "Création interne (Éclosion)",
+  banque_images: "Banque d'images (sous licence)",
+  fourni_par_auteur: "Fourni par l'auteur",
+};
 
 // Dépôt de la COUVERTURE par l'infographe (demande opérateur 01/10/2026).
 // Deux modes AU CHOIX (panneau dépliable) :
@@ -32,23 +42,45 @@ export function CoverDeposit({ manuscriptId, canManage }: { manuscriptId: string
   const [busy, setBusy] = useState<ImageAssetType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [rights, setRights] = useState<RightsOrigin>("creation_interne");
+  const [savingRights, setSavingRights] = useState(false);
 
   const refresh = () => listImageAssets(manuscriptId).then(setAssets).catch(() => setAssets([]));
   useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [manuscriptId]);
 
   const byType = (t: ImageAssetType) => assets.find((a) => a.type === t && a.has_file);
   const cover1 = byType("couverture_1");
+  // Aligne le sélecteur sur l'origine déjà enregistrée pour la couverture.
+  useEffect(() => { if (cover1?.rightsOrigin) setRights(cover1.rightsOrigin); }, [cover1?.rightsOrigin]);
 
   async function upload(type: ImageAssetType, file: File) {
     setBusy(type); setError(null); setMsg(null);
     try {
-      await uploadImageAssetFile(manuscriptId, type, file);
+      // La 1re de couverture porte l'origine des droits (exigée pour valider
+      // l'infographie) ; les autres pièces n'en ont pas besoin.
+      await uploadImageAssetFile(manuscriptId, type, file, type === "couverture_1" ? rights : undefined);
       setMsg(`${LABELS[type]} déposée.${type === "couverture_1" ? " Elle alimentera le catalogue du site." : ""}`);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Dépôt impossible.");
     } finally {
       setBusy(null);
+    }
+  }
+
+  // Enregistre l'origine des droits sur la couverture DÉJÀ déposée (sans
+  // re-téléverser) — débloque la validation de l'infographie.
+  async function saveRights() {
+    if (!cover1) return;
+    setSavingRights(true); setError(null); setMsg(null);
+    try {
+      await setImageAssetRights(manuscriptId, cover1.id, rights);
+      setMsg("Origine des droits de la couverture enregistrée.");
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Enregistrement impossible.");
+    } finally {
+      setSavingRights(false);
     }
   }
 
@@ -72,6 +104,30 @@ export function CoverDeposit({ manuscriptId, canManage }: { manuscriptId: string
           </button>
         )}
       </div>
+
+      {/* Origine des droits de la 1re de couverture (exigée pour valider
+          l'infographie). Si la couverture est déposée sans droits, on invite à
+          la renseigner ici — sans avoir à re-téléverser l'image. */}
+      {canManage && (
+        <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12.5 }}>
+          <label style={{ color: "var(--muted)" }}>Origine des droits (1re de couverture) :</label>
+          <select value={rights} onChange={(e) => setRights(e.target.value as RightsOrigin)} style={{ border: "1px solid var(--line)", borderRadius: 6, padding: "4px 8px", fontSize: 12.5, background: "#fff" }}>
+            {(Object.keys(RIGHTS_LABELS) as RightsOrigin[]).map((r) => (
+              <option key={r} value={r}>{RIGHTS_LABELS[r]}</option>
+            ))}
+          </select>
+          {cover1 && cover1.rightsOrigin == null && (
+            <button type="button" onClick={saveRights} disabled={savingRights} style={{ ...btn, background: "var(--eclosion, #D9B21A)", color: "#0B0B0C" }}>
+              {savingRights ? "Enregistrement…" : "Enregistrer les droits"}
+            </button>
+          )}
+          {cover1 && (
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: cover1.rightsOrigin ? "var(--valid, #2F7D4A)" : "var(--eclosion-retard, #C4661F)" }}>
+              {cover1.rightsOrigin ? "✓ droits renseignés" : "⚠ droits à renseigner (sinon l'infographie ne peut pas être validée)"}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Aperçu des pièces déjà déposées (vignettes). */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12 }}>

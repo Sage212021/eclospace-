@@ -2306,10 +2306,31 @@ export interface ImageAsset {
   technicalOk: boolean;
   rightsOrigin: RightsOrigin | null;
   can_correct?: boolean;
+  has_file?: boolean;
+  mime_type?: string | null;
 }
 
 export function listImageAssets(manuscriptId: string) {
   return request<ImageAsset[]>(`/api/v1/manuscripts/${manuscriptId}/image-assets`);
+}
+
+// Dépôt d'un visuel AVEC son image (la 1ère de couverture alimente le site).
+export async function uploadImageAssetFile(manuscriptId: string, type: ImageAssetType, file: File, rightsOrigin?: RightsOrigin) {
+  const form = new FormData();
+  form.append("type", type);
+  if (rightsOrigin) form.append("rights_origin", rightsOrigin);
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/manuscripts/${manuscriptId}/image-assets/upload`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ message: "Dépôt impossible." }));
+    throw new Error(err.message ?? "Dépôt impossible.");
+  }
+  return response.json() as Promise<ImageAsset>;
+}
+
+// URL de l'image d'un visuel (aperçu / téléchargement).
+export function imageAssetFileUrl(manuscriptId: string, assetId: string): string {
+  return `${API_BASE}/api/v1/manuscripts/${manuscriptId}/image-assets/${assetId}/file`;
 }
 
 // Retrait d'un visuel déposé par erreur (suppression logique ; auteur/direction).

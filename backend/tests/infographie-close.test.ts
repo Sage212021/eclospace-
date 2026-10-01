@@ -62,6 +62,18 @@ describe("clôture de l'infographie par l'infographe", () => {
     expect(prodNotif).toBeGreaterThan(0);
   });
 
+  it("on peut transmettre l'attribution des références à un MAQUETTISTE (demande opérateur 01/10)", async () => {
+    const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Info123!");
+    const maq = await createUserWithRole(`maq_${rnd()}`, "MAQUETTISTE", "Maq123!");
+    const infoCookie = await login(info.username, "Info123!");
+    const m = await manuscriptAtInfographie(info.id, { converged: true });
+    const ok = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/INFOGRAPHIE/validate`, headers: { cookie: infoCookie }, payload: { assignee_id: maq.id } });
+    expect(ok.statusCode).toBe(200);
+    const refStatus = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "ATTRIBUTION_REFERENCES" } });
+    const nextStep = await prisma.manuscriptStep.findUnique({ where: { manuscriptId_statusId: { manuscriptId: m.id, statusId: refStatus.id } } });
+    expect(nextStep?.responsibleId).toBe(maq.id);
+  });
+
   it("l'infographe affecté passe le contrôle de permission (409 convergence, pas 403) quand la convergence manque", async () => {
     const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Info123!");
     const infoCookie = await login(info.username, "Info123!");

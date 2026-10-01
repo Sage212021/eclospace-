@@ -1,35 +1,21 @@
 import { useEffect, useState } from "react";
 import {
-  createImageAsset,
-  deleteImageAsset,
   getProductionSpecs,
-  listImageAssets,
   updateProductionSpecs,
-  type ImageAsset,
-  type ImageAssetType,
   type ProductionSpecs,
-  type RightsOrigin,
 } from "../api/client";
+import { CoverDeposit } from "./CoverDeposit";
 
 interface ProductionSectionProps {
   manuscriptId: string;
   canManage: boolean;
 }
 
-const IMAGE_TYPE_LABELS: Record<ImageAssetType, string> = {
-  couverture_1: "Couverture 1",
-  couverture_4: "Couverture 4",
-  dos: "Dos",
-  rabat: "Rabat",
-  illustration_interieure: "Illustration intérieure",
-  visuel_marketing: "Visuel marketing",
-};
-
 // Maquette (Ch. 11) et Infographie (Ch. 12) : fiche technique de fabrication
-// avec calcul automatique du dos, et visuels avec contrôle technique/droits.
+// avec calcul automatique du dos. Les visuels de couverture sont gérés par
+// CoverDeposit (vraies images ; la 1ère alimente le site).
 export function ProductionSection({ manuscriptId, canManage }: ProductionSectionProps) {
   const [specs, setSpecs] = useState<ProductionSpecs | null>(null);
-  const [assets, setAssets] = useState<ImageAsset[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   // Fiche repliée (résumé) une fois enregistrée ; « Modifier » la rouvre.
@@ -37,9 +23,8 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
   const [form, setForm] = useState({ trim_format: "", final_pages: "", paper_interior: "", paper_interior_gsm: "", paper_cover: "", binding: "", lamination: "", typeface: "", font_size_pt: "", leading: "", margins: "", layout_name: "" });
 
   const refresh = async () => {
-    const [s, a] = await Promise.all([getProductionSpecs(manuscriptId), listImageAssets(manuscriptId)]);
+    const s = await getProductionSpecs(manuscriptId);
     setSpecs(s);
-    setAssets(a);
     if (s) {
       setForm({
         trim_format: s.trimFormat ?? "",
@@ -90,18 +75,50 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
     }
   }
 
-  async function handleAddAsset() {
-    const type = window.prompt(`Type de visuel (${Object.keys(IMAGE_TYPE_LABELS).join(", ")})`, "couverture_1") as ImageAssetType | null;
-    if (!type || !(type in IMAGE_TYPE_LABELS)) return;
-    const dpi = Number(window.prompt("Résolution (dpi)", "300") ?? "0");
-    const colorMode = window.prompt("Mode colorimétrique (CMJN, RVB...)", "CMJN") ?? undefined;
-    const rightsOrigin = window.prompt("Origine des droits (creation_interne, banque_images, fourni_par_auteur)", "creation_interne") as RightsOrigin | undefined;
-    try {
-      await createImageAsset(manuscriptId, { type, resolution_dpi: dpi || undefined, color_mode: colorMode, rights_origin: rightsOrigin });
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'ajout du visuel.");
-    }
+  // Impression de la fiche technique : ouvre une page propre (charte Éclosion,
+  // or/noir/ivoire) prête pour l'imprimante ou l'export PDF du navigateur.
+  function printFiche() {
+    const rows: [string, string][] = [
+      ["Format", specs?.trimFormat ?? form.trim_format],
+      ["Nombre de pages", specs?.finalPages?.toString() ?? form.final_pages],
+      ["Papier intérieur", specs?.paperInterior ?? form.paper_interior],
+      ["Grammage intérieur", (specs?.paperInteriorGsm?.toString() ?? form.paper_interior_gsm) ? `${specs?.paperInteriorGsm ?? form.paper_interior_gsm} g/m²` : ""],
+      ["Papier couverture", specs?.paperCover ?? form.paper_cover],
+      ["Façonnage", specs?.binding ?? form.binding],
+      ["Pelliculage", specs?.lamination ?? form.lamination],
+      ["Dos calculé", specs?.spineWidthMm ? `${specs.spineWidthMm} mm` : ""],
+      ["Gabarit / collection", specs?.layoutName ?? form.layout_name],
+      ["Police", specs?.typeface ?? form.typeface],
+      ["Corps de texte", specs?.fontSizePt ?? form.font_size_pt],
+      ["Interlignage", specs?.leading ?? form.leading],
+      ["Marges", specs?.margins ?? form.margins],
+    ];
+    const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string));
+    const body = rows
+      .map(([k, v]) => `<tr><th>${esc(k)}</th><td>${v ? esc(String(v)) : "—"}</td></tr>`)
+      .join("");
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche technique de fabrication</title>
+      <style>
+        body{font-family:Georgia,'Times New Roman',serif;color:#0B0B0C;background:#fff;margin:32px;}
+        h1{font-size:20px;border-bottom:3px solid #D9B21A;padding-bottom:8px;margin:0 0 4px;}
+        .sub{color:#6b6b6b;font-size:12px;margin:0 0 20px;}
+        table{width:100%;border-collapse:collapse;font-size:13px;}
+        th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #e7e2d4;vertical-align:top;}
+        th{width:38%;color:#6b6b6b;font-weight:600;}
+        td{font-family:'Courier New',monospace;}
+        .foot{margin-top:24px;font-size:11px;color:#9a9a9a;}
+      </style></head><body>
+      <h1>Fiche technique de fabrication</h1>
+      <p class="sub">Éditions Éclosion — Service de production</p>
+      <table>${body}</table>
+      <p class="foot">Document interne de fabrication.</p>
+      <script>window.onload=function(){window.print();}</script>
+      </body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) { setError("Veuillez autoriser les fenêtres pop-up pour imprimer."); return; }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
   }
 
   // La fiche est considérée « renseignée » dès que l'essentiel est saisi → on
@@ -110,7 +127,12 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
 
   return (
     <div id="fiche-technique-fabrication" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16, scrollMarginTop: 12 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Fiche technique de fabrication</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Fiche technique de fabrication</div>
+        {hasFilledSpecs && (
+          <button type="button" onClick={printFiche} style={{ ...secondaryButtonStyle }}>🖨️ Imprimer</button>
+        )}
+      </div>
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
 
       {specs?.spineNeedsRecalc && (
@@ -225,48 +247,9 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
         <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, marginTop: 10 }}>Épaisseur du dos calculée : {specs.spineWidthMm} mm</p>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>Visuels</div>
-        {canManage && (
-          <button onClick={handleAddAsset} style={secondaryButtonStyle}>
-            + Ajouter un visuel
-          </button>
-        )}
-      </div>
-      {assets.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun visuel déposé.</p>}
-      {assets.map((asset) => (
-        <div key={asset.id} style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)", padding: "8px 0", fontSize: 13 }}>
-          <span>{IMAGE_TYPE_LABELS[asset.type]}</span>
-          <span style={{ display: "flex", gap: 8, fontSize: 11 }}>
-            <span style={{ color: "var(--muted)" }}>{asset.resolutionDpi ?? "—"} dpi · {asset.colorMode ?? "—"}</span>
-            <span
-              style={{
-                background: asset.technicalOk ? "var(--eclosion-soft)" : "var(--alert-soft)",
-                color: asset.technicalOk ? "var(--eclosion)" : "var(--alert)",
-                borderRadius: 999,
-                padding: "2px 8px",
-              }}
-            >
-              {asset.technicalOk ? "Conforme" : "Non conforme"}
-            </span>
-            {!asset.rightsOrigin && (
-              <span style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 999, padding: "2px 8px" }}>Sans droits</span>
-            )}
-            {canManage && asset.can_correct && (
-              <button
-                onClick={async () => {
-                  if (!window.confirm("Retirer ce visuel déposé par erreur ? Vous pourrez en déposer un autre.")) return;
-                  try { await deleteImageAsset(manuscriptId, asset.id); await refresh(); }
-                  catch (e) { setError(e instanceof Error ? e.message : "Retrait impossible."); }
-                }}
-                style={{ color: "var(--alert)", background: "none", border: "none", fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0, fontSize: 11 }}
-              >
-                Retirer
-              </button>
-            )}
-          </span>
-        </div>
-      ))}
+      {/* Couverture (1ère/4e/dos) avec vraies images : la 1ère alimente le site.
+          Deux modes au choix de l'infographe (un fichier / pièces séparées). */}
+      <CoverDeposit manuscriptId={manuscriptId} canManage={canManage} />
     </div>
   );
 }

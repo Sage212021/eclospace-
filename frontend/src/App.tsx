@@ -22,6 +22,7 @@ const MyIntegrations = lazy(() => import("./pages/MyIntegrations").then((m) => (
 const CatalogueReferencePage = lazy(() => import("./pages/CatalogueReferencePage").then((m) => ({ default: m.CatalogueReferencePage })));
 const EditorialQuotesInbox = lazy(() => import("./components/EditorialQuotesInbox").then((m) => ({ default: m.EditorialQuotesInbox })));
 const ArchivesPage = lazy(() => import("./pages/ArchivesPage").then((m) => ({ default: m.ArchivesPage })));
+const SitePublishQueue = lazy(() => import("./pages/SitePublishQueue").then((m) => ({ default: m.SitePublishQueue })));
 const RightsMatrixPage = lazy(() => import("./pages/RightsMatrixPage").then((m) => ({ default: m.RightsMatrixPage })));
 const ManuscriptDetail = lazy(() => import("./pages/ManuscriptDetail").then((m) => ({ default: m.ManuscriptDetail })));
 const MyReadings = lazy(() => import("./pages/MyReadings").then((m) => ({ default: m.MyReadings })));
@@ -121,7 +122,8 @@ type PageId =
   | "commissions"
   | "author-royalties"
   | "chat"
-  | "service-desk";
+  | "service-desk"
+  | "site-publish";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
 
@@ -203,6 +205,7 @@ const NAV_POLES: NavPole[] = [
     items: [
       { key: "pr-maquette", label: "Maquette", permission: "production:consultation" },
       { key: "pr-infographie", label: "Infographie & couvertures", permission: "production:consultation" },
+      { key: "pr-a-publier", label: "À publier (site)", anyPermission: ["production:consultation", "marketing:consultation", "commercial:consultation", "communication:consultation", "manuscripts:administration", "manuscripts:validation"] },
       { key: "pr-isbn", label: "ISBN & dépôt légal", permission: "isbn:consultation" },
       { key: "pr-bat", label: "BAT Final & contrôle qualité", permission: "bat:consultation" },
       { key: "pr-impression", label: "Impression", permission: "printing:consultation" },
@@ -297,6 +300,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-devis-editorial": { page: "editorial-quotes-inbox" },
   "ed-catalogue-ref": { page: "catalogue-ref" },
   "ed-archives": { page: "archives" },
+  "pr-a-publier": { page: "site-publish" },
   "pr-maquette": { stage: "MISE_EN_PAGE", heading: "Maquette & mise en page" },
   "pr-infographie": { stage: "INFOGRAPHIE", heading: "Infographie & couvertures" },
   "pr-isbn": { stage: "ATTRIBUTION_REFERENCES", heading: "ISBN & dépôt légal" },
@@ -858,6 +862,7 @@ export function App() {
           <CatalogueReferencePage canManage={permissions.has("manuscripts:administration")} />
         )}
         {leaf && "page" in leaf && leaf.page === "archives" && <ArchivesPage onOpenManuscript={openManuscript} />}
+        {leaf && "page" in leaf && leaf.page === "site-publish" && <SitePublishQueue permissions={permissions} />}
         {leaf && "page" in leaf && leaf.page === "rights-matrix" && (
           <RightsMatrixPage canManage={permissions.has("users:administration")} />
         )}

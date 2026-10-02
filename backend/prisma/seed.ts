@@ -2032,8 +2032,8 @@ async function main() {
     {
       slug: "2026-10-mes-travaux-integration-si-travail",
       version: "2026.10",
-      title: "Nouveauté — « Mes travaux de production » n'affiche plus les intégrations vides",
-      body: "Petit ajustement : dans « Mes travaux de production », une intégration de couverture n'apparaît désormais QUE lorsqu'il y a vraiment quelque chose à faire — le correcteur a envoyé un rapport de couverture, ou il reste des corrections à intégrer. Fini les lignes « 0/0 » pour des ouvrages où le correcteur n'a encore rien transmis : la liste ne montre que vos vrais travaux en attente.",
+      title: "Nouveauté — Intégration de couverture : affichée seulement quand le correcteur a transmis",
+      body: "Ajustement important : une intégration de correction de couverture n'apparaît (dans « Mes travaux de production » comme dans « Mes intégrations de correction ») QUE lorsqu'il y a vraiment quelque chose à faire — le correcteur a réellement DÉPOSÉ un rapport de couverture (un fichier, pas une fiche vide), ou des corrections de couverture ont été retenues. Fini les lignes « 0/0 » pour des ouvrages où le correcteur n'a encore rien transmis : vous ne voyez que vos vrais travaux en attente.",
       permissionModules: ["production"],
       departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
     },

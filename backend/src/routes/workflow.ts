@@ -1036,23 +1036,10 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
     // INTÉGRATION DE CORRECTION (couverture) — travail de l'infographe/maquettiste
     // (demande opérateur 02/10) : inclus ici pour un point d'entrée unique. On
     // réutilise « Mes intégrations de correction » (branche couverture, actives).
-    const integrationsAll = (await myCorrectionIntegrations(me)).filter((i) => i.branch === "couverture" && !i.closed_at);
-    // On ne liste une intégration de couverture que s'il y a RÉELLEMENT du travail
-    // (demande opérateur 02/10) : soit le correcteur a déposé un rapport de
-    // couverture (couverture_1 / couverture_2), soit il reste des corrections à
-    // intégrer. Sinon l'ouvrage n'encombre pas « Mes travaux de production ».
-    const covIds = integrationsAll.map((i) => i.id);
-    const reportDocs = covIds.length
-      ? await prisma.document.findMany({
-          where: {
-            entityType: "manuscript", entityId: { in: covIds }, category: "piece_etape", deletedAt: null,
-            OR: [{ title: { startsWith: "[correction:couverture_1]" } }, { title: { startsWith: "[correction:couverture_2]" } }],
-          },
-          select: { entityId: true },
-        })
-      : [];
-    const hasReport = new Set(reportDocs.map((d) => d.entityId));
-    const integrations = integrationsAll.filter((i) => i.counts.a_integrer + i.counts.a_revoir > 0 || hasReport.has(i.id));
+    // Intégrations de couverture ACTIVES (non closes). La règle « uniquement si le
+    // correcteur a transmis un rapport de couverture » est déjà appliquée dans
+    // myCorrectionIntegrations (branche couverture), donc pas de filtre en doublon.
+    const integrations = (await myCorrectionIntegrations(me)).filter((i) => i.branch === "couverture" && !i.closed_at);
     const integrationRows = integrations.map((i) => {
       const restant = i.counts.a_integrer + i.counts.a_revoir;
       const done = Math.max(0, i.counts.total - restant);

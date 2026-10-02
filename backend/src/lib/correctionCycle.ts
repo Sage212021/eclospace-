@@ -116,6 +116,15 @@ export async function coverFinaleMissing(manuscriptId: string): Promise<boolean>
   return !state.find((p) => p.key === "couverture_finale")?.has_file;
 }
 
+// Le correcteur a-t-il réellement TRANSMIS un rapport de correction de couverture
+// (fichier déposé, pas une simple fiche vide) ? Sert à n'afficher l'intégration de
+// couverture à l'infographe que lorsqu'il y a vraiment quelque chose à intégrer
+// (demande opérateur 02/10).
+export async function coverReportReceived(manuscriptId: string): Promise<boolean> {
+  const state = await coverCorrectionCycleState(manuscriptId);
+  return state.some((p) => (p.key === "couverture_1" || p.key === "couverture_2") && p.has_file);
+}
+
 // « À qui la main » : premier maillon du relais dont le fichier manque encore.
 // Correcteur → Intégrateur → Correcteur → Intégrateur → terminé.
 export async function currentCorrectionActor(manuscriptId: string): Promise<CorrectionActor | "termine"> {

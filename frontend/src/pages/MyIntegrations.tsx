@@ -125,7 +125,7 @@ function CoverReports({ manuscriptId }: { manuscriptId: string }) {
 // finale (VCF). Branche TEXTE (la couverture, gérée par l'infographe, arrive en
 // 2ᵉ temps).
 
-export function MyIntegrations() {
+export function MyIntegrations({ focusManuscriptId, onFocusConsumed }: { focusManuscriptId?: string | null; onFocusConsumed?: () => void } = {}) {
   const [items, setItems] = useState<MyIntegrationItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -137,6 +137,16 @@ export function MyIntegrations() {
       .then((r) => { setItems(r.manuscripts); setError(null); })
       .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
   useEffect(() => { refresh(); }, []);
+
+  // Ouverture ciblée depuis « Mes travaux de production » : on déplie la ligne
+  // couverture de l'ouvrage visé dès qu'il est chargé.
+  useEffect(() => {
+    if (!focusManuscriptId || items.length === 0) return;
+    const target = items.find((m) => m.id === focusManuscriptId && m.branch === "couverture")
+      ?? items.find((m) => m.id === focusManuscriptId);
+    if (target) setOpenId(`${target.branch}:${target.id}`);
+    onFocusConsumed?.();
+  }, [focusManuscriptId, items, onFocusConsumed]);
 
   const active = items.filter((m) => !m.closed_at);
   const history = items.filter((m) => m.closed_at);

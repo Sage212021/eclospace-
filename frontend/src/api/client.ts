@@ -641,6 +641,7 @@ export function getMyDossiers() {
 // active et une progression sur le segment de production.
 export type ProductionBucket = "en_cours" | "a_traiter" | "en_attente" | "termine";
 export interface MyProductionWork {
+  kind: "step" | "integration";
   manuscript_id: string;
   manuscript_number: string;
   title: string;
@@ -649,8 +650,9 @@ export interface MyProductionWork {
   bucket: ProductionBucket;
   started: boolean;
   blocked_reason: string | null;
+  detail: string | null;
   progression: { done: number; total: number };
-  since: string;
+  since: string | null;
 }
 export function getMyProductionWork() {
   return request<MyProductionWork[]>("/api/v1/my-production-work");

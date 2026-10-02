@@ -2030,6 +2030,14 @@ async function main() {
       departmentCodes: ["INFOG", "MKT", "COM", "DG", "DIRED"],
     },
     {
+      slug: "2026-10-mes-travaux-integrations-couverture",
+      version: "2026.10",
+      title: "Nouveauté — « Mes travaux de production » inclut vos intégrations de correction",
+      body: "Les intégrations de correction de couverture (le travail de l'infographe / du maquettiste : reprendre les corrections du correcteur sur la couverture) apparaissent désormais aussi dans « Mes travaux de production ». Plus besoin d'aller dans un écran séparé pour les voir : elles sont listées avec vos autres travaux, avec le nombre de corrections à intégrer. Un clic sur « Ouvrir » vous mène directement à l'ouvrage, sur sa ligne couverture, prêt à déposer. L'écran « Mes intégrations de correction » reste disponible comme avant.",
+      permissionModules: ["production"],
+      departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-mes-travaux-de-production",
       version: "2026.10",
       title: "Nouveauté — « Mes travaux de production » : un seul espace pour toute la production",

@@ -7,6 +7,7 @@ import { SUPPORTS } from "../lib/correctionProfile.js";
 import { isAnomalyStatus } from "../lib/correctionAnomalies.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { isDirection } from "../lib/stepDocuments.js";
+import { myCorrectionIntegrations } from "../lib/correctionIntegrations.js";
 import {
   loadConfig,
   saveConfig,
@@ -620,68 +621,7 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
     "/api/v1/my-correction-integrations",
     { preHandler: requireAnyPermission(AI_JOB_READ_PERMS) },
     async (request, reply) => {
-      const me = request.user!.id;
-      const emptyCounts = () => ({ a_integrer: 0, integree: 0, a_revoir: 0, non_applicable: 0, total: 0 });
-
-      const tally = async (manuscriptIds: string[], workTypes: ("correction_1" | "correction_2" | "couverture")[]) => {
-        if (manuscriptIds.length === 0) return new Map<string, ReturnType<typeof emptyCounts>>();
-        const rows = await prisma.correctionAnomaly.findMany({
-          where: { manuscriptId: { in: manuscriptIds }, status: { in: ["acceptee", "modifiee"] }, job: { workType: { in: workTypes } } },
-          select: { manuscriptId: true, integrationStatus: true },
-        });
-        const m = new Map<string, ReturnType<typeof emptyCounts>>();
-        for (const r of rows) {
-          if (!m.has(r.manuscriptId)) m.set(r.manuscriptId, emptyCounts());
-          const c = m.get(r.manuscriptId)!;
-          c.total += 1;
-          if (r.integrationStatus in c) (c as Record<string, number>)[r.integrationStatus] += 1;
-        }
-        return m;
-      };
-
-      // Présence du FICHIER FINAL par branche (autorise la clôture) : on cherche
-      // les pièces d'étape « [correction:integration_finale] » (texte) ou
-      // « [correction:couverture_finale] » (couverture) déposées, non supprimées.
-      const withFinalFile = async (manuscriptIds: string[], phaseKey: string) => {
-        if (manuscriptIds.length === 0) return new Set<string>();
-        const docs = await prisma.document.findMany({
-          where: { entityType: "manuscript", entityId: { in: manuscriptIds }, category: "piece_etape", deletedAt: null, title: { startsWith: `[correction:${phaseKey}]` } },
-          select: { entityId: true },
-        });
-        return new Set(docs.map((d) => d.entityId));
-      };
-
-      // Branche TEXTE : ouvrages où je suis l'intégrateur éditorial désigné.
-      const texteManuscripts = await prisma.manuscript.findMany({
-        where: { deletedAt: null, correctionIntegratorId: me },
-        select: { id: true, manuscriptNumber: true, title: true, correctionIntegrationClosedAt: true, status: { select: { code: true, label: true } } },
-        orderBy: { updatedAt: "desc" },
-      });
-      const texteCounts = await tally(texteManuscripts.map((m) => m.id), ["correction_1", "correction_2"]);
-      const texteFinal = await withFinalFile(texteManuscripts.map((m) => m.id), "integration_finale");
-
-      // Branche COUVERTURE : ouvrages où je suis l'infographe — désigné pour la
-      // correction de couverture, OU responsable de l'étape Infographie.
-      const infoSteps = await prisma.manuscriptStep.findMany({
-        where: { responsibleId: me, status: { code: "INFOGRAPHIE" }, manuscript: { deletedAt: null } },
-        select: { manuscript: { select: { id: true, manuscriptNumber: true, title: true, coverIntegrationClosedAt: true, status: { select: { code: true, label: true } } } } },
-      });
-      const designated = await prisma.manuscript.findMany({
-        where: { deletedAt: null, coverIntegratorId: me },
-        select: { id: true, manuscriptNumber: true, title: true, coverIntegrationClosedAt: true, status: { select: { code: true, label: true } } },
-      });
-      type CoverM = { id: string; manuscriptNumber: string; title: string; coverIntegrationClosedAt: Date | null; status: { code: string; label: string } };
-      const coverById = new Map<string, CoverM>();
-      for (const s of infoSteps) coverById.set(s.manuscript.id, s.manuscript);
-      for (const m of designated) coverById.set(m.id, m); // le désigné prime / dédoublonne
-      const coverManuscripts = [...coverById.values()];
-      const coverCounts = await tally(coverManuscripts.map((m) => m.id), ["couverture"]);
-      const coverFinal = await withFinalFile(coverManuscripts.map((m) => m.id), "couverture_finale");
-
-      const items = [
-        ...texteManuscripts.map((m) => ({ id: m.id, manuscript_number: m.manuscriptNumber, title: m.title, status_code: m.status.code, status_label: m.status.label, branch: "texte" as const, counts: texteCounts.get(m.id) ?? emptyCounts(), closed_at: m.correctionIntegrationClosedAt?.toISOString() ?? null, can_close: texteFinal.has(m.id) })),
-        ...coverManuscripts.map((m) => ({ id: m.id, manuscript_number: m.manuscriptNumber, title: m.title, status_code: m.status.code, status_label: m.status.label, branch: "couverture" as const, counts: coverCounts.get(m.id) ?? emptyCounts(), closed_at: m.coverIntegrationClosedAt?.toISOString() ?? null, can_close: coverFinal.has(m.id) })),
-      ];
+      const items = await myCorrectionIntegrations(request.user!.id);
       return reply.send({ manuscripts: items });
     },
   );

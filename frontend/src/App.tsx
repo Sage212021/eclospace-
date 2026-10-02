@@ -402,6 +402,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>(loadStoredView);
   const [announcementToOpen, setAnnouncementToOpen] = useState<string | null>(null);
+  const [integrationFocusId, setIntegrationFocusId] = useState<string | null>(null);
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
   // Voyant de non-lus de la messagerie interne (rafraîchi régulièrement et au
   // changement de vue) pour signaler au destinataire un nouveau message.
@@ -683,6 +684,12 @@ export function App() {
   // reste dans le menu mais son ouverture affiche « Accès non autorisé ».
   const leafAuthorized = view.kind !== "leaf" || isLeafAuthorized(activeKey, permissions, roles);
   const openManuscript = (id: string) => setView({ kind: "manuscript-detail", id, originKey: activeKey });
+  // Ouvrir une intégration de correction depuis « Mes travaux de production » :
+  // on bascule sur « Mes intégrations de correction » et on déplie l'ouvrage visé.
+  const openIntegration = (id: string) => {
+    setIntegrationFocusId(id);
+    setView({ kind: "leaf", key: "ed-mes-integrations" });
+  };
   // Ouverture d'une annonce depuis la cloche : bascule sur le Babillard et
   // transmet l'identifiant à ouvrir (si l'utilisateur y a accès).
   const openAnnouncement = (id: string) => {
@@ -860,10 +867,10 @@ export function App() {
           <MyDossiers onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation")} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-production-work" && (
-          <MyProductionWork onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation")} />
+          <MyProductionWork onOpenManuscript={openManuscript} onOpenIntegration={openIntegration} canOpen={permissions.has("manuscripts:consultation")} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-corrections" && <MyCorrections />}
-        {leaf && "page" in leaf && leaf.page === "my-correction-integrations" && <MyIntegrations />}
+        {leaf && "page" in leaf && leaf.page === "my-correction-integrations" && <MyIntegrations focusManuscriptId={integrationFocusId} onFocusConsumed={() => setIntegrationFocusId(null)} />}
         {leaf && "page" in leaf && leaf.page === "editorial-quotes-inbox" && <EditorialQuotesInbox />}
         {leaf && "page" in leaf && leaf.page === "catalogue-ref" && (
           <CatalogueReferencePage canManage={permissions.has("manuscripts:administration")} />

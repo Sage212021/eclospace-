@@ -56,6 +56,7 @@ import { useConfirm } from "../components/ConfirmProvider";
 import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printEditorialDecisionLetter, type PrintOpts } from "../lib/print";
 import { Spine } from "../components/Spine";
+import { ProductionParcours } from "../components/ProductionParcours";
 import { CorrectionReturns } from "../components/CorrectionReturns";
 import { IncomingDeliverable } from "../components/IncomingDeliverable";
 import { ContractsSection } from "../components/ContractsSection";
@@ -510,6 +511,12 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
       )}
 
       <Spine steps={timeline} currentStatusCode={manuscript.status.code} />
+
+      {/* Parcours de production (Lot B) : vue dédiée ✓ / → / 🔒 + progression,
+          affichée dès que l'ouvrage est entré en production. */}
+      {reachedSteps.has("MISE_EN_PAGE") && (
+        <ProductionParcours timeline={timeline} currentStatusCode={manuscript.status.code} />
+      )}
 
       {/* Retours de correction (lecture seule) : consultables sur la fiche
           globale APRÈS l'étape Correction (en production, stock…). Pendant la

@@ -78,15 +78,25 @@ describe("mes travaux de production", () => {
 
     // Sans rapport ni correction → rien à faire → ABSENT de la liste.
     const vide = await coverManuscript(info.id);
-    // Avec un rapport de couverture déposé par le correcteur → PRÉSENT.
-    const avecRapport = await coverManuscript(info.id);
+    // Une simple FICHE de document sans fichier ne suffit pas (le correcteur n'a
+    // rien déposé) → toujours ABSENT.
+    const ficheVide = await coverManuscript(info.id);
     await prisma.document.create({
+      data: { entityType: "manuscript", entityId: ficheVide.id, category: "piece_etape", title: "[correction:couverture_1] (vide)", createdBy: adminId, updatedBy: adminId },
+    });
+    // Avec un rapport de couverture réellement DÉPOSÉ (fichier) par le correcteur → PRÉSENT.
+    const avecRapport = await coverManuscript(info.id);
+    const doc = await prisma.document.create({
       data: { entityType: "manuscript", entityId: avecRapport.id, category: "piece_etape", title: "[correction:couverture_1] rapport.pdf", createdBy: adminId, updatedBy: adminId },
+    });
+    await prisma.documentVersion.create({
+      data: { documentId: doc.id, versionNumber: 1, filePath: `test/cov-${avecRapport.id}.pdf`, fileSize: 10, mimeType: "application/pdf", sha256Hash: "0".repeat(64), changeSummary: "Rapport couverture", uploadedBy: adminId },
     });
 
     const res = await app.inject({ method: "GET", url: "/api/v1/my-production-work", headers: { cookie } });
     const rows = res.json() as { manuscript_id: string; kind: string; step_label: string }[];
     expect(rows.find((r) => r.manuscript_id === vide.id)).toBeUndefined();
+    expect(rows.find((r) => r.manuscript_id === ficheVide.id)).toBeUndefined();
     const row = rows.find((r) => r.manuscript_id === avecRapport.id);
     expect(row?.kind).toBe("integration");
     expect(row?.step_label).toContain("Intégration de correction");

@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import { coverReportReceived } from "./correctionCycle.js";
 
 // « Mes intégrations de correction » — source unique, réutilisée par la page
 // dédiée (aiEditorial) ET par « Mes travaux de production » (workflow), pour ne
@@ -73,8 +74,17 @@ export async function myCorrectionIntegrations(userId: string): Promise<Integrat
   const coverById = new Map<string, CoverM>();
   for (const s of infoSteps) coverById.set(s.manuscript.id, s.manuscript);
   for (const m of designated) coverById.set(m.id, m);
-  const coverManuscripts = [...coverById.values()];
-  const coverCounts = await tally(coverManuscripts.map((m) => m.id), ["couverture"]);
+  // Ne garder que les ouvrages où il y a RÉELLEMENT du travail d'intégration de
+  // couverture (demande opérateur 02/10) : soit le correcteur a TRANSMIS un
+  // rapport de couverture (fichier déposé), soit des corrections de couverture
+  // ont été retenues (acceptées/modifiées). Une simple fiche vide ne compte pas.
+  const coverCandidates = [...coverById.values()];
+  const coverCounts = await tally(coverCandidates.map((m) => m.id), ["couverture"]);
+  const coverManuscripts: CoverM[] = [];
+  for (const m of coverCandidates) {
+    const hasCorrections = (coverCounts.get(m.id)?.total ?? 0) > 0;
+    if (hasCorrections || (await coverReportReceived(m.id))) coverManuscripts.push(m);
+  }
   const coverFinal = await withFinalFile(coverManuscripts.map((m) => m.id), "couverture_finale");
 
   return [

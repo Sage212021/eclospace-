@@ -65,6 +65,24 @@ describe("mes travaux de production", () => {
     expect(byId(aTraiter.id)?.progression.done).toBe(0);
   });
 
+  it("inclut les intégrations de correction (couverture) de l'infographe", async () => {
+    const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Pwd123!");
+    const cookie = await login(info.username, "Pwd123!");
+    // Infographe DÉSIGNÉ pour l'intégration de couverture, ouvrage à l'étape
+    // Correction (donc hors segment « étapes actives » : n'apparaît QUE via la
+    // branche intégration).
+    const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "CORRECTION" } });
+    const m = await prisma.manuscript.create({
+      data: { manuscriptNumber: `MS-INT-${rnd()}`, title: `Intégration ${rnd()}`, statusId: status.id, ownerId: adminId, origin: "soumission", language: "fr", receivedAt: new Date(), coverIntegratorId: info.id },
+    });
+
+    const res = await app.inject({ method: "GET", url: "/api/v1/my-production-work", headers: { cookie } });
+    const row = (res.json() as { manuscript_id: string; kind: string; step_label: string }[]).find((r) => r.manuscript_id === m.id);
+    expect(row).toBeTruthy();
+    expect(row?.kind).toBe("integration");
+    expect(row?.step_label).toContain("Intégration de correction");
+  });
+
   it("place en « en attente » une infographie dont la convergence n'est pas atteinte", async () => {
     const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Pwd123!");
     const cookie = await login(info.username, "Pwd123!");

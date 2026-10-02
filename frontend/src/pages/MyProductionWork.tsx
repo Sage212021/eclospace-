@@ -20,7 +20,7 @@ const BUCKETS: { key: ProductionBucket; label: string; hint: string; accent: str
   { key: "termine", label: "Terminés", hint: "Vos tâches de production validées.", accent: "#2F7D4A", soft: "#e9f3ec" },
 ];
 
-export function MyProductionWork({ onOpenManuscript, canOpen }: { onOpenManuscript: (id: string) => void; canOpen: boolean }) {
+export function MyProductionWork({ onOpenManuscript, onOpenIntegration, canOpen }: { onOpenManuscript: (id: string) => void; onOpenIntegration: (id: string) => void; canOpen: boolean }) {
   const [rows, setRows] = useState<Work[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,7 +62,7 @@ export function MyProductionWork({ onOpenManuscript, canOpen }: { onOpenManuscri
                 </div>
                 <div style={{ display: "grid", gap: 10 }}>
                   {items.map((d) => (
-                    <WorkCard key={`${d.manuscript_id}-${d.step_code}`} work={d} accent={b.accent} soft={b.soft} canOpen={canOpen} onOpen={() => onOpenManuscript(d.manuscript_id)} />
+                    <WorkCard key={`${d.manuscript_id}-${d.step_code}`} work={d} accent={b.accent} soft={b.soft} canOpen={canOpen} onOpen={() => (d.kind === "integration" ? onOpenIntegration(d.manuscript_id) : onOpenManuscript(d.manuscript_id))} />
                   ))}
                 </div>
               </div>
@@ -77,7 +77,7 @@ export function MyProductionWork({ onOpenManuscript, canOpen }: { onOpenManuscri
 function WorkCard({ work, accent, soft, canOpen, onOpen }: { work: Work; accent: string; soft: string; canOpen: boolean; onOpen: () => void }) {
   const { done, total } = work.progression;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  const days = daysSince(work.since);
+  const days = work.since ? daysSince(work.since) : null;
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
       <div style={{ flex: 1, minWidth: 240 }}>
@@ -87,11 +87,17 @@ function WorkCard({ work, accent, soft, canOpen, onOpen }: { work: Work; accent:
           <span style={{ display: "inline-block", background: soft, color: accent, borderRadius: 999, padding: "1px 9px", fontWeight: 700 }}>
             {work.bucket === "termine" ? "✓ " : ""}{work.step_label}
           </span>
-          <span>· {work.bucket === "termine" ? "validé" : "confié"} {days === 0 ? "aujourd'hui" : `il y a ${days} j`}</span>
+          {days !== null && (
+            <span>· {work.bucket === "termine" ? "validé" : "confié"} {days === 0 ? "aujourd'hui" : `il y a ${days} j`}</span>
+          )}
         </div>
         {/* Motif d'attente (préalable manquant) — explicite. */}
         {work.blocked_reason && (
           <div style={{ fontSize: 12, color: "#B87400", marginTop: 4 }}>⏳ En attente : {work.blocked_reason}.</div>
+        )}
+        {/* Détail de la tâche (ex. intégration de correction : nb à intégrer). */}
+        {work.detail && !work.blocked_reason && (
+          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{work.detail}</div>
         )}
         {/* Progression sur le parcours de production. */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>

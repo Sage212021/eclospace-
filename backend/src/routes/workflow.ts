@@ -96,6 +96,7 @@ async function canSelfCloseStep(
 }
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
 import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
+import { myCorrectionIntegrations } from "../lib/correctionIntegrations.js";
 
 // Étapes « à option » — Expertise, Réécriture, Projet (demande opérateur
 // 20/08/2026). Le manuscrit S'ARRÊTE désormais à ces étapes : l'opérateur y
@@ -1016,6 +1017,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         const reason = await blockReason(s.status.code, s.manuscript.id);
         const bucket = reason ? "en_attente" : started ? "en_cours" : "a_traiter";
         return {
+          kind: "step" as const,
           manuscript_id: s.manuscript.id,
           manuscript_number: s.manuscript.manuscriptNumber,
           title: s.manuscript.title,
@@ -1024,11 +1026,44 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
           bucket,
           started,
           blocked_reason: reason,
+          detail: null as string | null,
           progression: progressionFor(s.manuscript.id),
-          since: (s.plannedStart ?? s.createdAt).toISOString(),
+          since: (s.plannedStart ?? s.createdAt).toISOString() as string | null,
         };
       }),
     );
+
+    // INTÉGRATION DE CORRECTION (couverture) — travail de l'infographe/maquettiste
+    // (demande opérateur 02/10) : inclus ici pour un point d'entrée unique. On
+    // réutilise « Mes intégrations de correction » (branche couverture, actives).
+    const integrations = (await myCorrectionIntegrations(me)).filter((i) => i.branch === "couverture" && !i.closed_at);
+    const integrationRows = integrations.map((i) => {
+      const restant = i.counts.a_integrer + i.counts.a_revoir;
+      const done = Math.max(0, i.counts.total - restant);
+      const detail = i.counts.total === 0
+        ? "couverture à intégrer (retours du correcteur)"
+        : restant > 0
+          ? `${restant} correction(s) de couverture à intégrer`
+          : i.can_close
+            ? "prêt à clore (couverture finale déposée)"
+            : "déposer la couverture corrigée finale";
+      // Actif = en cours, sauf s'il ne reste qu'à déposer le fichier final (à traiter).
+      const bucket = restant === 0 && !i.can_close ? "a_traiter" : "en_cours";
+      return {
+        kind: "integration" as const,
+        manuscript_id: i.id,
+        manuscript_number: i.manuscript_number,
+        title: i.title,
+        step_code: "INTEGRATION_COUVERTURE",
+        step_label: "Intégration de correction (couverture)",
+        bucket,
+        started: true,
+        blocked_reason: null as string | null,
+        detail,
+        progression: { done, total: i.counts.total },
+        since: null as string | null,
+      };
+    });
 
     // Un ouvrage ne figure dans « Terminés » que s'il n'a pas d'étape active à moi
     // (sinon il est déjà dans un bac actif) ; on garde le dernier validé par ouvrage.
@@ -1038,6 +1073,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       .filter((s) => !activeIds.has(s.manuscript.id))
       .filter((s) => (seenDone.has(s.manuscript.id) ? false : (seenDone.add(s.manuscript.id), true)))
       .map((s) => ({
+        kind: "step" as const,
         manuscript_id: s.manuscript.id,
         manuscript_number: s.manuscript.manuscriptNumber,
         title: s.manuscript.title,
@@ -1046,11 +1082,12 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         bucket: "termine" as const,
         started: true,
         blocked_reason: null as string | null,
+        detail: null as string | null,
         progression: progressionFor(s.manuscript.id),
-        since: (s.validatedAt ?? s.createdAt).toISOString(),
+        since: (s.validatedAt ?? s.createdAt).toISOString() as string | null,
       }));
 
-    return reply.send([...activeRows, ...doneRows]);
+    return reply.send([...activeRows, ...integrationRows, ...doneRows]);
   });
 
   // Retour à l'étape précédente (Ch. 4 §4.5, correction d'erreur) : ramène le

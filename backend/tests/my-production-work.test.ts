@@ -65,20 +65,29 @@ describe("mes travaux de production", () => {
     expect(byId(aTraiter.id)?.progression.done).toBe(0);
   });
 
-  it("inclut les intégrations de correction (couverture) de l'infographe", async () => {
+  async function coverManuscript(coverIntegratorId: string) {
+    const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "CORRECTION" } });
+    return prisma.manuscript.create({
+      data: { manuscriptNumber: `MS-INT-${rnd()}`, title: `Intégration ${rnd()}`, statusId: status.id, ownerId: adminId, origin: "soumission", language: "fr", receivedAt: new Date(), coverIntegratorId },
+    });
+  }
+
+  it("inclut l'intégration de couverture UNIQUEMENT quand le correcteur a envoyé un rapport", async () => {
     const info = await createUserWithRole(`info_${rnd()}`, "RESP_INFOGRAPHIE", "Pwd123!");
     const cookie = await login(info.username, "Pwd123!");
-    // Infographe DÉSIGNÉ pour l'intégration de couverture, ouvrage à l'étape
-    // Correction (donc hors segment « étapes actives » : n'apparaît QUE via la
-    // branche intégration).
-    const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "CORRECTION" } });
-    const m = await prisma.manuscript.create({
-      data: { manuscriptNumber: `MS-INT-${rnd()}`, title: `Intégration ${rnd()}`, statusId: status.id, ownerId: adminId, origin: "soumission", language: "fr", receivedAt: new Date(), coverIntegratorId: info.id },
+
+    // Sans rapport ni correction → rien à faire → ABSENT de la liste.
+    const vide = await coverManuscript(info.id);
+    // Avec un rapport de couverture déposé par le correcteur → PRÉSENT.
+    const avecRapport = await coverManuscript(info.id);
+    await prisma.document.create({
+      data: { entityType: "manuscript", entityId: avecRapport.id, category: "piece_etape", title: "[correction:couverture_1] rapport.pdf", createdBy: adminId, updatedBy: adminId },
     });
 
     const res = await app.inject({ method: "GET", url: "/api/v1/my-production-work", headers: { cookie } });
-    const row = (res.json() as { manuscript_id: string; kind: string; step_label: string }[]).find((r) => r.manuscript_id === m.id);
-    expect(row).toBeTruthy();
+    const rows = res.json() as { manuscript_id: string; kind: string; step_label: string }[];
+    expect(rows.find((r) => r.manuscript_id === vide.id)).toBeUndefined();
+    const row = rows.find((r) => r.manuscript_id === avecRapport.id);
     expect(row?.kind).toBe("integration");
     expect(row?.step_label).toContain("Intégration de correction");
   });

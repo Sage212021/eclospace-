@@ -2030,6 +2030,14 @@ async function main() {
       departmentCodes: ["INFOG", "MKT", "COM", "DG", "DIRED"],
     },
     {
+      slug: "2026-10-mes-travaux-integration-si-travail",
+      version: "2026.10",
+      title: "Nouveauté — « Mes travaux de production » n'affiche plus les intégrations vides",
+      body: "Petit ajustement : dans « Mes travaux de production », une intégration de couverture n'apparaît désormais QUE lorsqu'il y a vraiment quelque chose à faire — le correcteur a envoyé un rapport de couverture, ou il reste des corrections à intégrer. Fini les lignes « 0/0 » pour des ouvrages où le correcteur n'a encore rien transmis : la liste ne montre que vos vrais travaux en attente.",
+      permissionModules: ["production"],
+      departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-parcours-de-production-fiche",
       version: "2026.10",
       title: "Nouveauté — « Parcours de production » sur la fiche de l'ouvrage",

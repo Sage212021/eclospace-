@@ -2030,6 +2030,14 @@ async function main() {
       departmentCodes: ["INFOG", "MKT", "COM", "DG", "DIRED"],
     },
     {
+      slug: "2026-10-parcours-de-production-fiche",
+      version: "2026.10",
+      title: "Nouveauté — « Parcours de production » sur la fiche de l'ouvrage",
+      body: "Sur la fiche d'un ouvrage en production, un nouveau bloc « Parcours de production » montre d'un coup d'œil où en est le livre : les étapes TERMINÉES (✓), l'étape EN COURS (→, mise en évidence) et les étapes à venir, VERROUILLÉES (🔒), avec une progression (ex. 3/6). Les étapes verrouillées s'ouvrent automatiquement dès que l'étape en cours est validée. C'est une vue de lecture : on valide toujours depuis le bloc d'étape habituel. Le parcours suit les vraies étapes du circuit (maquette, infographie, ISBN/références, BAT, impression, contrôle qualité).",
+      permissionModules: ["production", "manuscripts"],
+      departmentCodes: ["INFOG", "MAQ", "IMPR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-mes-travaux-integrations-couverture",
       version: "2026.10",
       title: "Nouveauté — « Mes travaux de production » inclut vos intégrations de correction",

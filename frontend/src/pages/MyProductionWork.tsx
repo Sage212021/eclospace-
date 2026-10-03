@@ -3,15 +3,12 @@ import { getMyProductionWork, type MyProductionWork as Work } from "../api/clien
 
 // « Mes travaux de production » (demande opérateur 03/10) — TABLEAU DE BORD du
 // pôle Production. À l'ouverture : une vue synthétique de TOUTE la charge de
-// l'utilisateur, par ÉTAPE de production (Total / En attente / En cours /
-// Validés-livrés), dans l'ordre réel du circuit. Chaque ligne d'étape se déroule
-// pour montrer les ouvrages concernés ; chaque ouvrage ouvre sa fiche de travail.
-// Les chiffres sont dynamiques (recalculés depuis le workflow réel à chaque
-// chargement) ; un même ouvrage peut être « livré » à une étape et « en attente »
-// à une autre — le workflow suit chaque étape séparément.
+// l'utilisateur, par ÉTAPE de production (dans l'ordre réel), avec pour chacune
+// combien d'ouvrages sont en attente / en cours / livrés. Chaque étape se déroule
+// pour montrer les ouvrages ; chaque ouvrage ouvre sa fiche de travail. Présenté
+// en cartes (lisible sur téléphone), charte Éclospace or/noir/ivoire.
 
-// Étapes de production, dans l'ordre réel, avec les codes workflow qu'elles
-// regroupent. L'intégration de correction (couverture) est la 1re étape du pôle.
+// Étapes de production, dans l'ordre réel, avec les codes workflow regroupés.
 const STAGES: { key: string; label: string; codes: string[] }[] = [
   { key: "integration", label: "Mes intégrations & corrections", codes: ["INTEGRATION_COUVERTURE", "INTEGRATION_TEXTE"] },
   { key: "maquette", label: "Maquette / Mise en page", codes: ["MISE_EN_PAGE"] },
@@ -21,18 +18,16 @@ const STAGES: { key: string; label: string; codes: string[] }[] = [
   { key: "impression", label: "Impression", codes: ["IMPRESSION", "CONTROLE_QUALITE_IMPRESSION"] },
 ];
 
-// État d'un travail (regroupe les 4 bacs internes en 3 colonnes lisibles) :
-//  • En attente = confié mais pas commencé OU bloqué par un préalable manquant ;
-//  • En cours   = travail commencé ;
-//  • Livré      = étape validée par l'utilisateur.
+// 4 bacs internes → 3 états lisibles.
 type EtatCol = "attente" | "cours" | "livre";
 function etatOf(w: Work): EtatCol {
   if (w.bucket === "termine") return "livre";
   if (w.bucket === "en_cours") return "cours";
-  return "attente"; // a_traiter + en_attente
+  return "attente";
 }
+const ATTENTE = "#B87400", COURS = "#D9B21A", LIVRE = "#2F7D4A";
 const ETAT_LABEL: Record<EtatCol, string> = { attente: "En attente", cours: "En cours", livre: "Livré" };
-const ETAT_COLOR: Record<EtatCol, string> = { attente: "#B87400", cours: "var(--eclosion-dark, #9a7a12)", livre: "#2F7D4A" };
+const ETAT_COLOR: Record<EtatCol, string> = { attente: ATTENTE, cours: "var(--eclosion-dark, #9a7a12)", livre: LIVRE };
 
 export function MyProductionWork({ onOpenManuscript, onOpenIntegration, canOpen }: { onOpenManuscript: (id: string) => void; onOpenIntegration: (id: string) => void; canOpen: boolean }) {
   const [rows, setRows] = useState<Work[] | null>(null);
@@ -46,108 +41,142 @@ export function MyProductionWork({ onOpenManuscript, onOpenIntegration, canOpen 
   }, []);
 
   const stageRows = (codes: string[]) => (rows ?? []).filter((r) => codes.includes(r.step_code));
-  const hasAny = (rows ?? []).length > 0;
+  const grand = rows ?? [];
+  const hasAny = grand.length > 0;
+  const totalAll = grand.length;
+  const livreAll = grand.filter((w) => etatOf(w) === "livre").length;
 
   return (
-    <section style={{ maxWidth: 900 }}>
-      <h1 style={{ fontSize: 20, marginBottom: 4 }}>Mes travaux de production</h1>
-      <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>
-        Vue d'ensemble de toute votre charge de production, étape par étape. Cliquez sur une étape pour voir les ouvrages concernés, puis sur un ouvrage pour ouvrir son travail.
+    <section style={{ maxWidth: 820, margin: "0 auto" }}>
+      <h1 style={{ fontSize: 21, margin: "0 0 4px", fontFamily: "var(--font-title, inherit)" }}>Mes travaux de production</h1>
+      <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 14px", lineHeight: 1.5 }}>
+        Toute votre charge de production, étape par étape. Touchez une étape pour voir les ouvrages, puis un ouvrage pour ouvrir son travail.
       </p>
 
-      {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 12px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
       {rows === null && !error && <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>}
 
       {rows !== null && !hasAny && (
-        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 20, textAlign: "center", color: "var(--muted)", fontSize: 13.5 }}>
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: 24, textAlign: "center", color: "var(--muted)", fontSize: 13.5 }}>
           Aucun travail de production ne vous est confié pour l'instant. Dès qu'un ouvrage vous sera transmis (intégration, mise en page, infographie, références, BAT…), il apparaîtra ici.
         </div>
       )}
 
       {rows !== null && hasAny && (
-        <div style={{ border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden", background: "var(--card)" }}>
-          {/* En-tête de colonnes */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 54px 90px 78px 78px", gap: 6, padding: "9px 12px", background: "var(--ivory, #FAF8F2)", borderBottom: "1px solid var(--line)", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.3, color: "var(--muted)" }}>
-            <span>Étape de production</span>
-            <span style={{ textAlign: "center" }}>Total</span>
-            <span style={{ textAlign: "center" }}>En attente</span>
-            <span style={{ textAlign: "center" }}>En cours</span>
-            <span style={{ textAlign: "center" }}>Livrés</span>
+        <>
+          {/* Bandeau de synthèse + légende des couleurs. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 12, padding: "10px 14px", background: "var(--ivory, #FAF8F2)", border: "1px solid var(--line)", borderRadius: 12 }}>
+            <div style={{ fontSize: 13 }}>
+              <span style={{ fontFamily: "var(--font-mono, ui-monospace, monospace)", fontWeight: 800, fontSize: 18 }}>{livreAll}</span>
+              <span style={{ color: "var(--muted)" }}> / {totalAll} livrés</span>
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginLeft: "auto", fontSize: 11.5, color: "var(--muted)" }}>
+              <Legend color={ATTENTE} label="En attente" />
+              <Legend color={COURS} label="En cours" />
+              <Legend color={LIVRE} label="Livré" />
+            </div>
           </div>
 
-          {STAGES.map((st) => {
-            const items = stageRows(st.codes);
-            const total = items.length;
-            const attente = items.filter((w) => etatOf(w) === "attente").length;
-            const cours = items.filter((w) => etatOf(w) === "cours").length;
-            const livre = items.filter((w) => etatOf(w) === "livre").length;
-            const expanded = openStage === st.key;
-            const disabled = total === 0;
-            return (
-              <div key={st.key} style={{ borderBottom: "1px solid var(--line)" }}>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => setOpenStage(expanded ? null : st.key)}
-                  style={{
-                    width: "100%", display: "grid", gridTemplateColumns: "1fr 54px 90px 78px 78px", gap: 6, alignItems: "center",
-                    padding: "11px 12px", border: "none", textAlign: "left", cursor: disabled ? "default" : "pointer",
-                    background: expanded ? "var(--eclosion-soft, #f6efd8)" : "transparent", fontSize: 13,
-                  }}
-                >
-                  <span style={{ fontWeight: 700, color: disabled ? "var(--muted)" : "var(--ink)", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span aria-hidden style={{ color: "var(--muted)", width: 12, display: "inline-block" }}>{disabled ? "" : expanded ? "▾" : "▸"}</span>
-                    {st.label}
-                  </span>
-                  <span style={{ textAlign: "center", fontWeight: 800, fontFamily: "var(--font-mono, ui-monospace, monospace)" }}>{total}</span>
-                  <Cell n={attente} color={ETAT_COLOR.attente} />
-                  <Cell n={cours} color={ETAT_COLOR.cours} />
-                  <Cell n={livre} color={ETAT_COLOR.livre} />
-                </button>
+          <div style={{ display: "grid", gap: 10 }}>
+            {STAGES.map((st, i) => {
+              const items = stageRows(st.codes);
+              const total = items.length;
+              const attente = items.filter((w) => etatOf(w) === "attente").length;
+              const cours = items.filter((w) => etatOf(w) === "cours").length;
+              const livre = items.filter((w) => etatOf(w) === "livre").length;
+              const expanded = openStage === st.key;
+              const empty = total === 0;
 
-                {expanded && total > 0 && (
-                  <div style={{ padding: "2px 12px 12px", background: "var(--ivory, #FAF8F2)" }}>
-                    {items.map((w) => {
-                      const etat = etatOf(w);
-                      return (
-                        <div key={`${w.manuscript_id}-${w.step_code}`} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", borderTop: "1px solid #ece6d4", padding: "9px 2px" }}>
-                          <div style={{ flex: 1, minWidth: 220 }}>
-                            <div style={{ fontWeight: 600, fontSize: 13.5 }}>📕 {w.title}</div>
-                            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                              <span style={{ fontFamily: "var(--font-mono, ui-monospace, monospace)" }}>{w.manuscript_number}</span>
-                              <span style={{ fontWeight: 700, color: ETAT_COLOR[etat] }}>{etat === "livre" ? "✓ " : ""}{ETAT_LABEL[etat]}</span>
+              return (
+                <div key={st.key} style={{ border: `1px solid ${expanded ? "var(--eclosion, #D9B21A)" : "var(--line)"}`, borderRadius: 12, background: "var(--card)", overflow: "hidden", opacity: empty ? 0.6 : 1, transition: "border-color .15s" }}>
+                  <button
+                    type="button"
+                    disabled={empty}
+                    onClick={() => setOpenStage(expanded ? null : st.key)}
+                    style={{ width: "100%", border: "none", background: expanded ? "var(--eclosion-soft, #f6efd8)" : "transparent", textAlign: "left", padding: "12px 14px", cursor: empty ? "default" : "pointer", display: "flex", alignItems: "center", gap: 12 }}
+                  >
+                    {/* Numéro d'étape (pastille) */}
+                    <span style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 12.5, fontWeight: 800, fontFamily: "var(--font-mono, ui-monospace, monospace)", background: empty ? "var(--line)" : "var(--eclosion, #D9B21A)", color: empty ? "var(--muted)" : "#0B0B0C" }}>{i + 1}</span>
+
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: empty ? "var(--muted)" : "var(--ink)" }}>{st.label}</span>
+                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                        {empty ? "Aucun ouvrage" : [
+                          attente > 0 ? `${attente} en attente` : null,
+                          cours > 0 ? `${cours} en cours` : null,
+                          livre > 0 ? `${livre} livré${livre > 1 ? "s" : ""}` : null,
+                        ].filter(Boolean).join(" · ") || `${total} ouvrage${total > 1 ? "s" : ""}`}
+                      </span>
+                      {/* Barre segmentée des états (proportions). */}
+                      {!empty && (
+                        <span style={{ display: "flex", height: 5, borderRadius: 999, overflow: "hidden", marginTop: 7, background: "var(--line)" }}>
+                          {attente > 0 && <span style={{ flexGrow: attente, background: ATTENTE }} />}
+                          {cours > 0 && <span style={{ flexGrow: cours, background: COURS }} />}
+                          {livre > 0 && <span style={{ flexGrow: livre, background: LIVRE }} />}
+                        </span>
+                      )}
+                    </span>
+
+                    {/* Total + chevron */}
+                    <span style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ textAlign: "right" }}>
+                        <span style={{ display: "block", fontSize: 17, fontWeight: 800, fontFamily: "var(--font-mono, ui-monospace, monospace)", color: empty ? "var(--muted)" : "var(--ink)" }}>{total}</span>
+                        <span style={{ display: "block", fontSize: 9.5, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)" }}>Total</span>
+                      </span>
+                      {!empty && <span aria-hidden style={{ color: "var(--muted)", fontSize: 12, transform: expanded ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▸</span>}
+                    </span>
+                  </button>
+
+                  {expanded && total > 0 && (
+                    <div style={{ padding: "0 14px 8px" }}>
+                      {items.map((w) => {
+                        const etat = etatOf(w);
+                        return (
+                          <div key={`${w.manuscript_id}-${w.step_code}`} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", borderTop: "1px solid #ece6d4", padding: "10px 0" }}>
+                            <div style={{ flex: 1, minWidth: 200 }}>
+                              <div style={{ fontWeight: 600, fontSize: 13.5, display: "flex", alignItems: "center", gap: 6 }}>
+                                <span aria-hidden>📕</span>{w.title}
+                              </div>
+                              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                <span style={{ fontFamily: "var(--font-mono, ui-monospace, monospace)" }}>{w.manuscript_number}</span>
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: ETAT_COLOR[etat] }}>
+                                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: ETAT_COLOR[etat], display: "inline-block" }} />
+                                  {ETAT_LABEL[etat]}
+                                </span>
+                              </div>
+                              {w.blocked_reason && <div style={{ fontSize: 12, color: ATTENTE, marginTop: 3 }}>⏳ En attente : {w.blocked_reason}.</div>}
+                              {w.detail && !w.blocked_reason && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>{w.detail}</div>}
                             </div>
-                            {w.blocked_reason && <div style={{ fontSize: 12, color: "#B87400", marginTop: 3 }}>⏳ En attente : {w.blocked_reason}.</div>}
-                            {w.detail && !w.blocked_reason && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>{w.detail}</div>}
+                            {canOpen ? (
+                              <button
+                                onClick={() => (w.kind === "integration" ? onOpenIntegration(w.manuscript_id) : onOpenManuscript(w.manuscript_id))}
+                                style={{ border: "1px solid var(--eclosion, #D9B21A)", background: etat === "livre" ? "#fff" : "var(--eclosion, #D9B21A)", color: etat === "livre" ? "var(--eclosion-dark, #9a7a12)" : "#0B0B0C", borderRadius: 8, padding: "6px 15px", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}
+                              >
+                                Ouvrir
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: 12, color: "var(--muted)" }}>Consultation seule</span>
+                            )}
                           </div>
-                          {canOpen ? (
-                            <button
-                              onClick={() => (w.kind === "integration" ? onOpenIntegration(w.manuscript_id) : onOpenManuscript(w.manuscript_id))}
-                              style={{ border: "1px solid var(--eclosion, #D9B21A)", background: etat === "livre" ? "#fff" : "var(--eclosion, #D9B21A)", color: etat === "livre" ? "var(--eclosion-dark, #9a7a12)" : "#0B0B0C", borderRadius: 8, padding: "6px 14px", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}
-                            >
-                              Ouvrir
-                            </button>
-                          ) : (
-                            <span style={{ fontSize: 12, color: "var(--muted)" }}>Consultation seule</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </section>
   );
 }
 
-function Cell({ n, color }: { n: number; color: string }) {
+function Legend({ color, label }: { color: string; label: string }) {
   return (
-    <span style={{ textAlign: "center", fontWeight: 700, fontFamily: "var(--font-mono, ui-monospace, monospace)", color: n > 0 ? color : "var(--line)" }}>
-      {n}
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+      <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, display: "inline-block" }} />
+      {label}
     </span>
   );
 }

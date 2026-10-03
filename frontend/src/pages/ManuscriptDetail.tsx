@@ -59,6 +59,7 @@ import { DocPrintMenu } from "../components/DocPrintMenu";
 import { printEditorialDecisionLetter, type PrintOpts } from "../lib/print";
 import { Spine } from "../components/Spine";
 import { ProductionParcours } from "../components/ProductionParcours";
+import { StepAssigneeControl } from "../components/StepAssigneeControl";
 import { CorrectionReturns } from "../components/CorrectionReturns";
 import { IncomingDeliverable } from "../components/IncomingDeliverable";
 import { ContractsSection } from "../components/ContractsSection";
@@ -547,6 +548,14 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
 
       <div id="fiche-actions" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20, scrollMarginTop: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Étape courante : {manuscript.status.label}</div>
+
+        {/* « Confier l'étape » directement sur la fiche (demande opérateur 03/10,
+            cas « Rêver en Afrique ») : les profils habilités (direction, resp.
+            production/infographie) choisissent ici la personne responsable de
+            l'étape courante — ex. confier l'attribution des références à un
+            infographe — sans passer par la liste par étape. L'encart se masque
+            tout seul aux étapes qui ne se confient pas nominativement. */}
+        {canValidate && <StepAssigneeControl manuscriptId={manuscript.id} canAssign={canValidate} display="block" />}
 
         {/* Un manuscrit resté à « Réception » (donnée ancienne : la création
             fait normalement passer directement à la vérification) : bouton pour

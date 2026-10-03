@@ -2070,6 +2070,14 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-mes-travaux-tableau-de-bord",
+      version: "2026.10",
+      title: "Nouveauté — « Mes travaux de production » devient un tableau de bord",
+      body: "« Mes travaux de production » s'ouvre désormais sur un TABLEAU récapitulatif de toute votre charge, étape par étape (dans l'ordre réel) : Mes intégrations & corrections → Maquette/Mise en page → Infographie/Couverture → Références/ISBN/Dépôt légal → BAT/Final → Impression. Pour chaque étape : le Total, combien sont En attente, En cours, et Validés/Livrés. D'un coup d'œil vous savez combien de livres sont à chaque étape — sans ouvrir chaque sous-menu. Cliquez sur une étape pour dérouler la liste des ouvrages concernés, puis sur un ouvrage pour ouvrir directement son travail. Les chiffres sont dynamiques : dès qu'une étape est livrée, le compteur se met à jour et l'ouvrage passe à l'étape suivante.",
+      permissionModules: ["production", "isbn", "bat"],
+      departmentCodes: ["INFOG", "MAQ", "IMPR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-mes-travaux-de-production",
       version: "2026.10",
       title: "Nouveauté — « Mes travaux de production » : un seul espace pour toute la production",

@@ -976,7 +976,9 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         manuscript: { select: { id: true, manuscriptNumber: true, title: true } },
       },
       orderBy: { validatedAt: "desc" },
-      take: 20,
+      // Plafond large : le tableau récapitulatif « Mes travaux de production »
+      // compte les étapes livrées par étape — on ne veut pas sous-compter.
+      take: 500,
     });
 
     // Progression : nombre d'étapes du segment déjà VALIDÉES pour chaque ouvrage.

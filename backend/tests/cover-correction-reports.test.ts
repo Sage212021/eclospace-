@@ -107,13 +107,13 @@ describe("Rapports de correction de couverture (branche infographe)", () => {
     const mp = multipart("pirate.txt", "Tentative.");
     const up = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/correction-cycle/couverture_finale`, headers: { cookie: otherInfoCookie, ...mp.headers }, payload: mp.body });
     expect(up.statusCode).toBe(403);
-    expect(up.json().code).toBe("not_integrator");
+    expect(up.json().code).toBe("not_authorized_for_phase");
   });
 
   it("un infographe ne peut pas déposer un RAPPORT de correction (réservé au correcteur) — 403", async () => {
     const mp = multipart("rapport.txt", "Tentative rapport.");
     const up = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/correction-cycle/couverture_1`, headers: { cookie: infoCookie, ...mp.headers }, payload: mp.body });
     expect(up.statusCode).toBe(403);
-    expect(up.json().code).toBe("forbidden_phase");
+    expect(up.json().code).toBe("not_authorized_for_phase");
   });
 });

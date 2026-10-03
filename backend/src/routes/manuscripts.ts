@@ -1246,17 +1246,44 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
         const st = await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "INFOGRAPHIE" } }, orderBy: { createdAt: "desc" }, select: { responsibleId: true } });
         return st?.responsibleId ?? null;
       })();
-      // Habilitation de dépôt : les rôles éditoriaux (tasks/manuscripts:saisie)
-      // gèrent tout le cycle ; un utilisateur seulement « production » (infographe)
-      // ne peut déposer QUE ses retours de couverture (retour intégration, finale)
-      // et seulement s'il est l'infographe de l'ouvrage.
-      const canEditCycle = request.user!.permissions.has("tasks:saisie") || request.user!.permissions.has("manuscripts:saisie");
-      if (!canEditCycle) {
-        if (!isCoverIntegrationDeposit(phase)) {
-          return reply.code(403).send({ code: "forbidden_phase", message: "Vous ne pouvez déposer ici que la couverture intégrée (retour infographie) et la couverture finale." });
+      // HABILITATION PAR PHASE (demande opérateur 03/10) — on fait respecter QUI
+      // dépose QUOI dans le relais de correction, sinon un profil peut déposer la
+      // pièce d'un autre (constat : un éditeur a déposé la 1re correction) :
+      //   • 1re correction / 2e relecture (texte) + rapports de couverture
+      //     (1ʳᵉ/2ᵉ) → le CORRECTEUR de l'ouvrage ;
+      //   • version intégrée / version finale (VCF) → le RESPONSABLE ÉDITORIAL
+      //     intégrateur de l'ouvrage ;
+      //   • couverture intégrée / couverture finale → l'INFOGRAPHE de l'ouvrage.
+      // On identifie l'acteur par l'affectation (responsable étape / intégrateur /
+      // infographe) ; à défaut d'affectation, on retombe sur le rôle attendu.
+      // L'administrateur général garde une porte de secours (déblocage).
+      {
+        const me = request.user!.id;
+        const roles = new Set(request.user!.roles);
+        const isSuperAdmin = roles.has("ADMIN_GENERAL");
+        const correcteurId = (await prisma.manuscriptStep.findFirst({ where: { manuscriptId: id, status: { code: "CORRECTION" } }, orderBy: { createdAt: "desc" }, select: { responsibleId: true } }))?.responsibleId ?? null;
+        const integrateurId = manuscript.correctionIntegratorId ?? null;
+
+        const CORRECTEUR_PHASES = new Set(["rapport_1", "relecture_2", "couverture_1", "couverture_2"]);
+        const INTEGRATEUR_TEXTE_PHASES = new Set(["integration_1", "integration_finale"]);
+        const INFOGRAPHE_PHASES = new Set(["couverture_integration_1", "couverture_finale"]);
+
+        let denied: string | null = null;
+        if (!isSuperAdmin) {
+          if (CORRECTEUR_PHASES.has(phase)) {
+            const ok = correcteurId ? me === correcteurId : roles.has("CORRECTEUR") || roles.has("MEMBRE_COMITE_LECTURE");
+            if (!ok) denied = "Ce dépôt (rapport de correction) revient au CORRECTEUR de l'ouvrage : un autre profil ne peut pas déposer la correction à sa place.";
+          } else if (INTEGRATEUR_TEXTE_PHASES.has(phase)) {
+            const ok = integrateurId ? me === integrateurId : roles.has("DIR_EDITORIAL") || roles.has("ASSISTANT_EDITORIAL");
+            if (!ok) denied = "Ce dépôt (version intégrée / version corrigée finale) revient au RESPONSABLE ÉDITORIAL intégrateur de l'ouvrage.";
+          } else if (INFOGRAPHE_PHASES.has(phase)) {
+            const ok = infographeId ? me === infographeId : roles.has("RESP_INFOGRAPHIE") || roles.has("MAQUETTISTE");
+            if (!ok) denied = "Ce retour de couverture revient à l'INFOGRAPHE désigné de l'ouvrage.";
+          }
         }
-        if (infographeId !== request.user!.id) {
-          return reply.code(403).send({ code: "not_integrator", message: "Seul l'infographe désigné de cet ouvrage peut déposer le retour de couverture." });
+        if (denied) {
+          void writeAuditLog({ userId: me, action: "access_denied", entityType: "correction_phase", entityId: `${id}:${phase}`, newValues: { phase }, ipAddress: request.ip }).catch(() => {});
+          return reply.code(403).send({ code: "not_authorized_for_phase", message: denied });
         }
       }
       // VERROU (Lot 3) : la version corrigée finale (VCF) ne peut être déposée que

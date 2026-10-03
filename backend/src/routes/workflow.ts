@@ -600,6 +600,21 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // « MÊME AGENT SUR TOUTE LA PRODUCTION » (demande opérateur 03/10) :
+      // l'infographe désigné à l'intégration des corrections de couverture
+      // (coverIntegratorId) devient le PROPRIÉTAIRE DE PRODUCTION et suit/exécute
+      // les étapes graphiques jusqu'à l'attribution des références. Quand aucune
+      // affectation explicite n'est faite, on l'auto-affecte comme responsable de
+      // l'étape suivante. Le BAT et l'impression restent au pôle dédié (contre-
+      // validés par le DG) : on NE propage PAS au-delà de l'attribution des références.
+      const PROD_OWNER_STEPS = ["MISE_EN_PAGE", "INFOGRAPHIE", "ATTRIBUTION_REFERENCES"];
+      let autoOwnerId: string | null = null;
+      if (!assignee_id && nextStatus && PROD_OWNER_STEPS.includes(nextStatus.code) && manuscript.coverIntegratorId) {
+        const owner = await prisma.user.findFirst({ where: { id: manuscript.coverIntegratorId, status: "active" }, select: { id: true } });
+        autoOwnerId = owner?.id ?? null;
+      }
+      const effectiveAssigneeId = assignee_id ?? autoOwnerId;
+
       await prisma.$transaction(async (tx) => {
         await tx.manuscriptStep.upsert({
           where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
@@ -636,17 +651,18 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
             },
           });
 
-          if (assignee_id && nextStatus.code !== "COMITE_LECTURE") {
-            // Affectation nominative : la personne désignée devient responsable
-            // de l'étape suivante (préparée ici) et est notifiée personnellement.
+          if (effectiveAssigneeId && nextStatus.code !== "COMITE_LECTURE") {
+            // Affectation nominative (explicite OU propriétaire de production
+            // auto-affecté) : la personne devient responsable de l'étape suivante
+            // et est notifiée personnellement.
             await tx.manuscriptStep.upsert({
               where: { manuscriptId_statusId: { manuscriptId: id, statusId: nextStatus.id } },
-              update: { responsibleId: assignee_id, plannedStart: now },
-              create: { manuscriptId: id, statusId: nextStatus.id, responsibleId: assignee_id, plannedStart: now },
+              update: { responsibleId: effectiveAssigneeId, plannedStart: now },
+              create: { manuscriptId: id, statusId: nextStatus.id, responsibleId: effectiveAssigneeId, plannedStart: now },
             });
             await tx.notification.create({
               data: {
-                userId: assignee_id,
+                userId: effectiveAssigneeId,
                 type: "affectation",
                 priority: "medium",
                 title: `Dossier confié — ${nextStatus.label}`,

@@ -344,6 +344,11 @@ async function main() {
     "production:saisie",
     "production:administration",
     "manuscripts:consultation",
+    // « Même agent sur toute la production » (demande opérateur 03/10) :
+    // l'infographe de production exécute aussi l'attribution des références
+    // (ISBN / dépôt légal) pour les ouvrages qui le suivent → droits ISBN.
+    "isbn:consultation",
+    "isbn:saisie",
   ]);
   await grant("DIR_EDITORIAL", ["production:consultation"]);
 
@@ -354,6 +359,10 @@ async function main() {
   // BAT et contrôle qualité (Ch. 14).
   await grant("RESP_QUALITE", ["bat:consultation", "bat:saisie", "bat:validation", "manuscripts:consultation"]);
   await grant("DIR_EDITORIAL", ["bat:consultation", "bat:validation"]);
+  // Le DG contre-valide à partir du BAT Final et la suite (demande opérateur
+  // 03/10) : il reçoit l'autorité de validation du BAT (il a déjà celle de
+  // l'impression plus bas).
+  await grant("DIR_GENERAL", ["bat:consultation", "bat:validation"]);
 
   // Impression et fabrication (Ch. 15).
   await grant("RESP_IMPRESSION", [
@@ -2067,6 +2076,14 @@ async function main() {
       title: "Nouveauté — « Mes travaux de production » inclut vos intégrations de correction",
       body: "Les intégrations de correction de couverture (le travail de l'infographe / du maquettiste : reprendre les corrections du correcteur sur la couverture) apparaissent désormais aussi dans « Mes travaux de production ». Plus besoin d'aller dans un écran séparé pour les voir : elles sont listées avec vos autres travaux, avec le nombre de corrections à intégrer. Un clic sur « Ouvrir » vous mène directement à l'ouvrage, sur sa ligne couverture, prêt à déposer. L'écran « Mes intégrations de correction » reste disponible comme avant.",
       permissionModules: ["production"],
+      departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
+      slug: "2026-10-infographe-proprietaire-production",
+      version: "2026.10",
+      title: "Nouveauté — L'infographe suit son ouvrage sur toute la production",
+      body: "Quand un infographe est désigné à l'intégration des corrections de couverture, il devient le « propriétaire de production » de l'ouvrage : à chaque étape graphique suivante (maquette, infographie, puis attribution des références / ISBN / dépôt légal), l'ouvrage lui est automatiquement confié — il n'a plus besoin qu'on le lui réaffecte à la main, et il le retrouve dans « Mes travaux de production » à chaque étape. L'infographe reçoit pour cela les droits ISBN / dépôt légal. À partir du BAT Final et de l'impression, c'est le pôle dédié qui opère et la Direction générale qui contre-valide (le DG reçoit l'autorité de validation du BAT). Note : les ouvrages déjà engagés avant cette mise à jour gardent leur affectation actuelle ; la règle s'applique aux prochains passages d'étape.",
+      permissionModules: ["production", "isbn", "bat", "manuscripts"],
       departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
     },
     {

@@ -24,7 +24,7 @@ const STEP_ASSIGNABLE_ROLES: Record<string, string[]> = {
   // les maquettistes — dans les faits ils s'en chargent parfois (demande
   // opérateur 01/10/2026). Ils reçoivent le droit ISBN au seed pour pouvoir le
   // faire réellement une fois le dossier transmis.
-  ATTRIBUTION_REFERENCES: ["ASSISTANT_EDITORIAL", "DIR_EDITORIAL", "MAQUETTISTE"],
+  ATTRIBUTION_REFERENCES: ["ASSISTANT_EDITORIAL", "DIR_EDITORIAL", "MAQUETTISTE", "RESP_INFOGRAPHIE"],
 };
 
 // Filtre Prisma sur `userRoles` désignant les personnes affectables à cette

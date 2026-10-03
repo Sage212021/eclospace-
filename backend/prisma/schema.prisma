@@ -2120,6 +2120,12 @@ model ManuscriptStep {
   actualEnd     DateTime?      @map("actual_end")
   validationBy  String?        @map("validation_by")
   validatedAt   DateTime?      @map("validated_at")
+  // Pré-validation (1re signature) pour les étapes à DOUBLE validation — ex. le
+  // BAT Final : l'opérateur (infographe) soumet, puis la Direction générale
+  // contre-valide (validatedAt). Tant que validatedAt est nul, l'ouvrage reste à
+  // l'étape ; la contre-validation ne peut être faite par le pré-validateur.
+  preValidatedAt DateTime?     @map("pre_validated_at")
+  preValidatedBy String?       @map("pre_validated_by")
   observations  String?
 
   // Étapes « à option » (Expertise, Réécriture, Projet/Planification) : trace de

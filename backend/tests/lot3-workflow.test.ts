@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, uniqueIsbnPrefix, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload , seedVc1 } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, uniqueIsbnPrefix, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload , seedVc1 } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
@@ -17,12 +17,17 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
   let adminId: string;
   let genreId: string;
   let printerId: string;
+  // BAT à double validation : la contre-validation exige une 2e personne
+  // distincte habilitée (manuscripts:validation).
+  let dgCookie: string;
 
   beforeAll(async () => {
     app = await buildApp();
     const admin = await prisma.user.findUniqueOrThrow({ where: { username: "admin" } });
     adminId = admin.id;
     adminCookie = await loginCookie(app, "admin", ADMIN_PASSWORD);
+    await createUserWithRole("dir_general_lot3wf", "DIR_GENERAL", "DirLot3Wf123!");
+    dgCookie = await loginCookie(app, "dir_general_lot3wf", "DirLot3Wf123!");
     const genre = await prisma.genre.findUniqueOrThrow({ where: { code: "ROMAN" } });
     genreId = genre.id;
 
@@ -238,7 +243,17 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
     await app.inject({ method: "PATCH", url: `/api/v1/bat/${bat.id}/status`, headers: { cookie: adminCookie }, payload: { status: "awaiting_signature" } });
     await app.inject({ method: "POST", url: `/api/v1/bat/${bat.id}/sign`, headers: { cookie: adminCookie }, payload: {} });
 
-    const validatedBat = await validate(manuscript.id, "VALIDATION_BAT");
+    // BAT à DOUBLE validation : 1re signature (admin pré-valide, pas d'avancement),
+    // puis contre-validation par une personne distincte habilitée (DG).
+    const preBat = await validate(manuscript.id, "VALIDATION_BAT");
+    expect(preBat.statusCode).toBe(200);
+    expect(preBat.json().pending_counter_validation).toBe(true);
+    const validatedBat = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscript.id}/steps/VALIDATION_BAT/validate`,
+      headers: { cookie: dgCookie },
+      payload: {},
+    });
     expect(validatedBat.statusCode).toBe(200);
     // D-010 : la validation du BAT mène désormais à la CONTRACTUALISATION, qui
     // précède l'impression.

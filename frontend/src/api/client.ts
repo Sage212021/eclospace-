@@ -536,7 +536,7 @@ export function validateStep(
     realization?: Record<string, string | number>;
   },
 ) {
-  return request<{ advanced: boolean; status: string | null; realization_mode?: string | null }>(`/api/v1/manuscripts/${manuscriptId}/steps/${step}/validate`, {
+  return request<{ advanced: boolean; status: string | null; realization_mode?: string | null; pending_counter_validation?: boolean; message?: string }>(`/api/v1/manuscripts/${manuscriptId}/steps/${step}/validate`, {
     method: "POST",
     body: JSON.stringify(options ?? {}),
   });
@@ -565,6 +565,21 @@ export type OptionalStepMeta =
     };
 export function getOptionalStep(manuscriptId: string, code: string) {
   return request<OptionalStepMeta>(`/api/v1/manuscripts/${manuscriptId}/optional-step/${code}`);
+}
+
+// État de la DOUBLE validation du BAT Final : 1re signature (pré-validation) posée
+// ou non, par qui, et ce que l'utilisateur courant peut faire.
+export interface BatValidationState {
+  at_bat: boolean;
+  pre_validated: boolean;
+  pre_validated_at: string | null;
+  pre_validator: { id: string; username: string } | null;
+  can_pre_validate: boolean;
+  can_counter_validate: boolean;
+  is_pre_validator: boolean;
+}
+export function getBatValidationState(manuscriptId: string) {
+  return request<BatValidationState>(`/api/v1/manuscripts/${manuscriptId}/bat-validation-state`);
 }
 
 // Paramètre : mode (facultative / obligatoire) des étapes « à option ».

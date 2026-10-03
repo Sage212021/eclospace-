@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Manuscript, TaskType } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission, requireAuth } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission, requireAuth } from "../lib/permissions.js";
 import { missingRequiredCorrectionPhases, coverFinaleMissing, correctionCycleState } from "../lib/correctionCycle.js";
 import { closeCorrectionCycle, ensureOpenCorrectionCycle } from "../lib/correctionCycleEntity.js";
 import { isDeliverableRequired, hasStepDeliverable, DELIVERABLE_LABELS } from "../lib/stepDeliverables.js";
@@ -193,7 +193,18 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       // sa mise en page (uniquement SON ouvrage, à SON étape). Aucune autre étape
       // n'est ouverte aux non-validateurs.
       if (!request.user!.permissions.has("manuscripts:validation")) {
-        const allowed = await canSelfCloseStep(id, manuscript.statusId, request.user!, targetStatus.code);
+        // BAT à DOUBLE validation : l'opérateur de production (infographe affecté,
+        // ou porteur du droit « bat:saisie ») peut PRÉ-valider le BAT Final — la
+        // 1re signature. La contre-validation (2e signature) exige, elle,
+        // « manuscripts:validation » (Direction générale) : elle est contrôlée plus
+        // bas, dans le bloc VALIDATION_BAT. On laisse donc passer ici l'opérateur
+        // habilité à soumettre, sans lui ouvrir l'avancement pour autant.
+        const canSubmitBat =
+          targetStatus.code === "VALIDATION_BAT" &&
+          (request.user!.permissions.has("bat:saisie") ||
+            (await isAssignedForStep(id, manuscript.statusId, request.user!.id, targetStatus.code)));
+        const allowed =
+          canSubmitBat || (await canSelfCloseStep(id, manuscript.statusId, request.user!, targetStatus.code));
         if (!allowed) {
           void writeAuditLog({ userId: request.user!.id, action: "access_denied", entityType: "permission", entityId: "manuscripts:validation", newValues: { method: request.method, url: request.url }, ipAddress: request.ip }).catch(() => {});
           return reply.code(403).send({ code: "forbidden", message: "Action non autorisée : réservé à la direction éditoriale — ou au correcteur affecté, pour clôturer sa propre correction." });
@@ -424,6 +435,20 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       // Ch. 14 §14.6 : la signature électronique du BAT est l'acte qui
       // autorise le passage à l'impression — cette étape ne fait que
       // constater qu'un BAT signé existe pour le cycle courant.
+      //
+      // BAT à DOUBLE VALIDATION (demande opérateur 03/10/2026) : le BAT Final
+      // autorise l'impression, c'est l'étape la plus sensible. On exige DEUX
+      // signatures de deux personnes différentes :
+      //   1) PRÉ-VALIDATION — l'opérateur de production (infographe affecté, ou
+      //      porteur de « bat:saisie ») soumet le BAT. L'ouvrage NE PROGRESSE PAS :
+      //      il reste à l'étape, en attente de contre-validation. La Direction
+      //      générale est notifiée.
+      //   2) CONTRE-VALIDATION — la Direction générale (« manuscripts:validation »),
+      //      qui ne peut PAS être la même personne que le pré-validateur, consulte
+      //      puis contre-valide. C'est seulement là que l'ouvrage passe à
+      //      l'impression.
+      // Le bon à tirer signé par l'auteur (BatRecord « signed ») reste un
+      // prérequis des DEUX actes.
       if (targetStatus.code === "VALIDATION_BAT") {
         const latestBat = await prisma.batRecord.findFirst({ where: { manuscriptId: id }, orderBy: { cycleNumber: "desc" } });
         if (!latestBat || latestBat.status !== "signed") {
@@ -432,6 +457,64 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
             message: "Le BAT n'est pas signé : impossible de valider cette étape.",
           });
         }
+
+        const batStep = await prisma.manuscriptStep.findUnique({
+          where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
+          select: { preValidatedAt: true, preValidatedBy: true },
+        });
+        const hasFinalAuthority = request.user!.permissions.has("manuscripts:validation");
+
+        if (!batStep?.preValidatedAt) {
+          // 1re signature — PRÉ-VALIDATION. On trace le pré-validateur, on NOTIFIE
+          // la Direction générale, on NE FAIT PAS avancer l'ouvrage.
+          await prisma.manuscriptStep.upsert({
+            where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
+            update: { preValidatedAt: now, preValidatedBy: request.user!.id, observations, actualStart: now },
+            create: { manuscriptId: id, statusId: targetStatus.id, preValidatedAt: now, preValidatedBy: request.user!.id, actualStart: now, observations },
+          });
+          await notifyRole({
+            roleCode: "DIR_GENERAL",
+            type: "autre",
+            priority: "high",
+            title: `BAT à contre-valider — ${manuscript.manuscriptNumber}`,
+            body: `${request.user!.username} a validé le BAT Final de « ${manuscript.title} ». Votre contre-validation est requise pour autoriser l'impression.`,
+            entityType: "manuscript",
+            entityId: id,
+          });
+          await writeAuditLog({
+            userId: request.user!.id,
+            action: "validate",
+            entityType: "manuscript",
+            entityId: id,
+            oldValues: { statusCode: targetStatus.code },
+            newValues: { preValidated: true, advanced: false, observations },
+            ipAddress: request.ip,
+          });
+          return reply.send({
+            advanced: false,
+            pending_counter_validation: true,
+            message: "BAT validé — en attente de la contre-validation de la Direction générale pour autoriser l'impression.",
+          });
+        }
+
+        // 2e signature — CONTRE-VALIDATION. Réservée à la Direction générale et
+        // interdite au pré-validateur (double signature de deux personnes).
+        if (!hasFinalAuthority) {
+          void writeAuditLog({ userId: request.user!.id, action: "access_denied", entityType: "permission", entityId: "manuscripts:validation", newValues: { reason: "bat_counter_validation", method: request.method, url: request.url }, ipAddress: request.ip }).catch(() => {});
+          return reply.code(403).send({
+            code: "forbidden",
+            message: "Le BAT est déjà pré-validé : seule la Direction générale peut le contre-valider pour autoriser l'impression.",
+          });
+        }
+        if (batStep.preValidatedBy === request.user!.id) {
+          return reply.code(409).send({
+            code: "bat_same_signer",
+            message: "Vous avez déjà pré-validé ce BAT : la contre-validation doit être faite par une autre personne de la Direction.",
+          });
+        }
+        // Autorité confirmée, signataire différent : on laisse l'avancement
+        // normal se poursuivre (le bloc transactionnel plus bas fait passer
+        // l'ouvrage à l'impression et renseigne validatedAt).
       }
 
       // Ch. 15 §15.4 : l'impression proprement dite suppose un bon de
@@ -882,6 +965,54 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         has_department: !!roleFilter,
         current_assignee: step?.responsible ? { id: step.responsible.id, username: step.responsible.username } : null,
         assignees,
+      });
+    },
+  );
+
+  // État de la DOUBLE validation du BAT Final (demande opérateur 03/10/2026) :
+  // dit à l'écran si la 1re signature (pré-validation de l'infographe) est posée,
+  // par qui, et ce que l'utilisateur courant peut faire — pré-valider (soumettre)
+  // ou contre-valider (autorité Direction générale, signataire différent).
+  fastify.get(
+    "/api/v1/manuscripts/:id/bat-validation-state",
+    // Visible à qui peut consulter l'ouvrage, valider les étapes (Direction
+    // générale contre-validatrice) ou consulter/soumettre le BAT (infographe).
+    {
+      preHandler: requireAnyPermission([
+        { module: "manuscripts", action: "consultation" },
+        { module: "manuscripts", action: "validation" },
+        { module: "bat", action: "consultation" },
+        { module: "bat", action: "saisie" },
+      ]),
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true, statusId: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const current = await prisma.workflowStatus.findUnique({ where: { id: manuscript.statusId } });
+      const atBat = current?.code === "VALIDATION_BAT";
+      const step = atBat
+        ? await prisma.manuscriptStep.findUnique({
+            where: { manuscriptId_statusId: { manuscriptId: id, statusId: manuscript.statusId } },
+            select: { preValidatedAt: true, preValidatedBy: true, responsibleId: true },
+          })
+        : null;
+      const preValidator = step?.preValidatedBy
+        ? await prisma.user.findUnique({ where: { id: step.preValidatedBy }, select: { id: true, username: true } })
+        : null;
+      const hasFinalAuthority = request.user!.permissions.has("manuscripts:validation");
+      const preValidated = Boolean(step?.preValidatedAt);
+      const isAssigned = atBat ? await isAssignedForStep(id, manuscript.statusId, request.user!.id, "VALIDATION_BAT") : false;
+      const canSubmit = request.user!.permissions.has("bat:saisie") || isAssigned;
+      return reply.send({
+        at_bat: atBat,
+        pre_validated: preValidated,
+        pre_validated_at: step?.preValidatedAt ?? null,
+        pre_validator: preValidator ? { id: preValidator.id, username: preValidator.username } : null,
+        // Ce que l'utilisateur courant peut faire maintenant :
+        can_pre_validate: atBat && !preValidated && canSubmit,
+        can_counter_validate: atBat && preValidated && hasFinalAuthority && step?.preValidatedBy !== request.user!.id,
+        is_pre_validator: Boolean(step?.preValidatedBy && step.preValidatedBy === request.user!.id),
       });
     },
   );

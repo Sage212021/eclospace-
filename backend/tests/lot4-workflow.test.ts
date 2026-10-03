@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, uniqueIsbnPrefix, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload , seedVc1 } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, uniqueIsbnPrefix, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload , seedVc1 } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
@@ -18,12 +18,16 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
   let genreId: string;
   let printerId: string;
   let warehouseId: string;
+  // BAT à double validation : contre-validation par une 2e personne habilitée.
+  let dgCookie: string;
 
   beforeAll(async () => {
     app = await buildApp();
     const admin = await prisma.user.findUniqueOrThrow({ where: { username: "admin" } });
     adminId = admin.id;
     adminCookie = await loginCookie(app, "admin", ADMIN_PASSWORD);
+    await createUserWithRole("dir_general_lot4wf", "DIR_GENERAL", "DirLot4Wf123!");
+    dgCookie = await loginCookie(app, "dir_general_lot4wf", "DirLot4Wf123!");
     const genre = await prisma.genre.findUniqueOrThrow({ where: { code: "ROMAN" } });
     genreId = genre.id;
 
@@ -176,7 +180,9 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
     }
     await app.inject({ method: "PATCH", url: `/api/v1/bat/${bat.id}/status`, headers: { cookie: adminCookie }, payload: { status: "awaiting_signature" } });
     await app.inject({ method: "POST", url: `/api/v1/bat/${bat.id}/sign`, headers: { cookie: adminCookie }, payload: {} });
+    // BAT à DOUBLE validation : 1re signature (admin) puis contre-validation (DG).
     await validate(manuscript.id, "VALIDATION_BAT");
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/VALIDATION_BAT/validate`, headers: { cookie: dgCookie }, payload: {} });
     // D-010 : la contractualisation suit désormais la validation du BAT.
     await validate(manuscript.id, "CONTRACTUALISATION");
 

@@ -329,7 +329,10 @@ async function main() {
     "manuscripts:consultation",
     "users:consultation",
   ]);
-  await grant("DIR_GENERAL", ["contracts:consultation", "contracts:validation", "manuscripts:administration"]);
+  // Le DG CONTRE-VALIDE le BAT Final et peut valider les étapes du circuit
+  // (double validation du BAT — demande opérateur 03/10) : il lui faut
+  // « manuscripts:validation » en plus de l'administration.
+  await grant("DIR_GENERAL", ["contracts:consultation", "contracts:validation", "manuscripts:administration", "manuscripts:validation"]);
   await grant("RESP_FINANCE", ["contracts:consultation"]);
 
   // Correction éditoriale (Ch. 10) : le correcteur voit et exécute ses tâches.
@@ -349,6 +352,11 @@ async function main() {
     // (ISBN / dépôt légal) pour les ouvrages qui le suivent → droits ISBN.
     "isbn:consultation",
     "isbn:saisie",
+    // BAT à DOUBLE validation (demande opérateur 03/10) : l'infographe de
+    // production consulte le BAT Final et dépose la 1re signature
+    // (pré-validation) ; la Direction générale contre-valide ensuite.
+    "bat:consultation",
+    "bat:saisie",
   ]);
   await grant("DIR_EDITORIAL", ["production:consultation"]);
 
@@ -1981,6 +1989,14 @@ async function main() {
       body: "Deux améliorations à l'infographie : (1) même quand un dossier a été transmis « à tout le service » (donc à personne en particulier), l'infographe qui le prend en charge dispose maintenant du bouton « Valider + choisir qui reçoit la suite » (le secrétariat, pour l'attribution des références) — avant, ce bouton n'apparaissait que pour la personne nommément désignée. (2) Le bloc « Maquette reçue de la mise en page » a un nouveau design bien distinct (liseré doré, badge « 📥 Reçu ») pour ne plus le confondre avec les dépôts de fichiers de l'étape.",
       permissionModules: ["production", "manuscripts"],
       departmentCodes: ["MAQ", "INFOG", "SECR", "CQ", "DIRED"],
+    },
+    {
+      slug: "2026-10-bat-final-double-validation",
+      version: "2026.10",
+      title: "Nouveauté — BAT Final : double validation (infographe + Direction générale)",
+      body: "Le BAT Final autorise l'impression : c'est l'étape la plus sensible, elle demande désormais DEUX signatures de deux personnes. 1) L'infographe (ou le pôle BAT) pose la 1re signature en cliquant « Valider le BAT (1re signature) » : l'ouvrage NE PASSE PAS encore à l'impression, il reste en attente et la Direction générale est prévenue. 2) La Direction générale consulte puis clique « Contre-valider le BAT » : c'est seulement là que l'ouvrage part à l'impression. Tant que le DG n'a pas contre-validé, rien n'avance. Une même personne ne peut pas faire les deux signatures. Le bon à tirer signé par l'auteur reste exigé avant tout.",
+      permissionModules: ["bat", "manuscripts", "production"],
+      departmentCodes: ["INFOG", "CQ", "IMPR", "DIRED", "DG"],
     },
     {
       slug: "2026-10-couverture-image-site-impression-references",

@@ -1,5 +1,5 @@
 import { prisma } from "./prisma.js";
-import { coverReportReceived } from "./correctionCycle.js";
+import { coverReportReceived, textReportReceived } from "./correctionCycle.js";
 
 // « Mes intégrations de correction » — source unique, réutilisée par la page
 // dédiée (aiEditorial) ET par « Mes travaux de production » (workflow), pour ne
@@ -52,13 +52,22 @@ async function withFinalFile(manuscriptIds: string[], phaseKey: string) {
 export async function myCorrectionIntegrations(userId: string): Promise<IntegrationItem[]> {
   const me = userId;
 
-  // Branche TEXTE : ouvrages où je suis l'intégrateur éditorial désigné.
-  const texteManuscripts = await prisma.manuscript.findMany({
+  // Branche TEXTE : ouvrages où je suis l'intégrateur éditorial désigné. On ne
+  // garde que ceux où il y a RÉELLEMENT de la matière à intégrer (demande
+  // opérateur 03/10) : corrections de texte retenues (counts > 0) OU le correcteur
+  // a transmis un rapport de texte (fichier déposé). Un ouvrage juste soumis au
+  // correcteur (0 %, rien transmis) n'apparaît donc pas.
+  const texteCandidates = await prisma.manuscript.findMany({
     where: { deletedAt: null, correctionIntegratorId: me },
     select: { id: true, manuscriptNumber: true, title: true, correctionIntegrationClosedAt: true, status: { select: { code: true, label: true } } },
     orderBy: { updatedAt: "desc" },
   });
-  const texteCounts = await tally(texteManuscripts.map((m) => m.id), ["correction_1", "correction_2"]);
+  const texteCounts = await tally(texteCandidates.map((m) => m.id), ["correction_1", "correction_2"]);
+  const texteManuscripts: typeof texteCandidates = [];
+  for (const m of texteCandidates) {
+    const hasCorrections = (texteCounts.get(m.id)?.total ?? 0) > 0;
+    if (hasCorrections || (await textReportReceived(m.id))) texteManuscripts.push(m);
+  }
   const texteFinal = await withFinalFile(texteManuscripts.map((m) => m.id), "integration_finale");
 
   // Branche COUVERTURE : infographe désigné OU responsable de l'étape Infographie.

@@ -2038,6 +2038,14 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-correction-habilitation-par-phase",
+      version: "2026.10",
+      title: "Nouveauté — Correction : chacun ne dépose que sa propre étape",
+      body: "Le relais de correction respecte maintenant strictement les rôles, et l'ERP REFUSE tout dépôt par un profil non habilité : la 1re correction et la 2e relecture (ainsi que les rapports de couverture) ne peuvent être déposées QUE par le CORRECTEUR de l'ouvrage ; la version intégrée et la version corrigée finale (VCF) QUE par le RESPONSABLE ÉDITORIAL intégrateur ; la couverture intégrée et la couverture finale QUE par l'INFOGRAPHE désigné. Rappel du circuit : correcteur → 1re correction ; éditeur → version intégrée ; correcteur → 2e relecture ; éditeur → version finale. Si quelqu'un tente de déposer la pièce d'un autre, un message clair l'en empêche.",
+      permissionModules: ["tasks", "manuscripts", "production"],
+      departmentCodes: ["CORR", "DIRED", "SECR", "INFOG", "MAQ", "DG"],
+    },
+    {
       slug: "2026-10-integration-texte-si-rapport",
       version: "2026.10",
       title: "Nouveauté — Intégration éditoriale : affichée seulement quand le correcteur a transmis",

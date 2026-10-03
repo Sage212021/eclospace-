@@ -13,7 +13,7 @@ const STAGES: { key: string; label: string; codes: string[] }[] = [
   { key: "maquette", label: "Maquette / Mise en page", codes: ["MISE_EN_PAGE"] },
   { key: "infographie", label: "Infographie / Couverture", codes: ["INFOGRAPHIE"] },
   { key: "references", label: "Références / ISBN / Dépôt légal", codes: ["ATTRIBUTION_REFERENCES"] },
-  { key: "bat", label: "BAT / Final", codes: ["VALIDATION_BAT"] },
+  { key: "bat", label: "BAT Final & contrôle qualité", codes: ["VALIDATION_BAT"] },
   { key: "impression", label: "Impression", codes: ["IMPRESSION", "CONTROLE_QUALITE_IMPRESSION"] },
 ];
 

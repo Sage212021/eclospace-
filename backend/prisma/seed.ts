@@ -1991,6 +1991,14 @@ async function main() {
       departmentCodes: ["MAQ", "INFOG", "SECR", "CQ", "DIRED"],
     },
     {
+      slug: "2026-10-confier-etape-depuis-fiche",
+      version: "2026.10",
+      title: "Nouveauté — « Confier l'étape » directement depuis la fiche de l'ouvrage",
+      body: "Plus besoin de chercher dans une liste à part pour confier un ouvrage à quelqu'un. En haut du cadre « Étape courante » de la fiche, un encart « Responsable de l'étape » affiche la personne en charge et un bouton « Confier l'étape » / « Changer la personne ». Exemple : pour « Rêver en Afrique » arrivé à l'attribution des références, la direction peut y confier l'étape à l'infographe en deux clics, sans quitter la fiche. L'encart ne propose que les personnes habilitées pour l'étape en cours, et disparaît aux étapes qui ne se confient pas nominativement. Réservé aux profils qui peuvent valider (direction éditoriale, Direction générale).",
+      permissionModules: ["manuscripts", "production", "isbn"],
+      departmentCodes: ["DIRED", "DG", "SECR", "INFOG", "MAQ"],
+    },
+    {
       slug: "2026-10-bat-final-double-validation",
       version: "2026.10",
       title: "Nouveauté — BAT Final : double validation (infographe + Direction générale)",

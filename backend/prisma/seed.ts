@@ -2079,6 +2079,14 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-infographe-assignable-references",
+      version: "2026.10",
+      title: "Nouveauté — L'infographe peut se voir confier l'étape Références / ISBN",
+      body: "On peut désormais confier manuellement l'étape « Attribution des références / ISBN / dépôt légal » à un infographe (en plus du secrétariat, de la direction éditoriale et des maquettistes). Pratique quand l'infographe suit l'ouvrage de bout en bout : depuis la vue « ISBN & dépôt légal », « Confier l'étape » propose maintenant aussi les infographes. L'ouvrage apparaît alors dans « Mes travaux de production » de la personne choisie.",
+      permissionModules: ["isbn", "manuscripts"],
+      departmentCodes: ["INFOG", "SECR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-infographe-proprietaire-production",
       version: "2026.10",
       title: "Nouveauté — L'infographe suit son ouvrage sur toute la production",

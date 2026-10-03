@@ -15,6 +15,17 @@ async function loginCookie(app: FastifyInstance, username: string, password: str
   return extractSessionCookie(r.cookies.map((c) => `${c.name}=${c.value}`));
 }
 
+// Dépose un RAPPORT de correction texte (1re correction) — c'est ce qui rend
+// l'ouvrage visible pour l'intégrateur (le correcteur a transmis quelque chose).
+async function seedReportText(manuscriptId: string, uploaderId: string) {
+  const doc = await prisma.document.create({
+    data: { entityType: "manuscript", entityId: manuscriptId, category: "piece_etape", confidentiality: "interne", title: `[correction:rapport_1] rapport-${rnd()}.txt`, createdBy: uploaderId, updatedBy: uploaderId },
+  });
+  await prisma.documentVersion.create({
+    data: { documentId: doc.id, versionNumber: 1, filePath: `test/rap-${manuscriptId}.txt`, fileSize: 10, mimeType: "text/plain", sha256Hash: "0".repeat(64), changeSummary: "seed", uploadedBy: uploaderId },
+  });
+}
+
 // Dépose la version corrigée finale (fichier final texte) directement en base.
 async function seedFinalText(manuscriptId: string, uploaderId: string) {
   const doc = await prisma.document.create({
@@ -45,6 +56,8 @@ describe("Clôture de l'intégration (Historique)", () => {
     const st = await prisma.workflowStatus.findUniqueOrThrow({ where: { code: "CORRECTION" } });
     const m = await prisma.manuscript.create({ data: { manuscriptNumber: `MS-CLO-${s}`, title: `Clôture ${s}`, language: "fr", statusId: st.id, ownerId: adminId, correctionIntegratorId: integId, receivedAt: new Date(), createdBy: adminId, updatedBy: adminId } });
     manuscriptId = m.id;
+    // Le correcteur a transmis un rapport → l'ouvrage apparaît à l'intégrateur.
+    await seedReportText(manuscriptId, adminId);
     integCookie = await loginCookie(app, `integclo_${s}`, "Integ1!pass");
     otherCookie = await loginCookie(app, `integclo2_${s}`, "Integ1!pass");
   });

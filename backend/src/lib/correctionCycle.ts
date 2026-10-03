@@ -125,6 +125,15 @@ export async function coverReportReceived(manuscriptId: string): Promise<boolean
   return state.some((p) => (p.key === "couverture_1" || p.key === "couverture_2") && p.has_file);
 }
 
+// Le correcteur a-t-il réellement TRANSMIS un rapport de correction du TEXTE
+// (fichier déposé : 1re correction ou 2e relecture) ? Symétrique de
+// coverReportReceived, pour n'afficher l'intégration éditoriale que lorsqu'il y a
+// vraiment de la matière à intégrer (demande opérateur 03/10).
+export async function textReportReceived(manuscriptId: string): Promise<boolean> {
+  const state = await correctionCycleState(manuscriptId);
+  return state.some((p) => (p.key === "rapport_1" || p.key === "relecture_2") && p.has_file);
+}
+
 // « À qui la main » : premier maillon du relais dont le fichier manque encore.
 // Correcteur → Intégrateur → Correcteur → Intégrateur → terminé.
 export async function currentCorrectionActor(manuscriptId: string): Promise<CorrectionActor | "termine"> {

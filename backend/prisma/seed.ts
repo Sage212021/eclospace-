@@ -2038,6 +2038,14 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-integration-texte-si-rapport",
+      version: "2026.10",
+      title: "Nouveauté — Intégration éditoriale : affichée seulement quand le correcteur a transmis",
+      body: "Même principe que pour la couverture, côté TEXTE : dans « Mes intégrations de correction », un ouvrage n'apparaît pour l'intégrateur éditorial QUE lorsqu'il y a vraiment de la matière — le correcteur a déposé un rapport de correction du texte (1re correction ou 2e relecture), ou des corrections ont été retenues. Un manuscrit qui vient juste d'être soumis au correcteur (0 %, rien transmis) n'apparaît plus prématurément. Vous ne voyez que les ouvrages réellement prêts à intégrer.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["DIRED", "SECR", "DG"],
+    },
+    {
       slug: "2026-10-parcours-de-production-fiche",
       version: "2026.10",
       title: "Nouveauté — « Parcours de production » sur la fiche de l'ouvrage",

@@ -1991,6 +1991,14 @@ async function main() {
       departmentCodes: ["MAQ", "INFOG", "SECR", "CQ", "DIRED"],
     },
     {
+      slug: "2026-10-dg-mes-validations-production",
+      version: "2026.10",
+      title: "Nouveauté — « Mes validations de production » pour la Direction",
+      body: "La Direction a désormais son propre tableau de bord de production, dans le menu Pilotage : « Mes validations de production ». Même présentation que le tableau de l'infographe, mais pour les étapes de fin de chaîne que la Direction pilote — BAT Final (contre-validation), Contractualisation, Impression, Contrôle qualité. Pour chaque étape : combien d'ouvrages sont En attente (un pré-requis manque), À valider (votre action est attendue), Validés. Touchez une étape pour voir les ouvrages, puis « Ouvrir » pour aller sur la fiche et valider. Exemple : un BAT que l'infographe vient de valider apparaît « À valider » → vous le contre-validez et l'ouvrage part à l'impression.",
+      permissionModules: ["manuscripts", "bat", "printing"],
+      departmentCodes: ["DG", "DIRED"],
+    },
+    {
       slug: "2026-10-confier-etape-depuis-fiche",
       version: "2026.10",
       title: "Nouveauté — « Confier l'étape » directement depuis la fiche de l'ouvrage",

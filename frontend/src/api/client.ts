@@ -672,6 +672,11 @@ export interface MyProductionWork {
 export function getMyProductionWork() {
   return request<MyProductionWork[]>("/api/v1/my-production-work");
 }
+// « Mes validations de production » (DG) : même forme de lignes, étapes de fin de
+// chaîne que la Direction pilote/valide.
+export function getMyProductionValidations() {
+  return request<MyProductionWork[]>("/api/v1/my-production-validations");
+}
 
 // Retour à l'étape précédente (correction d'une validation faite par erreur).
 export function revertManuscriptStep(manuscriptId: string, reason?: string) {

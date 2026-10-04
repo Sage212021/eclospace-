@@ -1991,6 +1991,14 @@ async function main() {
       departmentCodes: ["MAQ", "INFOG", "SECR", "CQ", "DIRED"],
     },
     {
+      slug: "2026-10-relecture-ia-avancement-rapide",
+      version: "2026.10",
+      title: "Nouveauté — Relecture IA : plus rapide et avec avancement visible",
+      body: "La relecture BAT1/BAT2 produit le rapport PUIS régénère le manuscrit corrigé en entier — c'est cette 2e partie qui prenait du temps. Deux améliorations : (1) le manuscrit corrigé est désormais traité par tranches EN PARALLÈLE → beaucoup plus rapide, et une tranche qui bloque est réessayée sans faire échouer tout le lancement ; (2) l'historique affiche l'avancement en clair : « Rapport prêt — génération du manuscrit corrigé (3/12) », pour que vous sachiez où ça en est. Tant que le lancement progresse, il n'est plus jamais déclaré « interrompu » à tort.",
+      permissionModules: ["tasks", "manuscripts"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-fiche-sections-repliables",
       version: "2026.10",
       title: "Nouveauté — Les rubriques de la fiche se replient (accordéon)",

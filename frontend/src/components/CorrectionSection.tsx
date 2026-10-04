@@ -9,6 +9,7 @@ import {
   type DocumentSummary,
   type DocumentVersionSummary,
 } from "../api/client";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 interface CorrectionSectionProps {
   manuscriptId: string;
@@ -67,9 +68,7 @@ export function CorrectionSection({ manuscriptId, canManage }: CorrectionSection
   }
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Correction et versions</div>
-
+    <CollapsibleSection title="Correction et versions" storageKey="fiche:correction-versions">
       <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
         Document
         <select value={selectedDocId ?? ""} onChange={(e) => setSelectedDocId(e.target.value || null)} style={inputStyle}>
@@ -159,7 +158,7 @@ export function CorrectionSection({ manuscriptId, canManage }: CorrectionSection
           </div>
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }
 

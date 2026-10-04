@@ -15,6 +15,7 @@ import {
   type ReadingAssignment,
 } from "../api/client";
 import { buildDepositOnLetterhead } from "../lib/finalReport";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 // Pièces jointes d'un ouvrage (GED, Ch. 21 §21.9) : chaque pôle dépose,
 // consulte, télécharge et remplace (nouvelle version) des fichiers, classés par
@@ -137,14 +138,11 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
   const byCategory = (cat: string) => docs.filter((d) => d.category === cat);
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 20 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Documents de l'ouvrage (pièces jointes)</div>
-      <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 12px" }}>
-        Tout document lié à l'ouvrage — y compris les pièces fournies par l'auteur : couvertures, livre monté, contrats
-        scannés, pièces finance, archivage… Déposés par ouvrage, visibles par les pôles autorisés, versionnés et conservés
-        durablement.
-      </p>
-
+    <CollapsibleSection
+      title="Documents de l'ouvrage (pièces jointes)"
+      subtitle="Tout document lié à l'ouvrage — couvertures, livre monté, contrats scannés, pièces finance, archivage… Déposés par ouvrage, visibles par les pôles autorisés, versionnés et conservés durablement."
+      storageKey="fiche:documents"
+    >
       {error && <Banner tone="alert">{error}</Banner>}
       {message && <Banner tone="ok">{message}</Banner>}
 
@@ -233,7 +231,7 @@ export function AttachmentsSection({ manuscriptId, canManage }: { manuscriptId: 
       )}
 
       {docs.length === 0 && reportFiles.length === 0 && <p style={{ fontSize: 13, color: "var(--muted)", margin: "8px 0 0" }}>Aucune pièce jointe pour cet ouvrage.</p>}
-    </div>
+    </CollapsibleSection>
   );
 }
 

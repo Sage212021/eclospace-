@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getCorrectionCycle, getCoverCorrectionCycle, uploadCorrectionPhase, deleteStepDocument, stepAttachmentDownloadUrl, getCorrectionIntegrator, getCorrectionIntegrators, setCorrectionIntegrator, getCoverIntegrator, getCoverIntegrators, setCoverIntegrator, type CorrectionPhaseState, type CorrectionIntegratorState } from "../api/client";
+import { CollapsibleSection } from "./CollapsibleSection";
 import { confirmFileBelongs } from "../lib/filenameMatch";
 
 const ACTOR_LABEL: Record<string, string> = { correcteur: "au correcteur", integrateur: "à l'intégrateur (éditeur)", termine: "— cycle terminé" };
@@ -92,8 +93,11 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
   const requiredMissing = phases.filter((p) => p.required && !p.has_file);
 
   return (
-    <section style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 12 }}>
-      <h3 style={{ fontSize: 15, margin: "0 0 4px", color: "var(--ink)" }}>Correction en deux temps</h3>
+    <CollapsibleSection
+      title="Correction en deux temps"
+      subtitle="Relais correcteur ↔ intégrateur jusqu'à la version corrigée finale (VCF)."
+      storageKey="fiche:correction-cycle"
+    >
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
         Relais correcteur ↔ intégrateur : <strong>1re correction</strong> → <strong>version intégrée</strong> →
         <strong> 2e correction (relecture)</strong> → <strong>Version corrigée finale (VCF)</strong>, transmise à la mise en page.
@@ -241,6 +245,6 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
         ))}
       </div>
       </>)}
-    </section>
+    </CollapsibleSection>
   );
 }

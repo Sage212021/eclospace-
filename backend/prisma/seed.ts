@@ -1991,6 +1991,13 @@ async function main() {
       departmentCodes: ["MAQ", "INFOG", "SECR", "CQ", "DIRED"],
     },
     {
+      slug: "2026-10-fiche-sections-repliables",
+      version: "2026.10",
+      title: "Nouveauté — Les rubriques de la fiche se replient (accordéon)",
+      body: "Fini de faire défiler des écrans entiers : sur la fiche d'un ouvrage, les grandes rubriques se replient et se déplient d'un clic sur leur titre (chevron). À l'ouverture, tout est replié sauf le cadre « Étape courante » (vos actions) ; vous ouvrez seulement ce dont vous avez besoin. Concerné : Retours de correction, Correction en deux temps (texte + couverture), Comité de lecture — rapports, Échange de fichiers avec l'auteur, Planification du projet, Documents de l'ouvrage, Fiche technique de fabrication, ISBN & dépôt légal, BAT, Impression, Contrats, Devis, Tâches, Stock, Fiche pour le site… L'application retient vos rubriques ouvertes.",
+      audienceAll: true,
+    },
+    {
       slug: "2026-10-dg-mes-validations-production",
       version: "2026.10",
       title: "Nouveauté — « Mes validations de production » pour la Direction",

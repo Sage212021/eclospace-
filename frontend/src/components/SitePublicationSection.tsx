@@ -77,6 +77,7 @@ export function SitePublicationSection({ manuscriptId, canPublish }: { manuscrip
       title={t("sitepub.title", "Fiche pour le site")}
       subtitle={t("sitepub.subtitle", "Fiche prête à copier pour la page catalogue du site, rangée par genre.")}
       action={statusChip}
+      collapsible
     >
       {error && <div style={banner("var(--alert-soft)", "var(--alert)")}>{error}</div>}
       {message && <div style={banner("var(--eclosion-soft)", "var(--eclosion)")}>{message}</div>}

@@ -17,6 +17,7 @@ import {
   type LegalDeposit,
   type WorkMetadata,
 } from "../api/client";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 const EDITION_TYPE_LABELS: Record<EditionType, string> = {
   compte_editeur: "Compte d'éditeur",
@@ -36,11 +37,14 @@ const COMM_STATUS_LABELS: Record<CommercializationStatus, string> = {
 interface IsbnSectionProps {
   manuscriptId: string;
   canManage: boolean;
+  // Ouvre la section d'emblée (affichage « sur place » comme pré-requis). Par
+  // défaut repliée (accordéon de la fiche).
+  startOpen?: boolean;
 }
 
 // ISBN, dépôt légal et métadonnées (Ch. 13) : identité officielle de
 // l'ouvrage, point de passage obligé avant le BAT (Ch. 13 §13.9).
-export function IsbnSection({ manuscriptId, canManage }: IsbnSectionProps) {
+export function IsbnSection({ manuscriptId, canManage, startOpen = false }: IsbnSectionProps) {
   const [isbns, setIsbns] = useState<Isbn[]>([]);
   const [pools, setPools] = useState<IsbnPoolSummary[]>([]);
   const [deposits, setDeposits] = useState<LegalDeposit[]>([]);
@@ -141,8 +145,12 @@ export function IsbnSection({ manuscriptId, canManage }: IsbnSectionProps) {
   }
 
   return (
-    <div id="isbn-references" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16, scrollMarginTop: 12 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>ISBN, dépôt légal et métadonnées</div>
+    <CollapsibleSection
+      id="isbn-references"
+      title="ISBN, dépôt légal et métadonnées"
+      defaultOpen={startOpen}
+      storageKey={startOpen ? undefined : "fiche:isbn"}
+    >
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
 
       {completeness && !completeness.complete && (
@@ -257,7 +265,7 @@ export function IsbnSection({ manuscriptId, canManage }: IsbnSectionProps) {
           </button>
         )}
       </form>
-    </div>
+    </CollapsibleSection>
   );
 }
 

@@ -4,6 +4,7 @@ import { printReadingReport } from "../lib/print";
 import { buildReadingReport } from "../lib/readingReport";
 import { DocPrintMenu } from "./DocPrintMenu";
 import { useConfirm } from "./ConfirmProvider";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 // Comité de lecture / Direction : lecture et téléchargement des rapports des
 // relecteurs d'un manuscrit — le rapport généré (évaluation) et le fichier joint.
@@ -70,9 +71,11 @@ export function ReadingEvaluationsSection({
   if (!items || visible.length === 0) return null;
 
   return (
-    <section className="ecl-card">
-      <h3 style={{ fontSize: 15, margin: "0 0 4px", color: "var(--ink)" }}>Comité de lecture — rapports</h3>
-      <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 12px" }}>Les évaluations des relecteurs et leurs rapports.</p>
+    <CollapsibleSection
+      title="Comité de lecture — rapports"
+      subtitle="Les évaluations des relecteurs et leurs rapports."
+      storageKey="fiche:comite-rapports"
+    >
       {error && (
         <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{error}</div>
       )}
@@ -146,6 +149,6 @@ export function ReadingEvaluationsSection({
           </div>
         ))}
       </div>
-    </section>
+    </CollapsibleSection>
   );
 }

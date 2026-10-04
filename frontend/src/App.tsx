@@ -28,6 +28,7 @@ const ManuscriptDetail = lazy(() => import("./pages/ManuscriptDetail").then((m) 
 const MyReadings = lazy(() => import("./pages/MyReadings").then((m) => ({ default: m.MyReadings })));
 const MyDossiers = lazy(() => import("./pages/MyDossiers").then((m) => ({ default: m.MyDossiers })));
 const MyProductionWork = lazy(() => import("./pages/MyProductionWork").then((m) => ({ default: m.MyProductionWork })));
+const MyProductionValidations = lazy(() => import("./pages/MyProductionValidations").then((m) => ({ default: m.MyProductionValidations })));
 const StockPage = lazy(() => import("./pages/StockPage").then((m) => ({ default: m.StockPage })));
 const CommercialPage = lazy(() => import("./pages/CommercialPage").then((m) => ({ default: m.CommercialPage })));
 const CataloguePage = lazy(() => import("./pages/CataloguePage").then((m) => ({ default: m.CataloguePage })));
@@ -94,6 +95,7 @@ type PageId =
   | "my-readings"
   | "my-dossiers"
   | "my-production-work"
+  | "my-production-validations"
   | "editorial-quotes-inbox"
   | "catalogue-ref"
   | "archives"
@@ -279,6 +281,7 @@ const NAV_POLES: NavPole[] = [
   {
     label: "Pilotage",
     items: [
+      { key: "pi-mes-validations", label: "Mes validations de production", permission: "manuscripts:validation" },
       { key: "pi-direction", label: "Direction générale", permission: "direction:consultation" },
       { key: "pi-rapports", label: "Rapports & statistiques", permission: "rapports:consultation" },
       { key: "pi-journal", label: "Journal d'activité", permission: "direction:consultation" },
@@ -304,6 +307,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-catalogue-ref": { page: "catalogue-ref" },
   "ed-archives": { page: "archives" },
   "pr-mes-travaux": { page: "my-production-work" },
+  "pi-mes-validations": { page: "my-production-validations" },
   "pr-a-publier": { page: "site-publish" },
   "pr-maquette": { stage: "MISE_EN_PAGE", heading: "Maquette & mise en page" },
   "pr-infographie": { stage: "INFOGRAPHIE", heading: "Infographie & couvertures" },
@@ -868,6 +872,9 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "my-production-work" && (
           <MyProductionWork onOpenManuscript={openManuscript} onOpenIntegration={openIntegration} canOpen={permissions.has("manuscripts:consultation")} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "my-production-validations" && (
+          <MyProductionValidations onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation")} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-corrections" && <MyCorrections />}
         {leaf && "page" in leaf && leaf.page === "my-correction-integrations" && <MyIntegrations focusManuscriptId={integrationFocusId} onFocusConsumed={() => setIntegrationFocusId(null)} />}

@@ -1242,6 +1242,120 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
     return reply.send([...activeRows, ...integrationRows, ...doneRows]);
   });
 
+  // « Mes validations de production » (demande opérateur 03/10) — TABLEAU DE BORD
+  // de la DIRECTION, pendant de « Mes travaux de production » mais orienté
+  // VALIDATEUR : les ouvrages arrivés aux étapes de FIN de chaîne que le DG pilote
+  // — BAT Final (contre-validation), Contractualisation, Impression, Contrôle
+  // qualité. On liste TOUS les ouvrages à ces étapes (pas seulement ceux qui lui
+  // sont « confiés »), avec l'action attendue et le motif d'attente (réutilise les
+  // mêmes contrôles de pré-requis que la validation d'étape, pour rester fiable).
+  fastify.get(
+    "/api/v1/my-production-validations",
+    { preHandler: requirePermission("manuscripts", "validation") },
+    async (request, reply) => {
+      const me = request.user!.id;
+      // Ordre réel du workflow : BAT(12) → Contractualisation(13) → Impression(14)
+      // → Contrôle qualité(15).
+      const DG_SEGMENT = ["VALIDATION_BAT", "CONTRACTUALISATION", "IMPRESSION", "CONTROLE_QUALITE_IMPRESSION"];
+      const total = DG_SEGMENT.length;
+
+      // Ouvrages ACTUELLEMENT à l'une de ces étapes (quel que soit le responsable).
+      const manuscripts = await prisma.manuscript.findMany({
+        where: { deletedAt: null, status: { code: { in: DG_SEGMENT } } },
+        select: { id: true, manuscriptNumber: true, title: true, statusId: true, status: { select: { code: true, label: true } } },
+        orderBy: { updatedAt: "desc" },
+      });
+
+      // Étapes DG que J'AI validées récemment (bac « Validés »).
+      const doneSteps = await prisma.manuscriptStep.findMany({
+        where: { validationBy: me, validatedAt: { not: null }, status: { code: { in: DG_SEGMENT } }, manuscript: { deletedAt: null } },
+        include: {
+          status: { select: { code: true, label: true } },
+          manuscript: { select: { id: true, manuscriptNumber: true, title: true } },
+        },
+        orderBy: { validatedAt: "desc" },
+        take: 500,
+      });
+
+      // Progression : nombre d'étapes DG déjà validées pour chaque ouvrage.
+      const ids = [...new Set([...manuscripts.map((m) => m.id), ...doneSteps.map((s) => s.manuscript.id)])];
+      const validated = ids.length
+        ? await prisma.manuscriptStep.groupBy({
+            by: ["manuscriptId"],
+            where: { manuscriptId: { in: ids }, validatedAt: { not: null }, status: { code: { in: DG_SEGMENT } } },
+            _count: { _all: true },
+          })
+        : [];
+      const doneById = new Map(validated.map((g) => [g.manuscriptId, g._count._all]));
+
+      // Action attendue / motif d'attente par étape (mêmes contrôles que la
+      // validation d'étape → le statut affiché est fiable).
+      async function evaluate(code: string, manuscriptId: string, statusId: string): Promise<{ bucket: "en_attente" | "en_cours"; blocked_reason: string | null; detail: string | null }> {
+        if (code === "VALIDATION_BAT") {
+          const latestBat = await prisma.batRecord.findFirst({ where: { manuscriptId }, orderBy: { cycleNumber: "desc" } });
+          if (!latestBat || latestBat.status !== "signed") return { bucket: "en_attente", blocked_reason: "bon à tirer non signé", detail: null };
+          const step = await prisma.manuscriptStep.findUnique({ where: { manuscriptId_statusId: { manuscriptId, statusId } }, select: { preValidatedAt: true } });
+          if (!step?.preValidatedAt) return { bucket: "en_attente", blocked_reason: "en attente de la 1re signature de l'infographe", detail: null };
+          return { bucket: "en_cours", blocked_reason: null, detail: "à contre-valider (1re signature posée)" };
+        }
+        if (code === "IMPRESSION") {
+          const activeOrder = await prisma.purchaseOrder.findFirst({ where: { quote: { manuscriptId }, status: { in: ["sent", "in_production", "completed"] } } });
+          if (!activeOrder) return { bucket: "en_attente", blocked_reason: "bon de commande à transmettre à l'imprimeur", detail: null };
+          return { bucket: "en_cours", blocked_reason: null, detail: "à valider (lancement de l'impression)" };
+        }
+        if (code === "CONTROLE_QUALITE_IMPRESSION") {
+          const receipt = await prisma.goodsReceipt.findFirst({ where: { po: { quote: { manuscriptId } }, qcVerdict: { in: ["conform", "with_reserves"] } } });
+          if (!receipt) return { bucket: "en_attente", blocked_reason: "contrôle qualité des exemplaires à faire", detail: null };
+          return { bucket: "en_cours", blocked_reason: null, detail: "à valider (contrôle qualité conforme)" };
+        }
+        // CONTRACTUALISATION : pas de pré-requis technique particulier ici.
+        return { bucket: "en_cours", blocked_reason: null, detail: "à valider (contractualisation)" };
+      }
+
+      const activeRows = await Promise.all(
+        manuscripts.map(async (m) => {
+          const ev = await evaluate(m.status.code, m.id, m.statusId);
+          return {
+            kind: "step" as const,
+            manuscript_id: m.id,
+            manuscript_number: m.manuscriptNumber,
+            title: m.title,
+            step_code: m.status.code,
+            step_label: m.status.label,
+            bucket: ev.bucket,
+            started: ev.bucket === "en_cours",
+            blocked_reason: ev.blocked_reason,
+            detail: ev.detail,
+            progression: { done: doneById.get(m.id) ?? 0, total },
+            since: null as string | null,
+          };
+        }),
+      );
+
+      const activeIds = new Set(manuscripts.map((m) => m.id));
+      const seen = new Set<string>();
+      const doneRows = doneSteps
+        .filter((s) => !activeIds.has(s.manuscript.id))
+        .filter((s) => (seen.has(s.manuscript.id) ? false : (seen.add(s.manuscript.id), true)))
+        .map((s) => ({
+          kind: "step" as const,
+          manuscript_id: s.manuscript.id,
+          manuscript_number: s.manuscript.manuscriptNumber,
+          title: s.manuscript.title,
+          step_code: s.status.code,
+          step_label: s.status.label,
+          bucket: "termine" as const,
+          started: true,
+          blocked_reason: null as string | null,
+          detail: null as string | null,
+          progression: { done: doneById.get(s.manuscript.id) ?? total, total },
+          since: (s.validatedAt ?? s.createdAt).toISOString() as string | null,
+        }));
+
+      return reply.send([...activeRows, ...doneRows]);
+    },
+  );
+
   // Retour à l'étape précédente (Ch. 4 §4.5, correction d'erreur) : ramène le
   // manuscrit à l'étape applicable immédiatement précédente et « rouvre » cette
   // étape (sa validation est effacée pour pouvoir être refaite). Tracé au

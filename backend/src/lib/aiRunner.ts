@@ -995,17 +995,55 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       // corrigé reste bien en deçà de max_tokens. Un max_tokens trop élevé serait
       // rejeté par l'API (400) et ferait échouer toute la correction.
       const chunks = chunkText(prepared.text, 8000);
-      const correctedParts: string[] = [];
-      for (const ch of chunks) {
-        const cr = await client.messages.create({
-          model: modelId,
-          max_tokens: REPORT_MAX_TOKENS,
-          system: rewriteSystem,
-          messages: [{ role: "user", content: recoPrefix + ch }],
-        });
-        totalInput += cr.usage.input_tokens;
-        totalOutput += cr.usage.output_tokens;
-        correctedParts.push(cr.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join(""));
+      const CONCURRENCY = 4;
+      const CHUNK_TIMEOUT_MS = 180000;
+      const correctedParts: string[] = new Array(chunks.length).fill("");
+
+      // Avancement affiché : le rapport est déjà déposé ; on signale la phase
+      // « manuscrit corrigé » et on fait avancer un compteur tranche par tranche.
+      await prisma.aiReadingJob.update({
+        where: { id: job.id },
+        data: {
+          progressLabel: `Rapport prêt — génération du ${isReecriture ? "manuscrit réécrit" : "manuscrit corrigé"} (${versionLabel})`,
+          progressDone: 0,
+          progressTotal: chunks.length,
+          progressAt: new Date(),
+        },
+      }).catch(() => {});
+
+      // Correction d'une tranche : jusqu'à 2 tentatives (délai borné). Si l'IA
+      // échoue durablement sur une tranche, on conserve le texte d'origine pour
+      // cette tranche plutôt que de faire échouer toute la correction.
+      const correctChunk = async (ch: string, index: number): Promise<void> => {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const cr = await client.messages.create(
+              {
+                model: modelId,
+                max_tokens: REPORT_MAX_TOKENS,
+                system: rewriteSystem,
+                messages: [{ role: "user", content: recoPrefix + ch }],
+              },
+              { timeout: CHUNK_TIMEOUT_MS },
+            );
+            totalInput += cr.usage.input_tokens;
+            totalOutput += cr.usage.output_tokens;
+            correctedParts[index] = cr.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
+            return;
+          } catch {
+            if (attempt === 1) correctedParts[index] = ch; // repli : tranche non corrigée
+          }
+        }
+      };
+
+      // Traitement EN PARALLÈLE par lots (concurrence bornée) : bien plus rapide
+      // qu'une tranche après l'autre, sans saturer l'API. L'avancement est mis à
+      // jour à chaque lot terminé — ce qui sert aussi de « battement » pour que le
+      // lancement ne soit pas déclaré « interrompu » tant qu'il travaille.
+      for (let start = 0; start < chunks.length; start += CONCURRENCY) {
+        await Promise.all(chunks.slice(start, start + CONCURRENCY).map((ch, k) => correctChunk(ch, start + k)));
+        const doneCount = Math.min(chunks.length, start + CONCURRENCY);
+        await prisma.aiReadingJob.update({ where: { id: job.id }, data: { progressDone: doneCount, progressAt: new Date() } }).catch(() => {});
       }
       const correctedText = correctedParts.join("\n");
       const docLabel = isReecriture ? "Version réécrite" : "Manuscrit corrigé";

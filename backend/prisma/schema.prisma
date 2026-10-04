@@ -5666,6 +5666,14 @@ model AiReadingJob {
   rewriteText          String?     @map("rewrite_text")
   producedDocumentIds  Json?       @map("produced_document_ids")
   errorMessage         String?     @map("error_message")
+  // Avancement affiché pendant un lancement long (ex. génération du manuscrit
+  // corrigé tranche par tranche) : libellé de phase, tranches faites/total, et
+  // horodatage du dernier progrès (sert aussi de « battement » pour ne pas
+  // déclarer « interrompu » un lancement qui travaille encore).
+  progressLabel        String?     @map("progress_label")
+  progressDone         Int?        @map("progress_done")
+  progressTotal        Int?        @map("progress_total")
+  progressAt           DateTime?   @map("progress_at")
   launchedBy           String?     @map("launched_by")
   launchedAt           DateTime    @default(now()) @map("launched_at")
   finishedAt           DateTime?   @map("finished_at")

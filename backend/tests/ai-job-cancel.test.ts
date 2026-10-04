@@ -66,4 +66,28 @@ describe("relecture IA — arrêt & jobs bloqués", () => {
     const row = (list.json().jobs as Array<{ id: string; status: string }>).find((j) => j.id === job.id);
     expect(row?.status).toBe("en_cours");
   });
+
+  it("ne balaie PAS un lancement lancé il y a longtemps mais qui PROGRESSE encore (battement d'avancement)", async () => {
+    const old = new Date(Date.now() - 30 * 60 * 1000); // lancé il y a 30 min
+    const job = await mkJob("en_cours", old);
+    // …mais une tranche vient d'être traitée (progrès récent) : il travaille encore.
+    await prisma.aiReadingJob.update({
+      where: { id: job.id },
+      data: { progressLabel: "Rapport prêt — génération du manuscrit corrigé (BAT1)", progressTotal: 12, progressDone: 5, progressAt: new Date() },
+    });
+    const list = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`, headers: { cookie } });
+    const row = (list.json().jobs as Array<{ id: string; status: string; progressDone?: number; progressTotal?: number }>).find((j) => j.id === job.id);
+    expect(row?.status).toBe("en_cours");
+    expect(row?.progressDone).toBe(5);
+    expect(row?.progressTotal).toBe(12);
+  });
+
+  it("balaie un lancement ancien dont le progrès est lui aussi ancien (vrai silence)", async () => {
+    const old = new Date(Date.now() - 30 * 60 * 1000);
+    const job = await mkJob("en_cours", old);
+    await prisma.aiReadingJob.update({ where: { id: job.id }, data: { progressTotal: 12, progressDone: 3, progressAt: old } });
+    const list = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`, headers: { cookie } });
+    const row = (list.json().jobs as Array<{ id: string; status: string }>).find((j) => j.id === job.id);
+    expect(row?.status).toBe("erreur");
+  });
 });

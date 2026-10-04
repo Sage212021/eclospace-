@@ -88,7 +88,15 @@ async function sweepStaleAiJobs(manuscriptId?: string): Promise<void> {
   const cutoff = new Date(Date.now() - AI_JOB_STALE_MINUTES * 60 * 1000);
   await prisma.aiReadingJob
     .updateMany({
-      where: { status: { in: ["en_cours", "en_attente"] }, launchedAt: { lt: cutoff }, ...(manuscriptId ? { manuscriptId } : {}) },
+      where: {
+        status: { in: ["en_cours", "en_attente"] },
+        launchedAt: { lt: cutoff },
+        // Battement d'avancement : un lancement qui a progressé récemment (ex.
+        // génération du manuscrit corrigé tranche par tranche) n'est PAS déclaré
+        // interrompu, même au-delà de 15 min — seul un vrai silence l'est.
+        OR: [{ progressAt: null }, { progressAt: { lt: cutoff } }],
+        ...(manuscriptId ? { manuscriptId } : {}),
+      },
       data: { status: "erreur", finishedAt: new Date(), errorMessage: `Lancement interrompu (aucune réponse après ${AI_JOB_STALE_MINUTES} min — souvent un redémarrage du serveur). Relancez si besoin.` },
     })
     .catch(() => {});

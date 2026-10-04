@@ -1200,6 +1200,11 @@ export interface AiJob {
   launchedAt: string;
   finishedAt: string | null;
   reportAvailable?: boolean;
+  // Avancement d'un lancement long (ex. génération du manuscrit corrigé) :
+  // libellé de phase + tranches faites/total, pour un affichage « 3/12 ».
+  progressLabel?: string | null;
+  progressDone?: number | null;
+  progressTotal?: number | null;
 }
 // L'analyse est désormais lancée EN ARRIÈRE-PLAN : la requête répond aussitôt
 // avec l'identifiant du job (statut suivi via listAiJobs). Fini les erreurs 504.

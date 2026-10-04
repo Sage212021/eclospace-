@@ -256,6 +256,11 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
               <div key={j.id} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 12, flexWrap: "wrap" }}>
                 <span style={{ fontFamily: "var(--font-mono)" }}>{new Date(j.launchedAt).toLocaleString("fr-FR")}</span>
                 <span style={{ fontWeight: 700, color: STATUS_COLORS[j.status] }}>{STATUS_LABELS[j.status]}</span>
+                {j.status === "en_cours" && j.progressTotal ? (
+                  <span style={{ color: "var(--eclosion-dark, #9A7A12)", fontWeight: 600 }}>
+                    {j.progressLabel ? `${j.progressLabel} ` : ""}({j.progressDone ?? 0}/{j.progressTotal})
+                  </span>
+                ) : null}
                 {(j.status === "en_cours" || j.status === "en_attente") && (
                   <button
                     type="button"

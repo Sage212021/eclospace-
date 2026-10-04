@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCorrectionCycle, getCoverCorrectionCycle, stepAttachmentDownloadUrl, type CorrectionPhaseState } from "../api/client";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 // Retours de correction, en LECTURE SEULE, consultables sur la fiche globale
 // APRÈS l'étape Correction (en production, stock…) : on voit ce que le correcteur
@@ -29,11 +30,11 @@ export function CorrectionReturns({ manuscriptId }: { manuscriptId: string }) {
   if (returns.length === 0) return null;
 
   return (
-    <section style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 12 }}>
-      <h3 style={{ fontSize: 15, margin: "0 0 4px", color: "var(--ink)" }}>Retours de correction</h3>
-      <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
-        Ce que le correcteur a transmis pour cet ouvrage — consultable à tout moment.
-      </p>
+    <CollapsibleSection
+      title="Retours de correction"
+      subtitle="Ce que le correcteur a transmis pour cet ouvrage — consultable à tout moment."
+      storageKey="fiche:retours-correction"
+    >
       <div style={{ display: "grid", gap: 8 }}>
         {returns.map(({ from, p }) => (
           <div key={`${from}:${p.key}`} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px" }}>
@@ -56,6 +57,6 @@ export function CorrectionReturns({ manuscriptId }: { manuscriptId: string }) {
           </div>
         ))}
       </div>
-    </section>
+    </CollapsibleSection>
   );
 }

@@ -808,12 +808,12 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
                 chercher la section ailleurs dans la page. */}
             {prereqInlineProduction && (
               <div style={{ marginTop: 10 }}>
-                <ProductionSection manuscriptId={manuscript.id} canManage={permissions.has("production:saisie")} />
+                <ProductionSection manuscriptId={manuscript.id} canManage={permissions.has("production:saisie")} startOpen />
               </div>
             )}
             {prereqInlineIsbn && (
               <div style={{ marginTop: 10 }}>
-                <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie")} />
+                <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie")} startOpen />
               </div>
             )}
           </>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createTask, listTasks, listUsers, patchTask, type Task, type TaskStatus, type UserSummary } from "../api/client";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
   non_commencee: "Non commencée",
@@ -52,9 +53,8 @@ export function TasksSection({ manuscriptId, canManage }: TasksSectionProps) {
   }
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>Tâches</div>
+    <CollapsibleSection title="Tâches" storageKey="fiche:taches">
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 10 }}>
         {canManage && (
           <button onClick={() => setShowForm((v) => !v)} style={secondaryButtonStyle}>
             {showForm ? "Annuler" : "+ Nouvelle tâche"}
@@ -115,7 +115,7 @@ export function TasksSection({ manuscriptId, canManage }: TasksSectionProps) {
           </div>
         </div>
       ))}
-    </div>
+    </CollapsibleSection>
   );
 }
 

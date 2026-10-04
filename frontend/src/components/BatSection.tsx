@@ -8,6 +8,7 @@ import {
   updateBatStatus,
   type BatRecord,
 } from "../api/client";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 interface BatSectionProps {
   manuscriptId: string;
@@ -50,9 +51,8 @@ export function BatSection({ manuscriptId, canManage, canValidate }: BatSectionP
   const current = records[0];
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>BAT Final et contrôle qualité</div>
+    <CollapsibleSection title="BAT Final et contrôle qualité" storageKey="fiche:bat">
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 10 }}>
         {canManage && !current && (
           <button onClick={handleOpen} style={secondaryButtonStyle}>
             Ouvrir le dossier de BAT Final
@@ -71,7 +71,7 @@ export function BatSection({ manuscriptId, canManage, canValidate }: BatSectionP
           onError={setError}
         />
       )}
-    </div>
+    </CollapsibleSection>
   );
 }
 

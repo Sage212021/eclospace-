@@ -42,6 +42,7 @@ import { buildAuthorContractPdf, downloadAuthorContractPdf } from "../lib/contra
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
+import { CollapsibleSection } from "./CollapsibleSection";
 import { AuthorAccountBlock } from "./AuthorAccountBlock";
 
 const SIGNATURE_PARTY_LABELS: Record<SignatureParty, string> = {
@@ -134,9 +135,8 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
   }
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>Contrats</div>
+    <CollapsibleSection title="Contrats" storageKey="fiche:contrats">
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 10 }}>
         {canCreate && (
           <button onClick={() => setShowForm((v) => !v)} style={secondaryButtonStyle}>
             {showForm ? "Annuler" : "+ Nouveau contrat"}
@@ -317,7 +317,7 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
           onError={setError}
         />
       )}
-    </div>
+    </CollapsibleSection>
   );
 }
 

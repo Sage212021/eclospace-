@@ -21,6 +21,7 @@ import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
 import { useConfirm } from "./ConfirmProvider";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 const STATUS_LABELS: Record<EditorialQuoteStatus, string> = {
   draft: "Brouillon",
@@ -180,17 +181,17 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
   }
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>Devis de prestation</div>
+    <CollapsibleSection
+      title="Devis de prestation"
+      subtitle="Éditoriale (facturée à l'auteur), impression ou communication (facturées à un client) — devis → signature → facture."
+      storageKey="fiche:devis"
+    >
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 10 }}>
         {canCreate && (
           <button onClick={() => setShowForm((v) => !v)} style={secondaryButtonStyle}>
             {showForm ? "Annuler" : "+ Nouveau devis"}
           </button>
         )}
-      </div>
-      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
-        Éditoriale (facturée à l'auteur), impression ou communication (facturées à un client) — devis → signature → facture.
       </div>
 
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
@@ -276,7 +277,7 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
           }}
         />
       )}
-    </div>
+    </CollapsibleSection>
   );
 }
 

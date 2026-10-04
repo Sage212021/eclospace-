@@ -5,6 +5,7 @@ import {
   manuscriptAuthorFileDownloadUrl,
   type StaffAuthorFile,
 } from "../api/client";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 // Échange de fichiers avec l'auteur (Espace Auteur inc. 2a), côté personnel :
 // voir les dépôts de l'auteur et lui partager des documents (BAT, épreuves,
@@ -47,11 +48,11 @@ export function AuthorFilesSection({ manuscriptId, canManage }: { manuscriptId: 
   }
 
   return (
-    <section className="ecl-card">
-      <h3 style={{ fontSize: 15, margin: "0 0 4px", color: "var(--ink)" }}>Échange de fichiers avec l'auteur</h3>
-      <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 0 }}>
-        Les dépôts de l'auteur et les documents que vous lui partagez (visibles dans son espace auteur).
-      </p>
+    <CollapsibleSection
+      title="Échange de fichiers avec l'auteur"
+      subtitle="Les dépôts de l'auteur et les documents que vous lui partagez (visibles dans son espace auteur)."
+      storageKey="fiche:echange-auteur"
+    >
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{error}</div>}
 
       <div style={{ display: "grid", gap: 8 }}>
@@ -81,6 +82,6 @@ export function AuthorFilesSection({ manuscriptId, canManage }: { manuscriptId: 
           </div>
         </div>
       )}
-    </section>
+    </CollapsibleSection>
   );
 }

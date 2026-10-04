@@ -5,16 +5,20 @@ import {
   type ProductionSpecs,
 } from "../api/client";
 import { CoverDeposit } from "./CoverDeposit";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 interface ProductionSectionProps {
   manuscriptId: string;
   canManage: boolean;
+  // Ouvre la section d'emblée (ex. quand on l'affiche « sur place » comme
+  // pré-requis à remplir). Par défaut repliée (accordéon de la fiche).
+  startOpen?: boolean;
 }
 
 // Maquette (Ch. 11) et Infographie (Ch. 12) : fiche technique de fabrication
 // avec calcul automatique du dos. Les visuels de couverture sont gérés par
 // CoverDeposit (vraies images ; la 1ère alimente le site).
-export function ProductionSection({ manuscriptId, canManage }: ProductionSectionProps) {
+export function ProductionSection({ manuscriptId, canManage, startOpen = false }: ProductionSectionProps) {
   const [specs, setSpecs] = useState<ProductionSpecs | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -126,13 +130,17 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
   const hasFilledSpecs = !!(specs && (specs.trimFormat || specs.finalPages || specs.paperInterior || specs.paperCover || specs.binding));
 
   return (
-    <div id="fiche-technique-fabrication" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16, scrollMarginTop: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Fiche technique de fabrication</div>
-        {hasFilledSpecs && (
+    <CollapsibleSection
+      id="fiche-technique-fabrication"
+      title="Fiche technique de fabrication"
+      defaultOpen={startOpen}
+      storageKey={startOpen ? undefined : "fiche:production"}
+    >
+      {hasFilledSpecs && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
           <button type="button" onClick={printFiche} style={{ ...secondaryButtonStyle }}>🖨️ Imprimer</button>
-        )}
-      </div>
+        </div>
+      )}
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
 
       {specs?.spineNeedsRecalc && (
@@ -250,7 +258,7 @@ export function ProductionSection({ manuscriptId, canManage }: ProductionSection
       {/* Couverture (1ère/4e/dos) avec vraies images : la 1ère alimente le site.
           Deux modes au choix de l'infographe (un fichier / pièces séparées). */}
       <CoverDeposit manuscriptId={manuscriptId} canManage={canManage} />
-    </div>
+    </CollapsibleSection>
   );
 }
 

@@ -24,6 +24,7 @@ import {
 import { printPurchaseOrder } from "../lib/print";
 import { downloadPurchaseOrderPdf } from "../lib/financePdf";
 import { DocPrintMenu } from "./DocPrintMenu";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 interface PrintingSectionProps {
   manuscriptId: string;
@@ -138,9 +139,8 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
   }
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginTop: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>Impression et fabrication</div>
+    <CollapsibleSection title="Impression et fabrication" storageKey="fiche:impression">
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 10 }}>
         {canManage && (
           <button onClick={handleRequestQuote} style={secondaryButtonStyle}>
             + Demander un devis
@@ -229,7 +229,7 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
           )}
         </div>
       ))}
-    </div>
+    </CollapsibleSection>
   );
 }
 

@@ -1999,6 +1999,14 @@ async function main() {
       departmentCodes: ["CORR", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-relecture-ia-memoire",
+      version: "2026.10",
+      title: "Nouveauté — Relecture IA : moins gourmande en mémoire (moins de plantages)",
+      body: "Les relectures sur de gros manuscrits faisaient parfois planter le serveur par manque de mémoire (le conteneur redémarrait, ce qui interrompait la correction). La relecture a été rendue plus économe : le manuscrit source est libéré dès qu'il est découpé, les textes intermédiaires et les fichiers Word sont libérés au fur et à mesure, et le nombre de tranches traitées en même temps est réduit. Résultat : beaucoup moins de risques de plantage « mémoire » sur un livre volumineux. (Si des plantages persistent sur de très gros ouvrages, l'autre levier reste d'augmenter la mémoire du serveur côté hébergeur.)",
+      permissionModules: ["tasks", "manuscripts"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-relecture-ia-conclut-si-livree",
       version: "2026.10",
       title: "Nouveauté — Relecture IA : un lancement livré passe tout seul en « Terminé »",

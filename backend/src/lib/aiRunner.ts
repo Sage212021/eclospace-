@@ -824,7 +824,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         : "\n\n=== CONTRÔLE APRÈS INTÉGRATION (RELECTURE 2) ===\nLe rapport de la 1re relecture est introuvable : signale-le, et effectue un contrôle qualité complet de la version intégrée (corrections visibles, nouvelles anomalies, cohérence finale).";
     }
 
-    const content: Anthropic.MessageParam["content"] =
+    let content: Anthropic.MessageParam["content"] =
       prepared.kind === "pdf"
         ? [
             { type: "document", source: { type: "base64", media_type: "application/pdf", data: prepared.base64 } },
@@ -911,6 +911,10 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         break; // une relance qui échoue ne doit pas faire échouer tout le job
       }
     }
+    // MÉMOIRE : le message d'entrée (manuscrit complet, voire PDF/images en
+    // base64) n'est plus utile après la rédaction du rapport — on le libère
+    // avant la phase lourde (manuscrit corrigé) pour réduire le pic de RAM.
+    content = "";
 
     // (2) FILET DE SÉCURITÉ : si une rubrique manque encore (le modèle a « terminé »
     // sans la rédiger), on la réclame explicitement — en ne conservant que le texte
@@ -958,8 +962,9 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // lecture » ; les relectures de correction/couverture sont des pièces
     // rattachées à leur étape.
     const category = params.workType === "evaluation" ? "rapport_lecture" : "piece_etape";
-    const docxBuffer = await renderReportDocx(reportTitle, reportText);
+    let docxBuffer = await renderReportDocx(reportTitle, reportText);
     const stored = await storeFile(docxBuffer, `${params.workType}_${manuscript.manuscriptNumber}.docx`);
+    docxBuffer = Buffer.alloc(0); // libère le tampon du rapport après stockage
 
     const created = await prisma.document.create({
       data: {
@@ -1009,7 +1014,14 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       // corrigé reste bien en deçà de max_tokens. Un max_tokens trop élevé serait
       // rejeté par l'API (400) et ferait échouer toute la correction.
       const chunks = chunkText(prepared.text, 8000);
-      const CONCURRENCY = 4;
+      // MÉMOIRE : hors réécriture (qui a besoin du texte source pour le
+      // comparatif), on libère le manuscrit source dès qu'il est découpé —
+      // sinon on garde en RAM le texte complet EN PLUS des tranches.
+      if (!isReecriture) prepared = { kind: "text", text: "" };
+      // Concurrence modérée (2) : traite les tranches en parallèle pour la
+      // vitesse, mais limite le nombre de réponses du modèle gardées en mémoire
+      // en même temps (réduit le pic de RAM — cause des crashes « mémoire »).
+      const CONCURRENCY = 2;
       const CHUNK_TIMEOUT_MS = 180000;
       const correctedParts: string[] = new Array(chunks.length).fill("");
 
@@ -1043,9 +1055,10 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
             totalInput += cr.usage.input_tokens;
             totalOutput += cr.usage.output_tokens;
             correctedParts[index] = cr.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
+            chunks[index] = ""; // tranche source traitée → libérée
             return;
           } catch {
-            if (attempt === 1) correctedParts[index] = ch; // repli : tranche non corrigée
+            if (attempt === 1) { correctedParts[index] = ch; chunks[index] = ""; } // repli : tranche non corrigée
           }
         }
       };
@@ -1059,11 +1072,15 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         const doneCount = Math.min(chunks.length, start + CONCURRENCY);
         await prisma.aiReadingJob.update({ where: { id: job.id }, data: { progressDone: doneCount, progressAt: new Date() } }).catch(() => {});
       }
-      const correctedText = correctedParts.join("\n");
+      let correctedText = correctedParts.join("\n");
+      correctedParts.length = 0; // tableau des tranches corrigées libéré
+      chunks.length = 0;
       const docLabel = isReecriture ? "Version réécrite" : "Manuscrit corrigé";
       const fileStem = isReecriture ? "manuscrit_reecrit" : "manuscrit_corrige";
-      const correctedDocx = await renderManuscriptDocx(`${docLabel} (${versionLabel}) — ${manuscript.title}`, correctedText);
+      let correctedDocx = await renderManuscriptDocx(`${docLabel} (${versionLabel}) — ${manuscript.title}`, correctedText);
       const storedC = await storeFile(correctedDocx, `${fileStem}_${versionLabel}_${manuscript.manuscriptNumber}.docx`);
+      correctedDocx = Buffer.alloc(0); // tampon .docx libéré après stockage
+      if (!isReecriture) correctedText = ""; // texte corrigé libéré (le comparatif ne sert qu'en réécriture)
       const correctedDoc = await prisma.document.create({
         data: {
           entityType: "manuscript",

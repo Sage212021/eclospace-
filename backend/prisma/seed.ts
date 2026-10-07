@@ -1999,6 +1999,14 @@ async function main() {
       departmentCodes: ["CORR", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-relecture-ia-conclut-si-livree",
+      version: "2026.10",
+      title: "Nouveauté — Relecture IA : un lancement livré passe tout seul en « Terminé »",
+      body: "Il arrivait qu'une relecture soit terminée et livrée (rapport/manuscrit corrigé déposés) mais que l'historique reste bloqué sur « En cours… » — au point qu'il fallait relancer une correction pour « débloquer » la précédente. C'est corrigé : dès qu'un lancement a livré ses documents, s'il reste silencieux quelques minutes (par ex. après un redémarrage du serveur qui a empêché d'écrire la conclusion), il passe automatiquement en « Terminé », avec le rapport téléchargeable. Plus besoin de relancer pour débloquer. Un lancement qui travaille encore (avancement qui bouge) n'est jamais interrompu.",
+      permissionModules: ["tasks", "manuscripts"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-relecture-ia-pourcentage",
       version: "2026.10",
       title: "Nouveauté — Relecture IA : pourcentage d'avancement affiché",

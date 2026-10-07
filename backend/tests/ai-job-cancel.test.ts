@@ -90,4 +90,28 @@ describe("relecture IA — arrêt & jobs bloqués", () => {
     const row = (list.json().jobs as Array<{ id: string; status: string }>).find((j) => j.id === job.id);
     expect(row?.status).toBe("erreur");
   });
+
+  it("conclut en « terminé » un lancement qui a LIVRÉ mais est resté « en cours » (plus besoin de relancer pour débloquer)", async () => {
+    const silent = new Date(Date.now() - 10 * 60 * 1000); // livré mais silencieux depuis 10 min
+    const job = await mkJob("en_cours", silent);
+    // Le rapport a bien été produit (document livré), mais la conclusion n'a pas
+    // été écrite (conteneur recyclé) : le job est resté « en cours ».
+    await prisma.aiReadingJob.update({
+      where: { id: job.id },
+      data: { producedDocumentIds: ["doc-rapport-xyz"], progressAt: silent },
+    });
+    const list = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`, headers: { cookie } });
+    const row = (list.json().jobs as Array<{ id: string; status: string; reportAvailable?: boolean }>).find((j) => j.id === job.id);
+    expect(row?.status).toBe("termine");
+    expect(row?.reportAvailable).toBe(true);
+  });
+
+  it("ne conclut PAS un lancement livré qui vient de progresser (toujours en cours)", async () => {
+    const job = await mkJob("en_cours", new Date(Date.now() - 10 * 60 * 1000));
+    // Livré (rapport) ET progrès récent (il génère encore le manuscrit corrigé).
+    await prisma.aiReadingJob.update({ where: { id: job.id }, data: { producedDocumentIds: ["doc-rapport-xyz"], progressTotal: 12, progressDone: 4, progressAt: new Date() } });
+    const list = await app.inject({ method: "GET", url: `/api/v1/ai-editorial/jobs?manuscript=${manuscriptId}`, headers: { cookie } });
+    const row = (list.json().jobs as Array<{ id: string; status: string }>).find((j) => j.id === job.id);
+    expect(row?.status).toBe("en_cours");
+  });
 });

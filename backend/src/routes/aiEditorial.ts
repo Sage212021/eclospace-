@@ -80,26 +80,42 @@ const AI_JOB_LAUNCH_PERMS = [
 
 // Un lancement IA tourne EN ARRIÈRE-PLAN : si le conteneur redémarre (déploiement)
 // ou si l'appel est interrompu, le job pouvait rester « en cours » indéfiniment
-// (statut jamais résolu → l'opérateur relançait, consommant du crédit). Balayage
-// paresseux : au-delà de ce délai sans conclusion, un job « en cours » est
-// considéré comme interrompu et marqué en erreur (résolu, non bloquant).
+// (statut jamais résolu → l'opérateur relançait, consommant du crédit, ou pour
+// « débloquer » l'ancien). Balayage paresseux, déclenché à la lecture de
+// l'historique, qui RÉSOUT ces lancements silencieux :
+//   • s'il a DÉJÀ LIVRÉ des documents (rapport et/ou manuscrit corrigé) mais est
+//     silencieux depuis quelques minutes → « terminé » (il est fini/livré, c'est
+//     juste la conclusion qui ne s'est pas écrite — plus de « en cours » perpétuel) ;
+//   • s'il n'a rien livré après un délai franc → « interrompu » (erreur).
+// Un lancement qui PROGRESSE encore (battement récent) n'est jamais touché.
 const AI_JOB_STALE_MINUTES = 15;
+const AI_JOB_DELIVERED_SILENT_MINUTES = 5;
 async function sweepStaleAiJobs(manuscriptId?: string): Promise<void> {
-  const cutoff = new Date(Date.now() - AI_JOB_STALE_MINUTES * 60 * 1000);
-  await prisma.aiReadingJob
-    .updateMany({
-      where: {
-        status: { in: ["en_cours", "en_attente"] },
-        launchedAt: { lt: cutoff },
-        // Battement d'avancement : un lancement qui a progressé récemment (ex.
-        // génération du manuscrit corrigé tranche par tranche) n'est PAS déclaré
-        // interrompu, même au-delà de 15 min — seul un vrai silence l'est.
-        OR: [{ progressAt: null }, { progressAt: { lt: cutoff } }],
-        ...(manuscriptId ? { manuscriptId } : {}),
-      },
-      data: { status: "erreur", finishedAt: new Date(), errorMessage: `Lancement interrompu (aucune réponse après ${AI_JOB_STALE_MINUTES} min — souvent un redémarrage du serveur). Relancez si besoin.` },
+  const now = Date.now();
+  const hardCutoff = new Date(now - AI_JOB_STALE_MINUTES * 60 * 1000);
+  const deliveredCutoff = new Date(now - AI_JOB_DELIVERED_SILENT_MINUTES * 60 * 1000);
+  const candidates = await prisma.aiReadingJob
+    .findMany({
+      where: { status: { in: ["en_cours", "en_attente"] }, ...(manuscriptId ? { manuscriptId } : {}) },
+      select: { id: true, launchedAt: true, progressAt: true, producedDocumentIds: true },
     })
-    .catch(() => {});
+    .catch(() => [] as { id: string; launchedAt: Date; progressAt: Date | null; producedDocumentIds: unknown }[]);
+  const nowDate = new Date();
+  for (const j of candidates) {
+    const lastActivity = j.progressAt ?? j.launchedAt;
+    const delivered = Array.isArray(j.producedDocumentIds) && (j.producedDocumentIds as unknown[]).length > 0;
+    if (delivered && lastActivity < deliveredCutoff) {
+      // Livré mais resté « en cours » (conclusion non écrite : conteneur recyclé) →
+      // on conclut en « terminé » : l'opérateur n'a plus à relancer pour débloquer.
+      await prisma.aiReadingJob
+        .updateMany({ where: { id: j.id, status: { in: ["en_cours", "en_attente"] } }, data: { status: "termine", finishedAt: nowDate, reportVersion: 1, progressLabel: null } })
+        .catch(() => {});
+    } else if (!delivered && lastActivity < hardCutoff) {
+      await prisma.aiReadingJob
+        .updateMany({ where: { id: j.id, status: { in: ["en_cours", "en_attente"] } }, data: { status: "erreur", finishedAt: nowDate, errorMessage: `Lancement interrompu (aucune réponse après ${AI_JOB_STALE_MINUTES} min — souvent un redémarrage du serveur). Relancez si besoin.` } })
+        .catch(() => {});
+    }
+  }
 }
 
 // L'INFOGRAPHE qui intègre les corrections de COUVERTURE : celui DÉSIGNÉ pour

@@ -3053,6 +3053,10 @@ enum IsbnStatus {
   reserved
   assigned
   published
+  // ANNULÉ / INUTILISABLE (Banque des ISBN) : numéro erroné, retiré par l'agence,
+  // ou ouvrage abandonné — n'est plus proposé à l'attribution, mais CONSERVÉ pour
+  // la traçabilité (jamais supprimé, jamais réutilisé).
+  cancelled
 }
 
 // Ch. 13 §13.2-13.3 : un ISBN n'est jamais réutilisé (contrainte applicative —
@@ -3068,6 +3072,9 @@ model Isbn {
   status       IsbnStatus  @default(available)
   assignedAt   DateTime?   @map("assigned_at")
   assignedBy   String?     @map("assigned_by")
+  // Note libre de la Banque des ISBN (ex. motif d'annulation, provenance d'un
+  // ancien registre). Facultative.
+  observations String?
 
   createdAt DateTime @default(now()) @map("created_at")
 

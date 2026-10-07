@@ -1991,6 +1991,14 @@ async function main() {
       departmentCodes: ["MAQ", "INFOG", "SECR", "CQ", "DIRED"],
     },
     {
+      slug: "2026-10-banque-isbn-lot1",
+      version: "2026.10",
+      title: "Nouveauté — Banque des ISBN (consultation)",
+      body: "Nouveau module PRODUCTION → « Banque des ISBN » : la source centrale de tous les ISBN d'Éclosion. Tous les numéros déjà enregistrés (y compris ceux du catalogue) y apparaissent, classés par statut — 🟡 Disponible, 🟢 Attribué, 🔴 Annulé. En haut, un tableau de bord (Total / Disponibles / Attribués / Annulés). Vous pouvez rechercher par numéro, titre ou auteur, et filtrer par statut ou format. Pour chaque ISBN : titre, auteur, format, date d'attribution et qui l'a attribué — et un clic sur le titre ouvre la fiche de l'ouvrage. Un ISBN disponible mais erroné/retiré peut être « annulé » (il reste conservé, mais n'est plus proposé à l'attribution) ; un ISBN déjà attribué ne peut pas être annulé. C'est la 1ʳᵉ étape : l'attribution par numéro (avec les 3 cas) et l'import des anciens registres suivront.",
+      permissionModules: ["isbn", "production"],
+      departmentCodes: ["SECR", "INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-relecture-ia-avancement-rapide",
       version: "2026.10",
       title: "Nouveauté — Relecture IA : plus rapide et avec avancement visible",

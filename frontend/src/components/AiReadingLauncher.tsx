@@ -176,6 +176,13 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
     }
   }
 
+  // Un lancement est « en cours » pour TOUT LE MONDE s'il existe un job actif —
+  // pas seulement pour la personne qui l'a démarré (busy, local à sa session).
+  // Ainsi le correcteur voit aussi l'avancement d'une analyse lancée par l'éditeur.
+  const running = jobs.find((j) => j.status === "en_cours" || j.status === "en_attente");
+  const inProgress = busy || !!running;
+  const runningPct = running?.progressTotal ? Math.round(((running.progressDone ?? 0) / running.progressTotal) * 100) : null;
+
   return (
     <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 12, background: "var(--paper, #FAF8F2)" }}>
       <div style={{ fontWeight: 600, fontSize: 14 }}>🤖 {title}</div>
@@ -254,15 +261,11 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
       />
       <button
         onClick={launch}
-        disabled={busy}
-        style={{ marginTop: 8, background: "var(--eclosion)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "9px 16px", fontSize: 13.5, fontWeight: 700, cursor: busy ? "default" : "pointer" }}
+        disabled={inProgress}
+        style={{ marginTop: 8, background: "var(--eclosion)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "9px 16px", fontSize: 13.5, fontWeight: 700, cursor: inProgress ? "default" : "pointer" }}
       >
-        {busy
-          ? (() => {
-              const running = jobs.find((j) => j.status === "en_cours" || j.status === "en_attente");
-              const pct = running?.progressTotal ? Math.round(((running.progressDone ?? 0) / running.progressTotal) * 100) : null;
-              return pct !== null ? `Analyse en cours… ${pct} %` : "Analyse en cours… (patientez)";
-            })()
+        {inProgress
+          ? (runningPct !== null ? `Analyse en cours… ${runningPct} %` : "Analyse en cours… (patientez)")
           : "Lancer avec Claude"}
       </button>
 

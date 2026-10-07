@@ -2245,6 +2245,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks", "production"],
       departmentCodes: ["CORR", "DIRED", "INFOG", "DG"],
     },
+    {
+      slug: "2026-10-relecture-ia-pourcentage-tous-profils",
+      version: "2026.10",
+      title: "Nouveauté — Relecture IA : l'avancement en % visible par chaque profil impliqué",
+      body: "Avant, seul celui qui avait lancé l'analyse (souvent l'éditeur ou la direction éditoriale) voyait le pourcentage d'avancement du rapport. Le correcteur, lui, devait repasser par la page de l'éditeur pour savoir où en était le travail. C'est corrigé. Désormais, dès qu'un lancement est actif — relecture, correction BAT1, correction BAT2, couverture, évaluation ou réécriture — CHAQUE profil habilité et directement concerné voit le même pourcentage d'avancement depuis SA propre page (« Mes corrections », « Mes lectures », la fiche de l'ouvrage…). Le bouton affiche « Analyse en cours… X % » et la barre d'avancement de l'historique se met à jour toute seule, au même rythme pour tout le monde, parce que c'est la même source. Plus besoin de revenir sur la page d'un collègue pour connaître l'état d'avancement.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

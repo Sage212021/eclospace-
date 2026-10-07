@@ -2555,6 +2555,13 @@ export function importIsbnBank(rows: IsbnImportRow[]) {
   return request<IsbnImportResult>(`/api/v1/isbn-bank/import`, { method: "POST", body: JSON.stringify({ rows }) });
 }
 
+// Chargement de nouveaux ISBN DISPONIBLES (écran Administrateur) : liste de
+// numéros neufs à valider (13 chiffres + chiffre de contrôle) et à charger.
+export interface IsbnLoadResult { created: number; created_list: string[]; duplicates: number; invalid: { value: string; reason: string }[] }
+export function loadIsbns(isbns: string[], format?: IsbnFormat, observations?: string) {
+  return request<IsbnLoadResult>(`/api/v1/isbn-bank/load`, { method: "POST", body: JSON.stringify({ isbns, format, observations }) });
+}
+
 // Attribution par numéro (Lot 3 — parcours §9) : recherche dans la banque puis action.
 export type IsbnLookupCase = "absent" | "disponible" | "attribue_libre" | "attribue_courant" | "attribue_autre" | "annule";
 export interface IsbnLookupResult {

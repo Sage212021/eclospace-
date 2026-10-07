@@ -403,6 +403,60 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
     return reply.send({ created, duplicates: duplicates.length, errors });
   });
 
+  // ═══ CHARGEMENT DE NOUVEAUX ISBN DISPONIBLES (écran Administrateur) ══════════
+  // Charge dans la banque des ISBN NEUFS, non encore utilisés, au statut
+  // « disponible ». Pensé pour l'administrateur qui reçoit une nouvelle tranche
+  // de l'agence ISBN : il colle la liste (un numéro par ligne) ou génère une
+  // séquence. Chaque numéro est VALIDÉ (13 chiffres + chiffre de contrôle) :
+  // erreurs explicites, aucun numéro douteux n'entre. Le numéro reste unique en
+  // base (isbn13 unique) — un numéro déjà présent (même attribué) n'est jamais
+  // ni écrasé ni dupliqué : il est signalé « déjà en banque ».
+  fastify.post("/api/v1/isbn-bank/load", { preHandler: requirePermission("isbn", "administration") }, async (request, reply) => {
+    const schema = z.object({
+      isbns: z.array(z.string()).min(1).max(5000),
+      format: z.nativeEnum(IsbnFormat).optional(),
+      observations: z.string().max(500).optional(),
+    });
+    const parsed = schema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Aucun numéro ISBN à charger." });
+
+    const format = parsed.data.format ?? "print";
+    const observations = parsed.data.observations?.trim() || "Chargé par l'administrateur (tranche d'ISBN disponibles).";
+    let created = 0;
+    const createdList: string[] = [];
+    const duplicates: string[] = [];
+    const invalid: { value: string; reason: string }[] = [];
+    const seen = new Set<string>();
+
+    for (const raw of parsed.data.isbns) {
+      const value = raw.trim();
+      if (!value) continue; // ligne vide ignorée en silence
+      const norm = value.replace(/[^0-9Xx]/g, "").toUpperCase();
+      if (norm.length !== 13 || !/^\d{13}$/.test(norm)) {
+        invalid.push({ value, reason: `numéro invalide : un ISBN-13 doit comporter exactement 13 chiffres (reçu : ${norm.length || 0}).` });
+        continue;
+      }
+      const expected = computeEan13CheckDigit(norm.slice(0, 12));
+      if (Number(norm[12]) !== expected) {
+        invalid.push({ value, reason: `chiffre de contrôle erroné (attendu ${expected}, reçu ${norm[12]}) — vérifiez la saisie.` });
+        continue;
+      }
+      if (seen.has(norm)) { duplicates.push(norm); continue; } // doublon dans la liste collée
+      seen.add(norm);
+      const existing = await prisma.isbn.findFirst({ where: { isbn13: norm }, select: { id: true } });
+      if (existing) { duplicates.push(norm); continue; } // déjà en banque → jamais réutilisé
+      try {
+        await prisma.isbn.create({ data: { isbn13: norm, format, status: "available", observations } });
+        created++;
+        createdList.push(norm);
+      } catch {
+        invalid.push({ value, reason: "création impossible (numéro en conflit ?)." });
+      }
+    }
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "isbn", entityId: "load", newValues: { created, duplicates: duplicates.length, invalid: invalid.length, format }, ipAddress: request.ip });
+    return reply.send({ created, created_list: createdList, duplicates: duplicates.length, invalid });
+  });
+
   // ═══ ATTRIBUTION PAR NUMÉRO (Lot 3 — parcours §9 de la spec Banque) ═════════
   // Sur la fiche, à l'étape Attribution des références : l'opérateur SAISIT ou
   // RECHERCHE un numéro ISBN ; Eclospace vérifie la banque et détermine le cas.

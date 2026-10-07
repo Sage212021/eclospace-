@@ -101,6 +101,18 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [manuscriptId, workType]);
   useEffect(() => { if (askGrid) listGenres().then(setGenres).catch(() => setGenres([])); }, [askGrid]);
 
+  // Rafraîchissement LÉGER tant qu'un lancement est actif — indépendant du suivi
+  // de 5 min du bouton : garde le pourcentage d'avancement à jour dans
+  // l'historique, même pour une longue correction et même si l'opérateur revient
+  // sur l'écran plus tard. S'arrête dès qu'aucun lancement n'est en cours.
+  useEffect(() => {
+    const hasRunning = jobs.some((j) => j.status === "en_cours" || j.status === "en_attente");
+    if (!hasRunning) return;
+    const t = setTimeout(() => { refresh(); }, 8000);
+    return () => clearTimeout(t);
+    /* eslint-disable-next-line */
+  }, [jobs]);
+
   // L'analyse tourne EN ARRIÈRE-PLAN (fin des erreurs 504) : après le lancement,
   // on suit l'avancement du job en rafraîchissant régulièrement, jusqu'à
   // « Terminé » ou « Erreur ». Le bouton reste en « analyse en cours » pendant ce
@@ -245,7 +257,13 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
         disabled={busy}
         style={{ marginTop: 8, background: "var(--eclosion)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "9px 16px", fontSize: 13.5, fontWeight: 700, cursor: busy ? "default" : "pointer" }}
       >
-        {busy ? "Analyse en cours… (patientez)" : "Lancer avec Claude"}
+        {busy
+          ? (() => {
+              const running = jobs.find((j) => j.status === "en_cours" || j.status === "en_attente");
+              const pct = running?.progressTotal ? Math.round(((running.progressDone ?? 0) / running.progressTotal) * 100) : null;
+              return pct !== null ? `Analyse en cours… ${pct} %` : "Analyse en cours… (patientez)";
+            })()
+          : "Lancer avec Claude"}
       </button>
 
       {jobs.length > 0 && (
@@ -256,9 +274,18 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
               <div key={j.id} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 12, flexWrap: "wrap" }}>
                 <span style={{ fontFamily: "var(--font-mono)" }}>{new Date(j.launchedAt).toLocaleString("fr-FR")}</span>
                 <span style={{ fontWeight: 700, color: STATUS_COLORS[j.status] }}>{STATUS_LABELS[j.status]}</span>
-                {j.status === "en_cours" && j.progressTotal ? (
-                  <span style={{ color: "var(--eclosion-dark, #9A7A12)", fontWeight: 600 }}>
-                    {j.progressLabel ? `${j.progressLabel} ` : ""}({j.progressDone ?? 0}/{j.progressTotal})
+                {j.status === "en_cours" && (j.progressLabel || j.progressTotal) ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", color: "var(--eclosion-dark, #9A7A12)", fontWeight: 600 }}>
+                    {j.progressLabel && <span>{j.progressLabel}</span>}
+                    {j.progressTotal ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 90, height: 8, background: "var(--line)", borderRadius: 999, overflow: "hidden", display: "inline-block" }}>
+                          <span style={{ display: "block", height: "100%", width: `${Math.round(((j.progressDone ?? 0) / j.progressTotal) * 100)}%`, background: "var(--eclosion, #D9B21A)" }} />
+                        </span>
+                        <strong style={{ fontFamily: "var(--font-mono)" }}>{Math.round(((j.progressDone ?? 0) / j.progressTotal) * 100)} %</strong>
+                        <span style={{ color: "var(--muted)" }}>({j.progressDone ?? 0}/{j.progressTotal})</span>
+                      </span>
+                    ) : null}
                   </span>
                 ) : null}
                 {(j.status === "en_cours" || j.status === "en_attente") && (

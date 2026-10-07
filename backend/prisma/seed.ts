@@ -1999,6 +1999,14 @@ async function main() {
       departmentCodes: ["CORR", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-relecture-ia-pourcentage",
+      version: "2026.10",
+      title: "Nouveauté — Relecture IA : pourcentage d'avancement affiché",
+      body: "La relecture IA affiche maintenant un POURCENTAGE d'avancement pendant tout le lancement : d'abord « Analyse du manuscrit et rédaction du rapport… », puis, pendant la génération du manuscrit corrigé, une barre de progression avec le pourcentage et le détail (ex. « 45 % (5/12) »). Le bouton lui-même indique « Analyse en cours… 45 % ». L'avancement reste à jour même pour une longue correction et même si vous revenez sur l'écran plus tard. (Rappel : si vous voyez « credit balance too low », c'est le crédit API à recharger dans la Console Anthropic — l'avancement ne démarre qu'une fois le crédit disponible.)",
+      permissionModules: ["tasks", "manuscripts"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-fiche-sections-repliables",
       version: "2026.10",
       title: "Nouveauté — Les rubriques de la fiche se replient (accordéon)",

@@ -1068,6 +1068,25 @@ async function main() {
     create: { key: "isbn_stock_alert_threshold", value: 20 },
   });
 
+  // Tranche d'ISBN DISPONIBLES non utilisés fournie par la maison
+  // (978-9956-0-7966-7 → 978-9956-0-7985-8). Chargés au statut « disponible ».
+  // Idempotent et NON destructif : un numéro déjà en banque (même attribué)
+  // n'est JAMAIS écrasé ni dupliqué (update vide) — l'ISBN n'est jamais réutilisé.
+  // Les ISBN suivants se chargent via l'écran Administrateur « Chargement des ISBN ».
+  const availableIsbns = [
+    "9789956079667", "9789956079674", "9789956079681", "9789956079698", "9789956079704",
+    "9789956079711", "9789956079728", "9789956079735", "9789956079742", "9789956079759",
+    "9789956079766", "9789956079773", "9789956079780", "9789956079797", "9789956079803",
+    "9789956079810", "9789956079827", "9789956079834", "9789956079841", "9789956079858",
+  ];
+  for (const isbn13 of availableIsbns) {
+    await prisma.isbn.upsert({
+      where: { isbn13 },
+      update: {},
+      create: { isbn13, format: "print", status: "available", observations: "Tranche d'ISBN disponibles de la maison (chargement initial)." },
+    });
+  }
+
   // Seuil de délégation pour la validation d'un bon de commande d'impression
   // (Ch. 15 §15.3 point 5, "seuil paramétrable") — montant en XOF, au-delà
   // duquel la validation de la Direction générale est requise (à confirmer).
@@ -1430,6 +1449,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-10-isbn-chargement-admin",
+      version: "2026.10",
+      title: "Nouveauté — Chargement des ISBN : une tranche disponible chargée + un écran admin",
+      body: "Deux choses. 1) La tranche d'ISBN disponibles de la maison (978-9956-0-7966-7 → 978-9956-0-7985-8) est désormais chargée dans la Banque des ISBN, au statut « disponible » — prête à être attribuée. 2) Nouvel écran Administrateur « Chargement des ISBN » (menu Production) : quand vous recevez une nouvelle tranche de l'agence, vous collez la liste (un numéro par ligne) OU vous générez une séquence (ex. 978-9956-0-7986 et les suivants) — le chiffre de contrôle est calculé tout seul. Chaque numéro est vérifié avant d'entrer (13 chiffres + chiffre de contrôle juste), les doublons et les numéros déjà en banque sont signalés, et vous voyez un récapitulatif clair : combien chargés, combien déjà présents, lesquels refusés et pourquoi. Un ISBN n'est jamais réutilisé.",
+      permissionModules: ["isbn"],
+      departmentCodes: ["SECR", "DIRED", "DG"],
+    },
     {
       slug: "2026-09-rh-absences-suivi",
       version: "2026.09",

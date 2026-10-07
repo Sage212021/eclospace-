@@ -1999,6 +1999,14 @@ async function main() {
       departmentCodes: ["SECR", "INFOG", "MAQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-banque-isbn-attribution-par-numero",
+      version: "2026.10",
+      title: "Nouveauté — Attribuer un ISBN par son numéro (relié à la Banque)",
+      body: "Sur la fiche d'un ouvrage, à l'étape « Attribution des références », le bouton « + Attribuer un ISBN » ouvre désormais un panneau relié à la Banque des ISBN. Vous SAISISSEZ (ou recherchez) un numéro, puis « Vérifier » : le système dit le cas et propose la bonne action. ✅ Disponible → « Attribuer cet ISBN ». 📘 Déjà paru (ISBN enregistré mais sans ouvrage lié) → « Rattacher à cet ouvrage ». ⚠️ Déjà attribué à un autre ouvrage → bloqué, avec les infos et un bouton « Voir le dossier ». 🔴 Annulé → refusé. ℹ️ Absent de la banque → « Enregistrer et attribuer » en une fois. Un même numéro ne peut jamais être attribué deux fois. L'ancienne façon (générer le prochain numéro de la tranche de la maison) reste disponible en option dans le même panneau.",
+      permissionModules: ["isbn", "production", "manuscripts"],
+      departmentCodes: ["SECR", "INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-relecture-ia-avancement-rapide",
       version: "2026.10",
       title: "Nouveauté — Relecture IA : plus rapide et avec avancement visible",

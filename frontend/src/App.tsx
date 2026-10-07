@@ -823,6 +823,7 @@ export function App() {
             roles={roles}
             originKey={view.originKey}
             onBack={() => setView({ kind: "leaf", key: activeKey })}
+            onOpenManuscript={openManuscript}
           />
         )}
 

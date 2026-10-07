@@ -341,6 +341,99 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
     return reply.send(updated);
   });
 
+  // ═══ ATTRIBUTION PAR NUMÉRO (Lot 3 — parcours §9 de la spec Banque) ═════════
+  // Sur la fiche, à l'étape Attribution des références : l'opérateur SAISIT ou
+  // RECHERCHE un numéro ISBN ; Eclospace vérifie la banque et détermine le cas.
+  // L'unicité d'un numéro reste garantie par la base (isbn13 unique).
+  const normalizeIsbn = (s: string): string => s.replace(/[^0-9Xx]/g, "").toUpperCase();
+
+  // Pré-vérification (affichage du bon message + bonne action côté écran).
+  fastify.get("/api/v1/manuscripts/:id/isbn/lookup", { preHandler: requirePermission("isbn", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const raw = String((request.query as { isbn13?: string }).isbn13 ?? "").trim();
+    const norm = normalizeIsbn(raw);
+    if (!norm) return reply.code(400).send({ code: "validation_error", message: "Saisissez un numéro ISBN." });
+    const found = await prisma.isbn.findFirst({
+      where: { OR: [{ isbn13: raw }, { isbn13: norm }] },
+      include: {
+        manuscript: { select: { id: true, title: true, manuscriptNumber: true, workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, take: 1, select: { partner: { select: { firstName: true, lastName: true } } } } } },
+      },
+    });
+    if (!found) return reply.send({ case: "absent", isbn: null, other_manuscript: null });
+
+    const c = found.manuscript?.workContributors?.[0]?.partner;
+    const author = c ? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || null : null;
+    const info = {
+      id: found.id, isbn13: found.isbn13, format: found.format, status: found.status,
+      title: found.manuscript?.title ?? null, author,
+      assigned_at: found.assignedAt ? found.assignedAt.toISOString() : null,
+    };
+    const other = found.manuscript && found.manuscript.id !== id
+      ? { id: found.manuscript.id, number: found.manuscript.manuscriptNumber, title: found.manuscript.title }
+      : null;
+
+    let kase: string;
+    if (found.status === "cancelled") kase = "annule";
+    else if (found.status === "assigned" || found.status === "published") {
+      kase = found.manuscriptId === id ? "attribue_courant" : found.manuscriptId == null ? "attribue_libre" : "attribue_autre";
+    } else {
+      // available / reserved
+      kase = found.manuscriptId && found.manuscriptId !== id ? "attribue_autre" : "disponible";
+    }
+    return reply.send({ case: kase, isbn: info, other_manuscript: other });
+  });
+
+  // Action : attribuer / rattacher / enregistrer-et-attribuer selon le cas.
+  fastify.post("/api/v1/manuscripts/:id/isbn/by-number", { preHandler: requirePermission("isbn", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ isbn13: z.string().min(1), format: z.nativeEnum(IsbnFormat).optional(), observations: z.string().max(500).optional() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const norm = normalizeIsbn(parsed.data.isbn13);
+    if (!norm) return reply.code(400).send({ code: "validation_error", message: "Numéro ISBN invalide." });
+
+    const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+
+    const existing = await prisma.isbn.findFirst({ where: { OR: [{ isbn13: parsed.data.isbn13 }, { isbn13: norm }] } });
+    const now = new Date();
+
+    // CAS 3 — absent de la banque : on CRÉE l'ISBN (statut attribué) ET on le
+    // rattache au manuscrit en cours, en une seule opération.
+    if (!existing) {
+      const created = await prisma.isbn.create({
+        data: { isbn13: norm, format: parsed.data.format ?? "print", status: "assigned", manuscriptId: id, assignedAt: now, assignedBy: request.user!.id, observations: parsed.data.observations ?? null },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "isbn", entityId: created.id, newValues: { manuscriptId: id, isbn13: norm, mode: "register_and_attribute" }, ipAddress: request.ip });
+      return reply.code(201).send({ outcome: "registered_and_attributed", isbn: created });
+    }
+
+    if (existing.status === "cancelled") {
+      return reply.code(409).send({ code: "isbn_cancelled", message: "Cet ISBN est annulé / inutilisable : il ne peut pas être attribué." });
+    }
+    // Déjà rattaché à CET ouvrage : rien à faire.
+    if (existing.manuscriptId === id) {
+      return reply.send({ outcome: "already_attached", isbn: existing });
+    }
+    // Déjà attribué/rattaché à un AUTRE ouvrage : blocage (anti-doublon).
+    if (existing.manuscriptId && existing.manuscriptId !== id) {
+      const other = await prisma.manuscript.findUnique({ where: { id: existing.manuscriptId }, select: { id: true, title: true, manuscriptNumber: true } });
+      return reply.code(409).send({
+        code: "isbn_assigned_other",
+        message: `Cet ISBN est déjà attribué à « ${other?.title ?? "un autre ouvrage"} »${other ? ` (${other.manuscriptNumber})` : ""}. Il ne peut pas être attribué à un second ouvrage.`,
+        other_manuscript: other ? { id: other.id, number: other.manuscriptNumber, title: other.title } : null,
+      });
+    }
+    // CAS 1 (disponible) OU « attribué mais sans ouvrage lié » (déjà paru) :
+    // on attribue / rattache l'ISBN existant au manuscrit en cours.
+    const wasAttributed = existing.status === "assigned" || existing.status === "published";
+    const updated = await prisma.isbn.update({
+      where: { id: existing.id },
+      data: { manuscriptId: id, status: wasAttributed ? existing.status : "assigned", assignedAt: existing.assignedAt ?? now, assignedBy: existing.assignedBy ?? request.user!.id, observations: parsed.data.observations ?? existing.observations },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "isbn", entityId: updated.id, oldValues: { manuscriptId: existing.manuscriptId, status: existing.status }, newValues: { manuscriptId: id, mode: wasAttributed ? "rattach" : "attribute" }, ipAddress: request.ip });
+    return reply.send({ outcome: wasAttributed ? "attached" : "attributed", isbn: updated });
+  });
+
   fastify.get("/api/v1/isbn/:id/barcode", { preHandler: requirePermission("isbn", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const isbn = await prisma.isbn.findUnique({ where: { id } });

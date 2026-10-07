@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   assignIsbn,
+  attributeIsbnByNumber,
+  lookupIsbn,
   createLegalDeposit,
   getIsbnCompleteness,
   getWorkMetadata,
@@ -13,6 +15,7 @@ import {
   type EditionType,
   type Isbn,
   type IsbnFormat,
+  type IsbnLookupResult,
   type IsbnPoolSummary,
   type LegalDeposit,
   type WorkMetadata,
@@ -40,11 +43,13 @@ interface IsbnSectionProps {
   // Ouvre la section d'emblée (affichage « sur place » comme pré-requis). Par
   // défaut repliée (accordéon de la fiche).
   startOpen?: boolean;
+  // Ouvrir la fiche d'un AUTRE ouvrage (cas « ISBN déjà attribué à un autre »).
+  onOpenManuscript?: (id: string) => void;
 }
 
 // ISBN, dépôt légal et métadonnées (Ch. 13) : identité officielle de
 // l'ouvrage, point de passage obligé avant le BAT (Ch. 13 §13.9).
-export function IsbnSection({ manuscriptId, canManage, startOpen = false }: IsbnSectionProps) {
+export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpenManuscript }: IsbnSectionProps) {
   const [isbns, setIsbns] = useState<Isbn[]>([]);
   const [pools, setPools] = useState<IsbnPoolSummary[]>([]);
   const [deposits, setDeposits] = useState<LegalDeposit[]>([]);
@@ -96,14 +101,58 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false }: Isbn
     refresh().catch((e) => setError(e.message));
   }, [manuscriptId]);
 
-  async function handleAssign() {
-    const format = window.prompt("Format (print, epub, pdf, audio)", "print") as IsbnFormat | null;
-    if (!format) return;
+  // ── Attribution par numéro (parcours §9) : panneau ouvert par « + Attribuer ».
+  const [attrOpen, setAttrOpen] = useState(false);
+  const [attrInput, setAttrInput] = useState("");
+  const [attrFormat, setAttrFormat] = useState<IsbnFormat>("print");
+  const [lookup, setLookup] = useState<IsbnLookupResult | null>(null);
+  const [attrBusy, setAttrBusy] = useState(false);
+  const [attrError, setAttrError] = useState<string | null>(null);
+  const [attrInfo, setAttrInfo] = useState<string | null>(null);
+
+  function resetAttr() {
+    setAttrInput(""); setLookup(null); setAttrError(null); setAttrInfo(null); setAttrFormat("print");
+  }
+  async function verifyIsbn() {
+    const v = attrInput.trim();
+    if (!v) return;
+    setAttrBusy(true); setAttrError(null); setAttrInfo(null); setLookup(null);
     try {
-      await assignIsbn(manuscriptId, format, pools[0]?.id);
+      setLookup(await lookupIsbn(manuscriptId, v));
+    } catch (e) {
+      setAttrError(e instanceof Error ? e.message : "Vérification impossible.");
+    } finally {
+      setAttrBusy(false);
+    }
+  }
+  async function confirmAttr() {
+    setAttrBusy(true); setAttrError(null); setAttrInfo(null);
+    try {
+      const r = await attributeIsbnByNumber(manuscriptId, { isbn13: attrInput.trim(), format: attrFormat });
+      const msg = r.outcome === "registered_and_attributed" ? "ISBN enregistré et attribué à l'ouvrage."
+        : r.outcome === "attached" ? "ISBN rattaché à l'ouvrage."
+        : r.outcome === "already_attached" ? "Cet ISBN est déjà rattaché à l'ouvrage."
+        : "ISBN attribué à l'ouvrage.";
+      setAttrInfo(msg);
       await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'attribution.");
+      setAttrOpen(false); resetAttr();
+    } catch (e) {
+      const err = e as { message?: string; code?: string };
+      setAttrError(err?.message ?? "Attribution impossible.");
+    } finally {
+      setAttrBusy(false);
+    }
+  }
+  async function generateFromPool() {
+    setAttrBusy(true); setAttrError(null);
+    try {
+      await assignIsbn(manuscriptId, attrFormat, pools[0]?.id);
+      await refresh();
+      setAttrOpen(false); resetAttr();
+    } catch (e) {
+      setAttrError(e instanceof Error ? e.message : "Génération impossible.");
+    } finally {
+      setAttrBusy(false);
     }
   }
 
@@ -162,11 +211,22 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false }: Isbn
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ fontSize: 12, fontWeight: 600 }}>ISBN attribués</div>
         {canManage && (
-          <button onClick={handleAssign} style={secondaryButtonStyle}>
-            + Attribuer un ISBN
+          <button onClick={() => { setAttrOpen((v) => !v); resetAttr(); }} style={secondaryButtonStyle}>
+            {attrOpen ? "Fermer" : "+ Attribuer un ISBN"}
           </button>
         )}
       </div>
+
+      {canManage && attrOpen && (
+        <IsbnAttributePanel
+          input={attrInput} setInput={(v) => { setAttrInput(v); setLookup(null); setAttrError(null); }}
+          format={attrFormat} setFormat={setAttrFormat}
+          lookup={lookup} busy={attrBusy} error={attrError} info={attrInfo}
+          onVerify={verifyIsbn} onConfirm={confirmAttr} onGenerate={generateFromPool}
+          onOpenOther={onOpenManuscript}
+          poolAvailable={pools.reduce((n, p) => n + (p.available ?? 0), 0)}
+        />
+      )}
       {isbns.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun ISBN attribué.</p>}
       {isbns.map((isbn) => (
         <div key={isbn.id} style={{ display: "flex", alignItems: "center", gap: 12, borderTop: "1px solid var(--line)", padding: "8px 0" }}>
@@ -278,3 +338,98 @@ const secondaryButtonStyle: React.CSSProperties = {
   fontSize: 12,
   cursor: "pointer",
 };
+
+// Panneau d'attribution par numéro (parcours §9 de la Banque des ISBN) : saisir
+// ou rechercher un ISBN → vérifier dans la banque → action selon le cas.
+function IsbnAttributePanel({
+  input, setInput, format, setFormat, lookup, busy, error, info,
+  onVerify, onConfirm, onGenerate, onOpenOther, poolAvailable,
+}: {
+  input: string; setInput: (v: string) => void;
+  format: IsbnFormat; setFormat: (f: IsbnFormat) => void;
+  lookup: IsbnLookupResult | null; busy: boolean; error: string | null; info: string | null;
+  onVerify: () => void; onConfirm: () => void; onGenerate: () => void;
+  onOpenOther?: (id: string) => void; poolAvailable: number;
+}) {
+  const box: React.CSSProperties = { border: "1px solid var(--line)", borderRadius: 10, padding: 12, margin: "10px 0", background: "var(--ivory, #FAF8F2)" };
+  const primaryBtn: React.CSSProperties = { background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" };
+  const can = lookup?.case;
+  return (
+    <div style={box}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>Attribuer un ISBN à cet ouvrage</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onVerify(); } }}
+          placeholder="Saisir ou rechercher un numéro ISBN"
+          style={{ flex: 1, minWidth: 220, padding: "8px 11px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, fontFamily: "var(--font-mono)" }}
+        />
+        <button onClick={onVerify} disabled={busy || !input.trim()} style={{ ...primaryBtn, background: "#fff", border: "1px solid var(--eclosion, #D9B21A)", color: "var(--eclosion-dark, #9a7a12)" }}>Vérifier</button>
+      </div>
+
+      {error && <div style={{ marginTop: 10, background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "8px 11px", fontSize: 12.5 }}>⚠ {error}</div>}
+      {info && <div style={{ marginTop: 10, background: "#e9f3ec", color: "#2F7D4A", borderRadius: 8, padding: "8px 11px", fontSize: 12.5 }}>✓ {info}</div>}
+
+      {lookup && (
+        <div style={{ marginTop: 10, fontSize: 12.5, lineHeight: 1.5 }}>
+          {can === "absent" && (
+            <div>
+              <div style={{ color: "var(--ink)" }}>ℹ️ Cet ISBN n'est pas enregistré dans la banque. Vous pouvez l'enregistrer et l'attribuer à cet ouvrage.</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                <label style={{ fontSize: 12, color: "var(--muted)" }}>Format :
+                  <select value={format} onChange={(e) => setFormat(e.target.value as IsbnFormat)} style={{ marginLeft: 6, padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12.5 }}>
+                    <option value="print">Imprimé</option><option value="epub">ePub</option><option value="pdf">PDF</option><option value="audio">Audio</option>
+                  </select>
+                </label>
+                <button onClick={onConfirm} disabled={busy} style={primaryBtn}>Enregistrer et attribuer au manuscrit</button>
+              </div>
+            </div>
+          )}
+          {can === "disponible" && (
+            <div>
+              <div style={{ color: "#2F7D4A", fontWeight: 600 }}>✅ ISBN trouvé dans la banque — Disponible. Aucun ouvrage associé.</div>
+              <button onClick={onConfirm} disabled={busy} style={{ ...primaryBtn, marginTop: 8 }}>Attribuer cet ISBN</button>
+            </div>
+          )}
+          {can === "attribue_libre" && (
+            <div>
+              <div style={{ color: "var(--ink)" }}>Cet ISBN est enregistré (attribué) mais <strong>sans ouvrage lié</strong> — typiquement un ouvrage déjà paru. Vous pouvez le rattacher à cet ouvrage.</div>
+              <button onClick={onConfirm} disabled={busy} style={{ ...primaryBtn, marginTop: 8 }}>Rattacher cet ISBN à l'ouvrage</button>
+            </div>
+          )}
+          {can === "attribue_courant" && (
+            <div style={{ color: "var(--muted)" }}>ℹ️ Cet ISBN est déjà rattaché à cet ouvrage.</div>
+          )}
+          {can === "attribue_autre" && (
+            <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 12px" }}>
+              ⚠️ Cet ISBN est <strong>déjà attribué</strong> à {lookup.other_manuscript ? `« ${lookup.other_manuscript.title} » (${lookup.other_manuscript.number})` : "un autre ouvrage"}.
+              {lookup.isbn?.author && <> — Auteur : {lookup.isbn.author}.</>} Il ne peut pas être attribué à un second ouvrage.
+              {lookup.other_manuscript && onOpenOther && (
+                <div style={{ marginTop: 8 }}>
+                  <button onClick={() => onOpenOther(lookup.other_manuscript!.id)} style={{ background: "#fff", border: "1px solid var(--alert)", color: "var(--alert)", borderRadius: 6, padding: "5px 11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Voir le dossier</button>
+                </div>
+              )}
+            </div>
+          )}
+          {can === "annule" && (
+            <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 12px" }}>⚠️ Cet ISBN est annulé / inutilisable : il ne peut pas être attribué.</div>
+          )}
+        </div>
+      )}
+
+      {/* Option : générer le PROCHAIN ISBN de la tranche (ouvrages neufs). */}
+      <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dashed var(--line)", fontSize: 12, color: "var(--muted)" }}>
+        <span>Ou attribuer le prochain numéro de la tranche de la maison </span>
+        <label style={{ marginLeft: 4 }}>
+          <select value={format} onChange={(e) => setFormat(e.target.value as IsbnFormat)} style={{ padding: "4px 7px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12 }}>
+            <option value="print">Imprimé</option><option value="epub">ePub</option><option value="pdf">PDF</option><option value="audio">Audio</option>
+          </select>
+        </label>
+        <button onClick={onGenerate} disabled={busy || poolAvailable <= 0} title={poolAvailable <= 0 ? "Aucun ISBN disponible dans la tranche" : undefined} style={{ marginLeft: 8, background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "5px 11px", fontSize: 12.5, cursor: poolAvailable <= 0 ? "default" : "pointer" }}>
+          Générer le prochain ISBN{poolAvailable > 0 ? ` (${poolAvailable} dispo.)` : ""}
+        </button>
+      </div>
+    </div>
+  );
+}

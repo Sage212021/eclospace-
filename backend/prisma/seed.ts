@@ -2246,6 +2246,14 @@ async function main() {
       departmentCodes: ["CORR", "DIRED", "INFOG", "DG"],
     },
     {
+      slug: "2026-10-anomalies-texte-extraction-avant-manuscrit",
+      version: "2026.10",
+      title: "Nouveauté — Correction : les anomalies du TEXTE réapparaissent (plus seulement la couverture)",
+      body: "Vous avez signalé que « Anomalies à traiter » ne montrait plus que les anomalies de couverture, plus celles du texte. La cause : pour une correction de texte, les fiches d'anomalies étaient extraites du rapport APRÈS la longue fabrication du manuscrit corrigé. Si le serveur recyclait la tâche pendant cette fabrication, l'extraction était sautée — le rapport et le fichier corrigé arrivaient bien, mais sans fiches d'anomalies. La couverture, elle, n'a pas cette étape longue, donc ses anomalies passaient toujours. C'est corrigé : les anomalies sont maintenant extraites DÈS que le rapport est prêt, AVANT la fabrication du manuscrit corrigé — elles ne peuvent plus être perdues. En plus, un bouton « 🔧 Récupérer les anomalies manquantes » apparaît dans « Anomalies à traiter » : un clic régénère les fiches des corrections déjà terminées qui n'en avaient pas (sans jamais toucher aux décisions déjà prises, ni créer de doublon).",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-relecture-ia-pourcentage-tous-profils",
       version: "2026.10",
       title: "Nouveauté — Relecture IA : l'avancement en % visible par chaque profil impliqué",

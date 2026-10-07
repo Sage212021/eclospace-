@@ -540,6 +540,36 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Rattrapage : (re)génère les fiches d'anomalies MANQUANTES de TOUTES les
+  // relectures terminées d'un ouvrage (correction texte + couverture). Sert aux
+  // corrections livrées AVANT le correctif d'ordre d'extraction (où l'extraction,
+  // placée après la longue génération du manuscrit corrigé, pouvait être sautée
+  // si le conteneur était recyclé). Idempotent : les jobs qui ont déjà leurs
+  // anomalies sont ignorés (aucune décision humaine n'est perdue). Best-effort.
+  fastify.post(
+    "/api/v1/manuscripts/:id/correction-anomalies/backfill",
+    { preHandler: requireAnyPermission(ANOMALY_WRITE_PERMS) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const jobs = await prisma.aiReadingJob.findMany({
+        where: { manuscriptId: id, status: "termine", workType: { in: ["correction_1", "correction_2", "couverture"] } },
+        select: { id: true },
+        orderBy: { launchedAt: "asc" },
+      });
+      let repaired = 0;
+      let created = 0;
+      for (const j of jobs) {
+        try {
+          const r = await extractAnomaliesForJob(j.id);
+          if (!r.skipped && r.created > 0) { repaired += 1; created += r.created; }
+        } catch {
+          /* best-effort : un job qui échoue ne bloque pas les autres */
+        }
+      }
+      return reply.send({ jobs: jobs.length, repaired, created });
+    },
+  );
+
   // Décision humaine sur une anomalie : accepter / modifier / rejeter / à
   // vérifier. Tracée (audit) ; on n'écrase jamais l'historique (append-only).
   const anomalyPatchSchema = z.object({

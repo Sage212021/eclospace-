@@ -1258,6 +1258,11 @@ export function setIntegrationClosure(manuscriptId: string, branch: "texte" | "c
 export function extractAnomalies(jobId: string) {
   return request<{ created: number; skipped: boolean }>(`/api/v1/ai-editorial/jobs/${jobId}/extract-anomalies`, { method: "POST" });
 }
+// Rattrapage : (re)génère les anomalies manquantes de toutes les relectures
+// terminées d'un ouvrage (corrections livrées sans anomalies). Idempotent.
+export function backfillCorrectionAnomalies(manuscriptId: string) {
+  return request<{ jobs: number; repaired: number; created: number }>(`/api/v1/manuscripts/${manuscriptId}/correction-anomalies/backfill`, { method: "POST" });
+}
 // Paramétrage éditable des grilles de correction (admin éditorial).
 export interface CorrectionControlPointView { id: string; label: string; defaultSeverity: string; displayOrder: number; isActive: boolean; }
 export interface CorrectionProfileView { id: string; bookTypeCode: string | null; label: string; isActive: boolean; controlPoints: CorrectionControlPointView[]; }

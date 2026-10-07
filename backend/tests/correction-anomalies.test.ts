@@ -107,4 +107,22 @@ describe("Anomalies de correction — décisions tracées (Lot 3)", () => {
     const bad = await app.inject({ method: "PATCH", url: `/api/v1/correction-anomalies/${list[0].id}`, headers: { cookie }, payload: { status: "n_importe_quoi" } });
     expect(bad.statusCode).toBe(400);
   });
+
+  it("backfill : idempotent — les relectures qui ont déjà leurs anomalies ne sont PAS réextraites (aucune décision perdue, aucun doublon)", async () => {
+    // Décision déjà posée au test précédent (une anomalie « modifiée ») : le
+    // backfill ne doit ni l'écraser ni recréer de fiche.
+    const before = await prisma.correctionAnomaly.findMany({ where: { manuscriptId }, select: { id: true, status: true, resolutionNote: true } });
+    const r = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/correction-anomalies/backfill`, headers: { cookie } });
+    expect(r.statusCode).toBe(200);
+    const body = r.json() as { jobs: number; repaired: number; created: number };
+    // Les 2 relectures terminées (correction_1 + correction_2) sont examinées…
+    expect(body.jobs).toBe(2);
+    // …mais toutes deux ont déjà leurs anomalies → rien n'est réextrait.
+    expect(body.repaired).toBe(0);
+    expect(body.created).toBe(0);
+    const after = await prisma.correctionAnomaly.findMany({ where: { manuscriptId }, select: { id: true, status: true, resolutionNote: true } });
+    expect(after.length).toBe(before.length); // aucun doublon
+    // La décision humaine antérieure est intacte.
+    expect(after.find((a) => a.status === "modifiee")?.resolutionNote).toBe("préférer « la » pomme");
+  });
 });

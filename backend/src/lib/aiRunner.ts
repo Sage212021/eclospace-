@@ -998,6 +998,51 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     let comparisonSource: string | null = null;
     let comparisonRewrite: string | null = null;
 
+    // ANOMALIES STRUCTURÉES (Lot 3) — pour la correction ET la couverture, on
+    // convertit le rapport rédigé en fiches d'anomalies (validation humaine :
+    // accepter / modifier / rejeter / à vérifier). On le fait ICI, DÈS QUE LE
+    // RAPPORT EST PRÊT et AVANT la longue régénération du manuscrit corrigé :
+    // sinon, pour une correction de texte, un recyclage du conteneur pendant la
+    // génération du manuscrit corrigé (phase lente) sautait l'extraction, et les
+    // anomalies du texte n'apparaissaient jamais (contrairement à la couverture,
+    // qui n'a pas de phase manuscrit). Best-effort : un échec d'extraction
+    // n'invalide JAMAIS le job ni le rapport (le rapport reste le livrable).
+    if (reportText && (params.workType === "correction_1" || params.workType === "correction_2" || params.workType === "couverture")) {
+      try {
+        const ex = await client.messages.create({
+          model: modelId,
+          max_tokens: 4000,
+          system: ANOMALY_EXTRACTION_SYSTEM,
+          messages: [{ role: "user", content: anomalyExtractionUser(reportText) }],
+        });
+        totalInput += ex.usage.input_tokens;
+        totalOutput += ex.usage.output_tokens;
+        const exText = ex.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
+        const anomalies = parseAnomaliesJson(exText);
+        if (anomalies.length) {
+          await prisma.correctionAnomaly.createMany({
+            data: anomalies.map((a, i) => ({
+              jobId: job.id,
+              manuscriptId: manuscript.id,
+              number: i + 1,
+              severity: a.severity,
+              face: a.face,
+              location: a.location,
+              element: a.element,
+              observation: a.observation,
+              proposal: a.proposal,
+              justification: a.justification,
+            })),
+          });
+        }
+        // Battement : l'extraction a pu prendre du temps, on rafraîchit le
+        // horodatage d'avancement pour ne pas être déclaré « interrompu ».
+        await prisma.aiReadingJob.update({ where: { id: jobId }, data: { progressAt: new Date() } }).catch(() => {});
+      } catch {
+        /* extraction best-effort : on garde le rapport, sans fiches d'anomalies */
+      }
+    }
+
     // Régénération du manuscrit corrigé (Lot IA-3b) — uniquement 1ʳᵉ/2ᵉ
     // correction et si le texte est exploitable (pas un PDF image). Le livre est
     // corrigé PAR TRANCHES pour tenir sur les gros volumes. L'IA renvoie le texte
@@ -1113,45 +1158,6 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       if (isReecriture) {
         comparisonSource = prepared.text;
         comparisonRewrite = correctedText;
-      }
-    }
-
-    // ANOMALIES STRUCTURÉES (Lot 3) — pour la correction et la couverture, on
-    // convertit le rapport rédigé en fiches d'anomalies (validation humaine :
-    // accepter / modifier / rejeter / à vérifier). Best-effort : un échec
-    // d'extraction n'invalide JAMAIS le job ni le rapport (le rapport reste le
-    // livrable). Chaque relecture a ses propres anomalies (aucune n'écrase les
-    // précédentes).
-    if (reportText && (params.workType === "correction_1" || params.workType === "correction_2" || params.workType === "couverture")) {
-      try {
-        const ex = await client.messages.create({
-          model: modelId,
-          max_tokens: 4000,
-          system: ANOMALY_EXTRACTION_SYSTEM,
-          messages: [{ role: "user", content: anomalyExtractionUser(reportText) }],
-        });
-        totalInput += ex.usage.input_tokens;
-        totalOutput += ex.usage.output_tokens;
-        const exText = ex.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
-        const anomalies = parseAnomaliesJson(exText);
-        if (anomalies.length) {
-          await prisma.correctionAnomaly.createMany({
-            data: anomalies.map((a, i) => ({
-              jobId: job.id,
-              manuscriptId: manuscript.id,
-              number: i + 1,
-              severity: a.severity,
-              face: a.face,
-              location: a.location,
-              element: a.element,
-              observation: a.observation,
-              proposal: a.proposal,
-              justification: a.justification,
-            })),
-          });
-        }
-      } catch {
-        /* extraction best-effort : on garde le rapport, sans fiches d'anomalies */
       }
     }
 

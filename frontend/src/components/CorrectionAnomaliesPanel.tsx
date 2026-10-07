@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getCorrectionAnomalies, decideCorrectionAnomaly, integrateCorrectionAnomaly, type CorrectionAnomaly, type AnomalySummary } from "../api/client";
+import { getCorrectionAnomalies, decideCorrectionAnomaly, integrateCorrectionAnomaly, backfillCorrectionAnomalies, type CorrectionAnomaly, type AnomalySummary } from "../api/client";
 
 // Lot 3 en DEUX temps.
 //  • Mode DÉCISION (correcteur) : Accepter / Modifier / Rejeter / À vérifier.
@@ -40,12 +40,32 @@ export function CorrectionAnomaliesPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [noteFor, setNoteFor] = useState<{ id: string; status: string; text: string; kind: "decision" | "integration" } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
 
   const load = () =>
     getCorrectionAnomalies(manuscriptId)
       .then((r) => { setAnomalies(r.anomalies); setSummary(r.summary); })
       .catch((e) => setErr(e instanceof Error ? e.message : "Chargement impossible."));
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [manuscriptId]);
+
+  // Rattrapage des anomalies manquantes : utile pour les corrections de TEXTE
+  // livrées avant le correctif (où l'extraction, placée après la génération du
+  // manuscrit corrigé, pouvait être sautée). Idempotent côté serveur.
+  async function backfill() {
+    setBackfilling(true); setErr(null); setBackfillMsg(null);
+    try {
+      const r = await backfillCorrectionAnomalies(manuscriptId);
+      await load();
+      setBackfillMsg(
+        r.created > 0
+          ? `${r.created} anomalie(s) récupérée(s) sur ${r.repaired} relecture(s).`
+          : "Aucune anomalie à récupérer : les relectures terminées ont déjà leurs fiches (ou leur rapport n'en contenait aucune).",
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Récupération impossible.");
+    } finally { setBackfilling(false); }
+  }
 
   // En mode intégration, on ne travaille que sur les anomalies RETENUES
   // (acceptées/modifiées) — ce sont les seules à appliquer dans le fichier.
@@ -184,7 +204,19 @@ export function CorrectionAnomaliesPanel({
     return (
       <section style={box}>
         <div style={{ fontWeight: 600, fontSize: 14 }}>Anomalies à traiter</div>
-        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 0" }}>Aucune anomalie enregistrée pour l'instant. Lancez une relecture IA ci-dessus : ses anomalies s'afficheront ici, à valider une par une.</p>
+        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 10px" }}>Aucune anomalie enregistrée pour l'instant. Lancez une relecture IA ci-dessus : ses anomalies s'afficheront ici, à valider une par une.</p>
+        {canDecide && (
+          <>
+            <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 6px" }}>
+              Une correction de texte déjà terminée n'affiche aucune anomalie ? Récupérez-les depuis son rapport :
+            </p>
+            <button type="button" onClick={backfill} disabled={backfilling} style={{ ...btnGhost, color: "var(--eclosion-dark, #9A7A12)", borderColor: "var(--eclosion, #D9B21A)", fontWeight: 700 }}>
+              {backfilling ? "Récupération en cours…" : "🔧 Récupérer les anomalies du rapport"}
+            </button>
+            {backfillMsg && <div style={{ fontSize: 12, color: "var(--ink)", marginTop: 6 }}>{backfillMsg}</div>}
+            {err && <div style={{ fontSize: 12.5, color: "var(--alert, #B23A2E)", marginTop: 6 }}>{err}</div>}
+          </>
+        )}
       </section>
     );
   }
@@ -199,11 +231,20 @@ export function CorrectionAnomaliesPanel({
 
   return (
     <section style={box}>
-      <div style={{ fontWeight: 600, fontSize: 14 }}>Anomalies à traiter ({summary.total})</div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>Anomalies à traiter ({summary.total})</div>
+        {canDecide && (
+          <button type="button" onClick={backfill} disabled={backfilling} title="Récupère les anomalies manquantes des relectures terminées (corrections livrées sans anomalies)"
+            style={{ ...btnGhost, marginLeft: "auto", color: "var(--eclosion-dark, #9A7A12)", borderColor: "var(--eclosion, #D9B21A)", fontWeight: 700 }}>
+            {backfilling ? "Récupération…" : "🔧 Récupérer les anomalies manquantes"}
+          </button>
+        )}
+      </div>
       <p style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 10px" }}>
         Chaque anomalie relevée par l'assistance IA se valide une par une. « Accepter » enregistre la décision ; l'intégrateur
         applique ensuite la correction dans le fichier. Sévérité : C1 bloquant · C2 important · C3 mineur · S suggestion.
       </p>
+      {backfillMsg && <div style={{ fontSize: 12, color: "var(--ink)", marginBottom: 8 }}>{backfillMsg}</div>}
       {err && <div style={{ background: "var(--alert-soft, #F6E2DE)", color: "var(--alert, #B23A2E)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>

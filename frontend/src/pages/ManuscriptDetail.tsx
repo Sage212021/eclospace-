@@ -99,6 +99,9 @@ interface ManuscriptDetailProps {
   // cette étape (le reste est masqué, avec une échappatoire « toute la fiche »).
   originKey?: string;
   onBack: () => void;
+  // Ouvrir la fiche d'un AUTRE ouvrage (ex. « voir le dossier » d'un ISBN déjà
+  // attribué ailleurs). Optionnel.
+  onOpenManuscript?: (id: string) => void;
 }
 
 // Rubrique d'origine → module de la fiche à mettre en avant. Absent (ex. depuis
@@ -137,7 +140,7 @@ const CONTRACTUALISATION_STEP_ORDER = 5;
 const PLANIFICATION_STEP_ORDER = 6;
 const MISE_EN_PAGE_STEP_ORDER = 10;
 
-export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, onBack }: ManuscriptDetailProps) {
+export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, onBack, onOpenManuscript }: ManuscriptDetailProps) {
   const confirm = useConfirm();
   const [manuscript, setManuscript] = useState<ManuscriptWithExtras | null>(null);
   const [timeline, setTimeline] = useState<TimelineStep[]>([]);
@@ -813,7 +816,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             )}
             {prereqInlineIsbn && (
               <div style={{ marginTop: 10 }}>
-                <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie")} startOpen />
+                <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie")} startOpen onOpenManuscript={onOpenManuscript} />
               </div>
             )}
           </>
@@ -984,7 +987,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
       )}
 
       {show("isbn") && stageReached(["ATTRIBUTION_REFERENCES"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("isbn:consultation") && !prereqInlineIsbn && (
-        <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie") && !confieAutrui} />
+        <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie") && !confieAutrui} onOpenManuscript={onOpenManuscript} />
       )}
 
       {show("bat") && stageReached(["VALIDATION_BAT"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("bat:consultation") && (

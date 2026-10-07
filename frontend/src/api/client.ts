@@ -2544,6 +2544,24 @@ export function cancelIsbn(isbnId: string, observations?: string) {
   return request<Isbn>(`/api/v1/isbn/${isbnId}/cancel`, { method: "POST", body: JSON.stringify({ observations }) });
 }
 
+// Attribution par numéro (Lot 3 — parcours §9) : recherche dans la banque puis action.
+export type IsbnLookupCase = "absent" | "disponible" | "attribue_libre" | "attribue_courant" | "attribue_autre" | "annule";
+export interface IsbnLookupResult {
+  case: IsbnLookupCase;
+  isbn: { id: string; isbn13: string; format: IsbnFormat; status: string; title: string | null; author: string | null; assigned_at: string | null } | null;
+  other_manuscript: { id: string; number: string; title: string } | null;
+}
+export function lookupIsbn(manuscriptId: string, isbn13: string) {
+  return request<IsbnLookupResult>(`/api/v1/manuscripts/${manuscriptId}/isbn/lookup?isbn13=${encodeURIComponent(isbn13)}`);
+}
+export interface IsbnByNumberResult {
+  outcome: "attributed" | "attached" | "registered_and_attributed" | "already_attached";
+  isbn: Isbn;
+}
+export function attributeIsbnByNumber(manuscriptId: string, input: { isbn13: string; format?: IsbnFormat; observations?: string }) {
+  return request<IsbnByNumberResult>(`/api/v1/manuscripts/${manuscriptId}/isbn/by-number`, { method: "POST", body: JSON.stringify(input) });
+}
+
 export function isbnBarcodeUrl(isbnId: string) {
   return `${API_BASE}/api/v1/isbn/${isbnId}/barcode`;
 }

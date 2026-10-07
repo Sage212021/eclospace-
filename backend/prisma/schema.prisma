@@ -3075,6 +3075,11 @@ model Isbn {
   // Note libre de la Banque des ISBN (ex. motif d'annulation, provenance d'un
   // ancien registre). Facultative.
   observations String?
+  // Titre / auteur portés DIRECTEMENT par l'ISBN quand il n'est lié à aucun
+  // manuscrit Eclospace (anciens ISBN importés des registres). Quand un
+  // manuscrit est lié, c'est lui qui fait foi (ces champs servent de repli).
+  title        String?
+  authorName   String?     @map("author_name")
 
   createdAt DateTime @default(now()) @map("created_at")
 

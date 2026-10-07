@@ -2543,6 +2543,12 @@ export function getIsbnBank(params?: { q?: string; status?: IsbnBankStatus; form
 export function cancelIsbn(isbnId: string, observations?: string) {
   return request<Isbn>(`/api/v1/isbn/${isbnId}/cancel`, { method: "POST", body: JSON.stringify({ observations }) });
 }
+// Import des anciens ISBN (Lot 4) : lignes lues côté client depuis un CSV.
+export interface IsbnImportRow { isbn13: string; title?: string; author?: string; format?: IsbnFormat; status?: IsbnBankStatus; assigned_at?: string }
+export interface IsbnImportResult { created: number; duplicates: number; errors: { line: number; isbn13: string; reason: string }[] }
+export function importIsbnBank(rows: IsbnImportRow[]) {
+  return request<IsbnImportResult>(`/api/v1/isbn-bank/import`, { method: "POST", body: JSON.stringify({ rows }) });
+}
 
 // Attribution par numéro (Lot 3 — parcours §9) : recherche dans la banque puis action.
 export type IsbnLookupCase = "absent" | "disponible" | "attribue_libre" | "attribue_courant" | "attribue_autre" | "annule";

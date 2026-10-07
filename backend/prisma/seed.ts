@@ -1999,6 +1999,14 @@ async function main() {
       departmentCodes: ["SECR", "INFOG", "MAQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-banque-isbn-import-csv",
+      version: "2026.10",
+      title: "Nouveauté — Banque des ISBN : import des anciens registres (CSV)",
+      body: "Dans PRODUCTION → « Banque des ISBN », un bouton « ⬆ Importer des anciens ISBN (CSV) » permet d'intégrer d'un coup les ISBN de vos anciens registres depuis un fichier CSV (export Excel). Le fichier a une ligne d'en-tête ; colonnes reconnues (dans n'importe quel ordre, séparateur « ; » ou « , ») : isbn (obligatoire), titre, auteur, format (print/epub/pdf/audio), statut (disponible/attribué/annulé), date (AAAA-MM-JJ). Les numéros déjà présents sont automatiquement IGNORÉS (aucun doublon), et un résumé indique combien ont été ajoutés, ignorés et en erreur. Les ISBN importés apparaissent aussitôt dans la banque avec leur titre et leur auteur, même sans manuscrit lié dans Eclospace. (Réservé aux profils qui administrent les ISBN.)",
+      permissionModules: ["isbn", "production"],
+      departmentCodes: ["SECR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-banque-isbn-attribution-par-numero",
       version: "2026.10",
       title: "Nouveauté — Attribuer un ISBN par son numéro (relié à la Banque)",

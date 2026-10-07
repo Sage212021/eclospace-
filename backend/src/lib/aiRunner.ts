@@ -678,6 +678,13 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
 
     const modelId = resolveModelId(cfg.models[params.workType]);
     const job = { id: jobId };
+    // Avancement — PHASE 1 (rapport) : on affiche un libellé dès le départ pour
+    // que l'opérateur ne reste pas devant un « En cours… » muet. Le pourcentage
+    // précis arrive à la PHASE 2 (manuscrit corrigé), découpée en tranches.
+    await prisma.aiReadingJob.update({
+      where: { id: jobId },
+      data: { progressLabel: "Analyse du manuscrit et rédaction du rapport…", progressDone: null, progressTotal: null, progressAt: new Date() },
+    }).catch(() => {});
 
     // Récupère le fichier source (dernière version déposée) en lisant la BONNE
     // matière selon le passage : BAT1 = manuscrit à corriger ; BAT2 = version
@@ -864,6 +871,9 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       messages: [{ role: "user", content }],
     });
     let reportText = textOf(first.content);
+    // Battement : le rapport est rédigé, on rafraîchit l'horodatage de progrès
+    // (empêche un balayage « interrompu » si le rapport a été long).
+    await prisma.aiReadingJob.update({ where: { id: jobId }, data: { progressAt: new Date() } }).catch(() => {});
     // Coût cumulé sur tous les appels (rapport + complétions + éventuelle réécriture).
     let totalInput = first.usage.input_tokens;
     let totalOutput = first.usage.output_tokens;

@@ -278,15 +278,17 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
 
     const all = rows.map((i) => {
       const c = i.manuscript?.workContributors?.[0]?.partner;
-      const author = c ? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || null : null;
+      const mAuthor = c ? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || null : null;
       return {
         id: i.id,
         isbn13: i.isbn13,
         bank_status: bankStatus(i.status),
         status: i.status,
         format: i.format,
-        title: i.manuscript?.title ?? null,
-        author,
+        // Titre/auteur : le manuscrit lié fait foi ; sinon les champs portés par
+        // l'ISBN (anciens numéros importés sans manuscrit).
+        title: i.manuscript?.title ?? i.title ?? null,
+        author: mAuthor ?? i.authorName ?? null,
         manuscript_id: i.manuscript?.id ?? null,
         manuscript_number: i.manuscript?.manuscriptNumber ?? null,
         assigned_at: i.assignedAt ? i.assignedAt.toISOString() : null,
@@ -341,6 +343,66 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
     return reply.send(updated);
   });
 
+  // Import des anciens ISBN (Lot 4, spec §7) : intègre dans la banque les ISBN
+  // des anciens registres (le frontend lit le CSV/Excel et envoie des lignes).
+  // Contrôle des doublons OBLIGATOIRE : un numéro déjà présent est IGNORÉ (jamais
+  // deux fois le même ISBN). Résumé renvoyé (créés / doublons / erreurs).
+  fastify.post("/api/v1/isbn-bank/import", { preHandler: requirePermission("isbn", "administration") }, async (request, reply) => {
+    const schema = z.object({
+      rows: z.array(z.object({
+        isbn13: z.string().min(1),
+        title: z.string().optional(),
+        author: z.string().optional(),
+        format: z.nativeEnum(IsbnFormat).optional(),
+        status: z.enum(["disponible", "attribue", "annule"]).optional(),
+        assigned_at: z.string().optional(),
+        observations: z.string().optional(),
+      })).min(1).max(5000),
+    });
+    const parsed = schema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Fichier invalide : aucune ligne exploitable." });
+
+    const statusMap = { disponible: "available", attribue: "assigned", annule: "cancelled" } as const;
+    let created = 0;
+    const duplicates: string[] = [];
+    const errors: { line: number; isbn13: string; reason: string }[] = [];
+    // Dédoublonnage AUSSI à l'intérieur du fichier (deux fois le même numéro).
+    const seen = new Set<string>();
+
+    for (let idx = 0; idx < parsed.data.rows.length; idx++) {
+      const row = parsed.data.rows[idx];
+      const line = idx + 1;
+      const norm = row.isbn13.replace(/[^0-9Xx]/g, "").toUpperCase();
+      if (!norm) { errors.push({ line, isbn13: row.isbn13, reason: "numéro ISBN vide ou invalide" }); continue; }
+      if (seen.has(norm)) { duplicates.push(norm); continue; }
+      seen.add(norm);
+      const existing = await prisma.isbn.findFirst({ where: { OR: [{ isbn13: row.isbn13 }, { isbn13: norm }] }, select: { id: true } });
+      if (existing) { duplicates.push(norm); continue; }
+      const status = row.status ? statusMap[row.status] : (row.title ? "assigned" : "available");
+      let assignedAt: Date | null = null;
+      if (row.assigned_at) { const d = new Date(row.assigned_at); if (!isNaN(d.getTime())) assignedAt = d; }
+      try {
+        await prisma.isbn.create({
+          data: {
+            isbn13: norm,
+            format: row.format ?? "print",
+            status,
+            title: row.title?.trim() || null,
+            authorName: row.author?.trim() || null,
+            assignedAt: status === "assigned" ? (assignedAt ?? new Date()) : assignedAt,
+            assignedBy: status === "assigned" ? request.user!.id : null,
+            observations: row.observations?.trim() || "Importé d'un ancien registre.",
+          },
+        });
+        created++;
+      } catch {
+        errors.push({ line, isbn13: norm, reason: "création impossible (numéro en conflit ?)" });
+      }
+    }
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "isbn", entityId: "import", newValues: { created, duplicates: duplicates.length, errors: errors.length }, ipAddress: request.ip });
+    return reply.send({ created, duplicates: duplicates.length, errors });
+  });
+
   // ═══ ATTRIBUTION PAR NUMÉRO (Lot 3 — parcours §9 de la spec Banque) ═════════
   // Sur la fiche, à l'étape Attribution des références : l'opérateur SAISIT ou
   // RECHERCHE un numéro ISBN ; Eclospace vérifie la banque et détermine le cas.
@@ -362,10 +424,10 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
     if (!found) return reply.send({ case: "absent", isbn: null, other_manuscript: null });
 
     const c = found.manuscript?.workContributors?.[0]?.partner;
-    const author = c ? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || null : null;
+    const mAuthor = c ? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || null : null;
     const info = {
       id: found.id, isbn13: found.isbn13, format: found.format, status: found.status,
-      title: found.manuscript?.title ?? null, author,
+      title: found.manuscript?.title ?? found.title ?? null, author: mAuthor ?? found.authorName ?? null,
       assigned_at: found.assignedAt ? found.assignedAt.toISOString() : null,
     };
     const other = found.manuscript && found.manuscript.id !== id

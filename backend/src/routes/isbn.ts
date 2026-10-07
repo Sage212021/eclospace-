@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { IsbnFormat, LegalDepositStatus, MetadataExportFormat } from "@prisma/client";
+import { IsbnFormat, LegalDepositStatus, MetadataExportFormat, IsbnStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAuth } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
@@ -245,6 +245,101 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
       return reply.code(201).send(created);
     },
   );
+
+  // ═══ BANQUE DES ISBN (Lot 1) ═══════════════════════════════════════════════
+  // Source centrale de référence des ISBN d'Éclosion : tous les ISBN enregistrés
+  // (ceux du catalogue sont déjà des enregistrements), classés par STATUT, avec
+  // recherche (numéro / titre / auteur), filtres et tableau de bord. L'unicité
+  // d'un numéro est garantie par la base (isbn13 unique) ; un ISBN n'est jamais
+  // supprimé.
+  //   Statuts « banque » (regroupent les statuts techniques) :
+  //     DISPONIBLE = available | reserved   ATTRIBUÉ = assigned | published
+  //     ANNULÉ     = cancelled
+  fastify.get("/api/v1/isbn-bank", { preHandler: requirePermission("isbn", "consultation") }, async (request, reply) => {
+    const q = request.query as { q?: string; status?: string; format?: string };
+    const rows = await prisma.isbn.findMany({
+      include: {
+        manuscript: {
+          select: {
+            id: true, title: true, manuscriptNumber: true,
+            workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, take: 1, select: { partner: { select: { firstName: true, lastName: true } } } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    // Résolution des noms d'utilisateur ayant attribué (champ texte, pas de relation).
+    const byIds = [...new Set(rows.map((r) => r.assignedBy).filter((v): v is string => !!v))];
+    const users = byIds.length ? await prisma.user.findMany({ where: { id: { in: byIds } }, select: { id: true, username: true } }) : [];
+    const userName = new Map(users.map((u) => [u.id, u.username]));
+
+    const bankStatus = (s: IsbnStatus): "disponible" | "attribue" | "annule" =>
+      s === "cancelled" ? "annule" : s === "assigned" || s === "published" ? "attribue" : "disponible";
+
+    const all = rows.map((i) => {
+      const c = i.manuscript?.workContributors?.[0]?.partner;
+      const author = c ? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || null : null;
+      return {
+        id: i.id,
+        isbn13: i.isbn13,
+        bank_status: bankStatus(i.status),
+        status: i.status,
+        format: i.format,
+        title: i.manuscript?.title ?? null,
+        author,
+        manuscript_id: i.manuscript?.id ?? null,
+        manuscript_number: i.manuscript?.manuscriptNumber ?? null,
+        assigned_at: i.assignedAt ? i.assignedAt.toISOString() : null,
+        assigned_by: i.assignedBy ? (userName.get(i.assignedBy) ?? null) : null,
+        observations: i.observations ?? null,
+        created_at: i.createdAt.toISOString(),
+      };
+    });
+
+    // Tableau de bord : compteurs sur l'ENSEMBLE de la banque (indépendants des filtres).
+    const summary = {
+      total: all.length,
+      disponible: all.filter((x) => x.bank_status === "disponible").length,
+      attribue: all.filter((x) => x.bank_status === "attribue").length,
+      annule: all.filter((x) => x.bank_status === "annule").length,
+    };
+
+    const needle = (q.q ?? "").trim().toLowerCase();
+    const items = all.filter((x) => {
+      if (q.status && x.bank_status !== q.status) return false;
+      if (q.format && x.format !== q.format) return false;
+      if (needle) {
+        const hay = `${x.isbn13} ${x.title ?? ""} ${x.author ?? ""}`.toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
+
+    return reply.send({ summary, items });
+  });
+
+  // Annuler un ISBN (Banque) : le rend INUTILISABLE (plus proposé à l'attribution)
+  // sans le supprimer. Autorisé UNIQUEMENT depuis « disponible » / « réservé » —
+  // un ISBN déjà ATTRIBUÉ à un ouvrage ne peut pas être annulé (le livre le porte).
+  fastify.post("/api/v1/isbn/:id/cancel", { preHandler: requirePermission("isbn", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ observations: z.string().max(500).optional() }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides." });
+    const isbn = await prisma.isbn.findUnique({ where: { id } });
+    if (!isbn) return reply.code(404).send({ code: "not_found", message: "ISBN introuvable." });
+    if (isbn.status === "cancelled") {
+      return reply.code(409).send({ code: "already_cancelled", message: "Cet ISBN est déjà annulé." });
+    }
+    if (isbn.status === "assigned" || isbn.status === "published") {
+      return reply.code(409).send({ code: "isbn_attributed", message: "Impossible d'annuler un ISBN déjà attribué à un ouvrage. Un ISBN attribué reste rattaché à son ouvrage (jamais réutilisé)." });
+    }
+    const updated = await prisma.isbn.update({
+      where: { id },
+      data: { status: "cancelled", observations: parsed.data.observations ?? isbn.observations },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "isbn", entityId: id, oldValues: { status: isbn.status }, newValues: { status: "cancelled", observations: parsed.data.observations ?? null }, ipAddress: request.ip });
+    return reply.send(updated);
+  });
 
   fastify.get("/api/v1/isbn/:id/barcode", { preHandler: requirePermission("isbn", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };

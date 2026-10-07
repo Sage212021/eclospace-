@@ -29,6 +29,7 @@ const MyReadings = lazy(() => import("./pages/MyReadings").then((m) => ({ defaul
 const MyDossiers = lazy(() => import("./pages/MyDossiers").then((m) => ({ default: m.MyDossiers })));
 const MyProductionWork = lazy(() => import("./pages/MyProductionWork").then((m) => ({ default: m.MyProductionWork })));
 const MyProductionValidations = lazy(() => import("./pages/MyProductionValidations").then((m) => ({ default: m.MyProductionValidations })));
+const IsbnBank = lazy(() => import("./pages/IsbnBank").then((m) => ({ default: m.IsbnBank })));
 const StockPage = lazy(() => import("./pages/StockPage").then((m) => ({ default: m.StockPage })));
 const CommercialPage = lazy(() => import("./pages/CommercialPage").then((m) => ({ default: m.CommercialPage })));
 const CataloguePage = lazy(() => import("./pages/CataloguePage").then((m) => ({ default: m.CataloguePage })));
@@ -96,6 +97,7 @@ type PageId =
   | "my-dossiers"
   | "my-production-work"
   | "my-production-validations"
+  | "isbn-bank"
   | "editorial-quotes-inbox"
   | "catalogue-ref"
   | "archives"
@@ -212,6 +214,7 @@ const NAV_POLES: NavPole[] = [
       { key: "pr-infographie", label: "Infographie & couvertures", permission: "production:consultation" },
       { key: "pr-a-publier", label: "À publier (site)", anyPermission: ["production:consultation", "marketing:consultation", "commercial:consultation", "communication:consultation", "manuscripts:administration", "manuscripts:validation"] },
       { key: "pr-isbn", label: "ISBN & dépôt légal", permission: "isbn:consultation" },
+      { key: "pr-isbn-banque", label: "Banque des ISBN", permission: "isbn:consultation" },
       { key: "pr-bat", label: "BAT Final & contrôle qualité", permission: "bat:consultation" },
       { key: "pr-impression", label: "Impression", permission: "printing:consultation" },
     ],
@@ -312,6 +315,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "pr-maquette": { stage: "MISE_EN_PAGE", heading: "Maquette & mise en page" },
   "pr-infographie": { stage: "INFOGRAPHIE", heading: "Infographie & couvertures" },
   "pr-isbn": { stage: "ATTRIBUTION_REFERENCES", heading: "ISBN & dépôt légal" },
+  "pr-isbn-banque": { page: "isbn-bank" },
   "pr-bat": { stage: "VALIDATION_BAT", heading: "BAT Final & contrôle qualité" },
   "pr-impression": { stage: "IMPRESSION", heading: "Impression" },
   "md-tableau": { page: "marketing-dashboard" },
@@ -875,6 +879,9 @@ export function App() {
         )}
         {leaf && "page" in leaf && leaf.page === "my-production-validations" && (
           <MyProductionValidations onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation")} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "isbn-bank" && (
+          <IsbnBank canManage={permissions.has("isbn:administration")} onOpenManuscript={openManuscript} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-corrections" && <MyCorrections />}
         {leaf && "page" in leaf && leaf.page === "my-correction-integrations" && <MyIntegrations focusManuscriptId={integrationFocusId} onFocusConsumed={() => setIntegrationFocusId(null)} />}

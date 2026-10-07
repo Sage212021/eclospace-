@@ -2511,6 +2511,39 @@ export function assignIsbn(manuscriptId: string, format: IsbnFormat, poolId?: st
   });
 }
 
+// Banque des ISBN (Lot 1) : source centrale, classée par statut.
+export type IsbnBankStatus = "disponible" | "attribue" | "annule";
+export interface IsbnBankItem {
+  id: string;
+  isbn13: string;
+  bank_status: IsbnBankStatus;
+  status: string;
+  format: IsbnFormat;
+  title: string | null;
+  author: string | null;
+  manuscript_id: string | null;
+  manuscript_number: string | null;
+  assigned_at: string | null;
+  assigned_by: string | null;
+  observations: string | null;
+  created_at: string;
+}
+export interface IsbnBankResponse {
+  summary: { total: number; disponible: number; attribue: number; annule: number };
+  items: IsbnBankItem[];
+}
+export function getIsbnBank(params?: { q?: string; status?: IsbnBankStatus; format?: IsbnFormat }) {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.status) qs.set("status", params.status);
+  if (params?.format) qs.set("format", params.format);
+  const s = qs.toString();
+  return request<IsbnBankResponse>(`/api/v1/isbn-bank${s ? `?${s}` : ""}`);
+}
+export function cancelIsbn(isbnId: string, observations?: string) {
+  return request<Isbn>(`/api/v1/isbn/${isbnId}/cancel`, { method: "POST", body: JSON.stringify({ observations }) });
+}
+
 export function isbnBarcodeUrl(isbnId: string) {
   return `${API_BASE}/api/v1/isbn/${isbnId}/barcode`;
 }

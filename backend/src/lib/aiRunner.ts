@@ -984,6 +984,10 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     });
 
     const producedIds: string[] = [created.id];
+    // Persiste le rapport livré SUR LE JOB tout de suite (même en cours) : si le
+    // processus d'arrière-plan est recyclé avant la conclusion, le balayage saura
+    // que le lancement a bien livré et le marquera « terminé » (et non bloqué).
+    await prisma.aiReadingJob.update({ where: { id: jobId }, data: { producedDocumentIds: producedIds, progressAt: new Date() } }).catch(() => {});
     // Comparaison avant/après (réécriture) : on conserve le texte source analysé
     // et le texte réécrit proposé pour l'afficher côte à côte.
     let comparisonSource: string | null = null;
@@ -1087,6 +1091,8 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         },
       });
       producedIds.push(correctedDoc.id);
+      // Persiste aussi le manuscrit corrigé livré (même avant la conclusion).
+      await prisma.aiReadingJob.update({ where: { id: jobId }, data: { producedDocumentIds: producedIds, progressAt: new Date() } }).catch(() => {});
       if (isReecriture) {
         comparisonSource = prepared.text;
         comparisonRewrite = correctedText;

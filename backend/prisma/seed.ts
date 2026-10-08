@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-encaissements-editoriaux-bilan-daf",
+      version: "2026.10",
+      title: "Nouveauté — Encaissements éditoriaux : validés par la Finance, ils alimentent le bilan",
+      body: "Les encaissements éditoriaux (frais de dépôt de manuscrit, frais de travaux éditoriaux…) sont désormais reliés aux états financiers. 1) Dès qu'un encaissement est enregistré par l'éditorial, la Direction financière (DAF) reçoit une ALERTE (montant, libellé, date, origine, référence). 2) L'encaissement n'a AUCUN impact financier tant qu'il n'est pas validé : il doit être contrôlé puis COMPTABILISÉ par la Finance. 3) À la comptabilisation, le système crée automatiquement une ENTRÉE financière datée du jour de l'encaissement — elle apparaît dans le bilan du mois correspondant, sans ressaisie et sans risque de double saisie (une seule entrée par reçu). La référence du reçu est conservée sur l'entrée pour la traçabilité. (La présentation détaillée du bilan mensuel — lignes par ligne, solde du mois, excédent/déficit — arrive dans une prochaine étape.)",
+      permissionModules: ["paiements_auteurs", "finance"],
+      departmentCodes: ["SECR", "DIRED", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-isbn-rattacher-deja-paru-recherche",
       version: "2026.10",
       title: "Nouveauté — Rattacher un ISBN déjà paru : recherche dans le catalogue",

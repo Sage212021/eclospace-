@@ -5,6 +5,11 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { nextReceiptNumber } from "../lib/receiptNumber.js";
+import { notifyRole } from "../lib/notify.js";
+
+// DAF (Directeur administratif et financier) : destinataire des alertes
+// d'encaissement éditorial à contrôler/valider.
+const DAF_ROLE = "RESP_FINANCE";
 
 // PAIEMENTS AUTEURS & REÇUS (chantier 25/09/2026) — incrément 1 (socle).
 // Le reçu est l'OPÉRATION FINANCIÈRE CENTRALE (source unique) : l'éditorial
@@ -129,6 +134,15 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
       },
     });
     await writeAuditLog({ userId: me, action: "create", entityType: "author_receipt", entityId: receipt.id, newValues: { receiptNumber, type: b.type, amount: b.amount, partnerId, manuscriptId: manuscript.id }, ipAddress: request.ip });
+    // Alerte au DAF : un nouvel encaissement éditorial est à contrôler/valider.
+    // (Il n'aura d'impact financier qu'une fois comptabilisé par la Finance.)
+    const libelle = b.type === "prestation_editoriale" ? (b.service_label!.trim()) : "Frais de dépôt de manuscrit";
+    await notifyRole({
+      roleCode: DAF_ROLE, type: "validation", priority: "high",
+      title: "Nouvel encaissement éditorial à valider",
+      body: `Un encaissement de ${Math.round(b.amount).toLocaleString("fr-FR")} ${b.currency === "XAF" ? "FCFA" : b.currency} vient d'être enregistré. Libellé : ${libelle}. Date : ${paidAt.toLocaleDateString("fr-FR")}. Origine : Pôle éditorial. Référence : ${receiptNumber}. À contrôler puis comptabiliser pour l'intégrer au bilan.`,
+      entityType: "author_receipt", entityId: receipt.id,
+    }).catch(() => {});
     return reply.code(201).send({ id: receipt.id, receipt_number: receiptNumber });
   });
 
@@ -243,13 +257,35 @@ export default async function authorReceiptRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const parsed = accountSchema.safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Référence comptable invalide." });
-    const r = await prisma.authorReceipt.findUnique({ where: { id }, select: { status: true } });
+    const r = await prisma.authorReceipt.findUnique({ where: { id } });
     if (!r) return reply.code(404).send({ code: "not_found", message: "Reçu introuvable." });
     if (r.status === "annule") return reply.code(409).send({ code: "receipt_cancelled", message: "Ce reçu est annulé : il n'évolue plus." });
     if (r.status !== "controle") return reply.code(409).send({ code: "not_controlled", message: "Contrôlez d'abord le reçu avant de l'intégrer en comptabilité." });
     const me = request.user!.id;
-    await prisma.authorReceipt.update({ where: { id }, data: { status: "comptabilise", accountedBy: me, accountedAt: new Date(), accountingRef: parsed.data.accounting_ref?.trim() || null } });
-    await writeAuditLog({ userId: me, action: "update", entityType: "author_receipt", entityId: id, newValues: { status: "comptabilise", accountingRef: parsed.data.accounting_ref ?? null }, ipAddress: request.ip });
+    // VALIDATION FINANCIÈRE (DAF) = point de bascule : l'encaissement devient une
+    // ENTRÉE financière. On crée un Payment « in » daté du jour du paiement
+    // (paid_at) → il alimente AUTOMATIQUEMENT le bilan du mois correspondant,
+    // sans ressaisie. Idempotent : jamais deux paiements pour un même reçu.
+    const bankAccountId = (await prisma.paymentMethodDef.findUnique({ where: { code: r.method }, select: { defaultAccountId: true } }))?.defaultAccountId ?? null;
+    await prisma.$transaction(async (tx) => {
+      let paymentId = r.paymentId;
+      if (!paymentId) {
+        const payment = await tx.payment.create({
+          data: {
+            direction: "in",
+            method: r.method,
+            reference: r.receiptNumber,
+            amount: r.amount,
+            bankAccountId,
+            receivedAt: r.paidAt,
+            createdBy: me,
+          },
+        });
+        paymentId = payment.id;
+      }
+      await tx.authorReceipt.update({ where: { id }, data: { status: "comptabilise", accountedBy: me, accountedAt: new Date(), accountingRef: parsed.data.accounting_ref?.trim() || null, paymentId } });
+    });
+    await writeAuditLog({ userId: me, action: "update", entityType: "author_receipt", entityId: id, newValues: { status: "comptabilise", accountingRef: parsed.data.accounting_ref ?? null, financialEntry: true }, ipAddress: request.ip });
     return reply.send({ id, status: "comptabilise" });
   });
 

@@ -5807,6 +5807,9 @@ model AuthorReceipt {
   accountedAt  DateTime? @map("accounted_at")
   // Référence comptable saisie à l'intégration (journal/exercice/pièce), libre.
   accountingRef String?  @map("accounting_ref")
+  // Entrée financière (Payment « in ») créée automatiquement à la comptabilisation
+  // (validation financière DAF) : relie l'encaissement éditorial au bilan du mois.
+  paymentId     String?  @map("payment_id")
 
   // Annulation (jamais de suppression physique).
   cancelledBy         String?   @map("cancelled_by")

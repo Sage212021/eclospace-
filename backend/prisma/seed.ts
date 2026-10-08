@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-isbn-nouvel-enregistrer-direct",
+      version: "2026.10",
+      title: "Nouveauté — Nouvel ISBN : bouton « Enregistrer et attribuer » direct",
+      body: "Dans le cas « ➕ Enregistrer un nouvel ISBN », après avoir saisi le numéro vous avez maintenant un bouton clair « Enregistrer et attribuer l'ISBN » : un seul clic crée le numéro dans la banque ET le relie à l'ouvrage en cours (plus besoin de passer par « Vérifier » d'abord — la touche Entrée valide aussi). Si le numéro existe déjà ou est pris ailleurs, le système le signale. Une fois le numéro attribué, l'étape « Attribution des références » peut être validée pour avancer. Le bouton « Vérifier » reste disponible pour contrôler un numéro avant de l'enregistrer.",
+      permissionModules: ["isbn"],
+      departmentCodes: ["SECR", "INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-isbn-rattacher-bouton-clair",
       version: "2026.10",
       title: "Nouveauté — « Rattacher un ISBN déjà paru » : bouton clair « Rattacher l'ISBN »",

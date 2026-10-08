@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-isbn-attribution-par-cas",
+      version: "2026.10",
+      title: "Nouveauté — Attribuer un ISBN : on choisit d'abord le CAS du dossier",
+      body: "Quand vous cliquez « + Attribuer un ISBN », l'écran vous demande maintenant d'abord : « Quel est le cas de ce dossier ? » et vous choisissez la situation qui correspond : ✅ Attribuer un ISBN disponible (la liste des numéros libres s'affiche, un clic « Attribuer ») ; 📘 Rattacher un ISBN déjà paru (les numéros enregistrés sans ouvrage lié s'affichent, un clic « Rattacher ») ; ➕ Enregistrer un nouvel ISBN absent de la banque (vous saisissez le numéro, il est créé puis attribué) ; 🔎 Vérifier un numéro précis (le système dit s'il est disponible, déjà attribué ailleurs, annulé, ou déjà rattaché à cet ouvrage). Plus besoin de deviner comment faire : on part du cas réel de l'ouvrage, et l'outil adapté apparaît. Les blocages de sécurité restent (un numéro déjà attribué à un autre ouvrage ou annulé ne peut pas être réutilisé).",
+      permissionModules: ["isbn"],
+      departmentCodes: ["SECR", "INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-paie-cloture-apres-validation-dg",
       version: "2026.10",
       title: "Nouveauté — Paie : clôture impossible tant que le Directeur général n'a pas validé",

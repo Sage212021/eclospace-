@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-bilan-mensuel-tracabilite",
+      version: "2026.10",
+      title: "Nouveauté — Bilan mensuel : cliquer une ligne pour voir l'opération d'origine",
+      body: "Dans le « Bilan mensuel (détaillé) », chaque ligne d'entrée ou de sortie est désormais cliquable : elle se déplie et montre l'opération à l'origine du mouvement. Pour un encaissement éditorial, on voit la fiche complète du reçu (type, prestation, payeur/auteur, ouvrage, montant, mode, date, statut, et QUI l'a initié / contrôlé / comptabilisé, avec la référence comptable). Pour les autres mouvements (dépense, décaissement), on voit le détail de l'écriture. Cela garantit la traçabilité et le rapprochement : depuis le bilan, on remonte toujours à la source.",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN", "DG"],
+    },
+    {
       slug: "2026-10-bilan-mensuel-detaille",
       version: "2026.10",
       title: "Nouveauté — Bilan mensuel financier détaillé (par mois, ligne par ligne)",

@@ -4,6 +4,8 @@ import {
   attributeIsbnByNumber,
   lookupIsbn,
   createLegalDeposit,
+  updateLegalDeposit,
+  getIsbnBank,
   getIsbnCompleteness,
   getWorkMetadata,
   isbnBarcodeUrl,
@@ -14,6 +16,9 @@ import {
   type CommercializationStatus,
   type EditionType,
   type Isbn,
+  type IsbnBankItem,
+  type IsbnBankResponse,
+  type IsbnBankStatus,
   type IsbnFormat,
   type IsbnLookupResult,
   type IsbnPoolSummary,
@@ -29,6 +34,11 @@ const EDITION_TYPE_LABELS: Record<EditionType, string> = {
   coproduction: "Coproduction",
   partenariat: "Partenariat",
   autre: "Autre",
+};
+const LEGAL_DEPOSIT_STATUS_LABELS: Record<string, string> = {
+  a_preparer: "À préparer",
+  depose: "Déposé",
+  accuse_reception: "Accusé de réception",
 };
 const COMM_STATUS_LABELS: Record<CommercializationStatus, string> = {
   a_paraitre: "À paraître",
@@ -52,6 +62,7 @@ interface IsbnSectionProps {
 export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpenManuscript }: IsbnSectionProps) {
   const [isbns, setIsbns] = useState<Isbn[]>([]);
   const [pools, setPools] = useState<IsbnPoolSummary[]>([]);
+  const [bank, setBank] = useState<IsbnBankResponse | null>(null);
   const [deposits, setDeposits] = useState<LegalDeposit[]>([]);
   const [metadata, setMetadata] = useState<WorkMetadata | null>(null);
   const [completeness, setCompleteness] = useState<{ complete: boolean; missing: string[] } | null>(null);
@@ -71,15 +82,17 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
   const [schoolYear, setSchoolYear] = useState("");
 
   const refresh = async () => {
-    const [isbnList, poolData, depositList, meta, complete] = await Promise.all([
+    const [isbnList, poolData, bankData, depositList, meta, complete] = await Promise.all([
       listIsbns(manuscriptId),
       listIsbnPools(),
+      getIsbnBank(),
       listLegalDeposits(manuscriptId),
       getWorkMetadata(manuscriptId),
       getIsbnCompleteness(manuscriptId),
     ]);
     setIsbns(isbnList);
     setPools(poolData.pools);
+    setBank(bankData);
     setDeposits(depositList);
     setMetadata(meta);
     setCompleteness(complete);
@@ -110,17 +123,59 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
   const [attrError, setAttrError] = useState<string | null>(null);
   const [attrInfo, setAttrInfo] = useState<string | null>(null);
 
+  // Édition inline d'une fiche de dépôt légal déjà enregistrée (correction).
+  const [editDep, setEditDep] = useState<{ id: string; country: string; depository: string; copies: string; status: string } | null>(null);
+  async function saveDeposit() {
+    if (!editDep) return;
+    const copies = Number(editDep.copies);
+    if (!editDep.country.trim() || !editDep.depository.trim() || !Number.isFinite(copies) || copies < 1) {
+      setError("Dépôt légal : pays et organisme obligatoires, et au moins 1 exemplaire.");
+      return;
+    }
+    try {
+      await updateLegalDeposit(editDep.id, {
+        country: editDep.country.trim(),
+        depository: editDep.depository.trim(),
+        copies_required: copies,
+        status: editDep.status,
+      });
+      setEditDep(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Modification impossible.");
+    }
+  }
+
   function resetAttr() {
     setAttrInput(""); setLookup(null); setAttrError(null); setAttrInfo(null); setAttrFormat("print");
   }
-  async function verifyIsbn() {
-    const v = attrInput.trim();
+  async function verifyIsbn(value?: string) {
+    const v = (value ?? attrInput).trim();
     if (!v) return;
     setAttrBusy(true); setAttrError(null); setAttrInfo(null); setLookup(null);
     try {
       setLookup(await lookupIsbn(manuscriptId, v));
     } catch (e) {
       setAttrError(e instanceof Error ? e.message : "Vérification impossible.");
+    } finally {
+      setAttrBusy(false);
+    }
+  }
+  // Attribution DIRECTE depuis une ligne de la banque (clic « Attribuer » /
+  // « Rattacher »). Le backend valide le cas (409 si entre-temps pris ailleurs).
+  async function attributeDirect(isbn13: string, fmt: IsbnFormat) {
+    setAttrBusy(true); setAttrError(null); setAttrInfo(null);
+    try {
+      const r = await attributeIsbnByNumber(manuscriptId, { isbn13, format: fmt });
+      const msg = r.outcome === "attached" ? "ISBN rattaché à l'ouvrage."
+        : r.outcome === "already_attached" ? "Cet ISBN est déjà rattaché à l'ouvrage."
+        : "ISBN attribué à l'ouvrage.";
+      setAttrInfo(msg);
+      await refresh();
+      setAttrOpen(false); resetAttr();
+    } catch (e) {
+      const err = e as { message?: string };
+      setAttrError(err?.message ?? "Attribution impossible.");
     } finally {
       setAttrBusy(false);
     }
@@ -222,9 +277,10 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
           input={attrInput} setInput={(v) => { setAttrInput(v); setLookup(null); setAttrError(null); }}
           format={attrFormat} setFormat={setAttrFormat}
           lookup={lookup} busy={attrBusy} error={attrError} info={attrInfo}
-          onVerify={verifyIsbn} onConfirm={confirmAttr} onGenerate={generateFromPool}
+          onVerify={() => verifyIsbn()} onConfirm={confirmAttr} onGenerate={generateFromPool}
           onOpenOther={onOpenManuscript}
           poolAvailable={pools.reduce((n, p) => n + (p.available ?? 0), 0)}
+          bank={bank} onAttribute={attributeDirect}
         />
       )}
       {isbns.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun ISBN attribué.</p>}
@@ -247,7 +303,42 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
       {deposits.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune fiche de dépôt légal.</p>}
       {deposits.map((deposit) => (
         <div key={deposit.id} style={{ borderTop: "1px solid var(--line)", padding: "8px 0", fontSize: 13 }}>
-          {deposit.country} — {deposit.depository} ({deposit.copiesRequired} ex.) — {deposit.status}
+          {editDep?.id === deposit.id ? (
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 6 }}>
+                <label style={{ fontSize: 11, color: "var(--muted)" }}>Pays
+                  <input value={editDep.country} onChange={(e) => setEditDep({ ...editDep, country: e.target.value })} style={inputStyle} />
+                </label>
+                <label style={{ fontSize: 11, color: "var(--muted)" }}>Organisme dépositaire
+                  <input value={editDep.depository} onChange={(e) => setEditDep({ ...editDep, depository: e.target.value })} style={inputStyle} />
+                </label>
+                <label style={{ fontSize: 11, color: "var(--muted)" }}>Exemplaires
+                  <input type="number" min={1} value={editDep.copies} onChange={(e) => setEditDep({ ...editDep, copies: e.target.value })} style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
+                </label>
+                <label style={{ fontSize: 11, color: "var(--muted)" }}>Statut
+                  <select value={editDep.status} onChange={(e) => setEditDep({ ...editDep, status: e.target.value })} style={inputStyle}>
+                    <option value="a_preparer">À préparer</option>
+                    <option value="depose">Déposé</option>
+                    <option value="accuse_reception">Accusé de réception</option>
+                  </select>
+                </label>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={saveDeposit} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#0B0B0C", border: "none", fontWeight: 700 }}>Enregistrer</button>
+                <button onClick={() => setEditDep(null)} style={secondaryButtonStyle}>Annuler</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span>{deposit.country} — {deposit.depository} ({deposit.copiesRequired} ex.) — {LEGAL_DEPOSIT_STATUS_LABELS[deposit.status] ?? deposit.status}</span>
+              {canManage && (
+                <button onClick={() => setEditDep({ id: deposit.id, country: deposit.country, depository: deposit.depository, copies: String(deposit.copiesRequired), status: deposit.status })}
+                  style={{ ...secondaryButtonStyle, marginLeft: "auto", padding: "3px 10px" }}>
+                  Modifier
+                </button>
+              )}
+            </div>
+          )}
         </div>
       ))}
 
@@ -343,20 +434,68 @@ const secondaryButtonStyle: React.CSSProperties = {
 // ou rechercher un ISBN → vérifier dans la banque → action selon le cas.
 function IsbnAttributePanel({
   input, setInput, format, setFormat, lookup, busy, error, info,
-  onVerify, onConfirm, onGenerate, onOpenOther, poolAvailable,
+  onVerify, onConfirm, onGenerate, onOpenOther, poolAvailable, bank, onAttribute,
 }: {
   input: string; setInput: (v: string) => void;
   format: IsbnFormat; setFormat: (f: IsbnFormat) => void;
   lookup: IsbnLookupResult | null; busy: boolean; error: string | null; info: string | null;
   onVerify: () => void; onConfirm: () => void; onGenerate: () => void;
   onOpenOther?: (id: string) => void; poolAvailable: number;
+  bank: IsbnBankResponse | null; onAttribute: (isbn13: string, fmt: IsbnFormat) => void;
 }) {
   const box: React.CSSProperties = { border: "1px solid var(--line)", borderRadius: 10, padding: 12, margin: "10px 0", background: "var(--ivory, #FAF8F2)" };
   const primaryBtn: React.CSSProperties = { background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" };
   const can = lookup?.case;
+
+  // Choix en DEUX TEMPS : 1) on choisit un TYPE (Disponibles / Déjà attribués /
+  // Annulés) ; 2) la liste des ISBN de ce type s'affiche et on en choisit un.
+  const [cat, setCat] = useState<IsbnBankStatus | null>(null);
+  const items = bank?.items ?? [];
+  const summary = bank?.summary;
+  const CAT_META: { key: IsbnBankStatus; label: string; color: string; count: number }[] = [
+    { key: "disponible", label: "Disponibles", color: "#B87400", count: summary?.disponible ?? 0 },
+    { key: "attribue", label: "Déjà attribués", color: "#2F7D4A", count: summary?.attribue ?? 0 },
+    { key: "annule", label: "Annulés", color: "#B23A2E", count: summary?.annule ?? 0 },
+  ];
+  const catItems = cat ? items.filter((i) => i.bank_status === cat) : [];
+
   return (
     <div style={box}>
       <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>Attribuer un ISBN à cet ouvrage</div>
+
+      {/* 1) Les TYPES d'ISBN de la banque (avec le nombre). */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>Choisissez un type d'ISBN à parcourir :</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {CAT_META.map((c) => (
+            <button key={c.key} type="button" onClick={() => setCat(cat === c.key ? null : c.key)}
+              style={{ background: cat === c.key ? c.color : "#fff", color: cat === c.key ? "#fff" : "var(--ink)", border: `1px solid ${c.color}`, borderRadius: 999, padding: "5px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+              {c.label} · {c.count}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 2) La liste des ISBN du type choisi. */}
+      {cat && (
+        <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px dashed var(--line)" }}>
+          {catItems.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucun ISBN dans cette catégorie.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 6, maxHeight: 260, overflow: "auto" }}>
+              {catItems.map((it) => (
+                <IsbnBankRow key={it.id} it={it} cat={cat} busy={busy} onAttribute={onAttribute} onOpenOther={onOpenOther} />
+              ))}
+            </div>
+          )}
+          {cat === "disponible" && catItems.length > 0 && (
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>Cliquez « Attribuer » sur le numéro voulu. Il sera attribué à cet ouvrage au format indiqué sur sa ligne.</div>
+          )}
+        </div>
+      )}
+
+      {/* Option : saisir / rechercher un numéro précis. */}
+      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>Ou saisissez / recherchez un numéro précis :</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <input
           value={input}
@@ -426,10 +565,45 @@ function IsbnAttributePanel({
             <option value="print">Imprimé</option><option value="epub">ePub</option><option value="pdf">PDF</option><option value="audio">Audio</option>
           </select>
         </label>
-        <button onClick={onGenerate} disabled={busy || poolAvailable <= 0} title={poolAvailable <= 0 ? "Aucun ISBN disponible dans la tranche" : undefined} style={{ marginLeft: 8, background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "5px 11px", fontSize: 12.5, cursor: poolAvailable <= 0 ? "default" : "pointer" }}>
+        <button onClick={onGenerate} disabled={busy || poolAvailable <= 0} title={poolAvailable <= 0 ? "Aucun ISBN dans une tranche configurée (utilisez les ISBN disponibles de la banque ci-dessus)" : undefined} style={{ marginLeft: 8, background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "5px 11px", fontSize: 12.5, cursor: poolAvailable <= 0 ? "default" : "pointer" }}>
           Générer le prochain ISBN{poolAvailable > 0 ? ` (${poolAvailable} dispo.)` : ""}
         </button>
       </div>
+    </div>
+  );
+}
+
+const FORMAT_LABELS: Record<string, string> = { print: "Imprimé", epub: "ePub", pdf: "PDF", audio: "Audio" };
+
+// Une ligne de la liste « ISBN de ce type » : action adaptée à la catégorie.
+//  • disponible → « Attribuer » (attribue à l'ouvrage) ;
+//  • attribué SANS ouvrage lié → « Rattacher » (ouvrage déjà paru) ;
+//  • attribué à un AUTRE ouvrage → lecture seule (+ « Voir le dossier ») ;
+//  • annulé → lecture seule.
+function IsbnBankRow({ it, cat, busy, onAttribute, onOpenOther }: {
+  it: IsbnBankItem; cat: IsbnBankStatus; busy: boolean;
+  onAttribute: (isbn13: string, fmt: IsbnFormat) => void; onOpenOther?: (id: string) => void;
+}) {
+  const actionBtn: React.CSSProperties = { background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: busy ? "default" : "pointer" };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "7px 10px", background: "#fff" }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}>{it.isbn13}</span>
+      <span style={{ fontSize: 11, color: "var(--muted)" }}>{FORMAT_LABELS[it.format] ?? it.format}</span>
+      {it.title && <span style={{ fontSize: 11.5, color: "var(--muted)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {it.title}</span>}
+      <span style={{ marginLeft: "auto" }} />
+      {cat === "disponible" && (
+        <button type="button" disabled={busy} onClick={() => onAttribute(it.isbn13, it.format)} style={actionBtn}>Attribuer</button>
+      )}
+      {cat === "attribue" && it.manuscript_id === null && (
+        <button type="button" disabled={busy} onClick={() => onAttribute(it.isbn13, it.format)} style={{ ...actionBtn, background: "#fff", border: "1px solid var(--eclosion, #D9B21A)", color: "var(--eclosion-dark, #9a7a12)" }} title="ISBN déjà attribué sans ouvrage lié (déjà paru) — le rattacher à cet ouvrage">Rattacher</button>
+      )}
+      {cat === "attribue" && it.manuscript_id && (
+        <span style={{ fontSize: 11.5, color: "var(--muted)", display: "inline-flex", gap: 6, alignItems: "center" }}>
+          → {it.manuscript_number ?? "ouvrage"}
+          {onOpenOther && <button type="button" onClick={() => onOpenOther(it.manuscript_id!)} style={{ background: "none", border: "1px solid var(--line)", borderRadius: 6, padding: "2px 8px", fontSize: 11.5, cursor: "pointer" }}>Voir</button>}
+        </span>
+      )}
+      {cat === "annule" && <span style={{ fontSize: 11.5, color: "var(--alert, #B23A2E)", fontWeight: 600 }}>Annulé — inutilisable</span>}
     </div>
   );
 }

@@ -38,6 +38,12 @@ const legalDepositSchema = z.object({
 });
 
 const legalDepositUpdateSchema = z.object({
+  // Correction d'une saisie (pays / organisme / exemplaires / échéance).
+  country: z.string().min(1).optional(),
+  depository: z.string().min(1).optional(),
+  copies_required: z.number().int().positive().optional(),
+  due_date: z.string().datetime().nullable().optional(),
+  // Suivi du dépôt.
   status: z.nativeEnum(LegalDepositStatus).optional(),
   deposited_at: z.string().datetime().optional(),
   deposit_number: z.string().optional(),
@@ -624,6 +630,10 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
       const updated = await prisma.legalDeposit.update({
         where: { id },
         data: {
+          country: body.country,
+          depository: body.depository,
+          copiesRequired: body.copies_required,
+          dueDate: body.due_date === undefined ? undefined : body.due_date ? new Date(body.due_date) : null,
           status: body.status,
           depositedAt: body.deposited_at ? new Date(body.deposited_at) : undefined,
           depositNumber: body.deposit_number,

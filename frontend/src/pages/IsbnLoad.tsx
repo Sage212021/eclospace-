@@ -86,11 +86,50 @@ export function IsbnLoad() {
   return (
     <div style={{ maxWidth: 820 }}>
       <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Chargement des ISBN</h1>
-      <p style={{ color: "var(--muted)", margin: "0 0 18px", fontSize: 13.5, lineHeight: 1.5 }}>
+      <p style={{ color: "var(--muted)", margin: "0 0 12px", fontSize: 13.5, lineHeight: 1.5 }}>
         Réservé à l'administrateur. Chargez ici une nouvelle tranche d'ISBN <strong>disponibles</strong> (neufs, non
         utilisés). Collez la liste (un numéro par ligne) ou générez une séquence. Chaque numéro est vérifié (13 chiffres
         et chiffre de contrôle) ; un numéro déjà présent dans la banque n'est jamais rechargé ni réutilisé.
       </p>
+
+      {/* Mode d'emploi REPLIÉ par défaut : n'envahit pas l'écran, se déplie au besoin. */}
+      <details style={{ ...box, background: "var(--eclosion-soft, #FBF4D9)", borderColor: "var(--eclosion, #D9B21A)", marginBottom: 16 }}>
+        <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 14 }}>📘 Mode d'emploi — comment charger des ISBN (cliquer pour déplier)</summary>
+        <div style={{ fontSize: 13, lineHeight: 1.6, marginTop: 10 }}>
+          <p style={{ margin: "0 0 10px" }}>
+            Un ISBN se termine toujours par un dernier chiffre « de contrôle » (le <strong>7</strong> dans
+            978-9956-0-7966-<strong>7</strong>) : il se calcule à partir des autres et sert à repérer une faute de frappe.
+            Vous n'avez pas à le calculer — l'écran le vérifie, et le génère pour vous. Deux façons de faire :
+          </p>
+          <p style={{ margin: "0 0 4px", fontWeight: 700 }}>Façon 1 — Coller la liste (le plus simple)</p>
+          <p style={{ margin: "0 0 10px" }}>
+            Vous avez déjà les numéros (papier, e-mail, fichier). Tapez-les ou copiez-les dans la grande case ci-dessous,
+            <strong> un par ligne</strong>, puis cliquez « Charger ». Les tirets sont facultatifs
+            (<span style={{ fontFamily: "var(--font-mono)" }}>978-9956-0-7986-5</span> ou
+            <span style={{ fontFamily: "var(--font-mono)" }}> 9789956079865</span>, les deux marchent).
+            À utiliser quand vous avez peu de numéros, ou une liste déjà écrite.
+          </p>
+          <p style={{ margin: "0 0 4px", fontWeight: 700 }}>Façon 2 — Générer une séquence (pour gagner du temps)</p>
+          <p style={{ margin: "0 0 6px" }}>
+            Quand les numéros se suivent (7986, 7987, 7988…), l'écran les fabrique tout seul. Remplissez 3 cases dans
+            l'encadré « Générer une séquence » :
+          </p>
+          <ul style={{ margin: "0 0 10px", paddingLeft: 18 }}>
+            <li><strong>Base</strong> : la partie fixe du début, toujours la même pour Éclosion →
+              <span style={{ fontFamily: "var(--font-mono)" }}> 97899560</span> (c'est 978-9956-0).</li>
+            <li><strong>Premier numéro</strong> : le point de départ, ex.
+              <span style={{ fontFamily: "var(--font-mono)" }}> 7986</span>.</li>
+            <li><strong>Combien</strong> : combien en créer d'un coup, ex. <strong>10</strong>.</li>
+          </ul>
+          <p style={{ margin: 0 }}>
+            Cliquez « ➕ Générer » : les numéros s'écrivent dans la grande case (avec leur chiffre de contrôle). Vous les
+            <strong> relisez</strong>, en ajoutez/enlevez si besoin, puis « Charger ».
+            À la fin, l'écran indique : combien <span style={{ color: "#2F7D4A", fontWeight: 700 }}>chargés</span>,
+            combien <span style={{ color: "#B87400", fontWeight: 700 }}>déjà en banque</span> (ignorés),
+            combien <span style={{ color: "#B23A2E", fontWeight: 700 }}>refusés</span> et pourquoi.
+          </p>
+        </div>
+      </details>
 
       {error && (
         <div style={{ background: "#F6E2DE", color: "#B23A2E", border: "1px solid #E4B8AF", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 14 }}>{error}</div>

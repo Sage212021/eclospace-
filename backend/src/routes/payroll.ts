@@ -789,6 +789,9 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
           .map((p) => ({ employee_id: p.employeeId, employee_name: `${p.employee.firstName} ${p.employee.lastName}` }))
           .sort((a, b) => a.employee_name.localeCompare(b.employee_name, "fr"));
       }
+      // NB : `reg.monthly_status` (issu de computeRegister) porte déjà le statut
+      // du mois (null | brouillon | soumis_dg | valide) — il pilote l'autorisation
+      // de clôture côté écran (clôture permise uniquement si « valide »).
       return reply.send({ ...reg, closed: Boolean(closure), closed_at: closure?.closedAt ?? null, incoherences, missing_profiles });
     },
   );
@@ -874,6 +877,21 @@ export default async function payrollRoutes(fastify: FastifyInstance) {
       if (!/^\d{4}-\d{2}$/.test(period)) return reply.code(400).send({ code: "validation_error", message: "Période attendue au format AAAA-MM." });
       const existing = await prisma.payrollClosure.findUnique({ where: { periodKey: period } });
       if (existing) return reply.code(409).send({ code: "already_closed", message: "Cette période est déjà clôturée : le journal de paie est figé." });
+
+      // GARDE : la clôture n'est possible QUE si la paie du mois a été VALIDÉE
+      // par la Direction générale (statut « valide »). Tant que le DG n'a pas
+      // validé (aucun mois préparé, brouillon, ou soumis au DG en attente), la
+      // clôture est refusée avec un message explicite.
+      const run = await prisma.payrollMonthlyRun.findUnique({ where: { periodKey: period }, select: { status: true } });
+      if (!run || run.status !== "valide") {
+        const message = run?.status === "soumis_dg"
+          ? "Clôture impossible : la paie de ce mois est soumise au Directeur général mais n'est PAS ENCORE VALIDÉE. Le DG doit d'abord la valider."
+          : run?.status === "brouillon"
+            ? "Clôture impossible : la paie de ce mois est en brouillon. Soumettez-la au Directeur général, puis attendez sa validation avant de clôturer."
+            : "Clôture impossible : la paie de ce mois n'a pas encore été validée par la Direction générale. Préparez le mois, soumettez-le au DG, puis attendez sa validation avant de clôturer.";
+        return reply.code(409).send({ code: "not_validated_by_dg", message });
+      }
+
       const reg = await computeRegister(period);
       if ("error" in reg) return reply.code(reg.status).send(reg.error);
       if (reg.lines.length === 0) return reply.code(409).send({ code: "empty_register", message: "Aucun salarié avec fiche paie : rien à clôturer." });

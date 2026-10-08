@@ -81,6 +81,9 @@ describe("Clôture de paie — tous les salariés avec fiche du mois (D-044)", (
     const run = await prisma.payrollMonthlyRun.findUniqueOrThrow({ where: { periodKey: PERIOD } });
     const lineCount = await prisma.payrollMonthlyLine.count({ where: { runId: run.id } });
 
+    // La clôture exige la validation du DG : on soumet puis on valide (admin).
+    await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/submit`, headers: { cookie } });
+    await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/validate`, headers: { cookie } });
     const close = await app.inject({ method: "POST", url: `/api/v1/payroll/register/${PERIOD}/close`, headers: { cookie } });
     expect(close.statusCode).toBe(200);
     // La clôture archive AUTANT de bulletins qu'il y a de fiches du mois (aucune perdue).

@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-isbn-rattacher-bouton-clair",
+      version: "2026.10",
+      title: "Nouveauté — « Rattacher un ISBN déjà paru » : bouton clair « Rattacher l'ISBN »",
+      body: "Dans « Rattacher un ISBN déjà paru », le bouton « Voir le dossier » est remplacé par un vrai bouton d'action : « Rattacher l'ISBN ». Un clic relie le numéro existant à l'ouvrage en cours d'enregistrement (c'est le même livre déjà paru, que l'on fait passer par les étapes dans Eclospace). Si l'ISBN est déjà rattaché à cet ouvrage, le système l'indique clairement (« ✓ Déjà rattaché à cet ouvrage ») au lieu de proposer une action inutile. Le numéro reste unique et ses informations (titre, auteur) sont conservées.",
+      permissionModules: ["isbn"],
+      departmentCodes: ["SECR", "INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-commandes-facturer-autre-multilignes",
       version: "2026.10",
       title: "Nouveauté — Commandes à facturer « Autre » : plusieurs lignes",

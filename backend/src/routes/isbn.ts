@@ -556,6 +556,33 @@ export default async function isbnRoutes(fastify: FastifyInstance) {
     return reply.send({ outcome: wasAttributed ? "attached" : "attributed", isbn: updated });
   });
 
+  // Rattacher un ISBN EXISTANT (déjà paru) au manuscrit en cours. Cas : un
+  // ouvrage déjà paru au catalogue dont on enregistre/poursuit le dossier dans
+  // Eclospace — c'est le même ouvrage, on relie son numéro à ce dossier. Si
+  // l'ISBN était rattaché à une autre fiche du même ouvrage, il est transféré
+  // (tracé au journal avec l'ancienne fiche). Le numéro reste UNIQUE.
+  fastify.post("/api/v1/manuscripts/:id/isbn/:isbnId/rattach", { preHandler: requirePermission("isbn", "saisie") }, async (request, reply) => {
+    const { id, isbnId } = request.params as { id: string; isbnId: string };
+    const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+    const existing = await prisma.isbn.findUnique({ where: { id: isbnId } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "ISBN introuvable." });
+    if (existing.status === "cancelled") return reply.code(409).send({ code: "isbn_cancelled", message: "Cet ISBN est annulé / inutilisable : il ne peut pas être rattaché." });
+    if (existing.manuscriptId === id) return reply.send({ outcome: "already_attached", isbn: existing });
+    const now = new Date();
+    const updated = await prisma.isbn.update({
+      where: { id: isbnId },
+      data: {
+        manuscriptId: id,
+        status: existing.status === "assigned" || existing.status === "published" ? existing.status : "assigned",
+        assignedAt: existing.assignedAt ?? now,
+        assignedBy: existing.assignedBy ?? request.user!.id,
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "isbn", entityId: isbnId, oldValues: { manuscriptId: existing.manuscriptId }, newValues: { manuscriptId: id, mode: "rattach_existing" }, ipAddress: request.ip });
+    return reply.send({ outcome: existing.manuscriptId ? "transferred" : "attached", isbn: updated });
+  });
+
   fastify.get("/api/v1/isbn/:id/barcode", { preHandler: requirePermission("isbn", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const isbn = await prisma.isbn.findUnique({ where: { id } });

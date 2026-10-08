@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   assignIsbn,
   attributeIsbnByNumber,
+  rattachExistingIsbn,
   lookupIsbn,
   createLegalDeposit,
   updateLegalDeposit,
@@ -161,6 +162,23 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
       setAttrBusy(false);
     }
   }
+  // Rattacher un ISBN EXISTANT (déjà paru) au dossier en cours, par id d'ISBN.
+  // C'est le même ouvrage (déjà au catalogue) dont on enregistre le dossier.
+  async function rattachExisting(isbnId: string) {
+    setAttrBusy(true); setAttrError(null); setAttrInfo(null);
+    try {
+      await rattachExistingIsbn(manuscriptId, isbnId);
+      setAttrInfo("ISBN rattaché à cet ouvrage.");
+      await refresh();
+      setAttrOpen(false); resetAttr();
+    } catch (e) {
+      const err = e as { message?: string };
+      setAttrError(err?.message ?? "Rattachement impossible.");
+    } finally {
+      setAttrBusy(false);
+    }
+  }
+
   // Attribution DIRECTE depuis une ligne de la banque (clic « Attribuer » /
   // « Rattacher »). Le backend valide le cas (409 si entre-temps pris ailleurs).
   async function attributeDirect(isbn13: string, fmt: IsbnFormat) {
@@ -281,6 +299,7 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
           onOpenOther={onOpenManuscript}
           poolAvailable={pools.reduce((n, p) => n + (p.available ?? 0), 0)}
           bank={bank} onAttribute={attributeDirect}
+          currentManuscriptId={manuscriptId} onRattach={rattachExisting}
         />
       )}
       {isbns.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun ISBN attribué.</p>}
@@ -434,7 +453,7 @@ const secondaryButtonStyle: React.CSSProperties = {
 // ou rechercher un ISBN → vérifier dans la banque → action selon le cas.
 function IsbnAttributePanel({
   input, setInput, format, setFormat, lookup, busy, error, info,
-  onVerify, onConfirm, onGenerate, onOpenOther, poolAvailable, bank, onAttribute,
+  onVerify, onConfirm, onGenerate, onOpenOther, poolAvailable, bank, onAttribute, currentManuscriptId, onRattach,
 }: {
   input: string; setInput: (v: string) => void;
   format: IsbnFormat; setFormat: (f: IsbnFormat) => void;
@@ -442,6 +461,7 @@ function IsbnAttributePanel({
   onVerify: () => void; onConfirm: () => void; onGenerate: () => void;
   onOpenOther?: (id: string) => void; poolAvailable: number;
   bank: IsbnBankResponse | null; onAttribute: (isbn13: string, fmt: IsbnFormat) => void;
+  currentManuscriptId: string; onRattach: (isbnId: string) => void;
 }) {
   const box: React.CSSProperties = { border: "1px solid var(--line)", borderRadius: 10, padding: 12, margin: "10px 0", background: "var(--ivory, #FAF8F2)" };
   const primaryBtn: React.CSSProperties = { background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" };
@@ -536,27 +556,23 @@ function IsbnAttributePanel({
               <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>{dejaParusFiltered.length} ouvrage(s) déjà paru. Recherchez le livre, vérifiez le titre/l'auteur, puis « Rattacher ». Un ISBN déjà lié à un autre ouvrage ne peut pas être réutilisé (accès au dossier proposé).</div>
               <div style={{ display: "grid", gap: 6, maxHeight: 300, overflow: "auto" }}>
                 {dejaParusFiltered.map((it) => {
-                  const linked = !!it.manuscript_id;
+                  const onCurrent = it.manuscript_id === currentManuscriptId;
                   return (
                     <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 11px", background: "#fff" }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontWeight: 700, fontSize: 13 }}>{it.title || <span style={{ color: "var(--muted)", fontWeight: 400 }}>(sans titre)</span>}</div>
                         <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
                           {it.author ? `${it.author} · ` : ""}<span style={{ fontFamily: "var(--font-mono)" }}>{it.isbn13}</span> · {FORMAT_LABELS[it.format] ?? it.format}
-                          {linked && it.manuscript_number ? <> · <span style={{ color: "var(--eclosion-dark, #9a7a12)" }}>déjà sur {it.manuscript_number}</span></> : null}
                         </div>
                       </div>
-                      {linked ? (
-                        onOpenOther && it.manuscript_id ? (
-                          <button type="button" onClick={() => onOpenOther(it.manuscript_id!)}
-                            style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                            Voir le dossier
-                          </button>
-                        ) : <span style={{ fontSize: 11.5, color: "var(--muted)" }}>déjà rattaché</span>
+                      {onCurrent ? (
+                        <span style={{ fontSize: 11.5, color: "#2F7D4A", fontWeight: 700 }}>✓ Déjà rattaché à cet ouvrage</span>
                       ) : (
-                        <button type="button" disabled={busy} onClick={() => onAttribute(it.isbn13, it.format)}
+                        <button type="button" disabled={busy}
+                          onClick={() => { if (it.manuscript_id) onRattach(it.id); else onAttribute(it.isbn13, it.format); }}
+                          title="Relier ce numéro ISBN à l'ouvrage en cours"
                           style={{ background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 12.5, fontWeight: 700, cursor: busy ? "default" : "pointer" }}>
-                          Rattacher
+                          Rattacher l'ISBN
                         </button>
                       )}
                     </div>

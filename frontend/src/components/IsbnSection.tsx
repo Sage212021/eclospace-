@@ -461,14 +461,18 @@ function IsbnAttributePanel({
   //    (numéro + titre + auteur) mais PAS encore liés à une fiche Eclospace
   //    (manuscript_id null) → à rechercher puis rattacher au dossier en cours.
   const dispoItems = items.filter((i) => i.bank_status === "disponible" && !i.title && !i.author);
-  const dejaParusItems = items.filter((i) => i.manuscript_id === null && i.bank_status !== "annule" && (!!i.title || !!i.author));
+  // « Déjà parus » = TOUS les ISBN déjà attribués/publiés déjà enregistrés dans
+  // le système (catalogue Eclospace inclus). Ceux SANS ouvrage lié se rattachent
+  // au dossier en cours ; ceux DÉJÀ liés à un ouvrage sont montrés pour
+  // information (on ne réutilise jamais un ISBN déjà pris) avec accès au dossier.
+  const dejaParusItems = items.filter((i) => i.bank_status === "attribue");
   const dejaQ = dejaSearch.trim().toLowerCase();
   const dejaParusFiltered = dejaQ
     ? dejaParusItems.filter((i) => `${i.isbn13} ${i.title ?? ""} ${i.author ?? ""}`.toLowerCase().includes(dejaQ))
     : dejaParusItems;
   const SCENARIOS: { key: Scenario; label: string; hint: string; count?: number }[] = [
     { key: "disponible", label: "✅ Attribuer un ISBN disponible", hint: "L'ouvrage reçoit un numéro neuf, libre, de la banque.", count: dispoItems.length },
-    { key: "deja_paru", label: "📘 Rattacher un ISBN déjà paru", hint: "L'ouvrage est déjà paru : son ISBN existe en banque mais n'est lié à aucun ouvrage.", count: dejaParusItems.length },
+    { key: "deja_paru", label: "📘 Rattacher un ISBN déjà paru", hint: "Rechercher dans les ouvrages déjà parus du catalogue (par titre ou numéro) et rattacher l'ISBN existant.", count: dejaParusItems.length },
     { key: "absent", label: "➕ Enregistrer un nouvel ISBN", hint: "Le numéro n'est pas encore dans la banque : on l'enregistre et on l'attribue en un geste." },
     { key: "verifier", label: "🔎 Vérifier un numéro précis", hint: "Vous avez un numéro et voulez savoir son cas (disponible, déjà attribué, annulé…)." },
   ];
@@ -524,27 +528,40 @@ function IsbnAttributePanel({
             style={{ width: "100%", boxSizing: "border-box", padding: "8px 11px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, marginBottom: 8 }}
           />
           {dejaParusItems.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucun ISBN de livre déjà paru n'est enregistré comme référence dans la banque. Faites-les importer par l'administrateur (banque des ISBN → import), puis ils apparaîtront ici pour rattachement.</div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucun ouvrage déjà paru / ISBN déjà attribué n'est encore enregistré dans le système.</div>
           ) : dejaParusFiltered.length === 0 ? (
             <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucun résultat pour « {dejaSearch} ». Essayez un autre titre ou numéro.</div>
           ) : (
             <>
-              <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>{dejaParusFiltered.length} ouvrage(s) déjà paru. Sélectionnez celui qui correspond, vérifiez le titre/l'auteur, puis « Rattacher ».</div>
+              <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>{dejaParusFiltered.length} ouvrage(s) déjà paru. Recherchez le livre, vérifiez le titre/l'auteur, puis « Rattacher ». Un ISBN déjà lié à un autre ouvrage ne peut pas être réutilisé (accès au dossier proposé).</div>
               <div style={{ display: "grid", gap: 6, maxHeight: 300, overflow: "auto" }}>
-                {dejaParusFiltered.map((it) => (
-                  <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 11px", background: "#fff" }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13 }}>{it.title || <span style={{ color: "var(--muted)", fontWeight: 400 }}>(sans titre)</span>}</div>
-                      <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
-                        {it.author ? `${it.author} · ` : ""}<span style={{ fontFamily: "var(--font-mono)" }}>{it.isbn13}</span> · {FORMAT_LABELS[it.format] ?? it.format}
+                {dejaParusFiltered.map((it) => {
+                  const linked = !!it.manuscript_id;
+                  return (
+                    <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 11px", background: "#fff" }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13 }}>{it.title || <span style={{ color: "var(--muted)", fontWeight: 400 }}>(sans titre)</span>}</div>
+                        <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                          {it.author ? `${it.author} · ` : ""}<span style={{ fontFamily: "var(--font-mono)" }}>{it.isbn13}</span> · {FORMAT_LABELS[it.format] ?? it.format}
+                          {linked && it.manuscript_number ? <> · <span style={{ color: "var(--eclosion-dark, #9a7a12)" }}>déjà sur {it.manuscript_number}</span></> : null}
+                        </div>
                       </div>
+                      {linked ? (
+                        onOpenOther && it.manuscript_id ? (
+                          <button type="button" onClick={() => onOpenOther(it.manuscript_id!)}
+                            style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                            Voir le dossier
+                          </button>
+                        ) : <span style={{ fontSize: 11.5, color: "var(--muted)" }}>déjà rattaché</span>
+                      ) : (
+                        <button type="button" disabled={busy} onClick={() => onAttribute(it.isbn13, it.format)}
+                          style={{ background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 12.5, fontWeight: 700, cursor: busy ? "default" : "pointer" }}>
+                          Rattacher
+                        </button>
+                      )}
                     </div>
-                    <button type="button" disabled={busy} onClick={() => onAttribute(it.isbn13, it.format)}
-                      style={{ background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 12.5, fontWeight: 700, cursor: busy ? "default" : "pointer" }}>
-                      Rattacher
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}

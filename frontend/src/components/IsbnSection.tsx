@@ -594,12 +594,30 @@ function IsbnAttributePanel({
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onVerify(); } }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); scenario === "absent" ? onConfirm() : onVerify(); } }}
               placeholder="Saisir un numéro ISBN"
               style={{ flex: 1, minWidth: 220, padding: "8px 11px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, fontFamily: "var(--font-mono)" }}
             />
             <button onClick={onVerify} disabled={busy || !input.trim()} style={{ ...primaryBtn, background: "#fff", border: "1px solid var(--eclosion, #D9B21A)", color: "var(--eclosion-dark, #9a7a12)" }}>Vérifier</button>
           </div>
+          {scenario === "absent" && (
+            // Enregistrement DIRECT du nouveau numéro + attribution à l'ouvrage,
+            // sans étape « Vérifier » séparée. Si le numéro existe déjà, le
+            // serveur le signale (message d'erreur adapté).
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+              <label style={{ fontSize: 12, color: "var(--muted)" }}>Format :
+                <select value={format} onChange={(e) => setFormat(e.target.value as IsbnFormat)} style={{ marginLeft: 6, padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12.5 }}>
+                  <option value="print">Imprimé</option><option value="epub">ePub</option><option value="pdf">PDF</option><option value="audio">Audio</option>
+                </select>
+              </label>
+              <button onClick={onConfirm} disabled={busy || !input.trim()} style={primaryBtn}>Enregistrer et attribuer l'ISBN</button>
+            </div>
+          )}
+          {scenario === "absent" && (
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
+              « Enregistrer et attribuer l'ISBN » crée le numéro dans la banque et le relie à cet ouvrage. L'étape « Attribution des références » peut ensuite être validée.
+            </div>
+          )}
         </>
       )}
 

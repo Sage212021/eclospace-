@@ -40,6 +40,7 @@ describe("commandes à facturer + validation par seuil", () => {
     await prisma.paymentAllocation.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
     await prisma.installment.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
     await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+    await prisma.billingOrderLine.deleteMany({ where: { billingOrderId: { in: orderIds } } });
     await prisma.billingOrder.deleteMany({ where: { id: { in: orderIds } } });
     await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
     await prisma.customer.deleteMany({ where: { id: customerId } });
@@ -471,5 +472,34 @@ describe("commandes à facturer + validation par seuil", () => {
     // établir la facture : réservé à la Finance → refusé
     const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${create.json().id}/invoice`, headers: { cookie: comCookie } });
     expect(inv.statusCode).toBe(403);
+  });
+
+  it("catégorie « autre » : plusieurs lignes libres → total = somme, et la facture reprend chaque ligne", async () => {
+    const create = await app.inject({
+      method: "POST", url: "/api/v1/billing-orders", headers: { cookie: admin },
+      payload: {
+        customer_id: customerId, category: "autre", label: `Prestations ${rnd()}`, tax_rate: 0,
+        lines: [
+          { description: "Frais de dossier", quantity: 1, unit_price_ht: 50000 },
+          { description: "Transport", quantity: 2, unit_price_ht: 15000 },
+        ],
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    const order = create.json();
+    orderIds.push(order.id);
+    // Total = 50000 + 2×15000 = 80000.
+    expect(order.amount_ht).toBe(80000);
+    expect(order.amount_ttc).toBe(80000);
+    const lines = await prisma.billingOrderLine.findMany({ where: { billingOrderId: order.id } });
+    expect(lines.length).toBe(2);
+    expect(lines.every((l) => l.isbnId === null)).toBe(true);
+    // Facturation : la facture reprend chaque ligne « autre ».
+    const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.id}/invoice`, headers: { cookie: admin } });
+    expect(inv.statusCode).toBe(201);
+    invoiceIds.push(inv.json().id);
+    const invLines = await prisma.invoiceLine.findMany({ where: { invoiceId: inv.json().id } });
+    expect(invLines.length).toBe(2);
+    expect(invLines.reduce((s, l) => s + l.quantity * Number(l.unitPrice), 0)).toBe(80000);
   });
 });

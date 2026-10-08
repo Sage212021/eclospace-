@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-commandes-facturer-autre-multilignes",
+      version: "2026.10",
+      title: "Nouveauté — Commandes à facturer « Autre » : plusieurs lignes",
+      body: "Dans « Commandes à facturer », la catégorie « Autre » permet désormais de saisir PLUSIEURS lignes quand une même commande comporte plusieurs éléments à facturer (prestations, frais…) hors catégories prédéfinies. Un bouton « + Ajouter une ligne » ajoute autant de lignes que nécessaire ; chaque ligne a ses propres champs (désignation, quantité, prix unitaire, montant calculé) et peut être supprimée avant validation. Une seule ligne reste affichée par défaut (inchangé pour qui n'a qu'un élément). Le total se calcule automatiquement, les lignes sont intégrées à la même commande et reprises telles quelles sur la facture. Ces lignes « Autre » ne génèrent pas de droits d'auteur (ce ne sont pas des ouvrages).",
+      permissionModules: ["finance", "commercial"],
+      departmentCodes: ["FIN", "DG"],
+    },
+    {
       slug: "2026-10-bilan-mensuel-tracabilite",
       version: "2026.10",
       title: "Nouveauté — Bilan mensuel : cliquer une ligne pour voir l'opération d'origine",

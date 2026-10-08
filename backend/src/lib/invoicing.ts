@@ -499,7 +499,9 @@ export async function createInvoiceFromBillingOrder(tx: Tx, orderId: string, thr
   });
 
   // Droits d'auteur du livre scolaire : une entrée segmentée par ligne-livre.
-  if (bookLines.length > 0) {
+  // EXCLU pour la catégorie « autre » : ses lignes sont des éléments libres à
+  // facturer (prestations, frais…), sans ouvrage ni droits d'auteur.
+  if (bookLines.length > 0 && order.category !== "autre") {
     await recordSchoolRoyaltyEntries(tx, {
       invoiceId: invoice.id,
       sourceType: "billing_order_invoice",

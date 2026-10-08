@@ -447,65 +447,98 @@ function IsbnAttributePanel({
   const primaryBtn: React.CSSProperties = { background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" };
   const can = lookup?.case;
 
-  // Choix en DEUX TEMPS : 1) on choisit un TYPE (Disponibles / Déjà attribués /
-  // Annulés) ; 2) la liste des ISBN de ce type s'affiche et on en choisit un.
-  const [cat, setCat] = useState<IsbnBankStatus | null>(null);
+  // Attribution PAR CAS DE FIGURE : on choisit d'abord LE CAS qui correspond au
+  // dossier en cours, puis l'outil adapté s'affiche. Les cas « déjà rattaché »,
+  // « attribué à un autre ouvrage » et « annulé » sont DÉTECTÉS automatiquement
+  // par la vérification d'un numéro (ils ne sont pas des choix de départ).
+  type Scenario = "disponible" | "deja_paru" | "absent" | "verifier";
+  const [scenario, setScenario] = useState<Scenario | null>(null);
   const items = bank?.items ?? [];
-  const summary = bank?.summary;
-  const CAT_META: { key: IsbnBankStatus; label: string; color: string; count: number }[] = [
-    { key: "disponible", label: "Disponibles", color: "#B87400", count: summary?.disponible ?? 0 },
-    { key: "attribue", label: "Déjà attribués", color: "#2F7D4A", count: summary?.attribue ?? 0 },
-    { key: "annule", label: "Annulés", color: "#B23A2E", count: summary?.annule ?? 0 },
+  // ISBN disponibles (à attribuer) et ISBN « déjà parus » (enregistrés SANS
+  // ouvrage lié → à rattacher).
+  const dispoItems = items.filter((i) => i.bank_status === "disponible");
+  const dejaParusItems = items.filter((i) => i.bank_status === "attribue" && i.manuscript_id === null);
+  const SCENARIOS: { key: Scenario; label: string; hint: string; count?: number }[] = [
+    { key: "disponible", label: "✅ Attribuer un ISBN disponible", hint: "L'ouvrage reçoit un numéro neuf, libre, de la banque.", count: dispoItems.length },
+    { key: "deja_paru", label: "📘 Rattacher un ISBN déjà paru", hint: "L'ouvrage est déjà paru : son ISBN existe en banque mais n'est lié à aucun ouvrage.", count: dejaParusItems.length },
+    { key: "absent", label: "➕ Enregistrer un nouvel ISBN", hint: "Le numéro n'est pas encore dans la banque : on l'enregistre et on l'attribue en un geste." },
+    { key: "verifier", label: "🔎 Vérifier un numéro précis", hint: "Vous avez un numéro et voulez savoir son cas (disponible, déjà attribué, annulé…)." },
   ];
-  const catItems = cat ? items.filter((i) => i.bank_status === cat) : [];
+  const numberTool = scenario === "absent" || scenario === "verifier";
 
   return (
     <div style={box}>
       <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>Attribuer un ISBN à cet ouvrage</div>
 
-      {/* 1) Les TYPES d'ISBN de la banque (avec le nombre). */}
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>Choisissez un type d'ISBN à parcourir :</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {CAT_META.map((c) => (
-            <button key={c.key} type="button" onClick={() => setCat(cat === c.key ? null : c.key)}
-              style={{ background: cat === c.key ? c.color : "#fff", color: cat === c.key ? "#fff" : "var(--ink)", border: `1px solid ${c.color}`, borderRadius: 999, padding: "5px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
-              {c.label} · {c.count}
-            </button>
-          ))}
+      {/* 1) CHOIX DU CAS qui correspond au dossier en cours. */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>Quel est le cas de ce dossier ?</div>
+        <div style={{ display: "grid", gap: 6 }}>
+          {SCENARIOS.map((sc) => {
+            const active = scenario === sc.key;
+            return (
+              <button key={sc.key} type="button" onClick={() => setScenario(active ? null : sc.key)}
+                style={{ textAlign: "left", background: active ? "var(--eclosion-soft, #FBF4D9)" : "#fff", border: `1px solid ${active ? "var(--eclosion, #D9B21A)" : "var(--line)"}`, borderRadius: 8, padding: "8px 11px", cursor: "pointer" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700 }}>
+                  {sc.label}{typeof sc.count === "number" ? <span style={{ color: "var(--muted)", fontWeight: 600 }}> · {sc.count}</span> : null}
+                </div>
+                <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>{sc.hint}</div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* 2) La liste des ISBN du type choisi. */}
-      {cat && (
+      {/* 2) Cas « Disponible » → liste des ISBN disponibles, bouton Attribuer. */}
+      {scenario === "disponible" && (
         <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px dashed var(--line)" }}>
-          {catItems.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucun ISBN dans cette catégorie.</div>
+          {dispoItems.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucun ISBN disponible en banque. Utilisez « Enregistrer un nouvel ISBN » ou faites charger une tranche par l'administrateur.</div>
           ) : (
-            <div style={{ display: "grid", gap: 6, maxHeight: 260, overflow: "auto" }}>
-              {catItems.map((it) => (
-                <IsbnBankRow key={it.id} it={it} cat={cat} busy={busy} onAttribute={onAttribute} onOpenOther={onOpenOther} />
-              ))}
-            </div>
-          )}
-          {cat === "disponible" && catItems.length > 0 && (
-            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>Cliquez « Attribuer » sur le numéro voulu. Il sera attribué à cet ouvrage au format indiqué sur sa ligne.</div>
+            <>
+              <div style={{ display: "grid", gap: 6, maxHeight: 260, overflow: "auto" }}>
+                {dispoItems.map((it) => <IsbnBankRow key={it.id} it={it} cat="disponible" busy={busy} onAttribute={onAttribute} onOpenOther={onOpenOther} />)}
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>Cliquez « Attribuer » sur le numéro voulu. Il sera attribué à cet ouvrage au format indiqué sur sa ligne.</div>
+            </>
           )}
         </div>
       )}
 
-      {/* Option : saisir / rechercher un numéro précis. */}
-      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>Ou saisissez / recherchez un numéro précis :</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onVerify(); } }}
-          placeholder="Saisir ou rechercher un numéro ISBN"
-          style={{ flex: 1, minWidth: 220, padding: "8px 11px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, fontFamily: "var(--font-mono)" }}
-        />
-        <button onClick={onVerify} disabled={busy || !input.trim()} style={{ ...primaryBtn, background: "#fff", border: "1px solid var(--eclosion, #D9B21A)", color: "var(--eclosion-dark, #9a7a12)" }}>Vérifier</button>
-      </div>
+      {/* 2bis) Cas « Déjà paru » → ISBN enregistrés SANS ouvrage lié, à rattacher. */}
+      {scenario === "deja_paru" && (
+        <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px dashed var(--line)" }}>
+          {dejaParusItems.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucun ISBN « déjà paru » sans ouvrage lié. Si le numéro n'est pas en banque, utilisez « Enregistrer un nouvel ISBN » ; s'il y est mais déjà rattaché ailleurs, utilisez « Vérifier un numéro ».</div>
+          ) : (
+            <>
+              <div style={{ display: "grid", gap: 6, maxHeight: 260, overflow: "auto" }}>
+                {dejaParusItems.map((it) => <IsbnBankRow key={it.id} it={it} cat="attribue" busy={busy} onAttribute={onAttribute} onOpenOther={onOpenOther} />)}
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>Cliquez « Rattacher » sur le numéro de l'ouvrage déjà paru.</div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* 3) Cas « Absent » / « Vérifier » → saisie d'un numéro + vérification. */}
+      {numberTool && (
+        <>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
+            {scenario === "absent" ? "Saisissez le nouveau numéro ISBN à enregistrer :" : "Saisissez le numéro à vérifier :"}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onVerify(); } }}
+              placeholder="Saisir un numéro ISBN"
+              style={{ flex: 1, minWidth: 220, padding: "8px 11px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, fontFamily: "var(--font-mono)" }}
+            />
+            <button onClick={onVerify} disabled={busy || !input.trim()} style={{ ...primaryBtn, background: "#fff", border: "1px solid var(--eclosion, #D9B21A)", color: "var(--eclosion-dark, #9a7a12)" }}>Vérifier</button>
+          </div>
+        </>
+      )}
 
       {error && <div style={{ marginTop: 10, background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "8px 11px", fontSize: 12.5 }}>⚠ {error}</div>}
       {info && <div style={{ marginTop: 10, background: "#e9f3ec", color: "#2F7D4A", borderRadius: 8, padding: "8px 11px", fontSize: 12.5 }}>✓ {info}</div>}
@@ -557,7 +590,9 @@ function IsbnAttributePanel({
         </div>
       )}
 
-      {/* Option : générer le PROCHAIN ISBN de la tranche (ouvrages neufs). */}
+      {/* Option : générer le PROCHAIN ISBN de la tranche (ouvrages neufs) —
+          seulement pertinente pour « disponible » / « nouvel ISBN ». */}
+      {(scenario === "disponible" || scenario === "absent") && (
       <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dashed var(--line)", fontSize: 12, color: "var(--muted)" }}>
         <span>Ou attribuer le prochain numéro de la tranche de la maison </span>
         <label style={{ marginLeft: 4 }}>
@@ -569,6 +604,7 @@ function IsbnAttributePanel({
           Générer le prochain ISBN{poolAvailable > 0 ? ` (${poolAvailable} dispo.)` : ""}
         </button>
       </div>
+      )}
     </div>
   );
 }

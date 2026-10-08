@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-bilan-mensuel-detaille",
+      version: "2026.10",
+      title: "Nouveauté — Bilan mensuel financier détaillé (par mois, ligne par ligne)",
+      body: "Nouvel écran « Bilan mensuel (détaillé) » dans le pôle Finance. On choisit le MOIS et l'ANNÉE, et le système construit l'état de trésorerie à partir des écritures réelles : 1) une SYNTHÈSE (solde initial, total des entrées, total des sorties, solde net, solde final) ; 2) le DÉTAIL des ENTRÉES ligne par ligne (date · référence · libellé · origine · montant) — encaissements éditoriaux validés, règlements clients, autres recettes ; 3) le DÉTAIL des SORTIES ligne par ligne (date · référence · libellé · catégorie · montant) — dépenses validées, droits d'auteur versés, etc. ; 4) la SITUATION du mois affichée clairement : « EXCÉDENTAIRE — excédent de … » ou « DÉFICITAIRE — déficit de … ». Solde net = entrées − sorties ; solde final = solde initial + solde net (solde de trésorerie, distinct d'un résultat comptable). Chaque mois est isolé et le solde se chaîne d'un mois à l'autre.",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN", "DG"],
+    },
+    {
       slug: "2026-10-encaissements-editoriaux-bilan-daf",
       version: "2026.10",
       title: "Nouveauté — Encaissements éditoriaux : validés par la Finance, ils alimentent le bilan",

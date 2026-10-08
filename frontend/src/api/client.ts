@@ -4014,6 +4014,24 @@ export function getMonthlyBalance(year?: number) {
   }>(`/api/v1/finance/monthly-balance${query}`);
 }
 
+// Bilan mensuel DÉTAILLÉ (un mois AAAA-MM) : lignes entrées/sorties + synthèse.
+export interface StatementEntry { date: string; reference: string; label: string; origin: string; amount: number; source_type: string; source_id: string }
+export interface StatementExit { date: string; reference: string; label: string; category: string; amount: number; source_type: string; source_id: string }
+export interface MonthlyStatement {
+  month: string;
+  solde_initial: number;
+  entrees: StatementEntry[];
+  sorties: StatementExit[];
+  total_entrees: number;
+  total_sorties: number;
+  solde_net: number;
+  solde_final: number;
+  situation: "excedent" | "deficit" | "equilibre";
+}
+export function getMonthlyStatement(month: string) {
+  return request<MonthlyStatement>(`/api/v1/finance/monthly-statement?month=${month}`);
+}
+
 // Ch. 9 §9.5, Ch. 18 §18.7 : moteur de droits d'auteur — exécution financière.
 export interface RoyaltyStatement {
   id: string;

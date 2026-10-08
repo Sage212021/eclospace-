@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { getMonthlyStatement, type MonthlyStatement } from "../api/client";
+import { Fragment, useEffect, useState } from "react";
+import { getMonthlyStatement, getAuthorReceipt, type MonthlyStatement, type AuthorReceiptDetail } from "../api/client";
 
 // Bilan financier mensuel détaillé (Ch. 18) : sélecteur mois+année, synthèse
 // (solde initial / entrées / sorties / solde net / solde final), détail ligne
@@ -21,16 +21,34 @@ export function MonthlyStatementPage() {
   const [data, setData] = useState<MonthlyStatement | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Traçabilité : ligne dépliée + fiche de l'encaissement éditorial source.
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<AuthorReceiptDetail | null>(null);
+  const [receiptBusy, setReceiptBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    setBusy(true); setErr(null);
+    setBusy(true); setErr(null); setOpenKey(null);
     getMonthlyStatement(month)
       .then((d) => { if (!cancelled) setData(d); })
       .catch((e) => { if (!cancelled) setErr(e instanceof Error ? e.message : "Chargement impossible."); })
       .finally(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
   }, [month]);
+
+  // Ouvre/ferme le détail d'une ligne ; charge la fiche du reçu si c'est un
+  // encaissement éditorial (source author_receipt).
+  function toggleRow(key: string, sourceType: string, sourceId: string) {
+    if (openKey === key) { setOpenKey(null); return; }
+    setOpenKey(key); setReceipt(null);
+    if (sourceType === "author_receipt" && sourceId) {
+      setReceiptBusy(true);
+      getAuthorReceipt(sourceId)
+        .then((r) => setReceipt(r))
+        .catch(() => setReceipt(null))
+        .finally(() => setReceiptBusy(false));
+    }
+  }
 
   const positive = data ? data.situation === "excedent" : false;
   const negative = data ? data.situation === "deficit" : false;
@@ -71,14 +89,22 @@ export function MonthlyStatementPage() {
           {/* 2. Détail des entrées */}
           <section style={card}>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Entrées — {monthLabel(data.month)} ({data.entrees.length})</div>
-            <MovementTable rows={data.entrees.map((e) => ({ date: e.date, reference: e.reference, label: e.label, extra: e.origin, amount: e.amount }))} extraHeader="Origine" emptyLabel="Aucune entrée ce mois." />
+            <MovementTable
+              rows={data.entrees.map((e) => ({ date: e.date, reference: e.reference, label: e.label, extra: e.origin, amount: e.amount, source_type: e.source_type, source_id: e.source_id }))}
+              extraHeader="Origine" emptyLabel="Aucune entrée ce mois." keyPrefix="in"
+              openKey={openKey} onToggle={toggleRow} receipt={receipt} receiptBusy={receiptBusy}
+            />
             <Total label="Total des entrées" value={fcfa(data.total_entrees)} color="#2F7D4A" />
           </section>
 
           {/* 3. Détail des sorties */}
           <section style={card}>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Sorties — {monthLabel(data.month)} ({data.sorties.length})</div>
-            <MovementTable rows={data.sorties.map((e) => ({ date: e.date, reference: e.reference, label: e.label, extra: e.category, amount: e.amount }))} extraHeader="Catégorie" emptyLabel="Aucune sortie ce mois." />
+            <MovementTable
+              rows={data.sorties.map((e) => ({ date: e.date, reference: e.reference, label: e.label, extra: e.category, amount: e.amount, source_type: e.source_type, source_id: e.source_id }))}
+              extraHeader="Catégorie" emptyLabel="Aucune sortie ce mois." keyPrefix="out"
+              openKey={openKey} onToggle={toggleRow} receipt={receipt} receiptBusy={receiptBusy}
+            />
             <Total label="Total des sorties" value={fcfa(data.total_sorties)} color="#B23A2E" />
           </section>
         </>
@@ -105,7 +131,14 @@ function Total({ label, value, color }: { label: string; value: string; color: s
   );
 }
 
-function MovementTable({ rows, extraHeader, emptyLabel }: { rows: { date: string; reference: string; label: string; extra: string; amount: number }[]; extraHeader: string; emptyLabel: string }) {
+interface MovementRow { date: string; reference: string; label: string; extra: string; amount: number; source_type: string; source_id: string }
+const SOURCE_LABELS: Record<string, string> = { author_receipt: "Encaissement éditorial", payment: "Mouvement de trésorerie", expense: "Dépense" };
+
+function MovementTable({ rows, extraHeader, emptyLabel, keyPrefix, openKey, onToggle, receipt, receiptBusy }: {
+  rows: MovementRow[]; extraHeader: string; emptyLabel: string; keyPrefix: string;
+  openKey: string | null; onToggle: (key: string, sourceType: string, sourceId: string) => void;
+  receipt: AuthorReceiptDetail | null; receiptBusy: boolean;
+}) {
   if (rows.length === 0) return <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>{emptyLabel}</p>;
   return (
     <div style={{ overflowX: "auto" }}>
@@ -116,19 +149,73 @@ function MovementTable({ rows, extraHeader, emptyLabel }: { rows: { date: string
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} style={{ borderBottom: "1px solid var(--line)" }}>
-              <td style={{ ...td, fontFamily: "var(--font-mono, monospace)" }}>{frDate(r.date)}</td>
-              <td style={{ ...td, fontFamily: "var(--font-mono, monospace)" }}>{r.reference || "—"}</td>
-              <td style={td}>{r.label}</td>
-              <td style={td}>{r.extra}</td>
-              <td style={{ ...td, textAlign: "right", fontFamily: "var(--font-mono, monospace)" }}>{Math.round(r.amount).toLocaleString("fr-FR")}</td>
-            </tr>
-          ))}
+          {rows.map((r, i) => {
+            const key = `${keyPrefix}:${i}`;
+            const open = openKey === key;
+            return (
+              <Fragment key={key}>
+                <tr onClick={() => onToggle(key, r.source_type, r.source_id)} style={{ borderBottom: open ? "none" : "1px solid var(--line)", cursor: "pointer", background: open ? "var(--ivory, #FAF8F2)" : undefined }} title="Cliquer pour voir l'opération d'origine">
+                  <td style={{ ...td, fontFamily: "var(--font-mono, monospace)" }}>{open ? "▾ " : "▸ "}{frDate(r.date)}</td>
+                  <td style={{ ...td, fontFamily: "var(--font-mono, monospace)" }}>{r.reference || "—"}</td>
+                  <td style={td}>{r.label}</td>
+                  <td style={td}>{r.extra}</td>
+                  <td style={{ ...td, textAlign: "right", fontFamily: "var(--font-mono, monospace)" }}>{Math.round(r.amount).toLocaleString("fr-FR")}</td>
+                </tr>
+                {open && (
+                  <tr style={{ borderBottom: "1px solid var(--line)" }}>
+                    <td colSpan={5} style={{ padding: "4px 8px 12px" }}>
+                      <RowDetail row={r} receipt={receipt} receiptBusy={receiptBusy} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
+}
+
+function RowDetail({ row, receipt, receiptBusy }: { row: MovementRow; receipt: AuthorReceiptDetail | null; receiptBusy: boolean }) {
+  const box: React.CSSProperties = { border: "1px solid var(--line)", borderRadius: 8, background: "#fff", padding: "10px 12px", fontSize: 12.5 };
+  if (row.source_type === "author_receipt") {
+    if (receiptBusy) return <div style={box}>Chargement de l'encaissement…</div>;
+    if (!receipt) return <div style={box}>Encaissement éditorial — référence {row.reference}. (Détail indisponible.)</div>;
+    const tr = receipt.traceability;
+    return (
+      <div style={box}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Encaissement éditorial — {receipt.receipt_number}</div>
+        <Line k="Type" v={receipt.type === "frais_depot" ? "Frais de dépôt de manuscrit" : "Prestation éditoriale"} />
+        {receipt.service_label && <Line k="Prestation" v={receipt.service_label} />}
+        <Line k="Payeur (auteur)" v={receipt.author?.name ?? "—"} />
+        {receipt.manuscript && <Line k="Ouvrage" v={`${receipt.manuscript.title} (${receipt.manuscript.number})`} />}
+        <Line k="Montant" v={`${Math.round(receipt.amount).toLocaleString("fr-FR")} ${receipt.currency === "XAF" ? "FCFA" : receipt.currency}`} />
+        <Line k="Mode" v={receipt.method_label} />
+        <Line k="Date de paiement" v={frDate(receipt.paid_at)} />
+        <Line k="Statut" v={receipt.status} />
+        {tr.initiated && <Line k="Initié par" v={`${tr.initiated.name ?? "—"}${tr.initiated.at ? ` — ${frDate(tr.initiated.at)}` : ""}`} />}
+        {tr.controlled && <Line k="Contrôlé par" v={`${tr.controlled.name ?? "—"}${tr.controlled.at ? ` — ${frDate(tr.controlled.at)}` : ""}`} />}
+        {tr.accounted && <Line k="Comptabilisé par" v={`${tr.accounted.name ?? "—"}${tr.accounted.at ? ` — ${frDate(tr.accounted.at)}` : ""}`} />}
+        {receipt.accounting_ref && <Line k="Référence comptable" v={receipt.accounting_ref} />}
+      </div>
+    );
+  }
+  // Autres mouvements : on affiche l'écriture telle qu'enregistrée.
+  return (
+    <div style={box}>
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>{SOURCE_LABELS[row.source_type] ?? "Opération"}</div>
+      <Line k="Date" v={frDate(row.date)} />
+      {row.reference && <Line k="Référence" v={row.reference} />}
+      <Line k="Libellé" v={row.label} />
+      <Line k="Rubrique" v={row.extra} />
+      <Line k="Montant" v={`${Math.round(row.amount).toLocaleString("fr-FR")} FCFA`} />
+    </div>
+  );
+}
+
+function Line({ k, v }: { k: string; v: string }) {
+  return <div style={{ display: "flex", gap: 8, margin: "2px 0" }}><span style={{ color: "var(--muted)", minWidth: 150 }}>{k} :</span><span>{v}</span></div>;
 }
 
 const card: React.CSSProperties = { border: "1px solid var(--line)", borderRadius: 10, background: "var(--paper, #FAF8F2)", padding: 14, marginBottom: 14 };

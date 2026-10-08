@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-isbn-rattacher-deja-paru-recherche",
+      version: "2026.10",
+      title: "Nouveauté — Rattacher un ISBN déjà paru : recherche par titre ou numéro",
+      body: "Quand un livre DÉJÀ PARU (publié avant Eclospace, donc possédant déjà son ISBN) est enregistré dans le système, on ne lui crée plus un nouveau numéro : à l'étape ISBN, le cas « 📘 Rattacher un ISBN déjà paru » ouvre maintenant une RECHERCHE parmi les ISBN de référence (livres déjà publiés enregistrés en banque, non encore liés à une fiche). Tapez le titre, l'auteur ou le numéro, vérifiez le livre affiché (titre · auteur · ISBN · format), puis « Rattacher » : l'ISBN existant est relié au dossier en cours, sans doublon et sans ressaisie. L'ISBN conserve son titre/auteur d'origine, ce qui garde la traçabilité (on voit quel ISBN existant a été rattaché). NB : pour alimenter cette liste de références, l'administrateur importe les ISBN des livres déjà parus dans la Banque des ISBN (avec leur titre).",
+      permissionModules: ["isbn"],
+      departmentCodes: ["SECR", "INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-isbn-attribution-par-cas",
       version: "2026.10",
       title: "Nouveauté — Attribuer un ISBN : on choisit d'abord le CAS du dossier",

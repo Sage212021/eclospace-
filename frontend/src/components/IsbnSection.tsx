@@ -453,11 +453,19 @@ function IsbnAttributePanel({
   // par la vérification d'un numéro (ils ne sont pas des choix de départ).
   type Scenario = "disponible" | "deja_paru" | "absent" | "verifier";
   const [scenario, setScenario] = useState<Scenario | null>(null);
+  const [dejaSearch, setDejaSearch] = useState("");
   const items = bank?.items ?? [];
-  // ISBN disponibles (à attribuer) et ISBN « déjà parus » (enregistrés SANS
-  // ouvrage lié → à rattacher).
-  const dispoItems = items.filter((i) => i.bank_status === "disponible");
-  const dejaParusItems = items.filter((i) => i.bank_status === "attribue" && i.manuscript_id === null);
+  // Deux familles distinctes :
+  //  • « Disponibles » = numéros NEUFS vierges (sans titre), libres, à attribuer.
+  //  • « Déjà parus »  = ISBN de livres déjà publiés, conservés comme RÉFÉRENCES
+  //    (numéro + titre + auteur) mais PAS encore liés à une fiche Eclospace
+  //    (manuscript_id null) → à rechercher puis rattacher au dossier en cours.
+  const dispoItems = items.filter((i) => i.bank_status === "disponible" && !i.title && !i.author);
+  const dejaParusItems = items.filter((i) => i.manuscript_id === null && i.bank_status !== "annule" && (!!i.title || !!i.author));
+  const dejaQ = dejaSearch.trim().toLowerCase();
+  const dejaParusFiltered = dejaQ
+    ? dejaParusItems.filter((i) => `${i.isbn13} ${i.title ?? ""} ${i.author ?? ""}`.toLowerCase().includes(dejaQ))
+    : dejaParusItems;
   const SCENARIOS: { key: Scenario; label: string; hint: string; count?: number }[] = [
     { key: "disponible", label: "✅ Attribuer un ISBN disponible", hint: "L'ouvrage reçoit un numéro neuf, libre, de la banque.", count: dispoItems.length },
     { key: "deja_paru", label: "📘 Rattacher un ISBN déjà paru", hint: "L'ouvrage est déjà paru : son ISBN existe en banque mais n'est lié à aucun ouvrage.", count: dejaParusItems.length },
@@ -505,17 +513,39 @@ function IsbnAttributePanel({
         </div>
       )}
 
-      {/* 2bis) Cas « Déjà paru » → ISBN enregistrés SANS ouvrage lié, à rattacher. */}
+      {/* 2bis) Cas « Déjà paru » → RECHERCHE dans les ISBN de référence (livres
+          déjà publiés, non encore liés à une fiche) par titre ou numéro. */}
       {scenario === "deja_paru" && (
         <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px dashed var(--line)" }}>
+          <input
+            value={dejaSearch}
+            onChange={(e) => setDejaSearch(e.target.value)}
+            placeholder="Rechercher par titre, auteur ou numéro ISBN…"
+            style={{ width: "100%", boxSizing: "border-box", padding: "8px 11px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, marginBottom: 8 }}
+          />
           {dejaParusItems.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucun ISBN « déjà paru » sans ouvrage lié. Si le numéro n'est pas en banque, utilisez « Enregistrer un nouvel ISBN » ; s'il y est mais déjà rattaché ailleurs, utilisez « Vérifier un numéro ».</div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucun ISBN de livre déjà paru n'est enregistré comme référence dans la banque. Faites-les importer par l'administrateur (banque des ISBN → import), puis ils apparaîtront ici pour rattachement.</div>
+          ) : dejaParusFiltered.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Aucun résultat pour « {dejaSearch} ». Essayez un autre titre ou numéro.</div>
           ) : (
             <>
-              <div style={{ display: "grid", gap: 6, maxHeight: 260, overflow: "auto" }}>
-                {dejaParusItems.map((it) => <IsbnBankRow key={it.id} it={it} cat="attribue" busy={busy} onAttribute={onAttribute} onOpenOther={onOpenOther} />)}
+              <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>{dejaParusFiltered.length} ouvrage(s) déjà paru. Sélectionnez celui qui correspond, vérifiez le titre/l'auteur, puis « Rattacher ».</div>
+              <div style={{ display: "grid", gap: 6, maxHeight: 300, overflow: "auto" }}>
+                {dejaParusFiltered.map((it) => (
+                  <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 11px", background: "#fff" }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{it.title || <span style={{ color: "var(--muted)", fontWeight: 400 }}>(sans titre)</span>}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                        {it.author ? `${it.author} · ` : ""}<span style={{ fontFamily: "var(--font-mono)" }}>{it.isbn13}</span> · {FORMAT_LABELS[it.format] ?? it.format}
+                      </div>
+                    </div>
+                    <button type="button" disabled={busy} onClick={() => onAttribute(it.isbn13, it.format)}
+                      style={{ background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 12.5, fontWeight: 700, cursor: busy ? "default" : "pointer" }}>
+                      Rattacher
+                    </button>
+                  </div>
+                ))}
               </div>
-              <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>Cliquez « Rattacher » sur le numéro de l'ouvrage déjà paru.</div>
             </>
           )}
         </div>

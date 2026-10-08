@@ -39,6 +39,7 @@ const MarketingPartnersPage = lazy(() => import("./pages/MarketingPartnersPage")
 const MarketingCampaignsPage = lazy(() => import("./pages/MarketingCampaignsPage").then((m) => ({ default: m.MarketingCampaignsPage })));
 const MarketingDashboardPage = lazy(() => import("./pages/MarketingDashboardPage").then((m) => ({ default: m.MarketingDashboardPage })));
 const FinancePage = lazy(() => import("./pages/FinancePage").then((m) => ({ default: m.FinancePage })));
+const MonthlyStatementPage = lazy(() => import("./pages/MonthlyStatementPage").then((m) => ({ default: m.MonthlyStatementPage })));
 const HrPage = lazy(() => import("./pages/HrPage").then((m) => ({ default: m.HrPage })));
 const DirectionPage = lazy(() => import("./pages/DirectionPage").then((m) => ({ default: m.DirectionPage })));
 const PayrollSuiviPage = lazy(() => import("./pages/PayrollSuiviPage").then((m) => ({ default: m.PayrollSuiviPage })));
@@ -112,6 +113,7 @@ type PageId =
   | "marketing-campaigns"
   | "marketing-dashboard"
   | "finance"
+  | "monthly-statement"
   | "hr"
   | "direction"
   | "reports"
@@ -254,6 +256,7 @@ const NAV_POLES: NavPole[] = [
       // affichée à deux endroits — le juridique la retrouve comme auparavant.
       { key: "jf-contrats", label: "Contrats & droits d'auteur", permission: "manuscripts:consultation" },
       { key: "jf-finance", label: "Finance & comptabilité", permission: "finance:consultation" },
+      { key: "jf-bilan-mensuel", label: "Bilan mensuel (détaillé)", permission: "finance:consultation" },
       { key: "jf-encaissements-editoriaux", label: "Encaissements éditoriaux", permission: "paiements_auteurs:consultation" },
       { key: "jf-paie-suivi", label: "Paie — validation (DG) & suivi (DAF)", anyPermission: ["finance:validation", "paie:consultation"] },
       // Stock & magasin rattaché au pôle Finance (décision opérateur 13/08/2026) :
@@ -335,6 +338,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "co-commissions": { page: "commissions" },
   "jf-contrats": { stage: "CONTRACTUALISATION", heading: "Contrats & droits d'auteur" },
   "jf-finance": { page: "finance" },
+  "jf-bilan-mensuel": { page: "monthly-statement" },
   "jf-droits-annuels": { page: "author-royalties" },
   "ad-rh": { page: "hr" },
   "ad-users": { page: "users-roles" },
@@ -922,6 +926,7 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "finance" && (
           <FinancePage canManage={permissions.has("finance:saisie")} canAdminister={permissions.has("finance:administration")} canInitiateOrder={canInitiateOrder} canValidateCancellation={permissions.has("pilotage:administration")} canCounterValidate={permissions.has("finance:administration") || roles.has("DIR_GENERAL")} />
         )}
+        {leaf && "page" in leaf && leaf.page === "monthly-statement" && <MonthlyStatementPage />}
         {leaf && "page" in leaf && leaf.page === "hr" && (
           <HrPage
             canManage={permissions.has("rh:saisie")}

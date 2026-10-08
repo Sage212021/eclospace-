@@ -783,6 +783,79 @@ export default async function financeRoutes(fastify: FastifyInstance) {
     return reply.send({ year, months, totals });
   });
 
+  // BILAN MENSUEL DÉTAILLÉ (Ch. 18) : pour un mois donné (AAAA-MM), état de
+  // trésorerie complet calculé À PARTIR DES ÉCRITURES RÉELLES — jamais statique.
+  //   • solde initial = trésorerie cumulée AVANT le 1er du mois ;
+  //   • ENTRÉES détaillées ligne par ligne (encaissements éditoriaux validés,
+  //     règlements clients, autres recettes) ;
+  //   • SORTIES détaillées ligne par ligne (dépenses validées/payées,
+  //     décaissements : droits d'auteur…) ;
+  //   • solde net = entrées − sorties ; solde final = solde initial + solde net ;
+  //   • situation : excédent / déficit / équilibre.
+  // Chaque ligne porte sa source (type + id) pour remonter à l'opération.
+  fastify.get("/api/v1/finance/monthly-statement", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
+    const q = request.query as { month?: string };
+    const now = new Date();
+    const month = q.month && /^\d{4}-\d{2}$/.test(q.month) ? q.month : `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    const [y, m] = month.split("-").map(Number);
+    const start = new Date(Date.UTC(y, m - 1, 1));
+    const end = new Date(Date.UTC(y, m, 1));
+    const round = (n: number) => Math.round(n * 100) / 100;
+
+    // Solde initial = entrées validées − sorties validées des mois précédents.
+    const [inBefore, outBefore, expBefore] = await Promise.all([
+      prisma.payment.aggregate({ _sum: { amount: true }, where: { direction: "in", receivedAt: { lt: start } } }),
+      prisma.payment.aggregate({ _sum: { amount: true }, where: { direction: "out", receivedAt: { lt: start } } }),
+      prisma.expense.aggregate({ _sum: { amount: true }, where: { status: { in: ["validee", "payee"] }, expenseDate: { lt: start } } }),
+    ]);
+    const soldeInitial = round(Number(inBefore._sum.amount ?? 0) - Number(outBefore._sum.amount ?? 0) - Number(expBefore._sum.amount ?? 0));
+
+    const [paymentsIn, paymentsOut, expenses] = await Promise.all([
+      prisma.payment.findMany({ where: { direction: "in", receivedAt: { gte: start, lt: end } }, orderBy: { receivedAt: "asc" }, select: { id: true, amount: true, receivedAt: true, reference: true, method: true, allocations: { select: { invoiceId: true } } } }),
+      prisma.payment.findMany({ where: { direction: "out", receivedAt: { gte: start, lt: end } }, orderBy: { receivedAt: "asc" }, select: { id: true, amount: true, receivedAt: true, reference: true, method: true, royaltyPayment: { select: { partnerId: true } } } }),
+      prisma.expense.findMany({ where: { status: { in: ["validee", "payee"] }, expenseDate: { gte: start, lt: end } }, orderBy: { expenseDate: "asc" }, select: { id: true, amount: true, expenseDate: true, category: true, description: true, supplier: true } }),
+    ]);
+
+    // Enrichissement des libellés/origines (sans ressaisie) à partir des sources.
+    const inIds = paymentsIn.map((p) => p.id);
+    const receipts = inIds.length ? await prisma.authorReceipt.findMany({ where: { paymentId: { in: inIds } }, select: { id: true, paymentId: true, receiptNumber: true, type: true, serviceLabel: true } }) : [];
+    const recByPay = new Map(receipts.map((r) => [r.paymentId!, r]));
+    const invIds = [...new Set(paymentsIn.flatMap((p) => p.allocations.map((a) => a.invoiceId)))];
+    const invoices = invIds.length ? await prisma.invoice.findMany({ where: { id: { in: invIds } }, select: { id: true, invoiceNumber: true, customer: { select: { name: true } } } }) : [];
+    const invById = new Map(invoices.map((i) => [i.id, i]));
+    const royPartnerIds = [...new Set(paymentsOut.map((p) => p.royaltyPayment?.partnerId).filter((v): v is string => !!v))];
+    const partners = royPartnerIds.length ? await prisma.partner.findMany({ where: { id: { in: royPartnerIds } }, select: { id: true, firstName: true, lastName: true } }) : [];
+    const partnerName = new Map(partners.map((p) => [p.id, `${p.firstName} ${p.lastName}`.trim()]));
+    const methodLabel = new Map((await prisma.paymentMethodDef.findMany({ select: { code: true, label: true } })).map((mm) => [mm.code, mm.label]));
+
+    const entrees = paymentsIn.map((p) => {
+      const amount = round(Number(p.amount));
+      const rec = recByPay.get(p.id);
+      if (rec) return { date: p.receivedAt.toISOString(), reference: rec.receiptNumber, label: rec.serviceLabel ?? (rec.type === "frais_depot" ? "Frais de dépôt de manuscrit" : "Encaissement éditorial"), origin: "Pôle éditorial", amount, source_type: "author_receipt", source_id: rec.id };
+      if (p.allocations.length) {
+        const inv = invById.get(p.allocations[0].invoiceId);
+        return { date: p.receivedAt.toISOString(), reference: p.reference ?? inv?.invoiceNumber ?? "", label: `Règlement client${inv?.customer?.name ? ` — ${inv.customer.name}` : ""}`, origin: "Ventes / Clients", amount, source_type: "payment", source_id: p.id };
+      }
+      return { date: p.receivedAt.toISOString(), reference: p.reference ?? "", label: `Encaissement (${methodLabel.get(p.method) ?? p.method})`, origin: "Finance", amount, source_type: "payment", source_id: p.id };
+    });
+
+    const CAT_LABELS: Record<string, string> = { loyer: "Loyer", salaire: "Salaires", prestation: "Prestation", transport: "Transport", communication: "Communication", abonnement: "Abonnement", autre: "Autre" };
+    const sortiesExp = expenses.map((e) => ({ date: e.expenseDate.toISOString(), reference: "", label: e.description ?? e.supplier ?? (CAT_LABELS[e.category] ?? e.category), category: CAT_LABELS[e.category] ?? e.category, amount: round(Number(e.amount)), source_type: "expense", source_id: e.id }));
+    const sortiesOut = paymentsOut.map((p) => {
+      const nm = p.royaltyPayment?.partnerId ? partnerName.get(p.royaltyPayment.partnerId) ?? null : null;
+      return { date: p.receivedAt.toISOString(), reference: p.reference ?? "", label: nm ? `Droits d'auteur — ${nm}` : "Décaissement", category: nm ? "Droits d'auteur" : "Décaissement", amount: round(Number(p.amount)), source_type: "payment", source_id: p.id };
+    });
+    const sorties = [...sortiesExp, ...sortiesOut].sort((a, b) => a.date.localeCompare(b.date));
+
+    const totalEntrees = round(entrees.reduce((s, e) => s + e.amount, 0));
+    const totalSorties = round(sorties.reduce((s, e) => s + e.amount, 0));
+    const soldeNet = round(totalEntrees - totalSorties);
+    const soldeFinal = round(soldeInitial + soldeNet);
+    const situation = soldeNet > 0 ? "excedent" : soldeNet < 0 ? "deficit" : "equilibre";
+
+    return reply.send({ month, solde_initial: soldeInitial, entrees, sorties, total_entrees: totalEntrees, total_sorties: totalSorties, solde_net: soldeNet, solde_final: soldeFinal, situation });
+  });
+
   fastify.get("/api/v1/treasury-position", { preHandler: requirePermission("finance", "consultation") }, async (request, reply) => {
     const [accounts, incoming, outgoing] = await Promise.all([
       prisma.bankAccount.findMany(),

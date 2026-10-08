@@ -51,6 +51,11 @@ const CUSTOMER_CATS: { key: CustomerCategory; label: string }[] = [
 type BookLine = { isbn_id: string; description: string; quantity: string; unit_price_ht: string; royalty_rate: string };
 const emptyLine = (): BookLine => ({ isbn_id: "", description: "", quantity: "", unit_price_ht: "", royalty_rate: "" });
 
+// Ligne « Autre » (élément libre à facturer) : désignation, quantité, prix unit.
+// Permet plusieurs éléments hors catégories prédéfinies sur une même commande.
+type OtherLine = { description: string; quantity: string; unit_price_ht: string };
+const emptyOther = (): OtherLine => ({ description: "", quantity: "1", unit_price_ht: "" });
+
 // canValidateThreshold : validation des factures au-dessus du seuil — décision
 // de GOUVERNANCE (DG / administrateur général, pilotage:administration), pas la
 // Finance. Sert aussi le réglage du seuil (que seuls ces décideurs pilotent ici).
@@ -63,6 +68,7 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ customer_id: "", category: "livre_scolaire" as BillingOrderCategory, label: "", amount_ht: "", tax_rate: "0", discount_pct: 0 });
   const [bookLines, setBookLines] = useState<BookLine[]>([emptyLine()]);
+  const [otherLines, setOtherLines] = useState<OtherLine[]>([emptyOther()]);
   const [isbns, setIsbns] = useState<IsbnCatalogueItem[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,13 +98,17 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
 
   // Le livre (scolaire ou général) se saisit par ouvrage → droits d'auteur par livre.
   const detailed = form.category === "livre_scolaire" || form.category === "livre_general";
+  const isAutre = form.category === "autre";
   // Segment attendu du catalogue selon la catégorie (scolaire ↔ manuels ;
   // général ↔ ouvrages simples). Le sélecteur d'ouvrage ne montre que le bon segment.
   const wantSegment: "scolaire" | "general" | null =
     form.category === "livre_scolaire" ? "scolaire" : form.category === "livre_general" ? "general" : null;
   const linesTotalHt = bookLines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price_ht) || 0), 0);
+  const otherTotalHt = otherLines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price_ht) || 0), 0);
+  // Montant HT de base selon le mode (ouvrages / lignes « Autre »).
+  const baseHt = detailed ? linesTotalHt : otherTotalHt;
   // Brut TTC du formulaire (selon le mode) et net à payer après remise saisie.
-  const formGrossTtc = (detailed ? linesTotalHt : Number(form.amount_ht) || 0) * (1 + (Number(form.tax_rate) || 0) / 100);
+  const formGrossTtc = baseHt * (1 + (Number(form.tax_rate) || 0) / 100);
   const formNet = Math.round(formGrossTtc * (1 - form.discount_pct / 100) * 100) / 100;
 
   // Menu d'ouvrages groupé par matière (le sous-titre porte « Matière · Classe »).
@@ -144,6 +154,7 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   function resetForm() {
     setForm({ customer_id: "", category: "livre_scolaire", label: "", amount_ht: "", tax_rate: "0", discount_pct: 0 });
     setBookLines([emptyLine()]);
+    setOtherLines([emptyOther()]);
   }
 
   async function submitNewCustomer() {
@@ -202,6 +213,24 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
         unit_price_ht: Number(l.unit_price_ht),
         royalty_rate: l.royalty_rate.trim() ? Number(l.royalty_rate) / 100 : undefined,
       }));
+    } else if (isAutre) {
+      // « Autre » : une ou plusieurs lignes libres (désignation, quantité, prix).
+      const filled = otherLines.filter((l) => l.description.trim() || l.quantity || l.unit_price_ht);
+      if (filled.length === 0) {
+        setError("Ajoutez au moins une ligne (désignation, quantité, prix unitaire).");
+        return;
+      }
+      for (const l of filled) {
+        if (!l.description.trim() || !(Number(l.quantity) > 0) || !(Number(l.unit_price_ht) > 0)) {
+          setError("Chaque ligne doit avoir une désignation, une quantité et un prix unitaire (> 0).");
+          return;
+        }
+      }
+      payloadLines = filled.map((l) => ({
+        description: l.description.trim(),
+        quantity: Number(l.quantity),
+        unit_price_ht: Number(l.unit_price_ht),
+      }));
     } else if (!(Number(form.amount_ht) > 0)) {
       setError("Le montant HT (> 0) est requis.");
       return;
@@ -215,7 +244,7 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
         label: form.label.trim(),
         tax_rate: Number(form.tax_rate) || 0,
         discount_pct: form.discount_pct || 0,
-        ...(detailed ? { lines: payloadLines } : { amount_ht: Number(form.amount_ht) }),
+        ...(detailed || isAutre ? { lines: payloadLines } : { amount_ht: Number(form.amount_ht) }),
       });
       setShowForm(false);
       resetForm();
@@ -406,6 +435,7 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
                   // proposé change de segment (scolaire ↔ général).
                   setForm((f) => ({ ...f, category: e.target.value as BillingOrderCategory }));
                   setBookLines([emptyLine()]);
+                  setOtherLines([emptyOther()]);
                 }}
                 style={{ ...inp, flex: 1 }}
               >
@@ -457,9 +487,36 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
                 </div>
               </div>
             ) : (
-              <div style={{ display: "flex", gap: 8 }}>
-                <input value={form.amount_ht} onChange={(e) => setForm((f) => ({ ...f, amount_ht: e.target.value }))} placeholder="Montant HT (XAF)" inputMode="numeric" style={{ ...inp, flex: 1 }} />
-                <input value={form.tax_rate} onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))} placeholder="TVA %" inputMode="numeric" style={{ ...inp, width: 90 }} />
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontSize: 12.5, color: "var(--muted)" }}>
+                  Détail des éléments à facturer. Ajoutez autant de lignes que nécessaire — le total se calcule automatiquement.
+                </div>
+                {otherLines.map((l, i) => {
+                  const lineTotal = (Number(l.quantity) || 0) * (Number(l.unit_price_ht) || 0);
+                  return (
+                    <div key={i} style={{ display: "grid", gap: 6, border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input value={l.description} onChange={(e) => setOtherLines((ls) => ls.map((x, idx) => idx === i ? { ...x, description: e.target.value } : x))} placeholder="Désignation (ex. Prestation, frais…)" style={{ ...inp, flex: 1 }} />
+                        {otherLines.length > 1 && (
+                          <button type="button" onClick={() => setOtherLines((ls) => ls.filter((_, idx) => idx !== i))} style={btnDanger} title="Retirer cette ligne">✕</button>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input value={l.quantity} onChange={(e) => setOtherLines((ls) => ls.map((x, idx) => idx === i ? { ...x, quantity: e.target.value } : x))} placeholder="Quantité" inputMode="numeric" style={{ ...inp, flex: 1 }} />
+                        <input value={l.unit_price_ht} onChange={(e) => setOtherLines((ls) => ls.map((x, idx) => idx === i ? { ...x, unit_price_ht: e.target.value } : x))} placeholder="Prix unit. HT" inputMode="numeric" style={{ ...inp, flex: 1 }} />
+                        <span style={{ fontSize: 12.5, color: "var(--muted)", minWidth: 120, textAlign: "right" }}>Montant : <span style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{fmt.format(lineTotal)}</span></span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <button type="button" onClick={() => setOtherLines((ls) => [...ls, emptyOther()])} style={btnGhost}>+ Ajouter une ligne</button>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Total HT :</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>{fmt.format(otherTotalHt)}</span>
+                    <input value={form.tax_rate} onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))} placeholder="TVA %" inputMode="numeric" style={{ ...inp, width: 84 }} />
+                  </div>
+                </div>
               </div>
             )}
 

@@ -2600,6 +2600,11 @@ export function listLegalDeposits(manuscriptId: string) {
 export function createLegalDeposit(manuscriptId: string, input: { country: string; depository: string; copies_required: number }) {
   return request<LegalDeposit>(`/api/v1/manuscripts/${manuscriptId}/legal-deposits`, { method: "POST", body: JSON.stringify(input) });
 }
+// Correction d'une fiche de dépôt légal déjà enregistrée (pays / organisme /
+// exemplaires / statut).
+export function updateLegalDeposit(id: string, input: { country?: string; depository?: string; copies_required?: number; status?: string }) {
+  return request<LegalDeposit>(`/api/v1/legal-deposits/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
 
 export type EditionType = "compte_editeur" | "compte_auteur" | "coedition" | "coproduction" | "partenariat" | "autre";
 export type CommercializationStatus = "a_paraitre" | "disponible" | "epuise" | "arret_commercialisation";

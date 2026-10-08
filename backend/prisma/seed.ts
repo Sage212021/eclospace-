@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-isbn-attribution-par-type-et-depot-modifiable",
+      version: "2026.10",
+      title: "Nouveauté — Attribuer un ISBN en choisissant son type + corriger un dépôt légal",
+      body: "Deux améliorations sur la fiche « ISBN, dépôt légal et métadonnées ». 1) Quand vous cliquez « + Attribuer un ISBN », l'écran propose d'abord les TYPES d'ISBN de la banque avec leur nombre — Disponibles, Déjà attribués, Annulés. Vous cliquez sur un type et la liste des ISBN de ce type s'affiche : sur un ISBN « Disponible », un bouton « Attribuer » le lie directement à l'ouvrage ; un ISBN attribué mais sans ouvrage lié (déjà paru) propose « Rattacher » ; les ISBN déjà pris ou annulés sont montrés pour information. La saisie/recherche d'un numéro précis et la génération du prochain numéro restent possibles en dessous. 2) Une fiche de dépôt légal déjà enregistrée peut maintenant être CORRIGÉE (bouton « Modifier » : pays, organisme, nombre d'exemplaires, statut) — plus besoin de la recréer en cas d'erreur de saisie.",
+      permissionModules: ["isbn"],
+      departmentCodes: ["SECR", "INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-isbn-chargement-admin",
       version: "2026.10",
       title: "Nouveauté — Chargement des ISBN : une tranche disponible chargée + un écran admin",

@@ -2579,6 +2579,10 @@ export interface IsbnByNumberResult {
 export function attributeIsbnByNumber(manuscriptId: string, input: { isbn13: string; format?: IsbnFormat; observations?: string }) {
   return request<IsbnByNumberResult>(`/api/v1/manuscripts/${manuscriptId}/isbn/by-number`, { method: "POST", body: JSON.stringify(input) });
 }
+// Rattacher un ISBN EXISTANT (déjà paru) au manuscrit en cours (par id d'ISBN).
+export function rattachExistingIsbn(manuscriptId: string, isbnId: string) {
+  return request<{ outcome: string }>(`/api/v1/manuscripts/${manuscriptId}/isbn/${isbnId}/rattach`, { method: "POST" });
+}
 
 export function isbnBarcodeUrl(isbnId: string) {
   return `${API_BASE}/api/v1/isbn/${isbnId}/barcode`;

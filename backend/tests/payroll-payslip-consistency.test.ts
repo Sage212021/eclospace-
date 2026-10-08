@@ -72,6 +72,9 @@ describe("Paie — bulletin = grille = clôture (cas BIBI TSANGA)", () => {
 
   it("la clôture archive exactement le même net que le bulletin", async () => {
     const fiche = await payslipNet(PERIOD);
+    // La clôture exige la validation du DG : on soumet puis on valide (admin).
+    await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/submit`, headers: { cookie } });
+    await app.inject({ method: "POST", url: `/api/v1/payroll/monthly/${PERIOD}/validate`, headers: { cookie } });
     const close = await app.inject({ method: "POST", url: `/api/v1/payroll/register/${PERIOD}/close`, headers: { cookie } });
     expect(close.statusCode).toBe(200);
     const journal = (await app.inject({ method: "GET", url: `/api/v1/payroll/journal/${PERIOD}`, headers: { cookie } })).json();

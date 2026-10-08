@@ -121,8 +121,20 @@ export function PayrollRegisterSection({ canClose, collapsible, defaultOpen }: {
         <Button variant="edit" size="sm" type="button" disabled={busy} onClick={load}>{busy ? "…" : t("pay.gen_register", "Générer le livre de paie")}</Button>
         {reg && reg.lines.length > 0 && <Button variant="export" size="sm" type="button" onClick={exportCnps}>{t("pay.export_cnps", "Export CNPS (CSV)")}</Button>}
         {reg && reg.lines.length > 0 && <Button variant="export" size="sm" type="button" onClick={exportFiscal}>{t("pay.export_fiscal", "Export fiscal (CSV)")}</Button>}
-        {reg && !reg.closed && reg.lines.length > 0 && canClose && <Button variant="add" size="sm" type="button" disabled={busy} onClick={close}>{t("pay.close_period", "Clôturer la période")}</Button>}
+        {reg && !reg.closed && reg.lines.length > 0 && canClose && reg.monthly_status === "valide" && <Button variant="add" size="sm" type="button" disabled={busy} onClick={close}>{t("pay.close_period", "Clôturer la période")}</Button>}
       </div>
+
+      {/* La clôture n'est permise qu'après validation du DG : message explicite
+          tant que la paie du mois n'est pas « valide ». */}
+      {reg && !reg.closed && reg.lines.length > 0 && canClose && reg.monthly_status !== "valide" && (
+        <div style={{ marginTop: 10, background: "var(--alert-soft, #F6E2DE)", color: "var(--alert, #B23A2E)", border: "1px solid #E4B8AF", borderRadius: 8, padding: "9px 12px", fontSize: 12.5 }}>
+          ⚠ {reg.monthly_status === "soumis_dg"
+            ? t("pay.close_blocked_submitted", "Clôture indisponible : la paie de ce mois est soumise au Directeur général mais n'est pas encore validée. La clôture sera possible dès que la Direction générale l'aura validée.")
+            : reg.monthly_status === "brouillon"
+              ? t("pay.close_blocked_draft", "Clôture indisponible : la paie de ce mois est en brouillon. Soumettez-la au Directeur général, puis attendez sa validation avant de clôturer.")
+              : t("pay.close_blocked_none", "Clôture indisponible : la paie de ce mois n'a pas encore été validée par la Direction générale. Préparez le mois, soumettez-le au DG, puis attendez sa validation.")}
+        </div>
+      )}
 
       {reg && (
         <div style={{ marginTop: 12 }}>

@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-paie-cloture-apres-validation-dg",
+      version: "2026.10",
+      title: "Nouveauté — Paie : clôture impossible tant que le Directeur général n'a pas validé",
+      body: "Correctif important. Le livre de paie d'un mois ne peut plus être clôturé (figé) tant que la Direction générale n'a pas VALIDÉ la paie de ce mois. Avant, la clôture pouvait être faite juste après la préparation ou la soumission — c'est corrigé. Tant que le mois n'est pas validé par le DG, le bouton « Clôturer la période » n'apparaît pas et un message clair l'explique : « Clôture indisponible : la paie de ce mois n'est pas encore validée par la Direction générale. » Le circuit reste : préparer → soumettre au DG → validation du DG → clôture.",
+      permissionModules: ["paie"],
+      departmentCodes: ["RH", "FINANCE", "DG"],
+    },
+    {
       slug: "2026-10-isbn-attribution-par-type-et-depot-modifiable",
       version: "2026.10",
       title: "Nouveauté — Attribuer un ISBN en choisissant son type + corriger un dépôt légal",

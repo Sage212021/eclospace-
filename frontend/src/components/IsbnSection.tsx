@@ -36,6 +36,25 @@ const EDITION_TYPE_LABELS: Record<EditionType, string> = {
   partenariat: "Partenariat",
   autre: "Autre",
 };
+// Simulateur de poids — barèmes indicatifs.
+// Surface d'une PAGE (une face), en m² (une feuille = 2 pages).
+const WEIGHT_FORMATS: { key: string; label: string; area: number }[] = [
+  { key: "roman_135_215", label: "Roman 135 × 215 mm", area: 0.135 * 0.215 },
+  { key: "a5", label: "A5 (148 × 210 mm)", area: 0.148 * 0.210 },
+  { key: "poche_110_180", label: "Poche 110 × 180 mm", area: 0.110 * 0.180 },
+  { key: "145_220", label: "145 × 220 mm", area: 0.145 * 0.220 },
+  { key: "a4", label: "A4 (210 × 297 mm)", area: 0.210 * 0.297 },
+];
+// Grammage du papier intérieur (g/m²).
+const WEIGHT_PAPERS = [60, 70, 80, 90, 100, 115];
+// Couverture : grammage papier (g/m²) + éventuel poids de carton (reliure rigide).
+const WEIGHT_COVERS: { key: string; label: string; gsm: number; board: number }[] = [
+  { key: "souple_250", label: "Souple 250 g/m²", gsm: 250, board: 0 },
+  { key: "souple_300", label: "Souple 300 g/m²", gsm: 300, board: 0 },
+  { key: "rigide", label: "Rigide (cartonnée)", gsm: 150, board: 200 },
+  { key: "aucune", label: "Sans couverture", gsm: 0, board: 0 },
+];
+
 const LEGAL_DEPOSIT_STATUS_LABELS: Record<string, string> = {
   a_preparer: "À préparer",
   depose: "Déposé",
@@ -73,11 +92,18 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
   // Volet commercial & financier de la fiche ouvrage (Lot 2).
   const [editionType, setEditionType] = useState("");
   const [pricePublic, setPricePublic] = useState("");
-  const [pricePro, setPricePro] = useState("");
+  // Remise professionnelle paramétrable (défaut 25 %) : le prix pro en découle.
+  const [proDiscountPct, setProDiscountPct] = useState("25");
   const [priceEditeur, setPriceEditeur] = useState("");
   const [pricePromo, setPricePromo] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [commStatus, setCommStatus] = useState("");
+  // Simulateur de poids (local, non stocké — sert à remplir le champ Poids).
+  const [simOpen, setSimOpen] = useState(false);
+  const [simPages, setSimPages] = useState("");
+  const [simFormat, setSimFormat] = useState("roman_135_215");
+  const [simGsm, setSimGsm] = useState("80");
+  const [simCover, setSimCover] = useState("souple_250");
   const [isSchool, setIsSchool] = useState(false);
   const [schoolLevel, setSchoolLevel] = useState("");
   const [schoolSubject, setSchoolSubject] = useState("");
@@ -102,7 +128,7 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
     setWeight(meta?.weightGrams?.toString() ?? "");
     setEditionType(meta?.editionType ?? "");
     setPricePublic(meta?.pricePublic ?? "");
-    setPricePro(meta?.pricePro ?? "");
+    setProDiscountPct(meta?.proDiscountPct ?? "25");
     setPriceEditeur(meta?.priceEditeur ?? "");
     setPricePromo(meta?.pricePromo ?? "");
     setUnitCost(meta?.unitProductionCost ?? "");
@@ -244,9 +270,22 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
     }
   }
 
-  // Prix remisé −25 % : calculé automatiquement depuis le prix public (PPT),
-  // affiché à titre indicatif (non stocké).
-  const priceDiscount25 = Number(pricePublic) > 0 ? Math.round(Number(pricePublic) * 0.75) : null;
+  // Prix professionnel = prix public (PPT) − remise pro (paramétrable, défaut
+  // 25 %). Calculé automatiquement ; c'est ce prix qui est enregistré.
+  const proDiscountNum = Math.max(0, Math.min(100, Number(proDiscountPct) || 0));
+  const pricePro = Number(pricePublic) > 0 ? Math.round(Number(pricePublic) * (1 - proDiscountNum / 100)) : null;
+
+  // Estimation du poids : (pages/2) feuilles × surface × grammage + couverture.
+  const simEstimate = (() => {
+    const pages = Number(simPages) || 0;
+    const area = WEIGHT_FORMATS.find((f) => f.key === simFormat)?.area ?? 0;
+    const gsm = Number(simGsm) || 0;
+    const cover = WEIGHT_COVERS.find((c) => c.key === simCover);
+    if (pages <= 0 || area <= 0) return null;
+    const interior = (pages / 2) * area * gsm;
+    const coverW = cover ? area * 2 * cover.gsm + cover.board : 0;
+    return Math.round(interior + coverW);
+  })();
 
   async function handleSaveMetadata(event: React.FormEvent) {
     event.preventDefault();
@@ -257,7 +296,8 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
         weight_grams: weight ? Number(weight) : undefined,
         edition_type: (editionType || null) as EditionType | null,
         price_public: num(pricePublic),
-        price_pro: num(pricePro),
+        price_pro: pricePro,
+        pro_discount_pct: Number(proDiscountPct) ? proDiscountNum : null,
         price_editeur: num(priceEditeur),
         price_promo: num(pricePromo),
         unit_production_cost: num(unitCost),
@@ -374,10 +414,49 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
           Résumé de présentation
           <textarea disabled={!canManage} value={summary} onChange={(e) => setSummary(e.target.value)} rows={3} style={{ ...inputStyle, fontFamily: "inherit" }} />
         </label>
-        <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
+        <label style={{ fontSize: 12, display: "block", marginBottom: 4 }}>
           Poids (grammes)
           <input disabled={!canManage} type="number" value={weight} onChange={(e) => setWeight(e.target.value)} style={inputStyle} />
         </label>
+        {canManage && (
+          <div style={{ marginBottom: 8 }}>
+            <button type="button" onClick={() => setSimOpen((v) => !v)} style={{ background: "none", border: "none", color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700, cursor: "pointer", padding: 0, fontSize: 12 }}>
+              {simOpen ? "▾" : "▸"} ⚖️ Estimer le poids (papier · couverture · pages)
+            </button>
+            {simOpen && (
+              <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, marginTop: 6, background: "var(--ivory, #FAF8F2)", display: "grid", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
+                  <label style={{ fontSize: 12 }}>Nombre de pages
+                    <input type="number" min={1} value={simPages} onChange={(e) => setSimPages(e.target.value)} placeholder="ex. 200" style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
+                  </label>
+                  <label style={{ fontSize: 12 }}>Format
+                    <select value={simFormat} onChange={(e) => setSimFormat(e.target.value)} style={inputStyle}>
+                      {WEIGHT_FORMATS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+                    </select>
+                  </label>
+                  <label style={{ fontSize: 12 }}>Papier intérieur (g/m²)
+                    <select value={simGsm} onChange={(e) => setSimGsm(e.target.value)} style={inputStyle}>
+                      {WEIGHT_PAPERS.map((g) => <option key={g} value={g}>{g} g/m²</option>)}
+                    </select>
+                  </label>
+                  <label style={{ fontSize: 12 }}>Couverture
+                    <select value={simCover} onChange={(e) => setSimCover(e.target.value)} style={inputStyle}>
+                      {WEIGHT_COVERS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12.5 }}>Poids estimé : <strong style={{ fontFamily: "var(--font-mono)" }}>{simEstimate != null ? `${simEstimate.toLocaleString("fr-FR")} g` : "—"}</strong></span>
+                  <button type="button" disabled={simEstimate == null} onClick={() => { if (simEstimate != null) setWeight(String(simEstimate)); }}
+                    style={{ background: "var(--eclosion)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: simEstimate == null ? "default" : "pointer" }}>
+                    Appliquer au poids
+                  </button>
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>Estimation indicative (hors emballage).</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Volet commercial & financier de la fiche ouvrage (Lot 2). */}
         <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12, marginBottom: 6, color: "var(--eclosion)" }}>Édition, prix &amp; coût</div>
@@ -401,22 +480,22 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
             <input disabled={!canManage} type="number" min={0} value={pricePublic} onChange={(e) => setPricePublic(e.target.value)} style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
           </label>
           <label style={{ fontSize: 12 }}>
-            Prix remisé −25 % (auto)
+            Remise professionnelle (%)
+            <input disabled={!canManage} type="number" min={0} max={100} value={proDiscountPct} onChange={(e) => setProDiscountPct(e.target.value)} title="Remise consentie aux revendeurs. Par défaut 25 %." style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
+          </label>
+          <label style={{ fontSize: 12 }}>
+            Prix professionnel (auto, −{proDiscountNum || 0} %)
             <input
               readOnly
-              value={priceDiscount25 != null ? priceDiscount25.toLocaleString("fr-FR") : ""}
+              value={pricePro != null ? pricePro.toLocaleString("fr-FR") : ""}
               placeholder="—"
-              title="Calculé automatiquement : prix public × 0,75"
+              title="Calculé automatiquement : prix public × (1 − remise pro)"
               style={{ ...inputStyle, fontFamily: "var(--font-mono)", background: "var(--ivory, #FAF8F2)", color: "var(--muted)" }}
             />
           </label>
           <label style={{ fontSize: 12 }}>
             Prix promotionnel / autre (FCFA)
             <input disabled={!canManage} type="number" min={0} value={pricePromo} onChange={(e) => setPricePromo(e.target.value)} style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
-          </label>
-          <label style={{ fontSize: 12 }}>
-            Prix professionnel (FCFA)
-            <input disabled={!canManage} type="number" min={0} value={pricePro} onChange={(e) => setPricePro(e.target.value)} style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
           </label>
           <label style={{ fontSize: 12 }}>
             Prix éditeur (FCFA)

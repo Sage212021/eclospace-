@@ -1450,10 +1450,10 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
-      slug: "2026-10-fiche-prix-promo-remise25",
+      slug: "2026-10-fiche-prix-pro-remise-et-simulateur-poids",
       version: "2026.10",
-      title: "Nouveauté — Fiche ouvrage : prix public (PPT), remise −25 % automatique, prix promotionnel",
-      body: "Dans la fiche de métadonnées (section « Édition, prix & coût »), les prix sont enrichis : le « Prix public » est désormais affiché comme « Prix public / PPT » ; un « Prix remisé −25 % » est calculé AUTOMATIQUEMENT à partir du PPT (× 0,75) et affiché à titre indicatif (il se met à jour quand vous changez le PPT) ; un nouveau champ « Prix promotionnel / autre » permet d'enregistrer un prix spécial. Les prix professionnel, éditeur et le coût de production restent disponibles.",
+      title: "Nouveauté — Prix professionnel calculé (remise paramétrable) + simulateur de poids",
+      body: "Fiche ouvrage, section « Édition, prix & coût ». PRIX : le « Prix public » devient « Prix public / PPT » ; le « Prix professionnel » est désormais CALCULÉ automatiquement = PPT − une remise paramétrable (par défaut 25 %, modifiable via le champ « Remise professionnelle (%) ») ; un « Prix promotionnel / autre » reste saisissable. (L'ancien champ « Prix remisé −25 % » a été retiré : il faisait doublon avec le prix professionnel.) POIDS : nouveau simulateur « ⚖️ Estimer le poids » — vous indiquez le nombre de pages, le format, le grammage du papier intérieur et le type de couverture (souple/rigide), le système estime le poids en grammes et vous l'appliquez au champ Poids en un clic (estimation indicative).",
       permissionModules: ["isbn"],
       departmentCodes: ["SECR", "DIRED", "FIN", "DG"],
     },

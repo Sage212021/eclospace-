@@ -31,15 +31,24 @@ describe("Métadonnées — prix public / promotionnel", () => {
     await prisma.$disconnect();
   });
 
-  it("enregistre et renvoie le prix public (PPT) et le prix promotionnel", async () => {
-    const patch = await app.inject({ method: "PATCH", url: `/api/v1/manuscripts/${manuscriptId}/metadata`, headers: { cookie }, payload: { price_public: 12000, price_promo: 8000 } });
+  it("enregistre PPT, remise pro (défaut 25 %), prix pro calculé et prix promotionnel", async () => {
+    // Prix pro = PPT × (1 − 25 %) = 9000 (calculé côté écran puis enregistré).
+    const patch = await app.inject({ method: "PATCH", url: `/api/v1/manuscripts/${manuscriptId}/metadata`, headers: { cookie }, payload: { price_public: 12000, pro_discount_pct: 25, price_pro: 9000, price_promo: 8000 } });
     expect(patch.statusCode).toBe(200);
     const get = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/metadata`, headers: { cookie } });
-    const b = get.json() as { pricePublic: string | null; pricePromo: string | null };
+    const b = get.json() as { pricePublic: string | null; pricePro: string | null; proDiscountPct: string | null; pricePromo: string | null };
     expect(Number(b.pricePublic)).toBe(12000);
+    expect(Number(b.proDiscountPct)).toBe(25);
+    expect(Number(b.pricePro)).toBe(9000); // 12000 − 25 %
     expect(Number(b.pricePromo)).toBe(8000);
-    // La remise −25 % se déduit du prix public (contrôle du calcul attendu côté écran).
-    expect(Math.round(Number(b.pricePublic) * 0.75)).toBe(9000);
+  });
+
+  it("une remise pro paramétrée à 30 % donne un prix pro de 8400", async () => {
+    await app.inject({ method: "PATCH", url: `/api/v1/manuscripts/${manuscriptId}/metadata`, headers: { cookie }, payload: { price_public: 12000, pro_discount_pct: 30, price_pro: 8400 } });
+    const get = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/metadata`, headers: { cookie } });
+    const b = get.json() as { pricePro: string | null; proDiscountPct: string | null };
+    expect(Number(b.proDiscountPct)).toBe(30);
+    expect(Number(b.pricePro)).toBe(8400);
   });
 
   it("le prix promotionnel peut être vidé (null)", async () => {

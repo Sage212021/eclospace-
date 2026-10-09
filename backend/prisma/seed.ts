@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-anomalies-texte-rapports-longs",
+      version: "2026.10",
+      title: "Nouveauté — Correction : les anomalies du texte remontent même sur les rapports longs",
+      body: "Vous avez constaté que la correction de COUVERTURE générait bien ses anomalies, mais pas toujours la correction de TEXTE (BAT1/BAT2). La cause : un rapport de correction de texte peut lister des DIZAINES d'anomalies ; l'étape qui les transforme en fiches avait une limite de taille trop basse, et le résultat tronqué devenait illisible → aucune fiche. C'est corrigé : la limite a été relevée et, surtout, le système récupère désormais TOUTES les fiches complètes même si la conversion est coupée (plus de « tout ou rien »). Pour un ouvrage déjà corrigé sans fiches, le bouton « 🔧 Récupérer les anomalies manquantes » les régénère.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["CORR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-isbn-nouvel-enregistrer-direct",
       version: "2026.10",
       title: "Nouveauté — Nouvel ISBN : bouton « Enregistrer et attribuer » direct",

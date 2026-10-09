@@ -47,6 +47,38 @@ function str(v: unknown, max = 4000): string | null {
   return s ? s.slice(0, max) : null;
 }
 
+// Récupère chaque objet JSON COMPLET { … } d'un texte, même si l'ensemble
+// (tableau) est tronqué ou mal clôturé. Suit la profondeur d'accolades en
+// respectant les chaînes et les échappements, et tente un JSON.parse par objet
+// de premier niveau ; les objets incomplets (fin de texte) sont ignorés.
+function salvageObjects(text: string): unknown[] {
+  const out: unknown[] = [];
+  const starts: number[] = []; // pile des indices de « { » ouverts
+  let inStr = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === "{") { starts.push(i); }
+    else if (ch === "}") {
+      const start = starts.pop();
+      // Objet équilibré { … } (à n'importe quelle profondeur) → on tente de le
+      // lire. Capte aussi les objets d'anomalie imbriqués dans { "anomalies": [ … ] }.
+      if (start !== undefined) {
+        try { out.push(JSON.parse(text.slice(start, i + 1))); } catch { /* objet illisible : ignoré */ }
+      }
+    }
+    if (out.length >= 1000) break;
+  }
+  return out;
+}
+
 // Extrait le tableau d'anomalies d'un texte JSON (éventuellement enrobé de
 // ```json … ``` ou de prose). Robuste : renvoie [] si rien d'exploitable.
 export function parseAnomaliesJson(raw: string): ParsedAnomaly[] {
@@ -68,6 +100,11 @@ export function parseAnomaliesJson(raw: string): ParsedAnomaly[] {
   let list: unknown[] = [];
   if (Array.isArray(arr)) list = arr;
   else if (arr && typeof arr === "object" && Array.isArray((arr as { anomalies?: unknown[] }).anomalies)) list = (arr as { anomalies: unknown[] }).anomalies;
+  // Repli anti-TRONCATURE : si le JSON global n'a pas pu être lu (sortie du
+  // modèle coupée à la limite de tokens pour un rapport à beaucoup d'anomalies),
+  // on récupère quand même chaque objet { … } COMPLET présent dans le texte.
+  // Sans ce repli, une seule fiche manquante faisait perdre TOUTES les fiches.
+  if (list.length === 0) list = salvageObjects(text);
   const out: ParsedAnomaly[] = [];
   for (const item of list) {
     if (!item || typeof item !== "object") continue;
@@ -95,5 +132,7 @@ export const ANOMALY_EXTRACTION_SYSTEM =
   "Tu es un extracteur. On te donne un RAPPORT de correction éditoriale déjà rédigé. Tu renvoies UNIQUEMENT un JSON valide, sans aucun texte autour, de la forme {\"anomalies\":[{\"severity\":\"C1|C2|C3|S\",\"face\":\"1ere|dos|4eme|null\",\"location\":\"page/emplacement\",\"element\":\"texte original cité\",\"observation\":\"constat\",\"proposal\":\"correction proposée\",\"justification\":\"pourquoi\"}]}. Tu N'INVENTES RIEN : tu ne reprends que les anomalies réellement présentes dans le rapport. « face » n'est renseigné que pour une couverture (sinon null). Si le rapport ne contient aucune anomalie exploitable, renvoie {\"anomalies\":[]}.";
 
 export function anomalyExtractionUser(reportText: string): string {
-  return `RAPPORT À CONVERTIR EN LISTE D'ANOMALIES (JSON strict) :\n\n${reportText.slice(0, 60000)}`;
+  // Portion large : un rapport de correction texte (tableau d'annotations
+  // détaillé, citations) peut être long ; on évite de couper le tableau.
+  return `RAPPORT À CONVERTIR EN LISTE D'ANOMALIES (JSON strict) :\n\n${reportText.slice(0, 120000)}`;
 }

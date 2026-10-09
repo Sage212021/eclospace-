@@ -1011,7 +1011,11 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       try {
         const ex = await client.messages.create({
           model: modelId,
-          max_tokens: 4000,
+          // Sortie large : un rapport de correction texte peut lister des
+          // DIZAINES d'anomalies (contrairement à la couverture). Une limite
+          // trop basse tronquait le JSON → aucune fiche. Le parseur tolère en
+          // plus la troncature (récupère les fiches complètes).
+          max_tokens: REPORT_MAX_TOKENS,
           system: ANOMALY_EXTRACTION_SYSTEM,
           messages: [{ role: "user", content: anomalyExtractionUser(reportText) }],
         });
@@ -1209,7 +1213,7 @@ export async function extractAnomaliesForJob(jobId: string): Promise<{ created: 
   const client = new Anthropic({ apiKey });
   const ex = await client.messages.create({
     model: job.model,
-    max_tokens: 4000,
+    max_tokens: REPORT_MAX_TOKENS,
     system: ANOMALY_EXTRACTION_SYSTEM,
     messages: [{ role: "user", content: anomalyExtractionUser(job.reportText) }],
   });

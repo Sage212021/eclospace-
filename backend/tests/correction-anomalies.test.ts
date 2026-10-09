@@ -29,6 +29,27 @@ describe("parseAnomaliesJson — extraction robuste", () => {
     expect(parseAnomaliesJson("aucune anomalie ici")).toEqual([]);
     expect(parseAnomaliesJson("")).toEqual([]);
   });
+
+  it("récupère les fiches COMPLÈTES même si le JSON est tronqué (rapport à beaucoup d'anomalies)", () => {
+    // Sortie coupée à la limite de tokens : tableau non clôturé + dernier objet incomplet.
+    const raw = '{"anomalies":[\n' +
+      '{"severite":"c1","emplacement":"p.3","element":"des pomme","observation":"accord","correction":"une pomme"},\n' +
+      '{"severity":"C2","page":"p.7","element":"il mange","observation":"temps","proposal":"il mangeait"},\n' +
+      '{"severity":"C3","element":"texte coupé ici","observa';
+    const out = parseAnomaliesJson(raw);
+    // Les 2 objets complets sont récupérés ; le 3e (tronqué) est ignoré.
+    expect(out).toHaveLength(2);
+    expect(out[0].severity).toBe("C1");
+    expect(out[0].proposal).toBe("une pomme");
+    expect(out[1].proposal).toBe("il mangeait");
+  });
+
+  it("gère une citation contenant accolades/guillemets échappés sans fausser le découpage", () => {
+    const raw = '[{"severity":"C2","element":"phrase « {x} » et \\"guillemets\\"","observation":"o","proposal":"p"}]';
+    const out = parseAnomaliesJson(raw);
+    expect(out).toHaveLength(1);
+    expect(out[0].element).toContain("{x}");
+  });
 });
 
 describe("Anomalies de correction — décisions tracées (Lot 3)", () => {

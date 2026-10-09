@@ -2622,6 +2622,7 @@ export interface WorkMetadata {
   pricePublic: string | null;
   pricePro: string | null;
   priceEditeur: string | null;
+  pricePromo: string | null;
   unitProductionCost: string | null;
   commercializationStatus: CommercializationStatus | null;
   isSchoolBook: boolean;
@@ -2642,6 +2643,7 @@ export type WorkMetadataInput = Partial<{
   price_public: number | null;
   price_pro: number | null;
   price_editeur: number | null;
+  price_promo: number | null;
   unit_production_cost: number | null;
   commercialization_status: CommercializationStatus | null;
   is_school_book: boolean;

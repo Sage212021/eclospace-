@@ -75,6 +75,7 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
   const [pricePublic, setPricePublic] = useState("");
   const [pricePro, setPricePro] = useState("");
   const [priceEditeur, setPriceEditeur] = useState("");
+  const [pricePromo, setPricePromo] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [commStatus, setCommStatus] = useState("");
   const [isSchool, setIsSchool] = useState(false);
@@ -103,6 +104,7 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
     setPricePublic(meta?.pricePublic ?? "");
     setPricePro(meta?.pricePro ?? "");
     setPriceEditeur(meta?.priceEditeur ?? "");
+    setPricePromo(meta?.pricePromo ?? "");
     setUnitCost(meta?.unitProductionCost ?? "");
     setCommStatus(meta?.commercializationStatus ?? "");
     setIsSchool(meta?.isSchoolBook ?? false);
@@ -242,6 +244,10 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
     }
   }
 
+  // Prix remisé −25 % : calculé automatiquement depuis le prix public (PPT),
+  // affiché à titre indicatif (non stocké).
+  const priceDiscount25 = Number(pricePublic) > 0 ? Math.round(Number(pricePublic) * 0.75) : null;
+
   async function handleSaveMetadata(event: React.FormEvent) {
     event.preventDefault();
     try {
@@ -253,6 +259,7 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
         price_public: num(pricePublic),
         price_pro: num(pricePro),
         price_editeur: num(priceEditeur),
+        price_promo: num(pricePromo),
         unit_production_cost: num(unitCost),
         commercialization_status: (commStatus || null) as CommercializationStatus | null,
         is_school_book: isSchool,
@@ -390,8 +397,22 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
             </select>
           </label>
           <label style={{ fontSize: 12 }}>
-            Prix public (FCFA)
+            Prix public / PPT (FCFA)
             <input disabled={!canManage} type="number" min={0} value={pricePublic} onChange={(e) => setPricePublic(e.target.value)} style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
+          </label>
+          <label style={{ fontSize: 12 }}>
+            Prix remisé −25 % (auto)
+            <input
+              readOnly
+              value={priceDiscount25 != null ? priceDiscount25.toLocaleString("fr-FR") : ""}
+              placeholder="—"
+              title="Calculé automatiquement : prix public × 0,75"
+              style={{ ...inputStyle, fontFamily: "var(--font-mono)", background: "var(--ivory, #FAF8F2)", color: "var(--muted)" }}
+            />
+          </label>
+          <label style={{ fontSize: 12 }}>
+            Prix promotionnel / autre (FCFA)
+            <input disabled={!canManage} type="number" min={0} value={pricePromo} onChange={(e) => setPricePromo(e.target.value)} style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
           </label>
           <label style={{ fontSize: 12 }}>
             Prix professionnel (FCFA)

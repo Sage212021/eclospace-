@@ -2621,6 +2621,7 @@ export interface WorkMetadata {
   editionType: EditionType | null;
   pricePublic: string | null;
   pricePro: string | null;
+  proDiscountPct: string | null;
   priceEditeur: string | null;
   pricePromo: string | null;
   unitProductionCost: string | null;
@@ -2642,6 +2643,7 @@ export type WorkMetadataInput = Partial<{
   edition_type: EditionType | null;
   price_public: number | null;
   price_pro: number | null;
+  pro_discount_pct: number | null;
   price_editeur: number | null;
   price_promo: number | null;
   unit_production_cost: number | null;

@@ -3146,6 +3146,9 @@ model WorkMetadata {
   pricePublic             Decimal?                 @map("price_public") @db.Decimal(12, 2)
   pricePro                Decimal?                 @map("price_pro") @db.Decimal(12, 2)
   priceEditeur            Decimal?                 @map("price_editeur") @db.Decimal(12, 2)
+  // Prix promotionnel (ou autre prix spécial) ; la remise −25 % est calculée à
+  // l'affichage depuis le prix public, donc non stockée.
+  pricePromo              Decimal?                 @map("price_promo") @db.Decimal(12, 2)
   unitProductionCost      Decimal?                 @map("unit_production_cost") @db.Decimal(12, 2)
   commercializationStatus CommercializationStatus? @map("commercialization_status")
   // Volet scolaire (§3) — renseigné pour un livre scolaire.

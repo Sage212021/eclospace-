@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-fiche-prix-promo-remise25",
+      version: "2026.10",
+      title: "Nouveauté — Fiche ouvrage : prix public (PPT), remise −25 % automatique, prix promotionnel",
+      body: "Dans la fiche de métadonnées (section « Édition, prix & coût »), les prix sont enrichis : le « Prix public » est désormais affiché comme « Prix public / PPT » ; un « Prix remisé −25 % » est calculé AUTOMATIQUEMENT à partir du PPT (× 0,75) et affiché à titre indicatif (il se met à jour quand vous changez le PPT) ; un nouveau champ « Prix promotionnel / autre » permet d'enregistrer un prix spécial. Les prix professionnel, éditeur et le coût de production restent disponibles.",
+      permissionModules: ["isbn"],
+      departmentCodes: ["SECR", "DIRED", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-anomalies-texte-rapports-longs",
       version: "2026.10",
       title: "Nouveauté — Correction : les anomalies du texte remontent même sur les rapports longs",

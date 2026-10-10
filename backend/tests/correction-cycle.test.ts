@@ -46,7 +46,7 @@ describe("correction éditoriale en deux temps", () => {
     expect(res.statusCode).toBe(200);
     const phases = res.json() as { key: string; required: boolean; has_file: boolean }[];
     expect(phases.map((p) => p.key)).toEqual(["rapport_1", "integration_1", "relecture_2", "integration_finale"]);
-    expect(phases.filter((p) => p.required).map((p) => p.key)).toEqual(["rapport_1", "integration_finale"]);
+    expect(phases.filter((p) => p.required).map((p) => p.key)).toEqual(["rapport_1", "integration_1", "relecture_2", "integration_finale"]);
     expect(phases.every((p) => !p.has_file)).toBe(true);
   });
 

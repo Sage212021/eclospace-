@@ -18,10 +18,15 @@ export interface CorrectionPhase {
 // Acteur attendu pour chaque phase : le CORRECTEUR corrige (1re et 2e passages),
 // l'ÉDITEUR intègre (versions intégrées). Sert au relais « à qui la main ».
 export type CorrectionActor = "correcteur" | "integrateur";
+// Les QUATRE phases sont obligatoires (demande opérateur 10/10 : « même la 3
+// doit être obligatoire »). Le relais complet — 1re correction → version
+// intégrée → 2e correction → version corrigée finale — est imposé, et l'étape
+// Correction ne se valide qu'une fois les quatre déposées (en plus de la
+// couverture corrigée finale).
 export const CORRECTION_PHASES: (CorrectionPhase & { actor: CorrectionActor })[] = [
   { key: "rapport_1", label: "1re correction", required: true, actor: "correcteur" },
-  { key: "integration_1", label: "Version intégrée", required: false, actor: "integrateur" },
-  { key: "relecture_2", label: "2e correction (relecture)", required: false, actor: "correcteur" },
+  { key: "integration_1", label: "Version intégrée", required: true, actor: "integrateur" },
+  { key: "relecture_2", label: "2e correction (relecture)", required: true, actor: "correcteur" },
   { key: "integration_finale", label: "Version corrigée finale (VCF)", required: true, actor: "integrateur" },
 ];
 

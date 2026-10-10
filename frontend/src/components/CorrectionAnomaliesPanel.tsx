@@ -19,6 +19,18 @@ const INTEG_COLOR: Record<string, string> = { a_integrer: "#B87400", integree: "
 const WORKTYPE_LABEL: Record<string, string> = { correction_1: "Relecture 1 (BAT1)", correction_2: "Relecture 2 (BAT2)", couverture: "Couverture" };
 const FACE_LABEL: Record<string, string> = { "1ere": "1ʳᵉ de couverture", dos: "Dos", "4eme": "4ᵉ de couverture" };
 
+// Source d'une anomalie — pour l'accordéon de sélection (demande opérateur
+// 10/10) : Texte BAT1/BAT2 (1re/2e correction) et Couverture BAT1/BAT2.
+function anomalySource(a: CorrectionAnomaly): { key: string; label: string; sort: number } {
+  if (a.work_type === "correction_1") return { key: "texte_bat1", label: "Texte — BAT1", sort: 1 };
+  if (a.work_type === "correction_2") return { key: "texte_bat2", label: "Texte — BAT2", sort: 2 };
+  if (a.work_type === "couverture") {
+    const pass = a.cover_pass === "BAT2" ? "BAT2" : "BAT1";
+    return { key: `couverture_${pass}`, label: `Couverture — ${pass}`, sort: pass === "BAT2" ? 12 : 11 };
+  }
+  return { key: a.work_type, label: WORKTYPE_LABEL[a.work_type] ?? a.work_type, sort: 99 };
+}
+
 export function CorrectionAnomaliesPanel({
   manuscriptId,
   canDecide,
@@ -88,11 +100,19 @@ export function CorrectionAnomaliesPanel({
     if (filter === "all") return base;
     return integrationMode ? base.filter((a) => a.integration_status === filter) : base.filter((a) => a.status === filter);
   }, [base, filter, integrationMode]);
+  // Regroupement par SOURCE (Texte BAT1/BAT2, Couverture BAT1/BAT2) — chaque
+  // groupe est un accordéon que l'on déplie pour traiter ses anomalies.
   const groups = useMemo(() => {
-    const m = new Map<string, CorrectionAnomaly[]>();
-    for (const a of shown) { const k = a.job_id; if (!m.has(k)) m.set(k, []); m.get(k)!.push(a); }
-    return [...m.entries()];
+    const m = new Map<string, { label: string; sort: number; list: CorrectionAnomaly[] }>();
+    for (const a of shown) {
+      const s = anomalySource(a);
+      if (!m.has(s.key)) m.set(s.key, { label: s.label, sort: s.sort, list: [] });
+      m.get(s.key)!.list.push(a);
+    }
+    return [...m.entries()].sort((x, y) => x[1].sort - y[1].sort);
   }, [shown]);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggleGroup = (k: string) => setCollapsed((c) => ({ ...c, [k]: !c[k] }));
 
   async function decide(a: CorrectionAnomaly, status: string, note?: string) {
     setBusyId(a.id); setErr(null);
@@ -150,12 +170,19 @@ export function CorrectionAnomaliesPanel({
             </button>
           ))}
         </div>
-        {groups.map(([jobId, list]) => (
-          <div key={jobId} style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", margin: "0 0 6px" }}>
-              {WORKTYPE_LABEL[list[0].work_type] ?? list[0].work_type} · {new Date(list[0].job_launched_at).toLocaleDateString("fr-FR")}
-            </div>
-            <div style={{ display: "grid", gap: 8 }}>
+        {groups.map(([key, g]) => {
+          const list = g.list;
+          const open = !collapsed[key];
+          return (
+          <div key={key} style={{ marginBottom: 12, border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden" }}>
+            <button type="button" onClick={() => toggleGroup(key)} aria-expanded={open}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, background: "var(--ivory, #FAF8F2)", border: "none", borderBottom: open ? "1px solid var(--line)" : "none", padding: "8px 12px", cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: "var(--ink)" }}>
+              <span aria-hidden>{open ? "▾" : "▸"}</span>
+              <span>{g.label}</span>
+              <span style={{ marginLeft: "auto", fontWeight: 600, color: "var(--muted)" }}>{list.length} · {new Date(list[0].job_launched_at).toLocaleDateString("fr-FR")}</span>
+            </button>
+            {open && (
+            <div style={{ display: "grid", gap: 8, padding: 10 }}>
               {list.map((a) => {
                 const sev = SEV_COLOR[a.severity] ?? SEV_COLOR.C3;
                 const retenue = a.status === "modifiee" && a.resolution_note ? a.resolution_note : a.proposal;
@@ -193,8 +220,10 @@ export function CorrectionAnomaliesPanel({
                 );
               })}
             </div>
+            )}
           </div>
-        ))}
+          );
+        })}
       </section>
     );
   }
@@ -243,6 +272,7 @@ export function CorrectionAnomaliesPanel({
       <p style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 10px" }}>
         Chaque anomalie relevée par l'assistance IA se valide une par une. « Accepter » enregistre la décision ; l'intégrateur
         applique ensuite la correction dans le fichier. Sévérité : C1 bloquant · C2 important · C3 mineur · S suggestion.
+        Les anomalies sont regroupées par source — <strong>Texte BAT1/BAT2</strong> et <strong>Couverture BAT1/BAT2</strong> : cliquez un bandeau pour déplier/replier et traiter ce groupe.
       </p>
       {backfillMsg && <div style={{ fontSize: 12, color: "var(--ink)", marginBottom: 8 }}>{backfillMsg}</div>}
       {err && <div style={{ background: "var(--alert-soft, #F6E2DE)", color: "var(--alert, #B23A2E)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
@@ -256,12 +286,19 @@ export function CorrectionAnomaliesPanel({
         ))}
       </div>
 
-      {groups.map(([jobId, list]) => (
-        <div key={jobId} style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", margin: "0 0 6px" }}>
-            {WORKTYPE_LABEL[list[0].work_type] ?? list[0].work_type} · {new Date(list[0].job_launched_at).toLocaleDateString("fr-FR")}
-          </div>
-          <div style={{ display: "grid", gap: 8 }}>
+      {groups.map(([key, g]) => {
+        const list = g.list;
+        const open = !collapsed[key];
+        return (
+        <div key={key} style={{ marginBottom: 12, border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden" }}>
+          <button type="button" onClick={() => toggleGroup(key)} aria-expanded={open}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, background: "var(--ivory, #FAF8F2)", border: "none", borderBottom: open ? "1px solid var(--line)" : "none", padding: "8px 12px", cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: "var(--ink)" }}>
+            <span aria-hidden>{open ? "▾" : "▸"}</span>
+            <span>{g.label}</span>
+            <span style={{ marginLeft: "auto", fontWeight: 600, color: "var(--muted)" }}>{list.length} · {new Date(list[0].job_launched_at).toLocaleDateString("fr-FR")}</span>
+          </button>
+          {open && (
+          <div style={{ display: "grid", gap: 8, padding: 10 }}>
             {list.map((a) => {
               const sev = SEV_COLOR[a.severity] ?? SEV_COLOR.C3;
               return (
@@ -302,8 +339,10 @@ export function CorrectionAnomaliesPanel({
               );
             })}
           </div>
+          )}
         </div>
-      ))}
+        );
+      })}
     </section>
   );
 }

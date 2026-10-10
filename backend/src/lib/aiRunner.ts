@@ -645,6 +645,7 @@ export async function startAiReading(params: AiRunParams): Promise<{ jobId: stri
     data: {
       manuscriptId: manuscript.id,
       workType: params.workType,
+      coverPass: params.workType === "couverture" ? (params.coverPass ?? "BAT1") : null,
       stepCode: params.stepCode ?? null,
       promptKey: params.workType,
       promptVersion: prompt.version,

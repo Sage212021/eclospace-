@@ -1220,7 +1220,7 @@ export function getCorrectionBookTypes() {
 }
 // Anomalies de correction (Lot 3) : validation humaine ligne par ligne.
 export interface CorrectionAnomaly {
-  id: string; job_id: string; work_type: AiWorkType; job_launched_at: string;
+  id: string; job_id: string; work_type: AiWorkType; cover_pass: "BAT1" | "BAT2" | null; job_launched_at: string;
   number: number; severity: string; face: string | null; location: string | null;
   element: string | null; observation: string | null; proposal: string | null; justification: string | null;
   status: string; resolution_note: string | null; decided_by_name: string | null; decided_at: string | null;

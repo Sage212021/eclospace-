@@ -5672,6 +5672,9 @@ model AiReadingJob {
   id                   String      @id @default(uuid())
   manuscriptId         String      @map("manuscript_id")
   workType             AiWorkType  @map("work_type")
+  // Passe de correction de COUVERTURE (BAT1 / BAT2) — sert à distinguer les
+  // relectures de couverture (le workType « couverture » ne le dit pas).
+  coverPass            String?     @map("cover_pass")
   stepCode             String?     @map("step_code")
   manuscriptVersionRef String?     @map("manuscript_version_ref")
   promptKey            String      @map("prompt_key")

@@ -94,7 +94,9 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
   const [pricePublic, setPricePublic] = useState("");
   // Remise professionnelle paramétrable (défaut 25 %) : le prix pro en découle.
   const [proDiscountPct, setProDiscountPct] = useState("25");
-  const [priceEditeur, setPriceEditeur] = useState("");
+  // Remise éditeur paramétrable (défaut 50 %) : le prix éditeur en découle, même
+  // logique que le prix pro mais avec son propre taux.
+  const [editorDiscountPct, setEditorDiscountPct] = useState("50");
   const [pricePromo, setPricePromo] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [commStatus, setCommStatus] = useState("");
@@ -129,7 +131,7 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
     setEditionType(meta?.editionType ?? "");
     setPricePublic(meta?.pricePublic ?? "");
     setProDiscountPct(meta?.proDiscountPct ?? "25");
-    setPriceEditeur(meta?.priceEditeur ?? "");
+    setEditorDiscountPct(meta?.editorDiscountPct ?? "50");
     setPricePromo(meta?.pricePromo ?? "");
     setUnitCost(meta?.unitProductionCost ?? "");
     setCommStatus(meta?.commercializationStatus ?? "");
@@ -274,6 +276,10 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
   // 25 %). Calculé automatiquement ; c'est ce prix qui est enregistré.
   const proDiscountNum = Math.max(0, Math.min(100, Number(proDiscountPct) || 0));
   const pricePro = Number(pricePublic) > 0 ? Math.round(Number(pricePublic) * (1 - proDiscountNum / 100)) : null;
+  // Prix éditeur = prix public − remise éditeur (paramétrable, défaut 50 %).
+  // Même logique que le prix pro, avec son propre taux. Calculé automatiquement.
+  const editorDiscountNum = Math.max(0, Math.min(100, Number(editorDiscountPct) || 0));
+  const priceEditeur = Number(pricePublic) > 0 ? Math.round(Number(pricePublic) * (1 - editorDiscountNum / 100)) : null;
 
   // Estimation du poids : (pages/2) feuilles × surface × grammage + couverture.
   const simEstimate = (() => {
@@ -298,7 +304,8 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
         price_public: num(pricePublic),
         price_pro: pricePro,
         pro_discount_pct: Number(proDiscountPct) ? proDiscountNum : null,
-        price_editeur: num(priceEditeur),
+        price_editeur: priceEditeur,
+        editor_discount_pct: Number(editorDiscountPct) ? editorDiscountNum : null,
         price_promo: num(pricePromo),
         unit_production_cost: num(unitCost),
         commercialization_status: (commStatus || null) as CommercializationStatus | null,
@@ -419,6 +426,11 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
           <input disabled={!canManage} type="number" value={weight} onChange={(e) => setWeight(e.target.value)} style={inputStyle} />
         </label>
         {canManage && (
+          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>
+            Deux façons de renseigner le poids : le saisir directement ci-dessus, ou le faire estimer et l'appliquer avec le simulateur ci-dessous.
+          </div>
+        )}
+        {canManage && (
           <div style={{ marginBottom: 8 }}>
             <button type="button" onClick={() => setSimOpen((v) => !v)} style={{ background: "none", border: "none", color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700, cursor: "pointer", padding: 0, fontSize: 12 }}>
               {simOpen ? "▾" : "▸"} ⚖️ Estimer le poids (papier · couverture · pages)
@@ -498,8 +510,18 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
             <input disabled={!canManage} type="number" min={0} value={pricePromo} onChange={(e) => setPricePromo(e.target.value)} style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
           </label>
           <label style={{ fontSize: 12 }}>
-            Prix éditeur (FCFA)
-            <input disabled={!canManage} type="number" min={0} value={priceEditeur} onChange={(e) => setPriceEditeur(e.target.value)} style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
+            Remise éditeur (%)
+            <input disabled={!canManage} type="number" min={0} max={100} value={editorDiscountPct} onChange={(e) => setEditorDiscountPct(e.target.value)} title="Remise appliquée pour obtenir le prix éditeur. Par défaut 50 %." style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
+          </label>
+          <label style={{ fontSize: 12 }}>
+            Prix éditeur (auto, −{editorDiscountNum || 0} %)
+            <input
+              readOnly
+              value={priceEditeur != null ? priceEditeur.toLocaleString("fr-FR") : ""}
+              placeholder="—"
+              title="Calculé automatiquement : prix public × (1 − remise éditeur)"
+              style={{ ...inputStyle, fontFamily: "var(--font-mono)", background: "var(--ivory, #FAF8F2)", color: "var(--muted)" }}
+            />
           </label>
           <label style={{ fontSize: 12 }}>
             Coût de production unitaire (FCFA)

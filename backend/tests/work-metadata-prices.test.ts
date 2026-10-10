@@ -51,6 +51,23 @@ describe("Métadonnées — prix public / promotionnel", () => {
     expect(Number(b.pricePro)).toBe(8400);
   });
 
+  it("enregistre la remise éditeur (défaut 50 %) et le prix éditeur calculé", async () => {
+    // Prix éditeur = PPT × (1 − 50 %) = 6000 (calculé côté écran puis enregistré).
+    await app.inject({ method: "PATCH", url: `/api/v1/manuscripts/${manuscriptId}/metadata`, headers: { cookie }, payload: { price_public: 12000, editor_discount_pct: 50, price_editeur: 6000 } });
+    const get = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/metadata`, headers: { cookie } });
+    const b = get.json() as { priceEditeur: string | null; editorDiscountPct: string | null };
+    expect(Number(b.editorDiscountPct)).toBe(50);
+    expect(Number(b.priceEditeur)).toBe(6000); // 12000 − 50 %
+  });
+
+  it("une remise éditeur paramétrée à 40 % donne un prix éditeur de 7200", async () => {
+    await app.inject({ method: "PATCH", url: `/api/v1/manuscripts/${manuscriptId}/metadata`, headers: { cookie }, payload: { price_public: 12000, editor_discount_pct: 40, price_editeur: 7200 } });
+    const get = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/metadata`, headers: { cookie } });
+    const b = get.json() as { priceEditeur: string | null; editorDiscountPct: string | null };
+    expect(Number(b.editorDiscountPct)).toBe(40);
+    expect(Number(b.priceEditeur)).toBe(7200);
+  });
+
   it("le prix promotionnel peut être vidé (null)", async () => {
     await app.inject({ method: "PATCH", url: `/api/v1/manuscripts/${manuscriptId}/metadata`, headers: { cookie }, payload: { price_promo: null } });
     const get = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/metadata`, headers: { cookie } });

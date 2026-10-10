@@ -511,7 +511,7 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
       const anomalies = await prisma.correctionAnomaly.findMany({
         where: { manuscriptId: id, ...(jobFilter ? { jobId: jobFilter } : {}) },
         orderBy: [{ createdAt: "desc" }, { number: "asc" }],
-        include: { job: { select: { id: true, workType: true, launchedAt: true } } },
+        include: { job: { select: { id: true, workType: true, launchedAt: true, coverPass: true } } },
       });
       const peopleIds = [...new Set(anomalies.flatMap((a) => [a.decidedById, a.integratedById]).filter((v): v is string => Boolean(v)))];
       const users = peopleIds.length ? await prisma.user.findMany({ where: { id: { in: peopleIds } }, select: { id: true, username: true } }) : [];
@@ -528,7 +528,7 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
         summary,
         integration,
         anomalies: anomalies.map((a) => ({
-          id: a.id, job_id: a.jobId, work_type: a.job.workType, job_launched_at: a.job.launchedAt,
+          id: a.id, job_id: a.jobId, work_type: a.job.workType, cover_pass: a.job.coverPass, job_launched_at: a.job.launchedAt,
           number: a.number, severity: a.severity, face: a.face, location: a.location,
           element: a.element, observation: a.observation, proposal: a.proposal, justification: a.justification,
           status: a.status, resolution_note: a.resolutionNote,

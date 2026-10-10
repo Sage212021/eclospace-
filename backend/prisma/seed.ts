@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-correction-4-etapes-obligatoires-et-anomalies-accordeon",
+      version: "2026.10",
+      title: "Nouveauté — Correction : 4 étapes obligatoires + anomalies par source (accordéon)",
+      body: "Correction en deux temps : les QUATRE étapes sont désormais obligatoires (1re correction, version intégrée, 2e correction/relecture, version corrigée finale). Aucune ne peut être sautée ; l'étape Correction ne se clôt qu'une fois les quatre déposées (plus la couverture corrigée finale). ANOMALIES : les anomalies relevées par l'assistance sont maintenant regroupées par source, en accordéons que l'on déplie/replie — « Texte — BAT1 », « Texte — BAT2 », « Couverture — BAT1 », « Couverture — BAT2 ». On clique un bandeau pour voir ce groupe et traiter chaque anomalie (accepter, modifier, rejeter, à vérifier) comme avant.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["CORR", "DIRED", "SECR", "DG"],
+    },
+    {
       slug: "2026-10-cycle-correction-ordre-et-fiche-modifiable",
       version: "2026.10",
       title: "Nouveauté — Correction : dépôt dans l'ordre + fiche de renseignements corrigeable",

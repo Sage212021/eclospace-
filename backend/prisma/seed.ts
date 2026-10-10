@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-import-masse-ouvrages-fonds",
+      version: "2026.10",
+      title: "Nouveauté — Importer une liste d'ouvrages déjà parus (fichier CSV)",
+      body: "Pour alimenter le catalogue rapidement, un nouveau bouton « Importer une liste (fichier) » apparaît dans Manuscrits → Nouveau manuscrit. Vous chargez un fichier CSV (un bouton « Télécharger un modèle » vous donne le format) avec, par ligne : titre, auteur, genre, année (obligatoires) et, si vous les avez, collection, ISBN, tranche d'âge, résumé. Tous les ouvrages de la liste entrent d'un coup au catalogue, classés par domaine et collection, comme ouvrages du fonds. Les doublons de titre sont ignorés automatiquement, une ligne en erreur n'empêche pas les autres, et un récapitulatif indique ce qui a été créé / ignoré / en erreur. Les couvertures et les corrections éventuelles s'ajoutent ensuite sur chaque fiche.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["SECR", "DIRED", "COMM", "DG"],
+    },
+    {
       slug: "2026-10-catalogue-presentation-vitrine",
       version: "2026.10",
       title: "Nouveauté — Catalogue : présentation « vitrine » des ouvrages",

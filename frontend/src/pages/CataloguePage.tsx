@@ -163,15 +163,17 @@ export function CataloguePage({ onOpenManuscript, canAdmin }: { onOpenManuscript
         <p style={{ fontSize: 13, color: "var(--muted)" }}>Aucun ouvrage ne correspond. Le catalogue se remplit à mesure que les ouvrages passent en commercialisation.</p>
       )}
 
-      {/* Grille de couvertures. */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(158px, 1fr))", gap: 16 }}>
+      {/* Grille de couvertures — présentation « vitrine » (couverture en avant,
+          titre, auteur en italique, badge de genre), à la manière d'un catalogue. */}
+      <style>{`.ecl-cat-card{transition:transform .12s ease, box-shadow .12s ease}.ecl-cat-card:hover{transform:translateY(-3px);box-shadow:0 6px 18px rgba(11,11,12,.14)}`}</style>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(185px, 1fr))", gap: 20 }}>
         {items.map((it) => (
-          <button key={it.id} onClick={() => setSelected(it)} style={cardStyle} title={it.title}>
+          <button key={it.id} className="ecl-cat-card" onClick={() => setSelected(it)} style={cardStyle} title={it.title}>
             <Cover item={it} />
-            <div style={{ padding: "8px 9px 10px", textAlign: "left" }}>
-              <div style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.25, color: "var(--ink)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{it.title}</div>
-              <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.authors.join(", ") || "—"}</div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 6 }}>
+            <div style={{ padding: "10px 11px 12px", textAlign: "left" }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1.28, color: "var(--ink)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{it.title}</div>
+              <div style={{ fontFamily: "var(--font-title, Georgia, serif)", fontStyle: "italic", fontSize: 12.5, color: "var(--muted)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.authors.join(", ") || "—"}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 7, gap: 6 }}>
                 <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--eclosion-dark, #9a7a12)" }}>{it.year ?? ""}</span>
                 <span style={{ fontSize: 10, fontWeight: 700, color: AVAIL_COLOR[it.availabilityCode ?? ""] ?? "var(--muted)" }}>{it.availability}</span>
               </div>
@@ -187,9 +189,12 @@ export function CataloguePage({ onOpenManuscript, canAdmin }: { onOpenManuscript
 
 // Couverture (image de la fiche ouvrage) ou vignette de repli élégante (ivoire
 // + titre) si l'ouvrage n'a pas encore de fichier de couverture image.
-function Cover({ item }: { item: CatalogueItem }) {
+function Cover({ item, badge = true }: { item: CatalogueItem; badge?: boolean }) {
   const [failed, setFailed] = useState(false);
   const showImg = item.hasCover && !failed;
+  // Badge « genre » (ou collection à défaut) incrusté en coin, à la manière des
+  // grands catalogues — en OR Éclospace (seule couleur d'accent, charte §5).
+  const badgeLabel = item.genre?.label ?? item.collection?.label ?? null;
   return (
     <div style={{ aspectRatio: "3 / 4", background: "var(--paper, #FAF8F2)", borderTopLeftRadius: 10, borderTopRightRadius: 10, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
       {showImg ? (
@@ -201,6 +206,11 @@ function Cover({ item }: { item: CatalogueItem }) {
           <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 4 }}>{item.authors[0] ?? ""}</div>
         </div>
       )}
+      {badge && badgeLabel && (
+        <span style={{ position: "absolute", right: 0, bottom: 10, background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase", padding: "3px 8px 3px 9px", borderTopLeftRadius: 4, borderBottomLeftRadius: 4, maxWidth: "80%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", boxShadow: "0 1px 3px rgba(11,11,12,.25)" }}>
+          {badgeLabel}
+        </span>
+      )}
     </div>
   );
 }
@@ -211,7 +221,7 @@ function DetailModal({ item, onClose, onOpenManuscript }: { item: CatalogueItem;
       <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 620, width: "100%", maxHeight: "90vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <div style={{ width: 180, flexShrink: 0 }}>
-            <Cover item={item} />
+            <Cover item={item} badge={false} />
           </div>
           <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ fontFamily: "var(--font-title, Georgia, serif)", fontSize: 20, color: "var(--ink)" }}>{item.title}</div>

@@ -50,12 +50,37 @@ describe("correction éditoriale en deux temps", () => {
     expect(phases.every((p) => !p.has_file)).toBe(true);
   });
 
-  it("interdit de déposer la version finale (VCF) avant la 1re correction (garde-fou 01/10)", async () => {
+  it("interdit de déposer la version finale (VCF) tant que les étapes précédentes manquent (ordre du cycle, 10/10)", async () => {
     const m = await manuscriptAtCorrection();
-    const mp = multipart("file", "vcf.pdf", "VCF sans 1re correction");
+    const mp = multipart("file", "vcf.pdf", "VCF sans les étapes précédentes");
     const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/integration_finale`, headers: { cookie, ...mp.headers }, payload: mp.body });
     expect(res.statusCode).toBe(409);
-    expect(res.json().code).toBe("first_correction_missing");
+    expect(res.json().code).toBe("cycle_order_violation");
+    // Le message cite les étapes manquantes (1re correction, version intégrée, 2e relecture).
+    expect(res.json().message).toContain("1re correction");
+  });
+
+  it("déposer la 2e correction (relecture) exige d'abord la version intégrée", async () => {
+    const m = await manuscriptAtCorrection();
+    // 1re correction OK, mais pas la version intégrée → la 2e relecture est bloquée.
+    const r1 = multipart("file", "rapport.txt", "1re correction");
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/rapport_1`, headers: { cookie, ...r1.headers }, payload: r1.body });
+    const r3 = multipart("file", "relecture.txt", "2e relecture avant intégration");
+    const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/relecture_2`, headers: { cookie, ...r3.headers }, payload: r3.body });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe("cycle_order_violation");
+    expect(res.json().message).toContain("Version intégrée");
+  });
+
+  it("remplacer une pièce déjà déposée reste possible même hors ordre (corriger un mauvais fichier)", async () => {
+    const m = await manuscriptAtCorrection();
+    // Dépôt de la 1re correction, puis REMPLACEMENT : autorisé (c'est un remplacement).
+    const r1 = multipart("file", "rapport.txt", "1re correction v1");
+    const first = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/rapport_1`, headers: { cookie, ...r1.headers }, payload: r1.body });
+    expect(first.statusCode).toBe(201);
+    const r1bis = multipart("file", "rapport.txt", "1re correction v2 (bon fichier)");
+    const replace = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/rapport_1`, headers: { cookie, ...r1bis.headers }, payload: r1bis.body });
+    expect(replace.statusCode).toBe(201);
   });
 
   it("bloque la validation tant que rapport + version finale intégrée manquent, puis autorise", async () => {
@@ -74,6 +99,13 @@ describe("correction éditoriale en deux temps", () => {
     const stillBlocked = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/CORRECTION/validate`, headers: { cookie }, payload: {} });
     expect(stillBlocked.statusCode).toBe(409);
     expect(stillBlocked.json().message).toContain("Version corrigée finale");
+
+    // Ordre du cycle : on dépose la version intégrée puis la 2e relecture avant
+    // la version corrigée finale (sinon « cycle_order_violation »).
+    const upInteg = multipart("file", "integ.txt", "Version intégrée.");
+    expect((await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/integration_1`, headers: { cookie, ...upInteg.headers }, payload: upInteg.body })).statusCode).toBe(201);
+    const upRelecture = multipart("file", "relecture.txt", "2e relecture.");
+    expect((await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/relecture_2`, headers: { cookie, ...upRelecture.headers }, payload: upRelecture.body })).statusCode).toBe(201);
 
     // Dépôt de la version finale intégrée → toujours refusé : la couverture
     // corrigée finale (1ʳᵉ, dos, 4ᵉ) est désormais exigée pour clôturer.

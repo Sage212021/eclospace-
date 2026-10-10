@@ -1286,24 +1286,40 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           return reply.code(403).send({ code: "not_authorized_for_phase", message: denied });
         }
       }
-      // VERROU (Lot 3) : la version corrigée finale (VCF) ne peut être déposée que
-      // si toutes les corrections retenues (acceptées/modifiées) sont INTÉGRÉES
-      // (ou écartées « non applicable » avec motif). Empêche une correction
-      // oubliée entre la décision et le fichier livré. Branche TEXTE.
-      if (phase === "integration_finale") {
-        // ORDRE DU CYCLE : la version corrigée finale (VCF) ne peut être déposée
-        // qu'une fois la 1re correction faite (sinon une « finale » apparaîtrait
-        // sur un dossier non corrigé — incohérence signalée le 01/10).
+      // VERROUS DU RELAIS TEXTE (correction). Rien de tout cela sur la branche
+      // COUVERTURE (parallèle), qui garde ses propres règles.
+      if (!isCoverCorrectionPhase(phase)) {
         const cycle = await correctionCycleState(id);
-        const firstDone = cycle.find((p) => p.key === "rapport_1")?.has_file;
-        if (!firstDone) {
-          return reply.code(409).send({ code: "first_correction_missing", message: "Impossible de déposer la version corrigée finale : la 1re correction n'a pas encore été déposée. Déposez d'abord la 1re correction." });
+        const current = cycle.find((p) => p.key === phase);
+        const isReplacement = Boolean(current?.has_file);
+
+        // ORDRE DU CYCLE (demande opérateur 10/10) : un NOUVEAU dépôt d'une pièce
+        // ne peut se faire que si TOUTES les étapes précédentes ont déjà un
+        // fichier. Empêche de déposer la version corrigée finale (VCF) — ou la 2e
+        // correction — alors que les étapes intermédiaires (version intégrée, 2e
+        // relecture) manquent : incohérence signalée (« 2 et 3 pas déposés »).
+        // Le REMPLACEMENT d'une pièce déjà déposée reste TOUJOURS possible, pour
+        // corriger un mauvais fichier, sans réappliquer l'ordre.
+        if (!isReplacement) {
+          const idx = CORRECTION_PHASES.findIndex((p) => p.key === phase);
+          const missing = CORRECTION_PHASES.slice(0, Math.max(0, idx)).filter((p) => !cycle.find((c) => c.key === p.key)?.has_file);
+          if (missing.length > 0) {
+            const names = missing.map((p) => p.label).join(" ; ");
+            return reply.code(409).send({ code: "cycle_order_violation", message: `Dépôt impossible : déposez d'abord les étapes précédentes du cycle — ${names}. Ordre à respecter : 1re correction → version intégrée → 2e correction (relecture) → version corrigée finale (VCF). Vous pourrez toujours remplacer un fichier déjà déposé.` });
+          }
         }
-        const pending = await prisma.correctionAnomaly.count({
-          where: { manuscriptId: id, status: { in: ["acceptee", "modifiee"] }, integrationStatus: { in: ["a_integrer", "a_revoir"] }, job: { workType: { in: ["correction_1", "correction_2"] } } },
-        });
-        if (pending > 0) {
-          return reply.code(409).send({ code: "integration_incomplete", message: `Version finale bloquée : ${pending} correction(s) acceptée(s) ne sont pas encore intégrée(s). Cochez-les « intégrée » (ou « non applicable » avec motif) dans « Mes intégrations de correction » avant de déposer la version finale.` });
+
+        // VERROU INTÉGRATION (Lot 3) : la VCF ne peut être déposée que si toutes
+        // les corrections retenues (acceptées/modifiées) sont INTÉGRÉES (ou
+        // écartées « non applicable » avec motif). Empêche une correction oubliée
+        // entre la décision et le fichier livré.
+        if (phase === "integration_finale") {
+          const pending = await prisma.correctionAnomaly.count({
+            where: { manuscriptId: id, status: { in: ["acceptee", "modifiee"] }, integrationStatus: { in: ["a_integrer", "a_revoir"] }, job: { workType: { in: ["correction_1", "correction_2"] } } },
+          });
+          if (pending > 0) {
+            return reply.code(409).send({ code: "integration_incomplete", message: `Version finale bloquée : ${pending} correction(s) acceptée(s) ne sont pas encore intégrée(s). Cochez-les « intégrée » (ou « non applicable » avec motif) dans « Mes intégrations de correction » avant de déposer la version finale.` });
+          }
         }
       }
       const file = await request.file();

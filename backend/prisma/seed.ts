@@ -388,7 +388,11 @@ async function main() {
   // les rôles transverses (juridique, RH…). On garantit donc à la Direction
   // générale et éditoriale la visibilité complète de la Production.
   await grant("DIR_GENERAL", ["production:consultation", "isbn:consultation", "bat:consultation"]);
-  await grant("DIR_EDITORIAL", ["production:consultation", "isbn:consultation", "bat:consultation", "printing:consultation"]);
+  // Le Directeur éditorial peut CORRIGER la fiche de renseignements des références
+  // (ISBN, prix, poids, coût unitaire…) même après finalisation : droit `isbn:saisie`
+  // ajouté (demande opérateur 10/10 — « si une erreur a été faite, permettre de
+  // modifier »). Il imprime la fiche et doit pouvoir y corriger une erreur.
+  await grant("DIR_EDITORIAL", ["production:consultation", "isbn:consultation", "isbn:saisie", "bat:consultation", "printing:consultation"]);
 
   // Stock et magasin (Ch. 16).
   await grant("MAGASINIER", [
@@ -1449,6 +1453,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-10-cycle-correction-ordre-et-fiche-modifiable",
+      version: "2026.10",
+      title: "Nouveauté — Correction : dépôt dans l'ordre + fiche de renseignements corrigeable",
+      body: "Correction en deux temps. On ne peut plus déposer la « Version corrigée finale (VCF) » tant que les étapes précédentes (version intégrée, 2e correction/relecture) ne sont pas déposées : un message clair indique ce qui manque. Les étapes se déposent donc dans l'ordre. Un fichier déjà déposé reste TOUJOURS remplaçable — si vous avez mis le mauvais fichier (y compris pour la version finale), le bouton « Remplacer » fonctionne sans blocage. Par ailleurs, la fiche de renseignements des références (ISBN, prix, poids, coût unitaire…) — celle que l'on imprime — peut être corrigée après coup : si une information erronée a été saisie, on la modifie et on réenregistre (nouvelle version). Le Directeur éditorial peut désormais effectuer ces corrections.",
+      permissionModules: ["manuscripts", "tasks", "isbn"],
+      departmentCodes: ["CORR", "DIRED", "SECR", "DG"],
+    },
     {
       slug: "2026-10-fiche-renseignements-impression-prix-editeur",
       version: "2026.10",

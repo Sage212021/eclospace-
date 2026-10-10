@@ -101,6 +101,8 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
         Relais correcteur ↔ intégrateur : <strong>1re correction</strong> → <strong>version intégrée</strong> →
         <strong> 2e correction (relecture)</strong> → <strong>Version corrigée finale (VCF)</strong>, transmise à la mise en page.
+        Les étapes se déposent <strong>dans l'ordre</strong> : impossible de déposer la version corrigée finale tant que les étapes précédentes ne le sont pas.
+        Un fichier déjà déposé reste toujours remplaçable (pour corriger un mauvais fichier).
         Le passage à la mise en page est bloqué tant que la 1re correction et la version corrigée finale ne sont pas déposées.
       </p>
 
@@ -127,8 +129,14 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 6, padding: "7px 11px", fontSize: 12.5, marginBottom: 10 }}>{error}</div>}
 
       <div style={{ display: "grid", gap: 8 }}>
-        {phases.map((p, i) => (
-          <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px" }}>
+        {phases.map((p, i) => {
+          // ORDRE DU CYCLE : un NOUVEAU dépôt n'est possible que si toutes les
+          // étapes précédentes ont un fichier. Le remplacement d'une pièce déjà
+          // déposée reste toujours possible (corriger un mauvais fichier).
+          const prevMissing = phases.slice(0, i).filter((x) => !x.has_file);
+          const locked = !p.has_file && prevMissing.length > 0;
+          return (
+          <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px", opacity: locked ? 0.7 : 1 }}>
             <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 12 }}>{i + 1}.</span>
             <div style={{ flex: 1, minWidth: 200 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>
@@ -150,14 +158,18 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
                     ].filter(Boolean).join(" · ")}
                   </div>
                 </div>
+              ) : locked ? (
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                  🔒 Déposez d'abord : {prevMissing.map((x) => x.label).join(", ")}
+                </span>
               ) : (
                 <span style={{ fontSize: 12, color: p.required ? "var(--eclosion-retard, #C4661F)" : "var(--muted)" }}>
-                  {p.required ? "À déposer (bloque la suite)" : "Optionnel — non déposé"}
+                  {p.required ? "À déposer (bloque la suite)" : "À déposer (dans l'ordre du cycle)"}
                 </span>
               )}
             </div>
-            <span aria-hidden style={{ fontSize: 16 }}>{p.has_file ? "✅" : p.required ? "⛔" : "—"}</span>
-            {canManage && (
+            <span aria-hidden style={{ fontSize: 16 }}>{p.has_file ? "✅" : locked ? "🔒" : p.required ? "⛔" : "—"}</span>
+            {canManage && !locked && (
               <label style={{ cursor: busyKey === p.key ? "default" : "pointer", fontWeight: 600, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5 }}>
                 {busyKey === p.key ? "Envoi…" : p.has_file ? "Remplacer" : "Déposer"}
                 <input
@@ -169,13 +181,19 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
                 />
               </label>
             )}
+            {canManage && locked && (
+              <span title="Déposez d'abord les étapes précédentes du cycle." style={{ fontWeight: 600, color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5, cursor: "not-allowed" }}>
+                🔒 Déposer
+              </span>
+            )}
             {canManage && p.has_file && p.can_correct && p.doc_id && (
               <button onClick={() => remove(p.key, p.doc_id!)} disabled={busyKey === p.key} style={{ fontWeight: 600, color: "var(--alert)", background: "#fff", border: "1px solid var(--alert)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5, cursor: busyKey === p.key ? "default" : "pointer" }}>
                 Retirer
               </button>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {requiredMissing.length > 0 && (

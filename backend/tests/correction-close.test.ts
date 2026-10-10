@@ -77,8 +77,11 @@ describe("clôture de la correction par le correcteur", () => {
     const corrCookie = await login(corr.username, "Corr123!");
     const m = await manuscriptAtCorrectionWithCorrector(corr.id);
 
-    // Texte seul (rapport + VCF) → couverture finale manquante → refus.
+    // Texte complet (dans l'ordre : rapport → version intégrée → 2e relecture →
+    // VCF) → couverture finale manquante → refus.
     expect((await deposit(m.id, "rapport_1")).statusCode).toBe(201);
+    expect((await deposit(m.id, "integration_1")).statusCode).toBe(201);
+    expect((await deposit(m.id, "relecture_2")).statusCode).toBe(201);
     expect((await deposit(m.id, "integration_finale")).statusCode).toBe(201);
     const blocked = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/CORRECTION/validate`, headers: { cookie: corrCookie }, payload: { assignee_id: maq.id } });
     expect(blocked.statusCode).toBe(409);
@@ -113,6 +116,8 @@ describe("clôture de la correction par le correcteur", () => {
     const maq = await createUserWithRole(`maq_${rnd()}`, "MAQUETTISTE", "Maq123!");
     const m = await manuscriptAtCorrectionWithCorrector(corr.id);
     await deposit(m.id, "rapport_1");
+    await deposit(m.id, "integration_1");
+    await deposit(m.id, "relecture_2");
     await deposit(m.id, "integration_finale");
     await deposit(m.id, "couverture_finale");
 

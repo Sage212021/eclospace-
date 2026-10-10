@@ -4,6 +4,9 @@ import { ManuscriptCleanupSection } from "../components/ManuscriptCleanupSection
 import {
   createManuscript,
   importManuscript,
+  bulkImportManuscripts,
+  type BulkImportRow,
+  type BulkImportResult,
   listCollections,
   listGenres,
   listManuscripts,
@@ -133,6 +136,7 @@ export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, status
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isStageView = Boolean(statusFilter);
   // Menu local (accordéon) de la vue principale : liste complète (pour les
@@ -207,12 +211,14 @@ export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, status
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
           {canCreate && (
             <AccordionSection open={section === "nouveau"} onToggle={() => setSection(section === "nouveau" ? "" : "nouveau")} icon="➕" label="Nouveau manuscrit">
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: showForm || showImport ? 12 : 0 }}>
-                <Button variant={showForm ? "view" : "add"} onClick={() => { setShowImport(false); setShowForm((v) => !v); }}>{showForm ? "Fermer" : "Saisir un nouveau manuscrit"}</Button>
-                <Button variant="view" onClick={() => { setShowForm(false); setShowImport((v) => !v); }} title="Enregistrer un ouvrage déjà publié, avec sa date de parution réelle">{showImport ? "Fermer" : "Importer un ouvrage déjà paru"}</Button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: showForm || showImport || showBulk ? 12 : 0 }}>
+                <Button variant={showForm ? "view" : "add"} onClick={() => { setShowImport(false); setShowBulk(false); setShowForm((v) => !v); }}>{showForm ? "Fermer" : "Saisir un nouveau manuscrit"}</Button>
+                <Button variant="view" onClick={() => { setShowForm(false); setShowBulk(false); setShowImport((v) => !v); }} title="Enregistrer un ouvrage déjà publié, avec sa date de parution réelle">{showImport ? "Fermer" : "Importer un ouvrage déjà paru"}</Button>
+                <Button variant="view" onClick={() => { setShowForm(false); setShowImport(false); setShowBulk((v) => !v); }} title="Charger plusieurs ouvrages déjà parus d'un coup, depuis un fichier (CSV)">{showBulk ? "Fermer" : "Importer une liste (fichier)"}</Button>
               </div>
               {showForm && <NewManuscriptForm onCreated={(m) => { setShowForm(false); loadAll(); onOpenManuscript(m.id); }} onError={setError} />}
               {showImport && <ImportBookForm onImported={(m) => { setShowImport(false); loadAll(); onOpenManuscript(m.id); }} onError={setError} />}
+              {showBulk && <BulkImportForm onDone={() => loadAll()} onError={setError} />}
             </AccordionSection>
           )}
 
@@ -842,6 +848,161 @@ function ImportBookForm({ onImported, onError }: { onImported: (m: Manuscript) =
     </form>
   );
 }
+
+// IMPORT EN MASSE (fichier CSV) d'ouvrages déjà parus pour alimenter le
+// catalogue (demande opérateur 10/10). Colonnes attendues (ordre libre) :
+// titre ; auteur ; genre ; collection ; isbn ; annee ; resume ; age.
+function normHeader(h: string): string {
+  return h.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+// Parseur CSV minimal (séparateur ; ou , ; champs entre guillemets gérés).
+function parseCsv(text: string): string[][] {
+  const t = text.replace(/\r\n?/g, "\n").trim();
+  if (!t) return [];
+  const firstLine = t.slice(0, t.indexOf("\n") === -1 ? t.length : t.indexOf("\n"));
+  const delim = (firstLine.match(/;/g)?.length ?? 0) >= (firstLine.match(/,/g)?.length ?? 0) ? ";" : ",";
+  const rows: string[][] = [];
+  let row: string[] = [], field = "", inQ = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (inQ) {
+      if (c === '"') { if (t[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else if (c === '"') inQ = true;
+    else if (c === delim) { row.push(field); field = ""; }
+    else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+    else field += c;
+  }
+  row.push(field); rows.push(row);
+  return rows;
+}
+function rowsToBulk(text: string): { rows: BulkImportRow[]; error?: string } {
+  const grid = parseCsv(text);
+  if (grid.length < 2) return { rows: [], error: "Fichier vide ou sans ligne de données." };
+  const header = grid[0].map(normHeader);
+  const col = (keys: string[]) => header.findIndex((h) => keys.some((k) => h.includes(k)));
+  const iTitle = col(["titre", "title"]);
+  const iAuthor = col(["auteur", "author"]);
+  const iGenre = col(["genre", "domaine", "categor"]);
+  const iColl = col(["collection"]);
+  const iIsbn = col(["isbn"]);
+  const iDate = col(["annee", "année", "parution", "date"]);
+  const iSum = col(["resume", "résumé", "resum"]);
+  const iAge = col(["age", "tranche"]);
+  if (iTitle < 0 || iAuthor < 0 || iGenre < 0 || iDate < 0) {
+    return { rows: [], error: "Colonnes manquantes. Minimum requis : titre, auteur, genre, année (+ facultatif : collection, isbn, résumé, âge)." };
+  }
+  const out: BulkImportRow[] = [];
+  for (let r = 1; r < grid.length; r++) {
+    const g = grid[r];
+    const title = (g[iTitle] ?? "").trim();
+    if (!title) continue; // ligne vide
+    out.push({
+      title, author: (g[iAuthor] ?? "").trim(), genre: (g[iGenre] ?? "").trim(),
+      publication_date: (g[iDate] ?? "").trim(),
+      collection: iColl >= 0 ? (g[iColl] ?? "").trim() || undefined : undefined,
+      isbn: iIsbn >= 0 ? (g[iIsbn] ?? "").trim() || undefined : undefined,
+      summary: iSum >= 0 ? (g[iSum] ?? "").trim() || undefined : undefined,
+      age_range: iAge >= 0 ? (g[iAge] ?? "").trim() || undefined : undefined,
+    });
+  }
+  return { rows: out };
+}
+
+function BulkImportForm({ onDone, onError }: { onDone: () => void; onError: (m: string) => void }) {
+  const [rows, setRows] = useState<BulkImportRow[]>([]);
+  const [parseErr, setParseErr] = useState<string | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<BulkImportResult | null>(null);
+
+  function ingest(text: string, name: string) {
+    const { rows, error } = rowsToBulk(text);
+    setResult(null);
+    if (error) { setParseErr(error); setRows([]); setFileName(name); return; }
+    setParseErr(null); setRows(rows); setFileName(name);
+  }
+
+  function downloadTemplate() {
+    const csv = "titre;auteur;genre;collection;isbn;annee;age;resume\n"
+      + "Le village d'Ining;Wilfried Ekanga;Roman;Canarie;978-9956-36-263-9;2023;20-35 ans;\n";
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "modele_import_catalogue.csv"; a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function submit() {
+    if (rows.length === 0) return;
+    setSubmitting(true);
+    try {
+      const r = await bulkImportManuscripts(rows);
+      setResult(r);
+      onDone();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Import impossible.");
+    } finally { setSubmitting(false); }
+  }
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, padding: 18, marginBottom: 8 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 6 }}>Importer une liste d'ouvrages déjà parus (fichier CSV)</div>
+      <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px", lineHeight: 1.5 }}>
+        Chargez un fichier <strong>CSV</strong> pour créer plusieurs ouvrages du fonds d'un coup (ils paraissent aussitôt au catalogue, classés par domaine et collection).
+        Colonnes : <strong>titre</strong>, <strong>auteur</strong>, <strong>genre</strong>, <strong>année</strong> (obligatoires) ; <em>collection, isbn, âge, résumé</em> (facultatifs).
+        Les doublons de titre sont ignorés automatiquement. Les couvertures s'ajoutent ensuite sur chaque fiche.
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+        <button type="button" onClick={downloadTemplate} style={{ background: "#fff", border: "1px solid var(--eclosion, #D9B21A)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 6, padding: "6px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>⬇️ Télécharger un modèle</button>
+        <label style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "6px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+          📄 Choisir un fichier CSV
+          <input type="file" accept=".csv,text/csv,text/plain" style={{ display: "none" }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) f.text().then((t) => ingest(t, f.name)); e.target.value = ""; }} />
+        </label>
+        {fileName && <span style={{ fontSize: 12, color: "var(--muted)" }}>{fileName}</span>}
+      </div>
+
+      {parseErr && <div style={{ background: "var(--alert-soft, #F6E2DE)", color: "var(--alert, #B23A2E)", borderRadius: 6, padding: "8px 11px", fontSize: 12.5, marginBottom: 10 }}>{parseErr}</div>}
+
+      {rows.length > 0 && !result && (
+        <>
+          <div style={{ fontSize: 12.5, marginBottom: 8 }}><strong>{rows.length}</strong> ouvrage(s) prêt(s) à importer. Aperçu des 5 premiers :</div>
+          <div style={{ overflowX: "auto", marginBottom: 10 }}>
+            <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+              <thead><tr>{["Titre", "Auteur", "Genre", "Collection", "Année"].map((h) => <th key={h} style={{ textAlign: "left", borderBottom: "1px solid var(--line)", padding: "4px 8px", color: "var(--muted)" }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {rows.slice(0, 5).map((r, i) => (
+                  <tr key={i}><td style={tdS}>{r.title}</td><td style={tdS}>{r.author}</td><td style={tdS}>{r.genre}</td><td style={tdS}>{r.collection ?? "—"}</td><td style={tdS}>{r.publication_date}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Button variant="add" onClick={submit} disabled={submitting}>{submitting ? "Import en cours…" : `Importer ${rows.length} ouvrage(s)`}</Button>
+        </>
+      )}
+
+      {result && (
+        <div style={{ marginTop: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+            Import terminé : <span style={{ color: "#2F7D4A" }}>{result.created} créé(s)</span>
+            {result.skipped > 0 && <> · <span style={{ color: "#B87400" }}>{result.skipped} ignoré(s) (doublon)</span></>}
+            {result.errors > 0 && <> · <span style={{ color: "#B23A2E" }}>{result.errors} en erreur</span></>}
+          </div>
+          {(result.skipped > 0 || result.errors > 0) && (
+            <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12 }}>
+              {result.results.filter((x) => x.status !== "created").map((x) => (
+                <li key={x.row} style={{ color: x.status === "error" ? "var(--alert, #B23A2E)" : "var(--muted)" }}>
+                  Ligne {x.row} — <strong>{x.title}</strong> : {x.status === "skipped" ? "ignoré (doublon)" : x.message}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+const tdS: React.CSSProperties = { padding: "4px 8px", borderBottom: "1px solid var(--line)" };
 
 function LabeledInput({ label, children }: { label: string; children: React.ReactNode }) {
   return (

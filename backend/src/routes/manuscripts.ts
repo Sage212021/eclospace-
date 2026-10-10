@@ -548,6 +548,123 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     return reply.code(201).send(manuscript);
   });
 
+  // IMPORT EN MASSE d'ouvrages déjà parus (fonds) — demande opérateur 10/10 pour
+  // alimenter le catalogue marketing d'un coup. Chaque ligne crée un ouvrage au
+  // stade « publié » (isBackCatalogue), classé par domaine (genre) + collection.
+  // Tolérant : chaque ligne est traitée indépendamment, les doublons de titre
+  // sont ignorés, et une ligne en erreur n'empêche pas les autres. Les ISBN et
+  // couvertures restent attachables ensuite sur la fiche.
+  const bulkRowSchema = z.object({
+    title: z.string().trim().min(1),
+    author: z.string().trim().min(1),
+    genre: z.string().trim().min(1), // libellé OU code du domaine
+    collection: z.string().trim().optional(), // libellé OU code (facultatif)
+    publication_date: z.string().trim().min(4), // année « 2021 » ou date ISO
+    summary: z.string().trim().optional(),
+    isbn: z.string().trim().optional(),
+    age_range: z.string().trim().optional(),
+  });
+  const bulkImportSchema = z.object({ rows: z.array(bulkRowSchema).min(1).max(500) });
+
+  fastify.post("/api/v1/manuscripts/import/bulk", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
+    const parsed = bulkImportSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Fichier invalide.", details: parsed.error.issues });
+    }
+    const me = request.user!.id;
+    const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+    const publishedStatus = await prisma.workflowStatus.findUnique({ where: { code: "SUIVI_POST_PUBLICATION" } });
+    if (!publishedStatus) {
+      return reply.code(500).send({ code: "referential_missing", message: "Statut SUIVI_POST_PUBLICATION absent du référentiel (seed manquant)." });
+    }
+    const [genres, collections] = await Promise.all([
+      prisma.genre.findMany({ where: { deletedAt: null }, select: { id: true, code: true, label: true } }),
+      prisma.collection.findMany({ where: { deletedAt: null }, select: { id: true, code: true, label: true } }),
+    ]);
+    const genreByKey = new Map<string, string>();
+    for (const g of genres) { genreByKey.set(norm(g.label), g.id); if (g.code) genreByKey.set(norm(g.code), g.id); }
+    const collByKey = new Map<string, string>();
+    for (const c of collections) { collByKey.set(norm(c.label), c.id); if (c.code) collByKey.set(norm(c.code), c.id); }
+    // « Collection Canari » imprimée → collection officielle « Canarie », etc.
+    const collAlias: Record<string, string> = { canari: "canarie", source: "sources", "les heritiers": "heritier", heritiers: "heritier" };
+
+    const parseDate = (s: string): Date | null => {
+      const y = s.match(/^(\d{4})$/);
+      const d = y ? new Date(`${y[1]}-01-01T00:00:00Z`) : new Date(s);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    // « Prénom Nom » → first/last ; un seul mot → nom seul ; on retire « (…) ».
+    const splitAuthor = (raw: string) => {
+      const clean = raw.replace(/\([^)]*\)/g, "").trim().replace(/\s+/g, " ");
+      const parts = clean.split(" ");
+      if (parts.length === 1) return { firstName: "", lastName: parts[0] };
+      return { firstName: parts.slice(0, -1).join(" "), lastName: parts[parts.length - 1] };
+    };
+
+    const results: { row: number; title: string; status: "created" | "skipped" | "error"; message?: string; id?: string }[] = [];
+    for (let i = 0; i < parsed.data.rows.length; i++) {
+      const r = parsed.data.rows[i];
+      try {
+        const genreId = genreByKey.get(norm(r.genre));
+        if (!genreId) { results.push({ row: i + 1, title: r.title, status: "error", message: `Domaine inconnu : « ${r.genre} ».` }); continue; }
+        let collectionId: string | undefined;
+        if (r.collection) {
+          const key = norm(r.collection).replace(/^collection\s+/, "");
+          collectionId = collByKey.get(key) ?? collByKey.get(collAlias[key] ?? key);
+        }
+        const pub = parseDate(r.publication_date);
+        if (!pub) { results.push({ row: i + 1, title: r.title, status: "error", message: `Date de parution illisible : « ${r.publication_date} ».` }); continue; }
+        if (pub > startOfToday()) { results.push({ row: i + 1, title: r.title, status: "error", message: "Date de parution postérieure à aujourd'hui." }); continue; }
+        const dup = await findDuplicateManuscript(r.title);
+        if (dup) { results.push({ row: i + 1, title: r.title, status: "skipped", message: "Déjà au catalogue (titre existant)." }); continue; }
+
+        const { firstName, lastName } = splitAuthor(r.author);
+        const manuscriptNumber = await nextManuscriptNumber();
+        const created = await prisma.$transaction(async (tx) => {
+          const author = await tx.partner.create({ data: { category: "auteur", firstName, lastName, createdBy: me, updatedBy: me } });
+          const m = await tx.manuscript.create({
+            data: {
+              manuscriptNumber, title: r.title, collectionId, genreId, language: "fr",
+              summary: r.summary, origin: "soumission", statusId: publishedStatus.id, ownerId: me,
+              receivedAt: pub, publicationDate: pub, isBackCatalogue: true, createdBy: me, updatedBy: me,
+              workContributors: { create: { partnerId: author.id, role: "author", displayOrder: 0 } },
+            },
+          });
+          // Tranche d'âge → fiche métadonnées (si fournie).
+          if (r.age_range) {
+            await tx.workMetadata.create({ data: { manuscriptId: m.id, ageRange: r.age_range, updatedBy: me } });
+          }
+          return m;
+        });
+
+        // ISBN connu (ouvrage paru) : on l'enregistre/rattache, en best-effort —
+        // une erreur ici n'annule pas l'import de l'ouvrage.
+        if (r.isbn) {
+          const isbn13 = r.isbn.replace(/[^0-9Xx]/g, "").toUpperCase();
+          if (isbn13.length >= 10) {
+            try {
+              const existingIsbn = await prisma.isbn.findUnique({ where: { isbn13 } });
+              if (!existingIsbn) {
+                await prisma.isbn.create({ data: { isbn13, format: "print", status: "published", manuscriptId: created.id, assignedAt: new Date(), assignedBy: me } });
+              } else if (!existingIsbn.manuscriptId) {
+                await prisma.isbn.update({ where: { id: existingIsbn.id }, data: { manuscriptId: created.id, status: "published", assignedAt: new Date(), assignedBy: me } });
+              }
+            } catch { /* ISBN non bloquant */ }
+          }
+        }
+
+        await writeAuditLog({ userId: me, action: "create", entityType: "manuscript", entityId: created.id, newValues: { manuscriptNumber, title: r.title, imported: true, bulk: true, back_catalogue: true }, ipAddress: request.ip });
+        results.push({ row: i + 1, title: r.title, status: "created", id: created.id });
+      } catch (e) {
+        results.push({ row: i + 1, title: r.title, status: "error", message: e instanceof Error ? e.message : "Erreur inconnue." });
+      }
+    }
+    const created = results.filter((x) => x.status === "created").length;
+    const skipped = results.filter((x) => x.status === "skipped").length;
+    const errors = results.filter((x) => x.status === "error").length;
+    return reply.send({ created, skipped, errors, results });
+  });
+
   fastify.get("/api/v1/manuscripts", { preHandler: requirePermission("manuscripts", "consultation") }, async (request, reply) => {
     const parsed = listQuerySchema.safeParse(request.query);
     if (!parsed.success) {

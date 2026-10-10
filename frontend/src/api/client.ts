@@ -514,6 +514,27 @@ export function importManuscript(input: {
   return request<Manuscript>("/api/v1/manuscripts/import", { method: "POST", body: JSON.stringify(input) });
 }
 
+// Import EN MASSE d'ouvrages déjà parus (fonds) pour alimenter le catalogue.
+export interface BulkImportRow {
+  title: string;
+  author: string;
+  genre: string;
+  collection?: string;
+  publication_date: string;
+  summary?: string;
+  isbn?: string;
+  age_range?: string;
+}
+export interface BulkImportResult {
+  created: number;
+  skipped: number;
+  errors: number;
+  results: { row: number; title: string; status: "created" | "skipped" | "error"; message?: string; id?: string }[];
+}
+export function bulkImportManuscripts(rows: BulkImportRow[]) {
+  return request<BulkImportResult>("/api/v1/manuscripts/import/bulk", { method: "POST", body: JSON.stringify({ rows }) });
+}
+
 // Renseigner / corriger la date de parution d'un ouvrage (antidatage tracé, §8).
 export function setPublicationDate(manuscriptId: string, publicationDate: string, note?: string) {
   return request<Manuscript>(`/api/v1/manuscripts/${manuscriptId}/publication-date`, {

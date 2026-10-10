@@ -120,9 +120,14 @@ describe("Correction — intégration par l'intégrateur désigné (Lot 3, branc
   });
 
   it("VERROU : la version finale est bloquée tant qu'une correction retenue n'est pas intégrée", async () => {
-    // Pré-requis (règle 01/10) : la VCF exige d'abord une 1re correction déposée.
+    // Pré-requis (ordre du cycle, 10/10) : la VCF exige d'abord la 1re correction,
+    // la version intégrée et la 2e relecture déposées, dans cet ordre.
     const mpr = multipart("file", "rapport1.txt", "text/plain", Buffer.from("1re correction"));
     await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/correction-cycle/rapport_1`, headers: { cookie: adminCookie, "content-type": mpr.contentType }, payload: mpr.body });
+    const mpi = multipart("file", "integ.txt", "text/plain", Buffer.from("version intégrée"));
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/correction-cycle/integration_1`, headers: { cookie: adminCookie, "content-type": mpi.contentType }, payload: mpi.body });
+    const mpl = multipart("file", "relecture.txt", "text/plain", Buffer.from("2e relecture"));
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/correction-cycle/relecture_2`, headers: { cookie: adminCookie, "content-type": mpl.contentType }, payload: mpl.body });
 
     const mp = multipart("file", "vcf.txt", "text/plain", Buffer.from("version finale"));
     const blocked = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/correction-cycle/integration_finale`, headers: { cookie: adminCookie, "content-type": mp.contentType }, payload: mp.body });

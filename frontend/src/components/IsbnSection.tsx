@@ -527,6 +527,11 @@ ${summaryBlock}
       ))}
 
       <div style={{ fontSize: 12, fontWeight: 600, marginTop: 16, marginBottom: 6 }}>Fiche de métadonnées {metadata ? `(v${metadata.version})` : ""}</div>
+      {canManage && (
+        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>
+          Cette fiche reste <strong>modifiable</strong> : en cas d'erreur (ISBN, prix, poids, coût…), corrigez ici et réenregistrez — chaque enregistrement crée une nouvelle version.
+        </div>
+      )}
       <form onSubmit={handleSaveMetadata}>
         <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
           Résumé de présentation

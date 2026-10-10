@@ -88,7 +88,10 @@ describe("clôture de la correction par le correcteur", () => {
     expect(blocked.json().code).toBe("correction_cycle_incomplete");
     expect(blocked.json().message).toContain("Couverture corrigée finale");
 
-    // Couverture finale déposée → clôture possible.
+    // Cycle couverture complet (dans l'ordre) → clôture possible.
+    expect((await deposit(m.id, "couverture_1")).statusCode).toBe(201);
+    expect((await deposit(m.id, "couverture_integration_1")).statusCode).toBe(201);
+    expect((await deposit(m.id, "couverture_2")).statusCode).toBe(201);
     expect((await deposit(m.id, "couverture_finale")).statusCode).toBe(201);
     const ready = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/correction/close-info`, headers: { cookie: corrCookie } });
     expect(ready.json().ready).toBe(true);
@@ -119,6 +122,9 @@ describe("clôture de la correction par le correcteur", () => {
     await deposit(m.id, "integration_1");
     await deposit(m.id, "relecture_2");
     await deposit(m.id, "integration_finale");
+    await deposit(m.id, "couverture_1");
+    await deposit(m.id, "couverture_integration_1");
+    await deposit(m.id, "couverture_2");
     await deposit(m.id, "couverture_finale");
 
     const otherCookie = await login(other.username, "Corr123!");

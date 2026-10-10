@@ -78,7 +78,7 @@ describe("entité cycle de correction (Phase 2)", () => {
     const m = await manuscriptAtCorrection();
     // Pièces du cycle, dans l'ordre : 1re correction + version intégrée + 2e
     // relecture + VCF + couverture finale (l'ordre est désormais imposé, 10/10).
-    for (const [phase, name] of [["rapport_1", "rapport.txt"], ["integration_1", "integ.txt"], ["relecture_2", "relecture.txt"], ["integration_finale", "vcf.txt"], ["couverture_finale", "cover.txt"]] as const) {
+    for (const [phase, name] of [["rapport_1", "rapport.txt"], ["integration_1", "integ.txt"], ["relecture_2", "relecture.txt"], ["integration_finale", "vcf.txt"], ["couverture_1", "cov1.txt"], ["couverture_integration_1", "covint.txt"], ["couverture_2", "cov2.txt"], ["couverture_finale", "cover.txt"]] as const) {
       const up = multipart("file", name, `Contenu ${phase}`);
       const r = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/${phase}`, headers: { cookie, ...up.headers }, payload: up.body });
       expect(r.statusCode).toBe(201);

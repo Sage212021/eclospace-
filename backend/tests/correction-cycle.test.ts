@@ -116,10 +116,13 @@ describe("correction éditoriale en deux temps", () => {
     expect(coverStill.statusCode).toBe(409);
     expect(coverStill.json().message).toContain("Couverture corrigée finale");
 
-    // Dépôt de la couverture corrigée finale → validation possible.
-    const up3 = multipart("file", "cover.txt", "Couverture corrigée finale.");
-    const r3 = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/couverture_finale`, headers: { cookie, ...up3.headers }, payload: up3.body });
-    expect(r3.statusCode).toBe(201);
+    // Cycle couverture obligatoire et ordonné : on dépose les 4 pièces de
+    // couverture dans l'ordre → validation possible.
+    for (const key of ["couverture_1", "couverture_integration_1", "couverture_2", "couverture_finale"]) {
+      const upc = multipart("file", `${key}.txt`, `Couverture — ${key}.`);
+      const rc = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/correction-cycle/${key}`, headers: { cookie, ...upc.headers }, payload: upc.body });
+      expect(rc.statusCode).toBe(201);
+    }
 
     const meta = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${m.id}/correction-cycle`, headers: { cookie } });
     const rows = meta.json() as { key: string; has_file: boolean; uploaded_by_name: string | null; version_number: number | null; created_at: string | null }[];

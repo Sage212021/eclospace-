@@ -1286,33 +1286,37 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           return reply.code(403).send({ code: "not_authorized_for_phase", message: denied });
         }
       }
-      // VERROUS DU RELAIS TEXTE (correction). Rien de tout cela sur la branche
-      // COUVERTURE (parallèle), qui garde ses propres règles.
-      if (!isCoverCorrectionPhase(phase)) {
-        const cycle = await correctionCycleState(id);
+      // VERROUS DU RELAIS DE CORRECTION — appliqués aux DEUX branches : TEXTE et
+      // COUVERTURE (demande opérateur 10/10 : le cycle couverture est désormais
+      // obligatoire et ordonné au même titre que le texte).
+      {
+        const isCover = isCoverCorrectionPhase(phase);
+        const phaseList = isCover ? COVER_CORRECTION_PHASES : CORRECTION_PHASES;
+        const cycle = isCover ? await coverCorrectionCycleState(id) : await correctionCycleState(id);
         const current = cycle.find((p) => p.key === phase);
         const isReplacement = Boolean(current?.has_file);
 
-        // ORDRE DU CYCLE (demande opérateur 10/10) : un NOUVEAU dépôt d'une pièce
-        // ne peut se faire que si TOUTES les étapes précédentes ont déjà un
-        // fichier. Empêche de déposer la version corrigée finale (VCF) — ou la 2e
-        // correction — alors que les étapes intermédiaires (version intégrée, 2e
-        // relecture) manquent : incohérence signalée (« 2 et 3 pas déposés »).
-        // Le REMPLACEMENT d'une pièce déjà déposée reste TOUJOURS possible, pour
-        // corriger un mauvais fichier, sans réappliquer l'ordre.
+        // ORDRE DU CYCLE : un NOUVEAU dépôt d'une pièce ne peut se faire que si
+        // TOUTES les étapes précédentes de SA branche ont déjà un fichier.
+        // Empêche p. ex. de déposer la version corrigée finale alors que les
+        // étapes intermédiaires manquent. Le REMPLACEMENT d'une pièce déjà
+        // déposée reste TOUJOURS possible (corriger un mauvais fichier).
         if (!isReplacement) {
-          const idx = CORRECTION_PHASES.findIndex((p) => p.key === phase);
-          const missing = CORRECTION_PHASES.slice(0, Math.max(0, idx)).filter((p) => !cycle.find((c) => c.key === p.key)?.has_file);
+          const idx = phaseList.findIndex((p) => p.key === phase);
+          const missing = phaseList.slice(0, Math.max(0, idx)).filter((p) => !cycle.find((c) => c.key === p.key)?.has_file);
           if (missing.length > 0) {
             const names = missing.map((p) => p.label).join(" ; ");
-            return reply.code(409).send({ code: "cycle_order_violation", message: `Dépôt impossible : déposez d'abord les étapes précédentes du cycle — ${names}. Ordre à respecter : 1re correction → version intégrée → 2e correction (relecture) → version corrigée finale (VCF). Vous pourrez toujours remplacer un fichier déjà déposé.` });
+            const ordre = isCover
+              ? "1re correction couverture → retour intégration (BAT2) → 2e correction couverture → couverture corrigée finale"
+              : "1re correction → version intégrée → 2e correction (relecture) → version corrigée finale (VCF)";
+            return reply.code(409).send({ code: "cycle_order_violation", message: `Dépôt impossible : déposez d'abord les étapes précédentes du cycle — ${names}. Ordre à respecter : ${ordre}. Vous pourrez toujours remplacer un fichier déjà déposé.` });
           }
         }
 
-        // VERROU INTÉGRATION (Lot 3) : la VCF ne peut être déposée que si toutes
-        // les corrections retenues (acceptées/modifiées) sont INTÉGRÉES (ou
-        // écartées « non applicable » avec motif). Empêche une correction oubliée
-        // entre la décision et le fichier livré.
+        // VERROU INTÉGRATION (Lot 3) : la VCF (texte) ne peut être déposée que si
+        // toutes les corrections retenues (acceptées/modifiées) sont INTÉGRÉES
+        // (ou écartées « non applicable » avec motif). Empêche une correction
+        // oubliée entre la décision et le fichier livré.
         if (phase === "integration_finale") {
           const pending = await prisma.correctionAnomaly.count({
             where: { manuscriptId: id, status: { in: ["acceptee", "modifiee"] }, integrationStatus: { in: ["a_integrer", "a_revoir"] }, job: { workType: { in: ["correction_1", "correction_2"] } } },

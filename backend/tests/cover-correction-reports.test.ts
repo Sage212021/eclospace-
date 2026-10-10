@@ -83,9 +83,10 @@ describe("Rapports de correction de couverture (branche infographe)", () => {
     expect(notif).toBeTruthy();
   });
 
-  it("un rapport de couverture ne bloque pas le passage de l'étape correction (optionnel)", async () => {
-    // Les phases couverture sont facultatives : elles ne figurent pas parmi les
-    // phases obligatoires du cycle texte.
+  it("les phases couverture forment un cycle séparé du texte (branche parallèle)", async () => {
+    // La couverture est un cycle à part : ses phases n'apparaissent jamais dans
+    // le cycle TEXTE (même si, depuis le 10/10, elles sont elles aussi obligatoires
+    // pour clôturer l'étape Correction, via leur propre cycle).
     const text = (await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/correction-cycle`, headers: { cookie } })).json() as Array<{ key: string; required: boolean }>;
     expect(text.every((p) => !p.key.startsWith("couverture"))).toBe(true);
   });

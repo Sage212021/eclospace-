@@ -73,9 +73,9 @@ export async function seedManuscriptSourceFile(manuscriptId: string) {
 // des documents suit le préfixe stable « [correction:<clé>] » lu par le gate.
 export async function seedCorrectionCycle(manuscriptId: string) {
   const admin = await prisma.user.findFirstOrThrow({ where: { username: "admin" } });
-  // Les 4 pièces TEXTE (toutes obligatoires depuis le 10/10) + la couverture
-  // corrigée finale : pièces exigées pour clôturer l'étape Correction.
-  for (const key of ["rapport_1", "integration_1", "relecture_2", "integration_finale", "couverture_finale"]) {
+  // Les 4 pièces TEXTE + les 4 pièces COUVERTURE (toutes obligatoires depuis le
+  // 10/10) : pièces exigées pour clôturer l'étape Correction.
+  for (const key of ["rapport_1", "integration_1", "relecture_2", "integration_finale", "couverture_1", "couverture_integration_1", "couverture_2", "couverture_finale"]) {
     const doc = await prisma.document.create({
       data: {
         entityType: "manuscript",

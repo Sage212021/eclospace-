@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Manuscript, TaskType } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission, requireAnyPermission, requireAuth } from "../lib/permissions.js";
-import { missingRequiredCorrectionPhases, coverFinaleMissing, correctionCycleState } from "../lib/correctionCycle.js";
+import { missingRequiredCorrectionPhases, missingRequiredCoverPhases, correctionCycleState } from "../lib/correctionCycle.js";
 import { closeCorrectionCycle, ensureOpenCorrectionCycle } from "../lib/correctionCycleEntity.js";
 import { isDeliverableRequired, hasStepDeliverable, DELIVERABLE_LABELS } from "../lib/stepDeliverables.js";
 import { vc1State } from "../lib/startingProof.js";
@@ -373,8 +373,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         // Clôture (demande opérateur 26/09/2026) : la COUVERTURE corrigée finale
         // (1ʳᵉ, dos, 4ᵉ) est exigée en plus du texte — rien ne part en mise en
         // page sans le texte ET la couverture finalisés.
-        const missingAll = [...missingPhases];
-        if (await coverFinaleMissing(id)) missingAll.push("Couverture corrigée finale (1ʳᵉ, dos, 4ᵉ)");
+        const missingAll = [...missingPhases, ...(await missingRequiredCoverPhases(id))];
         if (missingAll.length > 0) {
           return reply.code(409).send({
             code: "correction_cycle_incomplete",
@@ -885,13 +884,17 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         maquettistes = users.map((u) => ({ id: u.id, username: u.username, role: u.userRoles.find((r) => r.role.departmentId === nextStatus.departmentId)?.role.label ?? u.userRoles[0]?.role.label ?? null }));
       }
       const textMissing = atCorrection ? await missingRequiredCorrectionPhases(id) : [];
-      const coverMissing = atCorrection ? await coverFinaleMissing(id) : false;
+      // Cycle couverture désormais obligatoire : « incomplet » tant qu'une phase
+      // couverture requise manque (et plus seulement la couverture finale).
+      const coverMissingList = atCorrection ? await missingRequiredCoverPhases(id) : [];
+      const coverMissing = coverMissingList.length > 0;
       return reply.send({
         at_correction: atCorrection,
         next_step: nextStatus ? { code: nextStatus.code, label: nextStatus.label } : null,
         maquettistes,
         text_missing: textMissing,
         cover_missing: coverMissing,
+        cover_missing_list: coverMissingList,
         ready: atCorrection && textMissing.length === 0 && !coverMissing,
       });
     },

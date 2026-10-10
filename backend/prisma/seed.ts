@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-catalogue-resume-depliable",
+      version: "2026.10",
+      title: "Nouveauté — Catalogue : résumé masqué, dépliable au clic",
+      body: "Sur la fiche d'un ouvrage du catalogue, le résumé n'est plus affiché d'emblée : il est masqué sous un en-tête « Résumé ». Un clic le déroule, un autre le replie. La fiche reste ainsi légère et lisible, et on ouvre le résumé seulement si on veut le lire.",
+      audienceAll: true,
+      permissionModules: ["communication"],
+    },
+    {
       slug: "2026-10-import-masse-ouvrages-fonds",
       version: "2026.10",
       title: "Nouveauté — Importer une liste d'ouvrages déjà parus (fichier CSV)",

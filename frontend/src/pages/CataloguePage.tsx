@@ -216,6 +216,8 @@ function Cover({ item, badge = true }: { item: CatalogueItem; badge?: boolean })
 }
 
 function DetailModal({ item, onClose, onOpenManuscript }: { item: CatalogueItem; onClose: () => void; onOpenManuscript?: (id: string) => void }) {
+  // Résumé masqué par défaut : on le déroule au clic sur l'en-tête (demande 10/10).
+  const [showSummary, setShowSummary] = useState(false);
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }} onClick={onClose}>
       <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 620, width: "100%", maxHeight: "90vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
@@ -239,9 +241,14 @@ function DetailModal({ item, onClose, onOpenManuscript }: { item: CatalogueItem;
           </div>
         </div>
         {item.summary && (
-          <div style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", marginBottom: 4 }}>Résumé</div>
-            <p style={{ fontSize: 13, lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{item.summary}</p>
+          <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+            <button type="button" onClick={() => setShowSummary((v) => !v)} aria-expanded={showSummary}
+              style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
+              <span aria-hidden style={{ color: "var(--eclosion-dark, #9a7a12)", fontSize: 12 }}>{showSummary ? "▾" : "▸"}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)" }}>Résumé</span>
+              {!showSummary && <span style={{ fontSize: 11.5, color: "var(--muted)", fontStyle: "italic", marginLeft: "auto" }}>cliquer pour afficher</span>}
+            </button>
+            {showSummary && <p style={{ fontSize: 13, lineHeight: 1.6, margin: "8px 0 0", whiteSpace: "pre-wrap" }}>{item.summary}</p>}
           </div>
         )}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>

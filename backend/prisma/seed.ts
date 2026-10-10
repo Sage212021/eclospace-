@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-fiche-prix-editeur-auto",
+      version: "2026.10",
+      title: "Nouveauté — Prix éditeur calculé automatiquement + poids au choix (saisie ou simulation)",
+      body: "Fiche ouvrage, section « Édition, prix & coût ». Le « Prix éditeur » n'est plus saisi à la main : il se calcule tout seul, comme le prix professionnel, à partir du prix public moins une remise que vous choisissez (champ « Remise éditeur (%) », par défaut 50 %, modifiable). Changez la remise et le prix éditeur se met à jour aussitôt. Côté POIDS : un petit rappel précise les deux façons de faire — soit vous tapez directement le poids en grammes, soit vous le faites estimer avec le simulateur « ⚖️ Estimer le poids » puis vous l'appliquez en un clic.",
+      permissionModules: ["isbn"],
+      departmentCodes: ["SECR", "DIRED", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-fiche-prix-pro-remise-et-simulateur-poids",
       version: "2026.10",
       title: "Nouveauté — Prix professionnel calculé (remise paramétrable) + simulateur de poids",

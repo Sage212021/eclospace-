@@ -2623,6 +2623,7 @@ export interface WorkMetadata {
   pricePro: string | null;
   proDiscountPct: string | null;
   priceEditeur: string | null;
+  editorDiscountPct: string | null;
   pricePromo: string | null;
   unitProductionCost: string | null;
   commercializationStatus: CommercializationStatus | null;
@@ -2645,6 +2646,7 @@ export type WorkMetadataInput = Partial<{
   price_pro: number | null;
   pro_discount_pct: number | null;
   price_editeur: number | null;
+  editor_discount_pct: number | null;
   price_promo: number | null;
   unit_production_cost: number | null;
   commercialization_status: CommercializationStatus | null;

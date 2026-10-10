@@ -3147,7 +3147,10 @@ model WorkMetadata {
   // Prix professionnel = prix public − remise pro (paramétrable, défaut 25 %).
   pricePro                Decimal?                 @map("price_pro") @db.Decimal(12, 2)
   proDiscountPct          Decimal?                 @map("pro_discount_pct") @db.Decimal(5, 2)
+  // Prix éditeur = prix public − remise éditeur (paramétrable). Même logique
+  // que le prix pro, avec son propre taux.
   priceEditeur            Decimal?                 @map("price_editeur") @db.Decimal(12, 2)
+  editorDiscountPct       Decimal?                 @map("editor_discount_pct") @db.Decimal(5, 2)
   // Prix promotionnel (ou autre prix spécial) ; la remise −25 % est calculée à
   // l'affichage depuis le prix public, donc non stockée.
   pricePromo              Decimal?                 @map("price_promo") @db.Decimal(12, 2)

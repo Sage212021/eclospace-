@@ -75,11 +75,14 @@ interface IsbnSectionProps {
   startOpen?: boolean;
   // Ouvrir la fiche d'un AUTRE ouvrage (cas « ISBN déjà attribué à un autre »).
   onOpenManuscript?: (id: string) => void;
+  // Titre et numéro de l'ouvrage — pour l'en-tête de la fiche imprimée.
+  manuscriptTitle?: string;
+  manuscriptNumber?: string;
 }
 
 // ISBN, dépôt légal et métadonnées (Ch. 13) : identité officielle de
 // l'ouvrage, point de passage obligé avant le BAT (Ch. 13 §13.9).
-export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpenManuscript }: IsbnSectionProps) {
+export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpenManuscript, manuscriptTitle, manuscriptNumber }: IsbnSectionProps) {
   const [isbns, setIsbns] = useState<Isbn[]>([]);
   const [pools, setPools] = useState<IsbnPoolSummary[]>([]);
   const [bank, setBank] = useState<IsbnBankResponse | null>(null);
@@ -94,8 +97,9 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
   const [pricePublic, setPricePublic] = useState("");
   // Remise professionnelle paramétrable (défaut 25 %) : le prix pro en découle.
   const [proDiscountPct, setProDiscountPct] = useState("25");
-  // Remise éditeur paramétrable (défaut 50 %) : le prix éditeur en découle, même
-  // logique que le prix pro mais avec son propre taux.
+  // Part du distributeur/diffuseur (paramétrable, défaut 50 %) : le prix éditeur
+  // est ce qui reste à Éclosion une fois cette commission retirée. Même logique
+  // de calcul que le prix pro, mais sens différent (circuit de distribution).
   const [editorDiscountPct, setEditorDiscountPct] = useState("50");
   const [pricePromo, setPricePromo] = useState("");
   const [unitCost, setUnitCost] = useState("");
@@ -276,8 +280,9 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
   // 25 %). Calculé automatiquement ; c'est ce prix qui est enregistré.
   const proDiscountNum = Math.max(0, Math.min(100, Number(proDiscountPct) || 0));
   const pricePro = Number(pricePublic) > 0 ? Math.round(Number(pricePublic) * (1 - proDiscountNum / 100)) : null;
-  // Prix éditeur = prix public − remise éditeur (paramétrable, défaut 50 %).
-  // Même logique que le prix pro, avec son propre taux. Calculé automatiquement.
+  // Prix éditeur = prix public − part du distributeur/diffuseur (paramétrable,
+  // défaut 50 %) = ce que touche réellement l'éditeur par exemplaire. Calculé
+  // automatiquement, même mécanique que le prix pro mais sens distinct.
   const editorDiscountNum = Math.max(0, Math.min(100, Number(editorDiscountPct) || 0));
   const priceEditeur = Number(pricePublic) > 0 ? Math.round(Number(pricePublic) * (1 - editorDiscountNum / 100)) : null;
 
@@ -292,6 +297,101 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
     const coverW = cover ? area * 2 * cover.gsm + cover.board : 0;
     return Math.round(interior + coverW);
   })();
+
+  // Impression de la fiche de renseignements (ex. à la demande du Directeur
+  // éditorial). Document « au nom des Éditions Éclosion » — charte Noir souverain,
+  // aucune mention d'outil interne. Reflète les valeurs affichées à l'écran.
+  function handlePrint() {
+    const esc = (v: unknown) =>
+      String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
+    const fcfa = (n: number | null | undefined) => (n != null && !Number.isNaN(n) ? `${Number(n).toLocaleString("fr-FR")} FCFA` : "—");
+    const editTypeLabel = editionType ? EDITION_TYPE_LABELS[editionType as EditionType] ?? editionType : "—";
+    const commLabel = commStatus ? COMM_STATUS_LABELS[commStatus as CommercializationStatus] ?? commStatus : "—";
+    const pricePublicNum = pricePublic.trim() === "" ? null : Number(pricePublic);
+    const promoNum = pricePromo.trim() === "" ? null : Number(pricePromo);
+    const unitCostNum = unitCost.trim() === "" ? null : Number(unitCost);
+    const isbnRows = isbns.length
+      ? isbns.map((i) => `<tr><td class="mono">${esc(i.isbn13)}</td><td>${esc(FORMAT_LABELS[i.format] ?? i.format)}</td></tr>`).join("")
+      : `<tr><td colspan="2" class="muted">Aucun ISBN attribué.</td></tr>`;
+    const depositRows = deposits.length
+      ? deposits.map((d) => `<tr><td>${esc(d.country)} — ${esc(d.depository)}</td><td>${esc(LEGAL_DEPOSIT_STATUS_LABELS[d.status] ?? d.status)}</td><td>${d.depositedAt ? esc(new Date(d.depositedAt).toLocaleDateString("fr-FR")) : "—"}</td></tr>`).join("")
+      : `<tr><td colspan="3" class="muted">Aucun dépôt légal enregistré.</td></tr>`;
+    const row = (label: string, value: string) => `<tr><th>${esc(label)}</th><td>${value}</td></tr>`;
+    const schoolBlock = isSchool
+      ? `<h2>Volet scolaire</h2><table class="kv">${row("Niveau", esc(schoolLevel) || "—")}${row("Matière", esc(schoolSubject) || "—")}${row("Année scolaire", esc(schoolYear) || "—")}</table>`
+      : "";
+    const summaryBlock = summary.trim()
+      ? `<h2>Résumé de présentation</h2><p class="summary">${esc(summary)}</p>`
+      : "";
+    const today = new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8" />
+<title>Fiche de renseignements — ${esc(manuscriptTitle ?? manuscriptNumber ?? "ouvrage")}</title>
+<style>
+  :root { --or: #D9B21A; --noir: #0B0B0C; --ivoire: #FAF8F2; --line: #E6E1D3; --muted: #6b6b6b; }
+  * { box-sizing: border-box; }
+  body { font-family: Georgia, "Times New Roman", serif; color: var(--noir); margin: 0; padding: 32px 36px; background: #fff; }
+  .mono { font-family: "Courier New", monospace; }
+  header { border-bottom: 3px solid var(--or); padding-bottom: 12px; margin-bottom: 20px; }
+  .brand { font-size: 20px; font-weight: bold; letter-spacing: 0.5px; }
+  .doc-title { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  h1 { font-size: 22px; margin: 18px 0 2px; }
+  .subtitle { font-size: 13px; color: var(--muted); margin: 0 0 18px; }
+  h2 { font-size: 14px; color: var(--noir); border-left: 4px solid var(--or); padding-left: 8px; margin: 22px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.kv th { text-align: left; width: 230px; vertical-align: top; color: var(--muted); font-weight: normal; padding: 5px 10px 5px 0; }
+  table.kv td { padding: 5px 0; }
+  table.grid th, table.grid td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  table.grid thead th { background: var(--ivoire); font-size: 12px; }
+  .summary { font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+  .muted { color: var(--muted); }
+  .note { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  footer { margin-top: 32px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+  @media print { body { padding: 0; } @page { margin: 18mm; } }
+</style></head><body>
+<header>
+  <div class="brand">Éclosion Édition</div>
+  <div class="doc-title">Fiche de renseignements de l'ouvrage</div>
+</header>
+<h1>${esc(manuscriptTitle ?? "—")}</h1>
+<p class="subtitle mono">${esc(manuscriptNumber ?? "")}</p>
+
+<h2>Identité &amp; références</h2>
+<table class="grid"><thead><tr><th>ISBN</th><th>Format</th></tr></thead><tbody>${isbnRows}</tbody></table>
+
+<h2>Dépôt légal</h2>
+<table class="grid"><thead><tr><th>Lieu</th><th>Statut</th><th>Date</th></tr></thead><tbody>${depositRows}</tbody></table>
+
+<h2>Édition, prix &amp; coût</h2>
+<table class="kv">
+  ${row("Type d'édition", esc(editTypeLabel))}
+  ${row("Statut de commercialisation", esc(commLabel))}
+  ${row("Prix public / PPT", `<span class="mono">${fcfa(pricePublicNum)}</span>`)}
+  ${row(`Prix professionnel (revendeur, −${proDiscountNum || 0} %)`, `<span class="mono">${fcfa(pricePro)}</span>`)}
+  ${row(`Prix éditeur (net distributeur, −${editorDiscountNum || 0} %)`, `<span class="mono">${fcfa(priceEditeur)}</span>`)}
+  ${row("Prix promotionnel / autre", `<span class="mono">${fcfa(promoNum)}</span>`)}
+  ${row("Coût de production unitaire", `<span class="mono">${fcfa(unitCostNum)}</span>`)}
+  ${row("Poids", weight.trim() ? `<span class="mono">${esc(Number(weight).toLocaleString("fr-FR"))} g</span>` : "—")}
+</table>
+<p class="note">Prix professionnel = ce que paie le revendeur. Prix éditeur = ce que touche réellement l'éditeur par exemplaire, une fois retirée la commission du distributeur/diffuseur.</p>
+
+${schoolBlock}
+${summaryBlock}
+
+<footer>
+  <span>Éditions Éclosion</span>
+  <span>Fiche éditée le ${esc(today)}</span>
+</footer>
+<script>window.onload = function () { window.focus(); window.print(); };<\/script>
+</body></html>`;
+    const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=1000");
+    if (!w) {
+      setError("Impression impossible : autorisez les fenêtres pop-up pour ce site, puis réessayez.");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  }
 
   async function handleSaveMetadata(event: React.FormEvent) {
     event.preventDefault();
@@ -334,6 +434,17 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
           Complétude non atteinte : {completeness.missing.join(", ")}
         </div>
       )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+        <button
+          type="button"
+          onClick={handlePrint}
+          style={{ ...secondaryButtonStyle, background: "#fff", border: "1px solid var(--eclosion, #D9B21A)", color: "var(--eclosion-dark, #9a7a12)", fontWeight: 700 }}
+          title="Éditer une fiche imprimable de ces références (ISBN, dépôt légal, prix, poids) — au nom des Éditions Éclosion."
+        >
+          🖨️ Imprimer la fiche de renseignements
+        </button>
+      </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ fontSize: 12, fontWeight: 600 }}>ISBN attribués</div>
@@ -510,16 +621,16 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
             <input disabled={!canManage} type="number" min={0} value={pricePromo} onChange={(e) => setPricePromo(e.target.value)} style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
           </label>
           <label style={{ fontSize: 12 }}>
-            Remise éditeur (%)
-            <input disabled={!canManage} type="number" min={0} max={100} value={editorDiscountPct} onChange={(e) => setEditorDiscountPct(e.target.value)} title="Remise appliquée pour obtenir le prix éditeur. Par défaut 50 %." style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
+            Part distributeur/diffuseur (%)
+            <input disabled={!canManage} type="number" min={0} max={100} value={editorDiscountPct} onChange={(e) => setEditorDiscountPct(e.target.value)} title="Commission retenue par le distributeur/diffuseur sur le circuit de vente. Ce qui reste est le prix éditeur. Par défaut 50 % (selon le contrat de distribution)." style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
           </label>
           <label style={{ fontSize: 12 }}>
-            Prix éditeur (auto, −{editorDiscountNum || 0} %)
+            Prix éditeur (auto, net −{editorDiscountNum || 0} %)
             <input
               readOnly
               value={priceEditeur != null ? priceEditeur.toLocaleString("fr-FR") : ""}
               placeholder="—"
-              title="Calculé automatiquement : prix public × (1 − remise éditeur)"
+              title="Ce que touche réellement Éclosion par exemplaire, une fois retirée la commission du distributeur/diffuseur (prix public − part des intermédiaires). À ne pas confondre avec le prix professionnel, qui est ce que paie le revendeur."
               style={{ ...inputStyle, fontFamily: "var(--font-mono)", background: "var(--ivory, #FAF8F2)", color: "var(--muted)" }}
             />
           </label>
@@ -527,6 +638,10 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
             Coût de production unitaire (FCFA)
             <input disabled={!canManage} type="number" min={0} value={unitCost} onChange={(e) => setUnitCost(e.target.value)} style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
           </label>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6, lineHeight: 1.5 }}>
+          <strong>Prix professionnel</strong> = ce que paie le revendeur (prix public − remise revendeur).{" "}
+          <strong>Prix éditeur</strong> = ce que touche réellement Éclosion par exemplaire, une fois retirée la commission du distributeur/diffuseur.
         </div>
 
         {/* Volet scolaire (§3). */}

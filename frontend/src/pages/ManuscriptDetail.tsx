@@ -816,7 +816,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             )}
             {prereqInlineIsbn && (
               <div style={{ marginTop: 10 }}>
-                <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie")} startOpen onOpenManuscript={onOpenManuscript} />
+                <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie")} startOpen onOpenManuscript={onOpenManuscript} manuscriptTitle={manuscript.title} manuscriptNumber={manuscript.manuscriptNumber} />
               </div>
             )}
           </>
@@ -987,7 +987,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
       )}
 
       {show("isbn") && stageReached(["ATTRIBUTION_REFERENCES"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("isbn:consultation") && !prereqInlineIsbn && (
-        <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie") && !confieAutrui} onOpenManuscript={onOpenManuscript} />
+        <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie") && !confieAutrui} onOpenManuscript={onOpenManuscript} manuscriptTitle={manuscript.title} manuscriptNumber={manuscript.manuscriptNumber} />
       )}
 
       {show("bat") && stageReached(["VALIDATION_BAT"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("bat:consultation") && (

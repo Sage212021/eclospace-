@@ -1450,6 +1450,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-fiche-renseignements-impression-prix-editeur",
+      version: "2026.10",
+      title: "Nouveauté — Impression de la fiche de renseignements + clarté du prix éditeur",
+      body: "Fiche ouvrage. Nouveau bouton « 🖨️ Imprimer la fiche de renseignements » (section ISBN, dépôt légal et métadonnées) : il édite une fiche propre et imprimable — titre, ISBN, dépôt légal, prix (public, professionnel, éditeur, promotionnel), poids, volet scolaire — au nom des Éditions Éclosion, utile notamment au Directeur éditorial. PRIX ÉDITEUR : on clarifie sa définition — c'est ce que touche réellement Éclosion par exemplaire une fois retirée la commission du distributeur/diffuseur (à ne pas confondre avec le prix professionnel, qui est ce que paie le revendeur). Le champ se nomme maintenant « Part distributeur/diffuseur (%) » et le prix éditeur se calcule tout seul à partir de ce taux.",
+      permissionModules: ["isbn"],
+      departmentCodes: ["SECR", "DIRED", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-fiche-prix-editeur-auto",
       version: "2026.10",
       title: "Nouveauté — Prix éditeur calculé automatiquement + poids au choix (saisie ou simulation)",

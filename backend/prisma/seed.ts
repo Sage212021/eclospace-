@@ -1461,7 +1461,7 @@ async function main() {
       slug: "2026-10-fiche-prix-editeur-auto",
       version: "2026.10",
       title: "Nouveauté — Prix éditeur calculé automatiquement + poids au choix (saisie ou simulation)",
-      body: "Fiche ouvrage, section « Édition, prix & coût ». Le « Prix éditeur » n'est plus saisi à la main : il se calcule tout seul, comme le prix professionnel, à partir du prix public moins une remise que vous choisissez (champ « Remise éditeur (%) », par défaut 50 %, modifiable). Changez la remise et le prix éditeur se met à jour aussitôt. Côté POIDS : un petit rappel précise les deux façons de faire — soit vous tapez directement le poids en grammes, soit vous le faites estimer avec le simulateur « ⚖️ Estimer le poids » puis vous l'appliquez en un clic.",
+      body: "Fiche ouvrage, section « Édition, prix & coût ». Le « Prix éditeur » n'est plus saisi à la main : il se calcule tout seul, comme le prix professionnel, à partir du prix public moins une part que vous choisissez (champ « Part distributeur/diffuseur (%) », par défaut 25 %, modifiable selon le contrat). Changez la part et le prix éditeur se met à jour aussitôt. Côté POIDS : un petit rappel précise les deux façons de faire — soit vous tapez directement le poids en grammes, soit vous le faites estimer avec le simulateur « ⚖️ Estimer le poids » puis vous l'appliquez en un clic.",
       permissionModules: ["isbn"],
       departmentCodes: ["SECR", "DIRED", "FIN", "DG"],
     },

@@ -97,10 +97,10 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
   const [pricePublic, setPricePublic] = useState("");
   // Remise professionnelle paramétrable (défaut 25 %) : le prix pro en découle.
   const [proDiscountPct, setProDiscountPct] = useState("25");
-  // Part du distributeur/diffuseur (paramétrable, défaut 50 %) : le prix éditeur
+  // Part du distributeur/diffuseur (paramétrable, défaut 25 %) : le prix éditeur
   // est ce qui reste à Éclosion une fois cette commission retirée. Même logique
   // de calcul que le prix pro, mais sens différent (circuit de distribution).
-  const [editorDiscountPct, setEditorDiscountPct] = useState("50");
+  const [editorDiscountPct, setEditorDiscountPct] = useState("25");
   const [pricePromo, setPricePromo] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [commStatus, setCommStatus] = useState("");
@@ -135,7 +135,7 @@ export function IsbnSection({ manuscriptId, canManage, startOpen = false, onOpen
     setEditionType(meta?.editionType ?? "");
     setPricePublic(meta?.pricePublic ?? "");
     setProDiscountPct(meta?.proDiscountPct ?? "25");
-    setEditorDiscountPct(meta?.editorDiscountPct ?? "50");
+    setEditorDiscountPct(meta?.editorDiscountPct ?? "25");
     setPricePromo(meta?.pricePromo ?? "");
     setUnitCost(meta?.unitProductionCost ?? "");
     setCommStatus(meta?.commercializationStatus ?? "");
@@ -622,7 +622,7 @@ ${summaryBlock}
           </label>
           <label style={{ fontSize: 12 }}>
             Part distributeur/diffuseur (%)
-            <input disabled={!canManage} type="number" min={0} max={100} value={editorDiscountPct} onChange={(e) => setEditorDiscountPct(e.target.value)} title="Commission retenue par le distributeur/diffuseur sur le circuit de vente. Ce qui reste est le prix éditeur. Par défaut 50 % (selon le contrat de distribution)." style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
+            <input disabled={!canManage} type="number" min={0} max={100} value={editorDiscountPct} onChange={(e) => setEditorDiscountPct(e.target.value)} title="Commission retenue par le distributeur/diffuseur sur le circuit de vente. Ce qui reste est le prix éditeur. Par défaut 25 % (selon le contrat de distribution)." style={{ ...inputStyle, fontFamily: "var(--font-mono)" }} />
           </label>
           <label style={{ fontSize: 12 }}>
             Prix éditeur (auto, net −{editorDiscountNum || 0} %)

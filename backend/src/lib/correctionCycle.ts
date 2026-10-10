@@ -31,15 +31,16 @@ export const CORRECTION_PHASES: (CorrectionPhase & { actor: CorrectionActor })[]
 ];
 
 // Rapports de correction de la COUVERTURE (branche infographe), en parallèle du
-// texte : 1re relecture, 2e relecture, couverture corrigée finale. Facultatifs
-// (tous les ouvrages n'ont pas de couverture à corriger) et hors du relais
-// « à qui la main » du texte. Déposés par le correcteur, ils sont routés à
-// l'INFOGRAPHE qui les exploite (cf. « Mes intégrations de correction »).
+// texte : 1re relecture, retour intégration (BAT2), 2e relecture, couverture
+// corrigée finale. Déposés par le correcteur et l'infographe (relais), routés à
+// l'INFOGRAPHE (cf. « Mes intégrations de correction »). TOUTES OBLIGATOIRES
+// (demande opérateur 10/10 : « rendre les étapes du cycle obligatoires aussi du
+// côté couverture ») et déposées DANS L'ORDRE, comme le texte.
 export const COVER_CORRECTION_PHASES: CorrectionPhase[] = [
-  { key: "couverture_1", label: "Rapport de correction — couverture (1ʳᵉ · dos · 4ᵉ)", required: false },
-  { key: "couverture_integration_1", label: "Retour intégration infographie (couverture BAT2)", required: false },
-  { key: "couverture_2", label: "Rapport de correction — couverture (2ᵉ relecture)", required: false },
-  { key: "couverture_finale", label: "Couverture corrigée finale", required: false },
+  { key: "couverture_1", label: "Rapport de correction — couverture (1ʳᵉ · dos · 4ᵉ)", required: true },
+  { key: "couverture_integration_1", label: "Retour intégration infographie (couverture BAT2)", required: true },
+  { key: "couverture_2", label: "Rapport de correction — couverture (2ᵉ relecture)", required: true },
+  { key: "couverture_finale", label: "Couverture corrigée finale", required: true },
 ];
 // Phases de couverture DÉPOSÉES PAR L'INFOGRAPHE (retour vers le correcteur),
 // par opposition aux rapports déposés par le correcteur.
@@ -119,6 +120,13 @@ export async function missingRequiredCorrectionPhases(manuscriptId: string): Pro
 export async function coverFinaleMissing(manuscriptId: string): Promise<boolean> {
   const state = await coverCorrectionCycleState(manuscriptId);
   return !state.find((p) => p.key === "couverture_finale")?.has_file;
+}
+
+// Phases de COUVERTURE obligatoires manquantes (demande opérateur 10/10 : le
+// cycle couverture est désormais obligatoire, au même titre que le texte).
+export async function missingRequiredCoverPhases(manuscriptId: string): Promise<string[]> {
+  const state = await coverCorrectionCycleState(manuscriptId);
+  return state.filter((p) => p.required && !p.has_file).map((p) => p.label);
 }
 
 // Le correcteur a-t-il réellement TRANSMIS un rapport de correction de couverture

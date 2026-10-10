@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-cycle-couverture-obligatoire-et-ordonne",
+      version: "2026.10",
+      title: "Nouveauté — Correction couverture : étapes obligatoires et dans l'ordre",
+      body: "Côté COUVERTURE aussi, le cycle de correction devient obligatoire et ordonné (comme le texte). Les quatre pièces doivent être déposées, dans l'ordre : 1re correction couverture → retour intégration (BAT2) → 2e correction couverture → couverture corrigée finale. On ne peut pas sauter une étape ni en déposer une avant la précédente (message clair à l'appui), et l'étape Correction ne se clôt qu'une fois la couverture complète (en plus du texte). Comme pour le texte, un fichier déjà déposé reste toujours remplaçable si on s'est trompé.",
+      permissionModules: ["manuscripts", "tasks", "production"],
+      departmentCodes: ["CORR", "INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-correction-4-etapes-obligatoires-et-anomalies-accordeon",
       version: "2026.10",
       title: "Nouveauté — Correction : 4 étapes obligatoires + anomalies par source (accordéon)",

@@ -208,8 +208,8 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
       {showCover && (<>
       <h3 style={{ fontSize: 15, margin: "18px 0 4px", color: "var(--ink)" }}>Correction de la couverture (pour l'infographe)</h3>
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
-        Déposez ici les rapports de correction de la couverture (1ʳᵉ · dos · 4ᵉ) et la couverture corrigée finale.
-        L'infographe désigné les reçoit dans « Mes intégrations de correction » et les exploite.
+        Déposez ici, <strong>dans l'ordre</strong>, les pièces de correction de la couverture : 1re correction → retour intégration (BAT2) → 2e correction → couverture corrigée finale.
+        Toutes sont <strong>obligatoires</strong> pour clôturer la correction. L'infographe désigné les reçoit dans « Mes intégrations de correction » et les exploite.
       </p>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 12px", margin: "6px 0 10px" }}>
         <span style={{ fontSize: 12.5, fontWeight: 600 }}>Infographe (couverture) :</span>
@@ -226,10 +226,18 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
         <p style={{ fontSize: 12, color: "var(--eclosion-retard, #C4661F)", marginTop: 0 }}>Désignez l'infographe pour que le rapport de correction de couverture lui parvienne.</p>
       )}
       <div style={{ display: "grid", gap: 8 }}>
-        {coverPhases.map((p) => (
-          <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px" }}>
+        {coverPhases.map((p, i) => {
+          // Cycle couverture obligatoire et ORDONNÉ (10/10) : un nouveau dépôt
+          // n'est possible que si les étapes couverture précédentes ont un fichier.
+          const prevMissing = coverPhases.slice(0, i).filter((x) => !x.has_file);
+          const locked = !p.has_file && prevMissing.length > 0;
+          return (
+          <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px", opacity: locked ? 0.7 : 1 }}>
             <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{p.label}</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                {p.label}
+                {p.required && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: "var(--eclosion-retard, #C4661F)" }}>OBLIGATOIRE</span>}
+              </div>
               {p.has_file ? (
                 <div>
                   <a href={stepAttachmentDownloadUrl(manuscriptId, p.version_id!)} download style={{ fontSize: 12, color: "var(--eclosion-dark)", fontWeight: 600 }}>
@@ -243,16 +251,21 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
                     ].filter(Boolean).join(" · ")}
                   </div>
                 </div>
+              ) : locked ? (
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>🔒 Déposez d'abord : {prevMissing.map((x) => x.label).join(", ")}</span>
               ) : (
-                <span style={{ fontSize: 12, color: "var(--muted)" }}>Optionnel — non déposé</span>
+                <span style={{ fontSize: 12, color: p.required ? "var(--eclosion-retard, #C4661F)" : "var(--muted)" }}>{p.required ? "À déposer (bloque la suite)" : "À déposer (dans l'ordre du cycle)"}</span>
               )}
             </div>
-            <span aria-hidden style={{ fontSize: 16 }}>{p.has_file ? "✅" : "—"}</span>
-            {canManage && (
+            <span aria-hidden style={{ fontSize: 16 }}>{p.has_file ? "✅" : locked ? "🔒" : p.required ? "⛔" : "—"}</span>
+            {canManage && !locked && (
               <label style={{ cursor: busyKey === p.key ? "default" : "pointer", fontWeight: 600, color: "var(--muted)", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5 }}>
                 {busyKey === p.key ? "Envoi…" : p.has_file ? "Remplacer" : "Déposer"}
                 <input type="file" style={{ display: "none" }} disabled={busyKey === p.key} onChange={(e) => { const f = e.target.files?.[0]; if (f && (!p.has_file || window.confirm("Remplacer le fichier déjà déposé ? L'ancien reste dans l'historique."))) deposit(p.key, f); e.target.value = ""; }} />
               </label>
+            )}
+            {canManage && locked && (
+              <span title="Déposez d'abord les étapes couverture précédentes." style={{ fontWeight: 600, color: "var(--muted)", border: "1px dashed var(--line)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5, cursor: "not-allowed" }}>🔒 Déposer</span>
             )}
             {canManage && p.has_file && p.can_correct && p.doc_id && (
               <button onClick={() => remove(p.key, p.doc_id!)} disabled={busyKey === p.key} style={{ fontWeight: 600, color: "var(--alert)", background: "#fff", border: "1px solid var(--alert)", borderRadius: 6, padding: "4px 10px", fontSize: 12.5, cursor: busyKey === p.key ? "default" : "pointer" }}>
@@ -260,7 +273,8 @@ export function CorrectionCyclePanel({ manuscriptId, canManage, showCover = true
               </button>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
       </>)}
     </CollapsibleSection>

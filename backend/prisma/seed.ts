@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-catalogue-presentation-vitrine",
+      version: "2026.10",
+      title: "Nouveauté — Catalogue : présentation « vitrine » des ouvrages",
+      body: "Le catalogue des ouvrages adopte une présentation plus soignée, façon vitrine de librairie : couvertures mises en avant, plus grandes, avec un petit badge doré du genre (Roman, Jeunesse, Essai…) incrusté dans le coin de chaque couverture, le titre puis l'auteur en italique en dessous, et un léger effet au survol. Les couleurs restent à la charte Éclosion (or/noir/ivoire). Rien ne change dans la recherche, les filtres et le tri.",
+      audienceAll: true,
+      permissionModules: ["communication"],
+    },
+    {
       slug: "2026-10-cycle-couverture-obligatoire-et-ordonne",
       version: "2026.10",
       title: "Nouveauté — Correction couverture : étapes obligatoires et dans l'ordre",

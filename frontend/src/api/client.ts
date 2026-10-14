@@ -262,6 +262,9 @@ export interface Manuscript {
   // un collègue) et au verrou « consultation ».
   currentAssignee?: { id: string; username: string } | null;
   assignedToMe?: boolean;
+  // Date d'entrée dans l'étape courante (pour ranger les écrans par étape puis
+  // par ancienneté). Repli serveur sur la date de réception si le pas est absent.
+  stageEnteredAt?: string;
 }
 
 export type EditorialSegment = "scolaire" | "general";

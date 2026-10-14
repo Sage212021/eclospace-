@@ -2524,6 +2524,14 @@ async function main() {
       permissionModules: ["finance"],
       departmentCodes: ["FIN", "DG"],
     },
+    {
+      slug: "2026-10-manuscrits-regroupes-par-etape-recherche",
+      version: "2026.10",
+      title: "Nouveauté — Manuscrits : rangés par étape + barre de recherche sur chaque écran",
+      body: "Les écrans qui listent plusieurs manuscrits (surtout « Acceptés & en production », qui couvre beaucoup d'étapes) affichaient tout en vrac. Désormais, chaque écran range les manuscrits PAR ÉTAPE (dans l'ordre du circuit éditorial : planification, correction, mise en page… jusqu'au suivi), et à l'intérieur de chaque étape du PLUS ANCIEN au plus récent selon la date d'ENTRÉE dans l'étape — comme une file d'attente, ce qui attend le plus longtemps apparaît en premier. Une colonne « À cette étape depuis » indique cette date. Et une BARRE DE RECHERCHE est ajoutée en haut de chaque écran : tapez un titre, un numéro ou un genre pour retrouver un manuscrit instantanément. Même présentation partout, pour plus de cohérence.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["SECR", "DIRED", "CORR", "MAQ", "INFOG", "COM", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

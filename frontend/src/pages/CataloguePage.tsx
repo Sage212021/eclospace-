@@ -3,6 +3,7 @@ import {
   getCatalogue,
   getCatalogueConfig,
   setCatalogueDefaultSort,
+  setCatalogueSummary,
   catalogueCoverUrl,
   type CatalogueItem,
   type CatalogueResponse,
@@ -188,7 +189,7 @@ export function CataloguePage({ onOpenManuscript, canAdmin, canUploadCovers }: {
         ))}
       </div>
 
-      {selected && <DetailModal item={selected} onClose={() => setSelected(null)} onOpenManuscript={onOpenManuscript} />}
+      {selected && <DetailModal item={selected} onClose={() => setSelected(null)} onOpenManuscript={onOpenManuscript} canAdmin={canAdmin} onSaved={() => setReloadTick((t) => t + 1)} />}
     </div>
   );
 }
@@ -213,7 +214,10 @@ function Cover({ item, badge = true, version = 0 }: { item: CatalogueItem; badge
         </div>
       )}
       {badge && badgeLabel && (
-        <span style={{ position: "absolute", right: 0, bottom: 10, background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase", padding: "3px 8px 3px 9px", borderTopLeftRadius: 4, borderBottomLeftRadius: 4, maxWidth: "80%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", boxShadow: "0 1px 3px rgba(11,11,12,.25)" }}>
+        // Badge en HAUT-droite : le logo Éclosion figure en bas de la plupart des
+        // couvertures — on ne doit jamais le masquer (charte §5). Le badge est donc
+        // placé en haut pour laisser le logo du pied de couverture visible.
+        <span style={{ position: "absolute", right: 0, top: 10, background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase", padding: "3px 8px 3px 9px", borderTopLeftRadius: 4, borderBottomLeftRadius: 4, maxWidth: "80%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", boxShadow: "0 1px 3px rgba(11,11,12,.25)" }}>
           {badgeLabel}
         </span>
       )}
@@ -221,9 +225,30 @@ function Cover({ item, badge = true, version = 0 }: { item: CatalogueItem; badge
   );
 }
 
-function DetailModal({ item, onClose, onOpenManuscript }: { item: CatalogueItem; onClose: () => void; onOpenManuscript?: (id: string) => void }) {
+function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { item: CatalogueItem; onClose: () => void; onOpenManuscript?: (id: string) => void; canAdmin?: boolean; onSaved?: () => void }) {
   // Résumé masqué par défaut : on le déroule au clic sur l'en-tête (demande 10/10).
   const [showSummary, setShowSummary] = useState(false);
+  // Résumé local (se met à jour après enregistrement, sans recharger la page).
+  const [summary, setSummary] = useState<string | null>(item.summary);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(item.summary ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  async function saveSummary() {
+    setSaving(true);
+    setSaveErr(null);
+    try {
+      const r = await setCatalogueSummary(item.id, draft);
+      setSummary(r.summary);
+      setEditing(false);
+      setShowSummary(true);
+      onSaved?.();
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : "Enregistrement impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }} onClick={onClose}>
       <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 620, width: "100%", maxHeight: "90vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
@@ -246,15 +271,38 @@ function DetailModal({ item, onClose, onOpenManuscript }: { item: CatalogueItem;
             </div>
           </div>
         </div>
-        {item.summary && (
+        {(summary || canAdmin) && (
           <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
-            <button type="button" onClick={() => setShowSummary((v) => !v)} aria-expanded={showSummary}
-              style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
-              <span aria-hidden style={{ color: "var(--eclosion-dark, #9a7a12)", fontSize: 12 }}>{showSummary ? "▾" : "▸"}</span>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)" }}>Résumé</span>
-              {!showSummary && <span style={{ fontSize: 11.5, color: "var(--muted)", fontStyle: "italic", marginLeft: "auto" }}>cliquer pour afficher</span>}
-            </button>
-            {showSummary && <p style={{ fontSize: 13, lineHeight: 1.6, margin: "8px 0 0", whiteSpace: "pre-wrap" }}>{item.summary}</p>}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {summary ? (
+                <button type="button" onClick={() => setShowSummary((v) => !v)} aria-expanded={showSummary}
+                  style={{ display: "flex", alignItems: "center", gap: 7, flex: 1, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
+                  <span aria-hidden style={{ color: "var(--eclosion-dark, #9a7a12)", fontSize: 12 }}>{showSummary ? "▾" : "▸"}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)" }}>Résumé</span>
+                  {!showSummary && <span style={{ fontSize: 11.5, color: "var(--muted)", fontStyle: "italic", marginLeft: "auto" }}>cliquer pour afficher</span>}
+                </button>
+              ) : (
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", flex: 1 }}>Résumé {canAdmin && <em style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— aucun pour l'instant</em>}</span>
+              )}
+              {canAdmin && !editing && (
+                <button type="button" onClick={() => { setDraft(summary ?? ""); setEditing(true); }}
+                  style={{ border: "1px solid var(--line)", background: "#fff", borderRadius: 7, padding: "4px 10px", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+                  {summary ? "✏️ Modifier" : "✏️ Ajouter un résumé"}
+                </button>
+              )}
+            </div>
+            {showSummary && summary && !editing && <p style={{ fontSize: 13, lineHeight: 1.6, margin: "8px 0 0", whiteSpace: "pre-wrap" }}>{summary}</p>}
+            {editing && (
+              <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={8} placeholder="Collez ici le résumé (la « légende ») de l'ouvrage…"
+                  style={{ width: "100%", boxSizing: "border-box", padding: 10, border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, lineHeight: 1.5, fontFamily: "inherit", resize: "vertical" }} />
+                {saveErr && <div style={{ fontSize: 12.5, color: "var(--alert, #B23A2E)" }}>{saveErr}</div>}
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <button type="button" onClick={() => { setEditing(false); setSaveErr(null); }} disabled={saving} style={{ border: "1px solid var(--line)", background: "#fff", borderRadius: 8, padding: "7px 12px", fontSize: 13, cursor: "pointer" }}>Annuler</button>
+                  <button type="button" onClick={saveSummary} disabled={saving} style={{ border: "none", background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{saving ? "Enregistrement…" : "Enregistrer le résumé"}</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>

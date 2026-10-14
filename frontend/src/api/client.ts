@@ -7074,6 +7074,11 @@ export function getCatalogue(params: { q?: string; collection?: string; genre?: 
 export function catalogueCoverUrl(id: string): string {
   return `${API_BASE}/api/v1/catalogue/${id}/cover`;
 }
+// Résumé (« légende ») d'un ouvrage du catalogue — réservé au pôle Marketing
+// (communication:administration). Alimente le résumé dépliable du catalogue.
+export function setCatalogueSummary(id: string, summary: string) {
+  return request<{ ok: true; summary: string | null }>(`/api/v1/catalogue/${id}/summary`, { method: "PATCH", body: JSON.stringify({ summary }) });
+}
 export function getCatalogueConfig(): Promise<{ defaultSort: CatalogueSort; sorts: CatalogueSort[] }> {
   return request("/api/v1/catalogue/config");
 }

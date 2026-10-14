@@ -220,6 +220,20 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "catalogue_config", entityId: DEFAULT_SORT_KEY, newValues: { default_sort: parsed.data.default_sort }, ipAddress: request.ip });
     return reply.send({ defaultSort: parsed.data.default_sort });
   });
+
+  // Résumé (« légende ») d'un ouvrage du catalogue — saisi/collé depuis la fiche
+  // détaillée du catalogue par le pôle Marketing (communication:administration).
+  // Alimente `manuscript.summary`, affiché en dépliable dans le catalogue.
+  fastify.patch("/api/v1/catalogue/:id/summary", { preHandler: requirePermission("communication", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ summary: z.string().max(8000) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Résumé invalide (8000 caractères max)." });
+    const ms = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!ms) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable." });
+    await prisma.manuscript.update({ where: { id }, data: { summary: parsed.data.summary.trim() || null } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "catalogue_summary", entityId: id, newValues: { length: parsed.data.summary.trim().length }, ipAddress: request.ip });
+    return reply.send({ ok: true, summary: parsed.data.summary.trim() || null });
+  });
 }
 
 function uniqueBy<T>(arr: T[], key: (x: T) => string): T[] {

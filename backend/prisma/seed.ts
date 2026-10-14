@@ -2879,11 +2879,18 @@ async function main() {
           create: { manuscriptId: ms.id, partnerId: p.id, role: "author", displayOrder: order++ },
         });
       }
-      let isbn = await prisma.isbn.findFirst({ where: { manuscriptId: ms.id, format: "print" } });
-      if (!isbn) {
-        isbn = await prisma.isbn.create({ data: { isbn13: b.isbn, format: "print", manuscriptId: ms.id, status: "published", assignedAt: new Date() } });
-      } else if (isbn.isbn13 !== b.isbn) {
-        isbn = await prisma.isbn.update({ where: { id: isbn.id }, data: { isbn13: b.isbn } });
+      // ISBN du catalogue — posé seulement s'il n'est pas DÉJÀ rattaché à un
+      // AUTRE ouvrage (contrainte « ISBN jamais réutilisé », unicité sur isbn13).
+      // Sans ce garde-fou, un numéro en double (dans la liste ou déjà présent en
+      // base) faisait échouer TOUT le seed → hook postdeploy en erreur.
+      const clash = await prisma.isbn.findFirst({ where: { isbn13: b.isbn, manuscriptId: { not: ms.id } } });
+      if (!clash) {
+        const existing = await prisma.isbn.findFirst({ where: { manuscriptId: ms.id, format: "print" } });
+        if (!existing) {
+          await prisma.isbn.create({ data: { isbn13: b.isbn, format: "print", manuscriptId: ms.id, status: "published", assignedAt: new Date() } });
+        } else if (existing.isbn13 !== b.isbn) {
+          await prisma.isbn.update({ where: { id: existing.id }, data: { isbn13: b.isbn } });
+        }
       }
     }
     const provCount = generalCatalogue.filter((b) => b.provisional).length;

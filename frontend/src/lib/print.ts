@@ -2013,8 +2013,14 @@ export function printEditorialDecisionLetter(d: DecisionLetterLayout, opts?: Pri
   // « Direction financière » apposé sur les factures), sans déformation (les
   // proportions sont conservées) et sans déborder hors de la page (right:0, plus
   // de valeur négative qui coupait le bord droit du cachet).
+  // REMONTÉ (demande opérateur 14/10) : le cachet était posé à top:28px et sa
+  // hauteur (~160 px) descendait SOUS le bloc de signature → en bas de page, il
+  // était coupé par le saut de page et une partie ressortait sur la 2ᵉ page. On
+  // le remonte (top négatif) pour qu'il reste contenu dans le bloc, donc tenu
+  // entièrement sur la première page ; il chevauche la mention « Pour … / La
+  // Direction éditoriale », comme un vrai tampon apposé à la main.
   const cachetImg = cachet
-    ? `<img src="${cachet}" alt="" aria-hidden="true" style="position:absolute;right:0;top:28px;height:auto;width:auto;max-height:160px;max-width:250px;mix-blend-mode:multiply;pointer-events:none;image-rendering:auto">`
+    ? `<img src="${cachet}" alt="" aria-hidden="true" style="position:absolute;right:0;top:-16px;height:auto;width:auto;max-height:160px;max-width:250px;mix-blend-mode:multiply;pointer-events:none;image-rendering:auto">`
     : "";
 
   const body = `

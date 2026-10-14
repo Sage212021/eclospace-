@@ -2460,6 +2460,14 @@ async function main() {
       permissionModules: ["finance", "commercial"],
       departmentCodes: ["FIN", "COMM", "DG"],
     },
+    {
+      slug: "2026-10-lettre-decision-cachet-remonte",
+      version: "2026.10",
+      title: "Nouveauté — Lettre de décision : le cachet remonté pour ne plus être coupé en bas de page",
+      body: "Vous avez remarqué que, sur la lettre de décision imprimée, le cachet « Direction Éditoriale » placé en bas de la première page était coupé par le bord de page : une partie du tampon ressortait sur la deuxième page. C'est corrigé. Le cachet est maintenant remonté pour rester entièrement contenu dans le bloc de signature — il tient donc en entier sur la première page, en chevauchant légèrement la mention « Pour Éclosion Édition / La Direction éditoriale », comme un vrai tampon apposé à la main. La zone de signature manuscrite et la ligne « Nom du responsable » restent en place pour être remplies après impression.",
+      permissionModules: ["decision_editoriale"],
+      departmentCodes: ["DIRED", "SECR", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

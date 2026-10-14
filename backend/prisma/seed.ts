@@ -2500,6 +2500,14 @@ async function main() {
       permissionModules: ["communication", "production"],
       departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-couvertures-masse-explorateur-fichiers",
+      version: "2026.10",
+      title: "Nouveauté — Ajout des couvertures : on choisit depuis l'explorateur de fichiers",
+      body: "Vous avez signalé que le bouton ouvrait Google Photos (la galerie) au lieu d'un explorateur de fichiers, et que vos couvertures n'y apparaissaient pas. C'est corrigé : le bouton « Ouvrir l'explorateur de fichiers… » ouvre désormais le gestionnaire de fichiers du téléphone, où vous naviguez dans les dossiers et sélectionnez vos images (plusieurs à la fois). Vous ne dépendez plus de la galerie photo. Si, selon le téléphone, une liste d'applications s'affiche, choisissez « Fichiers » / « Explorateur ». Idéal : décompressez le dossier des couvertures que vous avez reçu, puis sélectionnez-y les fichiers — ils sont déjà nommés comme les titres, donc le rapprochement se fait tout seul.",
+      permissionModules: ["communication", "production"],
+      departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

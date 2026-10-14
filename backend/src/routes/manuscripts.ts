@@ -730,6 +730,18 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       orderBy: orderByField,
     });
 
+    // Date d'ENTRÉE dans l'étape courante (pour ranger chaque écran par étape puis
+    // par ancienneté) : le pas de workflow de l'étape actuelle de chaque ouvrage —
+    // actualStart (travail commencé) sinon createdAt (création du pas), repli sur
+    // la date de réception. Une seule requête bornée aux ouvrages listés.
+    const stepRows = manuscripts.length
+      ? await prisma.manuscriptStep.findMany({
+          where: { manuscriptId: { in: manuscripts.map((m) => m.id) }, statusId: { in: [...new Set(manuscripts.map((m) => m.statusId))] } },
+          select: { manuscriptId: true, statusId: true, actualStart: true, createdAt: true },
+        })
+      : [];
+    const stageByKey = new Map(stepRows.map((s) => [`${s.manuscriptId}:${s.statusId}`, s]));
+
     const meId = request.user!.id;
     const withAssignee = manuscripts.map((m) => {
       const steps = (m as unknown as { steps?: { responsible: { id: string; username: string } | null }[] }).steps;
@@ -737,7 +749,9 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       const currentAssignee = resp ? { id: resp.id, username: resp.username } : null;
       const rest: Record<string, unknown> = { ...(m as Record<string, unknown>) };
       delete rest.steps;
-      return { ...rest, currentAssignee, assignedToMe: currentAssignee?.id === meId };
+      const step = stageByKey.get(`${m.id}:${m.statusId}`);
+      const stageEnteredAt = step?.actualStart ?? step?.createdAt ?? m.receivedAt;
+      return { ...rest, currentAssignee, assignedToMe: currentAssignee?.id === meId, stageEnteredAt };
     });
     return reply.send(withAssignee);
   });

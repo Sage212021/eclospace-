@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ManuscriptsDashboard } from "../components/ManuscriptsDashboard";
 import { ManuscriptCleanupSection } from "../components/ManuscriptCleanupSection";
 import {
@@ -235,7 +235,7 @@ export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, status
                 {items.length === 0 ? (
                   <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>Aucun manuscrit à cette étape.</p>
                 ) : (
-                  <ManuscriptTable items={items} onOpen={onOpenManuscript} />
+                  <ManuscriptListPanel items={items} onOpen={onOpenManuscript} />
                 )}
               </AccordionSection>
             );
@@ -252,7 +252,7 @@ export function Manuscripts({ onOpenManuscript, canCreate, canAdminister, status
               {manuscripts.length === 0 ? (
                 <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>Aucun ouvrage ne correspond à ces critères.</p>
               ) : (
-                <ManuscriptTable items={manuscripts} onOpen={onOpenManuscript} />
+                <ManuscriptListPanel items={manuscripts} onOpen={onOpenManuscript} />
               )}
             </div>
           </AccordionSection>
@@ -394,7 +394,18 @@ function StageGroups({ items, onOpen, canAssign }: { items: Manuscript[]; onOpen
 }
 
 // Tableau de manuscrits réutilisable (une ligne cliquable par ouvrage).
-function ManuscriptTable({ items, onOpen, showAssignee, canAssign }: { items: Manuscript[]; onOpen: (id: string) => void; showAssignee?: boolean; canAssign?: boolean }) {
+// Date d'entrée dans l'étape courante (repli sur la date de réception), en ms.
+function stageEnteredMs(m: Manuscript): number {
+  const d = m.stageEnteredAt ?? m.receivedAt;
+  const t = d ? new Date(d).getTime() : 0;
+  return Number.isFinite(t) ? t : 0;
+}
+// Normalisation pour la recherche texte (sans accents / casse).
+function normalizeTxt(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+function ManuscriptTable({ items, onOpen, showAssignee, canAssign, groupMode, showStageDate }: { items: Manuscript[]; onOpen: (id: string) => void; showAssignee?: boolean; canAssign?: boolean; groupMode?: boolean; showStageDate?: boolean }) {
   return (
     <div style={{ overflowX: "auto" }}>
       <table className="ecl-table">
@@ -403,8 +414,10 @@ function ManuscriptTable({ items, onOpen, showAssignee, canAssign }: { items: Ma
             <th>N°</th>
             <th>Titre</th>
             <th>Genre</th>
-            <th>Étape</th>
+            {/* En mode groupé, l'étape est déjà le titre du groupe : colonne masquée. */}
+            {!groupMode && <th>Étape</th>}
             {showAssignee && <th>Assigné à</th>}
+            {showStageDate && <th>À cette étape depuis</th>}
             <th>Reçu le</th>
             <th>Paru le</th>
           </tr>
@@ -415,20 +428,78 @@ function ManuscriptTable({ items, onOpen, showAssignee, canAssign }: { items: Ma
               <td className="mono">{m.manuscriptNumber}</td>
               <td className="linklike">{m.title}</td>
               <td>{m.genre?.label ?? "—"}</td>
-              <td>
-                <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark)", borderRadius: 999, padding: "2px 10px", fontSize: 11, whiteSpace: "nowrap" }}>{m.status.label}</span>
-              </td>
+              {!groupMode && (
+                <td>
+                  <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark)", borderRadius: 999, padding: "2px 10px", fontSize: 11, whiteSpace: "nowrap" }}>{m.status.label}</span>
+                </td>
+              )}
               {showAssignee && (
                 <td onClick={(e) => e.stopPropagation()} style={{ cursor: "default" }}>
                   <StepAssigneeControl manuscriptId={m.id} canAssign={!!canAssign} />
                 </td>
               )}
+              {showStageDate && <td className="mono">{m.stageEnteredAt ? new Date(m.stageEnteredAt).toLocaleDateString("fr-FR") : "—"}</td>}
               <td className="mono">{new Date(m.receivedAt).toLocaleDateString("fr-FR")}</td>
               <td className="mono">{m.publicationDate ? new Date(m.publicationDate).toLocaleDateString("fr-FR") : "—"}</td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// Écran-liste HARMONISÉ (demande opérateur 14/10) : une barre de RECHERCHE
+// (titre, n°, genre, étape) + un REGROUPEMENT PAR ÉTAPE (dans l'ordre du
+// workflow), chaque groupe trié par DATE D'ENTRÉE dans l'étape (le plus ancien
+// d'abord = file d'attente). Utilisé par tous les écrans-listes pour la cohérence.
+function ManuscriptListPanel({ items, onOpen, showAssignee, canAssign }: { items: Manuscript[]; onOpen: (id: string) => void; showAssignee?: boolean; canAssign?: boolean }) {
+  const [q, setQ] = useState("");
+  const filtered = useMemo(() => {
+    const n = normalizeTxt(q.trim());
+    if (!n) return items;
+    return items.filter((m) => normalizeTxt(`${m.manuscriptNumber} ${m.title} ${m.genre?.label ?? ""} ${m.status.label}`).includes(n));
+  }, [items, q]);
+  const groups = useMemo(() => {
+    const map = new Map<string, { label: string; order: number; items: Manuscript[] }>();
+    for (const m of filtered) {
+      const key = m.status.code;
+      if (!map.has(key)) map.set(key, { label: m.status.label, order: m.status.stepOrder ?? 0, items: [] });
+      map.get(key)!.items.push(m);
+    }
+    const arr = [...map.values()].sort((a, b) => a.order - b.order);
+    for (const g of arr) g.items.sort((a, b) => stageEnteredMs(a) - stageEnteredMs(b)); // plus ancien d'abord
+    return arr;
+  }, [filtered]);
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Rechercher un manuscrit (titre, n°, genre…)"
+          style={{ flex: "1 1 240px", minWidth: 200, padding: "8px 11px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13.5, boxSizing: "border-box" }}
+        />
+        <span style={{ fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }}>{filtered.length} manuscrit{filtered.length > 1 ? "s" : ""}{q.trim() ? ` sur ${items.length}` : ""}</span>
+      </div>
+      {filtered.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>Aucun manuscrit ne correspond.</p>
+      ) : groups.length <= 1 ? (
+        <ManuscriptTable items={filtered} onOpen={onOpen} showAssignee={showAssignee} canAssign={canAssign} showStageDate />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {groups.map((g) => (
+            <div key={g.label}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "2px 0 6px" }}>
+                <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark)", borderRadius: 999, padding: "3px 12px", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{g.label}</span>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>{g.items.length} manuscrit{g.items.length > 1 ? "s" : ""}</span>
+              </div>
+              <ManuscriptTable items={g.items} onOpen={onOpen} showAssignee={showAssignee} canAssign={canAssign} groupMode showStageDate />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

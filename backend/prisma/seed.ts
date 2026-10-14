@@ -2508,6 +2508,14 @@ async function main() {
       permissionModules: ["communication", "production"],
       departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-couvertures-masse-zip-direct",
+      version: "2026.10",
+      title: "Nouveauté — Ajout des couvertures : sélectionnez directement le fichier .zip",
+      body: "Vous avez reçu les couvertures dans un fichier .zip mais votre téléphone ne savait pas l'ouvrir pour en sortir les images. C'est réglé : vous pouvez désormais sélectionner DIRECTEMENT le fichier .zip dans l'explorateur de fichiers — l'outil le décompresse tout seul et en sort les images, sans que vous ayez à l'ouvrir vous-même. Pratique : un seul fichier à choisir au lieu de dizaines d'images. Pendant l'opération, un message « Décompression du ZIP… » s'affiche, puis les couvertures apparaissent, déjà rapprochées des ouvrages. Les images (.jpg/.png) restent bien sûr sélectionnables une par une comme avant.",
+      permissionModules: ["communication", "production"],
+      departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

@@ -2532,6 +2532,14 @@ async function main() {
       permissionModules: ["manuscripts"],
       departmentCodes: ["SECR", "DIRED", "CORR", "MAQ", "INFOG", "COM", "DG"],
     },
+    {
+      slug: "2026-10-classification-genre-debloque-references",
+      version: "2026.10",
+      title: "Nouveauté — Attribution des références débloquée : le genre tient lieu de classification",
+      body: "Vous avez signalé que l'infographe/maquettiste ne pouvait pas valider l'étape « Attribution des références » : le message « Complétude non atteinte : classification_affectee » bloquait, alors que tout semblait rempli. La cause : le contrôle réclamait une classification « Thema » (une nomenclature internationale) qu'AUCUN écran ne permettait de saisir — donc impossible à satisfaire. C'est corrigé : désormais, le GENRE de l'ouvrage (Roman, Essai, Poésie…), déjà renseigné par l'éditorial, tient lieu de classification. Dès que l'ISBN, le dépôt légal et la fiche de métadonnées (résumé + poids) sont là, l'étape peut être validée. (Les codes Thema restent acceptés en option pour qui veut la classification internationale fine.)",
+      permissionModules: ["isbn", "manuscripts"],
+      departmentCodes: ["INFOG", "MAQ", "SECR", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

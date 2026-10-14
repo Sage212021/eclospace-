@@ -2476,6 +2476,14 @@ async function main() {
       permissionModules: ["communication", "production"],
       departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-couvertures-masse-connexion-lente",
+      version: "2026.10",
+      title: "Nouveauté — Ajout des couvertures : fiabilisé sur connexion lente",
+      body: "Vous avez signalé que l'envoi groupé des couvertures échouait (« Failed to fetch ») sur une connexion faible. En cause : le réseau trop lent qui coupait l'envoi avant la fin. C'est fiabilisé. Désormais, avant chaque envoi, l'image est automatiquement ALLÉGÉE (redimensionnée et recompressée) — un fichier bien plus léger passe là où un gros fichier échouait. Et si l'envoi est coupé par le réseau, il est RÉESSAYÉ automatiquement (plusieurs tentatives). Un bouton « Réessayer » apparaît aussi pour relancer uniquement les couvertures en échec, sans re-sélectionner les fichiers et sans ré-envoyer celles déjà réussies. Conseil : pour aller plus vite, lancez l'envoi sur une connexion Wi-Fi stable et désactivez l'économiseur de données/batterie.",
+      permissionModules: ["communication", "production"],
+      departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

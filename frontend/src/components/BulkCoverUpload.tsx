@@ -69,8 +69,66 @@ async function uploadWithRetry(fn: () => Promise<unknown>, attempts = 3): Promis
 // Reconnaît une image par son TYPE déclaré OU, à défaut (Android ne le renseigne
 // pas toujours), par son EXTENSION — pour ne pas rejeter à tort des fichiers
 // pourtant valides.
+const IMAGE_EXT = /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i;
 function isImageFile(file: File): boolean {
-  return file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i.test(file.name);
+  return file.type.startsWith("image/") || IMAGE_EXT.test(file.name);
+}
+function isZipFile(file: File): boolean {
+  return /\.zip$/i.test(file.name) || /zip/i.test(file.type);
+}
+
+// Décompresse un flux DEFLATE brut avec l'API native du navigateur (aucune
+// bibliothèque externe). Disponible sur les navigateurs récents (Android compris).
+async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
+  const DS = (globalThis as unknown as { DecompressionStream?: typeof DecompressionStream }).DecompressionStream;
+  const ds = new DS!("deflate-raw");
+  const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(ds);
+  const ab = await new Response(stream).arrayBuffer();
+  return new Uint8Array(ab);
+}
+
+// Extrait les IMAGES contenues dans une archive .zip, directement dans le
+// navigateur : on lit les en-têtes locaux ZIP (PK\x03\x04) un par un et on
+// décompresse chaque entrée (méthode 0 = stockée, 8 = deflate). Permet de
+// sélectionner le fichier .zip des couvertures sans avoir à le décompresser à la
+// main sur le téléphone. En cas d'impossibilité (navigateur trop ancien), lève
+// « zip_unsupported ».
+async function extractZipImages(file: File): Promise<File[]> {
+  if (typeof (globalThis as unknown as { DecompressionStream?: unknown }).DecompressionStream === "undefined") {
+    throw new Error("zip_unsupported");
+  }
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const td = new TextDecoder("utf-8");
+  const out: File[] = [];
+  let off = 0;
+  try {
+    while (off + 30 <= buf.length) {
+      if (dv.getUint32(off, true) !== 0x04034b50) break; // fin des entrées locales
+      const flags = dv.getUint16(off + 6, true);
+      const method = dv.getUint16(off + 8, true);
+      const compSize = dv.getUint32(off + 18, true);
+      const nameLen = dv.getUint16(off + 26, true);
+      const extraLen = dv.getUint16(off + 28, true);
+      const nameStart = off + 30;
+      const name = td.decode(buf.subarray(nameStart, nameStart + nameLen));
+      const dataStart = nameStart + nameLen + extraLen;
+      if (flags & 0x08) break; // descripteur de données : taille absente de l'en-tête (non géré, inutile ici)
+      const comp = buf.subarray(dataStart, dataStart + compSize);
+      let data: Uint8Array | null = null;
+      if (method === 0) data = comp;
+      else if (method === 8) data = await inflateRaw(comp);
+      const base = name.split("/").pop() || name;
+      if (data && !name.endsWith("/") && IMAGE_EXT.test(base)) {
+        const type = /\.png$/i.test(base) ? "image/png" : /\.webp$/i.test(base) ? "image/webp" : "image/jpeg";
+        out.push(new File([data as BlobPart], base, { type }));
+      }
+      off = dataStart + compSize;
+    }
+  } catch {
+    /* parse interrompu : on renvoie ce qu'on a pu extraire */
+  }
+  return out;
 }
 
 // Normalisation pour le rapprochement fichier ↔ titre : minuscules, sans
@@ -97,6 +155,7 @@ export function BulkCoverUpload({ onDone }: { onDone: () => void }) {
   const [loadingList, setLoadingList] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
+  const [extracting, setExtracting] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -156,17 +215,39 @@ export function BulkCoverUpload({ onDone }: { onDone: () => void }) {
   // galeries Android ne laissent choisir qu'un lot à la fois, donc on peut
   // cliquer « Ajouter des images » plusieurs fois et tout s'empile. Un même
   // fichier (nom + taille + date) n'est pas ajouté deux fois.
-  function onPick(files: FileList | null) {
+  async function onPick(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const picked = Array.from(files);
-    const nonImages = picked.filter((f) => !isImageFile(f)).length;
+    const picked = Array.from(files); // capturé tout de suite (avant tout await)
+    const zips = picked.filter(isZipFile);
+    const directImages = picked.filter((f) => !isZipFile(f) && isImageFile(f));
+    const nonImages = picked.length - zips.length - directImages.length;
+
+    // Les .zip sélectionnés sont décompressés dans le navigateur : on en extrait
+    // les images, sans que l'utilisateur ait à décompresser à la main.
+    const zipImages: File[] = [];
+    let zipUnsupported = false;
+    if (zips.length) {
+      setExtracting(true);
+      try {
+        for (const z of zips) {
+          try {
+            zipImages.push(...(await extractZipImages(z)));
+          } catch (e) {
+            if (e instanceof Error && e.message === "zip_unsupported") zipUnsupported = true;
+          }
+        }
+      } finally {
+        setExtracting(false);
+      }
+    }
+
+    const allImages = [...directImages, ...zipImages];
     let addedCount = 0;
     let dupCount = 0;
     setRows((prev) => {
       const seen = new Set(prev.map((r) => `${r.file.name}|${r.file.size}|${r.file.lastModified}`));
       const add: Row[] = [];
-      for (const file of picked) {
-        if (!isImageFile(file)) continue;
+      for (const file of allImages) {
         const key = `${file.name}|${file.size}|${file.lastModified}`;
         if (seen.has(key)) {
           dupCount++;
@@ -179,14 +260,20 @@ export function BulkCoverUpload({ onDone }: { onDone: () => void }) {
       addedCount = add.length;
       return [...prev, ...add];
     });
-    // Retour explicite : on ne laisse jamais l'utilisateur devant une liste vide
-    // sans explication (ex. fichiers non reconnus comme images).
-    if (addedCount === 0) {
-      if (nonImages > 0) setSummary(`Aucune image ajoutée : ${nonImages} fichier(s) non reconnu(s) comme image. Choisissez des fichiers .jpg ou .png.`);
-      else if (dupCount > 0) setSummary(`Ces ${dupCount} image(s) sont déjà dans la liste.`);
-      else setSummary("Aucune image ajoutée.");
+
+    // Retour explicite : jamais de liste vide sans explication.
+    if (addedCount > 0) {
+      setSummary(`${addedCount} image(s) ajoutée(s)${zips.length ? ` (dont ${zipImages.length} depuis le ZIP)` : ""}${dupCount ? ` · ${dupCount} déjà présente(s)` : ""}.`);
+    } else if (zipUnsupported) {
+      setSummary("Ce téléphone ne peut pas ouvrir le ZIP directement. Décompressez-le d'abord, puis sélectionnez les images — ou mettez le navigateur à jour.");
+    } else if (zips.length && zipImages.length === 0) {
+      setSummary("Le fichier ZIP ne contient aucune image reconnue.");
+    } else if (nonImages > 0) {
+      setSummary(`Aucune image ajoutée : ${nonImages} fichier(s) non reconnu(s). Choisissez des .jpg/.png, ou le fichier .zip des couvertures.`);
+    } else if (dupCount > 0) {
+      setSummary(`Ces ${dupCount} image(s) sont déjà dans la liste.`);
     } else {
-      setSummary(`${addedCount} image(s) ajoutée(s)${dupCount ? ` · ${dupCount} déjà présente(s)` : ""}${nonImages ? ` · ${nonImages} non image(s) ignorée(s)` : ""}.`);
+      setSummary("Aucune image ajoutée.");
     }
   }
 
@@ -267,23 +354,24 @@ export function BulkCoverUpload({ onDone }: { onDone: () => void }) {
         d'un ouvrage par son <strong>nom</strong> (comparé au titre) ; vérifiez le rapprochement et corrigez-le au besoin,
         puis téléversez. {loadingList ? "Chargement du catalogue…" : `${all.length} ouvrage(s) au catalogue, dont ${missingCount} sans couverture.`}
         <br />
-        <span style={{ fontSize: 11.5 }}>Le bouton ouvre l'<strong>explorateur de fichiers</strong> : naviguez vers le dossier des couvertures et sélectionnez-les (vous pouvez en prendre plusieurs). <em>Si une galerie photo s'ouvre quand même, choisissez « Fichiers » / « Explorateur » dans la liste des applications.</em> Astuce : nommez chaque image comme le titre de l'ouvrage (ex. « Bozayeur.jpg ») pour un rapprochement automatique fiable. Les images sont <strong>allégées automatiquement</strong> avant l'envoi et <strong>réessayées</strong> en cas de coupure.</span>
+        <span style={{ fontSize: 11.5 }}>Le bouton ouvre l'<strong>explorateur de fichiers</strong> : sélectionnez vos images (.jpg/.png), <strong>ou directement le fichier .zip des couvertures</strong> — il sera décompressé automatiquement, vous n'avez pas à l'ouvrir vous-même. <em>Si une galerie photo s'ouvre, choisissez « Fichiers » / « Explorateur ».</em> Astuce : nommez chaque image comme le titre de l'ouvrage pour un rapprochement fiable. Les images sont <strong>allégées</strong> avant l'envoi et <strong>réessayées</strong> en cas de coupure.</span>
       </p>
 
       {/* Pas d'attribut `accept` : sinon Android ouvre d'office la galerie photo
           (Google Photos). Sans restriction de type, le système ouvre
-          l'EXPLORATEUR DE FICHIERS (navigation par dossiers). Le filtrage des
-          images se fait ensuite côté appli (isImageFile). `value` réinitialisée
-          après chaque choix pour permettre d'ajouter d'autres images. */}
-      <input ref={inputRef} type="file" multiple style={{ display: "none" }} onChange={(e) => { onPick(e.target.files); e.currentTarget.value = ""; }} />
+          l'EXPLORATEUR DE FICHIERS (navigation par dossiers), et on peut aussi
+          choisir un .zip. Le filtrage/extraction se fait côté appli. `value`
+          réinitialisée après chaque choix pour permettre d'ajouter d'autres. */}
+      <input ref={inputRef} type="file" multiple style={{ display: "none" }} onChange={(e) => { void onPick(e.target.files); e.currentTarget.value = ""; }} />
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
-        <button type="button" onClick={() => inputRef.current?.click()} style={btnGhost} disabled={busy}>📂 {rows.length > 0 ? "Ajouter d'autres fichiers…" : "Ouvrir l'explorateur de fichiers…"}</button>
+        <button type="button" onClick={() => inputRef.current?.click()} style={btnGhost} disabled={busy || extracting}>📂 {rows.length > 0 ? "Ajouter d'autres fichiers (ou un .zip)…" : "Ouvrir l'explorateur de fichiers…"}</button>
+        {extracting && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Décompression du ZIP…</span>}
         {rows.length > 0 && (
           <>
-            <button type="button" onClick={uploadAll} style={btnPrimary} disabled={busy || remainingCount === 0}>
+            <button type="button" onClick={uploadAll} style={btnPrimary} disabled={busy || extracting || remainingCount === 0}>
               {busy ? "Téléversement…" : failedCount > 0 ? `Réessayer (${remainingCount} restante(s))` : `Téléverser ${matchedCount} couverture(s)`}
             </button>
-            <button type="button" onClick={clearRows} style={btnGhost} disabled={busy}>Vider la liste</button>
+            <button type="button" onClick={clearRows} style={btnGhost} disabled={busy || extracting}>Vider la liste</button>
           </>
         )}
       </div>

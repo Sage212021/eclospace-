@@ -32,6 +32,11 @@ async function createInvoiceRecord(
     // le brut (total_ht/total_tax) reste la somme des lignes. N'affecte PAS les
     // droits d'auteur (calculés au prix unitaire de chaque ligne, avant remise).
     discountPct?: number;
+    // Avance (acompte) et son libellé imprimé, + mode de paiement conservé pour
+    // encaisser l'avance (ici ou à la validation d'une facture au-dessus du seuil).
+    advanceAmount?: number;
+    advanceLabel?: string | null;
+    advanceMethod?: string | null;
   },
 ) {
   await assertPeriodOpen(tx);
@@ -65,6 +70,9 @@ async function createInvoiceRecord(
       totalTtc: Math.round(totalTtc * 100) / 100,
       dueDate,
       status: params.status ?? "issued",
+      advanceAmount: Math.max(0, Math.round((params.advanceAmount ?? 0) * 100) / 100),
+      advanceLabel: params.advanceLabel?.trim() || null,
+      advanceMethod: params.advanceMethod ?? null,
       lines: {
         create: params.lines.map((l) => ({
           isbnId: l.isbnId ?? undefined,
@@ -97,6 +105,32 @@ async function createInvoiceRecord(
   }
 
   return invoice;
+}
+
+// Enregistre l'AVANCE (acompte) d'une facture comme un encaissement RÉEL : un
+// paiement entrant lettré sur la facture. Le reste à payer (créances, suivi) en
+// tient compte, et si l'avance solde la facture, celle-ci passe « réglée ». Le
+// mode de paiement (code) est validé contre la liste configurable ; compte
+// financier = celui par défaut du mode. Idempotent par appel (à n'appeler qu'une
+// fois par facture — à l'établissement si émise, sinon à la validation du DG).
+export async function recordAdvancePayment(tx: Tx, invoiceId: string, amount: number, method: string) {
+  if (!(amount > 0)) return;
+  const methodDef = await tx.paymentMethodDef.findUnique({ where: { code: method } });
+  if (!methodDef || !methodDef.active) throw new Error("invalid_advance_method");
+  const payment = await tx.payment.create({
+    data: { direction: "in", method, amount, bankAccountId: methodDef.defaultAccountId ?? null },
+  });
+  await tx.paymentAllocation.create({ data: { paymentId: payment.id, invoiceId, amount } });
+  // Si l'avance solde entièrement la facture (avance ≥ net), elle passe « réglée ».
+  const inv = await tx.invoice.findUnique({ where: { id: invoiceId }, include: { paymentAllocations: true, creditNotes: true } });
+  if (inv && inv.type === "invoice" && inv.status === "issued") {
+    const allocated = inv.paymentAllocations.reduce((s, a) => s + Number(a.amount), 0);
+    const credited = inv.creditNotes.reduce((s, c) => s + Number(c.totalTtc), 0);
+    if (Number(inv.totalTtc) - allocated - credited <= 0.01) {
+      await tx.invoice.update({ where: { id: invoiceId }, data: { status: "paid" } });
+    }
+  }
+  return payment;
 }
 
 // Ch. 18 §18.2 : génération automatique de la facture depuis une livraison
@@ -457,7 +491,13 @@ export async function createCreditNoteFromInvoice(tx: Tx, invoiceId: string, rea
 // initiée par le DG / le commercial / la Finance ; la Finance la reçoit et
 // facture. Validation par seuil : au-dessus du seuil, la facture naît « en
 // attente de validation » (le DG doit valider) ; sinon elle est émise.
-export async function createInvoiceFromBillingOrder(tx: Tx, orderId: string, thresholdTtc: number, discountPct = 0) {
+export async function createInvoiceFromBillingOrder(
+  tx: Tx,
+  orderId: string,
+  thresholdTtc: number,
+  discountPct = 0,
+  advance?: { amount: number; label?: string | null; method: string },
+) {
   const order = await tx.billingOrder.findUniqueOrThrow({ where: { id: orderId }, include: { lines: true } });
   if (order.status !== "pending") throw new Error("order_not_pending");
   if (order.invoiceId) throw new Error("order_already_invoiced");
@@ -489,6 +529,12 @@ export async function createInvoiceFromBillingOrder(tx: Tx, orderId: string, thr
   const totalTtc = amountHt * (1 + taxRate / 100) * (1 - clampedDiscount / 100);
   const status: "issued" | "pending_validation" = totalTtc >= thresholdTtc && thresholdTtc > 0 ? "pending_validation" : "issued";
 
+  // Avance (acompte) : bornée au net à payer. Stockée sur la facture (pour
+  // l'impression « Avance » / « Solde à régler »). L'encaissement réel n'est
+  // enregistré que si la facture est ÉMISE ; si elle est en attente de validation
+  // (au-dessus du seuil), on diffère l'encaissement à la validation du DG.
+  const advanceAmount = advance ? Math.max(0, Math.min(Math.round(totalTtc * 100) / 100, Math.round(advance.amount * 100) / 100)) : 0;
+
   const invoice = await createInvoiceRecord(tx, {
     customerId: order.customerId,
     sourceType: "sales_order",
@@ -496,7 +542,14 @@ export async function createInvoiceFromBillingOrder(tx: Tx, orderId: string, thr
     lines,
     status,
     discountPct: clampedDiscount,
+    advanceAmount,
+    advanceLabel: advance?.label ?? null,
+    advanceMethod: advance?.method ?? null,
   });
+
+  if (advanceAmount > 0 && status === "issued") {
+    await recordAdvancePayment(tx, invoice.id, advanceAmount, advance!.method);
+  }
 
   // Droits d'auteur du livre scolaire : une entrée segmentée par ligne-livre.
   // EXCLU pour la catégorie « autre » : ses lignes sont des éléments libres à

@@ -4369,6 +4369,15 @@ model Invoice {
   dueDate         DateTime?     @map("due_date")
   status          InvoiceStatus @default(issued)
 
+  // Avance (acompte) versée à l'établissement et son libellé imprimé (défaut
+  // « Avance ») ; `advanceMethod` = mode de paiement de l'avance (code
+  // payment_methods.code), conservé pour encaisser l'avance à la validation d'une
+  // facture au-dessus du seuil. L'avance est enregistrée comme un encaissement
+  // réel (Payment + PaymentAllocation) ; le « solde à régler » = totalTtc − avance.
+  advanceAmount   Decimal       @default(0) @map("advance_amount") @db.Decimal(12, 2)
+  advanceLabel    String?       @map("advance_label")
+  advanceMethod   String?       @map("advance_method")
+
   // Demande d'annulation (validée par le DG) — Ch. 18 : une facture émise n'est
   // annulée qu'après validation de la direction. Trace de la demande.
   cancellationReason      String?   @map("cancellation_reason")

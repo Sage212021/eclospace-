@@ -498,8 +498,26 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
     </div>`;
     })()}
     <div style="clear:both"></div>
+    ${(() => {
+      // Avance (acompte) + solde à régler (Total − avance), à la manière du modèle
+      // maison. Affiché pour une facture/proforma qui porte une avance.
+      const adv = Number(invoice.advanceAmount ?? 0);
+      if (!(adv > 0) || isCredit) return "";
+      const solde = Math.round((Number(invoice.totalTtc) - adv) * 100) / 100;
+      const advLabel = invoice.advanceLabel?.trim() || tr("Avance", "Advance");
+      return `<div style="margin-top:12px; display:flex; justify-content:flex-end">
+        <div style="min-width:260px">
+          <div style="display:flex; justify-content:space-between; gap:16px; padding:3px 2px; font-weight:700; color:#8a4712">
+            <span>${escapeHtml(advLabel)}</span><span class="num">${money(adv, cur)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; gap:16px; padding:7px 9px; margin-top:3px; font-weight:800; color:#0b0b0c; background:#f6efd8; border:1px solid #e7e2d4; border-radius:6px; -webkit-print-color-adjust:exact; print-color-adjust:exact">
+            <span>${tr("Solde à régler", "Balance due")}</span><span class="num">${money(solde, cur)}</span>
+          </div>
+        </div>
+      </div>`;
+    })()}
     ${
-      !isCredit && !isProforma && invoice.status === "issued"
+      !isCredit && !isProforma && invoice.status === "issued" && !(Number(invoice.advanceAmount ?? 0) > 0)
         ? `<div style="margin-top:14px; border:1px solid #C4661F; background:#f9e9db; color:#8a4712; border-radius:6px; padding:8px 12px; font-size:12px; font-weight:700">
              ${tr("VENTE À CRÉDIT", "CREDIT SALE")} — ${tr("montant dû, à régler", "amount due")}${due !== "—" ? ` ${tr("avant le", "by")} <span class="num">${escapeHtml(due)}</span>` : ""}.
            </div>`

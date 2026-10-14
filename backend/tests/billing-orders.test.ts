@@ -37,12 +37,17 @@ describe("commandes à facturer + validation par seuil", () => {
 
   afterAll(async () => {
     await prisma.billingOrder.updateMany({ where: { id: { in: orderIds } }, data: { invoiceId: null } });
+    // Encaissements d'avance créés par les tests : on retire d'abord les paiements
+    // reliés à nos factures (via leurs lettrages), puis les lettrages eux-mêmes.
+    const advAllocs = await prisma.paymentAllocation.findMany({ where: { invoiceId: { in: invoiceIds } }, select: { paymentId: true } });
+    const advPaymentIds = [...new Set(advAllocs.map((a) => a.paymentId))];
     await prisma.paymentAllocation.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
     await prisma.installment.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
     await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
     await prisma.billingOrderLine.deleteMany({ where: { billingOrderId: { in: orderIds } } });
     await prisma.billingOrder.deleteMany({ where: { id: { in: orderIds } } });
     await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+    await prisma.payment.deleteMany({ where: { id: { in: advPaymentIds } } });
     await prisma.customer.deleteMany({ where: { id: customerId } });
     await app.close();
   });
@@ -501,6 +506,71 @@ describe("commandes à facturer + validation par seuil", () => {
     const invLines = await prisma.invoiceLine.findMany({ where: { invoiceId: inv.json().id } });
     expect(invLines.length).toBe(2);
     expect(invLines.reduce((s, l) => s + l.quantity * Number(l.unitPrice), 0)).toBe(80000);
+  });
+
+  // --- Avance (acompte) + solde à régler (demande responsable Finance) ---------
+  it("avance à l'établissement : encaissement réel enregistré, facture gardée émise (solde restant)", async () => {
+    const order = await createOrder(300_000); // sous le seuil → émise directement
+    const inv = await app.inject({
+      method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin },
+      payload: { advance_amount: 200_000, advance_label: "Avance sur impression", advance_method: "cash" },
+    });
+    expect(inv.statusCode).toBe(201);
+    invoiceIds.push(inv.json().id);
+    const invoice = await prisma.invoice.findUnique({ where: { id: inv.json().id }, include: { paymentAllocations: { include: { payment: true } } } });
+    expect(Number(invoice!.advanceAmount)).toBe(200000);
+    expect(invoice!.advanceLabel).toBe("Avance sur impression");
+    expect(invoice!.status).toBe("issued"); // solde 100 000 encore dû
+    // L'avance est un encaissement réel, lettré sur la facture.
+    expect(invoice!.paymentAllocations.length).toBe(1);
+    expect(Number(invoice!.paymentAllocations[0].amount)).toBe(200000);
+    expect(invoice!.paymentAllocations[0].payment.direction).toBe("in");
+  });
+
+  it("avance égale au total : la facture passe « réglée » ; libellé par défaut « Avance »", async () => {
+    const order = await createOrder(150_000);
+    const inv = await app.inject({
+      method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin },
+      payload: { advance_amount: 150_000, advance_method: "cash" },
+    });
+    expect(inv.statusCode).toBe(201);
+    invoiceIds.push(inv.json().id);
+    const invoice = await prisma.invoice.findUnique({ where: { id: inv.json().id } });
+    expect(invoice!.status).toBe("paid");
+    expect(Number(invoice!.advanceAmount)).toBe(150000);
+    expect(invoice!.advanceLabel).toBe("Avance"); // défaut appliqué
+  });
+
+  it("avance avec mode de paiement inconnu : refusée (400)", async () => {
+    const order = await createOrder(120_000);
+    const inv = await app.inject({
+      method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin },
+      payload: { advance_amount: 50_000, advance_method: "bitcoin" },
+    });
+    expect(inv.statusCode).toBe(400);
+    expect(inv.json().code).toBe("invalid_payment_method");
+  });
+
+  it("au-dessus du seuil : l'avance est différée, puis encaissée à la validation du DG", async () => {
+    const order = await createOrder(2_000_000);
+    const inv = await app.inject({
+      method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin },
+      payload: { advance_amount: 1_600_000, advance_label: "Avance sur impression", advance_method: "cash" },
+    });
+    expect(inv.statusCode).toBe(201);
+    invoiceIds.push(inv.json().id);
+    expect(inv.json().status).toBe("pending_validation");
+    // Avance stockée mais PAS encore encaissée (facture non émise).
+    let invoice = await prisma.invoice.findUnique({ where: { id: inv.json().id }, include: { paymentAllocations: true } });
+    expect(Number(invoice!.advanceAmount)).toBe(1600000);
+    expect(invoice!.paymentAllocations.length).toBe(0);
+    // Validation du DG → la facture est émise ET l'avance est encaissée.
+    const val = await app.inject({ method: "POST", url: `/api/v1/invoices/${inv.json().id}/validate`, headers: { cookie: admin } });
+    expect(val.statusCode).toBe(200);
+    invoice = await prisma.invoice.findUnique({ where: { id: inv.json().id }, include: { paymentAllocations: true } });
+    expect(invoice!.paymentAllocations.length).toBe(1);
+    expect(Number(invoice!.paymentAllocations[0].amount)).toBe(1600000);
+    expect(invoice!.status).toBe("issued"); // solde 400 000 restant
   });
 
   it("l'API expose les lignes de la commande (proforma : tous les libellés ressortent)", async () => {

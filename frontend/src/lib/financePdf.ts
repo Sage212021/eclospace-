@@ -427,6 +427,15 @@ export function invoicePdf(invoice: InvoiceDetail): jsPDF {
     ];
   }
 
+  // Avance (acompte) + solde à régler (Total − avance), à la manière du modèle
+  // maison — uniquement pour une facture/proforma qui porte une avance.
+  const adv = Number(invoice.advanceAmount ?? 0);
+  if (adv > 0 && !isCredit) {
+    const solde = Math.round((Number(invoice.totalTtc) - adv) * 100) / 100;
+    totals.push({ label: invoice.advanceLabel?.trim() || "Avance", value: `− ${money(adv, cur)}` });
+    totals.push({ label: "Solde à régler", value: money(solde, cur), strong: true });
+  }
+
   const notes: string[] = [];
   if (isDuplicate) notes.push(`Duplicata — copie conforme d'une facture déjà imprimée${invoice.printedAt ? ` (original tiré le ${new Date(invoice.printedAt).toLocaleDateString("fr-FR")})` : ""}.`);
   if (!isCredit && !isProforma && invoice.status === "issued") {

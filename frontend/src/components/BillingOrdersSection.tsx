@@ -14,6 +14,8 @@ import {
   getValidationThreshold,
   setValidationThreshold,
   listIsbnCatalogue,
+  listPaymentMethods,
+  type PaymentMethodDef,
   type Customer,
   type CustomerCategory,
   type BillingOrder,
@@ -79,6 +81,13 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   // Remise (%) choisie par commande, appliquée à l'établissement de la facture.
   const [remises, setRemises] = useState<Record<string, number>>({});
   const getRemise = (id: string) => remises[id] ?? 0;
+  // Avance (acompte) par commande : montant versé + libellé imprimé + mode de
+  // paiement. Saisie à l'établissement ; enregistrée comme encaissement réel.
+  const [methods, setMethods] = useState<PaymentMethodDef[]>([]);
+  const [advances, setAdvances] = useState<Record<string, { amount: string; label: string; method: string }>>({});
+  const getAdvance = (id: string) => advances[id] ?? { amount: "", label: "Avance", method: "" };
+  const setAdvance = (id: string, patch: Partial<{ amount: string; label: string; method: string }>) =>
+    setAdvances((m) => ({ ...m, [id]: { ...getAdvance(id), ...patch } }));
 
   const reload = () => {
     getBillingOrders("pending").then((os) => {
@@ -94,6 +103,8 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
     listCustomers().then(setCustomers).catch(() => {});
     // Catalogue des ISBN imprimés (livre papier) pour le sélecteur d'ouvrage.
     listIsbnCatalogue("print").then(setIsbns).catch(() => {});
+    // Modes de paiement actifs (pour enregistrer l'encaissement de l'avance).
+    listPaymentMethods().then((ms) => setMethods(ms.filter((m) => m.active))).catch(() => {});
   }, []);
 
   // Le livre (scolaire ou général) se saisit par ouvrage → droits d'auteur par livre.
@@ -301,17 +312,34 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
     const d = getRemise(o.id);
     const nap = Math.round(o.amount_ttc * (1 - d / 100) * 100) / 100;
     const remiseLine = d > 0 ? ` Remise ${d} % : −${fmt.format(o.amount_ttc - nap)} → Net à payer ${fmt.format(nap)}.` : "";
+
+    // Avance (acompte) éventuelle : montant versé, bornée au net à payer.
+    const adv = getAdvance(o.id);
+    const advAmount = Math.min(nap, Math.max(0, Number(adv.amount) || 0));
+    let advanceLine = "";
+    let advancePayload: { amount: number; label?: string; method?: string } | undefined;
+    if (advAmount > 0) {
+      const method = adv.method || methods[0]?.code;
+      if (!method) {
+        setError("Aucun mode de paiement disponible pour enregistrer l'avance.");
+        return;
+      }
+      const solde = Math.round((nap - advAmount) * 100) / 100;
+      advanceLine = ` ${adv.label || "Avance"} : ${fmt.format(advAmount)} → Solde à régler ${fmt.format(solde)}.`;
+      advancePayload = { amount: advAmount, label: adv.label || "Avance", method };
+    }
+
     const ok = await confirm({
       title: "Établir la facture",
       message: `Établir la facture officielle pour « ${o.label} » ?`,
-      detail: `Client : ${o.customer_name} · Montant : ${fmt.format(o.amount_ttc)}.${remiseLine} Une facture émise ne peut plus être supprimée (numérotation légale).`,
+      detail: `Client : ${o.customer_name} · Montant : ${fmt.format(o.amount_ttc)}.${remiseLine}${advanceLine} Une facture émise ne peut plus être supprimée (numérotation légale).`,
       confirmLabel: "Établir la facture",
     });
     if (!ok) return;
     setError(null);
     setMsg(null);
     try {
-      const r = await invoiceBillingOrder(o.id, d);
+      const r = await invoiceBillingOrder(o.id, d, advancePayload);
       if (r.needs_validation) {
         setMsg(`Facture ${r.invoice_number} créée — en attente de validation du DG (montant ≥ seuil). Impression possible une fois validée.`);
       } else {
@@ -592,6 +620,29 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
                       </div>
                     </div>
                   )}
+                  {/* Avance (acompte) : montant déjà versé, libellé imprimé et mode de
+                      paiement. Enregistré comme encaissement réel à l'établissement ;
+                      la facture affiche « Avance » et « Solde à régler ». */}
+                  {canInvoice && (() => {
+                    const adv = getAdvance(o.id);
+                    const advAmount = Math.min(nap, Math.max(0, Number(adv.amount) || 0));
+                    const solde = Math.round((nap - advAmount) * 100) / 100;
+                    return (
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", background: "var(--ivory, #FAF8F2)", border: "1px dashed var(--line)", borderRadius: 8, padding: "8px 10px", fontSize: 12.5 }}>
+                        <label style={{ color: "var(--eclosion-dark, #9A7A12)", fontWeight: 600 }}>Avance (facultatif)</label>
+                        <input value={adv.amount} onChange={(e) => setAdvance(o.id, { amount: e.target.value })} placeholder="Montant versé (FCFA)" inputMode="numeric" style={{ ...inp, width: 150, padding: "6px 8px" }} />
+                        <input value={adv.label} onChange={(e) => setAdvance(o.id, { label: e.target.value })} placeholder="Libellé (ex. Avance sur impression)" style={{ ...inp, width: 210, padding: "6px 8px" }} />
+                        {methods.length > 0 && (
+                          <select value={adv.method || methods[0]?.code} onChange={(e) => setAdvance(o.id, { method: e.target.value })} style={{ ...inp, width: 150, padding: "6px 8px" }} title="Mode de paiement de l'avance">
+                            {methods.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
+                          </select>
+                        )}
+                        {advAmount > 0 && (
+                          <span style={{ marginLeft: "auto", color: "var(--muted)" }}>Solde à régler <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--ink)" }}>{fmt.format(solde)}</span></span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}

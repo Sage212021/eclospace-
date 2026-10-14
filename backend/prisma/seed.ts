@@ -2540,6 +2540,14 @@ async function main() {
       permissionModules: ["isbn", "manuscripts"],
       departmentCodes: ["INFOG", "MAQ", "SECR", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-catalogue-resume-editable-badge-logo",
+      version: "2026.10",
+      title: "Nouveauté — Catalogue : écrire le résumé d'un ouvrage + le badge ne cache plus le logo",
+      body: "Deux améliorations sur le catalogue. (1) On peut maintenant RATTACHER un résumé (la « légende ») à chaque ouvrage, directement depuis le catalogue : cliquez sur un ouvrage, puis sur « ✏️ Ajouter un résumé » (ou « Modifier »), collez le texte et enregistrez. Le résumé s'affiche replié et se déroule au clic, comme demandé. Réservé au pôle Marketing. (2) Le badge doré du genre/collection, qui se trouvait en bas de la vignette, masquait parfois le logo Éclosion imprimé en pied de couverture : il est désormais placé EN HAUT de la vignette, pour ne jamais recouvrir le logo (charte maison).",
+      permissionModules: ["communication"],
+      departmentCodes: ["MKT", "COM", "INFOG", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

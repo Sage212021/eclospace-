@@ -2468,6 +2468,14 @@ async function main() {
       permissionModules: ["decision_editoriale"],
       departmentCodes: ["DIRED", "SECR", "DG"],
     },
+    {
+      slug: "2026-10-catalogue-couvertures-en-masse",
+      version: "2026.10",
+      title: "Nouveauté — Catalogue : ajouter toutes les couvertures d'un coup",
+      body: "Après l'import en masse des ouvrages du fonds, les fiches étaient bien là (titre, auteur, genre, collection, résumé) mais SANS image de couverture : l'import n'apporte que le texte, pas les images. Résultat, le catalogue affichait un petit livre 📖 à la place des vignettes. Plutôt que d'ouvrir chaque fiche une par une pour y déposer la couverture, un nouveau bouton « 🖼️ Ajouter les couvertures (en masse) » apparaît en haut du catalogue. Vous choisissez TOUTES les images d'un coup : chaque fichier est rapproché automatiquement d'un ouvrage d'après son nom (comparé au titre), vous vérifiez/corrigez le rapprochement avec un menu déroulant par image, puis vous téléversez. Chaque image est déposée comme « 1ère de couverture » et la vignette apparaît aussitôt dans le catalogue. Astuce : pour un rapprochement automatique fiable, nommez chaque image comme le titre de l'ouvrage (ex. « Bozayeur.jpg »). Réservé aux profils qui gèrent les visuels (droit Production).",
+      permissionModules: ["communication", "production"],
+      departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

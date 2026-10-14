@@ -8,6 +8,7 @@ import {
   type CatalogueResponse,
   type CatalogueSort,
 } from "../api/client";
+import { BulkCoverUpload } from "../components/BulkCoverUpload";
 
 // Pôle Marketing & Distribution — CATALOGUE des ouvrages.
 // Grille visuelle des couvertures, alimentée automatiquement par les ouvrages
@@ -36,7 +37,7 @@ function price(n: number | null): string {
   return n == null ? "—" : `${n.toLocaleString("fr-FR")} FCFA`;
 }
 
-export function CataloguePage({ onOpenManuscript, canAdmin }: { onOpenManuscript?: (id: string) => void; canAdmin?: boolean }) {
+export function CataloguePage({ onOpenManuscript, canAdmin, canUploadCovers }: { onOpenManuscript?: (id: string) => void; canAdmin?: boolean; canUploadCovers?: boolean }) {
   const [data, setData] = useState<CatalogueResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -51,6 +52,9 @@ export function CataloguePage({ onOpenManuscript, canAdmin }: { onOpenManuscript
   const [selected, setSelected] = useState<CatalogueItem | null>(null);
   const [defaultSort, setDefault] = useState<CatalogueSort>("recent");
   const [savingDefault, setSavingDefault] = useState(false);
+  // Incrémenté après un ajout groupé de couvertures pour relancer le chargement
+  // (les vignettes nouvellement déposées apparaissent alors sans recharger la page).
+  const [reloadTick, setReloadTick] = useState(0);
 
   // Débounce léger de la recherche pour ne pas requêter à chaque frappe.
   const [qDebounced, setQDebounced] = useState("");
@@ -73,7 +77,7 @@ export function CataloguePage({ onOpenManuscript, canAdmin }: { onOpenManuscript
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Chargement impossible."))
       .finally(() => setLoading(false));
-  }, [qDebounced, collection, genre, year, availability, sort]);
+  }, [qDebounced, collection, genre, year, availability, sort, reloadTick]);
 
   const items = data?.items ?? [];
   const facets = data?.facets;
@@ -145,6 +149,8 @@ export function CataloguePage({ onOpenManuscript, canAdmin }: { onOpenManuscript
         </label>
       </div>
 
+      {canUploadCovers && <BulkCoverUpload onDone={() => setReloadTick((t) => t + 1)} />}
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
         <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{loading ? "Chargement…" : totalLabel}</span>
         {canAdmin && (
@@ -169,7 +175,7 @@ export function CataloguePage({ onOpenManuscript, canAdmin }: { onOpenManuscript
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(185px, 1fr))", gap: 20 }}>
         {items.map((it) => (
           <button key={it.id} className="ecl-cat-card" onClick={() => setSelected(it)} style={cardStyle} title={it.title}>
-            <Cover item={it} />
+            <Cover item={it} version={reloadTick} />
             <div style={{ padding: "10px 11px 12px", textAlign: "left" }}>
               <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1.28, color: "var(--ink)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{it.title}</div>
               <div style={{ fontFamily: "var(--font-title, Georgia, serif)", fontStyle: "italic", fontSize: 12.5, color: "var(--muted)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.authors.join(", ") || "—"}</div>
@@ -189,7 +195,7 @@ export function CataloguePage({ onOpenManuscript, canAdmin }: { onOpenManuscript
 
 // Couverture (image de la fiche ouvrage) ou vignette de repli élégante (ivoire
 // + titre) si l'ouvrage n'a pas encore de fichier de couverture image.
-function Cover({ item, badge = true }: { item: CatalogueItem; badge?: boolean }) {
+function Cover({ item, badge = true, version = 0 }: { item: CatalogueItem; badge?: boolean; version?: number }) {
   const [failed, setFailed] = useState(false);
   const showImg = item.hasCover && !failed;
   // Badge « genre » (ou collection à défaut) incrusté en coin, à la manière des
@@ -198,7 +204,7 @@ function Cover({ item, badge = true }: { item: CatalogueItem; badge?: boolean })
   return (
     <div style={{ aspectRatio: "3 / 4", background: "var(--paper, #FAF8F2)", borderTopLeftRadius: 10, borderTopRightRadius: 10, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
       {showImg ? (
-        <img src={catalogueCoverUrl(item.id)} alt={`Couverture — ${item.title}`} onError={() => setFailed(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <img src={`${catalogueCoverUrl(item.id)}${version ? `?v=${version}` : ""}`} alt={`Couverture — ${item.title}`} onError={() => setFailed(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       ) : (
         <div style={{ padding: 12, textAlign: "center" }}>
           <div style={{ fontSize: 22 }}>📖</div>

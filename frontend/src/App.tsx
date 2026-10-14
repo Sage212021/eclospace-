@@ -911,7 +911,7 @@ export function App() {
           <CommercialPage canManage={permissions.has("commercial:saisie")} canValidate={permissions.has("commercial:administration")} canInitiateOrder={canInitiateOrder} canSeeTeam={permissions.has("commercial:validation")} />
         )}
         {leaf && "page" in leaf && leaf.page === "catalogue" && (
-          <CataloguePage onOpenManuscript={openManuscript} canAdmin={permissions.has("communication:administration")} />
+          <CataloguePage onOpenManuscript={openManuscript} canAdmin={permissions.has("communication:administration")} canUploadCovers={permissions.has("production:saisie")} />
         )}
         {leaf && "page" in leaf && leaf.page === "marketing-plans" && (
           <MarketingPlansPage canManage={permissions.has("marketing:saisie")} />

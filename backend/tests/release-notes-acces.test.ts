@@ -44,7 +44,10 @@ describe("notes de version — ciblage par accès (pas de fuite hors périmètre
     await prisma.$disconnect();
   });
 
-  it("livre au responsable RH, jamais au relecteur, et retire un envoi à tort", async () => {
+  // Ce test lance deux fois `dispatchReleaseNotes()`, qui re-balaie toutes les
+  // notes de version (≈125 après seed) pour tous les destinataires : légitimement
+  // long sur le runner CI → délai élargi (le défaut global de 30 s ne suffit pas).
+  it("livre au responsable RH, jamais au relecteur, et retire un envoi à tort", { timeout: 180000 }, async () => {
     const sysId = await systemId();
     // Deux profils SANS département (le cas courant) : seul l'accès les distingue.
     relecteurId = (await createUserWithRole(relecteurName, "CORRECTEUR", "Acces123!")).id;

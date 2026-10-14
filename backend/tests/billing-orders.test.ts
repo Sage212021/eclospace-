@@ -502,4 +502,37 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(invLines.length).toBe(2);
     expect(invLines.reduce((s, l) => s + l.quantity * Number(l.unitPrice), 0)).toBe(80000);
   });
+
+  it("l'API expose les lignes de la commande (proforma : tous les libellés ressortent)", async () => {
+    // La proforma est construite côté client à partir de la commande : la réponse
+    // de l'API — à la création ET dans la file — doit donc porter CHAQUE ligne
+    // saisie (libellé, quantité, prix, total), et non le seul intitulé global.
+    const create = await app.inject({
+      method: "POST", url: "/api/v1/billing-orders", headers: { cookie: admin },
+      payload: {
+        customer_id: customerId, category: "livre_scolaire", label: `Lot proforma ${rnd()}`, tax_rate: 0,
+        lines: [
+          { description: "Grammaire 6e", quantity: 10, unit_price_ht: 3000 },
+          { description: "Mathématiques 6e", quantity: 5, unit_price_ht: 4000 },
+        ],
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    const order = create.json();
+    orderIds.push(order.id);
+
+    // Réponse de création : les deux lignes, avec leur total calculé.
+    expect(Array.isArray(order.lines)).toBe(true);
+    expect(order.lines.length).toBe(2);
+    const gram = order.lines.find((l: { description: string }) => l.description === "Grammaire 6e");
+    expect(gram.quantity).toBe(10);
+    expect(gram.unit_price_ht).toBe(3000);
+    expect(gram.line_total).toBe(30000); // 10 × 3 000
+
+    // File des commandes : la commande y figure AVEC ses lignes (source proforma).
+    const list = await app.inject({ method: "GET", url: "/api/v1/billing-orders?status=pending", headers: { cookie: admin } });
+    const fromList = (list.json() as { id: string; lines: { description: string }[] }[]).find((o) => o.id === order.id);
+    expect(fromList).toBeTruthy();
+    expect(fromList!.lines.map((l) => l.description).sort()).toEqual(["Grammaire 6e", "Mathématiques 6e"]);
+  });
 });

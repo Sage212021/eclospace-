@@ -263,6 +263,21 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
     const tax = Math.round((o.amount_ht * o.tax_rate) / 100 * 100) / 100;
     const d = getRemise(o.id);
     const factor = 1 - d / 100;
+    // Reprend TOUTES les lignes saisies (ouvrages / éléments « Autre ») pour que
+    // la proforma affiche chaque libellé et son montant — exactement comme la
+    // facture définitive. Repli sur une ligne globale (intitulé) uniquement pour
+    // une commande sans détail (cas ancien).
+    const lines =
+      o.lines && o.lines.length > 0
+        ? o.lines.map((l, i) => ({
+            id: String(i + 1),
+            description: l.description,
+            quantity: l.quantity,
+            unitPrice: String(l.unit_price_ht),
+            taxRate: String(o.tax_rate),
+            lineTotal: String(l.line_total),
+          }))
+        : [{ id: "1", description: o.label, quantity: 1, unitPrice: String(o.amount_ht), taxRate: String(o.tax_rate), lineTotal: String(o.amount_ht) }];
     const doc: InvoiceDetail = {
       id: "proforma",
       invoiceNumber: `PRO-${o.reference}`,
@@ -277,7 +292,7 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
       createdAt: new Date().toISOString(),
       currency: "XAF",
       customer: { name: o.customer_name },
-      lines: [{ id: "1", description: o.label, quantity: 1, unitPrice: String(o.amount_ht), taxRate: String(o.tax_rate), lineTotal: String(o.amount_ht) }],
+      lines,
     };
     printInvoice(doc);
   }

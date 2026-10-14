@@ -58,7 +58,11 @@ async function governanceDeciderIds(): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-function orderView(o: { id: string; orderNumber: string; category: string; label: string; amountHt: unknown; taxRate: unknown; discountPct?: unknown; status: string; createdAt: Date }, customerName: string) {
+type OrderLineRow = { id: string; description: string; quantity: number; unitPriceHt: unknown; isbnId?: string | null };
+function orderView(
+  o: { id: string; orderNumber: string; category: string; label: string; amountHt: unknown; taxRate: unknown; discountPct?: unknown; status: string; createdAt: Date; lines?: OrderLineRow[] },
+  customerName: string,
+) {
   const ht = Number(o.amountHt);
   const rate = Number(o.taxRate);
   const discount = Number(o.discountPct ?? 0);
@@ -74,6 +78,20 @@ function orderView(o: { id: string; orderNumber: string; category: string; label
     discount_pct: discount,
     status: o.status,
     created_at: o.createdAt,
+    // Détail des lignes saisies (ouvrages / éléments « Autre »), pour que la
+    // proforma — comme la facture définitive — affiche TOUS les libellés et
+    // leurs montants, et non un seul libellé global.
+    lines: (o.lines ?? []).map((l) => {
+      const unit = Number(l.unitPriceHt);
+      return {
+        id: l.id,
+        description: l.description,
+        quantity: l.quantity,
+        unit_price_ht: unit,
+        line_total: Math.round(l.quantity * unit * 100) / 100,
+        isbn_id: l.isbnId ?? null,
+      };
+    }),
   };
 }
 
@@ -157,6 +175,7 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
             }
           : {}),
       },
+      include: { lines: true },
     });
     const staff = await financeStaffIds();
     if (staff.length) {
@@ -177,7 +196,7 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     const status = q.success ? q.data.status : undefined;
     const orders = await prisma.billingOrder.findMany({
       where: { deletedAt: null, ...(status ? { status } : { status: "pending" }) },
-      include: { customer: { select: { name: true } } },
+      include: { customer: { select: { name: true } }, lines: true },
       orderBy: { createdAt: "desc" },
       take: 200,
     });

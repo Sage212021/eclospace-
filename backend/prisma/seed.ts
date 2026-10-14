@@ -2452,6 +2452,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks"],
       departmentCodes: ["CORR", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-proforma-commande-tous-les-libelles",
+      version: "2026.10",
+      title: "Nouveauté — Proforma d'une commande à facturer : tous les libellés et leurs montants ressortent",
+      body: "Vous avez signalé que, sur une commande à facturer, les libellés saisis (les ouvrages, ou les lignes « Autre ») et leurs montants ne ressortaient pas sur la proforma imprimée : on n'y voyait qu'une seule ligne globale avec l'intitulé de la commande. C'est corrigé. Désormais le bouton « Proforma (PDF) » reprend CHAQUE ligne de la commande — désignation, quantité, prix unitaire et total — exactement comme la facture définitive. La facture officielle, elle, affichait déjà bien le détail : seule la proforma reconstruite à la volée l'aplatissait. Plus rien ne manque entre la proforma et la facture.",
+      permissionModules: ["finance", "commercial"],
+      departmentCodes: ["FIN", "COMM", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

@@ -267,14 +267,17 @@ export function BulkCoverUpload({ onDone }: { onDone: () => void }) {
         d'un ouvrage par son <strong>nom</strong> (comparé au titre) ; vérifiez le rapprochement et corrigez-le au besoin,
         puis téléversez. {loadingList ? "Chargement du catalogue…" : `${all.length} ouvrage(s) au catalogue, dont ${missingCount} sans couverture.`}
         <br />
-        <span style={{ fontSize: 11.5 }}>Astuce : pour un rapprochement automatique fiable, nommez chaque image comme le titre de l'ouvrage (ex. « Bozayeur.jpg »). Les images sont <strong>allégées automatiquement</strong> avant l'envoi et <strong>réessayées</strong> en cas de coupure — utile sur connexion lente.</span>
+        <span style={{ fontSize: 11.5 }}>Le bouton ouvre l'<strong>explorateur de fichiers</strong> : naviguez vers le dossier des couvertures et sélectionnez-les (vous pouvez en prendre plusieurs). <em>Si une galerie photo s'ouvre quand même, choisissez « Fichiers » / « Explorateur » dans la liste des applications.</em> Astuce : nommez chaque image comme le titre de l'ouvrage (ex. « Bozayeur.jpg ») pour un rapprochement automatique fiable. Les images sont <strong>allégées automatiquement</strong> avant l'envoi et <strong>réessayées</strong> en cas de coupure.</span>
       </p>
 
-      {/* value réinitialisée après chaque choix : permet de re-sélectionner le
-          même lot, et surtout d'AJOUTER d'autres images en plusieurs fois. */}
-      <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { onPick(e.target.files); e.currentTarget.value = ""; }} />
+      {/* Pas d'attribut `accept` : sinon Android ouvre d'office la galerie photo
+          (Google Photos). Sans restriction de type, le système ouvre
+          l'EXPLORATEUR DE FICHIERS (navigation par dossiers). Le filtrage des
+          images se fait ensuite côté appli (isImageFile). `value` réinitialisée
+          après chaque choix pour permettre d'ajouter d'autres images. */}
+      <input ref={inputRef} type="file" multiple style={{ display: "none" }} onChange={(e) => { onPick(e.target.files); e.currentTarget.value = ""; }} />
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
-        <button type="button" onClick={() => inputRef.current?.click()} style={btnGhost} disabled={busy}>📂 {rows.length > 0 ? "Ajouter d'autres images…" : "Choisir des images…"}</button>
+        <button type="button" onClick={() => inputRef.current?.click()} style={btnGhost} disabled={busy}>📂 {rows.length > 0 ? "Ajouter d'autres fichiers…" : "Ouvrir l'explorateur de fichiers…"}</button>
         {rows.length > 0 && (
           <>
             <button type="button" onClick={uploadAll} style={btnPrimary} disabled={busy || remainingCount === 0}>

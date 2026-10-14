@@ -6930,6 +6930,9 @@ export interface BillingOrder {
   discount_pct: number;
   status: "pending" | "invoiced" | "cancelled";
   created_at: string;
+  // Lignes saisies (ouvrages ou éléments « Autre ») : reprises telles quelles
+  // sur la proforma pour que tous les libellés et leurs montants y figurent.
+  lines: { id: string; description: string; quantity: number; unit_price_ht: number; line_total: number; isbn_id: string | null }[];
 }
 // Ligne d'ouvrage d'une commande « livre scolaire » : support du calcul des
 // droits d'auteur (ISBN, quantité, prix unitaire HT, taux éventuel).

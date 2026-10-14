@@ -16,7 +16,9 @@ import { getCatalogue, uploadImageAssetFile, type CatalogueItem } from "../api/c
 // (format exotique, navigateur restrictif), on renvoie le fichier d'origine.
 async function shrinkImage(file: File, maxDim = 1200, quality = 0.82): Promise<File> {
   try {
-    if (!file.type.startsWith("image/")) return file;
+    // On tente le décodage MÊME si le téléphone ne déclare pas le type « image/ »
+    // (fréquent sur Android depuis le gestionnaire de fichiers / Téléchargements).
+    // createImageBitmap décode d'après le CONTENU, pas d'après le type annoncé.
     const bitmap = await createImageBitmap(file);
     const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
     const w = Math.max(1, Math.round(bitmap.width * scale));
@@ -33,9 +35,11 @@ async function shrinkImage(file: File, maxDim = 1200, quality = 0.82): Promise<F
     bitmap.close?.();
     const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", quality));
     if (!blob) return file;
-    // Si l'allègement n'a rien gagné (petite image déjà compacte), on garde l'original.
-    if (blob.size >= file.size && scale >= 1) return file;
     const name = file.name.replace(/\.[a-z0-9]+$/i, "") + ".jpg";
+    // On garde l'original UNIQUEMENT s'il est déjà une image bien typée ET plus
+    // léger. Sinon on renvoie le JPEG ré-encodé : plus petit, et surtout d'un type
+    // « image/jpeg » propre que le serveur accepte (il refuse un type inconnu).
+    if (file.type.startsWith("image/") && blob.size >= file.size) return file;
     return new File([blob], name, { type: "image/jpeg" });
   } catch {
     return file;
@@ -60,6 +64,13 @@ async function uploadWithRetry(fn: () => Promise<unknown>, attempts = 3): Promis
     }
   }
   throw lastErr;
+}
+
+// Reconnaît une image par son TYPE déclaré OU, à défaut (Android ne le renseigne
+// pas toujours), par son EXTENSION — pour ne pas rejeter à tort des fichiers
+// pourtant valides.
+function isImageFile(file: File): boolean {
+  return file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i.test(file.name);
 }
 
 // Normalisation pour le rapprochement fichier ↔ titre : minuscules, sans
@@ -101,8 +112,12 @@ export function BulkCoverUpload({ onDone }: { onDone: () => void }) {
       .finally(() => setLoadingList(false));
   }, [open]);
 
-  // Nettoyage des URLs d'aperçu pour ne pas fuir de mémoire.
-  useEffect(() => () => rows.forEach((r) => URL.revokeObjectURL(r.previewUrl)), [rows]);
+  // Libère les URLs d'aperçu à la FERMETURE du composant uniquement — surtout pas
+  // à chaque changement de liste : en sélection cumulative, cela révoquerait les
+  // aperçus des images déjà présentes (elles deviendraient invisibles).
+  const rowsRef = useRef<Row[]>([]);
+  rowsRef.current = rows;
+  useEffect(() => () => rowsRef.current.forEach((r) => URL.revokeObjectURL(r.previewUrl)), []);
 
   const byNormTitle = useMemo(() => {
     const m = new Map<string, CatalogueItem>();
@@ -143,20 +158,36 @@ export function BulkCoverUpload({ onDone }: { onDone: () => void }) {
   // fichier (nom + taille + date) n'est pas ajouté deux fois.
   function onPick(files: FileList | null) {
     if (!files || files.length === 0) return;
+    const picked = Array.from(files);
+    const nonImages = picked.filter((f) => !isImageFile(f)).length;
+    let addedCount = 0;
+    let dupCount = 0;
     setRows((prev) => {
       const seen = new Set(prev.map((r) => `${r.file.name}|${r.file.size}|${r.file.lastModified}`));
       const add: Row[] = [];
-      for (const file of Array.from(files)) {
-        if (!file.type.startsWith("image/")) continue;
+      for (const file of picked) {
+        if (!isImageFile(file)) continue;
         const key = `${file.name}|${file.size}|${file.lastModified}`;
-        if (seen.has(key)) continue; // déjà dans la liste
+        if (seen.has(key)) {
+          dupCount++;
+          continue; // déjà dans la liste
+        }
         seen.add(key);
         const m = matchBook(file.name);
         add.push({ file, previewUrl: URL.createObjectURL(file), bookId: m?.id ?? "", auto: !!m, status: "pending" });
       }
+      addedCount = add.length;
       return [...prev, ...add];
     });
-    setSummary(null);
+    // Retour explicite : on ne laisse jamais l'utilisateur devant une liste vide
+    // sans explication (ex. fichiers non reconnus comme images).
+    if (addedCount === 0) {
+      if (nonImages > 0) setSummary(`Aucune image ajoutée : ${nonImages} fichier(s) non reconnu(s) comme image. Choisissez des fichiers .jpg ou .png.`);
+      else if (dupCount > 0) setSummary(`Ces ${dupCount} image(s) sont déjà dans la liste.`);
+      else setSummary("Aucune image ajoutée.");
+    } else {
+      setSummary(`${addedCount} image(s) ajoutée(s)${dupCount ? ` · ${dupCount} déjà présente(s)` : ""}${nonImages ? ` · ${nonImages} non image(s) ignorée(s)` : ""}.`);
+    }
   }
 
   function clearRows() {

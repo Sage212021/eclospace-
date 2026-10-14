@@ -2492,6 +2492,14 @@ async function main() {
       permissionModules: ["communication", "production"],
       departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-couvertures-masse-images-non-reconnues",
+      version: "2026.10",
+      title: "Nouveauté — Ajout des couvertures : images non reconnues désormais acceptées",
+      body: "Vous avez signalé qu'après avoir choisi des images, rien ne s'affichait. En cause : selon l'endroit d'où vous preniez les fichiers sur le téléphone (gestionnaire de fichiers, Téléchargements, archive décompressée), Android n'indiquait pas que c'était des images, et l'outil les écartait toutes — d'où la liste vide, sans explication. C'est corrigé : une image est maintenant reconnue aussi par son EXTENSION (.jpg, .png…), pas seulement par le type annoncé par le téléphone. De plus, chaque image est systématiquement reconvertie proprement avant l'envoi (le serveur ne refuse plus un format mal déclaré), et si jamais un fichier n'est pas une image, un message clair vous le dit au lieu de laisser la liste vide. Vous pouvez donc charger vos couvertures quelle que soit leur provenance.",
+      permissionModules: ["communication", "production"],
+      departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

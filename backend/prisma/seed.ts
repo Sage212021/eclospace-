@@ -2516,6 +2516,14 @@ async function main() {
       permissionModules: ["communication", "production"],
       departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-facture-avance-solde",
+      version: "2026.10",
+      title: "Nouveauté — Facture : saisir une avance et afficher le solde à régler",
+      body: "À la demande du responsable financier : quand on établit une facture (depuis une commande à facturer), on peut maintenant saisir une AVANCE déjà versée. La facture imprime alors deux lignes sous le total — « Avance » (libellé modifiable, ex. « Avance sur impression ») et « Solde à régler » (Total − avance) — comme sur le modèle papier. L'avance n'est pas qu'un affichage : elle est enregistrée comme un vrai encaissement (avec le mode de paiement choisi), donc le suivi des règlements, les créances et le « reste à payer » restent justes. Si l'avance couvre tout le montant, la facture passe directement « réglée ». Pour une facture au-dessus du seuil (validation du DG), l'avance est encaissée automatiquement au moment où le DG valide.",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

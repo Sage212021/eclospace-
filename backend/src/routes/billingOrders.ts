@@ -5,7 +5,7 @@ import { requireAuth, requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextBillingOrderNumber } from "../lib/billingOrderNumber.js";
-import { createInvoiceFromBillingOrder, createCreditNoteFromInvoice } from "../lib/invoicing.js";
+import { createInvoiceFromBillingOrder, createCreditNoteFromInvoice, recordAdvancePayment } from "../lib/invoicing.js";
 import { recordSchoolRoyaltyEntries } from "../lib/schoolRoyalty.js";
 
 // Commandes à facturer (reconfiguration Finance étape 3) — ex. livre scolaire.
@@ -241,17 +241,37 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
   // La Finance établit la facture depuis la commande (validation par seuil).
   fastify.post("/api/v1/billing-orders/:id/invoice", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const parsed = z.object({ discount_pct: z.number().min(0).max(100).optional() }).safeParse(request.body ?? {});
-    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Remise invalide (0 à 100 %)." });
+    const parsed = z
+      .object({
+        discount_pct: z.number().min(0).max(100).optional(),
+        // Avance (acompte) versée à l'établissement : montant, libellé imprimé
+        // (défaut « Avance ») et mode de paiement (code de la liste configurable).
+        advance_amount: z.number().min(0).optional(),
+        advance_label: z.string().max(120).optional(),
+        advance_method: z.string().max(60).optional(),
+      })
+      .safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Remise ou avance invalide." });
     const order = await prisma.billingOrder.findFirst({ where: { id, deletedAt: null } });
     if (!order) return reply.code(404).send({ code: "not_found", message: "Commande introuvable." });
     if (order.status !== "pending") return reply.code(409).send({ code: "not_pending", message: "Cette commande est déjà facturée ou annulée." });
     // Remise fournie à l'établissement, sinon celle prévue sur la commande.
     const discountPct = parsed.data.discount_pct ?? Number(order.discountPct);
 
+    // Avance : si un montant > 0 est saisi, le mode de paiement doit être valide
+    // (on enregistre un encaissement réel). Le libellé par défaut est « Avance ».
+    const advanceAmount = parsed.data.advance_amount ?? 0;
+    let advance: { amount: number; label?: string | null; method: string } | undefined;
+    if (advanceAmount > 0) {
+      const method = parsed.data.advance_method?.trim() || "cash";
+      const methodDef = await prisma.paymentMethodDef.findUnique({ where: { code: method } });
+      if (!methodDef || !methodDef.active) return reply.code(400).send({ code: "invalid_payment_method", message: "Mode de paiement de l'avance inconnu ou désactivé." });
+      advance = { amount: advanceAmount, label: parsed.data.advance_label?.trim() || "Avance", method };
+    }
+
     const threshold = await getThreshold();
     try {
-      const invoice = await prisma.$transaction((tx) => createInvoiceFromBillingOrder(tx, id, threshold, discountPct));
+      const invoice = await prisma.$transaction((tx) => createInvoiceFromBillingOrder(tx, id, threshold, discountPct, advance));
       await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "invoice", entityId: invoice.id, newValues: { invoiceNumber: invoice.invoiceNumber, fromBillingOrder: order.orderNumber, status: invoice.status }, ipAddress: request.ip });
       // Facture au-dessus du seuil → décision de GOUVERNANCE : c'est le DG (ou
       // l'administrateur général) qui valide, pas la Finance. On avertit les
@@ -300,8 +320,15 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     const invoice = await prisma.invoice.findUnique({ where: { id } });
     if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
     if (invoice.status !== "pending_validation") return reply.code(409).send({ code: "not_pending", message: "Cette facture n'est pas en attente de validation." });
-    await prisma.invoice.update({ where: { id }, data: { status: "issued" } });
-    await writeAuditLog({ userId: request.user!.id, action: "validate", entityType: "invoice", entityId: id, oldValues: { status: "pending_validation" }, newValues: { status: "issued" }, ipAddress: request.ip });
+    // La facture est émise ; si une AVANCE avait été saisie à l'établissement
+    // (encaissement différé car au-dessus du seuil), on l'enregistre maintenant.
+    await prisma.$transaction(async (tx) => {
+      await tx.invoice.update({ where: { id }, data: { status: "issued" } });
+      if (Number(invoice.advanceAmount) > 0) {
+        await recordAdvancePayment(tx, id, Number(invoice.advanceAmount), invoice.advanceMethod || "cash");
+      }
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "validate", entityType: "invoice", entityId: id, oldValues: { status: "pending_validation" }, newValues: { status: "issued", advance: Number(invoice.advanceAmount) || undefined }, ipAddress: request.ip });
     return reply.send({ ok: true, status: "issued" });
   });
 

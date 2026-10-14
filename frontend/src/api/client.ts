@@ -3836,6 +3836,10 @@ export interface Invoice {
   customer: { name: string };
   // Date de première impression : une fois « tirée », la facture n'est plus annulable.
   printedAt?: string | null;
+  // Avance (acompte) versée et son libellé imprimé (« Avance » par défaut). Le
+  // « solde à régler » imprimé = totalTtc − avance.
+  advanceAmount?: string;
+  advanceLabel?: string | null;
 }
 export function markInvoicePrinted(id: string) {
   return request<{ ok: true; printed_at: string | null }>(`/api/v1/invoices/${id}/mark-printed`, { method: "POST" });
@@ -6958,8 +6962,14 @@ export function createBillingOrder(input: {
 export function getBillingOrders(status: "pending" | "invoiced" | "cancelled" = "pending") {
   return request<BillingOrder[]>(`/api/v1/billing-orders?status=${status}`);
 }
-export function invoiceBillingOrder(id: string, discountPct = 0) {
-  return request<{ id: string; invoice_number: string; status: string; total_ttc: number; needs_validation: boolean }>(`/api/v1/billing-orders/${id}/invoice`, { method: "POST", body: JSON.stringify({ discount_pct: discountPct }) });
+export function invoiceBillingOrder(id: string, discountPct = 0, advance?: { amount: number; label?: string; method?: string }) {
+  const body: Record<string, unknown> = { discount_pct: discountPct };
+  if (advance && advance.amount > 0) {
+    body.advance_amount = advance.amount;
+    if (advance.label) body.advance_label = advance.label;
+    if (advance.method) body.advance_method = advance.method;
+  }
+  return request<{ id: string; invoice_number: string; status: string; total_ttc: number; needs_validation: boolean }>(`/api/v1/billing-orders/${id}/invoice`, { method: "POST", body: JSON.stringify(body) });
 }
 export function cancelBillingOrder(id: string, reason?: string) {
   return request<BillingOrder>(`/api/v1/billing-orders/${id}/cancel`, { method: "POST", body: JSON.stringify(reason ? { reason } : {}) });

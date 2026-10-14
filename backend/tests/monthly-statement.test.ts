@@ -56,8 +56,10 @@ describe("Bilan mensuel détaillé", () => {
     expect(s.total_sorties).toBe(30000); // seule la sortie de mars
     expect(s.solde_net).toBe(50000); // 80000 − 30000
     expect(s.situation).toBe("excedent");
-    // Solde final = solde initial (cumul réel) + solde net.
-    expect(s.solde_final).toBe(s.solde_initial + s.solde_net);
+    // Solde final = solde initial (cumul réel) + solde net. Comparaison au
+    // centime près : l'API arrondit solde_final, alors que « solde_initial +
+    // solde_net » calculé ici peut porter un artefact flottant (ex. …69999999995).
+    expect(s.solde_final).toBeCloseTo(s.solde_initial + s.solde_net, 2);
     // Détail ligne par ligne présent.
     expect(s.entrees.some((e) => e.amount === 80000)).toBe(true);
     expect(s.sorties.some((e) => e.amount === 30000)).toBe(true);

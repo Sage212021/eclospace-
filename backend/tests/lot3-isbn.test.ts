@@ -259,6 +259,22 @@ describe("ISBN, dépôt légal et métadonnées (Lot 3)", () => {
     expect(after.json().missing).toHaveLength(0);
   });
 
+  it("classification : le GENRE suffit (aucun code Thema requis) — débloque la validation des références", async () => {
+    // L'ouvrage a un genre (ROMAN, posé par le helper). Sans AUCUN code Thema, la
+    // complétude doit être atteinte dès que ISBN + dépôt légal + métadonnées (résumé
+    // + poids) sont là : le genre tient lieu de classification.
+    const manuscript = await createManuscriptWithActiveContract("Manuscrit Classé Par Genre");
+    const pool = await app.inject({ method: "POST", url: "/api/v1/isbn-pools", headers: { cookie: adminCookie }, payload: { prefix: uniqueIsbnPrefix(1), digit_width: 1, range_start: 0, range_end: 9 } });
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/isbn`, headers: { cookie: adminCookie }, payload: { format: "print", pool_id: pool.json().id } });
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/legal-deposits`, headers: { cookie: adminCookie }, payload: { country: "Cameroun", depository: "Ministère de la culture", copies_required: 6 } });
+    // Métadonnées SANS thema_codes.
+    await app.inject({ method: "PATCH", url: `/api/v1/manuscripts/${manuscript.id}/metadata`, headers: { cookie: adminCookie }, payload: { summary: "Résumé complet", weight_grams: 350 } });
+
+    const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscript.id}/isbn-completeness`, headers: { cookie: adminCookie } });
+    expect(res.json().missing).not.toContain("classification_affectee");
+    expect(res.json().complete).toBe(true);
+  });
+
   it("alerte quand le stock d'ISBN disponibles passe sous le seuil paramétrable (Ch. 13 §13.2)", async () => {
     await app.inject({
       method: "POST",

@@ -2484,6 +2484,14 @@ async function main() {
       permissionModules: ["communication", "production"],
       departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-couvertures-masse-selection-cumulative",
+      version: "2026.10",
+      title: "Nouveauté — Ajout des couvertures : sélectionner les images en plusieurs fois",
+      body: "Vous avez remarqué qu'en ajoutant les couvertures, seules quelques images apparaissaient alors que vous en aviez beaucoup à charger. En cause : chaque nouvelle sélection REMPLACAIT la précédente, et beaucoup de galeries de téléphone ne laissent choisir qu'un petit lot à la fois. C'est corrigé : les sélections s'AJOUTENT maintenant les unes aux autres. Cliquez « Ajouter d'autres images… » autant de fois qu'il faut — tout s'empile dans la liste (un même fichier n'est jamais ajouté deux fois). Un compteur indique combien d'images sont sélectionnées et combien sont déjà rapprochées d'un ouvrage, et un bouton « Vider la liste » permet de tout recommencer. Vous pouvez donc charger vos 30+ couvertures en plusieurs passages, puis tout téléverser d'un coup.",
+      permissionModules: ["communication", "production"],
+      departmentCodes: ["INFOG", "MKT", "COM", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

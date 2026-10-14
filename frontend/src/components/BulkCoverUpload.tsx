@@ -137,15 +137,31 @@ export function BulkCoverUpload({ onDone }: { onDone: () => void }) {
     return best;
   }
 
+  // Les sélections s'AJOUTENT à la liste (on ne remplace pas) : beaucoup de
+  // galeries Android ne laissent choisir qu'un lot à la fois, donc on peut
+  // cliquer « Ajouter des images » plusieurs fois et tout s'empile. Un même
+  // fichier (nom + taille + date) n'est pas ajouté deux fois.
   function onPick(files: FileList | null) {
-    if (!files) return;
-    const next: Row[] = [];
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith("image/")) continue;
-      const m = matchBook(file.name);
-      next.push({ file, previewUrl: URL.createObjectURL(file), bookId: m?.id ?? "", auto: !!m, status: "pending" });
-    }
-    setRows(next);
+    if (!files || files.length === 0) return;
+    setRows((prev) => {
+      const seen = new Set(prev.map((r) => `${r.file.name}|${r.file.size}|${r.file.lastModified}`));
+      const add: Row[] = [];
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/")) continue;
+        const key = `${file.name}|${file.size}|${file.lastModified}`;
+        if (seen.has(key)) continue; // déjà dans la liste
+        seen.add(key);
+        const m = matchBook(file.name);
+        add.push({ file, previewUrl: URL.createObjectURL(file), bookId: m?.id ?? "", auto: !!m, status: "pending" });
+      }
+      return [...prev, ...add];
+    });
+    setSummary(null);
+  }
+
+  function clearRows() {
+    rows.forEach((r) => URL.revokeObjectURL(r.previewUrl));
+    setRows([]);
     setSummary(null);
   }
 
@@ -223,15 +239,25 @@ export function BulkCoverUpload({ onDone }: { onDone: () => void }) {
         <span style={{ fontSize: 11.5 }}>Astuce : pour un rapprochement automatique fiable, nommez chaque image comme le titre de l'ouvrage (ex. « Bozayeur.jpg »). Les images sont <strong>allégées automatiquement</strong> avant l'envoi et <strong>réessayées</strong> en cas de coupure — utile sur connexion lente.</span>
       </p>
 
-      <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => onPick(e.target.files)} />
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-        <button type="button" onClick={() => inputRef.current?.click()} style={btnGhost} disabled={busy}>📂 Choisir des images…</button>
+      {/* value réinitialisée après chaque choix : permet de re-sélectionner le
+          même lot, et surtout d'AJOUTER d'autres images en plusieurs fois. */}
+      <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { onPick(e.target.files); e.currentTarget.value = ""; }} />
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+        <button type="button" onClick={() => inputRef.current?.click()} style={btnGhost} disabled={busy}>📂 {rows.length > 0 ? "Ajouter d'autres images…" : "Choisir des images…"}</button>
         {rows.length > 0 && (
-          <button type="button" onClick={uploadAll} style={btnPrimary} disabled={busy || remainingCount === 0}>
-            {busy ? "Téléversement…" : failedCount > 0 ? `Réessayer (${remainingCount} restante(s))` : `Téléverser ${matchedCount} couverture(s)`}
-          </button>
+          <>
+            <button type="button" onClick={uploadAll} style={btnPrimary} disabled={busy || remainingCount === 0}>
+              {busy ? "Téléversement…" : failedCount > 0 ? `Réessayer (${remainingCount} restante(s))` : `Téléverser ${matchedCount} couverture(s)`}
+            </button>
+            <button type="button" onClick={clearRows} style={btnGhost} disabled={busy}>Vider la liste</button>
+          </>
         )}
       </div>
+      {rows.length > 0 && (
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
+          {rows.length} image(s) sélectionnée(s) · {matchedCount} rapprochée(s){rows.length - matchedCount > 0 ? ` · ${rows.length - matchedCount} à rattacher` : ""}. Vous pouvez en ajouter d'autres en plusieurs fois.
+        </div>
+      )}
 
       {summary && (
         <div style={{ background: "var(--eclosion-soft, #f6efd8)", color: "var(--eclosion-dark, #9A7A12)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{summary}</div>

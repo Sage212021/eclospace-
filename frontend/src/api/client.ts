@@ -2711,6 +2711,8 @@ export interface BatRecord {
   status: "in_control" | "corrections_requested" | "awaiting_signature" | "signed" | "cancelled";
   checklist: { items: ChecklistItem[] } | null;
   anomalies: { id: string; description: string; severity: "minor" | "major" | "blocking"; resolvedAt: string | null }[];
+  // Scan du BAT Final signé par l'auteur (preuve requise avant la signature).
+  signedScanVersionId?: string | null;
 }
 
 export function listBatRecords(manuscriptId: string) {
@@ -2738,6 +2740,18 @@ export function updateBatStatus(batId: string, status: "corrections_requested" |
 
 export function signBat(batId: string, authorApproval?: boolean) {
   return request(`/api/v1/bat/${batId}/sign`, { method: "POST", body: JSON.stringify({ author_approval: authorApproval ?? false }) });
+}
+
+// Dépôt du scan du BAT Final signé par l'auteur (preuve) + lien de consultation.
+export async function uploadBatSignedScan(batId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/v1/bat/${batId}/signed-scan`, { method: "POST", credentials: "include", body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Dépôt du scan impossible.");
+  return response.json() as Promise<{ ok: true; version_id: string }>;
+}
+export function batSignedScanUrl(batId: string): string {
+  return `${API_BASE}/api/v1/bat/${batId}/signed-scan`;
 }
 
 export interface Printer {

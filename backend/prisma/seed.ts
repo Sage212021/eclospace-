@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-bat-signature-auteur-scan-obligatoire",
+      version: "2026.10",
+      title: "Nouveauté — BAT Final : la signature exige le scan du bon à tirer signé par l'auteur",
+      body: "La signature « bon pour impression » du BAT Final demande désormais une PREUVE. Dans la section « BAT Final et contrôle qualité », une fois le dossier prêt pour signature : le service dépose le SCAN (ou la photo) du BAT signé de la main de l'auteur (image ou PDF). Ce n'est qu'alors qu'une case « Je confirme avoir reçu le BAT signé par l'auteur » devient cochable, et que le bouton « Signer le BAT Final (bon pour impression) » s'active. Sans scan déposé, la signature est refusée (contrôle côté serveur). Le scan reste archivé et consultable comme preuve. Ainsi, aucune impression n'est autorisée sans l'accord écrit et signé de l'auteur.",
+      permissionModules: ["bat"],
+      departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-bat-final-fichier-et-controle",
       version: "2026.10",
       title: "Nouveauté — BAT Final : déposer le fichier prêt pour l'imprimeur + liste de contrôle avant de valider",

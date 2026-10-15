@@ -242,6 +242,13 @@ describe("BAT et contrôle qualité (Lot 3)", () => {
     expect(readyForSignature.statusCode).toBe(200);
     expect(readyForSignature.json().status).toBe("awaiting_signature");
 
+    // La signature exige désormais le scan du BAT signé par l'auteur : refus sans lui…
+    const noScan = await app.inject({ method: "POST", url: `/api/v1/bat/${bat.id}/sign`, headers: { cookie: adminCookie }, payload: { author_approval: true } });
+    expect(noScan.statusCode).toBe(409);
+    expect(noScan.json().code).toBe("signed_scan_required");
+    // …puis dépôt du scan (preuve) et signature possible.
+    await prisma.batRecord.update({ where: { id: bat.id }, data: { signedScanVersionId: (await prisma.batRecord.findUniqueOrThrow({ where: { id: bat.id }, select: { interiorVersionId: true } })).interiorVersionId } });
+
     const signed = await app.inject({
       method: "POST",
       url: `/api/v1/bat/${bat.id}/sign`,
@@ -337,6 +344,7 @@ describe("BAT et contrôle qualité (Lot 3)", () => {
       headers: { cookie: adminCookie },
       payload: { status: "awaiting_signature" },
     });
+    await prisma.batRecord.update({ where: { id: bat.id }, data: { signedScanVersionId: (await prisma.batRecord.findUniqueOrThrow({ where: { id: bat.id }, select: { interiorVersionId: true } })).interiorVersionId } });
     await app.inject({ method: "POST", url: `/api/v1/bat/${bat.id}/sign`, headers: { cookie: adminCookie }, payload: {} });
 
     const missingJustification = await app.inject({

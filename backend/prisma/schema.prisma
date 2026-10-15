@@ -3225,6 +3225,10 @@ model BatRecord {
   interiorVersion   DocumentVersion? @relation("BatInterior", fields: [interiorVersionId], references: [id])
   coverVersionId    String?          @map("cover_version_id")
   coverVersion      DocumentVersion? @relation("BatCover", fields: [coverVersionId], references: [id])
+  // Scan/photo du BAT Final SIGNÉ par l'auteur (preuve). Référence une version de
+  // document (sans relation Prisma dédiée : récupérée séparément). Requise avant
+  // de signer le bon à tirer (demande opérateur 15/10).
+  signedScanVersionId String?        @map("signed_scan_version_id")
   technicalSheet    Json?            @map("technical_sheet")
   checklistId       String?          @unique @map("checklist_id")
   checklist         Checklist?       @relation(fields: [checklistId], references: [id])

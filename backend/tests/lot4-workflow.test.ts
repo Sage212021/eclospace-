@@ -179,6 +179,7 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
       await app.inject({ method: "PATCH", url: `/api/v1/checklist-items/${item.id}`, headers: { cookie: adminCookie }, payload: { checked: true } });
     }
     await app.inject({ method: "PATCH", url: `/api/v1/bat/${bat.id}/status`, headers: { cookie: adminCookie }, payload: { status: "awaiting_signature" } });
+    await prisma.batRecord.update({ where: { id: bat.id }, data: { signedScanVersionId: (await prisma.batRecord.findUniqueOrThrow({ where: { id: bat.id }, select: { interiorVersionId: true } })).interiorVersionId } });
     await app.inject({ method: "POST", url: `/api/v1/bat/${bat.id}/sign`, headers: { cookie: adminCookie }, payload: {} });
     // BAT à DOUBLE validation : 1re signature (admin) puis contre-validation (DG).
     await validate(manuscript.id, "VALIDATION_BAT");

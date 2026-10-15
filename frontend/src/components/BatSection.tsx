@@ -7,6 +7,8 @@ import {
   toggleChecklistItem,
   updateBatStatus,
   listStepAttachments,
+  uploadBatSignedScan,
+  batSignedScanUrl,
   type BatRecord,
   type StepAttachment,
 } from "../api/client";
@@ -141,6 +143,22 @@ function BatCycle({
   onError: (m: string) => void;
 }) {
   const locked = bat.status === "signed";
+  const hasScan = !!bat.signedScanVersionId;
+  const [confirmSigned, setConfirmSigned] = useState(false);
+  const [uploadingScan, setUploadingScan] = useState(false);
+
+  async function handleUploadScan(file: File | null) {
+    if (!file) return;
+    setUploadingScan(true);
+    try {
+      await uploadBatSignedScan(bat.id, file);
+      onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Dépôt du scan impossible.");
+    } finally {
+      setUploadingScan(false);
+    }
+  }
 
   async function handleToggle(itemId: string, checked: boolean) {
     try {
@@ -238,10 +256,48 @@ function BatCycle({
         </div>
       )}
 
-      {canValidate && bat.status === "awaiting_signature" && (
-        <button onClick={handleSign} style={{ ...secondaryButtonStyle, marginTop: 10, background: "var(--eclosion)", color: "#fff", border: "none" }}>
-          Signer le BAT Final
-        </button>
+      {(canManage || canValidate) && bat.status === "awaiting_signature" && (
+        <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 12, display: "grid", gap: 8 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700 }}>Signature de l'auteur (bon à tirer)</div>
+          <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
+            Déposez le <b>scan (ou photo) du BAT Final signé de la main de l'auteur</b>. La signature « bon pour impression » n'est possible qu'une fois ce document déposé.
+          </div>
+          {/* Dépôt du scan — par le service (bat:saisie = canManage). */}
+          {canManage && !locked && (
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ ...secondaryButtonStyle, display: "inline-block" }}>
+                {hasScan ? "Remplacer le scan signé" : "Déposer le BAT signé par l'auteur"}
+                <input type="file" accept="image/*,application/pdf" style={{ display: "none" }} disabled={uploadingScan}
+                  onChange={(e) => { handleUploadScan(e.target.files?.[0] ?? null); e.currentTarget.value = ""; }} />
+              </label>
+              {uploadingScan && <span style={{ fontSize: 12, color: "var(--muted)" }}>Dépôt…</span>}
+            </div>
+          )}
+          {hasScan ? (
+            <div style={{ fontSize: 12.5, color: "#2F7D4A" }}>
+              ✅ Scan du BAT signé déposé — <a href={batSignedScanUrl(bat.id)} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark, #9a7a12)", fontWeight: 600 }}>consulter</a>
+            </div>
+          ) : (
+            <div style={{ fontSize: 12.5, color: "var(--alert)" }}>⬜ Aucun scan signé déposé pour l'instant.</div>
+          )}
+          {/* Case de confirmation : activée uniquement si le scan est déposé. */}
+          {canValidate && (
+            <>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, opacity: hasScan ? 1 : 0.5 }}>
+                <input type="checkbox" disabled={!hasScan} checked={confirmSigned} onChange={(e) => setConfirmSigned(e.target.checked)} />
+                Je confirme avoir reçu le BAT signé par l'auteur (document déposé ci-dessus).
+              </label>
+              <button
+                onClick={handleSign}
+                disabled={!hasScan || !confirmSigned}
+                title={!hasScan ? "Déposez d'abord le scan du BAT signé par l'auteur." : !confirmSigned ? "Cochez la confirmation." : undefined}
+                style={{ ...secondaryButtonStyle, marginTop: 2, background: "var(--eclosion)", color: "#fff", border: "none", cursor: !hasScan || !confirmSigned ? "not-allowed" : "pointer", opacity: !hasScan || !confirmSigned ? 0.55 : 1 }}
+              >
+                Signer le BAT Final (bon pour impression)
+              </button>
+            </>
+          )}
+        </div>
       )}
     </div>
   );

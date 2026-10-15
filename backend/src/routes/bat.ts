@@ -8,6 +8,7 @@ import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
 import { checkMaquetteInfographieConvergence } from "../lib/productionConvergence.js";
+import { storeFile, readStoredFile } from "../lib/storage.js";
 
 // Ch. 14 §14.3 : liste de contrôle paramétrable, valeurs de départ conformes
 // au texte — la direction pourra en ajouter par collection (non implémenté :
@@ -402,6 +403,11 @@ export default async function batRoutes(fastify: FastifyInstance) {
       if (bat.status !== BatStatus.awaiting_signature) {
         return reply.code(409).send({ code: "invalid_transition", message: "Le BAT n'est pas en attente de signature." });
       }
+      // La signature « bon pour impression » exige la PREUVE : le scan du BAT
+      // Final signé par l'auteur doit avoir été déposé (demande opérateur 15/10).
+      if (!bat.signedScanVersionId) {
+        return reply.code(409).send({ code: "signed_scan_required", message: "Déposez d'abord le scan du BAT Final signé par l'auteur avant de signer." });
+      }
 
       const [interiorVersion, coverVersion] = await Promise.all([
         prisma.documentVersion.findUnique({ where: { id: bat.interiorVersionId! } }),
@@ -445,6 +451,40 @@ export default async function batRoutes(fastify: FastifyInstance) {
       return reply.code(201).send(signature);
     },
   );
+
+  // Dépôt du SCAN du BAT Final signé par l'auteur (preuve) — déposé par le
+  // service (bat:saisie). Image ou PDF. Possible tant que le BAT n'est pas signé.
+  fastify.post("/api/v1/bat/:id/signed-scan", { preHandler: requirePermission("bat", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const bat = await prisma.batRecord.findUnique({ where: { id } });
+    if (!bat) return reply.code(404).send({ code: "not_found", message: "BAT introuvable." });
+    if (bat.status === BatStatus.signed) return reply.code(409).send({ code: "bat_locked", message: "Le BAT est déjà signé : le dossier est verrouillé." });
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ code: "validation_error", message: "Fichier requis." });
+    const buffer = await file.toBuffer();
+    if (buffer.length === 0) return reply.code(400).send({ code: "empty_file", message: "Le fichier est vide." });
+    const stored = await storeFile(buffer, `bat-signe-${bat.manuscriptId}-${file.filename}`);
+    const doc = await prisma.document.create({
+      data: { entityType: "manuscript", entityId: bat.manuscriptId, category: "bat", confidentiality: "interne", title: `BAT signé par l'auteur — cycle ${bat.cycleNumber}`, createdBy: request.user!.id, updatedBy: request.user!.id },
+    });
+    const version = await prisma.documentVersion.create({
+      data: { documentId: doc.id, versionNumber: 1, filePath: stored.filePath, fileSize: stored.fileSize, mimeType: file.mimetype, sha256Hash: stored.sha256Hash, changeSummary: "Scan du BAT Final signé par l'auteur", uploadedBy: request.user!.id },
+    });
+    await prisma.batRecord.update({ where: { id }, data: { signedScanVersionId: version.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "bat_record", entityId: id, newValues: { signed_scan: true, versionId: version.id }, ipAddress: request.ip });
+    return reply.code(201).send({ ok: true, version_id: version.id });
+  });
+
+  fastify.get("/api/v1/bat/:id/signed-scan", { preHandler: requirePermission("bat", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const bat = await prisma.batRecord.findUnique({ where: { id }, select: { signedScanVersionId: true } });
+    if (!bat?.signedScanVersionId) return reply.code(404).send({ code: "not_found", message: "Aucun scan signé déposé." });
+    const version = await prisma.documentVersion.findUnique({ where: { id: bat.signedScanVersionId } });
+    if (!version) return reply.code(404).send({ code: "not_found", message: "Scan introuvable." });
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
+  });
 
   // Annulation formelle post-signature (Ch. 14 §14.5) : seule voie pour
   // modifier un BAT verrouillé, motivée et notifiée à la direction.

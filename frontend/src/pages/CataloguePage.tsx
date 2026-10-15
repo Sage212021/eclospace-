@@ -4,10 +4,13 @@ import {
   getCatalogueConfig,
   setCatalogueDefaultSort,
   setCatalogueSummary,
+  setCatalogueGenre,
+  listGenres,
   catalogueCoverUrl,
   type CatalogueItem,
   type CatalogueResponse,
   type CatalogueSort,
+  type Genre,
 } from "../api/client";
 import { BulkCoverUpload } from "../components/BulkCoverUpload";
 
@@ -236,6 +239,31 @@ function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { i
   const [draft, setDraft] = useState(item.summary ?? "");
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  // Genre (domaine) corrigeable par l'administration — utile après un import de
+  // fonds où le genre était approximatif.
+  const [genreLabel, setGenreLabel] = useState<string | null>(item.genre?.label ?? null);
+  const [genreId, setGenreId] = useState<string>(item.genre?.id ?? "");
+  const [editingGenre, setEditingGenre] = useState(false);
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [savingGenre, setSavingGenre] = useState(false);
+  const [genreErr, setGenreErr] = useState<string | null>(null);
+  useEffect(() => { if (editingGenre && genres.length === 0) listGenres().then(setGenres).catch(() => {}); }, [editingGenre, genres.length]);
+  async function saveGenre(newId: string) {
+    if (!newId || newId === genreId) { setEditingGenre(false); return; }
+    setSavingGenre(true);
+    setGenreErr(null);
+    try {
+      const r = await setCatalogueGenre(item.id, newId);
+      setGenreId(r.genre.id);
+      setGenreLabel(r.genre.label);
+      setEditingGenre(false);
+      onSaved?.();
+    } catch (e) {
+      setGenreErr(e instanceof Error ? e.message : "Enregistrement impossible.");
+    } finally {
+      setSavingGenre(false);
+    }
+  }
   async function saveSummary() {
     setSaving(true);
     setSaveErr(null);
@@ -264,7 +292,34 @@ function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { i
             <div style={{ fontSize: 13, marginTop: 8 }}>{item.authors.join(", ") || "Auteur non renseigné"}</div>
             <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", fontSize: 12.5, marginTop: 12 }}>
               <Meta k="Collection" v={item.collection?.label} />
-              <Meta k="Genre" v={item.genre?.label} />
+              {canAdmin ? (
+                <>
+                  <span style={{ color: "var(--muted)" }}>Genre</span>
+                  <span>
+                    {editingGenre ? (
+                      <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                        <select value={genreId} onChange={(e) => saveGenre(e.target.value)} disabled={savingGenre}
+                          style={{ padding: "4px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12.5, fontFamily: "inherit", background: "#fff" }}>
+                          <option value="">— choisir —</option>
+                          {genres.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+                        </select>
+                        <button type="button" onClick={() => { setEditingGenre(false); setGenreErr(null); }} disabled={savingGenre}
+                          style={{ border: "1px solid var(--line)", background: "#fff", borderRadius: 6, padding: "3px 8px", fontSize: 11.5, cursor: "pointer" }}>Annuler</button>
+                        {savingGenre && <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Enregistrement…</span>}
+                      </span>
+                    ) : (
+                      <span style={{ display: "inline-flex", gap: 7, alignItems: "center" }}>
+                        <span style={{ fontWeight: 600, color: "var(--ink)" }}>{genreLabel ?? "—"}</span>
+                        <button type="button" onClick={() => setEditingGenre(true)} title="Corriger le genre (domaine)"
+                          style={{ border: "1px solid var(--line)", background: "#fff", borderRadius: 6, padding: "2px 7px", fontSize: 11, cursor: "pointer" }}>✏️</button>
+                      </span>
+                    )}
+                    {genreErr && <span style={{ display: "block", fontSize: 11.5, color: "var(--alert, #B23A2E)", marginTop: 3 }}>{genreErr}</span>}
+                  </span>
+                </>
+              ) : (
+                <Meta k="Genre" v={item.genre?.label} />
+              )}
               <Meta k="Parution" v={item.year ? String(item.year) : undefined} />
               <Meta k="Prix public" v={price(item.pricePublic)} />
               <Meta k="Disponibilité" v={item.availability} color={AVAIL_COLOR[item.availabilityCode ?? ""]} />

@@ -80,6 +80,32 @@ describe("catalogue & classements (Phase 3)", () => {
     expect(rows[0].isBackCatalogue).toBe(true);
   });
 
+  it("corrige le genre d'un ouvrage du catalogue (PATCH /catalogue/:id/genre)", async () => {
+    const tag = Math.random().toString(36).slice(2, 7);
+    const book = await importBook(`Genre ${tag}`, "2019-03-01"); // créé en ROMAN
+    const other = await prisma.genre.findFirstOrThrow({ where: { deletedAt: null, id: { not: genreId } }, select: { id: true, label: true } });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/catalogue/${book.id}/genre`,
+      headers: { cookie: adminCookie },
+      payload: { genre_id: other.id },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().genre.id).toBe(other.id);
+
+    const after = await prisma.manuscript.findUniqueOrThrow({ where: { id: book.id }, select: { genreId: true } });
+    expect(after.genreId).toBe(other.id);
+
+    // Domaine inexistant → 404 ; profil sans communication:administration → 403.
+    const bad = await app.inject({ method: "PATCH", url: `/api/v1/catalogue/${book.id}/genre`, headers: { cookie: adminCookie }, payload: { genre_id: "00000000-0000-0000-0000-000000000000" } });
+    expect(bad.statusCode).toBe(404);
+    await createUserWithRole("correcteur_genre_test", "CORRECTEUR", "Correcteur123!");
+    const corr = await loginCookie(app, "correcteur_genre_test", "Correcteur123!");
+    const forbidden = await app.inject({ method: "PATCH", url: `/api/v1/catalogue/${book.id}/genre`, headers: { cookie: corr }, payload: { genre_id: other.id } });
+    expect(forbidden.statusCode).toBe(403);
+  });
+
   it("crée un domaine, l'utilise, puis refuse de le retirer tant qu'il sert (409)", async () => {
     const label = `Domaine ${Math.random().toString(36).slice(2, 7)}`;
     const create = await app.inject({

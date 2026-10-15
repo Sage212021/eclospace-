@@ -234,6 +234,21 @@ export default async function catalogueRoutes(fastify: FastifyInstance) {
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "catalogue_summary", entityId: id, newValues: { length: parsed.data.summary.trim().length }, ipAddress: request.ip });
     return reply.send({ ok: true, summary: parsed.data.summary.trim() || null });
   });
+
+  // Corrige le domaine (genre) d'un ouvrage directement depuis la fiche du
+  // catalogue — utile après un import de fonds où le genre était approximatif.
+  fastify.patch("/api/v1/catalogue/:id/genre", { preHandler: requirePermission("communication", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ genre_id: z.string().uuid() }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Domaine invalide." });
+    const ms = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!ms) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable." });
+    const genre = await prisma.genre.findFirst({ where: { id: parsed.data.genre_id, deletedAt: null }, select: { id: true, label: true } });
+    if (!genre) return reply.code(404).send({ code: "genre_not_found", message: "Domaine introuvable." });
+    await prisma.manuscript.update({ where: { id }, data: { genreId: genre.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "catalogue_genre", entityId: id, newValues: { genreId: genre.id, genreLabel: genre.label }, ipAddress: request.ip });
+    return reply.send({ ok: true, genre: { id: genre.id, label: genre.label } });
+  });
 }
 
 function uniqueBy<T>(arr: T[], key: (x: T) => string): T[] {

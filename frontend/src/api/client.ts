@@ -7079,6 +7079,9 @@ export function catalogueCoverUrl(id: string): string {
 export function setCatalogueSummary(id: string, summary: string) {
   return request<{ ok: true; summary: string | null }>(`/api/v1/catalogue/${id}/summary`, { method: "PATCH", body: JSON.stringify({ summary }) });
 }
+export function setCatalogueGenre(id: string, genreId: string) {
+  return request<{ ok: true; genre: { id: string; label: string } }>(`/api/v1/catalogue/${id}/genre`, { method: "PATCH", body: JSON.stringify({ genre_id: genreId }) });
+}
 export function getCatalogueConfig(): Promise<{ defaultSort: CatalogueSort; sorts: CatalogueSort[] }> {
   return request("/api/v1/catalogue/config");
 }

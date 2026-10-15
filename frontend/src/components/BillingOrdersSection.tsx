@@ -3,6 +3,7 @@ import {
   listCustomers,
   createCustomer,
   createBillingOrder,
+  updateBillingOrder,
   getBillingOrders,
   invoiceBillingOrder,
   cancelBillingOrder,
@@ -27,6 +28,7 @@ import {
 } from "../api/client";
 import { Card } from "./Card";
 import { IconFinance } from "./icons";
+import { IsbnCombobox } from "./IsbnCombobox";
 import { printInvoice } from "../lib/print";
 import { useConfirm } from "./ConfirmProvider";
 
@@ -68,6 +70,9 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [threshold, setThreshold] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
+  // Reprise d'une commande « en cours d'établissement » (brouillon) : id en cours
+  // de modification, ou null pour une création.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ customer_id: "", category: "livre_scolaire" as BillingOrderCategory, label: "", amount_ht: "", tax_rate: "0", discount_pct: 0 });
   const [bookLines, setBookLines] = useState<BookLine[]>([emptyLine()]);
   const [otherLines, setOtherLines] = useState<OtherLine[]>([emptyOther()]);
@@ -122,26 +127,12 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
   const formGrossTtc = baseHt * (1 + (Number(form.tax_rate) || 0) / 100);
   const formNet = Math.round(formGrossTtc * (1 - form.discount_pct / 100) * 100) / 100;
 
-  // Menu d'ouvrages groupé par matière (le sous-titre porte « Matière · Classe »).
-  // Les ouvrages sans matière connue tombent dans « Autres ouvrages », en dernier.
-  const groupedIsbns = useMemo(() => {
-    const groups = new Map<string, IsbnCatalogueItem[]>();
-    for (const x of isbns) {
-      // On ne propose que les ouvrages du segment correspondant à la catégorie
-      // (scolaire ↔ manuels, général ↔ ouvrages simples) pour ne pas les mélanger.
-      if (wantSegment && (x.manuscript?.editorialSegment ?? "general") !== wantSegment) continue;
-      const st = x.manuscript?.subtitle ?? "";
-      // Scolaire : « Matière · Classe » → groupe par matière. Général : « Collection … » → groupe par collection.
-      const grp = st.includes("·") ? st.split("·")[0].trim() : st.trim() || "Autres ouvrages";
-      if (!groups.has(grp)) groups.set(grp, []);
-      groups.get(grp)!.push(x);
-    }
-    return [...groups.entries()].sort((a, b) => {
-      if (a[0] === "Autres ouvrages") return 1;
-      if (b[0] === "Autres ouvrages") return -1;
-      return a[0].localeCompare(b[0], "fr");
-    });
-  }, [isbns, wantSegment]);
+  // Ouvrages du bon segment (scolaire ↔ général) pour la BARRE DE RECHERCHE
+  // (titre / initiales / ISBN) — remplace l'ancien menu déroulant.
+  const segmentIsbns = useMemo(
+    () => isbns.filter((x) => !wantSegment || (x.manuscript?.editorialSegment ?? "general") === wantSegment),
+    [isbns, wantSegment],
+  );
 
   function setLine(i: number, patch: Partial<BookLine>) {
     setBookLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -166,6 +157,47 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
     setForm({ customer_id: "", category: "livre_scolaire", label: "", amount_ht: "", tax_rate: "0", discount_pct: 0 });
     setBookLines([emptyLine()]);
     setOtherLines([emptyOther()]);
+    setEditingId(null);
+  }
+
+  // Reprendre / modifier une commande « en cours d'établissement » (brouillon) :
+  // on recharge ses valeurs dans le formulaire, sans créer de nouveau document.
+  function startEdit(o: BillingOrder) {
+    setEditingId(o.id);
+    setForm({
+      customer_id: o.customer_id ?? "",
+      category: o.category,
+      label: o.label,
+      amount_ht: o.lines.length === 0 ? String(o.amount_ht) : "",
+      tax_rate: String(o.tax_rate ?? 0),
+      discount_pct: o.discount_pct ?? 0,
+    });
+    const detailedCat = o.category === "livre_scolaire" || o.category === "livre_general";
+    if (detailedCat) {
+      setBookLines(
+        o.lines.length
+          ? o.lines.map((l) => ({
+              isbn_id: l.isbn_id ?? "",
+              description: l.description,
+              quantity: String(l.quantity),
+              unit_price_ht: String(l.unit_price_ht),
+              royalty_rate: l.royalty_rate != null ? String(Math.round(l.royalty_rate * 100)) : "",
+            }))
+          : [emptyLine()],
+      );
+      setOtherLines([emptyOther()]);
+    } else {
+      setOtherLines(
+        o.lines.length
+          ? o.lines.map((l) => ({ description: l.description, quantity: String(l.quantity), unit_price_ht: String(l.unit_price_ht) }))
+          : [emptyOther()],
+      );
+      setBookLines([emptyLine()]);
+    }
+    setShowForm(true);
+    setError(null);
+    setMsg(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function submitNewCustomer() {
@@ -249,17 +281,23 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
     setBusy(true);
     setError(null);
     try {
-      await createBillingOrder({
+      const payload = {
         customer_id: form.customer_id,
         category: form.category,
         label: form.label.trim(),
         tax_rate: Number(form.tax_rate) || 0,
         discount_pct: form.discount_pct || 0,
         ...(detailed || isAutre ? { lines: payloadLines } : { amount_ht: Number(form.amount_ht) }),
-      });
+      };
+      if (editingId) {
+        await updateBillingOrder(editingId, payload);
+        setMsg("Brouillon mis à jour. Vous pourrez le reprendre ou établir la facture quand il sera complet.");
+      } else {
+        await createBillingOrder(payload);
+        setMsg(detailed ? "Brouillon enregistré. Les droits d'auteur seront calculés à l'établissement de la facture." : "Brouillon enregistré.");
+      }
       setShowForm(false);
       resetForm();
-      setMsg(detailed ? "Commande enregistrée. Les droits d'auteur seront calculés à l'établissement de la facture." : "Commande enregistrée.");
       reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Enregistrement impossible.");
@@ -439,15 +477,18 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
 
   return (
     <>
-      <Card title="Commandes à facturer" icon={<IconFinance />} subtitle="Commandes (ex. livre scolaire) initiées par la direction, le commercial ou la Finance — à transformer en facture.">
+      <Card title="Factures en cours d'établissement" icon={<IconFinance />} subtitle="Brouillons de facture (commandes initiées par la direction, le commercial ou la Finance). Enregistrez un brouillon, reprenez-le autant de fois que nécessaire, puis établissez la facture définitive quand elle est complète.">
         {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{error}</div>}
         {msg && <div style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{msg}</div>}
 
         {canCreate && !showForm && (
-          <button onClick={() => { setShowForm(true); setError(null); }} style={{ border: "1px solid var(--eclosion)", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "7px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 12 }}>+ Nouvelle commande</button>
+          <button onClick={() => { resetForm(); setShowForm(true); setError(null); }} style={{ border: "1px solid var(--eclosion)", background: "var(--eclosion)", color: "#fff", borderRadius: 8, padding: "7px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 12 }}>+ Nouvelle facture (brouillon)</button>
         )}
         {showForm && (
           <div style={{ border: "1px dashed var(--line)", borderRadius: 10, padding: 12, marginBottom: 12, display: "grid", gap: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--eclosion-dark, #9A7A12)" }}>
+              {editingId ? "Reprise d'un brouillon en cours d'établissement" : "Nouveau brouillon de facture"}
+            </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <select value={form.customer_id} onChange={(e) => setForm((f) => ({ ...f, customer_id: e.target.value }))} style={{ ...inp, flex: 1 }}>
                 <option value="">— Choisir un client —</option>
@@ -494,20 +535,16 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
                 </div>
                 {bookLines.map((l, i) => (
                   <div key={i} style={{ display: "grid", gap: 6, border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <select value={l.isbn_id} onChange={(e) => pickIsbn(i, e.target.value)} style={{ ...inp, flex: 1 }}>
-                        <option value="">— Ouvrage / ISBN (facultatif) —</option>
-                        {groupedIsbns.map(([matiere, items]) => (
-                          <optgroup key={matiere} label={matiere}>
-                            {items.map((x) => {
-                              const t = x.manuscript?.title ?? "Sans titre";
-                              const st = x.manuscript?.subtitle; // « Matière · Classe »
-                              const classe = st && st.includes("·") ? st.split("·")[1].trim() : null;
-                              return <option key={x.id} value={x.id}>{classe ? `${t} — ${classe}` : t} · {x.isbn13}</option>;
-                            })}
-                          </optgroup>
-                        ))}
-                      </select>
+                    <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      {/* Barre de recherche d'ouvrage : titre, initiales ou ISBN. */}
+                      <div style={{ flex: 1 }}>
+                        <IsbnCombobox
+                          isbns={segmentIsbns}
+                          value={l.isbn_id}
+                          onChange={(id) => pickIsbn(i, id)}
+                          placeholder="Rechercher un ouvrage (titre, initiales ou ISBN)…"
+                        />
+                      </div>
                       {bookLines.length > 1 && (
                         <button type="button" onClick={() => setBookLines((ls) => ls.filter((_, idx) => idx !== i))} style={btnDanger} title="Retirer cet ouvrage">✕</button>
                       )}
@@ -576,15 +613,18 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
               </span>
             </div>
 
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
+              <span style={{ fontSize: 11.5, color: "var(--muted)", marginRight: "auto" }}>
+                Enregistrer ≠ valider : le brouillon est conservé, la facture n'est émise qu'avec « Établir la facture ».
+              </span>
               <button onClick={() => { setShowForm(false); resetForm(); }} style={btnGhost}>Annuler</button>
-              <button onClick={submitOrder} disabled={busy} style={btnPrimary}>Enregistrer la commande</button>
+              <button onClick={submitOrder} disabled={busy} style={btnPrimary}>{editingId ? "Enregistrer les modifications" : "Enregistrer le brouillon"}</button>
             </div>
           </div>
         )}
 
         {orders.length === 0 ? (
-          <p style={{ fontSize: 13.5, color: "var(--muted)", margin: 0 }}>Aucune commande en attente de facturation.</p>
+          <p style={{ fontSize: 13.5, color: "var(--muted)", margin: 0 }}>Aucune facture en cours d'établissement.</p>
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
             {orders.map((o) => {
@@ -593,9 +633,13 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
               return (
                 <div key={o.id} style={{ ...row, flexDirection: "column", alignItems: "stretch", gap: 8 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, color: "var(--ink)", fontSize: 14 }}>{o.label}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 600, color: "var(--ink)", fontSize: 14 }}>{o.label}</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, color: "var(--eclosion-dark, #9A7A12)", background: "var(--eclosion-soft, #f6efd8)", border: "1px solid var(--eclosion, #D9B21A)", borderRadius: 999, padding: "1px 8px" }}>Brouillon</span>
+                    </div>
                     <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>
-                      <span style={{ fontFamily: "var(--font-mono)" }}>{o.reference}</span> · {o.customer_name} · <span style={{ fontFamily: "var(--font-mono)" }}>{fmt.format(o.amount_ttc)}</span>
+                      <span style={{ fontFamily: "var(--font-mono)" }}>{o.reference}</span> · {o.customer_name} · créée le {new Date(o.created_at).toLocaleDateString("fr-FR")} · <span style={{ fontFamily: "var(--font-mono)" }}>{fmt.format(o.amount_ttc)}</span>
+                      {o.lines.length > 0 && <> · {o.lines.length} ligne{o.lines.length > 1 ? "s" : ""}</>}
                     </div>
                   </div>
                   {(canCreate || canInvoice) && (
@@ -613,10 +657,11 @@ export function BillingOrdersSection({ canCreate, canInvoice, canValidateThresho
                           </span>
                         )}
                       </div>
-                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
+                        {canCreate && <button onClick={() => startEdit(o)} style={btnGhost} title="Reprendre ce brouillon pour le compléter (ajouter des ouvrages, modifier les quantités…)">Reprendre / Modifier</button>}
                         <button onClick={() => proforma(o)} style={btnGhost} title="Imprimer une facture proforma (document préparatoire, non fiscal)">Proforma (PDF)</button>
-                        <button onClick={() => cancelOrder(o)} style={btnDanger} title="Annuler la commande (client désisté)">Annuler la commande</button>
-                        {canInvoice && <button onClick={() => establish(o)} style={btnPrimary}>Établir la facture</button>}
+                        <button onClick={() => cancelOrder(o)} style={btnDanger} title="Annuler le brouillon (client désisté)">Annuler</button>
+                        {canInvoice && <button onClick={() => establish(o)} style={btnPrimary} title="Validation définitive : émet la facture officielle (numérotée, non modifiable).">Établir la facture</button>}
                       </div>
                     </div>
                   )}

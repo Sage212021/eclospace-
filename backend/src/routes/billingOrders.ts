@@ -58,9 +58,9 @@ async function governanceDeciderIds(): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-type OrderLineRow = { id: string; description: string; quantity: number; unitPriceHt: unknown; isbnId?: string | null };
+type OrderLineRow = { id: string; description: string; quantity: number; unitPriceHt: unknown; isbnId?: string | null; royaltyRate?: unknown };
 function orderView(
-  o: { id: string; orderNumber: string; category: string; label: string; amountHt: unknown; taxRate: unknown; discountPct?: unknown; status: string; createdAt: Date; lines?: OrderLineRow[] },
+  o: { id: string; orderNumber: string; category: string; label: string; amountHt: unknown; taxRate: unknown; discountPct?: unknown; status: string; createdAt: Date; customerId?: string; note?: string | null; lines?: OrderLineRow[] },
   customerName: string,
 ) {
   const ht = Number(o.amountHt);
@@ -78,6 +78,8 @@ function orderView(
     discount_pct: discount,
     status: o.status,
     created_at: o.createdAt,
+    customer_id: o.customerId ?? null,
+    note: o.note ?? null,
     // Détail des lignes saisies (ouvrages / éléments « Autre »), pour que la
     // proforma — comme la facture définitive — affiche TOUS les libellés et
     // leurs montants, et non un seul libellé global.
@@ -90,6 +92,7 @@ function orderView(
         unit_price_ht: unit,
         line_total: Math.round(l.quantity * unit * 100) / 100,
         isbn_id: l.isbnId ?? null,
+        royalty_rate: l.royaltyRate != null ? Number(l.royaltyRate) : null,
       };
     }),
   };
@@ -236,6 +239,107 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     }
     await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "billing_order", entityId: order.id, oldValues: { status: order.status }, newValues: { status: "cancelled", reason }, ipAddress: request.ip });
     return reply.send(orderView(updated, order.customer.name));
+  });
+
+  // REPRISE / MODIFICATION d'une commande « en cours d'établissement » (brouillon)
+  // — demande opérateur 15/10. Le financier peut rouvrir une commande PENDING et
+  // la compléter (client, catégorie, intitulé, TVA, remise, lignes d'ouvrages)
+  // sans créer de nouveau document ni la facturer. Interdit dès qu'elle est
+  // facturée (facture immuable, Ch. 18) ou annulée. Les lignes fournies
+  // REMPLACENT entièrement les lignes existantes ; les montants sont recalculés.
+  fastify.patch("/api/v1/billing-orders/:id", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z
+      .object({
+        customer_id: z.string().uuid().optional(),
+        category: z.enum(["livre_scolaire", "livre_general", "autre"]).optional(),
+        label: z.string().min(1).max(200).optional(),
+        amount_ht: z.number().positive().optional(),
+        tax_rate: z.number().min(0).max(100).optional(),
+        discount_pct: z.number().min(0).max(100).optional(),
+        note: z.string().max(500).optional(),
+        lines: z
+          .array(
+            z.object({
+              isbn_id: z.string().uuid().optional(),
+              description: z.string().min(1).max(200),
+              quantity: z.number().int().positive(),
+              unit_price_ht: z.number().positive(),
+              royalty_rate: z.number().min(0).max(1).optional(),
+            }),
+          )
+          .max(200)
+          .optional(),
+      })
+      .safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides." });
+
+    const order = await prisma.billingOrder.findFirst({ where: { id, deletedAt: null }, include: { customer: { select: { name: true } } } });
+    if (!order) return reply.code(404).send({ code: "not_found", message: "Commande introuvable." });
+    if (order.status !== "pending") {
+      return reply.code(409).send({ code: "not_editable", message: order.status === "invoiced" ? "Cette commande est déjà facturée : une facture émise ne se modifie pas (établissez un avoir)." : "Cette commande est annulée : elle ne peut plus être modifiée." });
+    }
+
+    const { lines } = parsed.data;
+    // Client : si on le change, il doit exister.
+    let customer = order.customer;
+    let customerId = order.customerId;
+    if (parsed.data.customer_id && parsed.data.customer_id !== order.customerId) {
+      const c = await prisma.customer.findFirst({ where: { id: parsed.data.customer_id, deletedAt: null }, select: { id: true, name: true } });
+      if (!c) return reply.code(404).send({ code: "not_found", message: "Client introuvable." });
+      customer = { name: c.name };
+      customerId = c.id;
+    }
+
+    // ISBN référencés (s'il y a de nouvelles lignes) doivent exister.
+    if (lines?.length) {
+      const isbnIds = [...new Set(lines.map((l) => l.isbn_id).filter((v): v is string => !!v))];
+      if (isbnIds.length) {
+        const found = await prisma.isbn.count({ where: { id: { in: isbnIds } } });
+        if (found !== isbnIds.length) return reply.code(400).send({ code: "validation_error", message: "Un ISBN référencé est introuvable." });
+      }
+    }
+
+    // Montant HT : somme des lignes si on en fournit, sinon montant global éventuel,
+    // sinon on conserve le montant courant.
+    const amountHt = lines
+      ? Math.round(lines.reduce((s, l) => s + l.quantity * l.unit_price_ht, 0) * 100) / 100
+      : parsed.data.amount_ht ?? Number(order.amountHt);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Les lignes fournies remplacent intégralement les anciennes.
+      if (lines) {
+        await tx.billingOrderLine.deleteMany({ where: { billingOrderId: id } });
+        if (lines.length) {
+          await tx.billingOrderLine.createMany({
+            data: lines.map((l) => ({
+              billingOrderId: id,
+              isbnId: l.isbn_id ?? null,
+              description: l.description.trim(),
+              quantity: l.quantity,
+              unitPriceHt: l.unit_price_ht,
+              royaltyRate: l.royalty_rate ?? null,
+            })),
+          });
+        }
+      }
+      return tx.billingOrder.update({
+        where: { id },
+        data: {
+          customerId,
+          ...(parsed.data.category ? { category: parsed.data.category } : {}),
+          ...(parsed.data.label ? { label: parsed.data.label.trim() } : {}),
+          ...(parsed.data.tax_rate != null ? { taxRate: parsed.data.tax_rate } : {}),
+          ...(parsed.data.discount_pct != null ? { discountPct: parsed.data.discount_pct } : {}),
+          ...(parsed.data.note !== undefined ? { note: parsed.data.note?.trim() || null } : {}),
+          amountHt,
+        },
+        include: { lines: true },
+      });
+    });
+
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "billing_order", entityId: id, newValues: { amountHt, lines: lines?.length ?? undefined }, ipAddress: request.ip });
+    return reply.send(orderView(updated, customer.name));
   });
 
   // La Finance établit la facture depuis la commande (validation par seuil).

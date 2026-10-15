@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-factures-recherche-ouvrage-et-brouillon",
+      version: "2026.10",
+      title: "Nouveauté — Facturation : recherche d'ouvrage + brouillons repris à tout moment",
+      body: "Deux améliorations à l'établissement des factures (Finance). (1) Pour ajouter un ouvrage à une facture, une BARRE DE RECHERCHE remplace la longue liste déroulante : tapez le titre, ses premières lettres ou l'ISBN, le livre apparaît et s'ajoute en un clic (titre et prix pré-remplis). (2) Vous pouvez enregistrer une facture en BROUILLON, quitter l'écran, puis la REPRENDRE plus tard pour la compléter — ajouter des ouvrages, changer des quantités — sans jamais perdre les données ni créer de doublon. Les brouillons sont listés dans « Factures en cours d'établissement » (client, date, montant provisoire, badge « Brouillon »), avec un bouton « Reprendre / Modifier ». Enregistrer un brouillon n'émet rien : la facture officielle n'est créée qu'avec « Établir la facture » (validation définitive), comme avant.",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN", "DG"],
+    },
+    {
       slug: "2026-10-impression-double-validation-et-tableau",
       version: "2026.10",
       title: "Nouveauté — Impression à deux signatures + étapes « à signer » visibles dans Mes travaux",

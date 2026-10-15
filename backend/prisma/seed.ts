@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-import-masse-annee-facultative",
+      version: "2026.10",
+      title: "Nouveauté — Import d'une liste : l'année de parution devient facultative",
+      body: "À l'import d'une liste d'ouvrages (Manuscrits → Nouveau manuscrit → Importer une liste), l'année de parution n'est plus obligatoire. Si vous ne la connaissez pas, laissez la colonne « année » vide : l'ouvrage entre quand même au catalogue, avec la mention « année : — », et vous pourrez préciser l'année plus tard sur sa fiche. Seuls le titre, l'auteur et le genre restent indispensables. Auparavant, une seule année manquante empêchait tout l'import de se lancer (le bouton semblait ne rien faire).",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["SECR", "DIRED", "COMM", "DG"],
+    },
+    {
       slug: "2026-10-catalogue-resume-depliable",
       version: "2026.10",
       title: "Nouveauté — Catalogue : résumé masqué, dépliable au clic",

@@ -559,7 +559,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     author: z.string().trim().min(1),
     genre: z.string().trim().min(1), // libellé OU code du domaine
     collection: z.string().trim().optional(), // libellé OU code (facultatif)
-    publication_date: z.string().trim().min(4), // année « 2021 » ou date ISO
+    publication_date: z.string().trim().optional(), // année « 2021 » ou date ISO (facultatif)
     summary: z.string().trim().optional(),
     isbn: z.string().trim().optional(),
     age_range: z.string().trim().optional(),
@@ -612,9 +612,12 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           const key = norm(r.collection).replace(/^collection\s+/, "");
           collectionId = collByKey.get(key) ?? collByKey.get(collAlias[key] ?? key);
         }
-        const pub = parseDate(r.publication_date);
-        if (!pub) { results.push({ row: i + 1, title: r.title, status: "error", message: `Date de parution illisible : « ${r.publication_date} ».` }); continue; }
-        if (pub > startOfToday()) { results.push({ row: i + 1, title: r.title, status: "error", message: "Date de parution postérieure à aujourd'hui." }); continue; }
+        // Année facultative : si fournie elle doit être lisible et non future ;
+        // sinon l'ouvrage entre au catalogue sans date de parution (« année : — »).
+        const rawDate = (r.publication_date ?? "").trim();
+        const pub = rawDate ? parseDate(rawDate) : null;
+        if (rawDate && !pub) { results.push({ row: i + 1, title: r.title, status: "error", message: `Date de parution illisible : « ${rawDate} ».` }); continue; }
+        if (pub && pub > startOfToday()) { results.push({ row: i + 1, title: r.title, status: "error", message: "Date de parution postérieure à aujourd'hui." }); continue; }
         const dup = await findDuplicateManuscript(r.title);
         if (dup) { results.push({ row: i + 1, title: r.title, status: "skipped", message: "Déjà au catalogue (titre existant)." }); continue; }
 
@@ -626,7 +629,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
             data: {
               manuscriptNumber, title: r.title, collectionId, genreId, language: "fr",
               summary: r.summary, origin: "soumission", statusId: publishedStatus.id, ownerId: me,
-              receivedAt: pub, publicationDate: pub, isBackCatalogue: true, createdBy: me, updatedBy: me,
+              receivedAt: pub ?? new Date(), publicationDate: pub, isBackCatalogue: pub != null, createdBy: me, updatedBy: me,
               workContributors: { create: { partnerId: author.id, role: "author", displayOrder: 0 } },
             },
           });

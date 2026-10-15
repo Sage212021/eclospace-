@@ -203,7 +203,9 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
     const poResponse = await app.inject({ method: "POST", url: `/api/v1/print-quotes/${quote.id}/purchase-order`, headers: { cookie: adminCookie }, payload: {} });
     const po = poResponse.json();
     await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "sent" } });
+    // IMPRESSION à double validation : 1re signature (admin) puis contre-validation (DG).
     await validate(manuscript.id, "IMPRESSION");
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/IMPRESSION/validate`, headers: { cookie: dgCookie }, payload: {} });
 
     const receipt = await app.inject({
       method: "POST",

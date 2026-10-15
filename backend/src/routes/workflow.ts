@@ -163,6 +163,18 @@ const validateStepSchema = z.object({
 // /editorial-decision (Ch. 8 §8.2).
 const DEDICATED_FLOW_STEPS = new Set(["COMITE_LECTURE", "DECISION_EDITORIALE"]);
 
+// Étapes à DOUBLE signature (deux personnes différentes) : l'opérateur de
+// production habilité pose la 1re signature (pré-validation, l'ouvrage reste à
+// l'étape) ; la Direction générale (« manuscripts:validation ») contre-valide
+// (2e signature) et fait avancer l'ouvrage. Clé = code d'étape, valeur = droit
+// de pré-validation de l'opérateur de production concerné.
+//   BAT Final  → bat:saisie (service relecture/qualité ou infographe affecté)
+//   Impression → printing:saisie (responsable impression / infographe)
+const DOUBLE_VALIDATION_STEPS: Record<string, string> = {
+  VALIDATION_BAT: "bat:saisie",
+  IMPRESSION: "printing:saisie",
+};
+
 // Moteur de workflow générique (Ch. 4 §4.2, §4.5) : impossible de sauter une
 // étape — on ne peut valider que l'étape où se trouve actuellement le
 // manuscrit, ce qui garantit le séquencement par construction.
@@ -199,12 +211,16 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         // « manuscripts:validation » (Direction générale) : elle est contrôlée plus
         // bas, dans le bloc VALIDATION_BAT. On laisse donc passer ici l'opérateur
         // habilité à soumettre, sans lui ouvrir l'avancement pour autant.
-        const canSubmitBat =
-          targetStatus.code === "VALIDATION_BAT" &&
-          (request.user!.permissions.has("bat:saisie") ||
+        // Étapes à DOUBLE signature (BAT Final, Impression) : l'opérateur de
+        // production habilité pose la 1re signature ; la contre-validation (2e
+        // signature) reste à la Direction générale, contrôlée dans le bloc dédié.
+        const preValPerm = DOUBLE_VALIDATION_STEPS[targetStatus.code];
+        const canSubmitDouble =
+          Boolean(preValPerm) &&
+          (request.user!.permissions.has(preValPerm) ||
             (await isAssignedForStep(id, manuscript.statusId, request.user!.id, targetStatus.code)));
         const allowed =
-          canSubmitBat || (await canSelfCloseStep(id, manuscript.statusId, request.user!, targetStatus.code));
+          canSubmitDouble || (await canSelfCloseStep(id, manuscript.statusId, request.user!, targetStatus.code));
         if (!allowed) {
           void writeAuditLog({ userId: request.user!.id, action: "access_denied", entityType: "permission", entityId: "manuscripts:validation", newValues: { method: request.method, url: request.url }, ipAddress: request.ip }).catch(() => {});
           return reply.code(403).send({ code: "forbidden", message: "Action non autorisée : réservé à la direction éditoriale — ou au correcteur affecté, pour clôturer sa propre correction." });
@@ -528,6 +544,68 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
             message: "Aucun bon de commande transmis à l'imprimeur pour ce manuscrit.",
           });
         }
+
+        // DOUBLE validation (même principe que le BAT Final, demande opérateur
+        // 15/10) : 1re signature = opérateur d'impression / infographe
+        // (« printing:saisie ») ; 2e signature = Direction générale
+        // (« manuscripts:validation »), signataire obligatoirement différent.
+        const impStep = await prisma.manuscriptStep.findUnique({
+          where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
+          select: { preValidatedAt: true, preValidatedBy: true },
+        });
+        const hasFinalAuthority = request.user!.permissions.has("manuscripts:validation");
+
+        if (!impStep?.preValidatedAt) {
+          // 1re signature — PRÉ-VALIDATION. On trace le pré-validateur, on NOTIFIE
+          // la Direction générale, on NE FAIT PAS avancer l'ouvrage.
+          await prisma.manuscriptStep.upsert({
+            where: { manuscriptId_statusId: { manuscriptId: id, statusId: targetStatus.id } },
+            update: { preValidatedAt: now, preValidatedBy: request.user!.id, observations, actualStart: now },
+            create: { manuscriptId: id, statusId: targetStatus.id, preValidatedAt: now, preValidatedBy: request.user!.id, actualStart: now, observations },
+          });
+          await notifyRole({
+            roleCode: "DIR_GENERAL",
+            type: "autre",
+            priority: "high",
+            title: `Impression à contre-valider — ${manuscript.manuscriptNumber}`,
+            body: `${request.user!.username} a validé le lancement de l'impression de « ${manuscript.title} ». Votre contre-validation est requise pour autoriser l'impression.`,
+            entityType: "manuscript",
+            entityId: id,
+          });
+          await writeAuditLog({
+            userId: request.user!.id,
+            action: "validate",
+            entityType: "manuscript",
+            entityId: id,
+            oldValues: { statusCode: targetStatus.code },
+            newValues: { preValidated: true, advanced: false, observations },
+            ipAddress: request.ip,
+          });
+          return reply.send({
+            advanced: false,
+            pending_counter_validation: true,
+            message: "Impression validée — en attente de la contre-validation de la Direction générale pour autoriser l'impression.",
+          });
+        }
+
+        // 2e signature — CONTRE-VALIDATION. Réservée à la Direction générale et
+        // interdite au pré-validateur (double signature de deux personnes).
+        if (!hasFinalAuthority) {
+          void writeAuditLog({ userId: request.user!.id, action: "access_denied", entityType: "permission", entityId: "manuscripts:validation", newValues: { reason: "impression_counter_validation", method: request.method, url: request.url }, ipAddress: request.ip }).catch(() => {});
+          return reply.code(403).send({
+            code: "forbidden",
+            message: "L'impression est déjà pré-validée : seule la Direction générale peut la contre-valider pour autoriser l'impression.",
+          });
+        }
+        if (impStep.preValidatedBy === request.user!.id) {
+          return reply.code(409).send({
+            code: "impression_same_signer",
+            message: "Vous avez déjà pré-validé cette impression : la contre-validation doit être faite par une autre personne de la Direction.",
+          });
+        }
+        // Autorité confirmée, signataire différent : l'avancement normal se
+        // poursuit (le bloc transactionnel plus bas fait passer l'ouvrage à
+        // l'étape suivante et renseigne validatedAt).
       }
 
       // Ch. 14 §14.7 : seuls les exemplaires contrôlés (conformes ou
@@ -986,6 +1064,8 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         { module: "manuscripts", action: "validation" },
         { module: "bat", action: "consultation" },
         { module: "bat", action: "saisie" },
+        { module: "printing", action: "consultation" },
+        { module: "printing", action: "saisie" },
       ]),
     },
     async (request, reply) => {
@@ -993,8 +1073,10 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { id: true, statusId: true } });
       if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
       const current = await prisma.workflowStatus.findUnique({ where: { id: manuscript.statusId } });
-      const atBat = current?.code === "VALIDATION_BAT";
-      const step = atBat
+      // Généralisé aux étapes à double signature (BAT Final ET Impression).
+      const preValPerm = current ? DOUBLE_VALIDATION_STEPS[current.code] : undefined;
+      const atDouble = Boolean(preValPerm);
+      const step = atDouble
         ? await prisma.manuscriptStep.findUnique({
             where: { manuscriptId_statusId: { manuscriptId: id, statusId: manuscript.statusId } },
             select: { preValidatedAt: true, preValidatedBy: true, responsibleId: true },
@@ -1005,16 +1087,17 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         : null;
       const hasFinalAuthority = request.user!.permissions.has("manuscripts:validation");
       const preValidated = Boolean(step?.preValidatedAt);
-      const isAssigned = atBat ? await isAssignedForStep(id, manuscript.statusId, request.user!.id, "VALIDATION_BAT") : false;
-      const canSubmit = request.user!.permissions.has("bat:saisie") || isAssigned;
+      const isAssigned = atDouble && current ? await isAssignedForStep(id, manuscript.statusId, request.user!.id, current.code) : false;
+      const canSubmit = (preValPerm ? request.user!.permissions.has(preValPerm) : false) || isAssigned;
       return reply.send({
-        at_bat: atBat,
+        at_bat: atDouble, // conservé pour compatibilité : « à une étape à double signature »
+        step_code: current?.code ?? null,
         pre_validated: preValidated,
         pre_validated_at: step?.preValidatedAt ?? null,
         pre_validator: preValidator ? { id: preValidator.id, username: preValidator.username } : null,
         // Ce que l'utilisateur courant peut faire maintenant :
-        can_pre_validate: atBat && !preValidated && canSubmit,
-        can_counter_validate: atBat && preValidated && hasFinalAuthority && step?.preValidatedBy !== request.user!.id,
+        can_pre_validate: atDouble && !preValidated && canSubmit,
+        can_counter_validate: atDouble && preValidated && hasFinalAuthority && step?.preValidatedBy !== request.user!.id,
         is_pre_validator: Boolean(step?.preValidatedBy && step.preValidatedBy === request.user!.id),
       });
     },
@@ -1242,7 +1325,51 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         since: (s.validatedAt ?? s.createdAt).toISOString() as string | null,
       }));
 
-    return reply.send([...activeRows, ...integrationRows, ...doneRows]);
+    // ÉTAPES À DOUBLE SIGNATURE en attente de MA 1re signature (demande opérateur
+    // 15/10). Le BAT Final et l'Impression ne sont pas auto-confiés comme étapes
+    // actives (ils ne « descendent » pas dans la file de l'infographe) ; pourtant
+    // l'opérateur habilité doit y poser la 1re signature. On les fait donc
+    // remonter ici : ouvrages ACTUELLEMENT à ces étapes, PAS encore pré-validés,
+    // pour lesquels je détiens le droit de pré-validation. La contre-validation
+    // (2e signature) reste, elle, dans « Mes validations de production » (DG).
+    const myDoubleCodes = Object.entries(DOUBLE_VALIDATION_STEPS)
+      .filter(([, perm]) => request.user!.permissions.has(perm))
+      .map(([code]) => code);
+    let pendingDoubleRows: typeof activeRows = [];
+    if (myDoubleCodes.length) {
+      const atDouble = await prisma.manuscript.findMany({
+        where: { deletedAt: null, status: { code: { in: myDoubleCodes } } },
+        select: { id: true, manuscriptNumber: true, title: true, statusId: true, status: { select: { code: true, label: true } } },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (atDouble.length) {
+        const dSteps = await prisma.manuscriptStep.findMany({
+          where: { manuscriptId: { in: atDouble.map((m) => m.id) }, preValidatedAt: { not: null } },
+          select: { manuscriptId: true, statusId: true },
+        });
+        const preValidatedKey = new Set(dSteps.map((s) => `${s.manuscriptId}:${s.statusId}`));
+        pendingDoubleRows = atDouble
+          .filter((m) => !preValidatedKey.has(`${m.id}:${m.statusId}`))
+          .map((m) => ({
+            kind: "step" as const,
+            manuscript_id: m.id,
+            manuscript_number: m.manuscriptNumber,
+            title: m.title,
+            step_code: m.status.code,
+            step_label: m.status.label,
+            bucket: "en_cours" as const,
+            started: true,
+            blocked_reason: null as string | null,
+            detail: m.status.code === "VALIDATION_BAT"
+              ? "À signer — 1re signature du BAT Final (la Direction générale contre-valide ensuite)"
+              : "À signer — 1re signature du lancement de l'impression (la Direction générale contre-valide ensuite)",
+            progression: progressionFor(m.id),
+            since: null as string | null,
+          }));
+      }
+    }
+
+    return reply.send([...activeRows, ...integrationRows, ...pendingDoubleRows, ...doneRows]);
   });
 
   // « Mes validations de production » (demande opérateur 03/10) — TABLEAU DE BORD
@@ -1304,7 +1431,10 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         if (code === "IMPRESSION") {
           const activeOrder = await prisma.purchaseOrder.findFirst({ where: { quote: { manuscriptId }, status: { in: ["sent", "in_production", "completed"] } } });
           if (!activeOrder) return { bucket: "en_attente", blocked_reason: "bon de commande à transmettre à l'imprimeur", detail: null };
-          return { bucket: "en_cours", blocked_reason: null, detail: "à valider (lancement de l'impression)" };
+          // Double signature : la DG contre-valide après la 1re signature de l'opérateur.
+          const step = await prisma.manuscriptStep.findUnique({ where: { manuscriptId_statusId: { manuscriptId, statusId } }, select: { preValidatedAt: true } });
+          if (!step?.preValidatedAt) return { bucket: "en_attente", blocked_reason: "en attente de la 1re signature de l'impression (opérateur)", detail: null };
+          return { bucket: "en_cours", blocked_reason: null, detail: "à contre-valider (1re signature posée)" };
         }
         if (code === "CONTROLE_QUALITE_IMPRESSION") {
           const receipt = await prisma.goodsReceipt.findFirst({ where: { po: { quote: { manuscriptId } }, qcVerdict: { in: ["conform", "with_reserves"] } } });

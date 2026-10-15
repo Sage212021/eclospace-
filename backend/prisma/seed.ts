@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-impression-double-validation-et-tableau",
+      version: "2026.10",
+      title: "Nouveauté — Impression à deux signatures + étapes « à signer » visibles dans Mes travaux",
+      body: "Deux améliorations du circuit de production. (1) Le lancement de l'impression fonctionne désormais comme le BAT Final, à DEUX signatures : l'opérateur de production pose la 1re signature, puis la Direction générale contre-valide (deux personnes différentes) ; l'impression ne démarre qu'une fois contre-validée. (2) Dans « Mes travaux de production », les ouvrages qui attendent VOTRE 1re signature (BAT Final ou Impression) remontent maintenant dans la ligne correspondante, avec la mention « À signer » — avant, ils n'apparaissaient nulle part dans votre tableau et on pouvait croire qu'un manuscrit avait disparu. La contre-validation de la Direction générale reste, elle, dans « Mes validations de production ».",
+      permissionModules: ["printing", "bat", "manuscripts"],
+      departmentCodes: ["INFOG", "MAQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-catalogue-corriger-genre",
       version: "2026.10",
       title: "Nouveauté — Catalogue : corriger le genre d'un ouvrage en un clic",

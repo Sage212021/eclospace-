@@ -595,6 +595,7 @@ export function getOptionalStep(manuscriptId: string, code: string) {
 // ou non, par qui, et ce que l'utilisateur courant peut faire.
 export interface BatValidationState {
   at_bat: boolean;
+  step_code?: string | null;
   pre_validated: boolean;
   pre_validated_at: string | null;
   pre_validator: { id: string; username: string } | null;

@@ -784,15 +784,17 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
         )}
 
         {GENERIC_VALIDATION_STEPS.includes(manuscript.status.code)
-          // BAT à DOUBLE validation : l'infographe de production (bat:saisie) voit
-          // le panneau pour poser la 1re signature ; la Direction générale
-          // (canValidate) le voit pour contre-valider — MÊME quand l'ouvrage est
-          // confié à l'infographe.
+          // Étapes à DOUBLE validation (BAT Final, Impression) : l'opérateur de
+          // production habilité (bat:saisie / printing:saisie) voit le panneau
+          // pour poser la 1re signature ; la Direction générale (canValidate) le
+          // voit pour contre-valider — MÊME quand l'ouvrage lui est confié.
           && (canValidate || manuscript.canSelfClose
-              || (manuscript.status.code === "VALIDATION_BAT" && permissions.has("bat:saisie")))
+              || (manuscript.status.code === "VALIDATION_BAT" && permissions.has("bat:saisie"))
+              || (manuscript.status.code === "IMPRESSION" && permissions.has("printing:saisie")))
           && (!confieAutrui
               || (canValidate && OPTIONAL_DECISION_STEPS.includes(manuscript.status.code))
-              || (manuscript.status.code === "VALIDATION_BAT" && canValidate)) && (
+              || (manuscript.status.code === "VALIDATION_BAT" && canValidate)
+              || (manuscript.status.code === "IMPRESSION" && canValidate)) && (
           <>
             <GenericStepValidation
               manuscriptId={manuscript.id}
@@ -2129,17 +2131,21 @@ function GenericStepValidation({
   // sur mobile, le refus apparaissait tout en haut, hors de l'écran — d'où
   // l'impression que « Valider » ne faisait rien.
   const [localError, setLocalError] = useState<string | null>(null);
-  // BAT Final à DOUBLE validation : état des deux signatures.
+  // Étapes à DOUBLE validation (BAT Final, Impression) : état des deux signatures.
   const isBat = stepCode === "VALIDATION_BAT";
+  const isImpression = stepCode === "IMPRESSION";
+  const isDouble = isBat || isImpression;
   const [batState, setBatState] = useState<BatValidationState | null>(null);
+  // Nom affiché de l'acte selon l'étape (« le BAT » / « l'impression »).
+  const doubleNoun = isImpression ? "l'impression" : "le BAT";
 
-  const batLabel =
+  const doubleLabel =
     batState == null
-      ? "Valider le BAT"
+      ? `Valider ${doubleNoun}`
       : !batState.pre_validated
-        ? "Valider le BAT (1re signature)"
-        : "Contre-valider le BAT (Direction générale)";
-  const label = isBat ? batLabel : (STEP_ACTION_LABELS[stepCode] ?? "Valider cette étape");
+        ? `Valider ${doubleNoun} (1re signature)`
+        : `Contre-valider ${doubleNoun} (Direction générale)`;
+  const label = isDouble ? doubleLabel : (STEP_ACTION_LABELS[stepCode] ?? "Valider cette étape");
 
   // Qui pourra prendre le dossier à l'étape SUIVANTE (maquettiste, infographe,
   // correcteur…) : on propose de le confier nommément à l'un d'eux.
@@ -2151,7 +2157,7 @@ function GenericStepValidation({
     getOptionalStep(manuscriptId, stepCode)
       .then((m) => { if (alive) { setOptMeta(m); if (m.is_optional && m.mode === "obligatoire") setDecision("realise"); } })
       .catch(() => { if (alive) setOptMeta(null); });
-    if (stepCode === "VALIDATION_BAT") {
+    if (stepCode === "VALIDATION_BAT" || stepCode === "IMPRESSION") {
       getBatValidationState(manuscriptId)
         .then((s) => { if (alive) setBatState(s); })
         .catch(() => { if (alive) setBatState(null); });
@@ -2261,38 +2267,38 @@ function GenericStepValidation({
           Cette version nécessite une réécriture avant de poursuivre
         </label>
       )}
-      {isBat && batState && (
+      {isDouble && batState && (
         <div style={{
           background: batState.pre_validated ? "var(--eclosion-soft, #FAF3DA)" : "var(--amber-soft, #F6E7D2)",
           border: `1px solid ${batState.pre_validated ? "var(--eclosion, #D9B21A)" : "#E7C98A"}`,
           color: "#5a4a10", borderRadius: 8, padding: "10px 13px", fontSize: 12.5, marginBottom: 12, lineHeight: 1.55,
         }}>
-          <div style={{ fontWeight: 700, marginBottom: 3 }}>BAT Final — double validation</div>
+          <div style={{ fontWeight: 700, marginBottom: 3 }}>{isImpression ? "Lancement de l'impression" : "BAT Final"} — double validation</div>
           {!batState.pre_validated ? (
             <span>
-              Le BAT Final autorise l'impression : il demande <strong>deux signatures</strong>. Votre validation est la
+              {isImpression ? "Le lancement de l'impression" : "Le BAT Final autorise l'impression : il"} demande <strong>deux signatures</strong>. Votre validation est la
               <strong> 1re signature</strong> ; elle sera ensuite soumise à la <strong>contre-validation de la Direction générale</strong>.
-              L'ouvrage ne passera à l'impression qu'une fois contre-validé.
+              L'impression ne démarrera qu'une fois contre-validée.
             </span>
           ) : batState.is_pre_validator ? (
             <span>
-              Vous avez validé le BAT{batState.pre_validated_at ? ` le ${new Date(batState.pre_validated_at).toLocaleDateString("fr-FR")}` : ""}.
+              Vous avez validé {doubleNoun}{batState.pre_validated_at ? ` le ${new Date(batState.pre_validated_at).toLocaleDateString("fr-FR")}` : ""}.
               <strong> En attente de la contre-validation de la Direction générale</strong> pour autoriser l'impression.
             </span>
           ) : batState.can_counter_validate ? (
             <span>
-              Le BAT a été validé{batState.pre_validator ? ` par ${batState.pre_validator.username}` : ""} (1re signature).
+              La <strong>1re signature</strong> de {doubleNoun} a été posée{batState.pre_validator ? ` par ${batState.pre_validator.username}` : ""}.
               <strong> Votre contre-validation autorisera l'impression.</strong>
             </span>
           ) : (
             <span>
-              Le BAT a été validé{batState.pre_validator ? ` par ${batState.pre_validator.username}` : ""} (1re signature).
+              La <strong>1re signature</strong> de {doubleNoun} a été posée{batState.pre_validator ? ` par ${batState.pre_validator.username}` : ""}.
               <strong> En attente de la contre-validation de la Direction générale.</strong>
             </span>
           )}
         </div>
       )}
-      {assignees.length > 0 && (!isBat || (!!batState?.pre_validated && !!batState?.can_counter_validate)) && (
+      {assignees.length > 0 && (!isDouble || (!!batState?.pre_validated && !!batState?.can_counter_validate)) && (
         <label style={{ display: "block", fontSize: 13, marginBottom: 10 }}>
           <span style={{ display: "block", color: "var(--muted)", marginBottom: 4 }}>
             Transmettre à{nextLabel ? ` (${nextLabel})` : ""} :
@@ -2328,7 +2334,7 @@ function GenericStepValidation({
       {/* BAT : on n'affiche le bouton que si l'utilisateur courant a bien une
           action (pré-valider ou contre-valider). Le pré-validateur en attente, ou
           un tiers sans autorité de contre-validation, ne voient que l'état. */}
-      {(!isBat || !batState || batState.can_pre_validate || batState.can_counter_validate) && (
+      {(!isDouble || !batState || batState.can_pre_validate || batState.can_counter_validate) && (
         <ActionButton onClick={handleValidate}>{isOptional && decision === "passe" ? "Passer l'étape" : label}</ActionButton>
       )}
     </div>

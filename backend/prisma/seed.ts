@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-bat-preparation-acces-direct",
+      version: "2026.10",
+      title: "Nouveauté — BAT Final : accès direct à la préparation du bon à tirer",
+      body: "Quand la validation du BAT Final est bloquée, le panneau « À faire avant de valider » propose maintenant un bouton « ⬇ Aller à la préparation du bon à tirer » qui vous amène directement à la bonne section. Cette section « BAT Final et contrôle qualité » est désormais ouverte d'emblée (plus besoin de la chercher en bas de la fiche) et visible par tous ceux qui préparent ou signent le BAT (infographie, qualité, direction). C'est là qu'on dépose le fichier final (intérieur + couverture), qu'on coche la liste de contrôle, qu'on dépose le scan signé par l'auteur et qu'on signe — ce qui débloque la 1re signature.",
+      permissionModules: ["bat"],
+      departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-bon-commande-fichier-final-imprimeur",
       version: "2026.10",
       title: "Nouveauté — Bon de commande : le fichier final « bon pour impression » rattaché et téléchargeable",

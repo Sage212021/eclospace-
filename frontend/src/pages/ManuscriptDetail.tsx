@@ -861,6 +861,19 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
         )}
       </div>
 
+      {/* À l'étape BAT Final, la préparation du bon à tirer (dépôt du fichier
+          final, liste de contrôle, scan signé, signature) s'affiche DIRECTEMENT
+          sous le panneau de validation — plus besoin de la chercher ni de
+          défiler (demande opérateur 15/10). */}
+      {manuscript.status.code === "VALIDATION_BAT"
+        && (permissions.has("bat:consultation") || permissions.has("bat:saisie") || permissions.has("bat:validation")) && (
+        <BatSection
+          manuscriptId={manuscript.id}
+          canManage={permissions.has("bat:saisie") && !confieAutrui}
+          canValidate={permissions.has("bat:validation") && !confieAutrui}
+        />
+      )}
+
       {/* Bandeau de focalisation : indique qu'on ne voit que l'étape d'origine,
           et propose d'afficher toute la fiche. */}
       {focus && (
@@ -1005,11 +1018,16 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             onMessage={setMessage}
             onError={setError}
           />
-          <BatSection
-            manuscriptId={manuscript.id}
-            canManage={permissions.has("bat:saisie") && !confieAutrui}
-            canValidate={permissions.has("bat:validation") && !confieAutrui}
-          />
+          {/* À l'étape VALIDATION_BAT, le bon à tirer est affiché PLUS HAUT,
+              juste sous le panneau de validation (évite le doublon). Ici on ne
+              le montre qu'aux étapes suivantes (impression…), pour relecture. */}
+          {manuscript.status.code !== "VALIDATION_BAT" && (
+            <BatSection
+              manuscriptId={manuscript.id}
+              canManage={permissions.has("bat:saisie") && !confieAutrui}
+              canValidate={permissions.has("bat:validation") && !confieAutrui}
+            />
+          )}
           {permissions.has("bat:saisie") && (
             <AiReadingLauncher manuscriptId={manuscript.id} workType="couverture" stepCode="VALIDATION_BAT" title="Relecture IA — Couverture (BAT Final)" />
           )}
@@ -2310,14 +2328,7 @@ function GenericStepValidation({
           <div>{batState.bat_has_cover ? "✅" : "⬜"} Fichier couverture déposé</div>
           <div>{(batState.bat_checklist_blocking_remaining ?? 1) === 0 && (batState.bat_checklist_total ?? 0) > 0 ? "✅" : "⬜"} Liste de contrôle cochée{(batState.bat_checklist_total ?? 0) > 0 ? ` (${(batState.bat_checklist_total ?? 0) - (batState.bat_checklist_blocking_remaining ?? 0)}/${batState.bat_checklist_total} points essentiels)` : ""}</div>
           <div>{batState.bat_signed ? "✅" : "⬜"} Bon à tirer signé</div>
-          <div style={{ marginTop: 6 }}>Préparez le bon à tirer dans la section dédiée : déposez le fichier final (intérieur + couverture), cochez la liste de contrôle, déposez le scan signé par l'auteur, puis signez. La 1re signature deviendra alors possible.</div>
-          <button
-            type="button"
-            onClick={() => { const el = document.getElementById("bat-final"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }}
-            style={{ marginTop: 8, background: "var(--eclosion, #D9B21A)", color: "#0b0b0c", border: "none", borderRadius: 8, padding: "7px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}
-          >
-            ⬇ Aller à la préparation du bon à tirer
-          </button>
+          <div style={{ marginTop: 6 }}>Préparez le bon à tirer dans l'encadré <strong>« BAT Final et contrôle qualité »</strong> affiché <strong>juste en dessous</strong> : déposez le fichier final (intérieur + couverture), cochez la liste de contrôle, déposez le scan signé par l'auteur, puis signez. La 1re signature deviendra alors possible.</div>
         </div>
       )}
       {assignees.length > 0 && (!isDouble || (!!batState?.pre_validated && !!batState?.can_counter_validate)) && (

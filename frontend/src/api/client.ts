@@ -2941,6 +2941,62 @@ export function deleteBookReceipt(id: string) {
   return request<{ ok: true }>(`/api/v1/book-receipts/${id}`, { method: "DELETE" });
 }
 
+// --- Bon de commande (fournisseur / imprimeur) — pièce du pôle Stock & magasin ---
+export interface PurchaseOrderVoucherLineInput {
+  isbn_id?: string | null;
+  designation: string;
+  specs?: string | null;
+  quantity: number;
+  unit_price_ht: number;
+}
+export interface PurchaseOrderVoucher {
+  id: string;
+  number: string;
+  orderedAt: string;
+  supplier: string;
+  supplierAddress: string | null;
+  supplierContact: string | null;
+  quoteRef: string | null;
+  deliveryPlace: string | null;
+  deliveryDue: string | null;
+  paymentTerms: string | null;
+  currency: string;
+  taxRate: string;
+  issuedByName: string | null;
+  issuedByRole: string | null;
+  notes: string | null;
+  lines: { id: string; isbnId: string | null; designation: string; specs: string | null; quantity: number; unitPriceHt: string; position: number }[];
+  createdAt: string;
+}
+export interface PurchaseOrderVoucherInput {
+  ordered_at: string;
+  supplier: string;
+  supplier_address?: string | null;
+  supplier_contact?: string | null;
+  quote_ref?: string | null;
+  delivery_place?: string | null;
+  delivery_due?: string | null;
+  payment_terms?: string | null;
+  currency?: string;
+  tax_rate?: number;
+  issued_by_name?: string | null;
+  issued_by_role?: string | null;
+  notes?: string | null;
+  lines: PurchaseOrderVoucherLineInput[];
+}
+export function listPurchaseOrderVouchers() {
+  return request<PurchaseOrderVoucher[]>(`/api/v1/purchase-order-vouchers`);
+}
+export function createPurchaseOrderVoucher(input: PurchaseOrderVoucherInput) {
+  return request<PurchaseOrderVoucher>(`/api/v1/purchase-order-vouchers`, { method: "POST", body: JSON.stringify(input) });
+}
+export function updatePurchaseOrderVoucher(id: string, input: PurchaseOrderVoucherInput) {
+  return request<PurchaseOrderVoucher>(`/api/v1/purchase-order-vouchers/${id}`, { method: "PUT", body: JSON.stringify(input) });
+}
+export function deletePurchaseOrderVoucher(id: string) {
+  return request<{ ok: true }>(`/api/v1/purchase-order-vouchers/${id}`, { method: "DELETE" });
+}
+
 export type AuthorWithdrawalMotive = "contractuel" | "achat_remise" | "restitution_stock" | "autre";
 export interface AuthorWithdrawalVoucher {
   id: string;

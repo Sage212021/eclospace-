@@ -26,7 +26,7 @@ import { StockInventorySection } from "../components/StockInventorySection";
 import { IsbnCombobox } from "../components/IsbnCombobox";
 import { CommercialStockSection } from "../components/CommercialStockSection";
 import { PeriodFilter, currentPeriod, inPeriod, type Period } from "../components/PeriodFilter";
-import { BookReceiptSection, AuthorWithdrawalSection } from "../components/StockVouchersSection";
+import { BookReceiptSection, AuthorWithdrawalSection, PurchaseOrderSection } from "../components/StockVouchersSection";
 import { DeliveriesSection } from "../components/DeliveriesSection";
 import { NewOrderForm } from "./CommercialPage";
 import { StockConsolidatedSection } from "../components/StockConsolidatedSection";
@@ -410,6 +410,8 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
       <DeliveriesSection canManage={canManage} />
 
       {/* Pièces officielles imprimables (documents, sans impact stock). */}
+      {/* Bon de commande (fournisseur / imprimeur) — précède la réception. */}
+      <PurchaseOrderSection isbns={isbns} canManage={canManage} onError={setError} />
       <BookReceiptSection isbns={isbns} canManage={canManage} onError={setError} />
       <AuthorWithdrawalSection isbns={isbns} canManage={canManage} onError={setError} />
 

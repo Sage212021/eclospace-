@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-stock-bon-de-commande",
+      version: "2026.10",
+      title: "Nouveauté — Stock & magasin : bon de commande fournisseur",
+      body: "Le pôle Stock & magasin dispose d'une nouvelle rubrique « Bons de commande ». On y établit une commande officielle passée à un imprimeur ou un fournisseur, aux normes d'un bon de commande d'édition : fournisseur (adresse, contact), référence du devis, lieu et date de livraison souhaitée, conditions de paiement, puis les lignes (désignation de l'ouvrage, spécifications d'impression — format, pages, papier, reliure, finition —, quantité et prix unitaire). Le total HT, la TVA et le total TTC se calculent automatiquement. Chaque bon reçoit un numéro (BC-AAAA-NNNN), peut être modifié, supprimé et surtout imprimé/enregistré en PDF avec l'en-tête officiel Éclosion et les zones de signature (éditeur + fournisseur). C'est un document : il n'affecte ni le stock ni la comptabilité.",
+      permissionModules: ["stock"],
+      departmentCodes: ["STOCK", "SECR", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-factures-recherche-ouvrage-et-brouillon",
       version: "2026.10",
       title: "Nouveauté — Facturation : recherche d'ouvrage + brouillons repris à tout moment",

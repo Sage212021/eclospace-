@@ -8,10 +8,16 @@ import {
   createAuthorWithdrawal,
   updateAuthorWithdrawal,
   deleteAuthorWithdrawal,
+  listPurchaseOrderVouchers,
+  createPurchaseOrderVoucher,
+  updatePurchaseOrderVoucher,
+  deletePurchaseOrderVoucher,
   type BookReceiptVoucher,
   type BookReceiptLine,
   type AuthorWithdrawalVoucher,
   type AuthorWithdrawalMotive,
+  type PurchaseOrderVoucher,
+  type PurchaseOrderVoucherLineInput,
   type IsbnRef,
 } from "../api/client";
 import { Card } from "./Card";
@@ -19,7 +25,7 @@ import { Button } from "./Button";
 import { Field } from "./Modal";
 import { DocPrintMenu } from "./DocPrintMenu";
 import { IsbnCombobox } from "./IsbnCombobox";
-import { printBookReceipt, printAuthorWithdrawal } from "../lib/print";
+import { printBookReceipt, printAuthorWithdrawal, printPurchaseOrderVoucher } from "../lib/print";
 import { PeriodFilter, currentPeriod, inPeriod, type Period } from "./PeriodFilter";
 import { useConfirm } from "./ConfirmProvider";
 
@@ -286,6 +292,195 @@ export function AuthorWithdrawalSection({ isbns, canManage, onError }: { isbns: 
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ======================= Bon de commande (fournisseur) =======================
+
+const fmtXaf = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XAF", maximumFractionDigits: 0 });
+type PoLineDraft = { isbn_id: string | null; designation: string; specs: string; quantity: string; unit_price_ht: string };
+const emptyPoLine = (): PoLineDraft => ({ isbn_id: null, designation: "", specs: "", quantity: "1", unit_price_ht: "" });
+
+export function PurchaseOrderSection({ isbns, canManage, onError }: { isbns: IsbnRef[]; canManage: boolean; onError: (m: string) => void }) {
+  const confirm = useConfirm();
+  const [rows, setRows] = useState<PurchaseOrderVoucher[] | null>(null);
+  const [period, setPeriod] = useState<Period>(currentPeriod);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [head, setHead] = useState({ ordered_at: today(), supplier: "", supplier_address: "", supplier_contact: "", quote_ref: "", delivery_place: "", delivery_due: "", payment_terms: "", tax_rate: "0", issued_by_name: "", issued_by_role: "", notes: "" });
+  const [lines, setLines] = useState<PoLineDraft[]>([emptyPoLine()]);
+
+  const load = () => listPurchaseOrderVouchers().then(setRows).catch((e) => onError(e instanceof Error ? e.message : "Chargement impossible."));
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  function reset() {
+    setEditingId(null);
+    setShowForm(false);
+    setHead({ ordered_at: today(), supplier: "", supplier_address: "", supplier_contact: "", quote_ref: "", delivery_place: "", delivery_due: "", payment_terms: "", tax_rate: "0", issued_by_name: "", issued_by_role: "", notes: "" });
+    setLines([emptyPoLine()]);
+  }
+
+  function startEdit(v: PurchaseOrderVoucher) {
+    setEditingId(v.id);
+    setShowForm(true);
+    setHead({
+      ordered_at: v.orderedAt.slice(0, 10), supplier: v.supplier, supplier_address: v.supplierAddress ?? "", supplier_contact: v.supplierContact ?? "",
+      quote_ref: v.quoteRef ?? "", delivery_place: v.deliveryPlace ?? "", delivery_due: v.deliveryDue ? v.deliveryDue.slice(0, 10) : "",
+      payment_terms: v.paymentTerms ?? "", tax_rate: String(Number(v.taxRate) || 0), issued_by_name: v.issuedByName ?? "", issued_by_role: v.issuedByRole ?? "", notes: v.notes ?? "",
+    });
+    setLines(v.lines.length ? v.lines.map((l) => ({ isbn_id: l.isbnId, designation: l.designation, specs: l.specs ?? "", quantity: String(l.quantity), unit_price_ht: String(Number(l.unitPriceHt) || 0) })) : [emptyPoLine()]);
+  }
+
+  function setLine(i: number, patch: Partial<PoLineDraft>) {
+    setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  }
+  function pickIsbn(i: number, id: string) {
+    const found = isbns.find((x) => x.id === id);
+    setLine(i, { isbn_id: id || null, designation: lines[i].designation || found?.manuscript?.title || "" });
+  }
+
+  const totalHt = lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price_ht) || 0), 0);
+  const tax = Math.round(totalHt * (Number(head.tax_rate) || 0)) / 100;
+  const totalTtc = Math.round((totalHt + tax) * 100) / 100;
+
+  async function save() {
+    const clean: PurchaseOrderVoucherLineInput[] = lines
+      .filter((l) => l.designation.trim() !== "")
+      .map((l) => ({ isbn_id: l.isbn_id, designation: l.designation.trim(), specs: l.specs.trim() || null, quantity: Number(l.quantity) || 0, unit_price_ht: Number(l.unit_price_ht) || 0 }));
+    if (!head.supplier.trim()) { onError("Indiquez le fournisseur / l'imprimeur."); return; }
+    if (clean.length === 0) { onError("Ajoutez au moins une ligne (désignation)."); return; }
+    for (const l of clean) {
+      if (!(l.quantity > 0)) { onError("Chaque ligne doit avoir une quantité supérieure à zéro."); return; }
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        ordered_at: new Date(head.ordered_at).toISOString(),
+        supplier: head.supplier.trim(),
+        supplier_address: head.supplier_address || null,
+        supplier_contact: head.supplier_contact || null,
+        quote_ref: head.quote_ref || null,
+        delivery_place: head.delivery_place || null,
+        delivery_due: head.delivery_due ? new Date(head.delivery_due).toISOString() : null,
+        payment_terms: head.payment_terms || null,
+        tax_rate: Number(head.tax_rate) || 0,
+        issued_by_name: head.issued_by_name || null,
+        issued_by_role: head.issued_by_role || null,
+        notes: head.notes || null,
+        lines: clean,
+      };
+      if (editingId) await updatePurchaseOrderVoucher(editingId, payload);
+      else await createPurchaseOrderVoucher(payload);
+      reset();
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Enregistrement impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(v: PurchaseOrderVoucher) {
+    const ok = await confirm({ title: "Supprimer le bon de commande", message: `Supprimer le bon de commande ${v.number} ?`, detail: "Le document est retiré de la liste (annulation tracée).", tone: "danger", confirmLabel: "Supprimer" });
+    if (!ok) return;
+    try { await deletePurchaseOrderVoucher(v.id); await load(); } catch (e) { onError(e instanceof Error ? e.message : "Échec."); }
+  }
+
+  return (
+    <Card title="Bons de commande" subtitle="Commande officielle passée à un imprimeur / fournisseur — aux normes d'édition (fournisseur, devis, lignes, délai, conditions). À saisir et imprimer." collapsible defaultOpen={false}>
+      {canManage && !showForm && (
+        <div style={{ marginBottom: 12 }}><Button variant="add" size="sm" onClick={() => setShowForm(true)}>Nouveau bon de commande</Button></div>
+      )}
+
+      {showForm && canManage && (
+        <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 14, marginBottom: 14 }}>
+          <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 10 }}>{editingId ? "Modifier le bon de commande" : "Nouveau bon de commande"}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+            <Field label="Date de commande"><input type="date" value={head.ordered_at} onChange={(e) => setHead({ ...head, ordered_at: e.target.value })} /></Field>
+            <Field label="Fournisseur / imprimeur *"><input value={head.supplier} onChange={(e) => setHead({ ...head, supplier: e.target.value })} placeholder="Ex. Imprimerie Saint-Paul" /></Field>
+            <Field label="Adresse du fournisseur"><input value={head.supplier_address} onChange={(e) => setHead({ ...head, supplier_address: e.target.value })} /></Field>
+            <Field label="Contact (tél. / email)"><input value={head.supplier_contact} onChange={(e) => setHead({ ...head, supplier_contact: e.target.value })} /></Field>
+            <Field label="Réf. devis"><input value={head.quote_ref} onChange={(e) => setHead({ ...head, quote_ref: e.target.value })} /></Field>
+            <Field label="Lieu de livraison"><input value={head.delivery_place} onChange={(e) => setHead({ ...head, delivery_place: e.target.value })} /></Field>
+            <Field label="Date de livraison souhaitée"><input type="date" value={head.delivery_due} onChange={(e) => setHead({ ...head, delivery_due: e.target.value })} /></Field>
+            <Field label="Conditions de paiement"><input value={head.payment_terms} onChange={(e) => setHead({ ...head, payment_terms: e.target.value })} placeholder="Ex. 50 % à la commande, solde à la livraison" /></Field>
+          </div>
+
+          <div style={{ fontWeight: 600, fontSize: 12.5, margin: "12px 0 6px" }}>Lignes de la commande</div>
+          {lines.map((l, i) => {
+            const lineTotal = (Number(l.quantity) || 0) * (Number(l.unit_price_ht) || 0);
+            return (
+              <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 6, padding: 10, marginBottom: 8 }}>
+                <div style={{ marginBottom: 6 }}>
+                  <IsbnCombobox isbns={isbns} value={l.isbn_id ?? ""} onChange={(id) => pickIsbn(i, id)} placeholder="Chercher un ouvrage (titre ou ISBN) — facultatif" />
+                </div>
+                <div style={{ marginBottom: 6 }}>
+                  <input placeholder="Désignation (titre de l'ouvrage ou article)" value={l.designation} onChange={(e) => setLine(i, { designation: e.target.value })} style={{ width: "100%" }} />
+                </div>
+                <div style={{ marginBottom: 6 }}>
+                  <input placeholder="Spécifications (format, pages, papier, reliure, finition…)" value={l.specs} onChange={(e) => setLine(i, { specs: e.target.value })} style={{ width: "100%" }} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto", gap: 8, alignItems: "center" }}>
+                  <input type="number" min={1} placeholder="Quantité" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} />
+                  <input type="number" min={0} placeholder="Prix unit. HT" value={l.unit_price_ht} onChange={(e) => setLine(i, { unit_price_ht: e.target.value })} />
+                  <span style={{ fontSize: 12.5, color: "var(--muted)", whiteSpace: "nowrap" }}>= <span style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{fmtXaf.format(lineTotal)}</span></span>
+                  {lines.length > 1 && <button type="button" onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))} style={{ border: "1px solid var(--line)", background: "transparent", borderRadius: 6, padding: "6px 8px", cursor: "pointer", color: "#C24B3A" }}>Retirer</button>}
+                </div>
+              </div>
+            );
+          })}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+            <Button variant="view" size="sm" onClick={() => setLines((ls) => [...ls, emptyPoLine()])}>+ Ajouter une ligne</Button>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5 }}>
+              <label style={{ color: "var(--muted)" }}>TVA %</label>
+              <input type="number" min={0} max={100} value={head.tax_rate} onChange={(e) => setHead({ ...head, tax_rate: e.target.value })} style={{ width: 70 }} />
+              <span style={{ color: "var(--muted)" }}>Total HT <b style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{fmtXaf.format(totalHt)}</b></span>
+              <span style={{ color: "var(--muted)" }}>TTC <b style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>{fmtXaf.format(totalTtc)}</b></span>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+            <Field label="Établi par (nom)"><input value={head.issued_by_name} onChange={(e) => setHead({ ...head, issued_by_name: e.target.value })} /></Field>
+            <Field label="Poste / service"><input value={head.issued_by_role} onChange={(e) => setHead({ ...head, issued_by_role: e.target.value })} /></Field>
+          </div>
+          <Field label="Conditions particulières / mentions"><textarea rows={2} value={head.notes} onChange={(e) => setHead({ ...head, notes: e.target.value })} /></Field>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <Button variant="add" size="sm" onClick={save} disabled={saving}>{saving ? "Enregistrement…" : editingId ? "Enregistrer les modifications" : "Enregistrer le bon de commande"}</Button>
+            <Button variant="view" size="sm" onClick={reset}>Annuler</Button>
+          </div>
+        </div>
+      )}
+
+      {rows && rows.length > 0 && (
+        <PeriodFilter dates={rows.map((v) => v.orderedAt)} value={period} onChange={setPeriod} resultCount={rows.filter((v) => inPeriod(v.orderedAt, period)).length} />
+      )}
+      {rows === null ? (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>
+      ) : rows.length === 0 ? (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun bon de commande enregistré.</p>
+      ) : rows.filter((v) => inPeriod(v.orderedAt, period)).length === 0 ? (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun bon de commande pour cette période.</p>
+      ) : (
+        <div className="ecl-list">
+          {rows.filter((v) => inPeriod(v.orderedAt, period)).map((v) => {
+            const ht = v.lines.reduce((s, l) => s + (Number(l.unitPriceHt) || 0) * l.quantity, 0);
+            return (
+              <div key={v.id} className="ecl-row" style={{ alignItems: "center" }}>
+                <div className="ecl-row__main">
+                  <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{v.number}</span>
+                  <span className="ecl-row__desc" style={{ margin: 0 }}>{new Date(v.orderedAt).toLocaleDateString("fr-FR")} · {v.supplier} · {v.lines.length} ligne(s) · <span style={{ fontFamily: "var(--font-mono)" }}>{fmtXaf.format(ht)}</span> HT</span>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <DocPrintMenu onPrint={(opts) => printPurchaseOrderVoucher(v, opts)} />
+                  {canManage && <button onClick={() => startEdit(v)} style={miniBtn}>Modifier</button>}
+                  {canManage && <button onClick={() => remove(v)} style={{ ...miniBtn, color: "#C24B3A" }}>Supprimer</button>}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </Card>

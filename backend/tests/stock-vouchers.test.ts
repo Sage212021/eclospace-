@@ -95,4 +95,49 @@ describe("pièces stock & magasin (bon de réception + retrait auteur)", () => {
     const one = await app.inject({ method: "GET", url: `/api/v1/author-withdrawals/${id}`, headers: { cookie } });
     expect(one.statusCode).toBe(404);
   });
+
+  it("bon de commande : création numérotée (BC), lignes + spécifications, édition, suppression logique, sans impact stock", async () => {
+    const stockBefore = await prisma.stockMovement.count();
+
+    const create = await app.inject({
+      method: "POST", url: "/api/v1/purchase-order-vouchers", headers: { cookie },
+      payload: {
+        ordered_at: "2026-10-15T00:00:00.000Z", supplier: "Imprimerie Saint-Paul", supplier_address: "Yaoundé", supplier_contact: "699 00 00 00",
+        quote_ref: "DEV-2026-012", delivery_place: "Entrepôt principal", delivery_due: "2026-11-15T00:00:00.000Z",
+        payment_terms: "50 % à la commande, solde à la livraison", tax_rate: 0, issued_by_name: "NDI SANAMA", issued_by_role: "Responsable des stocks",
+        lines: [
+          { designation: "Le Roi Mbella", specs: "14x21, 200 p., offset 80g, broché, couv. couché 250g pelliculé mat", quantity: 1000, unit_price_ht: 1200 },
+          { designation: "Vers amers", specs: "14x21, 90 p.", quantity: 500, unit_price_ht: 900 },
+        ],
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json().number).toMatch(/^BC-\d{4}-\d{4}$/);
+    expect(create.json().lines).toHaveLength(2);
+    expect(create.json().lines[0].specs).toContain("pelliculé");
+    const firstSeq = Number(create.json().number.slice(-4));
+
+    // Numérotation continue.
+    const second = await app.inject({ method: "POST", url: "/api/v1/purchase-order-vouchers", headers: { cookie }, payload: { ordered_at: "2026-10-16T00:00:00.000Z", supplier: "Autre imprimeur", lines: [{ designation: "X", quantity: 10, unit_price_ht: 100 }] } });
+    expect(Number(second.json().number.slice(-4))).toBe(firstSeq + 1);
+
+    // Fournisseur obligatoire.
+    const noSupplier = await app.inject({ method: "POST", url: "/api/v1/purchase-order-vouchers", headers: { cookie }, payload: { ordered_at: "2026-10-16T00:00:00.000Z", supplier: "", lines: [{ designation: "X", quantity: 1, unit_price_ht: 1 }] } });
+    expect(noSupplier.statusCode).toBe(400);
+
+    const id = create.json().id;
+    const edit = await app.inject({ method: "PUT", url: `/api/v1/purchase-order-vouchers/${id}`, headers: { cookie }, payload: { ordered_at: "2026-10-15T00:00:00.000Z", supplier: "Imprimerie Saint-Paul (corrigé)", tax_rate: 19.25, lines: [{ designation: "Une seule ligne", quantity: 100, unit_price_ht: 500 }] } });
+    expect(edit.statusCode).toBe(200);
+    expect(edit.json().supplier).toBe("Imprimerie Saint-Paul (corrigé)");
+    expect(edit.json().lines).toHaveLength(1);
+    expect(edit.json().number).toBe(create.json().number); // numéro conservé
+
+    // Aucune écriture de stock.
+    expect(await prisma.stockMovement.count()).toBe(stockBefore);
+
+    const del = await app.inject({ method: "DELETE", url: `/api/v1/purchase-order-vouchers/${id}`, headers: { cookie } });
+    expect(del.statusCode).toBe(200);
+    const list = await app.inject({ method: "GET", url: "/api/v1/purchase-order-vouchers", headers: { cookie } });
+    expect(list.json().some((v: { id: string }) => v.id === id)).toBe(false);
+  });
 });

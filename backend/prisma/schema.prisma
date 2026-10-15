@@ -5636,6 +5636,61 @@ model AuthorWithdrawalVoucher {
   @@map("author_withdrawal_vouchers")
 }
 
+// Bon de commande (fournisseur / imprimeur) — pièce officielle du pôle Stock &
+// magasin (demande opérateur 15/10/2026). DOCUMENT numéroté, tracé et
+// réimprimable (BC-AAAA-NNNN), aux normes d'un bon de commande d'édition :
+// fournisseur, référence devis, lieu + date de livraison, conditions de
+// paiement, lignes (désignation + spécifications d'impression + quantité + prix
+// unitaire HT), totaux HT/TVA/TTC. N'affecte NI le stock NI la comptabilité
+// (document seul, comme les autres bons du magasin).
+model PurchaseOrderVoucherCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("purchase_order_voucher_counters")
+}
+
+model PurchaseOrderVoucher {
+  id              String                     @id @default(uuid())
+  number          String                     @unique // BC-AAAA-NNNN
+  orderedAt       DateTime                   @map("ordered_at")
+  supplier        String // imprimeur / fournisseur
+  supplierAddress String?                    @map("supplier_address")
+  supplierContact String?                    @map("supplier_contact") // téléphone / email / interlocuteur
+  quoteRef        String?                    @map("quote_ref") // référence du devis
+  deliveryPlace   String?                    @map("delivery_place") // lieu de livraison
+  deliveryDue     DateTime?                  @map("delivery_due") // date de livraison souhaitée
+  paymentTerms    String?                    @map("payment_terms") // conditions de paiement
+  currency        String                     @default("XAF")
+  taxRate         Decimal                    @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  issuedByName    String?                    @map("issued_by_name") // émis par (nom)
+  issuedByRole    String?                    @map("issued_by_role") // poste / service
+  notes           String? // conditions particulières, mentions
+  lines           PurchaseOrderVoucherLine[]
+  createdById     String                     @map("created_by")
+  createdAt       DateTime                   @default(now()) @map("created_at")
+  updatedAt       DateTime                   @updatedAt @map("updated_at")
+  deletedAt       DateTime?                  @map("deleted_at")
+
+  @@index([orderedAt])
+  @@map("purchase_order_vouchers")
+}
+
+model PurchaseOrderVoucherLine {
+  id          String               @id @default(uuid())
+  voucherId   String               @map("voucher_id")
+  voucher     PurchaseOrderVoucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  isbnId      String?              @map("isbn_id") // lien facultatif au catalogue
+  designation String // titre de l'ouvrage / désignation
+  specs       String? // format, pages, papier, reliure, finition…
+  quantity    Int
+  unitPriceHt Decimal              @map("unit_price_ht") @db.Decimal(12, 2)
+  position    Int                  @default(0)
+
+  @@index([voucherId])
+  @@map("purchase_order_voucher_lines")
+}
+
 // ============================================================
 // IA éditoriale — relecture assistée (Lot IA-0). L'IA agit toujours AU NOM du
 // relecteur d'Éclosion Édition ; elle ne prend aucune décision et ne fait

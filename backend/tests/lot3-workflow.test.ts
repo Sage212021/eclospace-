@@ -291,7 +291,17 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
     const po = poResponse.json();
     await app.inject({ method: "PATCH", url: `/api/v1/purchase-orders/${po.id}/status`, headers: { cookie: adminCookie }, payload: { status: "sent" } });
 
-    const validatedImpression = await validate(manuscript.id, "IMPRESSION");
+    // IMPRESSION à double validation (demande opérateur 15/10) : 1re signature
+    // de l'opérateur (admin ici), puis contre-validation de la Direction générale.
+    const preImpression = await validate(manuscript.id, "IMPRESSION");
+    expect(preImpression.statusCode).toBe(200);
+    expect(preImpression.json().pending_counter_validation).toBe(true);
+    const validatedImpression = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscript.id}/steps/IMPRESSION/validate`,
+      headers: { cookie: dgCookie },
+      payload: {},
+    });
     expect(validatedImpression.statusCode).toBe(200);
     expect(validatedImpression.json().status).toBe("CONTROLE_QUALITE_IMPRESSION");
 

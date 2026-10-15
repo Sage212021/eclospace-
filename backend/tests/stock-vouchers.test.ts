@@ -140,4 +140,40 @@ describe("pièces stock & magasin (bon de réception + retrait auteur)", () => {
     const list = await app.inject({ method: "GET", url: "/api/v1/purchase-order-vouchers", headers: { cookie } });
     expect(list.json().some((v: { id: string }) => v.id === id)).toBe(false);
   });
+
+  it("bon de commande : le fichier final (BAT signé) de l'ouvrage est rattaché à la ligne", async () => {
+    const tag = Math.random().toString(36).slice(2, 7);
+    const admin = await prisma.user.findUniqueOrThrow({ where: { username: "admin" } });
+    const status = await prisma.workflowStatus.findFirstOrThrow({ where: { code: "VALIDATION_BAT" } });
+    const genre = await prisma.genre.findFirstOrThrow({ where: { code: "ROMAN" } });
+    const m = await prisma.manuscript.create({ data: { manuscriptNumber: `MS-PM-${tag}`, title: `Ouvrage PM ${tag}`, genreId: genre.id, language: "fr", statusId: status.id, ownerId: admin.id, receivedAt: new Date(), createdBy: admin.id, updatedBy: admin.id } });
+    const isbn = await prisma.isbn.create({ data: { isbn13: `978-9956-50-${tag.slice(0, 2)}-1`, format: "print", status: "published", manuscriptId: m.id, assignedAt: new Date(), assignedBy: admin.id } });
+    const doc = await prisma.document.create({ data: { entityType: "manuscript", entityId: m.id, category: "bat", title: `BAT ${tag}` } });
+    const iv = await prisma.documentVersion.create({ data: { documentId: doc.id, versionNumber: 1, filePath: `int-${tag}.pdf`, fileSize: 10, mimeType: "application/pdf", sha256Hash: `int-${tag}` } });
+    const cv = await prisma.documentVersion.create({ data: { documentId: doc.id, versionNumber: 2, filePath: `cov-${tag}.pdf`, fileSize: 10, mimeType: "application/pdf", sha256Hash: `cov-${tag}` } });
+    const bat = await prisma.batRecord.create({ data: { manuscriptId: m.id, cycleNumber: 1, status: "signed", interiorVersionId: iv.id, coverVersionId: cv.id } });
+    await prisma.batSignature.create({ data: { batId: bat.id, signerId: admin.id, filesHash: `h-${tag}`, authorApproval: true } });
+
+    const create = await app.inject({
+      method: "POST", url: "/api/v1/purchase-order-vouchers", headers: { cookie },
+      payload: { ordered_at: "2026-10-15T00:00:00.000Z", supplier: "Imprimeur PM", lines: [{ isbn_id: isbn.id, designation: `Ouvrage PM ${tag}`, quantity: 500, unit_price_ht: 1000 }, { designation: "Ligne sans ISBN", quantity: 1, unit_price_ht: 100 }] },
+    });
+    expect(create.statusCode).toBe(201);
+    const vId = create.json().id;
+
+    const got = await app.inject({ method: "GET", url: `/api/v1/purchase-order-vouchers/${vId}`, headers: { cookie } });
+    const lines = got.json().lines as { isbnId: string | null; print_master: { ready: boolean; has_interior: boolean; has_cover: boolean; signed_at: string | null } | null }[];
+    const withIsbn = lines.find((l) => l.isbnId === isbn.id)!;
+    expect(withIsbn.print_master?.ready).toBe(true);
+    expect(withIsbn.print_master?.has_interior).toBe(true);
+    expect(withIsbn.print_master?.has_cover).toBe(true);
+    expect(withIsbn.print_master?.signed_at).not.toBeNull();
+    // Une ligne sans ISBN n'a pas de fichier final.
+    expect(lines.find((l) => l.isbnId === null)?.print_master ?? null).toBeNull();
+
+    // Téléchargement d'une ligne sans ISBN → 404 (pas de fichier final).
+    const lineNoIsbn = (got.json().lines as { id: string; isbnId: string | null }[]).find((l) => l.isbnId === null)!;
+    const dl404 = await app.inject({ method: "GET", url: `/api/v1/purchase-order-vouchers/${vId}/lines/${lineNoIsbn.id}/print-file/interior`, headers: { cookie } });
+    expect(dl404.statusCode).toBe(404);
+  });
 });

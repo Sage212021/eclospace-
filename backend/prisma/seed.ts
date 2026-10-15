@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-bon-commande-fichier-final-imprimeur",
+      version: "2026.10",
+      title: "Nouveauté — Bon de commande : le fichier final « bon pour impression » rattaché et téléchargeable",
+      body: "Sur un bon de commande, chaque ouvrage référencé (par son ISBN) affiche désormais son FICHIER FINAL « bon pour impression » dès que le BAT de l'ouvrage est signé : un encadré « 📎 Fichier final — bon pour impression » liste, par ouvrage, la date de signature du BAT et deux liens de téléchargement — « Intérieur » et « Couverture ». Le magasin récupère ainsi directement, depuis le bon de commande, les fichiers définitifs validés à transmettre à l'imprimeur, sans aller les chercher dans la fiche de l'ouvrage. Tant que le BAT n'est pas signé, rien n'est proposé (le fichier final n'est pas encore validé).",
+      permissionModules: ["stock"],
+      departmentCodes: ["STOCK", "INFOG", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-bat-signature-auteur-scan-obligatoire",
       version: "2026.10",
       title: "Nouveauté — BAT Final : la signature exige le scan du bon à tirer signé par l'auteur",

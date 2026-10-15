@@ -12,6 +12,7 @@ import {
   createPurchaseOrderVoucher,
   updatePurchaseOrderVoucher,
   deletePurchaseOrderVoucher,
+  poVoucherPrintFileUrl,
   type BookReceiptVoucher,
   type BookReceiptLine,
   type AuthorWithdrawalVoucher,
@@ -467,17 +468,35 @@ export function PurchaseOrderSection({ isbns, canManage, onError }: { isbns: Isb
         <div className="ecl-list">
           {rows.filter((v) => inPeriod(v.orderedAt, period)).map((v) => {
             const ht = v.lines.reduce((s, l) => s + (Number(l.unitPriceHt) || 0) * l.quantity, 0);
+            // Lignes dont le fichier final (bon pour impression) est prêt (BAT signé).
+            const finals = v.lines.filter((l) => l.print_master?.ready);
             return (
-              <div key={v.id} className="ecl-row" style={{ alignItems: "center" }}>
-                <div className="ecl-row__main">
-                  <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{v.number}</span>
-                  <span className="ecl-row__desc" style={{ margin: 0 }}>{new Date(v.orderedAt).toLocaleDateString("fr-FR")} · {v.supplier} · {v.lines.length} ligne(s) · <span style={{ fontFamily: "var(--font-mono)" }}>{fmtXaf.format(ht)}</span> HT</span>
+              <div key={v.id} className="ecl-row" style={{ alignItems: "stretch", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <div className="ecl-row__main">
+                    <span className="ecl-row__title" style={{ fontFamily: "var(--font-mono)" }}>{v.number}</span>
+                    <span className="ecl-row__desc" style={{ margin: 0 }}>{new Date(v.orderedAt).toLocaleDateString("fr-FR")} · {v.supplier} · {v.lines.length} ligne(s) · <span style={{ fontFamily: "var(--font-mono)" }}>{fmtXaf.format(ht)}</span> HT</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <DocPrintMenu onPrint={(opts) => printPurchaseOrderVoucher(v, opts)} />
+                    {canManage && <button onClick={() => startEdit(v)} style={miniBtn}>Modifier</button>}
+                    {canManage && <button onClick={() => remove(v)} style={{ ...miniBtn, color: "#C24B3A" }}>Supprimer</button>}
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <DocPrintMenu onPrint={(opts) => printPurchaseOrderVoucher(v, opts)} />
-                  {canManage && <button onClick={() => startEdit(v)} style={miniBtn}>Modifier</button>}
-                  {canManage && <button onClick={() => remove(v)} style={{ ...miniBtn, color: "#C24B3A" }}>Supprimer</button>}
-                </div>
+                {/* Fichier final « bon pour impression » : téléchargement par ligne. */}
+                {finals.length > 0 && (
+                  <div style={{ background: "var(--ivory, #FAF8F2)", border: "1px dashed var(--line)", borderRadius: 8, padding: "8px 10px", fontSize: 12.5 }}>
+                    <div style={{ fontWeight: 600, color: "var(--eclosion-dark, #9A7A12)", marginBottom: 4 }}>📎 Fichier final — bon pour impression</div>
+                    {finals.map((l) => (
+                      <div key={l.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "2px 0" }}>
+                        <span style={{ flex: 1, minWidth: 140 }}>{l.designation}</span>
+                        {l.print_master?.signed_at && <span style={{ color: "var(--muted)" }}>BAT signé le {new Date(l.print_master.signed_at).toLocaleDateString("fr-FR")}</span>}
+                        {l.print_master?.has_interior && <a href={poVoucherPrintFileUrl(v.id, l.id, "interior")} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark, #9A7A12)", fontWeight: 600 }}>Intérieur</a>}
+                        {l.print_master?.has_cover && <a href={poVoucherPrintFileUrl(v.id, l.id, "cover")} target="_blank" rel="noreferrer" style={{ color: "var(--eclosion-dark, #9A7A12)", fontWeight: 600 }}>Couverture</a>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}

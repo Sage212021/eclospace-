@@ -4,6 +4,40 @@ import { AuthorWithdrawalMotive } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { readStoredFile } from "../lib/storage.js";
+
+// Pour chaque ISBN référencé sur un bon de commande, le FICHIER FINAL « bon pour
+// impression » = l'intérieur + la couverture du dernier BAT SIGNÉ de l'ouvrage.
+// On indique sa disponibilité par ligne (ready) ; le téléchargement passe par
+// une route dédiée (droit stock), sans exposer le module manuscrits au magasin.
+type PrintMaster = { ready: boolean; signed_at: string | null; has_interior: boolean; has_cover: boolean };
+async function printMasterByIsbn(isbnIds: string[]): Promise<Map<string, PrintMaster>> {
+  const out = new Map<string, PrintMaster>();
+  const ids = [...new Set(isbnIds.filter(Boolean))];
+  if (!ids.length) return out;
+  const isbns = await prisma.isbn.findMany({ where: { id: { in: ids } }, select: { id: true, manuscriptId: true } });
+  const manuscriptIds = [...new Set(isbns.map((i) => i.manuscriptId).filter((v): v is string => !!v))];
+  if (!manuscriptIds.length) return out;
+  const bats = await prisma.batRecord.findMany({
+    where: { manuscriptId: { in: manuscriptIds }, status: "signed" },
+    orderBy: { cycleNumber: "desc" },
+    select: { manuscriptId: true, interiorVersionId: true, coverVersionId: true, signatures: { orderBy: { signedAt: "desc" }, take: 1, select: { signedAt: true } } },
+  });
+  const batByManuscript = new Map<string, (typeof bats)[number]>();
+  for (const b of bats) if (!batByManuscript.has(b.manuscriptId)) batByManuscript.set(b.manuscriptId, b);
+  for (const isbn of isbns) {
+    if (!isbn.manuscriptId) continue;
+    const b = batByManuscript.get(isbn.manuscriptId);
+    if (b) out.set(isbn.id, { ready: true, signed_at: b.signatures[0]?.signedAt?.toISOString() ?? null, has_interior: !!b.interiorVersionId, has_cover: !!b.coverVersionId });
+  }
+  return out;
+}
+// Enrichit un bon de commande : chaque ligne reçoit `print_master` (null si pas
+// d'ISBN ou pas de BAT signé).
+async function withPrintMaster<T extends { lines: { isbnId: string | null }[] }>(voucher: T): Promise<T> {
+  const map = await printMasterByIsbn(voucher.lines.map((l) => l.isbnId ?? "").filter(Boolean));
+  return { ...voucher, lines: voucher.lines.map((l) => ({ ...l, print_master: l.isbnId ? map.get(l.isbnId) ?? null : null })) };
+}
 
 // Pièces officielles du pôle Stock & magasin (revue opérateur du 27/08/2026) :
 // Bon de réception de livres + Retrait d'ouvrage auteur. Ce sont des DOCUMENTS
@@ -311,14 +345,34 @@ export default async function stockVoucherRoutes(fastify: FastifyInstance) {
       orderBy: { orderedAt: "desc" },
       include: { lines: { orderBy: { position: "asc" } } },
     });
-    return reply.send(rows);
+    return reply.send(await Promise.all(rows.map(withPrintMaster)));
   });
 
   fastify.get("/api/v1/purchase-order-vouchers/:id", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const row = await prisma.purchaseOrderVoucher.findFirst({ where: { id, deletedAt: null }, include: { lines: { orderBy: { position: "asc" } } } });
     if (!row) return reply.code(404).send({ code: "not_found", message: "Bon de commande introuvable." });
-    return reply.send(row);
+    return reply.send(await withPrintMaster(row));
+  });
+
+  // Téléchargement du FICHIER FINAL « bon pour impression » (intérieur ou
+  // couverture du BAT signé) d'une ligne du bon de commande — accessible au
+  // magasin (stock:consultation), sans ouvrir le module manuscrits.
+  fastify.get("/api/v1/purchase-order-vouchers/:id/lines/:lineId/print-file/:which", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
+    const { id, lineId, which } = request.params as { id: string; lineId: string; which: string };
+    if (which !== "interior" && which !== "cover") return reply.code(400).send({ code: "validation_error", message: "Type de fichier invalide." });
+    const line = await prisma.purchaseOrderVoucherLine.findFirst({ where: { id: lineId, voucherId: id }, select: { isbnId: true } });
+    if (!line?.isbnId) return reply.code(404).send({ code: "not_found", message: "Ligne ou ouvrage introuvable." });
+    const isbn = await prisma.isbn.findUnique({ where: { id: line.isbnId }, select: { manuscriptId: true } });
+    if (!isbn?.manuscriptId) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable." });
+    const bat = await prisma.batRecord.findFirst({ where: { manuscriptId: isbn.manuscriptId, status: "signed" }, orderBy: { cycleNumber: "desc" }, select: { interiorVersionId: true, coverVersionId: true } });
+    const versionId = which === "interior" ? bat?.interiorVersionId : bat?.coverVersionId;
+    if (!versionId) return reply.code(404).send({ code: "not_found", message: "Fichier final non disponible (BAT non signé)." });
+    const version = await prisma.documentVersion.findUnique({ where: { id: versionId } });
+    if (!version) return reply.code(404).send({ code: "not_found", message: "Fichier introuvable." });
+    const buffer = await readStoredFile(version.filePath);
+    reply.header("content-type", version.mimeType);
+    return reply.send(buffer);
   });
 
   fastify.post("/api/v1/purchase-order-vouchers", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {

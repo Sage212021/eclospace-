@@ -2986,8 +2986,16 @@ export interface PurchaseOrderVoucher {
   issuedByName: string | null;
   issuedByRole: string | null;
   notes: string | null;
-  lines: { id: string; isbnId: string | null; designation: string; specs: string | null; quantity: number; unitPriceHt: string; position: number }[];
+  lines: {
+    id: string; isbnId: string | null; designation: string; specs: string | null; quantity: number; unitPriceHt: string; position: number;
+    // Fichier final « bon pour impression » (BAT signé) de l'ouvrage, s'il existe.
+    print_master?: { ready: boolean; signed_at: string | null; has_interior: boolean; has_cover: boolean } | null;
+  }[];
   createdAt: string;
+}
+// URL de téléchargement du fichier final (intérieur / couverture) d'une ligne.
+export function poVoucherPrintFileUrl(voucherId: string, lineId: string, which: "interior" | "cover"): string {
+  return `${API_BASE}/api/v1/purchase-order-vouchers/${voucherId}/lines/${lineId}/print-file/${which}`;
 }
 export interface PurchaseOrderVoucherInput {
   ordered_at: string;

@@ -114,6 +114,7 @@ describe("BAT Final — double validation (infographe puis Direction générale)
         await app.inject({ method: "PATCH", url: `/api/v1/checklist-items/${item.id}`, headers: { cookie: adminCookie }, payload: { checked: true } });
       }
       await app.inject({ method: "PATCH", url: `/api/v1/bat/${bat.id}/status`, headers: { cookie: adminCookie }, payload: { status: "awaiting_signature" } });
+      await prisma.batRecord.update({ where: { id: bat.id }, data: { signedScanVersionId: interiorVersion.id } });
       await app.inject({ method: "POST", url: `/api/v1/bat/${bat.id}/sign`, headers: { cookie: adminCookie }, payload: { author_approval: true } });
     }
 

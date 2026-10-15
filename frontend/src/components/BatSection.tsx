@@ -69,7 +69,7 @@ export function BatSection({ manuscriptId, canManage, canValidate }: BatSectionP
   const fileLabel = (a: StepAttachment) => `${a.title}${a.file_size ? ` · ${(a.file_size / 1_000_000).toFixed(1)} Mo` : ""}`;
 
   return (
-    <CollapsibleSection title="BAT Final et contrôle qualité" storageKey="fiche:bat">
+    <CollapsibleSection title="BAT Final et contrôle qualité" subtitle="Déposez ici le fichier final (intérieur + couverture), cochez la liste de contrôle, puis le scan signé et la signature — c'est ce qui débloque la validation du BAT." storageKey="fiche:bat" id="bat-final" defaultOpen>
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 10 }}>
         {canManage && !current && !showOpen && (
           <button onClick={() => { setShowOpen(true); setError(null); }} style={secondaryButtonStyle}>

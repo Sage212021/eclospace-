@@ -992,7 +992,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
         <IsbnSection manuscriptId={manuscript.id} canManage={permissions.has("isbn:saisie") && !confieAutrui} onOpenManuscript={onOpenManuscript} manuscriptTitle={manuscript.title} manuscriptNumber={manuscript.manuscriptNumber} />
       )}
 
-      {show("bat") && stageReached(["VALIDATION_BAT"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && permissions.has("bat:consultation") && (
+      {show("bat") && stageReached(["VALIDATION_BAT"]) && manuscript.status.stepOrder >= MISE_EN_PAGE_STEP_ORDER && (permissions.has("bat:consultation") || permissions.has("bat:saisie") || permissions.has("bat:validation")) && (
         <>
           {/* Le BAT REÇOIT (lecture seule) la maquette du maquettiste et la
               couverture de l'infographe — les mêmes livrables, un seul dépôt en
@@ -2310,7 +2310,14 @@ function GenericStepValidation({
           <div>{batState.bat_has_cover ? "✅" : "⬜"} Fichier couverture déposé</div>
           <div>{(batState.bat_checklist_blocking_remaining ?? 1) === 0 && (batState.bat_checklist_total ?? 0) > 0 ? "✅" : "⬜"} Liste de contrôle cochée{(batState.bat_checklist_total ?? 0) > 0 ? ` (${(batState.bat_checklist_total ?? 0) - (batState.bat_checklist_blocking_remaining ?? 0)}/${batState.bat_checklist_total} points essentiels)` : ""}</div>
           <div>{batState.bat_signed ? "✅" : "⬜"} Bon à tirer signé</div>
-          <div style={{ marginTop: 6 }}>Rendez-vous dans la section <strong>« BAT Final et contrôle qualité »</strong> ci-dessous : déposez le fichier final (intérieur + couverture), cochez la liste de contrôle, puis signez le bon à tirer. La 1re signature deviendra alors possible.</div>
+          <div style={{ marginTop: 6 }}>Préparez le bon à tirer dans la section dédiée : déposez le fichier final (intérieur + couverture), cochez la liste de contrôle, déposez le scan signé par l'auteur, puis signez. La 1re signature deviendra alors possible.</div>
+          <button
+            type="button"
+            onClick={() => { const el = document.getElementById("bat-final"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+            style={{ marginTop: 8, background: "var(--eclosion, #D9B21A)", color: "#0b0b0c", border: "none", borderRadius: 8, padding: "7px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}
+          >
+            ⬇ Aller à la préparation du bon à tirer
+          </button>
         </div>
       )}
       {assignees.length > 0 && (!isDouble || (!!batState?.pre_validated && !!batState?.can_counter_validate)) && (

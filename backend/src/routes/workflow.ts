@@ -1089,6 +1089,35 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       const preValidated = Boolean(step?.preValidatedAt);
       const isAssigned = atDouble && current ? await isAssignedForStep(id, manuscript.statusId, request.user!.id, current.code) : false;
       const canSubmit = (preValPerm ? request.user!.permissions.has(preValPerm) : false) || isAssigned;
+
+      // État du BON À TIRER (print-ready) à l'étape BAT Final : fichier final
+      // (intérieur + couverture) déposé, liste de contrôle cochée, bon à tirer
+      // signé — ce qui est requis AVANT la 1re signature (demande opérateur 15/10).
+      let bat: {
+        bat_ready: boolean; bat_has_interior: boolean; bat_has_cover: boolean;
+        bat_checklist_total: number; bat_checklist_blocking_remaining: number; bat_signed: boolean;
+      } | null = null;
+      if (current?.code === "VALIDATION_BAT") {
+        const latestBat = await prisma.batRecord.findFirst({
+          where: { manuscriptId: id },
+          orderBy: { cycleNumber: "desc" },
+          select: { status: true, interiorVersionId: true, coverVersionId: true, checklist: { select: { items: { select: { isBlocking: true, checkedAt: true, notApplicable: true } } } } },
+        });
+        const items = latestBat?.checklist?.items ?? [];
+        const blockingRemaining = items.filter((i) => i.isBlocking && !i.checkedAt && !i.notApplicable).length;
+        const signed = latestBat?.status === "signed";
+        bat = {
+          bat_has_interior: Boolean(latestBat?.interiorVersionId),
+          bat_has_cover: Boolean(latestBat?.coverVersionId),
+          bat_checklist_total: items.length,
+          bat_checklist_blocking_remaining: blockingRemaining,
+          bat_signed: signed,
+          // Prêt pour la 1re signature = bon à tirer signé (qui suppose déjà fichiers
+          // déposés + points bloquants cochés, contrôlés à la signature du BAT).
+          bat_ready: signed,
+        };
+      }
+
       return reply.send({
         at_bat: atDouble, // conservé pour compatibilité : « à une étape à double signature »
         step_code: current?.code ?? null,
@@ -1099,6 +1128,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         can_pre_validate: atDouble && !preValidated && canSubmit,
         can_counter_validate: atDouble && preValidated && hasFinalAuthority && step?.preValidatedBy !== request.user!.id,
         is_pre_validator: Boolean(step?.preValidatedBy && step.preValidatedBy === request.user!.id),
+        ...(bat ?? {}),
       });
     },
   );

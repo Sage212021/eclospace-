@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-bat-final-fichier-et-controle",
+      version: "2026.10",
+      title: "Nouveauté — BAT Final : déposer le fichier prêt pour l'imprimeur + liste de contrôle avant de valider",
+      body: "La validation du BAT Final est désormais encadrée. Avant la 1re signature, on prépare le BON À TIRER dans la section « BAT Final et contrôle qualité » de la fiche : on choisit le FICHIER FINAL prêt pour l'impression — l'intérieur (texte) ET la couverture — directement parmi les fichiers déjà déposés (fini la saisie d'un identifiant technique), on coche la liste de contrôle prépresse (mentions légales, fonds perdus, dos, code-barres, fiche technique imprimeur…), puis on signe le bon à tirer. Tant que ce n'est pas fait, le bouton « Valider le BAT (1re signature) » reste bloqué, avec une liste claire de ce qu'il manque (fichier intérieur, couverture, liste cochée, bon à tirer signé). Ainsi, aucune impression n'est lancée sans le fichier définitif validé.",
+      permissionModules: ["bat", "manuscripts"],
+      departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-stock-bon-de-commande",
       version: "2026.10",
       title: "Nouveauté — Stock & magasin : bon de commande fournisseur",

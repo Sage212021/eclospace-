@@ -1359,11 +1359,13 @@ function barBtn(tone: "neutral" | "primary" | "danger" = "neutral"): React.CSSPr
   return base;
 }
 
-function ActionButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+function ActionButton({ children, onClick, disabled, title }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; title?: string }) {
   return (
     <button
       onClick={onClick}
-      style={{ background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+      disabled={disabled}
+      title={title}
+      style={{ background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.55 : 1 }}
     >
       {children}
     </button>
@@ -2298,6 +2300,19 @@ function GenericStepValidation({
           )}
         </div>
       )}
+      {/* État du BON À TIRER avant la 1re signature du BAT Final : fichier final
+          (intérieur + couverture) + liste de contrôle + signature du bon à tirer.
+          Tant que ce n'est pas prêt, la 1re signature est bloquée (demande 15/10). */}
+      {isBat && batState && batState.can_pre_validate && batState.bat_signed === false && (
+        <div style={{ background: "var(--amber-soft, #F6E7D2)", border: "1px solid #E7C98A", color: "#5a4a10", borderRadius: 8, padding: "10px 13px", fontSize: 12.5, marginBottom: 12, lineHeight: 1.6 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>À faire avant de valider : préparer le bon à tirer</div>
+          <div>{batState.bat_has_interior ? "✅" : "⬜"} Fichier intérieur (texte) déposé</div>
+          <div>{batState.bat_has_cover ? "✅" : "⬜"} Fichier couverture déposé</div>
+          <div>{(batState.bat_checklist_blocking_remaining ?? 1) === 0 && (batState.bat_checklist_total ?? 0) > 0 ? "✅" : "⬜"} Liste de contrôle cochée{(batState.bat_checklist_total ?? 0) > 0 ? ` (${(batState.bat_checklist_total ?? 0) - (batState.bat_checklist_blocking_remaining ?? 0)}/${batState.bat_checklist_total} points essentiels)` : ""}</div>
+          <div>{batState.bat_signed ? "✅" : "⬜"} Bon à tirer signé</div>
+          <div style={{ marginTop: 6 }}>Rendez-vous dans la section <strong>« BAT Final et contrôle qualité »</strong> ci-dessous : déposez le fichier final (intérieur + couverture), cochez la liste de contrôle, puis signez le bon à tirer. La 1re signature deviendra alors possible.</div>
+        </div>
+      )}
       {assignees.length > 0 && (!isDouble || (!!batState?.pre_validated && !!batState?.can_counter_validate)) && (
         <label style={{ display: "block", fontSize: 13, marginBottom: 10 }}>
           <span style={{ display: "block", color: "var(--muted)", marginBottom: 4 }}>
@@ -2334,9 +2349,20 @@ function GenericStepValidation({
       {/* BAT : on n'affiche le bouton que si l'utilisateur courant a bien une
           action (pré-valider ou contre-valider). Le pré-validateur en attente, ou
           un tiers sans autorité de contre-validation, ne voient que l'état. */}
-      {(!isDouble || !batState || batState.can_pre_validate || batState.can_counter_validate) && (
-        <ActionButton onClick={handleValidate}>{isOptional && decision === "passe" ? "Passer l'étape" : label}</ActionButton>
-      )}
+      {(!isDouble || !batState || batState.can_pre_validate || batState.can_counter_validate) && (() => {
+        // Verrou 1re signature du BAT Final : tant que le bon à tirer n'est pas
+        // signé (fichier final + liste de contrôle), on empêche la validation.
+        const batBlocks = isBat && !!batState && batState.can_pre_validate && batState.bat_signed === false;
+        return (
+          <ActionButton
+            onClick={handleValidate}
+            disabled={batBlocks}
+            title={batBlocks ? "Préparez d'abord le bon à tirer (fichier final + liste de contrôle + signature) dans la section « BAT Final et contrôle qualité »." : undefined}
+          >
+            {isOptional && decision === "passe" ? "Passer l'étape" : label}
+          </ActionButton>
+        );
+      })()}
     </div>
   );
 }

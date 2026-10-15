@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-catalogue-corriger-genre",
+      version: "2026.10",
+      title: "Nouveauté — Catalogue : corriger le genre d'un ouvrage en un clic",
+      body: "Sur la fiche d'un ouvrage du catalogue (celle qui s'ouvre au clic), le genre (domaine) peut désormais être corrigé directement : un petit crayon ✏️ à côté du genre ouvre une liste déroulante, vous choisissez le bon domaine, c'est enregistré aussitôt. Pratique après un import de liste où le genre était approximatif (ex. corriger « Roman » en « Poésie »). Aucun besoin d'ouvrir la fiche complète.",
+      permissionModules: ["communication"],
+      departmentCodes: ["MKT", "COMM", "INFOG", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-import-masse-annee-facultative",
       version: "2026.10",
       title: "Nouveauté — Import d'une liste : l'année de parution devient facultative",

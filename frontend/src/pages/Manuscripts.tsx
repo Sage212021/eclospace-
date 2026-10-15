@@ -960,8 +960,8 @@ function rowsToBulk(text: string): { rows: BulkImportRow[]; error?: string } {
   const iDate = col(["annee", "année", "parution", "date"]);
   const iSum = col(["resume", "résumé", "resum"]);
   const iAge = col(["age", "tranche"]);
-  if (iTitle < 0 || iAuthor < 0 || iGenre < 0 || iDate < 0) {
-    return { rows: [], error: "Colonnes manquantes. Minimum requis : titre, auteur, genre, année (+ facultatif : collection, isbn, résumé, âge)." };
+  if (iTitle < 0 || iAuthor < 0 || iGenre < 0) {
+    return { rows: [], error: "Colonnes manquantes. Minimum requis : titre, auteur, genre (+ facultatif : année, collection, isbn, résumé, âge)." };
   }
   const out: BulkImportRow[] = [];
   for (let r = 1; r < grid.length; r++) {
@@ -1020,7 +1020,7 @@ function BulkImportForm({ onDone, onError }: { onDone: () => void; onError: (m: 
       <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 6 }}>Importer une liste d'ouvrages déjà parus (fichier CSV)</div>
       <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px", lineHeight: 1.5 }}>
         Chargez un fichier <strong>CSV</strong> pour créer plusieurs ouvrages du fonds d'un coup (ils paraissent aussitôt au catalogue, classés par domaine et collection).
-        Colonnes : <strong>titre</strong>, <strong>auteur</strong>, <strong>genre</strong>, <strong>année</strong> (obligatoires) ; <em>collection, isbn, âge, résumé</em> (facultatifs).
+        Colonnes : <strong>titre</strong>, <strong>auteur</strong>, <strong>genre</strong> (obligatoires) ; <em>année, collection, isbn, âge, résumé</em> (facultatifs). Sans année, l'ouvrage entre au catalogue avec la mention « année : — ».
         Les doublons de titre sont ignorés automatiquement. Les couvertures s'ajoutent ensuite sur chaque fiche.
       </p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
@@ -1043,7 +1043,7 @@ function BulkImportForm({ onDone, onError }: { onDone: () => void; onError: (m: 
               <thead><tr>{["Titre", "Auteur", "Genre", "Collection", "Année"].map((h) => <th key={h} style={{ textAlign: "left", borderBottom: "1px solid var(--line)", padding: "4px 8px", color: "var(--muted)" }}>{h}</th>)}</tr></thead>
               <tbody>
                 {rows.slice(0, 5).map((r, i) => (
-                  <tr key={i}><td style={tdS}>{r.title}</td><td style={tdS}>{r.author}</td><td style={tdS}>{r.genre}</td><td style={tdS}>{r.collection ?? "—"}</td><td style={tdS}>{r.publication_date}</td></tr>
+                  <tr key={i}><td style={tdS}>{r.title}</td><td style={tdS}>{r.author}</td><td style={tdS}>{r.genre}</td><td style={tdS}>{r.collection ?? "—"}</td><td style={tdS}>{r.publication_date || "—"}</td></tr>
                 ))}
               </tbody>
             </table>

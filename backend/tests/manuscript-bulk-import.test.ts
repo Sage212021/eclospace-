@@ -15,7 +15,7 @@ describe("import en masse d'ouvrages du fonds", () => {
   let app: FastifyInstance;
   let cookie: string;
   const s = rnd();
-  const titles = { ok: `Roman Fonds ${s}`, dup: `Roman Fonds ${s}`, bad: `Mauvais domaine ${s}` };
+  const titles = { ok: `Roman Fonds ${s}`, dup: `Roman Fonds ${s}`, bad: `Mauvais domaine ${s}`, noYear: `Sans Annee ${s}` };
 
   beforeAll(async () => {
     app = await buildApp();
@@ -24,7 +24,7 @@ describe("import en masse d'ouvrages du fonds", () => {
   });
 
   afterAll(async () => {
-    const ms = await prisma.manuscript.findMany({ where: { title: { in: [titles.ok] } }, select: { id: true } });
+    const ms = await prisma.manuscript.findMany({ where: { title: { in: [titles.ok, titles.noYear] } }, select: { id: true } });
     const ids = ms.map((m) => m.id);
     if (ids.length) {
       await prisma.isbn.deleteMany({ where: { manuscriptId: { in: ids } } }).catch(() => {});
@@ -73,6 +73,24 @@ describe("import en masse d'ouvrages du fonds", () => {
     const norm = isbn.replace(/[^0-9Xx]/g, "").toUpperCase();
     const isbnRow = await prisma.isbn.findUnique({ where: { isbn13: norm } });
     expect(isbnRow?.manuscriptId).toBe(m.id);
+  });
+
+  it("accepte une année vide : ouvrage créé au catalogue, sans date de parution", async () => {
+    const res = await app.inject({
+      method: "POST", url: "/api/v1/manuscripts/import/bulk", headers: { cookie },
+      payload: { rows: [{ title: titles.noYear, author: "Olga Lona", genre: "Roman", collection: "Source", publication_date: "" }] },
+    });
+    expect(res.statusCode).toBe(200);
+    const b = res.json() as { created: number; errors: number };
+    expect(b.created).toBe(1);
+    expect(b.errors).toBe(0);
+    const m = await prisma.manuscript.findFirstOrThrow({
+      where: { title: titles.noYear },
+      include: { status: { select: { code: true } } },
+    });
+    expect(m.status.code).toBe("SUIVI_POST_PUBLICATION"); // bien au catalogue
+    expect(m.publicationDate).toBeNull();
+    expect(m.isBackCatalogue).toBe(false);
   });
 
   it("refuse une date de parution future (ligne en erreur, pas de création)", async () => {

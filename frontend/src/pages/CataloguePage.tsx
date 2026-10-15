@@ -180,6 +180,15 @@ export function CataloguePage({ onOpenManuscript, canAdmin, canUploadCovers }: {
             <div style={{ padding: "10px 11px 12px", textAlign: "left" }}>
               <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1.28, color: "var(--ink)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{it.title}</div>
               <div style={{ fontFamily: "var(--font-title, Georgia, serif)", fontStyle: "italic", fontSize: 12.5, color: "var(--muted)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.authors.join(", ") || "—"}</div>
+              {/* Genre (ou collection) en chip OR, SOUS la vignette : visible mais
+                  ne recouvre plus jamais la couverture ni le logo Éclosion. */}
+              {(it.genre?.label || it.collection?.label) && (
+                <div style={{ marginTop: 6 }}>
+                  <span style={{ display: "inline-block", background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase", padding: "2px 8px", borderRadius: 999, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {it.genre?.label ?? it.collection?.label}
+                  </span>
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 7, gap: 6 }}>
                 <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--eclosion-dark, #9a7a12)" }}>{it.year ?? ""}</span>
                 <span style={{ fontSize: 10, fontWeight: 700, color: AVAIL_COLOR[it.availabilityCode ?? ""] ?? "var(--muted)" }}>{it.availability}</span>
@@ -196,30 +205,23 @@ export function CataloguePage({ onOpenManuscript, canAdmin, canUploadCovers }: {
 
 // Couverture (image de la fiche ouvrage) ou vignette de repli élégante (ivoire
 // + titre) si l'ouvrage n'a pas encore de fichier de couverture image.
-function Cover({ item, badge = true, version = 0 }: { item: CatalogueItem; badge?: boolean; version?: number }) {
+function Cover({ item, version = 0 }: { item: CatalogueItem; version?: number }) {
   const [failed, setFailed] = useState(false);
   const showImg = item.hasCover && !failed;
-  // Badge « genre » (ou collection à défaut) incrusté en coin, à la manière des
-  // grands catalogues — en OR Éclospace (seule couleur d'accent, charte §5).
-  const badgeLabel = item.genre?.label ?? item.collection?.label ?? null;
   return (
+    // La couverture est affichée ENTIÈREMENT (objectFit: contain) : plus de
+    // rognage du haut/bas, donc le logo Éclosion en pied de couverture reste
+    // visible. Le badge genre/collection n'est PLUS posé sur l'image (il est
+    // affiché sous la vignette) pour ne jamais recouvrir le logo (charte §5).
     <div style={{ aspectRatio: "3 / 4", background: "var(--paper, #FAF8F2)", borderTopLeftRadius: 10, borderTopRightRadius: 10, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
       {showImg ? (
-        <img src={`${catalogueCoverUrl(item.id)}${version ? `?v=${version}` : ""}`} alt={`Couverture — ${item.title}`} onError={() => setFailed(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <img src={`${catalogueCoverUrl(item.id)}${version ? `?v=${version}` : ""}`} alt={`Couverture — ${item.title}`} onError={() => setFailed(true)} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
       ) : (
         <div style={{ padding: 12, textAlign: "center" }}>
           <div style={{ fontSize: 22 }}>📖</div>
           <div style={{ fontFamily: "var(--font-title, Georgia, serif)", fontSize: 12.5, color: "var(--ink)", marginTop: 6, lineHeight: 1.3 }}>{item.title}</div>
           <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 4 }}>{item.authors[0] ?? ""}</div>
         </div>
-      )}
-      {badge && badgeLabel && (
-        // Badge en HAUT-droite : le logo Éclosion figure en bas de la plupart des
-        // couvertures — on ne doit jamais le masquer (charte §5). Le badge est donc
-        // placé en haut pour laisser le logo du pied de couverture visible.
-        <span style={{ position: "absolute", right: 0, top: 10, background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase", padding: "3px 8px 3px 9px", borderTopLeftRadius: 4, borderBottomLeftRadius: 4, maxWidth: "80%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", boxShadow: "0 1px 3px rgba(11,11,12,.25)" }}>
-          {badgeLabel}
-        </span>
       )}
     </div>
   );
@@ -254,7 +256,7 @@ function DetailModal({ item, onClose, onOpenManuscript, canAdmin, onSaved }: { i
       <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 620, width: "100%", maxHeight: "90vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <div style={{ width: 180, flexShrink: 0 }}>
-            <Cover item={item} badge={false} />
+            <Cover item={item} />
           </div>
           <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ fontFamily: "var(--font-title, Georgia, serif)", fontSize: 20, color: "var(--ink)" }}>{item.title}</div>

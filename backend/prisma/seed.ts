@@ -2548,6 +2548,14 @@ async function main() {
       permissionModules: ["communication"],
       departmentCodes: ["MKT", "COM", "INFOG", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-catalogue-couverture-entiere-badge-dessous",
+      version: "2026.10",
+      title: "Nouveauté — Catalogue : couvertures affichées en entier, badge sous la vignette",
+      body: "Vous avez remarqué que certaines premières de couverture étaient coupées (on ne voyait pas toute l'image) et que le badge de collection masquait encore le logo Éclosion. Deux corrections : (1) la couverture s'affiche désormais ENTIÈREMENT dans la vignette (plus de rognage du haut ni du bas) — le logo en pied de couverture reste donc visible ; (2) le badge du genre/collection n'est plus posé par-dessus l'image : il est affiché EN DESSOUS de la vignette, sous forme de petite pastille dorée. Résultat : la couverture est montrée en entier et rien ne recouvre plus le logo.",
+      permissionModules: ["communication"],
+      departmentCodes: ["MKT", "COM", "INFOG", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

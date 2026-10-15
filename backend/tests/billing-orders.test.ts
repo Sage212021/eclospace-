@@ -239,6 +239,50 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(cancel.statusCode).toBe(403);
   });
 
+  // --- Reprise / modification d'un brouillon (commande en cours) -------------
+  it("reprend un brouillon : modifie l'intitulé et remplace les lignes, montant recalculé", async () => {
+    const create = await app.inject({
+      method: "POST", url: "/api/v1/billing-orders", headers: { cookie: admin },
+      payload: { customer_id: customerId, category: "livre_scolaire", label: `Brouillon ${rnd()}`, tax_rate: 0, lines: [{ description: "Manuel A", quantity: 10, unit_price_ht: 1000 }] },
+    });
+    expect(create.statusCode).toBe(201);
+    const id = create.json().id;
+    orderIds.push(id);
+    expect(create.json().amount_ht).toBe(10_000);
+
+    // Reprise : nouvel intitulé + lignes remplacées (2 ouvrages) → montant recalculé.
+    const patch = await app.inject({
+      method: "PATCH", url: `/api/v1/billing-orders/${id}`, headers: { cookie: admin },
+      payload: { label: "Manuels 6e — complété", lines: [{ description: "Manuel A", quantity: 10, unit_price_ht: 1000 }, { description: "Manuel B", quantity: 5, unit_price_ht: 2000, royalty_rate: 0.15 }] },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().label).toBe("Manuels 6e — complété");
+    expect(patch.json().amount_ht).toBe(20_000);
+    expect(patch.json().lines).toHaveLength(2);
+    expect(patch.json().lines.find((l: { description: string }) => l.description === "Manuel B").royalty_rate).toBe(0.15);
+
+    // La reprise ne crée PAS de nouveau document : même id, toujours pending.
+    const list = await app.inject({ method: "GET", url: "/api/v1/billing-orders?status=pending", headers: { cookie: admin } });
+    const rows = (list.json() as { id: string; status: string }[]).filter((o) => o.id === id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("pending");
+  });
+
+  it("un brouillon facturé n'est plus modifiable (409)", async () => {
+    const order = await createOrder(50_000);
+    const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin } });
+    invoiceIds.push(inv.json().id);
+    const patch = await app.inject({ method: "PATCH", url: `/api/v1/billing-orders/${order.json().id}`, headers: { cookie: admin }, payload: { label: "Trop tard" } });
+    expect(patch.statusCode).toBe(409);
+    expect(patch.json().code).toBe("not_editable");
+  });
+
+  it("un rôle non habilité ne peut pas modifier un brouillon (403)", async () => {
+    const order = await createOrder(60_000);
+    const patch = await app.inject({ method: "PATCH", url: `/api/v1/billing-orders/${order.json().id}`, headers: { cookie: magasinier }, payload: { label: "X" } });
+    expect(patch.statusCode).toBe(403);
+  });
+
   // --- Annulation d'une facture, validée par le DG ---------------------------
   async function issueInvoice(amountHt: number): Promise<string> {
     const order = await createOrder(amountHt);

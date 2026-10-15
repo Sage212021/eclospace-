@@ -6938,9 +6938,11 @@ export interface BillingOrder {
   discount_pct: number;
   status: "pending" | "invoiced" | "cancelled";
   created_at: string;
+  customer_id?: string | null;
+  note?: string | null;
   // Lignes saisies (ouvrages ou éléments « Autre ») : reprises telles quelles
   // sur la proforma pour que tous les libellés et leurs montants y figurent.
-  lines: { id: string; description: string; quantity: number; unit_price_ht: number; line_total: number; isbn_id: string | null }[];
+  lines: { id: string; description: string; quantity: number; unit_price_ht: number; line_total: number; isbn_id: string | null; royalty_rate?: number | null }[];
 }
 // Ligne d'ouvrage d'une commande « livre scolaire » : support du calcul des
 // droits d'auteur (ISBN, quantité, prix unitaire HT, taux éventuel).
@@ -6965,6 +6967,20 @@ export function createBillingOrder(input: {
 }
 export function getBillingOrders(status: "pending" | "invoiced" | "cancelled" = "pending") {
   return request<BillingOrder[]>(`/api/v1/billing-orders?status=${status}`);
+}
+// Reprise / modification d'une commande « en cours d'établissement » (brouillon),
+// tant qu'elle n'est pas facturée. Les lignes fournies remplacent les anciennes.
+export function updateBillingOrder(id: string, input: {
+  customer_id?: string;
+  category?: BillingOrderCategory;
+  label?: string;
+  amount_ht?: number;
+  tax_rate?: number;
+  discount_pct?: number;
+  note?: string;
+  lines?: BillingOrderLineInput[];
+}) {
+  return request<BillingOrder>(`/api/v1/billing-orders/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 export function invoiceBillingOrder(id: string, discountPct = 0, advance?: { amount: number; label?: string; method?: string }) {
   const body: Record<string, unknown> = { discount_pct: discountPct };

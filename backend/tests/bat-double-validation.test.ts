@@ -205,6 +205,12 @@ describe("BAT Final — double validation (infographe puis Direction générale)
     const pre = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/VALIDATION_BAT/validate`, headers: { cookie: infographeCookie }, payload: {} });
     expect(pre.statusCode).toBe(409);
     expect(pre.json().code).toBe("bat_not_signed");
+
+    // L'état reflète un bon à tirer PAS encore prêt (déposé mais non signé).
+    const state = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscript.id}/bat-validation-state`, headers: { cookie: dgCookie } });
+    expect(state.json().bat_has_interior).toBe(true);
+    expect(state.json().bat_signed).toBe(false);
+    expect(state.json().bat_ready).toBe(false);
   });
 
   it("expose l'état de double validation (endpoint bat-validation-state)", async () => {
@@ -214,6 +220,11 @@ describe("BAT Final — double validation (infographe puis Direction générale)
     expect(before.statusCode).toBe(200);
     expect(before.json().at_bat).toBe(true);
     expect(before.json().pre_validated).toBe(false);
+    // Bon à tirer prêt : fichiers déposés + signé → bat_ready true.
+    expect(before.json().bat_has_interior).toBe(true);
+    expect(before.json().bat_has_cover).toBe(true);
+    expect(before.json().bat_signed).toBe(true);
+    expect(before.json().bat_ready).toBe(true);
 
     await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/VALIDATION_BAT/validate`, headers: { cookie: infographeCookie }, payload: {} });
 

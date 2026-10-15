@@ -602,6 +602,13 @@ export interface BatValidationState {
   can_pre_validate: boolean;
   can_counter_validate: boolean;
   is_pre_validator: boolean;
+  // État du bon à tirer (print-ready) — présent uniquement à l'étape BAT Final.
+  bat_ready?: boolean;
+  bat_has_interior?: boolean;
+  bat_has_cover?: boolean;
+  bat_checklist_total?: number;
+  bat_checklist_blocking_remaining?: number;
+  bat_signed?: boolean;
 }
 export function getBatValidationState(manuscriptId: string) {
   return request<BatValidationState>(`/api/v1/manuscripts/${manuscriptId}/bat-validation-state`);

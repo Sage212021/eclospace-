@@ -5,7 +5,7 @@
 // **« Enregistrer au format PDF »** (option native de tous les navigateurs).
 // Aucune bibliothèque PDF lourde, fonctionne avec une connexion modeste.
 
-import type { AuthorReceiptDetail, AuthorWithdrawalVoucher, BookReceiptVoucher, ContractDetail, EditorialQuote, InvoiceDetail, PurchaseOrder, RoyaltyStatementDetail } from "../api/client";
+import type { AuthorReceiptDetail, AuthorWithdrawalVoucher, BookReceiptVoucher, ContractDetail, EditorialQuote, InvoiceDetail, PurchaseOrder, PurchaseOrderVoucher, RoyaltyStatementDetail } from "../api/client";
 import { isReportDisclaimer } from "./tidyProse";
 
 // Coordonnées officielles de la maison — source unique pour tous les documents
@@ -1662,6 +1662,77 @@ export function printBookReceipt(v: BookReceiptVoucher, opts?: PrintOpts): void 
       ${signatureZone("Signature de la Direction générale", "General management signature")}
     </div>`;
   openPrintWindow(`${tr("Bon de réception", "Book reception")} ${v.number}`, body, opts);
+}
+
+// Bon de commande fournisseur / imprimeur : document aux normes d'un bon de
+// commande d'édition (en-tête éditeur, fournisseur, référence devis, lignes avec
+// spécifications d'impression, totaux HT/TVA/TTC, conditions, signature & cachet).
+export function printPurchaseOrderVoucher(v: PurchaseOrderVoucher, opts?: PrintOpts): void {
+  const cur = v.currency || "XAF";
+  const rate = Number(v.taxRate) || 0;
+  let totalHt = 0;
+  const rows = v.lines
+    .map((l, i) => {
+      const pu = Number(l.unitPriceHt) || 0;
+      const lt = Math.round(pu * l.quantity * 100) / 100;
+      totalHt += lt;
+      return `<tr>
+        <td class="r num">${i + 1}</td>
+        <td>${escapeHtml(l.designation)}${l.specs ? `<div style="font-size:10.5px;color:#6b7280;margin-top:2px">${escapeHtml(l.specs)}</div>` : ""}</td>
+        <td class="r num">${fnum(l.quantity)}</td>
+        <td class="r num">${money(pu, cur)}</td>
+        <td class="r num">${money(lt, cur)}</td>
+      </tr>`;
+    })
+    .join("");
+  const tax = Math.round(totalHt * rate) / 100;
+  const totalTtc = Math.round((totalHt + tax) * 100) / 100;
+
+  const body = `
+    <div class="doc__title">${tr("Bon de commande", "Purchase order")}</div>
+    <div class="meta">
+      <span>${tr("N° de bon", "Order no.")} <b class="num">${escapeHtml(v.number)}</b></span>
+      <span>${tr("Date", "Date")} <b class="num">${escapeHtml(fdate(v.orderedAt))}</b></span>
+      ${v.quoteRef ? `<span>${tr("Réf. devis", "Quote ref.")} <b class="num">${escapeHtml(v.quoteRef)}</b></span>` : ""}
+    </div>
+
+    ${docSection(tr("Fournisseur / Imprimeur", "Supplier / Printer"))}
+    ${docField(tr("Raison sociale", "Name"), escapeHtml(v.supplier))}
+    ${docField(tr("Adresse", "Address"), v.supplierAddress ? escapeHtml(v.supplierAddress) : null)}
+    ${docField(tr("Contact (tél. / email)", "Contact (phone / email)"), v.supplierContact ? escapeHtml(v.supplierContact) : null)}
+
+    ${docSection(tr("Détail de la commande", "Order detail"))}
+    <table class="lines">
+      <thead><tr>
+        <th class="r">${tr("N°", "No.")}</th>
+        <th>${tr("Désignation / Spécifications", "Designation / Specifications")}</th>
+        <th class="r">${tr("Qté", "Qty")}</th>
+        <th class="r">${tr("P.U. HT", "Unit price")}</th>
+        <th class="r">${tr("Montant HT", "Amount")}</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    <div class="totals">
+      <div><span>${tr("Total HT", "Subtotal")}</span><span class="num">${money(totalHt, cur)}</span></div>
+      <div><span>${tr("TVA", "VAT")} (${pct(rate / 100)})</span><span class="num">${money(tax, cur)}</span></div>
+      <div class="ttc"><span>${tr("Total TTC", "Total")}</span><span class="num">${money(totalTtc, cur)}</span></div>
+    </div>
+
+    ${docSection(tr("Conditions", "Terms"))}
+    ${docField(tr("Lieu de livraison", "Delivery place"), v.deliveryPlace ? escapeHtml(v.deliveryPlace) : null)}
+    ${docField(tr("Date de livraison souhaitée", "Requested delivery date"), v.deliveryDue ? `<span class="num">${escapeHtml(fdate(v.deliveryDue))}</span>` : null)}
+    ${docField(tr("Conditions de paiement", "Payment terms"), v.paymentTerms ? escapeHtml(v.paymentTerms) : null)}
+    ${v.notes ? `<div style="font-size:12px;color:#374151;white-space:pre-wrap;margin-top:6px">${escapeHtml(v.notes)}</div>` : ""}
+
+    ${docSection(tr("Validation", "Validation"))}
+    ${docField(tr("Établi par (Nom)", "Issued by (Name)"), v.issuedByName ? escapeHtml(v.issuedByName) : null)}
+    ${docField(tr("Poste / Service", "Position / Department"), v.issuedByRole ? escapeHtml(v.issuedByRole) : null)}
+    <div style="display:flex; gap:24px; margin-top:22px">
+      ${signatureZone("Pour l'éditeur — signature &amp; cachet", "For the publisher — signature &amp; stamp")}
+      ${signatureZone("Pour le fournisseur — bon pour accord", "For the supplier — agreed")}
+    </div>`;
+  openPrintWindow(`${tr("Bon de commande", "Purchase order")} ${v.number}`, body, opts);
 }
 
 const WITHDRAWAL_MOTIVE_ORDER: AuthorWithdrawalVoucher["motive"][] = ["contractuel", "achat_remise", "restitution_stock", "autre"];

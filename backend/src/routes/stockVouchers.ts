@@ -29,6 +29,16 @@ async function nextWithdrawalNumber(): Promise<string> {
   return `RA-${year}-${String(rows[0].last_value).padStart(4, "0")}`;
 }
 
+// Bon de commande fournisseur / imprimeur : BC-AAAA-NNNN (compteur annuel atomique).
+async function nextPurchaseOrderVoucherNumber(): Promise<string> {
+  const year = new Date().getFullYear();
+  const rows = await prisma.$queryRaw<{ last_value: number }[]>`
+    INSERT INTO purchase_order_voucher_counters (year, last_value) VALUES (${year}, 1)
+    ON CONFLICT (year) DO UPDATE SET last_value = purchase_order_voucher_counters.last_value + 1
+    RETURNING last_value`;
+  return `BC-${year}-${String(rows[0].last_value).padStart(4, "0")}`;
+}
+
 const lineSchema = z.object({
   isbn_id: z.string().uuid().nullish(),
   title: z.string().min(1).max(300),
@@ -64,6 +74,60 @@ const withdrawalSchema = z.object({
   motive: z.nativeEnum(AuthorWithdrawalMotive),
   motive_other: z.string().max(500).nullish(),
 });
+
+const poLineSchema = z.object({
+  isbn_id: z.string().uuid().nullish(),
+  designation: z.string().min(1).max(300),
+  specs: z.string().max(500).nullish(),
+  quantity: z.number().int().min(1),
+  unit_price_ht: z.number().min(0),
+});
+
+const purchaseOrderSchema = z.object({
+  ordered_at: z.coerce.date(),
+  supplier: z.string().min(1).max(300),
+  supplier_address: z.string().max(400).nullish(),
+  supplier_contact: z.string().max(300).nullish(),
+  quote_ref: z.string().max(120).nullish(),
+  delivery_place: z.string().max(300).nullish(),
+  delivery_due: z.coerce.date().nullish(),
+  payment_terms: z.string().max(400).nullish(),
+  currency: z.string().max(8).optional(),
+  tax_rate: z.number().min(0).max(100).optional(),
+  issued_by_name: z.string().max(200).nullish(),
+  issued_by_role: z.string().max(200).nullish(),
+  notes: z.string().max(4000).nullish(),
+  lines: z.array(poLineSchema).min(1),
+});
+
+function purchaseOrderData(d: z.infer<typeof purchaseOrderSchema>) {
+  return {
+    orderedAt: d.ordered_at,
+    supplier: d.supplier.trim(),
+    supplierAddress: d.supplier_address?.trim() || null,
+    supplierContact: d.supplier_contact?.trim() || null,
+    quoteRef: d.quote_ref?.trim() || null,
+    deliveryPlace: d.delivery_place?.trim() || null,
+    deliveryDue: d.delivery_due ?? null,
+    paymentTerms: d.payment_terms?.trim() || null,
+    currency: d.currency?.trim() || "XAF",
+    taxRate: d.tax_rate ?? 0,
+    issuedByName: d.issued_by_name?.trim() || null,
+    issuedByRole: d.issued_by_role?.trim() || null,
+    notes: d.notes?.trim() || null,
+  };
+}
+
+function poLineData(l: z.infer<typeof poLineSchema>, position: number) {
+  return {
+    isbnId: l.isbn_id ?? null,
+    designation: l.designation.trim(),
+    specs: l.specs?.trim() || null,
+    quantity: l.quantity,
+    unitPriceHt: l.unit_price_ht,
+    position,
+  };
+}
 
 function lineData(l: z.infer<typeof lineSchema>, position: number) {
   return {
@@ -237,6 +301,64 @@ export default async function stockVoucherRoutes(fastify: FastifyInstance) {
     if (!existing) return reply.code(404).send({ code: "not_found", message: "Retrait d'ouvrage introuvable." });
     await prisma.authorWithdrawalVoucher.update({ where: { id }, data: { deletedAt: new Date() } });
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "author_withdrawal_voucher", entityId: id, newValues: { deleted: true }, ipAddress: request.ip });
+    return reply.send({ ok: true });
+  });
+
+  // === Bon de commande (fournisseur / imprimeur) ===
+  fastify.get("/api/v1/purchase-order-vouchers", { preHandler: requirePermission("stock", "consultation") }, async (_request, reply) => {
+    const rows = await prisma.purchaseOrderVoucher.findMany({
+      where: { deletedAt: null },
+      orderBy: { orderedAt: "desc" },
+      include: { lines: { orderBy: { position: "asc" } } },
+    });
+    return reply.send(rows);
+  });
+
+  fastify.get("/api/v1/purchase-order-vouchers/:id", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const row = await prisma.purchaseOrderVoucher.findFirst({ where: { id, deletedAt: null }, include: { lines: { orderBy: { position: "asc" } } } });
+    if (!row) return reply.code(404).send({ code: "not_found", message: "Bon de commande introuvable." });
+    return reply.send(row);
+  });
+
+  fastify.post("/api/v1/purchase-order-vouchers", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const parsed = purchaseOrderSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const d = parsed.data;
+    const number = await nextPurchaseOrderVoucherNumber();
+    const created = await prisma.purchaseOrderVoucher.create({
+      data: { number, ...purchaseOrderData(d), createdById: request.user!.id, lines: { create: d.lines.map((l, i) => poLineData(l, i)) } },
+      include: { lines: { orderBy: { position: "asc" } } },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "purchase_order_voucher", entityId: created.id, newValues: { number }, ipAddress: request.ip });
+    return reply.code(201).send(created);
+  });
+
+  fastify.put("/api/v1/purchase-order-vouchers/:id", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = purchaseOrderSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const existing = await prisma.purchaseOrderVoucher.findFirst({ where: { id, deletedAt: null } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Bon de commande introuvable." });
+    const d = parsed.data;
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.purchaseOrderVoucherLine.deleteMany({ where: { voucherId: id } });
+      return tx.purchaseOrderVoucher.update({
+        where: { id },
+        data: { ...purchaseOrderData(d), lines: { create: d.lines.map((l, i) => poLineData(l, i)) } },
+        include: { lines: { orderBy: { position: "asc" } } },
+      });
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "purchase_order_voucher", entityId: id, ipAddress: request.ip });
+    return reply.send(updated);
+  });
+
+  fastify.delete("/api/v1/purchase-order-vouchers/:id", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const existing = await prisma.purchaseOrderVoucher.findFirst({ where: { id, deletedAt: null } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Bon de commande introuvable." });
+    await prisma.purchaseOrderVoucher.update({ where: { id }, data: { deletedAt: new Date() } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "purchase_order_voucher", entityId: id, newValues: { deleted: true }, ipAddress: request.ip });
     return reply.send({ ok: true });
   });
 }

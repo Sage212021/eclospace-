@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { AnomalySeverity, BatStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { requirePermission } from "../lib/permissions.js";
+import { requirePermission, requireAnyPermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyRole } from "../lib/notify.js";
 import { computeIsbnCompleteness } from "../lib/isbnCompleteness.js";
@@ -338,7 +338,11 @@ export default async function batRoutes(fastify: FastifyInstance) {
   // en attente de signature — conditionné à l'état des anomalies/points bloquants.
   fastify.patch(
     "/api/v1/bat/:id/status",
-    { preHandler: requirePermission("bat", "validation") },
+    // Le profil qui PRÉPARE le bon à tirer (bat:saisie) peut le faire passer en
+    // signature / le renvoyer en correction (décision opérateur 16/10 : même
+    // personne sur tout le bon à tirer ; la vraie autorité reste la
+    // contre-validation DG à l'étape du workflow).
+    { preHandler: requireAnyPermission([{ module: "bat", action: "saisie" }, { module: "bat", action: "validation" }]) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = statusSchema.safeParse(request.body);
@@ -389,7 +393,10 @@ export default async function batRoutes(fastify: FastifyInstance) {
   // empreinte combinée et déclenche l'autorisation d'impression (§14.6).
   fastify.post(
     "/api/v1/bat/:id/sign",
-    { preHandler: requirePermission("bat", "validation") },
+    // Signer le bon à tirer = ENREGISTRER la signature de l'auteur (dont le scan
+    // est obligatoire). Le profil qui prépare (bat:saisie) peut le faire ; la
+    // gouvernance s'exerce à la contre-validation DG du workflow (décision 16/10).
+    { preHandler: requireAnyPermission([{ module: "bat", action: "saisie" }, { module: "bat", action: "validation" }]) },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = signSchema.safeParse(request.body ?? {});

@@ -20,11 +20,12 @@ interface BatSectionProps {
   canValidate: boolean;
 }
 
+// Libellés des ÉTATS du bon à tirer (statut du document, pas une personne).
 const STATUS_LABELS: Record<BatRecord["status"], string> = {
-  in_control: "En contrôle",
-  corrections_requested: "Corrections demandées",
-  awaiting_signature: "En attente de signature",
-  signed: "Signé",
+  in_control: "Étape 1/3 — Vérification en cours",
+  corrections_requested: "Renvoyé en correction",
+  awaiting_signature: "Étape 2/3 — En attente de signature",
+  signed: "Étape 3/3 — Signé (bon pour impression)",
   cancelled: "Annulé",
 };
 
@@ -217,18 +218,28 @@ function BatCycle({
         </span>
       </div>
 
-      {bat.checklist?.items.map((item) => (
-        <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "4px 0" }}>
-          <input
-            type="checkbox"
-            checked={!!item.checkedAt}
-            disabled={!canManage || locked}
-            onChange={(e) => handleToggle(item.id, e.target.checked)}
-          />
-          {item.label}
-          {item.isBlocking && <span style={{ fontSize: 10, color: "var(--alert)" }}>bloquant</span>}
-        </label>
-      ))}
+      <div style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+        Cochez chaque point vérifié. « Obligatoire » = point indispensable (à cocher avant de passer en signature). Une case cochée (✓) est satisfaite.
+      </div>
+      {bat.checklist?.items.map((item) => {
+        const done = !!item.checkedAt;
+        return (
+          <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "4px 0" }}>
+            <input
+              type="checkbox"
+              checked={done}
+              disabled={!canManage || locked}
+              onChange={(e) => handleToggle(item.id, e.target.checked)}
+            />
+            <span style={{ flex: 1 }}>{item.label}</span>
+            {item.isBlocking && (
+              done
+                ? <span style={{ fontSize: 10.5, color: "#2F7D4A", fontWeight: 600, whiteSpace: "nowrap" }}>✓ fait</span>
+                : <span style={{ fontSize: 10, color: "var(--muted)", whiteSpace: "nowrap" }}>obligatoire</span>
+            )}
+          </label>
+        );
+      })}
 
       <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Anomalies</div>
       {bat.anomalies.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucune anomalie signalée.</p>}
@@ -280,8 +291,9 @@ function BatCycle({
           ) : (
             <div style={{ fontSize: 12.5, color: "var(--alert)" }}>⬜ Aucun scan signé déposé pour l'instant.</div>
           )}
-          {/* Case de confirmation : activée uniquement si le scan est déposé. */}
-          {canValidate && (
+          {/* Case de confirmation : activée uniquement si le scan est déposé.
+              Ouverte au profil qui prépare (canManage) comme au validateur. */}
+          {(canManage || canValidate) && (
             <>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, opacity: hasScan ? 1 : 0.5 }}>
                 <input type="checkbox" disabled={!hasScan} checked={confirmSigned} onChange={(e) => setConfirmSigned(e.target.checked)} />

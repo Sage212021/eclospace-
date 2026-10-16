@@ -99,6 +99,9 @@ describe("Intégration workflow — étapes 10 à 15 (Lot 3)", () => {
     for (const status of ["legal_review", "direction_approval", "awaiting_signature", "active"]) {
       await app.inject({ method: "PATCH", url: `/api/v1/contracts/${contract.id}/status`, headers: { cookie: adminCookie }, payload: { status } });
     }
+    // Scan du contrat signé des deux parties : prérequis pour valider la
+    // CONTRACTUALISATION (garde-fou « contract_signed_scan_required », 16/10).
+    await prisma.contractDocument.create({ data: { contractId: contract.id, kind: "signed_scan", label: "Contrat signé", fileName: "signe.pdf", filePath: `test/ct-${contract.id}.pdf`, fileMime: "application/pdf", fileSize: 10 } });
     // D-010 : après la décision, on passe à la PLANIFICATION ; la
     // contractualisation intervient plus tard (juste après la validation du BAT).
     // Ordre D-014 : Planification → Expertise → Réécriture → Correction → Mise en

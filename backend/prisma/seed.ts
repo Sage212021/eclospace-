@@ -2644,6 +2644,14 @@ async function main() {
       permissionModules: ["bat"],
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-contractualisation-chez-le-dg-delegation",
+      version: "2026.10",
+      title: "Nouveauté — Contractualisation : le dossier passe chez le DG, avec délégation possible",
+      body: "Nouvelle étape clarifiée dans le circuit : après la contre-validation du BAT Final, l'ouvrage passe à la CONTRACTUALISATION avant l'impression. (1) ALERTE : la Direction générale est prévenue (« Dossier à contractualiser — … ») que le dossier est passé à son niveau — plus de message trompeur « pour autoriser l'impression ». (2) ÉCRAN DÉDIÉ : un nouvel écran « Dossiers à contractualiser » (pôle Éditorial) liste les ouvrages à cette étape, avec pour chacun l'état du contrat et les droits d'auteur, un bouton « Ouvrir la fiche » (rubrique Contrat : établir le contrat, l'imprimer, le faire signer, déposer le scan signé des deux parties) et le bouton « Valider la contractualisation ». (3) GARDE-FOU : on ne peut valider (→ impression) que si le contrat signé des deux parties (scan) est déposé. (4) DÉLÉGATION : le DG peut confier la PRÉPARATION d'un dossier à la Direction éditoriale, aux RH ou au DAF ; la personne désignée est notifiée et peut préparer le contrat de ce dossier précis, mais la validation finale reste au DG.",
+      permissionModules: ["manuscripts", "contracts"],
+      departmentCodes: ["DG", "DIRED", "JURID", "FIN", "RH"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

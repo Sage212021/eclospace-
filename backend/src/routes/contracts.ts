@@ -1,10 +1,41 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ContractDispatchChannel, ContractDocumentKind, ContractType, ContractStatus, RoyaltyBase, SignatureParty, StatementPeriodicity } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
+import { canPrepareContractForManuscript } from "../lib/contractualisation.js";
 import { writeAuditLog } from "../lib/audit.js";
+
+// Autorisation « saisie » des contrats avec ACCÈS SCOPÉ pour la
+// contractualisation (demande opérateur 16/10) : en plus des profils porteurs du
+// droit « contracts:saisie » (Juridique…), le DG — ou le délégué qu'il a
+// désigné — peut établir/compléter le contrat et déposer le scan signé, mais
+// UNIQUEMENT pour le dossier qui est en contractualisation. On n'ouvre jamais le
+// module Contrats en grand à RH/DAF/Éditorial.
+function allowContractSaisie() {
+  return async function contractSaisiePreHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    if (!request.user) {
+      reply.code(401).send({ code: "unauthenticated", message: "Connexion requise." });
+      return;
+    }
+    if (request.user.permissions.has("contracts:saisie")) return;
+    // Dériver le manuscrit : via le contrat (routes /:id/…) ou via le corps
+    // (création d'un contrat). Les routes multipart n'utilisent que params.id.
+    const params = request.params as { id?: string };
+    let manuscriptId: string | null = null;
+    if (params.id) {
+      const contract = await prisma.contract.findUnique({ where: { id: params.id }, select: { manuscriptId: true } });
+      manuscriptId = contract?.manuscriptId ?? null;
+    } else {
+      const body = request.body as { manuscript_id?: string } | undefined;
+      manuscriptId = body?.manuscript_id ?? null;
+    }
+    if (await canPrepareContractForManuscript(request.user, manuscriptId)) return;
+    void writeAuditLog({ userId: request.user.id, action: "access_denied", entityType: "permission", entityId: "contracts:saisie", newValues: { method: request.method, url: request.url }, ipAddress: request.ip }).catch(() => {});
+    reply.code(403).send({ code: "forbidden", message: "Action non autorisée : droit « contrats (saisie) » requis — ou dossier non délégué / hors contractualisation." });
+  };
+}
 import { nextContractNumber } from "../lib/contractNumber.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import { buildContractDeadline, runContractDeadlineAlerts } from "../lib/contractDeadlines.js";
@@ -149,7 +180,7 @@ const listQuerySchema = z.object({
 
 // Juridique et contrats (Ch. 9) — hors moteur de droits connecté aux ventes (Lot 5).
 export default async function contractRoutes(fastify: FastifyInstance) {
-  fastify.post("/api/v1/contracts", { preHandler: requirePermission("contracts", "saisie") }, async (request, reply) => {
+  fastify.post("/api/v1/contracts", { preHandler: allowContractSaisie() }, async (request, reply) => {
     const parsed = createContractSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
@@ -465,7 +496,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
   // Réservée à la saisie contrats, tracée au journal.
   fastify.patch(
     "/api/v1/contracts/:id/terms",
-    { preHandler: requirePermission("contracts", "saisie") },
+    { preHandler: allowContractSaisie() },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = z
@@ -538,7 +569,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
   // de contrat imprimé / PDF. Possible tant que le contrat n'est pas signé.
   fastify.post(
     "/api/v1/contracts/:id/clauses",
-    { preHandler: requirePermission("contracts", "saisie") },
+    { preHandler: allowContractSaisie() },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = z.object({ title: z.string().min(2).max(200), body: z.string().min(2).max(8000) }).safeParse(request.body);
@@ -568,7 +599,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
   // Possible tant que le contrat n'est pas signé.
   fastify.put(
     "/api/v1/contracts/:id/article-overrides",
-    { preHandler: requirePermission("contracts", "saisie") },
+    { preHandler: allowContractSaisie() },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = z.object({ article: z.number().int().min(1).max(15), text: z.string().max(8000) }).safeParse(request.body);
@@ -592,7 +623,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
   // réordonner) — pas seulement ajouter. Contrat non signé.
   fastify.put(
     "/api/v1/contracts/:id/clauses",
-    { preHandler: requirePermission("contracts", "saisie") },
+    { preHandler: allowContractSaisie() },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = z.object({ clauses: z.array(z.object({ title: z.string().min(2).max(200), body: z.string().min(2).max(8000) })).max(50) }).safeParse(request.body);
@@ -769,7 +800,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
   // Téléversement d'une pièce (multipart). Réservé à la saisie des contrats.
   fastify.post(
     "/api/v1/contracts/:id/documents",
-    { preHandler: requirePermission("contracts", "saisie") },
+    { preHandler: allowContractSaisie() },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       if (!(await contractExists(id))) return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });
@@ -819,7 +850,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
   // Retrait logique d'une pièce (conservation : suppression logique uniquement).
   fastify.delete(
     "/api/v1/contracts/:id/documents/:docId",
-    { preHandler: requirePermission("contracts", "saisie") },
+    { preHandler: allowContractSaisie() },
     async (request, reply) => {
       const { id, docId } = request.params as { id: string; docId: string };
       const doc = await prisma.contractDocument.findFirst({ where: { id: docId, contractId: id, deletedAt: null } });
@@ -857,7 +888,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
   // cette route ne fait qu'inscrire au registre que l'envoi a eu lieu.
   fastify.post(
     "/api/v1/contracts/:id/dispatches",
-    { preHandler: requirePermission("contracts", "saisie") },
+    { preHandler: allowContractSaisie() },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       if (!(await contractExists(id))) return reply.code(404).send({ code: "not_found", message: "Contrat introuvable." });

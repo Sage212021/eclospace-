@@ -314,6 +314,51 @@ export function listUsers() {
   return request<UserSummary[]>("/api/v1/users");
 }
 
+// ── Contractualisation « chez le DG » (circuit BAT → Contractualisation → Impression)
+export interface ContractualisationItem {
+  manuscript_id: string;
+  manuscript_number: string;
+  title: string;
+  delegate: { id: string; name: string } | null;
+  contract:
+    | {
+        id: string;
+        contract_number: string;
+        type: string;
+        status: string;
+        has_signed_scan: boolean;
+        royalty: unknown | null;
+      }
+    | null;
+}
+export interface ContractualisationInbox {
+  items: ContractualisationItem[];
+  is_direction: boolean;
+  delegate_roles: string[];
+}
+export interface DelegateCandidate {
+  id: string;
+  name: string;
+  roles: string[];
+}
+export function getContractualisationInbox() {
+  return request<ContractualisationInbox>("/api/v1/contractualisation/inbox");
+}
+export function getContractualisationDelegateCandidates() {
+  return request<{ items: DelegateCandidate[] }>("/api/v1/contractualisation/delegate-candidates");
+}
+export function delegateContractualisation(manuscriptId: string, assigneeId: string) {
+  return request<{ delegated_to: string }>(`/api/v1/manuscripts/${manuscriptId}/contractualisation/delegate`, {
+    method: "POST",
+    body: JSON.stringify({ assignee_id: assigneeId }),
+  });
+}
+export function revokeContractualisationDelegation(manuscriptId: string) {
+  return request<{ delegated_to: null }>(`/api/v1/manuscripts/${manuscriptId}/contractualisation/delegate`, {
+    method: "DELETE",
+  });
+}
+
 export interface CatalogueFilters {
   status?: string;
   genre?: string;

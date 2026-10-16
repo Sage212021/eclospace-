@@ -55,6 +55,16 @@ const anomalySchema = z.object({
   returned_to: z.string().optional(),
 });
 
+// Correction des fichiers d'un BAT non signé : au moins l'un des deux doit être fourni.
+const updateFilesSchema = z
+  .object({
+    interior_version_id: z.string().uuid().optional(),
+    cover_version_id: z.string().uuid().optional(),
+  })
+  .refine((d) => !!d.interior_version_id || !!d.cover_version_id, {
+    message: "Indiquez le nouveau fichier intérieur et/ou couverture.",
+  });
+
 const statusSchema = z.object({ status: z.enum(["corrections_requested", "awaiting_signature"]) });
 
 const signSchema = z.object({ author_approval: z.boolean().optional() });
@@ -234,6 +244,54 @@ export default async function batRoutes(fastify: FastifyInstance) {
       });
 
       return reply.code(201).send(record);
+    },
+  );
+
+  // Correction des fichiers du bon à tirer (demande opérateur 16/10 : « on peut
+  // avoir sélectionné un fichier par erreur »). Permet de remplacer l'intérieur
+  // et/ou la couverture TANT QUE le BAT n'est pas signé (dossier non verrouillé).
+  fastify.patch(
+    "/api/v1/bat/:id/files",
+    { preHandler: requirePermission("bat", "saisie") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = updateFilesSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const bat = await prisma.batRecord.findUnique({ where: { id } });
+      if (!bat) {
+        return reply.code(404).send({ code: "not_found", message: "BAT introuvable." });
+      }
+      if (bat.status === BatStatus.signed) {
+        return reply.code(409).send({ code: "bat_locked", message: "Le BAT est signé : les fichiers sont verrouillés et ne peuvent plus être corrigés." });
+      }
+      const wantedIds = [parsed.data.interior_version_id, parsed.data.cover_version_id].filter((v): v is string => !!v);
+      const found = await prisma.documentVersion.findMany({ where: { id: { in: wantedIds } }, select: { id: true } });
+      if (found.length !== wantedIds.length) {
+        return reply.code(404).send({ code: "not_found", message: "Fichier intérieur ou de couverture introuvable." });
+      }
+      const updated = await prisma.batRecord.update({
+        where: { id },
+        data: {
+          interiorVersionId: parsed.data.interior_version_id ?? undefined,
+          coverVersionId: parsed.data.cover_version_id ?? undefined,
+        },
+        include: { anomalies: true, signatures: true, checklist: { include: { items: true } } },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "bat_record",
+        entityId: id,
+        newValues: {
+          interiorVersionId: parsed.data.interior_version_id,
+          coverVersionId: parsed.data.cover_version_id,
+          reason: "correction_fichiers",
+        },
+        ipAddress: request.ip,
+      });
+      return reply.send(updated);
     },
   );
 

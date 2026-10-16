@@ -6,6 +6,7 @@ import {
   signBat,
   toggleChecklistItem,
   updateBatStatus,
+  updateBatFiles,
   listStepAttachments,
   uploadBatSignedScan,
   batSignedScanUrl,
@@ -120,6 +121,7 @@ export function BatSection({ manuscriptId, canManage, canValidate }: BatSectionP
       {current && (
         <BatCycle
           bat={current}
+          attachments={attachments}
           canManage={canManage}
           canValidate={canValidate}
           onChanged={refresh}
@@ -132,12 +134,14 @@ export function BatSection({ manuscriptId, canManage, canValidate }: BatSectionP
 
 function BatCycle({
   bat,
+  attachments,
   canManage,
   canValidate,
   onChanged,
   onError,
 }: {
   bat: BatRecord;
+  attachments: StepAttachment[];
   canManage: boolean;
   canValidate: boolean;
   onChanged: () => void;
@@ -147,6 +151,41 @@ function BatCycle({
   const hasScan = !!bat.signedScanVersionId;
   const [confirmSigned, setConfirmSigned] = useState(false);
   const [uploadingScan, setUploadingScan] = useState(false);
+  // Correction des fichiers (intérieur / couverture) en cas d'erreur de sélection.
+  const [editingFiles, setEditingFiles] = useState(false);
+  const [newInteriorId, setNewInteriorId] = useState("");
+  const [newCoverId, setNewCoverId] = useState("");
+  const [savingFiles, setSavingFiles] = useState(false);
+
+  const fileName = (versionId?: string | null) => {
+    if (!versionId) return "non défini";
+    const a = attachments.find((x) => x.version_id === versionId);
+    return a ? a.title : "fichier déposé";
+  };
+  const fileLabel = (a: StepAttachment) => `${a.title}${a.file_size ? ` · ${(a.file_size / 1_000_000).toFixed(1)} Mo` : ""}`;
+
+  function startEditFiles() {
+    setNewInteriorId(bat.interiorVersionId ?? "");
+    setNewCoverId(bat.coverVersionId ?? "");
+    setEditingFiles(true);
+  }
+
+  async function handleSaveFiles() {
+    const files: { interiorVersionId?: string; coverVersionId?: string } = {};
+    if (newInteriorId && newInteriorId !== bat.interiorVersionId) files.interiorVersionId = newInteriorId;
+    if (newCoverId && newCoverId !== bat.coverVersionId) files.coverVersionId = newCoverId;
+    if (!files.interiorVersionId && !files.coverVersionId) { setEditingFiles(false); return; }
+    setSavingFiles(true);
+    try {
+      await updateBatFiles(bat.id, files);
+      setEditingFiles(false);
+      onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Échec de la correction des fichiers.");
+    } finally {
+      setSavingFiles(false);
+    }
+  }
 
   async function handleUploadScan(file: File | null) {
     if (!file) return;
@@ -216,6 +255,49 @@ function BatCycle({
         <span style={{ background: locked ? "var(--eclosion-soft)" : "var(--alert-soft)", color: locked ? "var(--eclosion)" : "var(--alert)", borderRadius: 999, padding: "2px 10px", fontSize: 11 }}>
           {STATUS_LABELS[bat.status]}
         </span>
+      </div>
+
+      {/* Fichiers du bon à tirer — corrigeables tant que le BAT n'est pas signé
+          (en cas de fichier sélectionné par erreur). */}
+      <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, marginBottom: 12, background: "var(--ivory, #FAF8F2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600 }}>Fichiers du bon à tirer</div>
+          {canManage && !locked && !editingFiles && (
+            <button onClick={startEditFiles} style={secondaryButtonStyle}>Corriger les fichiers</button>
+          )}
+        </div>
+        {!editingFiles ? (
+          <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6, lineHeight: 1.6 }}>
+            <div>📄 <b>Intérieur</b> : {fileName(bat.interiorVersionId)}</div>
+            <div>🖼️ <b>Couverture</b> : {fileName(bat.coverVersionId)}</div>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 10, marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>
+              Choisissez le bon fichier parmi ceux déposés dans « Documents de l'étape ». Possible tant que le BAT n'est pas signé.
+            </div>
+            <label style={{ fontSize: 12.5 }}>
+              <span style={{ display: "block", color: "var(--muted)", marginBottom: 3 }}>Fichier intérieur (texte)</span>
+              <select value={newInteriorId} onChange={(e) => setNewInteriorId(e.target.value)} style={{ width: "100%" }}>
+                <option value="">— Choisir —</option>
+                {attachments.map((a) => <option key={a.version_id!} value={a.version_id!}>{fileLabel(a)}</option>)}
+              </select>
+            </label>
+            <label style={{ fontSize: 12.5 }}>
+              <span style={{ display: "block", color: "var(--muted)", marginBottom: 3 }}>Fichier couverture</span>
+              <select value={newCoverId} onChange={(e) => setNewCoverId(e.target.value)} style={{ width: "100%" }}>
+                <option value="">— Choisir —</option>
+                {attachments.map((a) => <option key={a.version_id!} value={a.version_id!}>{fileLabel(a)}</option>)}
+              </select>
+            </label>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => setEditingFiles(false)} style={secondaryButtonStyle}>Annuler</button>
+              <button onClick={handleSaveFiles} disabled={savingFiles} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none", opacity: savingFiles ? 0.6 : 1 }}>
+                {savingFiles ? "Enregistrement…" : "Enregistrer les fichiers"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 8px" }}>

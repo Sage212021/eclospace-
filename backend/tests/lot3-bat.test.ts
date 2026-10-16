@@ -277,6 +277,65 @@ describe("BAT et contrôle qualité (Lot 3)", () => {
     expect(lockedEdit.json().code).toBe("bat_locked");
   });
 
+  it("corrige les fichiers (intérieur/couverture) d'un BAT non signé, puis les verrouille une fois signé", async () => {
+    const { manuscript, interiorVersion, coverVersion } = await createManuscriptReadyForBat("Manuscrit BAT Correction Fichiers");
+
+    const opened = await app.inject({
+      method: "POST",
+      url: `/api/v1/manuscripts/${manuscript.id}/bat`,
+      headers: { cookie: adminCookie },
+      payload: { interior_version_id: interiorVersion.id, cover_version_id: coverVersion.id },
+    });
+    expect(opened.statusCode).toBe(201);
+    const bat = opened.json();
+
+    // Un nouveau fichier déposé par erreur-correction : on remplace l'intérieur.
+    const doc = await prisma.document.create({
+      data: { entityType: "manuscript", entityId: manuscript.id, category: "bat", title: "Bon fichier intérieur" },
+    });
+    const newInterior = await prisma.documentVersion.create({
+      data: { documentId: doc.id, versionNumber: 1, filePath: "interior-bon.pdf", fileSize: 1200, mimeType: "application/pdf", sha256Hash: "newinteriorhash", status: "validated" },
+    });
+
+    // Correction impossible avec un fichier inexistant → 404.
+    const badFix = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/bat/${bat.id}/files`,
+      headers: { cookie: adminCookie },
+      payload: { interior_version_id: "00000000-0000-0000-0000-000000000000" },
+    });
+    expect(badFix.statusCode).toBe(404);
+
+    // Correction valide : l'intérieur est remplacé, la couverture inchangée.
+    const fixed = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/bat/${bat.id}/files`,
+      headers: { cookie: adminCookie },
+      payload: { interior_version_id: newInterior.id },
+    });
+    expect(fixed.statusCode).toBe(200);
+    expect(fixed.json().interiorVersionId).toBe(newInterior.id);
+    expect(fixed.json().coverVersionId).toBe(coverVersion.id);
+
+    // Après signature, les fichiers sont verrouillés → 409.
+    for (const item of bat.checklist.items) {
+      await app.inject({ method: "PATCH", url: `/api/v1/checklist-items/${item.id}`, headers: { cookie: adminCookie }, payload: { checked: true } });
+    }
+    await app.inject({ method: "PATCH", url: `/api/v1/bat/${bat.id}/status`, headers: { cookie: adminCookie }, payload: { status: "awaiting_signature" } });
+    await prisma.batRecord.update({ where: { id: bat.id }, data: { signedScanVersionId: newInterior.id } });
+    const signed = await app.inject({ method: "POST", url: `/api/v1/bat/${bat.id}/sign`, headers: { cookie: adminCookie }, payload: { author_approval: true } });
+    expect(signed.statusCode).toBe(201);
+
+    const lockedFix = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/bat/${bat.id}/files`,
+      headers: { cookie: adminCookie },
+      payload: { cover_version_id: interiorVersion.id },
+    });
+    expect(lockedFix.statusCode).toBe(409);
+    expect(lockedFix.json().code).toBe("bat_locked");
+  });
+
   it("renvoie en correction sur anomalie bloquante puis ouvre un nouveau cycle (Ch. 14 §14.4)", async () => {
     const { manuscript, interiorVersion, coverVersion } = await createManuscriptReadyForBat("Manuscrit BAT Anomalie");
     const opened = await app.inject({

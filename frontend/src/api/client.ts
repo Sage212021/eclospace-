@@ -2713,6 +2713,9 @@ export interface BatRecord {
   anomalies: { id: string; description: string; severity: "minor" | "major" | "blocking"; resolvedAt: string | null }[];
   // Scan du BAT Final signé par l'auteur (preuve requise avant la signature).
   signedScanVersionId?: string | null;
+  // Fichiers du bon à tirer (corrigeables tant que le BAT n'est pas signé).
+  interiorVersionId?: string | null;
+  coverVersionId?: string | null;
 }
 
 export function listBatRecords(manuscriptId: string) {
@@ -2723,6 +2726,15 @@ export function openBat(manuscriptId: string, interiorVersionId: string, coverVe
   return request<BatRecord>(`/api/v1/manuscripts/${manuscriptId}/bat`, {
     method: "POST",
     body: JSON.stringify({ interior_version_id: interiorVersionId, cover_version_id: coverVersionId }),
+  });
+}
+
+// Corriger les fichiers du bon à tirer (intérieur et/ou couverture) tant qu'il
+// n'est pas signé — en cas de fichier sélectionné par erreur.
+export function updateBatFiles(batId: string, files: { interiorVersionId?: string; coverVersionId?: string }) {
+  return request<BatRecord>(`/api/v1/bat/${batId}/files`, {
+    method: "PATCH",
+    body: JSON.stringify({ interior_version_id: files.interiorVersionId, cover_version_id: files.coverVersionId }),
   });
 }
 

@@ -2636,6 +2636,14 @@ async function main() {
       permissionModules: ["bat"],
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-bat-corriger-fichiers-interieur-couverture",
+      version: "2026.10",
+      title: "Nouveauté — Bon à tirer : corriger un fichier intérieur/couverture déposé par erreur",
+      body: "Vous nous avez signalé qu'une fois les fichiers intérieur et couverture déposés dans le bon à tirer, il était impossible de revenir en arrière si on s'était trompé de fichier. C'est corrigé : dans la section « BAT Final et contrôle qualité », un encadré « Fichiers du bon à tirer » affiche désormais les deux fichiers choisis (intérieur + couverture) et un bouton « Corriger les fichiers » permet d'en remplacer un ou les deux par le bon fichier (parmi ceux déposés dans « Documents de l'étape »). Possible à tout moment TANT QUE le bon à tirer n'est pas encore signé. Une fois signé, le dossier est verrouillé (règle de sécurité : rien ne change après le bon pour impression).",
+      permissionModules: ["bat"],
+      departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

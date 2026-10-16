@@ -2628,6 +2628,14 @@ async function main() {
       permissionModules: ["communication"],
       departmentCodes: ["MKT", "COM", "INFOG", "DIRED", "DG"],
     },
+    {
+      slug: "2026-10-bat-flux-un-seul-profil-libelles-clairs",
+      version: "2026.10",
+      title: "Nouveauté — Bon à tirer : un parcours plus clair, géré par un seul profil",
+      body: "On a simplifié et clarifié le BAT Final (bon à tirer), suite à vos retours. (1) PLUS CLAIR : la fiche affiche maintenant l'état du bon à tirer sous forme d'étapes — « Étape 1/3 — Vérification en cours », « Étape 2/3 — En attente de signature », « Étape 3/3 — Signé (bon pour impression) » — au lieu de termes flous comme « En contrôle ». Dans la liste de contrôle, un point indispensable s'affiche « obligatoire » tant qu'il n'est pas coché, puis « ✓ fait » une fois coché : plus de mot « bloquant » qui restait même après avoir tout coché. (2) UN SEUL PROFIL : la personne qui PRÉPARE le bon à tirer (pôle Infographie, droit « BAT : saisie ») peut désormais faire avancer tout le parcours elle-même — passer « en attente de signature », déposer le SCAN du BAT signé de la main de l'auteur, puis enregistrer la signature « bon pour impression ». Avant, ce passage réclamait un droit « BAT : validation » et affichait « action non autorisée ». La vraie sécurité ne change pas : rien ne part à l'impression sans la CONTRE-VALIDATION de la Direction à l'étape finale du circuit. (3) RAPPEL : le bouton « Signer » ne s'active qu'après avoir déposé le scan du BAT signé par l'auteur, et coché la case de confirmation.",
+      permissionModules: ["bat"],
+      departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

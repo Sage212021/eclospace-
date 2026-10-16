@@ -10,6 +10,13 @@ import { vc1State } from "../lib/startingProof.js";
 import { isOptionalDecisionStep, stepMode, missingRealizationFields, sanitizeRealizationData, OPTIONAL_STEP_LABELS, type OptionalStepCode } from "../lib/stepRealization.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers, notifyRole } from "../lib/notify.js";
+import {
+  CONTRACTUALISATION_CODE,
+  CONTRACTUALISATION_DELEGATE_ROLES,
+  isDirectionGenerale,
+  contractualisationDelegateId,
+  getContractualisationStatusId,
+} from "../lib/contractualisation.js";
 
 // Éligibilité à l'affectation nominative d'une étape. Par défaut, ce sont les
 // personnes du SERVICE de l'étape (maquettistes → mise en page, etc.). Certaines
@@ -608,6 +615,32 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         // l'étape suivante et renseigne validatedAt).
       }
 
+      // Contractualisation (circuit D-010 : BAT Final → Contractualisation →
+      // Impression). Étape « chez le DG » (demande opérateur 16/10) :
+      //   • le CLIC FINAL est réservé à la Direction générale — la préparation
+      //     peut être déléguée (RH, Éditorial, DAF), mais pas ce clic ;
+      //   • rien ne part à l'impression tant que le CONTRAT signé des deux
+      //     parties (scan) n'est pas déposé dans la rubrique Contrat.
+      if (targetStatus.code === CONTRACTUALISATION_CODE) {
+        if (!isDirectionGenerale(request.user!)) {
+          void writeAuditLog({ userId: request.user!.id, action: "access_denied", entityType: "permission", entityId: "contractualisation:final", newValues: { reason: "final_click_reserved_dg", method: request.method, url: request.url }, ipAddress: request.ip }).catch(() => {});
+          return reply.code(403).send({
+            code: "forbidden",
+            message: "La validation de la contractualisation est réservée à la Direction générale (clic final). La préparation du contrat peut être déléguée, mais pas cette validation.",
+          });
+        }
+        const signedContract = await prisma.contract.findFirst({
+          where: { manuscriptId: id, deletedAt: null, documents: { some: { kind: "signed_scan", deletedAt: null } } },
+          select: { id: true },
+        });
+        if (!signedContract) {
+          return reply.code(409).send({
+            code: "contract_signed_scan_required",
+            message: "Déposez d'abord le contrat signé des deux parties (scan) dans la rubrique Contrat de la fiche avant de valider la contractualisation.",
+          });
+        }
+      }
+
       // Ch. 14 §14.7 : seuls les exemplaires contrôlés (conformes ou
       // conformes avec réserves) peuvent être transmis à l'entrée en stock.
       if (targetStatus.code === "CONTROLE_QUALITE_IMPRESSION") {
@@ -871,6 +904,24 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         await ensureOpenCorrectionCycle(id, { userId: request.user!.id, userRole: request.user!.roles[0] ?? null });
       }
 
+      // ENTRÉE EN CONTRACTUALISATION (circuit D-010 : BAT Final → Contractualisation
+      // → Impression). Le dossier est « chez le DG » : on le prévient explicitement
+      // que l'ouvrage est passé à SON NIVEAU pour la contractualisation (établir le
+      // contrat, le faire signer, déposer le scan signé des deux parties) — et non
+      // « pour autoriser l'impression ». La diffusion au service juridique
+      // (notification de département) reste par ailleurs assurée plus haut.
+      if (nextStatus?.code === CONTRACTUALISATION_CODE) {
+        await notifyRole({
+          roleCode: "DIR_GENERAL",
+          type: "validation",
+          priority: "high",
+          title: `Dossier à contractualiser — ${manuscript.manuscriptNumber}`,
+          body: `Le BAT de « ${manuscript.title} » est contre-validé : le dossier est passé à votre niveau pour la CONTRACTUALISATION. Établissez le contrat, faites-le signer et déposez le scan signé des deux parties (rubrique Contrat de la fiche). Vous pouvez aussi déléguer la préparation (Éditorial, RH ou DAF). L'impression ne démarrera qu'une fois la contractualisation validée.`,
+          entityType: "manuscript",
+          entityId: id,
+        });
+      }
+
       // CLÔTURE DU CYCLE DE CORRECTION (demande opérateur 01/10/2026) : valider
       // l'étape Correction clôt le cycle éditorial actif de l'ouvrage — statut
       // TERMINÉE, date/heure, qui a clôturé, dernière version corrigée (VCF) et
@@ -934,6 +985,183 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
       });
 
       return reply.send({ advanced: true, status: nextStatus?.code ?? null, realization_mode: realizationMode });
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CONTRACTUALISATION « chez le DG » (demande opérateur 16/10)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const delegateSchema = z.object({ assignee_id: z.string().uuid(), note: z.string().max(500).optional() });
+
+  // Résumé « contrat + droits d'auteur » d'un dossier, pour l'écran DG.
+  async function contractSummary(manuscriptId: string) {
+    const contract = await prisma.contract.findFirst({
+      where: { manuscriptId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      include: { royaltyTerms: true, documents: { where: { kind: "signed_scan", deletedAt: null }, select: { id: true } } },
+    });
+    if (!contract) return null;
+    const terms = contract.royaltyTerms;
+    return {
+      id: contract.id,
+      contract_number: contract.contractNumber,
+      type: contract.type,
+      status: contract.status,
+      has_signed_scan: contract.documents.length > 0,
+      royalty: terms
+        ? { base: terms.base, tiers: terms.tiers, advance_amount: terms.advanceAmount, author_free_copies: terms.authorFreeCopies }
+        : (contract.financialTerms ?? null),
+    };
+  }
+
+  // Le DG (clic final) DÉLÈGUE la PRÉPARATION de la contractualisation d'un
+  // dossier à l'Éditorial, aux RH ou au DAF. Le délégué prépare le contrat (de
+  // CE dossier uniquement) ; le DG garde la validation finale.
+  fastify.post(
+    "/api/v1/manuscripts/:id/contractualisation/delegate",
+    { preHandler: requirePermission("manuscripts", "validation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!isDirectionGenerale(request.user!)) {
+        return reply.code(403).send({ code: "forbidden", message: "Seule la Direction générale peut déléguer la contractualisation." });
+      }
+      const parsed = delegateSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+      }
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, include: { status: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      if (manuscript.status.code !== CONTRACTUALISATION_CODE) {
+        return reply.code(409).send({ code: "not_at_contractualisation", message: "Ce dossier n'est pas à l'étape Contractualisation." });
+      }
+      const delegate = await prisma.user.findFirst({
+        where: { id: parsed.data.assignee_id, status: "active" },
+        include: { userRoles: { where: { revokedAt: null }, include: { role: true } } },
+      });
+      if (!delegate) return reply.code(404).send({ code: "not_found", message: "Personne à déléguer introuvable ou inactive." });
+      const delegateRoles = delegate.userRoles.map((ur) => ur.role.code);
+      if (!delegateRoles.some((r) => (CONTRACTUALISATION_DELEGATE_ROLES as readonly string[]).includes(r))) {
+        return reply.code(409).send({
+          code: "role_not_delegable",
+          message: "La contractualisation ne peut être déléguée qu'à la Direction éditoriale, aux RH ou au Responsable administratif et financier (DAF).",
+        });
+      }
+      const statusId = (await getContractualisationStatusId())!;
+      await prisma.manuscriptStep.upsert({
+        where: { manuscriptId_statusId: { manuscriptId: id, statusId } },
+        update: { responsibleId: delegate.id },
+        create: { manuscriptId: id, statusId, responsibleId: delegate.id, plannedStart: new Date() },
+      });
+      await prisma.notification.create({
+        data: {
+          userId: delegate.id,
+          type: "affectation",
+          priority: "high",
+          title: `Contractualisation déléguée — ${manuscript.manuscriptNumber}`,
+          body: `La Direction générale vous confie la PRÉPARATION de la contractualisation de « ${manuscript.title} » : établissez le contrat, faites-le signer et déposez le scan signé des deux parties (rubrique Contrat de la fiche). La validation finale reste au DG.`,
+          entityType: "manuscript",
+          entityId: id,
+        },
+      });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "update",
+        entityType: "manuscript",
+        entityId: id,
+        newValues: { contractualisation_delegate: delegate.id, reason: "delegation" },
+        ipAddress: request.ip,
+      });
+      return reply.send({ delegated_to: delegate.id });
+    },
+  );
+
+  // Retrait de la délégation (le DG reprend la main).
+  fastify.delete(
+    "/api/v1/manuscripts/:id/contractualisation/delegate",
+    { preHandler: requirePermission("manuscripts", "validation") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!isDirectionGenerale(request.user!)) {
+        return reply.code(403).send({ code: "forbidden", message: "Seule la Direction générale peut retirer la délégation." });
+      }
+      const statusId = await getContractualisationStatusId();
+      if (statusId) {
+        await prisma.manuscriptStep.updateMany({
+          where: { manuscriptId: id, statusId },
+          data: { responsibleId: null },
+        });
+      }
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "manuscript", entityId: id, newValues: { contractualisation_delegate: null, reason: "delegation_revoked" }, ipAddress: request.ip });
+      return reply.send({ delegated_to: null });
+    },
+  );
+
+  // Candidats à la délégation de contractualisation : utilisateurs actifs
+  // portant un rôle délégable (Éditorial, RH, DAF). Réservé au DG.
+  fastify.get(
+    "/api/v1/contractualisation/delegate-candidates",
+    { preHandler: requirePermission("manuscripts", "validation") },
+    async (request, reply) => {
+      if (!isDirectionGenerale(request.user!)) {
+        return reply.code(403).send({ code: "forbidden", message: "Réservé à la Direction générale." });
+      }
+      const users = await prisma.user.findMany({
+        where: {
+          status: "active",
+          userRoles: { some: { revokedAt: null, role: { code: { in: [...CONTRACTUALISATION_DELEGATE_ROLES] } } } },
+        },
+        select: { id: true, username: true, userRoles: { where: { revokedAt: null }, select: { role: { select: { code: true, label: true } } } } },
+        orderBy: { username: "asc" },
+      });
+      const items = users.map((u) => ({
+        id: u.id,
+        name: u.username,
+        roles: u.userRoles
+          .map((ur) => ur.role)
+          .filter((r) => (CONTRACTUALISATION_DELEGATE_ROLES as readonly string[]).includes(r.code))
+          .map((r) => r.label),
+      }));
+      return reply.send({ items });
+    },
+  );
+
+  // Écran DG « Dossiers à contractualiser » : les ouvrages à l'étape
+  // Contractualisation, avec pour chacun le contrat + les droits d'auteur et le
+  // délégué éventuel. Le DG voit tout ; un délégué ne voit que SES dossiers.
+  fastify.get(
+    "/api/v1/contractualisation/inbox",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const statusId = await getContractualisationStatusId();
+      if (!statusId) return reply.send({ items: [] });
+      const isDg = isDirectionGenerale(request.user!);
+      const manuscripts = await prisma.manuscript.findMany({
+        where: { deletedAt: null, statusId },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true, manuscriptNumber: true, title: true },
+      });
+      const items = [] as unknown[];
+      for (const m of manuscripts) {
+        const delegateId = await contractualisationDelegateId(m.id);
+        if (!isDg && delegateId !== request.user!.id) continue; // un délégué ne voit que ses dossiers
+        const delegate = delegateId ? await prisma.user.findUnique({ where: { id: delegateId }, select: { id: true, username: true } }) : null;
+        items.push({
+          manuscript_id: m.id,
+          manuscript_number: m.manuscriptNumber,
+          title: m.title,
+          delegate: delegate ? { id: delegate.id, name: delegate.username } : null,
+          contract: await contractSummary(m.id),
+        });
+      }
+      if (!isDg && items.length === 0) {
+        // Ni DG, ni délégué d'aucun dossier : accès refusé proprement.
+        const anyDelegation = await prisma.manuscriptStep.findFirst({ where: { statusId, responsibleId: request.user!.id }, select: { id: true } });
+        if (!anyDelegation) {
+          return reply.code(403).send({ code: "forbidden", message: "Écran réservé à la Direction générale et aux personnes à qui une contractualisation est déléguée." });
+        }
+      }
+      return reply.send({ items, is_direction: isDg, delegate_roles: CONTRACTUALISATION_DELEGATE_ROLES });
     },
   );
 

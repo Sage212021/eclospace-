@@ -899,8 +899,9 @@ export function App() {
           <>
             {/* Pilotage DG : le panneau actionnable des dossiers à contractualiser
                 s'affiche aussi ici (demande opérateur 16/10), en plus du tableau
-                des validations. Il se masque seul si l'utilisateur n'y a pas accès. */}
-            <ContractualisationInbox onOpenManuscript={openManuscript} />
+                des validations. C'est la SEULE version où « Déléguer » est proposé
+                (allowDelegate). Il se masque seul si l'utilisateur n'y a pas accès. */}
+            <ContractualisationInbox onOpenManuscript={openManuscript} allowDelegate />
             <MyProductionValidations onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation")} />
           </>
         )}

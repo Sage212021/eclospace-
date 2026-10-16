@@ -40,7 +40,12 @@ function royaltySummary(royalty: unknown): string | null {
   return parts.length ? parts.join(" · ") : null;
 }
 
-export function ContractualisationInbox({ onOpenManuscript }: { onOpenManuscript: (id: string) => void }) {
+// `allowDelegate` : la DÉLÉGATION (et « Reprendre la main ») n'est proposée que
+// sur la version RÉSERVÉE AU DG — le pilotage (« Mes validations de production »).
+// Sur « Contrats & droits d'auteur » (partagé avec les pôles éditorial et
+// financier), ces boutons sont masqués (demande opérateur 16/10). Le reste
+// (contrat, droits, Ouvrir la fiche, Valider) reste identique partout.
+export function ContractualisationInbox({ onOpenManuscript, allowDelegate = false }: { onOpenManuscript: (id: string) => void; allowDelegate?: boolean }) {
   const [data, setData] = useState<Inbox | null>(null);
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +117,7 @@ export function ContractualisationInbox({ onOpenManuscript }: { onOpenManuscript
             key={item.manuscript_id}
             item={item}
             isDg={isDg}
+            allowDelegate={allowDelegate}
             candidates={candidates}
             busy={busy}
             onOpen={() => onOpenManuscript(item.manuscript_id)}
@@ -128,6 +134,7 @@ export function ContractualisationInbox({ onOpenManuscript }: { onOpenManuscript
 function DossierCard({
   item,
   isDg,
+  allowDelegate,
   candidates,
   busy,
   onOpen,
@@ -137,6 +144,7 @@ function DossierCard({
 }: {
   item: ContractualisationItem;
   isDg: boolean;
+  allowDelegate: boolean;
   candidates: DelegateCandidate[];
   busy: string | null;
   onOpen: () => void;
@@ -193,23 +201,26 @@ function DossierCard({
               {busy === `val-${item.manuscript_id}` ? "Validation…" : "Valider la contractualisation"}
             </button>
 
-            {!item.delegate ? (
-              <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                <select value={pick} onChange={(e) => setPick(e.target.value)} style={{ fontSize: 12.5, padding: "5px 6px" }}>
-                  <option value="">— Déléguer à… —</option>
-                  {candidates.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}{c.roles.length ? ` (${c.roles.join(", ")})` : ""}</option>
-                  ))}
-                </select>
-                <button onClick={() => pick && onDelegate(pick)} disabled={!pick || busy === `del-${item.manuscript_id}`} style={secondaryBtn}>
-                  Déléguer
+            {/* Délégation : uniquement sur la version réservée au DG (pilotage),
+                jamais sur « Contrats & droits d'auteur » (éditorial/financier). */}
+            {allowDelegate &&
+              (!item.delegate ? (
+                <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                  <select value={pick} onChange={(e) => setPick(e.target.value)} style={{ fontSize: 12.5, padding: "5px 6px" }}>
+                    <option value="">— Déléguer à… —</option>
+                    {candidates.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}{c.roles.length ? ` (${c.roles.join(", ")})` : ""}</option>
+                    ))}
+                  </select>
+                  <button onClick={() => pick && onDelegate(pick)} disabled={!pick || busy === `del-${item.manuscript_id}`} style={secondaryBtn}>
+                    Déléguer
+                  </button>
+                </span>
+              ) : (
+                <button onClick={onRevoke} disabled={busy === `rev-${item.manuscript_id}`} style={secondaryBtn}>
+                  Reprendre la main
                 </button>
-              </span>
-            ) : (
-              <button onClick={onRevoke} disabled={busy === `rev-${item.manuscript_id}`} style={secondaryBtn}>
-                Reprendre la main
-              </button>
-            )}
+              ))}
           </>
         )}
       </div>

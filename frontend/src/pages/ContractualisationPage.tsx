@@ -5,17 +5,20 @@ import {
   delegateContractualisation,
   revokeContractualisationDelegation,
   validateStep,
-  type ContractualisationInbox,
+  type ContractualisationInbox as Inbox,
   type ContractualisationItem,
   type DelegateCandidate,
 } from "../api/client";
 
-// Écran « Dossiers à contractualiser » (demande opérateur 16/10). Après la
-// contre-validation du BAT par le DG, l'ouvrage passe à la CONTRACTUALISATION :
-// la Direction générale établit le contrat, le fait signer et dépose le scan
-// signé des deux parties (rubrique Contrat de la fiche), puis valide — ce qui
-// autorise enfin l'impression. Le DG peut déléguer la PRÉPARATION (Éditorial,
-// RH, DAF) ; le clic final de validation reste au DG.
+// Panneau « Dossiers à contractualiser » (demande opérateur 16/10, recadré le
+// 16/10 : pas d'écran séparé — ce panneau est INTÉGRÉ à « Contrats & droits
+// d'auteur » et affiché aussi dans le pilotage DG). Après la contre-validation
+// du BAT, l'ouvrage passe à la CONTRACTUALISATION : la Direction générale
+// établit le contrat, le fait signer et dépose le scan signé des deux parties
+// (rubrique Contrat de la fiche), puis valide — ce qui autorise l'impression.
+// Le DG peut déléguer la PRÉPARATION (Éditorial, RH, DAF) ; le clic final reste
+// au DG. Le composant se masque tout seul pour qui n'y a pas accès (403) ou n'a
+// aucun dossier à traiter — il peut donc être embarqué sans précaution.
 
 const CONTRACT_STATUS_LABEL: Record<string, string> = {
   preparation: "En préparation",
@@ -37,8 +40,9 @@ function royaltySummary(royalty: unknown): string | null {
   return parts.length ? parts.join(" · ") : null;
 }
 
-export function ContractualisationPage({ onOpenManuscript }: { onOpenManuscript: (id: string) => void }) {
-  const [data, setData] = useState<ContractualisationInbox | null>(null);
+export function ContractualisationInbox({ onOpenManuscript }: { onOpenManuscript: (id: string) => void }) {
+  const [data, setData] = useState<Inbox | null>(null);
+  const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<DelegateCandidate[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -46,7 +50,11 @@ export function ContractualisationPage({ onOpenManuscript }: { onOpenManuscript:
   const refresh = () =>
     getContractualisationInbox()
       .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
+      .catch((e) => {
+        // 403 = ni DG ni délégué : on masque simplement le panneau (embarqué).
+        if ((e as { status?: number }).status === 403) setHidden(true);
+        else setError(e instanceof Error ? e.message : "Chargement impossible.");
+      });
 
   useEffect(() => {
     refresh();
@@ -75,20 +83,25 @@ export function ContractualisationPage({ onOpenManuscript }: { onOpenManuscript:
 
   const isDg = data?.is_direction ?? false;
 
+  // Masquage : pas d'accès (403), ou rien à traiter pour un délégué — on
+  // n'encombre pas l'écran « Contrats & droits d'auteur » ni le pilotage.
+  if (hidden) return null;
+  if (data && !isDg && data.items.length === 0) return null;
+
   return (
-    <section style={{ maxWidth: 820 }}>
-      <h1 style={{ fontSize: 21, margin: "0 0 4px", fontFamily: "var(--font-title, inherit)" }}>Dossiers à contractualiser</h1>
-      <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 14px", lineHeight: 1.5 }}>
-        Les ouvrages dont le BAT Final est contre-validé et qui attendent la <b>contractualisation</b> avant l'impression. Pour chaque dossier :
-        établissez le contrat, faites-le signer et déposez le <b>scan signé des deux parties</b> (bouton « Ouvrir la fiche » → rubrique Contrat), puis
-        {isDg ? " validez la contractualisation." : " le DG validera."} {isDg && "Vous pouvez déléguer la préparation à l'Éditorial, aux RH ou au DAF ; la validation finale reste la vôtre."}
+    <section style={{ maxWidth: 820, marginBottom: 18 }}>
+      <h2 style={{ fontSize: 16, margin: "0 0 4px", fontFamily: "var(--font-title, inherit)" }}>Dossiers à contractualiser</h2>
+      <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "0 0 12px", lineHeight: 1.5 }}>
+        Ouvrages dont le BAT Final est contre-validé et qui attendent la <b>contractualisation</b> avant l'impression : établissez le contrat, faites-le signer et
+        déposez le <b>scan signé des deux parties</b> (« Ouvrir la fiche » → rubrique Contrat), puis{isDg ? " validez." : " le DG validera."}
+        {isDg && " Vous pouvez déléguer la préparation (Éditorial, RH ou DAF) ; la validation finale reste la vôtre."}
       </p>
 
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 12px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
       {data === null && !error && <p style={{ color: "var(--muted)", fontSize: 13 }}>Chargement…</p>}
 
       {data !== null && data.items.length === 0 && (
-        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: 24, textAlign: "center", color: "var(--muted)", fontSize: 13.5 }}>
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: 18, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
           Aucun dossier en contractualisation pour l'instant. Dès qu'un BAT Final sera contre-validé, l'ouvrage apparaîtra ici.
         </div>
       )}

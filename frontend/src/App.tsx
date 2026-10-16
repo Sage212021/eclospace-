@@ -29,7 +29,7 @@ const MyReadings = lazy(() => import("./pages/MyReadings").then((m) => ({ defaul
 const MyDossiers = lazy(() => import("./pages/MyDossiers").then((m) => ({ default: m.MyDossiers })));
 const MyProductionWork = lazy(() => import("./pages/MyProductionWork").then((m) => ({ default: m.MyProductionWork })));
 const MyProductionValidations = lazy(() => import("./pages/MyProductionValidations").then((m) => ({ default: m.MyProductionValidations })));
-const ContractualisationPage = lazy(() => import("./pages/ContractualisationPage").then((m) => ({ default: m.ContractualisationPage })));
+const ContractualisationInbox = lazy(() => import("./pages/ContractualisationPage").then((m) => ({ default: m.ContractualisationInbox })));
 const IsbnBank = lazy(() => import("./pages/IsbnBank").then((m) => ({ default: m.IsbnBank })));
 const IsbnLoad = lazy(() => import("./pages/IsbnLoad").then((m) => ({ default: m.IsbnLoad })));
 const StockPage = lazy(() => import("./pages/StockPage").then((m) => ({ default: m.StockPage })));
@@ -100,7 +100,6 @@ type PageId =
   | "my-dossiers"
   | "my-production-work"
   | "my-production-validations"
-  | "contractualisation"
   | "isbn-bank"
   | "isbn-load"
   | "editorial-quotes-inbox"
@@ -199,13 +198,6 @@ const NAV_POLES: NavPole[] = [
       // éditoriale avec l'auteur. Clé interne inchangée (« jf-contrats ») pour
       // préserver le rattachement au stade CONTRACTUALISATION et les droits.
       { key: "jf-contrats", label: "Contrats & droits d'auteur", permission: "manuscripts:consultation" },
-      // Écran DG « Dossiers à contractualiser » (demande opérateur 16/10) :
-      // après contre-validation du BAT, établir/signer le contrat + déposer le
-      // scan signé des deux parties, puis valider → impression. Délégation
-      // possible (Éditorial, RH, DAF). Visible au DG et aux rôles délégables ;
-      // les données sont restreintes côté serveur (un délégué ne voit que ses
-      // dossiers).
-      { key: "ed-contractualisation", label: "Dossiers à contractualiser", anyRole: ["ADMIN_GENERAL", "DIR_GENERAL", "DIR_EDITORIAL", "RESP_RH", "RESP_FINANCE"] },
       // Messagerie des auteurs : rattachée au pôle Éditorial (décision opérateur) —
       // la relation avec les auteurs est un travail éditorial. La clé reste
       // « cm-messages-auteurs » (identifiant interne inchangé, vue service-desk).
@@ -326,7 +318,6 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ed-archives": { page: "archives" },
   "pr-mes-travaux": { page: "my-production-work" },
   "pi-mes-validations": { page: "my-production-validations" },
-  "ed-contractualisation": { page: "contractualisation" },
   "pr-a-publier": { page: "site-publish" },
   "pr-maquette": { stage: "MISE_EN_PAGE", heading: "Maquette & mise en page" },
   "pr-infographie": { stage: "INFOGRAPHIE", heading: "Infographie & couvertures" },
@@ -852,6 +843,14 @@ export function App() {
                 <ContractsDashboard canRestore={permissions.has("contracts:validation")} />
               </div>
             )}
+            {/* Dossiers à contractualiser (DG + délégués) : intégré ici, dans
+                « Contrats & droits d'auteur ». Le panneau se masque seul pour qui
+                n'y a pas accès (demande opérateur 16/10 — recadrage). */}
+            {leaf.stage === "CONTRACTUALISATION" && (
+              <div className="ecl-page" style={{ paddingBottom: 0 }}>
+                <ContractualisationInbox onOpenManuscript={openManuscript} />
+              </div>
+            )}
             <Manuscripts
               key={leaf.stage}
               statusFilter={leaf.stage}
@@ -897,10 +896,13 @@ export function App() {
           <MyProductionWork onOpenManuscript={openManuscript} onOpenIntegration={openIntegration} canOpen={permissions.has("manuscripts:consultation")} />
         )}
         {leaf && "page" in leaf && leaf.page === "my-production-validations" && (
-          <MyProductionValidations onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation")} />
-        )}
-        {leaf && "page" in leaf && leaf.page === "contractualisation" && (
-          <ContractualisationPage onOpenManuscript={openManuscript} />
+          <>
+            {/* Pilotage DG : le panneau actionnable des dossiers à contractualiser
+                s'affiche aussi ici (demande opérateur 16/10), en plus du tableau
+                des validations. Il se masque seul si l'utilisateur n'y a pas accès. */}
+            <ContractualisationInbox onOpenManuscript={openManuscript} />
+            <MyProductionValidations onOpenManuscript={openManuscript} canOpen={permissions.has("manuscripts:consultation")} />
+          </>
         )}
         {leaf && "page" in leaf && leaf.page === "isbn-bank" && (
           <IsbnBank canManage={permissions.has("isbn:administration")} onOpenManuscript={openManuscript} />

@@ -166,13 +166,25 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
   async function stop(jobId: string) {
     try {
       await cancelAiJob(jobId);
-      setBusy(false);
       setErr(null);
       setNote("Lancement arrêté.");
+    } catch (e) {
+      // 409 = le lancement s'est déjà terminé/arrêté entre-temps : ce n'est pas
+      // une vraie erreur. On ne laisse donc PAS le bouton bloqué sur « en cours » —
+      // on rafraîchit l'état dans tous les cas (sinon : « je clique Stopper mais
+      // ça reste en cours », retour opérateur 17/10).
+      if ((e as { status?: number }).status === 409) {
+        setErr(null);
+        setNote("Lancement déjà terminé ou arrêté.");
+      } else {
+        setErr(e instanceof Error ? e.message : "Arrêt impossible.");
+      }
+    } finally {
+      setBusy(false);
+      // Rafraîchissement systématique : l'historique reflète le vrai statut
+      // (arrêté / terminé / interrompu) et le bouton se débloque.
       const list = await load().catch(() => null);
       if (list) setJobs(list);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Arrêt impossible.");
     }
   }
 

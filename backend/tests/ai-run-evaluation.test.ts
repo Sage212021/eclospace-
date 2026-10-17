@@ -334,6 +334,22 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(t).not.toMatch(/je confirme|je constate|vérification exhaustive|intelligence artificielle/i);
   });
 
+  it("arrêt coopératif : un lancement ARRÊTÉ (annulé) ne consomme plus l'IA et n'est pas ressuscité", async () => {
+    const { executeAiReading } = await import("../src/lib/aiRunner.js");
+    // Comme si l'opérateur avait cliqué « Stopper » juste avant l'exécution :
+    // le job est déjà « annulé » en base.
+    const job = await prisma.aiReadingJob.create({
+      data: { manuscriptId, workType: "evaluation", promptKey: "evaluation", promptVersion: 1, model: "claude-haiku-4-5", status: "annule", launchedBy: adminId },
+    });
+    const before = sdkCalls.length;
+    await executeAiReading(job.id, { manuscriptId, workType: "evaluation", userId: adminId });
+    // Aucun appel IA : le runner s'arrête au 1er point d'étape (plus de crédit consommé).
+    expect(sdkCalls.length).toBe(before);
+    // Le statut « annulé » n'est jamais ré-écrit en « terminé » ni en « erreur ».
+    const after = await prisma.aiReadingJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(after.status).toBe("annule");
+  });
+
   it("missingSectionKeys repère les rubriques absentes d'un rapport", async () => {
     const { missingSectionKeys } = await import("../src/lib/aiRunner.js");
     const rpt = "## A. Titre\ntexte\n## C. Autre\ntexte";

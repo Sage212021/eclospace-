@@ -658,6 +658,24 @@ export async function startAiReading(params: AiRunParams): Promise<{ jobId: stri
   return { jobId: job.id };
 }
 
+// Annulation COOPÉRATIVE (demande opérateur 17/10 : « je clique Stopper mais
+// "en cours" continue »). Le bouton « Stopper » met le job à un statut ≠
+// « en_cours ». Le runner tourne en arrière-plan, sans signal d'arrêt partagé :
+// on l'arrête donc en vérifiant ce statut aux POINTS D'ÉTAPE (entre deux appels
+// coûteux). Dès que le job n'est plus « en cours » (arrêté par l'opérateur ou
+// déclaré interrompu), on lève AiCancelledError pour cesser immédiatement les
+// appels suivants — plus de crédit consommé après un arrêt.
+class AiCancelledError extends Error {
+  constructor() {
+    super("Lancement arrêté.");
+    this.name = "AiCancelledError";
+  }
+}
+async function throwIfCancelled(jobId: string): Promise<void> {
+  const j = await prisma.aiReadingJob.findUnique({ where: { id: jobId }, select: { status: true } }).catch(() => null);
+  if (!j || j.status !== "en_cours") throw new AiCancelledError();
+}
+
 // EXÉCUTION (longue) — à lancer en arrière-plan après startAiReading. Ne relance
 // JAMAIS d'exception : succès comme échec sont consignés sur le job (que le
 // lanceur suit par rafraîchissement). Un PDF de plus de 100 pages (refusé par
@@ -865,6 +883,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     const textOf = (blocks: { type: string }[]) =>
       blocks.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("\n").trim();
 
+    await throwIfCancelled(jobId); // arrêt coopératif avant le 1er appel (coûteux)
     const first = await client.messages.create({
       model: modelId,
       max_tokens: REPORT_MAX_TOKENS,
@@ -893,6 +912,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     let stop: string | null = first.stop_reason;
     for (let i = 0; i < 4 && stop === "max_tokens"; i++) {
       try {
+        await throwIfCancelled(jobId); // arrêt coopératif entre deux relances
         const cont = await client.messages.create({
           model: modelId,
           max_tokens: REPORT_MAX_TOKENS,
@@ -908,8 +928,9 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         const contText = textOf(cont.content);
         if (!contText) break;
         reportText += contText; // poursuite directe (pas de séparateur : même texte)
-      } catch {
-        break; // une relance qui échoue ne doit pas faire échouer tout le job
+      } catch (e) {
+        if (e instanceof AiCancelledError) throw e; // l'arrêt doit stopper tout le job
+        break; // une relance qui échoue (hors arrêt) ne doit pas faire échouer tout le job
       }
     }
     // MÉMOIRE : le message d'entrée (manuscrit complet, voire PDF/images en
@@ -924,6 +945,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       const missing = missingSectionKeys(reportText, sectionKeys);
       if (missing.length === 0) break;
       try {
+        await throwIfCancelled(jobId); // arrêt coopératif avant une relance de rubrique
         const cont = await client.messages.create({
           model: modelId,
           max_tokens: REPORT_MAX_TOKENS,
@@ -949,7 +971,8 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         contText = contText.slice(idx).trim();
         if (!contText) break;
         reportText = `${reportText}\n\n${contText}`;
-      } catch {
+      } catch (e) {
+        if (e instanceof AiCancelledError) throw e; // l'arrêt doit stopper tout le job
         break;
       }
     }
@@ -1118,6 +1141,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       // jour à chaque lot terminé — ce qui sert aussi de « battement » pour que le
       // lancement ne soit pas déclaré « interrompu » tant qu'il travaille.
       for (let start = 0; start < chunks.length; start += CONCURRENCY) {
+        await throwIfCancelled(job.id); // arrêt coopératif entre deux lots de tranches
         await Promise.all(chunks.slice(start, start + CONCURRENCY).map((ch, k) => correctChunk(ch, start + k)));
         const doneCount = Math.min(chunks.length, start + CONCURRENCY);
         await prisma.aiReadingJob.update({ where: { id: job.id }, data: { progressDone: doneCount, progressAt: new Date() } }).catch(() => {});
@@ -1185,6 +1209,10 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       ipAddress: params.ip ?? null,
     });
   } catch (e) {
+    // Arrêt coopératif : le job a déjà été mis « annulé » (ou « interrompu ») par
+    // le bouton Stopper / le balayage — on ne touche à rien, le runner s'arrête
+    // simplement (plus d'appels IA, plus de crédit consommé).
+    if (e instanceof AiCancelledError) return;
     let message = e instanceof Error ? e.message : "Échec de la relecture IA.";
     // Message clair pour la limite PDF de l'API (100 pages) : orienter vers .docx.
     if (/100 PDF pages/i.test(message)) {

@@ -2645,6 +2645,14 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-relecture-ia-bouton-stopper-arrete-vraiment",
+      version: "2026.10",
+      title: "Nouveauté — Relecture IA : le bouton « Stopper » arrête vraiment l'analyse",
+      body: "Vous nous avez signalé qu'un lancement de relecture restait parfois bloqué sur « Analyse en cours… » et que cliquer « Stopper » ne l'arrêtait pas. C'est corrigé : (1) « Stopper » interrompt désormais réellement le travail en arrière-plan — le relecteur s'arrête au point d'étape suivant et ne consomme plus de crédit ; (2) l'écran se met à jour tout de suite après « Stopper » (ou si l'analyse s'est déjà terminée entre-temps) : le bouton se débloque et vous pouvez relancer. Pour rappel, un lancement resté silencieux trop longtemps (après un redémarrage du serveur) est de toute façon marqué « interrompu » automatiquement à l'ouverture de l'historique.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["DIRED", "CORR", "INFOG", "SECR", "DG"],
+    },
+    {
       slug: "2026-10-contractualisation-chez-le-dg-delegation",
       version: "2026.10",
       title: "Nouveauté — Contractualisation : le dossier passe chez le DG, avec délégation possible",

@@ -19,6 +19,32 @@ function messageView(m: {
 }
 
 export default async function aiEditorRoutes(fastify: FastifyInstance) {
+  // Liste des CONVERSATIONS existantes (une par ouvrage) — le « menu interne »
+  // pour naviguer entre les manuscrits sans tout re-chercher. Classé par
+  // dernière activité. Un ouvrage apparaît ici dès qu'il a ≥ 1 échange SAGE.
+  fastify.get("/api/v1/ai-editor", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (_request, reply) => {
+    const groups = await prisma.aiEditorialMessage.groupBy({
+      by: ["manuscriptId"],
+      _count: { _all: true },
+      _max: { createdAt: true },
+    });
+    if (groups.length === 0) return reply.send({ conversations: [] });
+    const manuscripts = await prisma.manuscript.findMany({
+      where: { id: { in: groups.map((g) => g.manuscriptId) }, deletedAt: null },
+      select: { id: true, manuscriptNumber: true, title: true },
+    });
+    const byId = new Map(manuscripts.map((m) => [m.id, m]));
+    const conversations = groups
+      .map((g) => {
+        const m = byId.get(g.manuscriptId);
+        if (!m) return null;
+        return { manuscript_id: m.id, number: m.manuscriptNumber, title: m.title, message_count: g._count._all, last_activity: g._max.createdAt };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+      .sort((a, b) => (b.last_activity?.getTime() ?? 0) - (a.last_activity?.getTime() ?? 0));
+    return reply.send({ conversations });
+  });
+
   // État du dossier éditorial d'un ouvrage : fiche, disponibilité des sources
   // (manuscrit + rapport), et l'historique complet des échanges.
   fastify.get("/api/v1/ai-editor/:manuscriptId", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {

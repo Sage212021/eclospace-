@@ -2645,6 +2645,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-conversations-menu-interne",
+      version: "2026.10",
+      title: "Nouveauté — SAGE : une conversation par ouvrage + menu interne",
+      body: "SAGE fonctionne désormais comme une messagerie : UNE conversation par ouvrage (elles ne sont plus mélangées). À l'ouverture, un menu interne « Mes conversations » liste les ouvrages déjà suivis (cliquez pour reprendre là où vous en étiez). Pour en démarrer une nouvelle, tapez le titre ou la référence dans « Nouvelle conversation » et touchez l'ouvrage dans la liste — plus de menu déroulant qui ne réagissait pas. Une fois dans une conversation, « ← Mes conversations » vous ramène à la liste. Réservé à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-documentaire-traduction-lot-e",
       version: "2026.10",
       title: "Nouveauté — SAGE : vérification documentaire & traduction (FR ↔ EN)",

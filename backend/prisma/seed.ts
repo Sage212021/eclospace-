@@ -2645,6 +2645,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-documentaire-traduction-lot-e",
+      version: "2026.10",
+      title: "Nouveauté — SAGE : vérification documentaire & traduction (FR ↔ EN)",
+      body: "Deux compétences de plus pour SAGE. (1) VÉRIFICATION DOCUMENTAIRE : un bouton « Vérification documentaire » et SAGE repère les affirmations à sourcer, distingue les faits, les opinions et les hypothèses, et signale les références incomplètes ou à vérifier — sans JAMAIS inventer de source (il n'a pas d'accès externe : il indique ce qui reste à vérifier). Pour un roman, il aide à équilibrer narration et documentation. (2) TRADUCTION : collez un passage, choisissez la langue cible (anglais ou français), et SAGE le traduit fidèlement en préservant le registre et la voix. Comme toujours, réservé à la Direction générale et à l'administrateur. Rappel : l'espace de dialogue (« Dialogue avec l'éditeur ») vous permet déjà de poser vos questions à SAGE et de garder l'historique.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-coherence-consequences-lot-d",
       version: "2026.10",
       title: "Nouveauté — SAGE : cohérence de l'œuvre & conséquences d'une modification",

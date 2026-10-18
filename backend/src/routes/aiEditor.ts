@@ -129,6 +129,42 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
     return reply.code(202).send({ user_message_id: userMessage.id, assistant_message_id: assistant.id });
   });
 
+  // Vérification DOCUMENTAIRE (sources, faits/opinions/hypothèses, références à
+  // vérifier). Vue d'ensemble. Exécution en arrière-plan.
+  fastify.post("/api/v1/ai-editor/:manuscriptId/documentaire", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+    const { manuscriptId } = request.params as { manuscriptId: string };
+    const manuscript = await prisma.manuscript.findFirst({ where: { id: manuscriptId, deletedAt: null }, select: { id: true } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
+    const manuscriptDoc = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "manuscrit", deletedAt: null }, select: { id: true } });
+    if (!manuscriptDoc) return reply.code(409).send({ code: "no_manuscript_file", message: "Aucun manuscrit n'est déposé pour cet ouvrage." });
+    const already = await prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, status: "pending" }, select: { id: true } });
+    if (already) return reply.code(409).send({ code: "already_running", message: "Une analyse est déjà en cours pour cet ouvrage." });
+    const assistant = await prisma.aiEditorialMessage.create({ data: { manuscriptId, kind: "documentaire", role: "assistant", status: "pending", content: "", createdBy: request.user!.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "ai_editorial_message", entityId: assistant.id, newValues: { manuscriptId, kind: "documentaire" }, ipAddress: request.ip });
+    void runEditorAnswer(assistant.id);
+    return reply.code(202).send({ message_id: assistant.id });
+  });
+
+  // TRADUCTION fidèle d'un passage (français ↔ anglais). Le passage + la langue
+  // cible sont conservés dans le message « user » ; la traduction en fond.
+  const translateSchema = z.object({ source_text: z.string().trim().min(1).max(20000), target_lang: z.enum(["fr", "en"]) });
+  fastify.post("/api/v1/ai-editor/:manuscriptId/translate", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+    const { manuscriptId } = request.params as { manuscriptId: string };
+    const parsed = translateSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Indiquez le passage et la langue cible.", details: parsed.error.issues });
+    const manuscript = await prisma.manuscript.findFirst({ where: { id: manuscriptId, deletedAt: null }, select: { id: true } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
+    const already = await prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, status: "pending" }, select: { id: true } });
+    if (already) return reply.code(409).send({ code: "already_running", message: "Une traduction est déjà en cours pour cet ouvrage." });
+    const langLabel = parsed.data.target_lang === "en" ? "anglais" : "français";
+    const userContent = `Langue cible : ${langLabel}\n\n${parsed.data.source_text}`;
+    const userMessage = await prisma.aiEditorialMessage.create({ data: { manuscriptId, kind: "traduction", role: "user", status: "done", content: userContent, createdBy: request.user!.id } });
+    const assistant = await prisma.aiEditorialMessage.create({ data: { manuscriptId, kind: "traduction", role: "assistant", status: "pending", content: "", createdBy: request.user!.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "ai_editorial_message", entityId: userMessage.id, newValues: { manuscriptId, kind: "traduction", target_lang: parsed.data.target_lang }, ipAddress: request.ip });
+    void runEditorAnswer(assistant.id);
+    return reply.code(202).send({ user_message_id: userMessage.id, assistant_message_id: assistant.id });
+  });
+
   // Atelier de réécriture : proposer une réécriture d'un passage dans un mode
   // donné. L'original fourni est conservé ; la proposition est tracée. Exécution
   // en arrière-plan (comme le dialogue).

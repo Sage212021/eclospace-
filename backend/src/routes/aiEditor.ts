@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAnyRole } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
-import { runEditorAnswer } from "../lib/aiEditor.js";
+import { runEditorAnswer, runRewrite, REWRITE_MODES } from "../lib/aiEditor.js";
 
 // ÉCLOSION ÉDITORIAL IA — Lot A (lecture + diagnostic + dialogue). Réservé à la
 // Direction générale et à l'administrateur (ouverture au directeur éditorial
@@ -30,11 +30,12 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
     if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
 
     // Sources déjà présentes dans l'ERP.
-    const [manuscriptDoc, evalReport, messages, passageCount] = await Promise.all([
+    const [manuscriptDoc, evalReport, messages, passageCount, rewrites] = await Promise.all([
       prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "manuscrit", deletedAt: null }, select: { id: true } }),
       prisma.aiReadingJob.findFirst({ where: { manuscriptId, workType: "evaluation", status: "termine", reportText: { not: null } }, select: { id: true } }),
       prisma.aiEditorialMessage.findMany({ where: { manuscriptId }, orderBy: { createdAt: "asc" } }),
       prisma.aiEditorialPassage.count({ where: { manuscriptId } }),
+      prisma.aiEditorialRewrite.findMany({ where: { manuscriptId }, orderBy: { createdAt: "desc" }, take: 30 }),
     ]);
 
     return reply.send({
@@ -42,6 +43,10 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
       sources: { has_manuscript_file: !!manuscriptDoc, has_evaluation_report: !!evalReport },
       memory: { passage_count: passageCount },
       messages: messages.map(messageView),
+      rewrites: rewrites.map((r) => ({
+        id: r.id, mode: r.mode, instruction: r.instruction, source_text: r.sourceText, proposed_text: r.proposedText,
+        explanation: r.explanation, status: r.status, error_message: r.errorMessage, created_at: r.createdAt, decided_at: r.decidedAt,
+      })),
     });
   });
 
@@ -88,5 +93,48 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
     await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "ai_editorial_message", entityId: userMessage.id, newValues: { manuscriptId, kind: "chat", role: "user" }, ipAddress: request.ip });
     void runEditorAnswer(assistant.id);
     return reply.code(202).send({ user_message_id: userMessage.id, assistant_message_id: assistant.id });
+  });
+
+  // Atelier de réécriture : proposer une réécriture d'un passage dans un mode
+  // donné. L'original fourni est conservé ; la proposition est tracée. Exécution
+  // en arrière-plan (comme le dialogue).
+  const rewriteSchema = z.object({
+    mode: z.enum(REWRITE_MODES),
+    source_text: z.string().trim().min(1).max(20000),
+    instruction: z.string().trim().max(2000).optional(),
+  });
+  fastify.post("/api/v1/ai-editor/:manuscriptId/rewrite", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+    const { manuscriptId } = request.params as { manuscriptId: string };
+    const parsed = rewriteSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Demande de réécriture invalide.", details: parsed.error.issues });
+    const manuscript = await prisma.manuscript.findFirst({ where: { id: manuscriptId, deletedAt: null }, select: { id: true } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
+
+    const rw = await prisma.aiEditorialRewrite.create({
+      data: { manuscriptId, mode: parsed.data.mode, instruction: parsed.data.instruction ?? null, sourceText: parsed.data.source_text, status: "pending", createdBy: request.user!.id },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "ai_editorial_rewrite", entityId: rw.id, newValues: { manuscriptId, mode: parsed.data.mode }, ipAddress: request.ip });
+    void runRewrite(rw.id);
+    return reply.code(202).send({ rewrite_id: rw.id });
+  });
+
+  // Décision sur une proposition : acceptée ou refusée. N'applique RIEN au
+  // manuscrit de référence (l'original est préservé) — elle trace la décision.
+  const decisionSchema = z.object({ decision: z.enum(["accepted", "rejected"]) });
+  fastify.post("/api/v1/ai-editor/rewrites/:rewriteId/decision", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+    const { rewriteId } = request.params as { rewriteId: string };
+    const parsed = decisionSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Décision invalide.", details: parsed.error.issues });
+    const rw = await prisma.aiEditorialRewrite.findUnique({ where: { id: rewriteId } });
+    if (!rw) return reply.code(404).send({ code: "not_found", message: "Proposition introuvable." });
+    if (rw.status !== "done" && rw.status !== "accepted" && rw.status !== "rejected") {
+      return reply.code(409).send({ code: "not_decidable", message: "Cette proposition n'est pas encore prête (ou a échoué)." });
+    }
+    const updated = await prisma.aiEditorialRewrite.update({
+      where: { id: rewriteId },
+      data: { status: parsed.data.decision, decidedBy: request.user!.id, decidedAt: new Date() },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "ai_editorial_rewrite", entityId: rewriteId, newValues: { decision: parsed.data.decision }, ipAddress: request.ip });
+    return reply.send({ id: updated.id, status: updated.status });
   });
 }

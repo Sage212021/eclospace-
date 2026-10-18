@@ -25,6 +25,7 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/ai-editor", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (_request, reply) => {
     const groups = await prisma.aiEditorialMessage.groupBy({
       by: ["manuscriptId"],
+      where: { deletedAt: null },
       _count: { _all: true },
       _max: { createdAt: true },
     });
@@ -59,7 +60,7 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
     const [manuscriptDoc, evalReport, messages, passageCount, rewrites] = await Promise.all([
       prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "manuscrit", deletedAt: null }, select: { id: true } }),
       prisma.aiReadingJob.findFirst({ where: { manuscriptId, workType: "evaluation", status: "termine", reportText: { not: null } }, select: { id: true } }),
-      prisma.aiEditorialMessage.findMany({ where: { manuscriptId }, orderBy: { createdAt: "asc" } }),
+      prisma.aiEditorialMessage.findMany({ where: { manuscriptId, deletedAt: null }, orderBy: { createdAt: "asc" } }),
       prisma.aiEditorialPassage.count({ where: { manuscriptId } }),
       prisma.aiEditorialRewrite.findMany({ where: { manuscriptId }, orderBy: { createdAt: "desc" }, take: 30 }),
     ]);
@@ -232,5 +233,18 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
     });
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "ai_editorial_rewrite", entityId: rewriteId, newValues: { decision: parsed.data.decision }, ipAddress: request.ip });
     return reply.send({ id: updated.id, status: updated.status });
+  });
+
+  // Supprimer (logiquement) un message du tchat. Le message est masqué de
+  // l'historique et du contexte ; il n'est jamais effacé physiquement (§13).
+  fastify.delete("/api/v1/ai-editor/messages/:messageId", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+    const { messageId } = request.params as { messageId: string };
+    const msg = await prisma.aiEditorialMessage.findUnique({ where: { id: messageId }, select: { id: true, deletedAt: true } });
+    if (!msg) return reply.code(404).send({ code: "not_found", message: "Message introuvable." });
+    if (!msg.deletedAt) {
+      await prisma.aiEditorialMessage.update({ where: { id: messageId }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "ai_editorial_message", entityId: messageId, newValues: { deleted: true }, ipAddress: request.ip });
+    }
+    return reply.send({ ok: true });
   });
 }

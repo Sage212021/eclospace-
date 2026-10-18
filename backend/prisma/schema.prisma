@@ -5798,6 +5798,10 @@ model AiEditorialMessage {
   createdBy    String?  @map("created_by")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
+  // Suppression LOGIQUE d'un message du tchat (règle d'intégrité §13 : on ne
+  // supprime jamais physiquement). Masqué de l'historique et du contexte.
+  deletedAt    DateTime? @map("deleted_at")
+  deletedBy    String?   @map("deleted_by")
 
   @@index([manuscriptId])
   @@map("ai_editorial_messages")

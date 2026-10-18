@@ -2827,6 +2827,9 @@ export function listAiEditorConversations() {
 export function getAiEditor(manuscriptId: string) {
   return request<AiEditorDossier>(`/api/v1/ai-editor/${manuscriptId}`);
 }
+export function deleteAiEditorMessage(messageId: string) {
+  return request<{ ok: true }>(`/api/v1/ai-editor/messages/${messageId}`, { method: "DELETE" });
+}
 export function diagnoseAiEditor(manuscriptId: string) {
   return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/diagnose`, { method: "POST" });
 }

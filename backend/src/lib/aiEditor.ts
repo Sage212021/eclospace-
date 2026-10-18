@@ -250,7 +250,7 @@ export async function runRewrite(rewriteId: string): Promise<void> {
 
     const [header, diagnostic] = await Promise.all([
       manuscriptHeader(rw.manuscriptId),
-      prisma.aiEditorialMessage.findFirst({ where: { manuscriptId: rw.manuscriptId, kind: "diagnostic", status: "done" }, orderBy: { createdAt: "desc" }, select: { content: true } }),
+      prisma.aiEditorialMessage.findFirst({ where: { manuscriptId: rw.manuscriptId, kind: "diagnostic", status: "done", deletedAt: null }, orderBy: { createdAt: "desc" }, select: { content: true } }),
     ]);
     const context = [
       `=== FICHE DE L'OUVRAGE ===\n${header || "(non renseignée)"}`,
@@ -319,7 +319,7 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
       // par le dernier message « user » de nature « impact ». On récupère les
       // passages PERTINENTS pour ce changement.
       const changeMsg = await prisma.aiEditorialMessage.findFirst({
-        where: { manuscriptId, kind: "impact", role: "user", status: "done" },
+        where: { manuscriptId, kind: "impact", role: "user", status: "done", deletedAt: null },
         orderBy: { createdAt: "desc" },
         select: { content: true },
       });
@@ -338,7 +338,7 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
       // Traduction : le passage + la langue cible sont portés par le dernier
       // message « user » de nature « traduction ». Pas de contexte manuscrit.
       const src = await prisma.aiEditorialMessage.findFirst({
-        where: { manuscriptId, kind: "traduction", role: "user", status: "done" },
+        where: { manuscriptId, kind: "traduction", role: "user", status: "done", deletedAt: null },
         orderBy: { createdAt: "desc" },
         select: { content: true },
       });
@@ -347,11 +347,11 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
     } else {
       // On récupère la question (message « user » le plus récent) et un historique court.
       const history = await prisma.aiEditorialMessage.findMany({
-        where: { manuscriptId, kind: "chat", status: "done", id: { not: assistantMessageId } },
+        where: { manuscriptId, kind: "chat", status: "done", deletedAt: null, id: { not: assistantMessageId } },
         orderBy: { createdAt: "asc" },
         take: 12,
       });
-      const diagnostic = await prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, kind: "diagnostic", status: "done" }, orderBy: { createdAt: "desc" }, select: { content: true } });
+      const diagnostic = await prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, kind: "diagnostic", status: "done", deletedAt: null }, orderBy: { createdAt: "desc" }, select: { content: true } });
       if (diagnostic?.content) messages.push({ role: "assistant", content: `DIAGNOSTIC ÉDITORIAL DÉJÀ ÉTABLI :\n${diagnostic.content}` });
       for (const h of history) messages.push({ role: h.role === "user" ? "user" : "assistant", content: h.content });
       const lastUser = [...history].reverse().find((h) => h.role === "user");

@@ -154,4 +154,31 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     const r = await app.inject({ method: "GET", url: "/api/v1/ai-editor", headers: { cookie: correcteurCookie } });
     expect(r.statusCode).toBe(403);
   });
+
+  it("supprime (logiquement) un message et le masque de l'historique", async () => {
+    // On crée une question + réponse à supprimer.
+    const q = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/message`, headers: { cookie: adminCookie }, payload: { content: "Question à supprimer ensuite." } });
+    const assistantId = q.json().assistant_message_id as string;
+    await waitMessage(assistantId);
+
+    const del = await app.inject({ method: "DELETE", url: `/api/v1/ai-editor/messages/${assistantId}`, headers: { cookie: adminCookie } });
+    expect(del.statusCode).toBe(200);
+
+    // Masqué de l'historique renvoyé…
+    const listed = await app.inject({ method: "GET", url: `/api/v1/ai-editor/${withFile}`, headers: { cookie: adminCookie } });
+    const ids = (listed.json().messages as Array<{ id: string }>).map((m) => m.id);
+    expect(ids).not.toContain(assistantId);
+    // …mais conservé en base (suppression LOGIQUE, règle d'intégrité §13).
+    const row = await prisma.aiEditorialMessage.findUniqueOrThrow({ where: { id: assistantId } });
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.deletedBy).toBe(adminId);
+  });
+
+  it("réserve la suppression au DG / admin (403 pour un correcteur)", async () => {
+    const q = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/message`, headers: { cookie: adminCookie }, payload: { content: "Autre question." } });
+    const assistantId = q.json().assistant_message_id as string;
+    await waitMessage(assistantId);
+    const del = await app.inject({ method: "DELETE", url: `/api/v1/ai-editor/messages/${assistantId}`, headers: { cookie: correcteurCookie } });
+    expect(del.statusCode).toBe(403);
+  });
 });

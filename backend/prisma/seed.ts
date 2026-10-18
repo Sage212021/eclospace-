@@ -2645,6 +2645,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-supprimer-message-export-pdf",
+      version: "2026.10",
+      title: "Nouveauté — SAGE : supprimer un message et télécharger une réponse en PDF",
+      body: "Deux petits conforts dans l'espace SAGE. (1) Vous pouvez SUPPRIMER un message de la conversation (votre question comme une réponse) : un lien « 🗑 Supprimer » apparaît sous chaque message. Le message disparaît de l'historique et n'est plus transmis à SAGE pour la suite (il reste toutefois conservé en base, car nous ne supprimons jamais définitivement — règle d'intégrité de la maison). (2) Vous pouvez TÉLÉCHARGER une réponse de SAGE en PDF : sous chaque réponse aboutie, un lien « 📄 Télécharger en PDF » produit une note propre, en-tête « Éditions Éclosion — Service éditorial », avec le titre de l'ouvrage et la date, prête à imprimer ou à partager. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-lecture-integrale-dialogue",
       version: "2026.10",
       title: "Nouveauté — SAGE lit désormais TOUT le manuscrit (et tout le rapport) en dialogue",

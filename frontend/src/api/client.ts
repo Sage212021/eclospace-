@@ -2786,7 +2786,7 @@ export function updateBatFiles(batId: string, files: { interiorVersionId?: strin
 // ── Éditeur littéraire IA (« ÉCLOSION ÉDITORIAL IA ») — Lot A (DG + admin)
 export interface AiEditorMessage {
   id: string;
-  kind: "diagnostic" | "chat";
+  kind: "diagnostic" | "chat" | "coherence" | "impact";
   role: "user" | "assistant";
   content: string;
   status: "pending" | "done" | "erreur";
@@ -2825,6 +2825,12 @@ export function sendAiEditorMessage(manuscriptId: string, content: string) {
     method: "POST",
     body: JSON.stringify({ content }),
   });
+}
+export function requestAiEditorCoherence(manuscriptId: string) {
+  return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/coherence`, { method: "POST" });
+}
+export function requestAiEditorImpact(manuscriptId: string, change: string) {
+  return request<{ user_message_id: string; assistant_message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/impact`, { method: "POST", body: JSON.stringify({ change }) });
 }
 export function requestAiEditorRewrite(manuscriptId: string, input: { mode: RewriteMode; source_text: string; instruction?: string }) {
   return request<{ rewrite_id: string }>(`/api/v1/ai-editor/${manuscriptId}/rewrite`, { method: "POST", body: JSON.stringify(input) });

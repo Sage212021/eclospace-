@@ -44,6 +44,19 @@ const DIAGNOSTIC_TASK = `Établis un DIAGNOSTIC ÉDITORIAL complet et structuré
 1) Identité (titre, genre, public visé, intention perçue) ; 2) Points forts ; 3) Faiblesses et risques ; 4) Structure et rythme ; 5) Personnages (roman) OU thèse et arguments (essai) OU adéquation à l'âge (jeunesse), selon le genre ; 6) Style et voix de l'auteur à préserver ; 7) Cohérence (incohérences éventuelles repérées) ; 8) Lien avec le rapport d'évaluation (ce qu'il relève et ton analyse) ; 9) Décisions à prendre et pistes de travail prioritaires.
 Sois concret et honnête. Si des parties du manuscrit manquent, dis-le.`;
 
+const COHERENCE_TASK = `Procède à une ANALYSE DE COHÉRENCE de l'ouvrage. Recherche :
+- les CONTRADICTIONS (chronologie, âges, noms, lieux, faits, arguments, détails) ;
+- les RÉPÉTITIONS inutiles (idées, scènes, informations) ;
+- les RUPTURES de ton et les TRANSITIONS insuffisantes.
+Pour chaque point : localise-le (chapitre / extrait), explique précisément, et DISTINGUE une incohérence CERTAINE d'une simple possibilité d'interprétation. N'invente rien ; si le texte fourni est partiel, signale-le.`;
+
+function impactTask(change: string): string {
+  return `L'auteur envisage (ou vient d'appliquer) la MODIFICATION suivante de l'œuvre :
+« ${change} »
+Ne te limite PAS au passage directement modifié : recherche dans le manuscrit tous les passages qui pourraient devenir INCOHÉRENTS à cause de cette modification (mentions du personnage, de l'âge, du lieu, de l'événement ou du fait concerné, conséquences en aval, etc.).
+Pour CHAQUE passage concerné : cite-le (chapitre / extrait), explique le risque d'incohérence, et propose un ajustement concret. Distingue incohérence CERTAINE et simple possibilité. N'invente aucun passage : appuie-toi uniquement sur ce qui t'est fourni, et signale si le texte disponible est partiel.`;
+}
+
 // Lecture du MANUSCRIT déposé (texte exploitable) : PDF (couche texte), .docx
 // (via mammoth), ou texte brut. Les PDF scannés (sans texte) ne sont pas lus ici
 // — l'agent s'appuiera alors sur le rapport d'évaluation en le signalant.
@@ -305,6 +318,26 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
       await buildPassageIndex(manuscriptId).catch(() => {});
       block = (await buildContext(manuscriptId)).block;
       task = DIAGNOSTIC_TASK;
+    } else if (assistant.kind === "coherence") {
+      // Analyse de cohérence : vue d'ensemble → lecture complète (capée) du
+      // manuscrit, comme le diagnostic.
+      await buildPassageIndex(manuscriptId).catch(() => {});
+      block = (await buildContext(manuscriptId)).block;
+      task = COHERENCE_TASK;
+    } else if (assistant.kind === "impact") {
+      // Conséquences d'une modification : la description du changement est portée
+      // par le dernier message « user » de nature « impact ». On récupère les
+      // passages PERTINENTS pour ce changement.
+      const changeMsg = await prisma.aiEditorialMessage.findFirst({
+        where: { manuscriptId, kind: "impact", role: "user", status: "done" },
+        orderBy: { createdAt: "desc" },
+        select: { content: true },
+      });
+      const change = changeMsg?.content ?? "(modification non précisée)";
+      const count = await prisma.aiEditorialPassage.count({ where: { manuscriptId } });
+      if (count === 0) await buildPassageIndex(manuscriptId).catch(() => {});
+      block = await buildChatContext(manuscriptId, change);
+      task = impactTask(change);
     } else {
       // On récupère la question (message « user » le plus récent) et un historique court.
       const history = await prisma.aiEditorialMessage.findMany({

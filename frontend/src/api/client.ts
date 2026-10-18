@@ -2814,6 +2814,16 @@ export interface AiEditorDossier {
   messages: AiEditorMessage[];
   rewrites: AiEditorRewrite[];
 }
+export interface AiEditorConversation {
+  manuscript_id: string;
+  number: string;
+  title: string;
+  message_count: number;
+  last_activity: string | null;
+}
+export function listAiEditorConversations() {
+  return request<{ conversations: AiEditorConversation[] }>("/api/v1/ai-editor");
+}
 export function getAiEditor(manuscriptId: string) {
   return request<AiEditorDossier>(`/api/v1/ai-editor/${manuscriptId}`);
 }

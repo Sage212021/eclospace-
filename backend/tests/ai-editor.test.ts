@@ -138,4 +138,20 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     const sent = lastUser?.map((x) => x.content).join(" ") ?? "";
     expect(sent).toContain("MANUSCRIT");
   });
+
+  it("liste les conversations existantes (menu interne), une par ouvrage", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/v1/ai-editor", headers: { cookie: adminCookie } });
+    expect(r.statusCode).toBe(200);
+    const convs = r.json().conversations as Array<{ manuscript_id: string; message_count: number; title: string }>;
+    const mine = convs.find((c) => c.manuscript_id === withFile);
+    expect(mine).toBeTruthy();
+    expect(mine!.message_count).toBeGreaterThanOrEqual(1);
+    // Une seule entrée par ouvrage (pas de doublon malgré plusieurs messages).
+    expect(convs.filter((c) => c.manuscript_id === withFile).length).toBe(1);
+  });
+
+  it("réserve le menu des conversations au DG / admin (403 pour un correcteur)", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/v1/ai-editor", headers: { cookie: correcteurCookie } });
+    expect(r.statusCode).toBe(403);
+  });
 });

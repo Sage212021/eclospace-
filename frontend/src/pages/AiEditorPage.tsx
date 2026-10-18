@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   listManuscripts,
+  listAiEditorConversations,
   getAiEditor,
   diagnoseAiEditor,
   sendAiEditorMessage,
@@ -15,6 +16,7 @@ import {
   type AiEditorMessage,
   type AiEditorRewrite,
   type RewriteMode,
+  type AiEditorConversation,
 } from "../api/client";
 
 const REWRITE_MODE_LABELS: Record<RewriteMode, string> = {
@@ -30,6 +32,7 @@ const REWRITE_MODE_LABELS: Record<RewriteMode, string> = {
 
 export function AiEditorPage() {
   const [manuscripts, setManuscripts] = useState<Manuscript[]>([]);
+  const [conversations, setConversations] = useState<AiEditorConversation[]>([]);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dossier, setDossier] = useState<AiEditorDossier | null>(null);
@@ -43,11 +46,17 @@ export function AiEditorPage() {
   const [trSource, setTrSource] = useState("");
   const [trLang, setTrLang] = useState<"fr" | "en">("en");
 
+  const loadConversations = () => listAiEditorConversations().then((r) => setConversations(r.conversations)).catch(() => setConversations([]));
+
   useEffect(() => {
     listManuscripts().then(setManuscripts).catch(() => setManuscripts([]));
+    loadConversations();
   }, []);
 
-  const loadDossier = (id: string) => getAiEditor(id).then(setDossier).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
+  const loadDossier = (id: string) =>
+    getAiEditor(id)
+      .then((d) => { setDossier(d); loadConversations(); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
 
   useEffect(() => {
     if (!selectedId) { setDossier(null); return; }
@@ -184,22 +193,53 @@ export function AiEditorPage() {
 
       {error && <div style={{ background: "var(--alert-soft)", color: "var(--alert)", borderRadius: 8, padding: "9px 12px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-      {/* Choix de l'ouvrage */}
-      <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 12, marginBottom: 14 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Ouvrage</div>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher par titre ou référence…"
-          style={{ width: "100%", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, marginBottom: 8 }}
-        />
-        <select value={selectedId ?? ""} onChange={(e) => setSelectedId(e.target.value || null)} style={{ width: "100%", padding: "7px 8px", fontSize: 13 }}>
-          <option value="">— Choisir un ouvrage —</option>
-          {matches.map((m) => (
-            <option key={m.id} value={m.id}>{m.title} · {m.manuscriptNumber}</option>
-          ))}
-        </select>
-      </div>
+      {/* MENU INTERNE : une conversation par manuscrit (pas de mélange) */}
+      {!selectedId && (
+        <>
+          <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 12, marginBottom: 14 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>Mes conversations</div>
+            {conversations.length === 0 ? (
+              <p style={{ color: "var(--muted)", fontSize: 12.5, margin: 0 }}>Aucune conversation pour l'instant. Choisissez un ouvrage ci-dessous pour en démarrer une.</p>
+            ) : (
+              <div style={{ display: "grid", gap: 6 }}>
+                {conversations.map((c) => (
+                  <button key={c.manuscript_id} onClick={() => setSelectedId(c.manuscript_id)} style={rowBtnStyle}>
+                    <span>📘 {c.title} <span style={{ fontFamily: "var(--font-mono, ui-monospace, monospace)", fontSize: 11.5, color: "var(--muted)" }}>{c.number}</span></span>
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>{c.message_count} échange(s)</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 12, marginBottom: 14 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Nouvelle conversation</div>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Rechercher un ouvrage par titre ou référence…"
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, marginBottom: 8 }}
+            />
+            <div style={{ display: "grid", gap: 4, maxHeight: 320, overflow: "auto" }}>
+              {matches.length === 0 ? (
+                <p style={{ color: "var(--muted)", fontSize: 12.5, margin: 0 }}>Aucun ouvrage trouvé.</p>
+              ) : (
+                matches.map((m) => (
+                  <button key={m.id} onClick={() => setSelectedId(m.id)} style={rowBtnStyle}>
+                    <span>{m.title} <span style={{ fontFamily: "var(--font-mono, ui-monospace, monospace)", fontSize: 11.5, color: "var(--muted)" }}>{m.manuscriptNumber}</span></span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {selectedId && (
+        <div style={{ marginBottom: 12 }}>
+          <button onClick={() => { setSelectedId(null); setQuery(""); loadConversations(); }} style={{ ...rowBtnStyle, display: "inline-flex", width: "auto", fontWeight: 700 }}>← Mes conversations</button>
+        </div>
+      )}
 
       {dossier && (
         <>
@@ -371,6 +411,21 @@ export function AiEditorPage() {
     </section>
   );
 }
+
+const rowBtnStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+  width: "100%",
+  textAlign: "left",
+  background: "#fff",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  padding: "9px 11px",
+  fontSize: 13,
+  cursor: "pointer",
+};
 
 const primaryBtnStyle: React.CSSProperties = {
   background: "var(--eclosion, #D9B21A)",

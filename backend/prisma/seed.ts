@@ -2645,6 +2645,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-editeur-lot-a",
+      version: "2026.10",
+      title: "Nouveauté — SAGE, votre éditeur professionnel (1re étape)",
+      body: "Première étape d'un vrai partenaire éditorial : SAGE. Dans Pilotage → « SAGE — Éditeur » (réservé pour l'instant à la Direction générale et à l'administrateur), choisissez un ouvrage DÉJÀ enregistré dans Eclospace : SAGE lit son manuscrit et son rapport d'évaluation déjà déposés, en établit un DIAGNOSTIC éditorial (points forts, faiblesses, structure, personnages/arguments, style, cohérence, décisions à prendre), puis vous pouvez DIALOGUER avec lui (ex. « Le dénouement est-il assez préparé ? »). SAGE est un éditeur professionnel bilingue français-anglais, rigoureux sur les normes éditoriales (bibliographie, typographie, structuration), pédagogue et exigeant. Ses réponses se fondent sur le texte réel ; il signale honnêtement ce qu'il ne peut pas lire et n'invente jamais de source. Chaque échange est conservé et horodaté, et chaque action est tracée au journal d'audit. Les étapes suivantes (mémoire chapitre par chapitre, atelier de réécriture, contrôle de cohérence, vérification documentaire, traduction, puis ouverture au directeur éditorial) viendront par lots.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-relecture-ia-bouton-stopper-arrete-vraiment",
       version: "2026.10",
       title: "Nouveauté — Relecture IA : le bouton « Stopper » arrête vraiment l'analyse",

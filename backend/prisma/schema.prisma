@@ -5776,6 +5776,33 @@ model AiReadingJob {
   @@map("ai_reading_jobs")
 }
 
+// Éditeur littéraire IA (« ÉCLOSION ÉDITORIAL IA ») — Lot A. Dialogue éditorial
+// PERSISTANT sur un ouvrage ENREGISTRÉ dans Eclospace, réservé DG + admin.
+// Chaque message (question de l'opérateur, réponse de l'agent, diagnostic) est
+// conservé et horodaté → historique complet des échanges (en plus du journal
+// d'audit). Pas de relation Prisma inverse (évite de modifier le gros modèle
+// Manuscript) ; l'intégrité est garantie par la clé étrangère SQL.
+model AiEditorialMessage {
+  id           String   @id @default(uuid())
+  manuscriptId String   @map("manuscript_id")
+  // "diagnostic" (bilan éditorial initial) ou "chat" (échange question/réponse).
+  kind         String   @default("chat")
+  // "user" (opérateur) ou "assistant" (agent).
+  role         String
+  content      String   @default("")
+  // "pending" (réponse en cours de rédaction en arrière-plan), "done", "erreur".
+  status       String   @default("done")
+  errorMessage String?  @map("error_message")
+  model        String?
+  costEstimate Decimal? @map("cost_estimate") @db.Decimal(12, 2)
+  createdBy    String?  @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([manuscriptId])
+  @@map("ai_editorial_messages")
+}
+
 // Anomalie de correction ISSUE d'une relecture IA, tracée ligne par ligne pour
 // la validation humaine (Lot 3) : chaque anomalie du rapport devient une fiche
 // que le correcteur / la Direction accepte, modifie, rejette ou marque « à

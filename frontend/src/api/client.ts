@@ -2783,6 +2783,35 @@ export function updateBatFiles(batId: string, files: { interiorVersionId?: strin
   });
 }
 
+// ── Éditeur littéraire IA (« ÉCLOSION ÉDITORIAL IA ») — Lot A (DG + admin)
+export interface AiEditorMessage {
+  id: string;
+  kind: "diagnostic" | "chat";
+  role: "user" | "assistant";
+  content: string;
+  status: "pending" | "done" | "erreur";
+  error_message: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+export interface AiEditorDossier {
+  manuscript: { id: string; number: string; title: string; genre: string | null };
+  sources: { has_manuscript_file: boolean; has_evaluation_report: boolean };
+  messages: AiEditorMessage[];
+}
+export function getAiEditor(manuscriptId: string) {
+  return request<AiEditorDossier>(`/api/v1/ai-editor/${manuscriptId}`);
+}
+export function diagnoseAiEditor(manuscriptId: string) {
+  return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/diagnose`, { method: "POST" });
+}
+export function sendAiEditorMessage(manuscriptId: string, content: string) {
+  return request<{ user_message_id: string; assistant_message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/message`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
 export function toggleChecklistItem(itemId: string, checked: boolean) {
   return request<ChecklistItem>(`/api/v1/checklist-items/${itemId}`, { method: "PATCH", body: JSON.stringify({ checked }) });
 }

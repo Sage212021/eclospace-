@@ -117,6 +117,11 @@ export function AiEditorPage() {
               <div style={{ color: dossier.sources.has_evaluation_report ? "#2F7D4A" : "var(--muted)" }}>
                 {dossier.sources.has_evaluation_report ? "✅ Rapport d'évaluation disponible" : "ⓘ Aucun rapport d'évaluation (l'agent s'appuiera sur le manuscrit seul)"}
               </div>
+              <div style={{ color: dossier.memory.passage_count > 0 ? "#2F7D4A" : "var(--muted)" }}>
+                {dossier.memory.passage_count > 0
+                  ? `✅ Mémoire prête : ${dossier.memory.passage_count} passages indexés (SAGE cite le chapitre/extrait)`
+                  : "ⓘ Mémoire non constituée (lancez le diagnostic pour indexer le manuscrit)"}
+              </div>
             </div>
             <div style={{ marginTop: 10 }}>
               <button

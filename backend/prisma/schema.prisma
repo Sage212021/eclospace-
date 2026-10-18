@@ -5803,6 +5803,26 @@ model AiEditorialMessage {
   @@map("ai_editorial_messages")
 }
 
+// Mémoire de SAGE — Lot B. Le manuscrit est découpé en PASSAGES indexés
+// (recherche plein texte PostgreSQL) afin que l'agent réponde en CITANT le
+// passage exact (chapitre / extrait), au lieu de redonner tout le texte à chaque
+// question, et pour tenir les gros manuscrits. La colonne de recherche
+// (content_tsv, tsvector générée) et son index GIN sont créés par la migration,
+// hors schéma Prisma (gérés côté base). FK en cascade : la mémoire est dérivée.
+model AiEditorialPassage {
+  id           String   @id @default(uuid())
+  manuscriptId String   @map("manuscript_id")
+  // Ordre d'apparition dans le manuscrit (0 = début).
+  ordinal      Int
+  // Étiquette de chapitre détectée (ex. « Chapitre 3 »), si repérable.
+  chapterLabel String?  @map("chapter_label")
+  content      String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([manuscriptId])
+  @@map("ai_editorial_passages")
+}
+
 // Anomalie de correction ISSUE d'une relecture IA, tracée ligne par ligne pour
 // la validation humaine (Lot 3) : chaque anomalie du rapport devient une fiche
 // que le correcteur / la Direction accepte, modifie, rejette ou marque « à

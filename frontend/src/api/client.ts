@@ -2797,6 +2797,7 @@ export interface AiEditorMessage {
 export interface AiEditorDossier {
   manuscript: { id: string; number: string; title: string; genre: string | null };
   sources: { has_manuscript_file: boolean; has_evaluation_report: boolean };
+  memory: { passage_count: number };
   messages: AiEditorMessage[];
 }
 export function getAiEditor(manuscriptId: string) {

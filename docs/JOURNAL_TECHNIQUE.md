@@ -17,6 +17,10 @@ Document vivant : chaque choix technique structurant y est consigné avec sa jus
 
 | 04/07/2026 | Endpoints ajoutés hors spécification API v1 : `GET /genres`, `GET /collections`, `GET /evaluation-criteria`, `GET /users` | Plomberie minimale nécessaire aux listes déroulantes du Ch. 6 §6.2 et à la grille du Ch. 7 §7.4, absente de `03_Specification_API.md` (document explicitement « version de travail »). Lecture seule, permissions vérifiées. |
 
+## SAGE — mémoire & recherche de passages (18/10/2026, Lot B)
+
+**Choix : recherche plein texte PostgreSQL (`tsvector`/`websearch_to_tsquery`, configuration `french`) — PAS de base de données vectorielle.** Pour que l'éditeur SAGE réponde en citant le passage exact (chapitre/extrait) sans redonner tout le manuscrit à chaque question, le manuscrit est découpé en passages (`ai_editorial_passages`) et indexé. La recherche de pertinence utilise une colonne **générée** `content_tsv` (maintenue par Postgres, hors schéma Prisma) avec un **index GIN**. Raison : PostgreSQL est déjà la base du projet (aucune dépendance exotique ni service supplémentaire à héberger/opérer — charte « stack éprouvée et économe », CLAUDE.md règle 6 et Ch. 21 §21.6) ; une base vectorielle (embeddings) aurait ajouté coût, infrastructure et complexité, non justifiés à ce stade. L'étape d'embeddings reste possible plus tard sans changer l'interface (`retrievePassages`). Le découpage détecte au mieux les débuts de chapitre pour étiqueter les passages ; le diagnostic lit tout le manuscrit (bilan complet) tandis que le dialogue s'appuie sur les passages pertinents + le rapport + le diagnostic.
+
 ## Planning annuel des événements (21/07/2026)
 
 ### Besoin (opérateur)

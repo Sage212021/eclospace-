@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import { loadConfig, readApiKey, resolveModelId } from "./aiConfig.js";
 import { resolveAiSourceVersion, extractPdfText, capManuscriptText, MANUSCRIT_CHAR_BUDGET } from "./aiRunner.js";
@@ -120,6 +121,100 @@ async function buildContext(manuscriptId: string): Promise<{ block: string; manu
   return { block: parts.join("\n\n"), manuscriptOk: manuscript.ok };
 }
 
+// ── Mémoire de SAGE (Lot B) : découpage en passages + recherche plein texte ──
+
+const MAX_PASSAGE_CHARS = 2000;
+const MAX_PASSAGES = 400;
+
+// Repère un début de chapitre (pour étiqueter les passages). Best-effort.
+function detectChapter(line: string): string | null {
+  const t = line.trim();
+  if (!t || t.length > 80) return null;
+  if (/^(chapitre|chapter|partie|livre|prologue|épilogue|epilogue|introduction|préface|preface|avant-propos)\b/i.test(t)) return t;
+  if (/^#{1,3}\s+\S/.test(t)) return t.replace(/^#{1,3}\s+/, "").slice(0, 80);
+  if (/^([IVXLC]{1,6}|\d{1,3})[.)]?\s*$/.test(t)) return `Chapitre ${t.replace(/[.)]\s*$/, "")}`;
+  return null;
+}
+
+// Découpe le texte du manuscrit en passages d'environ MAX_PASSAGE_CHARS,
+// en conservant l'étiquette du dernier chapitre rencontré.
+function splitIntoPassages(text: string): { ordinal: number; chapterLabel: string | null; content: string }[] {
+  const lines = text.split(/\r?\n/);
+  const passages: { ordinal: number; chapterLabel: string | null; content: string }[] = [];
+  let currentLabel: string | null = null;
+  let buf = "";
+  let ordinal = 0;
+  const flush = () => {
+    if (buf.trim()) { passages.push({ ordinal: ordinal++, chapterLabel: currentLabel, content: buf.trim() }); buf = ""; }
+  };
+  for (const line of lines) {
+    if (passages.length >= MAX_PASSAGES) break;
+    const label = detectChapter(line);
+    if (label) { flush(); currentLabel = label; continue; }
+    if (buf.length + line.length + 1 > MAX_PASSAGE_CHARS) flush();
+    buf += line + "\n";
+  }
+  flush();
+  return passages.slice(0, MAX_PASSAGES);
+}
+
+// (Re)construit l'index de passages d'un ouvrage à partir du manuscrit déposé.
+// Renvoie le nombre de passages indexés (0 si le texte n'a pas pu être lu).
+export async function buildPassageIndex(manuscriptId: string): Promise<number> {
+  const m = await readManuscriptText(manuscriptId);
+  if (!m.ok || !m.text.trim()) {
+    await prisma.aiEditorialPassage.deleteMany({ where: { manuscriptId } }).catch(() => {});
+    return 0;
+  }
+  const passages = splitIntoPassages(m.text);
+  await prisma.$transaction([
+    prisma.aiEditorialPassage.deleteMany({ where: { manuscriptId } }),
+    prisma.aiEditorialPassage.createMany({ data: passages.map((p) => ({ manuscriptId, ordinal: p.ordinal, chapterLabel: p.chapterLabel, content: p.content })) }),
+  ]);
+  return passages.length;
+}
+
+// Récupère les passages les plus PERTINENTS pour une question (recherche plein
+// texte PostgreSQL, config française). Repli : les premiers passages si la
+// recherche ne ramène rien (question trop générale).
+export async function retrievePassages(manuscriptId: string, query: string, k = 8): Promise<{ ordinal: number; chapterLabel: string | null; content: string }[]> {
+  let rows: Array<{ ordinal: number; chapter_label: string | null; content: string }> = [];
+  try {
+    rows = await prisma.$queryRaw<Array<{ ordinal: number; chapter_label: string | null; content: string }>>(Prisma.sql`
+      SELECT "ordinal", "chapter_label", "content"
+      FROM "ai_editorial_passages"
+      WHERE "manuscript_id" = ${manuscriptId}
+        AND "content_tsv" @@ websearch_to_tsquery('french', ${query})
+      ORDER BY ts_rank("content_tsv", websearch_to_tsquery('french', ${query})) DESC
+      LIMIT ${k}
+    `);
+  } catch {
+    rows = [];
+  }
+  if (rows.length > 0) return rows.map((r) => ({ ordinal: r.ordinal, chapterLabel: r.chapter_label, content: r.content }));
+  const fallback = await prisma.aiEditorialPassage.findMany({ where: { manuscriptId }, orderBy: { ordinal: "asc" }, take: k });
+  return fallback.map((p) => ({ ordinal: p.ordinal, chapterLabel: p.chapterLabel, content: p.content }));
+}
+
+// Contexte du DIALOGUE : fiche + rapport + PASSAGES pertinents (au lieu de tout
+// le manuscrit) — plus précis, plus léger, et citable par chapitre/extrait.
+async function buildChatContext(manuscriptId: string, question: string): Promise<string> {
+  const [header, report] = await Promise.all([manuscriptHeader(manuscriptId), latestEvaluationReport(manuscriptId)]);
+  const passages = await retrievePassages(manuscriptId, question, 8).catch(() => []);
+  const parts: string[] = [];
+  parts.push(`=== FICHE DE L'OUVRAGE ===\n${header || "(non renseignée)"}`);
+  parts.push(`=== RAPPORT D'ÉVALUATION ===\n${report ? report : "(aucun rapport d'évaluation disponible)"}`);
+  if (passages.length > 0) {
+    parts.push(
+      `=== PASSAGES PERTINENTS DU MANUSCRIT (cite-les par chapitre / extrait quand tu t'appuies dessus) ===\n` +
+        passages.map((p) => `[${p.chapterLabel ?? "Passage"} · extrait ${p.ordinal + 1}]\n${p.content}`).join("\n\n"),
+    );
+  } else {
+    parts.push(`=== MANUSCRIT ===\n(Aucun passage retrouvé pour cette question : indique-le et reste prudent ; appuie-toi sur le rapport et la fiche.)`);
+  }
+  return parts.join("\n\n");
+}
+
 // Exécution (longue) en arrière-plan : remplit le message « assistant » en
 // attente. Ne lève JAMAIS : toute erreur est consignée sur le message.
 export async function runEditorAnswer(assistantMessageId: string): Promise<void> {
@@ -136,12 +231,15 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
     }
     const modelId = resolveModelId(cfg.models.reecriture ?? "intermediaire");
 
-    const { block } = await buildContext(manuscriptId);
-
     // Dialogue : question de l'opérateur + historique récent + diagnostic connu.
     let task: string;
+    let block: string;
     const messages: { role: "user" | "assistant"; content: string }[] = [];
     if (assistant.kind === "diagnostic") {
+      // Le diagnostic lit TOUT le manuscrit (bilan complet) ET (re)construit la
+      // mémoire de passages pour les dialogues à venir.
+      await buildPassageIndex(manuscriptId).catch(() => {});
+      block = (await buildContext(manuscriptId)).block;
       task = DIAGNOSTIC_TASK;
     } else {
       // On récupère la question (message « user » le plus récent) et un historique court.
@@ -155,6 +253,11 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
       for (const h of history) messages.push({ role: h.role === "user" ? "user" : "assistant", content: h.content });
       const lastUser = [...history].reverse().find((h) => h.role === "user");
       task = lastUser?.content ?? "Peux-tu m'aider sur cet ouvrage ?";
+      // Mémoire : garantir l'index de passages, puis construire un contexte
+      // fondé sur les passages PERTINENTS (plutôt que tout le manuscrit).
+      const count = await prisma.aiEditorialPassage.count({ where: { manuscriptId } });
+      if (count === 0) await buildPassageIndex(manuscriptId).catch(() => {});
+      block = await buildChatContext(manuscriptId, task);
     }
 
     const { default: Anthropic } = await import("@anthropic-ai/sdk");

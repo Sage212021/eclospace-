@@ -2645,6 +2645,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-lecture-integrale-dialogue",
+      version: "2026.10",
+      title: "Nouveauté — SAGE lit désormais TOUT le manuscrit (et tout le rapport) en dialogue",
+      body: "Correction importante : en dialogue, SAGE ne recevait qu'une poignée d'extraits (souvent les premières pages), ce qui l'amenait à dire qu'il n'avait pas lu l'ouvrage. Désormais, pour répondre à vos questions — comme pour l'analyse des conséquences d'une modification — SAGE s'appuie sur L'INTÉGRALITÉ du manuscrit déposé ET sur l'INTÉGRALITÉ du rapport d'évaluation, et non plus sur des extraits. (Pour un manuscrit exceptionnellement volumineux qui dépasse la capacité d'une seule lecture, il vous le signale et lit un ensemble représentatif ; sinon il lit tout.) Réservé à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-conversations-menu-interne",
       version: "2026.10",
       title: "Nouveauté — SAGE : une conversation par ouvrage + menu interne",

@@ -95,6 +95,40 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
     return reply.code(202).send({ user_message_id: userMessage.id, assistant_message_id: assistant.id });
   });
 
+  // Analyse de COHÉRENCE : contradictions, répétitions, ruptures (vue
+  // d'ensemble). Exécution en arrière-plan.
+  fastify.post("/api/v1/ai-editor/:manuscriptId/coherence", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+    const { manuscriptId } = request.params as { manuscriptId: string };
+    const manuscript = await prisma.manuscript.findFirst({ where: { id: manuscriptId, deletedAt: null }, select: { id: true } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
+    const manuscriptDoc = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "manuscrit", deletedAt: null }, select: { id: true } });
+    if (!manuscriptDoc) return reply.code(409).send({ code: "no_manuscript_file", message: "Aucun manuscrit n'est déposé pour cet ouvrage." });
+    const already = await prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, status: "pending" }, select: { id: true } });
+    if (already) return reply.code(409).send({ code: "already_running", message: "Une analyse est déjà en cours pour cet ouvrage." });
+    const assistant = await prisma.aiEditorialMessage.create({ data: { manuscriptId, kind: "coherence", role: "assistant", status: "pending", content: "", createdBy: request.user!.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "ai_editorial_message", entityId: assistant.id, newValues: { manuscriptId, kind: "coherence" }, ipAddress: request.ip });
+    void runEditorAnswer(assistant.id);
+    return reply.code(202).send({ message_id: assistant.id });
+  });
+
+  // Conséquences d'une MODIFICATION : l'opérateur décrit un changement, SAGE
+  // repère les passages qui deviendraient incohérents. Exécution en fond.
+  const impactSchema = z.object({ change: z.string().trim().min(1).max(4000) });
+  fastify.post("/api/v1/ai-editor/:manuscriptId/impact", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+    const { manuscriptId } = request.params as { manuscriptId: string };
+    const parsed = impactSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Décrivez la modification envisagée.", details: parsed.error.issues });
+    const manuscript = await prisma.manuscript.findFirst({ where: { id: manuscriptId, deletedAt: null }, select: { id: true } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
+    const already = await prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, status: "pending" }, select: { id: true } });
+    if (already) return reply.code(409).send({ code: "already_running", message: "Une analyse est déjà en cours pour cet ouvrage." });
+    const userMessage = await prisma.aiEditorialMessage.create({ data: { manuscriptId, kind: "impact", role: "user", status: "done", content: parsed.data.change, createdBy: request.user!.id } });
+    const assistant = await prisma.aiEditorialMessage.create({ data: { manuscriptId, kind: "impact", role: "assistant", status: "pending", content: "", createdBy: request.user!.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "ai_editorial_message", entityId: userMessage.id, newValues: { manuscriptId, kind: "impact", role: "user" }, ipAddress: request.ip });
+    void runEditorAnswer(assistant.id);
+    return reply.code(202).send({ user_message_id: userMessage.id, assistant_message_id: assistant.id });
+  });
+
   // Atelier de réécriture : proposer une réécriture d'un passage dans un mode
   // donné. L'original fourni est conservé ; la proposition est tracée. Exécution
   // en arrière-plan (comme le dialogue).

@@ -2645,6 +2645,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-coherence-consequences-lot-d",
+      version: "2026.10",
+      title: "Nouveauté — SAGE : cohérence de l'œuvre & conséquences d'une modification",
+      body: "SAGE veille maintenant à la cohérence. (1) ANALYSE DE COHÉRENCE : un bouton « Analyser la cohérence » et SAGE recherche dans tout l'ouvrage les contradictions (dates, âges, noms, lieux, faits, arguments), les répétitions inutiles et les ruptures de ton — en localisant chaque point (chapitre/extrait) et en distinguant une incohérence certaine d'une simple possibilité. (2) CONSÉQUENCES D'UNE MODIFICATION : décrivez un changement envisagé (ex. « Samir passe de 17 à 25 ans » ou « le dénouement devient… ») et SAGE repère les passages qui deviendraient incohérents — pas seulement le passage modifié — avec un ajustement proposé pour chacun. Comme toujours, il n'invente rien et signale ce qu'il n'a pas pu lire. Réservé à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-atelier-reecriture-lot-c",
       version: "2026.10",
       title: "Nouveauté — SAGE : atelier de réécriture (Original / Proposé / Explication)",

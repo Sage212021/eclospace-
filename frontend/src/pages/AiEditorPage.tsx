@@ -4,6 +4,8 @@ import {
   getAiEditor,
   diagnoseAiEditor,
   sendAiEditorMessage,
+  requestAiEditorCoherence,
+  requestAiEditorImpact,
   requestAiEditorRewrite,
   decideAiEditorRewrite,
   type Manuscript,
@@ -35,6 +37,7 @@ export function AiEditorPage() {
   const [rwMode, setRwMode] = useState<RewriteMode>("fidele");
   const [rwSource, setRwSource] = useState("");
   const [rwInstruction, setRwInstruction] = useState("");
+  const [impactChange, setImpactChange] = useState("");
 
   useEffect(() => {
     listManuscripts().then(setManuscripts).catch(() => setManuscripts([]));
@@ -112,8 +115,33 @@ export function AiEditorPage() {
     } finally { setBusy(false); }
   }
 
+  async function runCoherence() {
+    if (!selectedId) return;
+    setBusy(true); setError(null);
+    try {
+      await requestAiEditorCoherence(selectedId);
+      await loadDossier(selectedId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Analyse impossible.");
+    } finally { setBusy(false); }
+  }
+
+  async function runImpact() {
+    if (!selectedId || !impactChange.trim()) return;
+    setBusy(true); setError(null);
+    try {
+      await requestAiEditorImpact(selectedId, impactChange.trim());
+      setImpactChange("");
+      await loadDossier(selectedId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Analyse impossible.");
+    } finally { setBusy(false); }
+  }
+
   const diagnostic = dossier?.messages.find((m) => m.kind === "diagnostic");
   const chat = dossier?.messages.filter((m) => m.kind === "chat") ?? [];
+  const coherence = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "coherence");
+  const impacts = dossier?.messages.filter((m) => m.kind === "impact") ?? [];
   const rewrites = dossier?.rewrites ?? [];
 
   return (
@@ -215,6 +243,38 @@ export function AiEditorPage() {
             {pending && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>L'éditeur réfléchit… (la réponse s'affichera ici, vous pouvez patienter ou revenir plus tard)</div>}
           </div>
 
+          {/* Cohérence & conséquences d'une modification */}
+          <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 14, marginTop: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>Cohérence & conséquences</div>
+            <p style={{ color: "var(--muted)", fontSize: 12, margin: "0 0 10px", lineHeight: 1.5 }}>
+              SAGE recherche les contradictions (dates, âges, noms, lieux, faits), les répétitions et les ruptures ; et, si vous envisagez une modification, les passages qui deviendraient incohérents.
+            </p>
+            {(() => { const d = busy || pending || !dossier.sources.has_manuscript_file; return (
+            <button onClick={runCoherence} disabled={d} title={!dossier.sources.has_manuscript_file ? "Déposez d'abord le manuscrit." : undefined} style={{ ...primaryBtnStyle, marginBottom: 8, cursor: d ? "not-allowed" : "pointer", opacity: d ? 0.55 : 1 }}>
+              {coherence ? "Relancer l'analyse de cohérence" : "Analyser la cohérence"}
+            </button>); })()}
+            {coherence && (
+              <div style={{ border: "1px solid var(--line)", borderRadius: 8, background: "var(--ivory, #FAF8F2)", padding: 10, marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>Analyse de cohérence</div>
+                <MessageBody m={coherence} />
+              </div>
+            )}
+
+            <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 6, marginBottom: 4 }}>Conséquences d'une modification</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
+              <textarea value={impactChange} onChange={(e) => setImpactChange(e.target.value)} placeholder="Décrivez la modification envisagée — ex. « Samir passe de 17 à 25 ans » ou « le dénouement devient… »" rows={2} style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, resize: "vertical" }} />
+              <button onClick={runImpact} disabled={busy || pending || !impactChange.trim()} style={{ ...primaryBtnStyle, whiteSpace: "nowrap", cursor: busy || pending || !impactChange.trim() ? "not-allowed" : "pointer", opacity: busy || pending || !impactChange.trim() ? 0.55 : 1 }}>Vérifier</button>
+            </div>
+            <div style={{ display: "grid", gap: 10 }}>
+              {impacts.map((m) => (
+                <div key={m.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, background: m.role === "user" ? "var(--eclosion-soft, #f6efd8)" : "var(--ivory, #FAF8F2)" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>{m.role === "user" ? "Modification envisagée" : "SAGE — conséquences"}</div>
+                  <MessageBody m={m} />
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Atelier de réécriture */}
           <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 14, marginTop: 14 }}>
             <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>Atelier de réécriture</div>
@@ -244,6 +304,17 @@ export function AiEditorPage() {
     </section>
   );
 }
+
+const primaryBtnStyle: React.CSSProperties = {
+  background: "var(--eclosion, #D9B21A)",
+  color: "#0B0B0C",
+  border: "none",
+  borderRadius: 8,
+  padding: "8px 15px",
+  fontWeight: 700,
+  fontSize: 12.5,
+  cursor: "pointer",
+};
 
 function MessageBody({ m }: { m: AiEditorMessage }) {
   if (m.status === "pending") return <span style={{ color: "var(--muted)", fontStyle: "italic" }}>Analyse en cours…</span>;

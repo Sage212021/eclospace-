@@ -30,15 +30,17 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
     if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
 
     // Sources déjà présentes dans l'ERP.
-    const [manuscriptDoc, evalReport, messages] = await Promise.all([
+    const [manuscriptDoc, evalReport, messages, passageCount] = await Promise.all([
       prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "manuscrit", deletedAt: null }, select: { id: true } }),
       prisma.aiReadingJob.findFirst({ where: { manuscriptId, workType: "evaluation", status: "termine", reportText: { not: null } }, select: { id: true } }),
       prisma.aiEditorialMessage.findMany({ where: { manuscriptId }, orderBy: { createdAt: "asc" } }),
+      prisma.aiEditorialPassage.count({ where: { manuscriptId } }),
     ]);
 
     return reply.send({
       manuscript: { id: manuscript.id, number: manuscript.manuscriptNumber, title: manuscript.title, genre: manuscript.genre?.label ?? null },
       sources: { has_manuscript_file: !!manuscriptDoc, has_evaluation_report: !!evalReport },
+      memory: { passage_count: passageCount },
       messages: messages.map(messageView),
     });
   });

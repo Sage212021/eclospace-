@@ -2645,6 +2645,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-memoire-passages-lot-b",
+      version: "2026.10",
+      title: "Nouveauté — SAGE : mémoire du manuscrit et citation du passage exact",
+      body: "SAGE gagne une mémoire. Au lancement du diagnostic, le manuscrit est découpé et indexé (vous voyez « Mémoire prête : N passages indexés » sur la fiche de l'ouvrage). Résultat : quand vous posez une question précise (ex. « Que se passe-t-il au moment où le personnage apprend la nouvelle ? »), SAGE retrouve le PASSAGE EXACT concerné et peut le citer par chapitre/extrait, au lieu de répondre de mémoire sur un simple résumé. Cela rend ses réponses plus fiables et permet de travailler sur de gros manuscrits sans tout relire à chaque fois. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-editeur-lot-a",
       version: "2026.10",
       title: "Nouveauté — SAGE, votre éditeur professionnel (1re étape)",

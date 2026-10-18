@@ -215,6 +215,70 @@ async function buildChatContext(manuscriptId: string, question: string): Promise
   return parts.join("\n\n");
 }
 
+// ── Atelier de réécriture (Lot C) ──
+export const REWRITE_MODES = ["fidele", "renforce", "alternatif"] as const;
+export type RewriteMode = (typeof REWRITE_MODES)[number];
+
+const REWRITE_MODE_INSTRUCTION: Record<RewriteMode, string> = {
+  fidele:
+    "MODE « FIDÈLE À L'AUTEUR » : corrige et améliore le passage (clarté, fluidité, fautes, répétitions) SANS transformer la voix de l'auteur (ton, rythme, niveau de langue, vocabulaire caractéristique). Interventions minimales et sûres ; conserve strictement le sens et la mise en paragraphes.",
+  renforce:
+    "MODE « LITTÉRAIREMENT RENFORCÉ » : améliore plus en profondeur le rythme, les images, les dialogues et la construction, TOUT EN PRÉSERVANT la voix de l'auteur. Tu ne changes pas le sens ni les faits ; tu renforces l'effet littéraire.",
+  alternatif:
+    "MODE « PROPOSITION ALTERNATIVE » : propose une réécriture plus audacieuse, une autre possibilité clairement différente, en gardant le sens. Présente-la comme une EXPLORATION (pas comme LA version à adopter).",
+};
+
+const REWRITE_DELIM = "---EXPLICATION---";
+
+// Exécution (longue) en arrière-plan d'une proposition de réécriture. Ne lève
+// JAMAIS : le résultat (ou l'erreur) est consigné sur la ligne de réécriture.
+export async function runRewrite(rewriteId: string): Promise<void> {
+  try {
+    const rw = await prisma.aiEditorialRewrite.findUnique({ where: { id: rewriteId } });
+    if (!rw || rw.status !== "pending") return;
+    const cfg = await loadConfig();
+    const apiKey = readApiKey(cfg);
+    if (!cfg.enabled || !apiKey) {
+      await prisma.aiEditorialRewrite.update({ where: { id: rewriteId }, data: { status: "erreur", errorMessage: "SAGE n'est pas activé (clé API manquante)." } }).catch(() => {});
+      return;
+    }
+    const modelId = resolveModelId(cfg.models.reecriture ?? "intermediaire");
+    const mode = (REWRITE_MODES as readonly string[]).includes(rw.mode) ? (rw.mode as RewriteMode) : "fidele";
+
+    const [header, diagnostic] = await Promise.all([
+      manuscriptHeader(rw.manuscriptId),
+      prisma.aiEditorialMessage.findFirst({ where: { manuscriptId: rw.manuscriptId, kind: "diagnostic", status: "done" }, orderBy: { createdAt: "desc" }, select: { content: true } }),
+    ]);
+    const context = [
+      `=== FICHE DE L'OUVRAGE ===\n${header || "(non renseignée)"}`,
+      diagnostic?.content ? `=== REPÈRES SUR LA VOIX DE L'AUTEUR (diagnostic) ===\n${diagnostic.content}` : "",
+      rw.instruction ? `=== CONSIGNE PARTICULIÈRE ===\n${rw.instruction}` : "",
+      `=== PASSAGE À RÉÉCRIRE ===\n${rw.sourceText}`,
+    ].filter(Boolean).join("\n\n");
+    const task = `${REWRITE_MODE_INSTRUCTION[mode]}\n\nRends ta réponse en DEUX parties séparées par une ligne contenant UNIQUEMENT « ${REWRITE_DELIM} ». Partie 1 : UNIQUEMENT le texte réécrit (aucun préambule, aucun commentaire). Partie 2 : une explication brève des modifications apportées et de leurs effets.`;
+
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic({ apiKey });
+    const resp = await client.messages.create({
+      model: modelId,
+      max_tokens: 4096,
+      system: AGENT_SYSTEM,
+      messages: [{ role: "user", content: `${context}\n\n=== DEMANDE ===\n${task}` }],
+    });
+    const text = resp.content.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("\n").trim();
+    const idx = text.indexOf(REWRITE_DELIM);
+    const proposed = (idx >= 0 ? text.slice(0, idx) : text).trim();
+    const explanation = idx >= 0 ? text.slice(idx + REWRITE_DELIM.length).trim() : "";
+    await prisma.aiEditorialRewrite.update({
+      where: { id: rewriteId },
+      data: { proposedText: proposed || "(réécriture vide)", explanation: explanation || null, status: "done", model: modelId },
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Échec de la réécriture.";
+    await prisma.aiEditorialRewrite.update({ where: { id: rewriteId }, data: { status: "erreur", errorMessage: message } }).catch(() => {});
+  }
+}
+
 // Exécution (longue) en arrière-plan : remplit le message « assistant » en
 // attente. Ne lève JAMAIS : toute erreur est consignée sur le message.
 export async function runEditorAnswer(assistantMessageId: string): Promise<void> {

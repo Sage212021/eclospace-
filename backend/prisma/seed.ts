@@ -2645,6 +2645,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-atelier-reecriture-lot-c",
+      version: "2026.10",
+      title: "Nouveauté — SAGE : atelier de réécriture (Original / Proposé / Explication)",
+      body: "SAGE peut désormais RÉÉCRIRE un passage. Dans « SAGE — Éditeur », collez le passage à retravailler et choisissez un mode : « Fidèle à l'auteur » (corrige et améliore sans toucher à la voix), « Littérairement renforcé » (travaille le rythme, les images, les dialogues en gardant la voix) ou « Proposition alternative » (une version plus audacieuse à explorer). SAGE renvoie le texte proposé À CÔTÉ de l'original, avec une explication des modifications. Vous décidez : Accepter ou Refuser. Important : l'original est toujours conservé et RIEN n'est appliqué au manuscrit tant que vous n'avez pas validé — chaque proposition et chaque décision sont tracées et horodatées. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-memoire-passages-lot-b",
       version: "2026.10",
       title: "Nouveauté — SAGE : mémoire du manuscrit et citation du passage exact",

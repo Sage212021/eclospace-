@@ -2794,11 +2794,25 @@ export interface AiEditorMessage {
   created_at: string;
   created_by: string | null;
 }
+export type RewriteMode = "fidele" | "renforce" | "alternatif";
+export interface AiEditorRewrite {
+  id: string;
+  mode: RewriteMode;
+  instruction: string | null;
+  source_text: string;
+  proposed_text: string;
+  explanation: string | null;
+  status: "pending" | "done" | "erreur" | "accepted" | "rejected";
+  error_message: string | null;
+  created_at: string;
+  decided_at: string | null;
+}
 export interface AiEditorDossier {
   manuscript: { id: string; number: string; title: string; genre: string | null };
   sources: { has_manuscript_file: boolean; has_evaluation_report: boolean };
   memory: { passage_count: number };
   messages: AiEditorMessage[];
+  rewrites: AiEditorRewrite[];
 }
 export function getAiEditor(manuscriptId: string) {
   return request<AiEditorDossier>(`/api/v1/ai-editor/${manuscriptId}`);
@@ -2811,6 +2825,12 @@ export function sendAiEditorMessage(manuscriptId: string, content: string) {
     method: "POST",
     body: JSON.stringify({ content }),
   });
+}
+export function requestAiEditorRewrite(manuscriptId: string, input: { mode: RewriteMode; source_text: string; instruction?: string }) {
+  return request<{ rewrite_id: string }>(`/api/v1/ai-editor/${manuscriptId}/rewrite`, { method: "POST", body: JSON.stringify(input) });
+}
+export function decideAiEditorRewrite(rewriteId: string, decision: "accepted" | "rejected") {
+  return request<{ id: string; status: string }>(`/api/v1/ai-editor/rewrites/${rewriteId}/decision`, { method: "POST", body: JSON.stringify({ decision }) });
 }
 
 export function toggleChecklistItem(itemId: string, checked: boolean) {

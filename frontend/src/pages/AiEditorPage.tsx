@@ -4,10 +4,20 @@ import {
   getAiEditor,
   diagnoseAiEditor,
   sendAiEditorMessage,
+  requestAiEditorRewrite,
+  decideAiEditorRewrite,
   type Manuscript,
   type AiEditorDossier,
   type AiEditorMessage,
+  type AiEditorRewrite,
+  type RewriteMode,
 } from "../api/client";
+
+const REWRITE_MODE_LABELS: Record<RewriteMode, string> = {
+  fidele: "Fidèle à l'auteur",
+  renforce: "Littérairement renforcé",
+  alternatif: "Proposition alternative",
+};
 
 // ÉCLOSION ÉDITORIAL IA — Lot A (lecture + diagnostic + dialogue). Réservé DG +
 // admin. On choisit un ouvrage DÉJÀ enregistré dans Eclospace ; l'agent lit son
@@ -22,6 +32,9 @@ export function AiEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [rwMode, setRwMode] = useState<RewriteMode>("fidele");
+  const [rwSource, setRwSource] = useState("");
+  const [rwInstruction, setRwInstruction] = useState("");
 
   useEffect(() => {
     listManuscripts().then(setManuscripts).catch(() => setManuscripts([]));
@@ -36,8 +49,10 @@ export function AiEditorPage() {
     loadDossier(selectedId);
   }, [selectedId]);
 
-  // Rafraîchissement tant qu'une réponse est en cours de rédaction en fond.
-  const pending = dossier?.messages.some((m) => m.status === "pending") ?? false;
+  // Rafraîchissement tant qu'une réponse OU une réécriture est en cours en fond.
+  const pending =
+    (dossier?.messages.some((m) => m.status === "pending") ?? false) ||
+    (dossier?.rewrites.some((r) => r.status === "pending") ?? false);
   useEffect(() => {
     if (!selectedId || !pending) return;
     const t = setTimeout(() => { loadDossier(selectedId); }, 5000);
@@ -74,8 +89,32 @@ export function AiEditorPage() {
     } finally { setBusy(false); }
   }
 
+  async function requestRewrite() {
+    if (!selectedId || !rwSource.trim()) return;
+    setBusy(true); setError(null);
+    try {
+      await requestAiEditorRewrite(selectedId, { mode: rwMode, source_text: rwSource.trim(), instruction: rwInstruction.trim() || undefined });
+      setRwSource(""); setRwInstruction("");
+      await loadDossier(selectedId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Réécriture impossible.");
+    } finally { setBusy(false); }
+  }
+
+  async function decide(rewriteId: string, decision: "accepted" | "rejected") {
+    if (!selectedId) return;
+    setBusy(true); setError(null);
+    try {
+      await decideAiEditorRewrite(rewriteId, decision);
+      await loadDossier(selectedId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Décision impossible.");
+    } finally { setBusy(false); }
+  }
+
   const diagnostic = dossier?.messages.find((m) => m.kind === "diagnostic");
   const chat = dossier?.messages.filter((m) => m.kind === "chat") ?? [];
+  const rewrites = dossier?.rewrites ?? [];
 
   return (
     <section style={{ maxWidth: 860 }}>
@@ -175,6 +214,31 @@ export function AiEditorPage() {
             </div>
             {pending && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>L'éditeur réfléchit… (la réponse s'affichera ici, vous pouvez patienter ou revenir plus tard)</div>}
           </div>
+
+          {/* Atelier de réécriture */}
+          <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 14, marginTop: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>Atelier de réécriture</div>
+            <p style={{ color: "var(--muted)", fontSize: 12, margin: "0 0 10px", lineHeight: 1.5 }}>
+              Collez le passage à retravailler, choisissez un mode, et SAGE propose une réécriture + une explication. <b>L'original est conservé</b> ; rien n'est appliqué au manuscrit tant que vous n'avez pas accepté.
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+              {(Object.keys(REWRITE_MODE_LABELS) as RewriteMode[]).map((mode) => (
+                <label key={mode} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, border: "1px solid var(--line)", borderRadius: 8, padding: "5px 9px", background: rwMode === mode ? "var(--eclosion-soft, #f6efd8)" : "#fff", cursor: "pointer" }}>
+                  <input type="radio" name="rwmode" checked={rwMode === mode} onChange={() => setRwMode(mode)} />
+                  {REWRITE_MODE_LABELS[mode]}
+                </label>
+              ))}
+            </div>
+            <textarea value={rwSource} onChange={(e) => setRwSource(e.target.value)} placeholder="Collez ici le passage à réécrire…" rows={4} style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, resize: "vertical", marginBottom: 8 }} />
+            <input value={rwInstruction} onChange={(e) => setRwInstruction(e.target.value)} placeholder="Consigne particulière (facultatif) — ex. « rendre le dialogue plus vif »" style={{ width: "100%", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, marginBottom: 8 }} />
+            <button onClick={requestRewrite} disabled={busy || pending || !rwSource.trim()} style={{ background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 8, padding: "8px 15px", fontWeight: 700, fontSize: 12.5, cursor: busy || pending || !rwSource.trim() ? "not-allowed" : "pointer", opacity: busy || pending || !rwSource.trim() ? 0.55 : 1 }}>
+              Proposer une réécriture
+            </button>
+
+            <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+              {rewrites.map((r) => <RewriteCard key={r.id} r={r} busy={busy} onDecide={decide} />)}
+            </div>
+          </div>
         </>
       )}
     </section>
@@ -185,4 +249,55 @@ function MessageBody({ m }: { m: AiEditorMessage }) {
   if (m.status === "pending") return <span style={{ color: "var(--muted)", fontStyle: "italic" }}>Analyse en cours…</span>;
   if (m.status === "erreur") return <span style={{ color: "var(--alert)" }}>⚠ {m.error_message || "L'analyse a échoué."}</span>;
   return <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{m.content}</div>;
+}
+
+const REWRITE_CARD_MODE: Record<string, string> = { fidele: "Fidèle à l'auteur", renforce: "Littérairement renforcé", alternatif: "Proposition alternative" };
+const STATUS_BADGE: Record<string, { label: string; color: string }> = {
+  pending: { label: "En cours…", color: "#B87400" },
+  done: { label: "Proposition prête", color: "var(--eclosion-dark, #9a7a12)" },
+  erreur: { label: "Échec", color: "#B23A2E" },
+  accepted: { label: "Acceptée", color: "#2F7D4A" },
+  rejected: { label: "Refusée", color: "var(--muted)" },
+};
+
+function RewriteCard({ r, busy, onDecide }: { r: AiEditorRewrite; busy: boolean; onDecide: (id: string, d: "accepted" | "rejected") => void }) {
+  const badge = STATUS_BADGE[r.status] ?? STATUS_BADGE.done;
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 10, background: "var(--ivory, #FAF8F2)", padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 700 }}>Mode : {REWRITE_CARD_MODE[r.mode] ?? r.mode}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: badge.color }}>{badge.label}</span>
+      </div>
+      {r.instruction && <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>Consigne : {r.instruction}</div>}
+      {r.status === "erreur" ? (
+        <div style={{ color: "var(--alert)", fontSize: 12.5 }}>⚠ {r.error_message || "La réécriture a échoué."}</div>
+      ) : r.status === "pending" ? (
+        <div style={{ color: "var(--muted)", fontStyle: "italic", fontSize: 12.5 }}>SAGE réécrit le passage…</div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>ORIGINAL</div>
+              <div style={{ fontSize: 12.5, whiteSpace: "pre-wrap", lineHeight: 1.5, background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: 8, maxHeight: 220, overflow: "auto" }}>{r.source_text}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", marginBottom: 3 }}>PROPOSÉ PAR SAGE</div>
+              <div style={{ fontSize: 12.5, whiteSpace: "pre-wrap", lineHeight: 1.5, background: "#fff", border: "1px solid var(--eclosion, #D9B21A)", borderRadius: 6, padding: 8, maxHeight: 220, overflow: "auto" }}>{r.proposed_text}</div>
+            </div>
+          </div>
+          {r.explanation && (
+            <div style={{ fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 700 }}>Explication : </span><span style={{ whiteSpace: "pre-wrap" }}>{r.explanation}</span>
+            </div>
+          )}
+          {(r.status === "done") && (
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button onClick={() => onDecide(r.id, "accepted")} disabled={busy} style={{ background: "#2F7D4A", color: "#fff", border: "none", borderRadius: 8, padding: "6px 13px", fontWeight: 700, fontSize: 12.5, cursor: busy ? "not-allowed" : "pointer" }}>Accepter</button>
+              <button onClick={() => onDecide(r.id, "rejected")} disabled={busy} style={{ background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 8, padding: "6px 13px", fontWeight: 600, fontSize: 12.5, cursor: busy ? "not-allowed" : "pointer" }}>Refuser</button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }

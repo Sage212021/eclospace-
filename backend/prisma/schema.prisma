@@ -5823,6 +5823,34 @@ model AiEditorialPassage {
   @@map("ai_editorial_passages")
 }
 
+// Atelier de réécriture de SAGE — Lot C. Chaque proposition de réécriture est
+// TRACÉE (original + texte proposé + explication + mode), avec sa décision
+// (acceptée / refusée). L'original est conservé ; rien ne modifie le manuscrit
+// de référence en silence — l'équipe reste maître de l'œuvre.
+model AiEditorialRewrite {
+  id           String    @id @default(uuid())
+  manuscriptId String    @map("manuscript_id")
+  // Mode : "fidele" (sans transformer la voix), "renforce" (plus en profondeur),
+  // "alternatif" (proposition plus audacieuse).
+  mode         String
+  instruction  String?
+  sourceText   String    @map("source_text")
+  proposedText String    @default("") @map("proposed_text")
+  explanation  String?
+  // "pending" (en cours), "done", "erreur", puis décision "accepted"/"rejected".
+  status       String    @default("pending")
+  errorMessage String?   @map("error_message")
+  model        String?
+  createdBy    String?   @map("created_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  decidedBy    String?   @map("decided_by")
+  decidedAt    DateTime? @map("decided_at")
+
+  @@index([manuscriptId])
+  @@map("ai_editorial_rewrites")
+}
+
 // Anomalie de correction ISSUE d'une relecture IA, tracée ligne par ligne pour
 // la validation humaine (Lot 3) : chaque anomalie du rapport devient une fiche
 // que le correcteur / la Direction accepte, modifie, rejette ou marque « à

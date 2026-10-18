@@ -21,6 +21,7 @@ import projectPlanRoutes from "./routes/projectPlan.js";
 import userRoutes from "./routes/users.js";
 import referenceRoutes from "./routes/reference.js";
 import aiEditorialRoutes from "./routes/aiEditorial.js";
+import aiEditorRoutes from "./routes/aiEditor.js";
 import maintenanceRoutes from "./routes/maintenance.js";
 import contractRoutes from "./routes/contracts.js";
 import partnerRoutes from "./routes/partners.js";
@@ -201,6 +202,7 @@ export async function buildApp() {
   await app.register(userRoutes);
   await app.register(referenceRoutes);
   await app.register(aiEditorialRoutes);
+  await app.register(aiEditorRoutes);
   await app.register(maintenanceRoutes);
   await app.register(contractRoutes);
   await app.register(partnerRoutes);

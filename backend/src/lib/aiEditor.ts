@@ -1,0 +1,178 @@
+import { prisma } from "./prisma.js";
+import { loadConfig, readApiKey, resolveModelId } from "./aiConfig.js";
+import { resolveAiSourceVersion, extractPdfText, capManuscriptText, MANUSCRIT_CHAR_BUDGET } from "./aiRunner.js";
+import { readStoredFile } from "./storage.js";
+
+// ─────────────────────────────────────────────────────────────────────────
+// SAGE — éditeur professionnel virtuel des Éditions Éclosion (Lot A : lecture +
+// diagnostic + dialogue). Réservé DG + admin. Ne travaille QUE sur des ouvrages
+// enregistrés dans Eclospace, à partir du manuscrit et du rapport d'évaluation
+// déjà déposés. Chaque échange est persisté (table ai_editorial_messages).
+// ─────────────────────────────────────────────────────────────────────────
+
+// Noyau de comportement (identité + expertise des normes éditoriales). RÈGLE
+// D'OR : le nom affiché est « SAGE » ; il ne comporte JAMAIS la mention « IA »
+// dans son nom, ses documents éditoriaux ou ses signatures professionnelles.
+const AGENT_SYSTEM = `Tu es SAGE, l'éditeur professionnel des Éditions Éclosion : éditeur littéraire, conseiller éditorial, expert des normes éditoriales internationales, formateur et traducteur bilingue français-anglais.
+Tu n'es ni un simple correcteur orthographique ni un assistant de rédaction généraliste : tu as une vision globale de la chaîne éditoriale et tu interviens à plusieurs niveaux — littéraire, linguistique, technique, documentaire, pédagogique et professionnel.
+Ton nom affiché est « SAGE ». Tu ne fais JAMAIS figurer la mention « IA » (ni « intelligence artificielle ») dans ton nom, tes documents éditoriaux ou tes signatures ; tu interviens au nom du Service éditorial des Éditions Éclosion.
+
+PERSONNALITÉ PROFESSIONNELLE : professionnel (vocabulaire précis des métiers de l'édition), cultivé, rigoureux, pédagogue (tu sais expliquer les règles et former), diplomate (critiques formulées avec tact), exigeant (tu ne confonds pas bienveillance et complaisance), créatif, adaptable (tu ajustes ton intervention au genre, au public et aux objectifs), transparent. Expression naturelle, élégante et précise.
+
+LANGUES : tu travailles en français ET en anglais. Par défaut tu réponds dans la langue de l'opérateur (français ici) ; tu appliques les conventions de la langue concernée sans les uniformiser artificiellement (les usages typographiques français, britanniques et américains diffèrent).
+
+EXPERTISE DES NORMES (tu distingues toujours : norme formelle / recommandation professionnelle / convention propre à la maison / simple choix stylistique — tu ne présentes jamais une préférence comme une obligation universelle) :
+- Références bibliographiques : APA, MLA, Chicago, Harvard, Vancouver, ISO 690, et les consignes propres à une revue/un éditeur. Tu harmonises, tu vérifies la cohérence citations↔bibliographie, tu repères les références incomplètes, tu ne mélanges pas deux variantes d'une même norme.
+- Typographie et composition (FR/EN) : espaces, guillemets et citations, dialogues, tirets et ponctuation, capitales, italiques, nombres/dates/unités, appels de notes, titres, listes, tableaux, légendes, index.
+- Structuration de l'ouvrage : pages liminaires (titre, copyright/mentions légales, dédicace, préface/avant-propos, introduction, table des matières, listes de tableaux/illustrations), corps du texte, éléments de fin (notes, bibliographie, glossaire, index, annexes, 4e de couverture, bio de l'auteur, résumé/mots-clés) — leur présence et leur ordre dépendent du genre et du projet.
+- Préparation de copie : tu identifies le NIVEAU d'intervention nécessaire (correction linguistique, typographique, préparation de copie, révision stylistique, révision structurelle, contrôle après mise en page / bon à tirer) AVANT d'intervenir. Tu ne réécris pas un texte qui ne demande qu'une correction, et tu signales quand une correction de surface ne suffira pas.
+
+RÈGLES ABSOLUES :
+- Tu te fondes UNIQUEMENT sur le manuscrit et le rapport d'évaluation fournis ci-dessous, ainsi que sur l'historique de l'échange. Tu ne prétends JAMAIS avoir lu un passage auquel tu n'as pas accès.
+- Si le texte du manuscrit n'a pas pu être extrait, ou s'il est tronqué, tu le signales explicitement et tu restes prudent dans tes conclusions.
+- Tu n'inventes JAMAIS de source, de citation, de statistique, de titre, d'auteur ni de page. Quand tu ne peux pas vérifier, tu le dis.
+- Tu distingues une vraie faiblesse d'un choix stylistique délibéré ou d'une convention de genre. Tu ne cherches pas à uniformiser les styles ; tu préserves la voix de l'auteur.
+- Tu es bienveillant dans le ton mais exigeant dans l'analyse : tu signales honnêtement les problèmes réels.
+- Tu n'attribues jamais au rapport d'évaluation une remarque qui n'y figure pas ; tes propres observations sont présentées comme telles.
+- Tu accompagnes la décision éditoriale, tu ne la remplaces pas : l'équipe reste maître de l'œuvre.
+- Tu n'affirmes pas de diagnostic psychologique ou médical ; tu restes sur le terrain littéraire.
+- Tu ne promets ni publication ni succès commercial.
+Localise tes analyses (chapitre / passage) quand c'est possible, en t'appuyant sur ce que contient réellement le texte fourni.`;
+
+const DIAGNOSTIC_TASK = `Établis un DIAGNOSTIC ÉDITORIAL complet et structuré de cet ouvrage, adapté à son genre :
+1) Identité (titre, genre, public visé, intention perçue) ; 2) Points forts ; 3) Faiblesses et risques ; 4) Structure et rythme ; 5) Personnages (roman) OU thèse et arguments (essai) OU adéquation à l'âge (jeunesse), selon le genre ; 6) Style et voix de l'auteur à préserver ; 7) Cohérence (incohérences éventuelles repérées) ; 8) Lien avec le rapport d'évaluation (ce qu'il relève et ton analyse) ; 9) Décisions à prendre et pistes de travail prioritaires.
+Sois concret et honnête. Si des parties du manuscrit manquent, dis-le.`;
+
+// Lecture du MANUSCRIT déposé (texte exploitable) : PDF (couche texte), .docx
+// (via mammoth), ou texte brut. Les PDF scannés (sans texte) ne sont pas lus ici
+// — l'agent s'appuiera alors sur le rapport d'évaluation en le signalant.
+async function readManuscriptText(manuscriptId: string): Promise<{ ok: boolean; text: string; truncated: boolean; note?: string }> {
+  const version = await resolveAiSourceVersion(manuscriptId, "evaluation").catch(() => null);
+  if (!version) return { ok: false, text: "", truncated: false, note: "Aucun manuscrit n'est déposé pour cet ouvrage dans Eclospace." };
+  let buffer: Buffer;
+  try {
+    buffer = await readStoredFile(version.filePath);
+  } catch {
+    return { ok: false, text: "", truncated: false, note: "Le fichier du manuscrit est introuvable ou illisible." };
+  }
+  const name = (version.filePath || "").toLowerCase();
+  const mime = version.mimeType || "";
+  try {
+    if (mime.includes("pdf") || name.endsWith(".pdf")) {
+      const extracted = await extractPdfText(buffer, MANUSCRIT_CHAR_BUDGET);
+      if (extracted && extracted.text.replace(/\s/g, "").length > 200) {
+        const capped = capManuscriptText(extracted.text);
+        return { ok: true, text: capped.text, truncated: capped.truncated };
+      }
+      return { ok: false, text: "", truncated: false, note: "Le manuscrit est un PDF scanné (sans texte exploitable) : il n'a pas pu être lu comme texte ici." };
+    }
+    if (mime.includes("word") || name.endsWith(".docx")) {
+      const mammoth = (await import("mammoth")).default;
+      const res = await mammoth.extractRawText({ buffer });
+      const capped = capManuscriptText(res.value ?? "");
+      if (capped.text.replace(/\s/g, "").length > 50) return { ok: true, text: capped.text, truncated: capped.truncated };
+      return { ok: false, text: "", truncated: false, note: "Le fichier .docx n'a pas livré de texte exploitable." };
+    }
+    // Texte brut (ou format assimilé).
+    const capped = capManuscriptText(buffer.toString("utf8"));
+    if (capped.text.replace(/\s/g, "").length > 50) return { ok: true, text: capped.text, truncated: capped.truncated };
+    return { ok: false, text: "", truncated: false, note: "Le format du manuscrit n'a pas pu être lu comme texte ici." };
+  } catch {
+    return { ok: false, text: "", truncated: false, note: "Le texte du manuscrit n'a pas pu être extrait." };
+  }
+}
+
+// Dernier rapport d'évaluation IA terminé (texte) pour cet ouvrage, s'il existe.
+async function latestEvaluationReport(manuscriptId: string): Promise<string | null> {
+  const job = await prisma.aiReadingJob
+    .findFirst({ where: { manuscriptId, workType: "evaluation", status: "termine", reportText: { not: null } }, orderBy: { launchedAt: "desc" }, select: { reportText: true } })
+    .catch(() => null);
+  return job?.reportText ?? null;
+}
+
+async function manuscriptHeader(manuscriptId: string): Promise<string> {
+  const m = await prisma.manuscript.findUnique({
+    where: { id: manuscriptId },
+    select: { manuscriptNumber: true, title: true, summary: true, genre: { select: { label: true } }, workContributors: { where: { role: "author" }, include: { partner: { select: { firstName: true, lastName: true } } }, orderBy: { displayOrder: "asc" } } },
+  });
+  if (!m) return "";
+  const authors = (m.workContributors ?? []).map((w) => `${w.partner.firstName ?? ""} ${w.partner.lastName ?? ""}`.trim()).filter(Boolean).join(", ");
+  return [
+    `Titre : ${m.title}`,
+    `Référence : ${m.manuscriptNumber}`,
+    m.genre?.label ? `Genre : ${m.genre.label}` : null,
+    authors ? `Auteur(s) : ${authors}` : null,
+    m.summary ? `Résumé connu : ${m.summary}` : null,
+  ].filter(Boolean).join("\n");
+}
+
+// Construit le CONTEXTE transmis au modèle (en-tête + rapport + manuscrit).
+async function buildContext(manuscriptId: string): Promise<{ block: string; manuscriptOk: boolean }> {
+  const [header, report, manuscript] = await Promise.all([manuscriptHeader(manuscriptId), latestEvaluationReport(manuscriptId), readManuscriptText(manuscriptId)]);
+  const parts: string[] = [];
+  parts.push(`=== FICHE DE L'OUVRAGE ===\n${header || "(non renseignée)"}`);
+  parts.push(`=== RAPPORT D'ÉVALUATION ===\n${report ? report : "(aucun rapport d'évaluation disponible dans Eclospace)"}`);
+  if (manuscript.ok) {
+    parts.push(`=== MANUSCRIT (texte exploitable${manuscript.truncated ? ", EXTRAIT représentatif car très volumineux" : " intégral"}) ===\n${manuscript.text}`);
+  } else {
+    parts.push(`=== MANUSCRIT ===\n(Texte non disponible : ${manuscript.note} Tu dois le signaler et t'appuyer prudemment sur le rapport et la fiche.)`);
+  }
+  return { block: parts.join("\n\n"), manuscriptOk: manuscript.ok };
+}
+
+// Exécution (longue) en arrière-plan : remplit le message « assistant » en
+// attente. Ne lève JAMAIS : toute erreur est consignée sur le message.
+export async function runEditorAnswer(assistantMessageId: string): Promise<void> {
+  try {
+    const assistant = await prisma.aiEditorialMessage.findUnique({ where: { id: assistantMessageId } });
+    if (!assistant || assistant.status !== "pending") return;
+    const manuscriptId = assistant.manuscriptId;
+
+    const cfg = await loadConfig();
+    const apiKey = readApiKey(cfg);
+    if (!cfg.enabled || !apiKey) {
+      await prisma.aiEditorialMessage.update({ where: { id: assistantMessageId }, data: { status: "erreur", errorMessage: "L'assistant éditorial IA n'est pas activé (clé API manquante). Configurez-le dans les paramètres IA." } }).catch(() => {});
+      return;
+    }
+    const modelId = resolveModelId(cfg.models.reecriture ?? "intermediaire");
+
+    const { block } = await buildContext(manuscriptId);
+
+    // Dialogue : question de l'opérateur + historique récent + diagnostic connu.
+    let task: string;
+    const messages: { role: "user" | "assistant"; content: string }[] = [];
+    if (assistant.kind === "diagnostic") {
+      task = DIAGNOSTIC_TASK;
+    } else {
+      // On récupère la question (message « user » le plus récent) et un historique court.
+      const history = await prisma.aiEditorialMessage.findMany({
+        where: { manuscriptId, kind: "chat", status: "done", id: { not: assistantMessageId } },
+        orderBy: { createdAt: "asc" },
+        take: 12,
+      });
+      const diagnostic = await prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, kind: "diagnostic", status: "done" }, orderBy: { createdAt: "desc" }, select: { content: true } });
+      if (diagnostic?.content) messages.push({ role: "assistant", content: `DIAGNOSTIC ÉDITORIAL DÉJÀ ÉTABLI :\n${diagnostic.content}` });
+      for (const h of history) messages.push({ role: h.role === "user" ? "user" : "assistant", content: h.content });
+      const lastUser = [...history].reverse().find((h) => h.role === "user");
+      task = lastUser?.content ?? "Peux-tu m'aider sur cet ouvrage ?";
+    }
+
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic({ apiKey });
+    const userContent = `${block}\n\n=== DEMANDE ===\n${task}`;
+    const resp = await client.messages.create({
+      model: modelId,
+      max_tokens: 4096,
+      system: AGENT_SYSTEM,
+      messages: [...messages, { role: "user", content: userContent }],
+    });
+    const text = resp.content.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("\n").trim();
+    await prisma.aiEditorialMessage.update({
+      where: { id: assistantMessageId },
+      data: { content: text || "(réponse vide)", status: "done", model: modelId },
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Échec de la réponse de l'éditeur IA.";
+    await prisma.aiEditorialMessage.update({ where: { id: assistantMessageId }, data: { status: "erreur", errorMessage: message } }).catch(() => {});
+  }
+}

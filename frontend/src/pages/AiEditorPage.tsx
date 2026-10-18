@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { jsPDF } from "jspdf";
 import {
   listManuscripts,
   listAiEditorConversations,
   getAiEditor,
+  deleteAiEditorMessage,
   diagnoseAiEditor,
   sendAiEditorMessage,
   requestAiEditorCoherence,
@@ -126,6 +128,69 @@ export function AiEditorPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Décision impossible.");
     } finally { setBusy(false); }
+  }
+
+  async function deleteMsg(messageId: string) {
+    if (!selectedId) return;
+    if (!window.confirm("Supprimer ce message ? Il sera retiré de l'historique et du contexte de SAGE.")) return;
+    setBusy(true); setError(null);
+    try {
+      await deleteAiEditorMessage(messageId);
+      await loadDossier(selectedId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Suppression impossible.");
+    } finally { setBusy(false); }
+  }
+
+  // Export d'une réponse de SAGE en PDF. Règle d'or (CLAUDE.md §9) : AUCUNE
+  // mention « IA » dans le document livré — il est produit « au nom du Service
+  // éditorial des Éditions Éclosion ».
+  function downloadPdf(m: AiEditorMessage) {
+    if (!dossier || m.status !== "done" || !m.content) return;
+    const KIND_TITLE: Record<string, string> = {
+      diagnostic: "Diagnostic éditorial",
+      chat: "Note éditoriale",
+      coherence: "Analyse de cohérence",
+      impact: "Conséquences d'une modification",
+      documentaire: "Vérification documentaire",
+      traduction: "Traduction",
+    };
+    const title = KIND_TITLE[m.kind] ?? "Note éditoriale";
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 18;
+    const maxW = pageW - margin * 2;
+    let y = margin;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    doc.text(title, margin, y);
+    y += 7;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(110);
+    doc.text(`Éditions Éclosion — Service éditorial · ${dossier.manuscript.title} (${dossier.manuscript.number})`, margin, y);
+    y += 4;
+    doc.text(new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }), margin, y);
+    y += 4;
+    doc.setDrawColor(217, 178, 26);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, pageW - margin, y);
+    y += 7;
+
+    doc.setTextColor(20);
+    doc.setFontSize(11);
+    const lines = doc.splitTextToSize(m.content, maxW) as string[];
+    const lineH = 5.4;
+    for (const line of lines) {
+      if (y + lineH > pageH - margin) { doc.addPage(); y = margin; }
+      doc.text(line, margin, y);
+      y += lineH;
+    }
+
+    const safe = dossier.manuscript.number.replace(/[^\w.-]+/g, "-");
+    doc.save(`note-editoriale-${safe}.pdf`);
   }
 
   async function runCoherence() {
@@ -276,6 +341,7 @@ export function AiEditorPage() {
             <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 14, marginBottom: 14 }}>
               <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 6 }}>Diagnostic éditorial</div>
               <MessageBody m={diagnostic} />
+              <MsgActions m={diagnostic} busy={busy} onPdf={downloadPdf} onDelete={deleteMsg} />
             </div>
           )}
 
@@ -289,6 +355,7 @@ export function AiEditorPage() {
                   <div style={{ maxWidth: "85%", background: m.role === "user" ? "var(--eclosion-soft, #f6efd8)" : "var(--ivory, #FAF8F2)", border: "1px solid var(--line)", borderRadius: 10, padding: "8px 11px", fontSize: 13 }}>
                     <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>{m.role === "user" ? "Vous" : "SAGE"}</div>
                     <MessageBody m={m} />
+                    <MsgActions m={m} busy={busy} onPdf={downloadPdf} onDelete={deleteMsg} />
                   </div>
                 </div>
               ))}
@@ -326,6 +393,7 @@ export function AiEditorPage() {
               <div style={{ border: "1px solid var(--line)", borderRadius: 8, background: "var(--ivory, #FAF8F2)", padding: 10, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>Analyse de cohérence</div>
                 <MessageBody m={coherence} />
+                <MsgActions m={coherence} busy={busy} onPdf={downloadPdf} onDelete={deleteMsg} />
               </div>
             )}
 
@@ -339,6 +407,7 @@ export function AiEditorPage() {
                 <div key={m.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, background: m.role === "user" ? "var(--eclosion-soft, #f6efd8)" : "var(--ivory, #FAF8F2)" }}>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>{m.role === "user" ? "Modification envisagée" : "SAGE — conséquences"}</div>
                   <MessageBody m={m} />
+                  <MsgActions m={m} busy={busy} onPdf={downloadPdf} onDelete={deleteMsg} />
                 </div>
               ))}
             </div>
@@ -358,6 +427,7 @@ export function AiEditorPage() {
               <div style={{ border: "1px solid var(--line)", borderRadius: 8, background: "var(--ivory, #FAF8F2)", padding: 10, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>Vérification documentaire</div>
                 <MessageBody m={documentaire} />
+                <MsgActions m={documentaire} busy={busy} onPdf={downloadPdf} onDelete={deleteMsg} />
               </div>
             )}
 
@@ -377,6 +447,7 @@ export function AiEditorPage() {
                 <div key={m.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, background: m.role === "user" ? "var(--eclosion-soft, #f6efd8)" : "var(--ivory, #FAF8F2)" }}>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>{m.role === "user" ? "À traduire" : "SAGE — traduction"}</div>
                   <MessageBody m={m} />
+                  <MsgActions m={m} busy={busy} onPdf={downloadPdf} onDelete={deleteMsg} />
                 </div>
               ))}
             </div>
@@ -442,6 +513,28 @@ function MessageBody({ m }: { m: AiEditorMessage }) {
   if (m.status === "pending") return <span style={{ color: "var(--muted)", fontStyle: "italic" }}>Analyse en cours…</span>;
   if (m.status === "erreur") return <span style={{ color: "var(--alert)" }}>⚠ {m.error_message || "L'analyse a échoué."}</span>;
   return <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{m.content}</div>;
+}
+
+const linkBtnStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  fontSize: 11.5,
+  color: "var(--muted)",
+  cursor: "pointer",
+  textDecoration: "underline",
+};
+
+// Actions sur un message : télécharger la réponse de SAGE en PDF (réponses
+// abouties uniquement) et/ou supprimer le message (suppression logique).
+function MsgActions({ m, busy, onPdf, onDelete }: { m: AiEditorMessage; busy: boolean; onPdf: (m: AiEditorMessage) => void; onDelete: (id: string) => void }) {
+  const canPdf = m.role === "assistant" && m.status === "done" && !!m.content;
+  return (
+    <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+      {canPdf && <button onClick={() => onPdf(m)} disabled={busy} style={{ ...linkBtnStyle, cursor: busy ? "not-allowed" : "pointer" }}>📄 Télécharger en PDF</button>}
+      <button onClick={() => onDelete(m.id)} disabled={busy} style={{ ...linkBtnStyle, cursor: busy ? "not-allowed" : "pointer" }}>🗑 Supprimer</button>
+    </div>
+  );
 }
 
 const REWRITE_CARD_MODE: Record<string, string> = { fidele: "Fidèle à l'auteur", renforce: "Littérairement renforcé", alternatif: "Proposition alternative" };

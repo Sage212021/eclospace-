@@ -109,18 +109,18 @@ describe("SAGE — mémoire & recherche de passages (Lot B)", () => {
     expect(dossier.json().memory.passage_count).toBeGreaterThanOrEqual(3);
   });
 
-  it("le dialogue transmet au modèle le PASSAGE pertinent (pas tout le manuscrit)", async () => {
-    await buildPassageIndex(manuscriptId);
+  it("le dialogue transmet au modèle l'INTÉGRALITÉ du manuscrit (pas des extraits)", async () => {
     const before = calls.length;
-    const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${manuscriptId}/message`, headers: { cookie: adminCookie }, payload: { content: "Que se passe-t-il autour du terme QUASIMODON ?" } });
+    const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${manuscriptId}/message`, headers: { cookie: adminCookie }, payload: { content: "As-tu lu tout le manuscrit ?" } });
     expect(r.statusCode).toBe(202);
     await waitMessage(r.json().assistant_message_id);
     expect(calls.length).toBeGreaterThan(before);
     const sent = (calls[calls.length - 1].messages ?? []).map((m) => m.content).join("\n");
-    // Le passage pertinent (chapitre 2) est fourni…
+    // Les mots-clés des TROIS chapitres sont présents → tout le manuscrit est transmis,
+    // même pour une question générale (plus de repli sur les seuls premiers extraits).
+    expect(sent).toContain("ZEBRASCOPE");
     expect(sent).toContain("QUASIMODON");
-    expect(sent).toContain("Chapitre 2");
-    // …et le contexte invite à citer le chapitre/extrait.
-    expect(sent).toContain("PASSAGES PERTINENTS");
+    expect(sent).toContain("FLIBUSTIER");
+    expect(sent).toContain("MANUSCRIT");
   });
 });

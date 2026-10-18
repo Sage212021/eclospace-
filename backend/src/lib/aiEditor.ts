@@ -218,25 +218,6 @@ export async function retrievePassages(manuscriptId: string, query: string, k = 
   return fallback.map((p) => ({ ordinal: p.ordinal, chapterLabel: p.chapterLabel, content: p.content }));
 }
 
-// Contexte du DIALOGUE : fiche + rapport + PASSAGES pertinents (au lieu de tout
-// le manuscrit) — plus précis, plus léger, et citable par chapitre/extrait.
-async function buildChatContext(manuscriptId: string, question: string): Promise<string> {
-  const [header, report] = await Promise.all([manuscriptHeader(manuscriptId), latestEvaluationReport(manuscriptId)]);
-  const passages = await retrievePassages(manuscriptId, question, 8).catch(() => []);
-  const parts: string[] = [];
-  parts.push(`=== FICHE DE L'OUVRAGE ===\n${header || "(non renseignée)"}`);
-  parts.push(`=== RAPPORT D'ÉVALUATION ===\n${report ? report : "(aucun rapport d'évaluation disponible)"}`);
-  if (passages.length > 0) {
-    parts.push(
-      `=== PASSAGES PERTINENTS DU MANUSCRIT (cite-les par chapitre / extrait quand tu t'appuies dessus) ===\n` +
-        passages.map((p) => `[${p.chapterLabel ?? "Passage"} · extrait ${p.ordinal + 1}]\n${p.content}`).join("\n\n"),
-    );
-  } else {
-    parts.push(`=== MANUSCRIT ===\n(Aucun passage retrouvé pour cette question : indique-le et reste prudent ; appuie-toi sur le rapport et la fiche.)`);
-  }
-  return parts.join("\n\n");
-}
-
 // ── Atelier de réécriture (Lot C) ──
 export const REWRITE_MODES = ["fidele", "renforce", "alternatif"] as const;
 export type RewriteMode = (typeof REWRITE_MODES)[number];
@@ -343,9 +324,10 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
         select: { content: true },
       });
       const change = changeMsg?.content ?? "(modification non précisée)";
-      const count = await prisma.aiEditorialPassage.count({ where: { manuscriptId } });
-      if (count === 0) await buildPassageIndex(manuscriptId).catch(() => {});
-      block = await buildChatContext(manuscriptId, change);
+      // Conséquences : SAGE lit TOUT le manuscrit (pour ne manquer aucun passage
+      // affecté) + tout le rapport, comme le diagnostic.
+      await buildPassageIndex(manuscriptId).catch(() => {});
+      block = (await buildContext(manuscriptId)).block;
       task = impactTask(change);
     } else if (assistant.kind === "documentaire") {
       // Vérification documentaire : vue d'ensemble → lecture complète (capée).
@@ -374,11 +356,11 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
       for (const h of history) messages.push({ role: h.role === "user" ? "user" : "assistant", content: h.content });
       const lastUser = [...history].reverse().find((h) => h.role === "user");
       task = lastUser?.content ?? "Peux-tu m'aider sur cet ouvrage ?";
-      // Mémoire : garantir l'index de passages, puis construire un contexte
-      // fondé sur les passages PERTINENTS (plutôt que tout le manuscrit).
-      const count = await prisma.aiEditorialPassage.count({ where: { manuscriptId } });
-      if (count === 0) await buildPassageIndex(manuscriptId).catch(() => {});
-      block = await buildChatContext(manuscriptId, task);
+      // Le dialogue s'appuie sur l'INTÉGRALITÉ du manuscrit + le rapport complet
+      // (demande opérateur 18/10 : lire tout, pas des extraits). On (re)construit
+      // aussi l'index de passages pour l'indicateur de mémoire.
+      await buildPassageIndex(manuscriptId).catch(() => {});
+      block = (await buildContext(manuscriptId)).block;
     }
 
     const { default: Anthropic } = await import("@anthropic-ai/sdk");

@@ -2786,7 +2786,7 @@ export function updateBatFiles(batId: string, files: { interiorVersionId?: strin
 // ── Éditeur littéraire IA (« ÉCLOSION ÉDITORIAL IA ») — Lot A (DG + admin)
 export interface AiEditorMessage {
   id: string;
-  kind: "diagnostic" | "chat" | "coherence" | "impact" | "documentaire" | "traduction";
+  kind: "diagnostic" | "chat" | "coherence" | "impact" | "documentaire" | "traduction" | "fiche_lecture" | "presentation" | "lettre_auteur";
   role: "user" | "assistant";
   content: string;
   status: "pending" | "done" | "erreur";
@@ -2856,6 +2856,16 @@ export function requestAiEditorRewrite(manuscriptId: string, input: { mode: Rewr
 }
 export function decideAiEditorRewrite(rewriteId: string, decision: "accepted" | "rejected") {
   return request<{ id: string; status: string }>(`/api/v1/ai-editor/rewrites/${rewriteId}/decision`, { method: "POST", body: JSON.stringify({ decision }) });
+}
+// Livrables éditoriaux (Lot F) : fiche de lecture, textes de présentation, lettre à l'auteur.
+export function requestAiEditorFicheLecture(manuscriptId: string) {
+  return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/fiche-lecture`, { method: "POST" });
+}
+export function requestAiEditorPresentation(manuscriptId: string) {
+  return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/presentation`, { method: "POST" });
+}
+export function requestAiEditorLettreAuteur(manuscriptId: string) {
+  return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/lettre-auteur`, { method: "POST" });
 }
 
 export function toggleChecklistItem(itemId: string, checked: boolean) {

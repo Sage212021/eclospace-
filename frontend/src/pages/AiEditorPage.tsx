@@ -13,6 +13,9 @@ import {
   requestAiEditorTranslation,
   requestAiEditorRewrite,
   decideAiEditorRewrite,
+  requestAiEditorFicheLecture,
+  requestAiEditorPresentation,
+  requestAiEditorLettreAuteur,
   type Manuscript,
   type AiEditorDossier,
   type AiEditorMessage,
@@ -154,6 +157,9 @@ export function AiEditorPage() {
       impact: "Conséquences d'une modification",
       documentaire: "Vérification documentaire",
       traduction: "Traduction",
+      fiche_lecture: "Fiche de lecture",
+      presentation: "Textes de présentation",
+      lettre_auteur: "Lettre à l'auteur",
     };
     const title = KIND_TITLE[m.kind] ?? "Note éditoriale";
     const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -239,12 +245,26 @@ export function AiEditorPage() {
     } finally { setBusy(false); }
   }
 
+  async function runDeliverable(fn: (id: string) => Promise<unknown>, label: string) {
+    if (!selectedId) return;
+    setBusy(true); setError(null);
+    try {
+      await fn(selectedId);
+      await loadDossier(selectedId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : `${label} impossible.`);
+    } finally { setBusy(false); }
+  }
+
   const diagnostic = dossier?.messages.find((m) => m.kind === "diagnostic");
   const chat = dossier?.messages.filter((m) => m.kind === "chat") ?? [];
   const coherence = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "coherence");
   const impacts = dossier?.messages.filter((m) => m.kind === "impact") ?? [];
   const documentaire = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "documentaire");
   const translations = dossier?.messages.filter((m) => m.kind === "traduction") ?? [];
+  const ficheLecture = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "fiche_lecture");
+  const presentation = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "presentation");
+  const lettreAuteur = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "lettre_auteur");
   const rewrites = dossier?.rewrites ?? [];
 
   return (
@@ -451,6 +471,36 @@ export function AiEditorPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Livrables éditoriaux : ce que l'éditeur PRODUIT */}
+          <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 14, marginTop: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>Livrables éditoriaux</div>
+            <p style={{ color: "var(--muted)", fontSize: 12, margin: "0 0 10px", lineHeight: 1.5 }}>
+              SAGE rédige des documents prêts à l'emploi à partir de l'ouvrage. Chaque livrable se télécharge en PDF (en-tête « Éditions Éclosion — Service éditorial »).
+            </p>
+            {([
+              { key: "fiche", title: "Fiche de lecture", desc: "Synthèse orientée décision : pitch, public, forces/faiblesses et recommandation (publier / retravailler / refuser).", msg: ficheLecture, fn: requestAiEditorFicheLecture, label: "Fiche de lecture" },
+              { key: "presentation", title: "Textes de présentation & promotion", desc: "4e de couverture, résumé catalogue, synopsis, argumentaire libraires/presse, accroche, mots-clés.", msg: presentation, fn: requestAiEditorPresentation, label: "Textes de présentation" },
+              { key: "lettre", title: "Lettre à l'auteur", desc: "Courrier éditorial diplomate (forces, axes de travail par priorité, points laissés libres), signé au nom du Service éditorial.", msg: lettreAuteur, fn: requestAiEditorLettreAuteur, label: "Lettre à l'auteur" },
+            ] as const).map((d) => {
+              const disabled = busy || pending || !dossier.sources.has_manuscript_file;
+              return (
+                <div key={d.key} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 2 }}>{d.title}</div>
+                  <p style={{ color: "var(--muted)", fontSize: 11.5, margin: "0 0 6px", lineHeight: 1.45 }}>{d.desc}</p>
+                  <button onClick={() => runDeliverable(d.fn, d.label)} disabled={disabled} title={!dossier.sources.has_manuscript_file ? "Déposez d'abord le manuscrit." : undefined} style={{ ...primaryBtnStyle, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.55 : 1 }}>
+                    {d.msg ? `Régénérer — ${d.title.toLowerCase()}` : `Générer — ${d.title.toLowerCase()}`}
+                  </button>
+                  {d.msg && (
+                    <div style={{ border: "1px solid var(--line)", borderRadius: 8, background: "var(--ivory, #FAF8F2)", padding: 10, marginTop: 8 }}>
+                      <MessageBody m={d.msg} />
+                      <MsgActions m={d.msg} busy={busy} onPdf={downloadPdf} onDelete={deleteMsg} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Atelier de réécriture */}

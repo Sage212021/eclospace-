@@ -6,6 +6,8 @@ import {
   sendAiEditorMessage,
   requestAiEditorCoherence,
   requestAiEditorImpact,
+  requestAiEditorDocumentaire,
+  requestAiEditorTranslation,
   requestAiEditorRewrite,
   decideAiEditorRewrite,
   type Manuscript,
@@ -38,6 +40,8 @@ export function AiEditorPage() {
   const [rwSource, setRwSource] = useState("");
   const [rwInstruction, setRwInstruction] = useState("");
   const [impactChange, setImpactChange] = useState("");
+  const [trSource, setTrSource] = useState("");
+  const [trLang, setTrLang] = useState<"fr" | "en">("en");
 
   useEffect(() => {
     listManuscripts().then(setManuscripts).catch(() => setManuscripts([]));
@@ -138,10 +142,35 @@ export function AiEditorPage() {
     } finally { setBusy(false); }
   }
 
+  async function runDocumentaire() {
+    if (!selectedId) return;
+    setBusy(true); setError(null);
+    try {
+      await requestAiEditorDocumentaire(selectedId);
+      await loadDossier(selectedId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Analyse impossible.");
+    } finally { setBusy(false); }
+  }
+
+  async function runTranslation() {
+    if (!selectedId || !trSource.trim()) return;
+    setBusy(true); setError(null);
+    try {
+      await requestAiEditorTranslation(selectedId, trSource.trim(), trLang);
+      setTrSource("");
+      await loadDossier(selectedId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Traduction impossible.");
+    } finally { setBusy(false); }
+  }
+
   const diagnostic = dossier?.messages.find((m) => m.kind === "diagnostic");
   const chat = dossier?.messages.filter((m) => m.kind === "chat") ?? [];
   const coherence = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "coherence");
   const impacts = dossier?.messages.filter((m) => m.kind === "impact") ?? [];
+  const documentaire = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "documentaire");
+  const translations = dossier?.messages.filter((m) => m.kind === "traduction") ?? [];
   const rewrites = dossier?.rewrites ?? [];
 
   return (
@@ -269,6 +298,44 @@ export function AiEditorPage() {
               {impacts.map((m) => (
                 <div key={m.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, background: m.role === "user" ? "var(--eclosion-soft, #f6efd8)" : "var(--ivory, #FAF8F2)" }}>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>{m.role === "user" ? "Modification envisagée" : "SAGE — conséquences"}</div>
+                  <MessageBody m={m} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Documentation & traduction */}
+          <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 14, marginTop: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>Documentation & traduction</div>
+            <p style={{ color: "var(--muted)", fontSize: 12, margin: "0 0 10px", lineHeight: 1.5 }}>
+              SAGE repère les affirmations à sourcer (faits/opinions/hypothèses) et les références à vérifier — sans jamais inventer de source. Il peut aussi traduire un passage (français ↔ anglais) en préservant la voix.
+            </p>
+            {(() => { const d = busy || pending || !dossier.sources.has_manuscript_file; return (
+              <button onClick={runDocumentaire} disabled={d} title={!dossier.sources.has_manuscript_file ? "Déposez d'abord le manuscrit." : undefined} style={{ ...primaryBtnStyle, marginBottom: 8, cursor: d ? "not-allowed" : "pointer", opacity: d ? 0.55 : 1 }}>
+                {documentaire ? "Relancer la vérification documentaire" : "Vérification documentaire"}
+              </button>); })()}
+            {documentaire && (
+              <div style={{ border: "1px solid var(--line)", borderRadius: 8, background: "var(--ivory, #FAF8F2)", padding: 10, marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>Vérification documentaire</div>
+                <MessageBody m={documentaire} />
+              </div>
+            )}
+
+            <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 6, marginBottom: 4 }}>Traduction d'un passage</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+              <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 5 }}>Vers&nbsp;:
+                <select value={trLang} onChange={(e) => setTrLang(e.target.value as "fr" | "en")} style={{ fontSize: 12.5, padding: "4px 6px" }}>
+                  <option value="en">Anglais</option>
+                  <option value="fr">Français</option>
+                </select>
+              </label>
+            </div>
+            <textarea value={trSource} onChange={(e) => setTrSource(e.target.value)} placeholder="Collez le passage à traduire…" rows={3} style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, resize: "vertical", marginBottom: 8 }} />
+            <button onClick={runTranslation} disabled={busy || pending || !trSource.trim()} style={{ ...primaryBtnStyle, cursor: busy || pending || !trSource.trim() ? "not-allowed" : "pointer", opacity: busy || pending || !trSource.trim() ? 0.55 : 1 }}>Traduire</button>
+            <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+              {translations.map((m) => (
+                <div key={m.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, background: m.role === "user" ? "var(--eclosion-soft, #f6efd8)" : "var(--ivory, #FAF8F2)" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>{m.role === "user" ? "À traduire" : "SAGE — traduction"}</div>
                   <MessageBody m={m} />
                 </div>
               ))}

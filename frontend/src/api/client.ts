@@ -2786,7 +2786,7 @@ export function updateBatFiles(batId: string, files: { interiorVersionId?: strin
 // ── Éditeur littéraire IA (« ÉCLOSION ÉDITORIAL IA ») — Lot A (DG + admin)
 export interface AiEditorMessage {
   id: string;
-  kind: "diagnostic" | "chat" | "coherence" | "impact";
+  kind: "diagnostic" | "chat" | "coherence" | "impact" | "documentaire" | "traduction";
   role: "user" | "assistant";
   content: string;
   status: "pending" | "done" | "erreur";
@@ -2831,6 +2831,12 @@ export function requestAiEditorCoherence(manuscriptId: string) {
 }
 export function requestAiEditorImpact(manuscriptId: string, change: string) {
   return request<{ user_message_id: string; assistant_message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/impact`, { method: "POST", body: JSON.stringify({ change }) });
+}
+export function requestAiEditorDocumentaire(manuscriptId: string) {
+  return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/documentaire`, { method: "POST" });
+}
+export function requestAiEditorTranslation(manuscriptId: string, source_text: string, target_lang: "fr" | "en") {
+  return request<{ user_message_id: string; assistant_message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/translate`, { method: "POST", body: JSON.stringify({ source_text, target_lang }) });
 }
 export function requestAiEditorRewrite(manuscriptId: string, input: { mode: RewriteMode; source_text: string; instruction?: string }) {
   return request<{ rewrite_id: string }>(`/api/v1/ai-editor/${manuscriptId}/rewrite`, { method: "POST", body: JSON.stringify(input) });

@@ -50,6 +50,15 @@ const COHERENCE_TASK = `Procède à une ANALYSE DE COHÉRENCE de l'ouvrage. Rech
 - les RUPTURES de ton et les TRANSITIONS insuffisantes.
 Pour chaque point : localise-le (chapitre / extrait), explique précisément, et DISTINGUE une incohérence CERTAINE d'une simple possibilité d'interprétation. N'invente rien ; si le texte fourni est partiel, signale-le.`;
 
+const DOCUMENTAIRE_TASK = `Procède à une VÉRIFICATION DOCUMENTAIRE adaptée au genre de l'ouvrage.
+- Identifie les AFFIRMATIONS qui nécessitent une source (données chiffrées, faits historiques, citations, décisions, études…).
+- DISTINGUE clairement les FAITS vérifiables, les OPINIONS et les HYPOTHÈSES.
+- Repère les références INCOMPLÈTES ou MANQUANTES, et les éventuelles sources contradictoires.
+- Pour un roman : rappelle que toutes les affirmations n'exigent pas une citation ; aide à l'équilibre entre narration et documentation (ce qui peut rester, être déplacé en note/bibliographie, ou devenir une scène/un dialogue).
+RÈGLE STRICTE : tu n'INVENTES JAMAIS de source, citation, statistique, auteur, titre, page, étude ou décision. Tu ne disposes d'AUCUN outil de vérification externe connecté : tu SIGNALES les références à vérifier, sans les confirmer ni les infirmer. Localise chaque point (chapitre / extrait).`;
+
+const TRANSLATION_TASK = `Traduis FIDÈLEMENT le passage fourni ci-dessus dans la LANGUE CIBLE indiquée, en préservant le sens, le registre, le ton et la voix de l'auteur, ainsi que la mise en paragraphes. Respecte les conventions typographiques de la langue cible. Rends UNIQUEMENT la traduction, sans aucun commentaire ni préambule.`;
+
 function impactTask(change: string): string {
   return `L'auteur envisage (ou vient d'appliquer) la MODIFICATION suivante de l'œuvre :
 « ${change} »
@@ -338,6 +347,21 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
       if (count === 0) await buildPassageIndex(manuscriptId).catch(() => {});
       block = await buildChatContext(manuscriptId, change);
       task = impactTask(change);
+    } else if (assistant.kind === "documentaire") {
+      // Vérification documentaire : vue d'ensemble → lecture complète (capée).
+      await buildPassageIndex(manuscriptId).catch(() => {});
+      block = (await buildContext(manuscriptId)).block;
+      task = DOCUMENTAIRE_TASK;
+    } else if (assistant.kind === "traduction") {
+      // Traduction : le passage + la langue cible sont portés par le dernier
+      // message « user » de nature « traduction ». Pas de contexte manuscrit.
+      const src = await prisma.aiEditorialMessage.findFirst({
+        where: { manuscriptId, kind: "traduction", role: "user", status: "done" },
+        orderBy: { createdAt: "desc" },
+        select: { content: true },
+      });
+      block = src?.content ?? "(passage non fourni)";
+      task = TRANSLATION_TASK;
     } else {
       // On récupère la question (message « user » le plus récent) et un historique court.
       const history = await prisma.aiEditorialMessage.findMany({

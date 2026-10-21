@@ -2653,6 +2653,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-journal-editorial-lot-h",
+      version: "2026.10",
+      title: "Nouveauté — SAGE : le journal éditorial de chaque ouvrage",
+      body: "Vous pouvez désormais consulter l'HISTORIQUE complet du travail de SAGE sur un ouvrage. Dans l'espace SAGE, en bas de la fiche d'un ouvrage, la section « Journal éditorial » liste, par date, tout ce qui a été fait : diagnostic établi, questions posées et réponses, analyses de cohérence, vérifications documentaires, traductions, fiches de lecture, textes de présentation, lettres à l'auteur, préparations de copie, contrôles bibliographiques et typographiques, propositions de réécriture et leurs décisions (acceptée/refusée), et même les messages supprimés (on garde la trace du mouvement, sans réafficher le contenu effacé). Chaque ligne indique la date, l'auteur de l'action et l'état. Le journal se télécharge en PDF (en-tête « Éditions Éclosion — Service éditorial »), pratique pour archiver ou joindre au dossier. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-preparation-copie-normes-lot-g",
       version: "2026.10",
       title: "Nouveauté — SAGE prépare la copie et contrôle les normes (typographie, bibliographie)",

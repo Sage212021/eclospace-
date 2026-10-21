@@ -235,4 +235,29 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/copyedit`, headers: { cookie: correcteurCookie }, payload: { source_text: "Un texte." } });
     expect(r.statusCode).toBe(403);
   });
+
+  // ── Journal éditorial ──
+  it("expose le journal éditorial daté, y compris les suppressions", async () => {
+    // Un message créé puis supprimé → doit laisser une trace « suppression ».
+    const q = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/message`, headers: { cookie: adminCookie }, payload: { content: "Message pour le journal." } });
+    const assistantId = q.json().assistant_message_id as string;
+    await waitMessage(assistantId);
+    await app.inject({ method: "DELETE", url: `/api/v1/ai-editor/messages/${assistantId}`, headers: { cookie: adminCookie } });
+
+    const r = await app.inject({ method: "GET", url: `/api/v1/ai-editor/${withFile}/journal`, headers: { cookie: adminCookie } });
+    expect(r.statusCode).toBe(200);
+    const events = r.json().events as Array<{ at: string; kind: string; label: string }>;
+    expect(events.length).toBeGreaterThan(0);
+    // Trié par date croissante.
+    for (let i = 1; i < events.length; i++) expect(events[i].at >= events[i - 1].at).toBe(true);
+    // La suppression figure comme un mouvement.
+    expect(events.some((e) => e.kind === "suppression")).toBe(true);
+    // Un diagnostic a été établi plus tôt dans la suite → présent au journal.
+    expect(events.some((e) => e.kind === "diagnostic")).toBe(true);
+  });
+
+  it("réserve le journal au DG / admin (403 pour un correcteur)", async () => {
+    const r = await app.inject({ method: "GET", url: `/api/v1/ai-editor/${withFile}/journal`, headers: { cookie: correcteurCookie } });
+    expect(r.statusCode).toBe(403);
+  });
 });

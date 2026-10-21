@@ -5855,6 +5855,30 @@ model AiConversationMessage {
   @@map("ai_conversation_messages")
 }
 
+// Mémoire institutionnelle & éditoriale VALIDÉE de SAGE (Lot 3) : connaissances
+// durables de la maison (histoire, collections, procédures, décisions actées)
+// que la Direction alimente et que SAGE consulte à chaque échange. Partagée
+// (non privée), persistante. `status` = "validated" (saisie/validée par le DG) ;
+// réservé pour le Lot 4 : "pending" (proposé par SAGE, en attente de validation).
+model AiKnowledge {
+  id          String    @id @default(uuid())
+  // "institution" | "editorial" | "procedure" | "collection" | "decision" | "autre".
+  category    String    @default("institution")
+  title       String
+  content     String
+  status      String    @default("validated")
+  createdBy   String?   @map("created_by")
+  validatedBy String?   @map("validated_by")
+  validatedAt DateTime? @map("validated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedBy   String?   @map("deleted_by")
+
+  @@index([status])
+  @@map("ai_knowledge")
+}
+
 // Mémoire de SAGE — Lot B. Le manuscrit est découpé en PASSAGES indexés
 // (recherche plein texte PostgreSQL) afin que l'agent réponde en CITANT le
 // passage exact (chapitre / extrait), au lieu de redonner tout le texte à chaque

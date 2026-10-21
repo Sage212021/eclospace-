@@ -2653,6 +2653,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-memoire-connaissances-lot-3",
+      version: "2026.10",
+      title: "Nouveauté — SAGE retient durablement les connaissances de la maison",
+      body: "Dans « Échanger avec SAGE », une rubrique « Connaissances de la maison » vous permet d'enseigner à SAGE ce qu'il doit tenir pour vrai sur Éclosion : histoire, collections, procédures de soumission, critères éditoriaux, décisions actées… Chaque fiche (un titre + un contenu, rangée par catégorie) est validée par vous et devient une connaissance officielle : SAGE s'appuie dessus dans TOUTES vos conversations, et elle est conservée durablement (elle ne disparaît pas à la fermeture). Vous pouvez ajouter, modifier ou retirer une fiche à tout moment. Et quand SAGE formule quelque chose que vous voulez garder, le lien « 📌 Retenir » sous sa réponse l'enregistre d'un clic (comme décision/connaissance). SAGE continue de distinguer une idée explorée d'une décision validée, et n'invente jamais une règle ou un chiffre : si ce n'est pas dans les connaissances validées, il vous le dit. Réservé, comme l'espace, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-dialogue-catalogue-erp-lot-2",
       version: "2026.10",
       title: "Nouveauté — SAGE connaît désormais les manuscrits d'Eclospace dans vos échanges",

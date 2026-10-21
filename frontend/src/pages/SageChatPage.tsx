@@ -6,9 +6,25 @@ import {
   sendSageMessage,
   renameSageConversation,
   archiveSageConversation,
+  listSageKnowledge,
+  createSageKnowledge,
+  updateSageKnowledge,
+  deleteSageKnowledge,
   type SageConversation,
   type SageDossier,
+  type SageKnowledge,
+  type SageKnowledgeCategory,
 } from "../api/client";
+
+const KNOWLEDGE_CATS: { value: SageKnowledgeCategory; label: string }[] = [
+  { value: "institution", label: "Institution" },
+  { value: "editorial", label: "Éditorial" },
+  { value: "procedure", label: "Procédure" },
+  { value: "collection", label: "Collection" },
+  { value: "decision", label: "Décision" },
+  { value: "autre", label: "Autre" },
+];
+const KCAT_LABEL = (c: string) => KNOWLEDGE_CATS.find((k) => k.value === c)?.label ?? c;
 
 // « Échanger avec SAGE » — espace de dialogue privé du directeur général avec
 // SAGE (éditeur de la maison). Conversations libres, persistantes, avec
@@ -24,9 +40,14 @@ export function SageChatPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  // Connaissances de la maison (mémoire validée).
+  const [knowledge, setKnowledge] = useState<SageKnowledge[]>([]);
+  const [kOpen, setKOpen] = useState(false);
+  const [kForm, setKForm] = useState<{ id: string | null; category: SageKnowledgeCategory; title: string; content: string } | null>(null);
 
   const loadConversations = () => listSageConversations().then((r) => setConversations(r.conversations)).catch(() => setConversations([]));
-  useEffect(() => { loadConversations(); }, []);
+  const loadKnowledge = () => listSageKnowledge().then((r) => setKnowledge(r.entries)).catch(() => setKnowledge([]));
+  useEffect(() => { loadConversations(); loadKnowledge(); }, []);
 
   const loadDossier = (id: string) =>
     getSageConversation(id).then((d) => { setDossier(d); loadConversations(); }).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
@@ -96,6 +117,43 @@ export function SageChatPage() {
     }
   }
 
+  async function saveKnowledge() {
+    if (!kForm || !kForm.title.trim() || !kForm.content.trim()) { setError("Titre et contenu requis."); return; }
+    setError(null);
+    try {
+      if (kForm.id) await updateSageKnowledge(kForm.id, { category: kForm.category, title: kForm.title.trim(), content: kForm.content.trim() });
+      else await createSageKnowledge({ category: kForm.category, title: kForm.title.trim(), content: kForm.content.trim() });
+      setKForm(null);
+      await loadKnowledge();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Enregistrement impossible.");
+    }
+  }
+
+  async function removeKnowledge(id: string) {
+    if (!window.confirm("Retirer cette connaissance de la mémoire de SAGE ?")) return;
+    try {
+      await deleteSageKnowledge(id);
+      await loadKnowledge();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Suppression impossible.");
+    }
+  }
+
+  // « Retenir » une réponse de SAGE comme décision/connaissance validée.
+  async function rememberFromMessage(content: string) {
+    const title = window.prompt("Retenir dans la mémoire de la maison.\n\nDonnez un titre court à cette connaissance :", "");
+    if (title === null || !title.trim()) return;
+    try {
+      await createSageKnowledge({ category: "decision", title: title.trim(), content });
+      await loadKnowledge();
+      setError(null);
+      window.alert("Enregistré dans les connaissances de la maison.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Enregistrement impossible.");
+    }
+  }
+
   return (
     <section style={{ maxWidth: 900 }}>
       <h1 style={{ fontSize: 21, margin: "0 0 4px", fontFamily: "var(--font-title, inherit)" }}>💬 Échanger avec SAGE</h1>
@@ -126,6 +184,57 @@ export function SageChatPage() {
               </div>
             )}
           </div>
+
+          {/* Connaissances de la maison (mémoire validée que SAGE consulte). */}
+          <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 12, marginTop: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700 }}>🏛️ Connaissances de la maison</div>
+              <button onClick={() => setKOpen((v) => !v)} style={{ ...rowBtnStyle, width: "auto", fontWeight: 700, padding: "5px 10px" }}>{kOpen ? "Masquer ▴" : `Gérer (${knowledge.length}) ▾`}</button>
+            </div>
+            <p style={{ color: "var(--muted)", fontSize: 11.5, margin: "6px 0 0", lineHeight: 1.45 }}>
+              Ce que SAGE doit tenir pour vrai sur Éclosion (histoire, collections, procédures, décisions actées). Il s'appuie sur ces fiches dans toutes vos conversations, et elles sont conservées durablement.
+            </p>
+            {kOpen && (
+              <div style={{ marginTop: 10 }}>
+                {kForm === null && (
+                  <button onClick={() => setKForm({ id: null, category: "institution", title: "", content: "" })} style={{ ...primaryBtnStyle, padding: "6px 13px", marginBottom: 10 }}>+ Ajouter une fiche</button>
+                )}
+                {kForm && (
+                  <div style={{ border: "1px solid var(--eclosion, #D9B21A)", borderRadius: 8, padding: 10, marginBottom: 10, display: "grid", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <select value={kForm.category} onChange={(e) => setKForm({ ...kForm, category: e.target.value as SageKnowledgeCategory })} style={{ padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13 }}>
+                        {KNOWLEDGE_CATS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                      <input value={kForm.title} onChange={(e) => setKForm({ ...kForm, title: e.target.value })} placeholder="Titre (ex. Modalités de soumission)" style={{ flex: 1, minWidth: 180, padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13 }} />
+                    </div>
+                    <textarea value={kForm.content} onChange={(e) => setKForm({ ...kForm, content: e.target.value })} placeholder="Contenu validé…" rows={3} style={{ padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, resize: "vertical" }} />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={saveKnowledge} style={{ ...primaryBtnStyle, padding: "6px 13px" }}>Enregistrer</button>
+                      <button onClick={() => setKForm(null)} style={{ ...rowBtnStyle, width: "auto", padding: "6px 13px" }}>Annuler</button>
+                    </div>
+                  </div>
+                )}
+                {knowledge.length === 0 ? (
+                  <p style={{ color: "var(--muted)", fontSize: 12.5, margin: 0 }}>Aucune fiche pour l'instant.</p>
+                ) : (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {knowledge.map((e) => (
+                      <div key={e.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", background: "var(--ivory, #FAF8F2)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}><span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", marginRight: 6 }}>{KCAT_LABEL(e.category).toUpperCase()}</span>{e.title}</span>
+                          <span style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                            <button onClick={() => setKForm({ id: e.id, category: e.category, title: e.title, content: e.content })} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--muted)" }}>✎</button>
+                            <button onClick={() => removeKnowledge(e.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--muted)" }}>🗑</button>
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{e.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </>
       )}
 
@@ -150,6 +259,9 @@ export function SageChatPage() {
                       <span style={{ color: "var(--alert)" }}>⚠ {m.error_message || "La réponse a échoué."}</span>
                     ) : (
                       <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{m.content}</div>
+                    )}
+                    {m.role === "assistant" && m.status === "done" && m.content && (
+                      <button onClick={() => rememberFromMessage(m.content)} title="Retenir dans la mémoire de la maison" style={{ background: "none", border: "none", padding: 0, marginTop: 6, fontSize: 11.5, color: "var(--muted)", cursor: "pointer", textDecoration: "underline" }}>📌 Retenir</button>
                     )}
                   </div>
                 </div>

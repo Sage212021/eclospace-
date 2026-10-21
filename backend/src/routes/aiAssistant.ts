@@ -89,6 +89,63 @@ export default async function aiAssistantRoutes(fastify: FastifyInstance) {
     return reply.send({ id: updated.id, title: updated.title });
   });
 
+  // ── Mémoire institutionnelle & éditoriale validée (Lot 3) ──────────────────
+  // Base de connaissances PARTAGÉE de la maison, alimentée par la Direction et
+  // consultée par SAGE. Non privée (connaissance officielle commune), persistante.
+  const KNOWLEDGE_CATEGORIES = ["institution", "editorial", "procedure", "collection", "decision", "autre"] as const;
+
+  fastify.get("/api/v1/sage/knowledge", { preHandler: requireAnyRole(SAGE_ROLES) }, async (_request, reply) => {
+    const entries = await prisma.aiKnowledge.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ category: "asc" }, { updatedAt: "desc" }],
+      select: { id: true, category: true, title: true, content: true, status: true, createdAt: true, updatedAt: true },
+    });
+    return reply.send({ entries });
+  });
+
+  const knowledgeSchema = z.object({
+    category: z.enum(KNOWLEDGE_CATEGORIES).default("institution"),
+    title: z.string().trim().min(1).max(200),
+    content: z.string().trim().min(1).max(8000),
+  });
+  fastify.post("/api/v1/sage/knowledge", { preHandler: requireAnyRole(SAGE_ROLES) }, async (request, reply) => {
+    const parsed = knowledgeSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Fiche de connaissance invalide.", details: parsed.error.issues });
+    const now = new Date();
+    const entry = await prisma.aiKnowledge.create({
+      data: { category: parsed.data.category, title: parsed.data.title.trim(), content: parsed.data.content.trim(), status: "validated", createdBy: request.user!.id, validatedBy: request.user!.id, validatedAt: now },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "ai_knowledge", entityId: entry.id, newValues: { category: entry.category, title: entry.title }, ipAddress: request.ip });
+    return reply.code(201).send({ id: entry.id });
+  });
+
+  fastify.patch("/api/v1/sage/knowledge/:id", { preHandler: requireAnyRole(SAGE_ROLES) }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = knowledgeSchema.partial().safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Modification invalide.", details: parsed.error.issues });
+    const existing = await prisma.aiKnowledge.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Fiche introuvable." });
+    const updated = await prisma.aiKnowledge.update({
+      where: { id },
+      data: {
+        ...(parsed.data.category ? { category: parsed.data.category } : {}),
+        ...(parsed.data.title ? { title: parsed.data.title.trim() } : {}),
+        ...(parsed.data.content ? { content: parsed.data.content.trim() } : {}),
+      },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "ai_knowledge", entityId: id, newValues: { category: updated.category, title: updated.title }, ipAddress: request.ip });
+    return reply.send({ id: updated.id });
+  });
+
+  fastify.delete("/api/v1/sage/knowledge/:id", { preHandler: requireAnyRole(SAGE_ROLES) }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const existing = await prisma.aiKnowledge.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Fiche introuvable." });
+    await prisma.aiKnowledge.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "ai_knowledge", entityId: id, newValues: { deleted: true }, ipAddress: request.ip });
+    return reply.send({ ok: true });
+  });
+
   // Archiver (suppression logique) une conversation : elle quitte la liste.
   fastify.delete("/api/v1/sage/conversations/:id", { preHandler: requireAnyRole(SAGE_ROLES) }, async (request, reply) => {
     const { id } = request.params as { id: string };

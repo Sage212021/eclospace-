@@ -136,7 +136,11 @@ export async function recordAdvancePayment(tx: Tx, invoiceId: string, amount: nu
 // Ch. 18 §18.2 : génération automatique de la facture depuis une livraison
 // (vente ferme) ; les prix/remises/taxes sont ceux de la ligne de commande
 // correspondante.
-export async function createInvoiceFromDelivery(tx: Tx, deliveryId: string) {
+export async function createInvoiceFromDelivery(
+  tx: Tx,
+  deliveryId: string,
+  advance?: { amount: number; label?: string | null; method: string },
+) {
   const delivery = await tx.delivery.findUniqueOrThrow({
     where: { id: deliveryId },
     include: { lines: true, order: { include: { lines: true } } },
@@ -174,12 +178,23 @@ export async function createInvoiceFromDelivery(tx: Tx, deliveryId: string) {
     });
     await tx.salesOrder.update({ where: { id: delivery.orderId }, data: { shippingFeeInvoiced: true } });
   }
-  return createInvoiceRecord(tx, {
+  // Avance (acompte) versée par le client à la livraison : bornée au net à payer,
+  // stockée sur la facture (impression « Avance » / « Solde à régler ») et
+  // enregistrée comme encaissement réel. La facture de livraison est émise
+  // immédiatement → on encaisse l'avance dans la foulée.
+  const ttc = lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.taxRate / 100), 0);
+  const advanceAmount = advance ? Math.max(0, Math.min(Math.round(ttc * 100) / 100, Math.round(advance.amount * 100) / 100)) : 0;
+  const invoice = await createInvoiceRecord(tx, {
     customerId: delivery.order.customerId,
     sourceType: "delivery",
     sourceId: delivery.id,
     lines,
+    advanceAmount,
+    advanceLabel: advance?.label ?? null,
+    advanceMethod: advance?.method ?? null,
   });
+  if (advanceAmount > 0) await recordAdvancePayment(tx, invoice.id, advanceAmount, advance!.method);
+  return invoice;
 }
 
 // Ch. 18 §18.2, Ch. 17 §17.6 : seules les ventes relevées et validées en
@@ -289,7 +304,11 @@ export async function ensureAuthorCustomer(tx: Tx, partnerId: string) {
 // porte de manuscrit/format → aucun droit d'auteur généré (c'est un service
 // vendu, pas une vente de livre). Idempotent : refuse si le devis a déjà sa
 // facture.
-export async function createInvoiceFromEditorialQuote(tx: Tx, quoteId: string) {
+export async function createInvoiceFromEditorialQuote(
+  tx: Tx,
+  quoteId: string,
+  advance?: { amount: number; label?: string | null; method: string },
+) {
   const quote = await tx.editorialQuote.findUniqueOrThrow({ where: { id: quoteId }, include: { lines: true } });
   if (quote.status !== "accepted") {
     throw new Error("quote_not_accepted");
@@ -303,20 +322,30 @@ export async function createInvoiceFromEditorialQuote(tx: Tx, quoteId: string) {
   const customer = quote.customerId
     ? await tx.customer.findUniqueOrThrow({ where: { id: quote.customerId } })
     : await ensureAuthorCustomer(tx, quote.partnerId!);
+  const lines: InvoiceLineInput[] = quote.lines.map((l) => ({
+    isbnId: null,
+    manuscriptId: null, // pas de droits d'auteur sur une prestation
+    format: null,
+    description: l.description,
+    quantity: l.quantity,
+    unitPrice: Number(l.unitPrice),
+    taxRate: Number(l.taxRate),
+  }));
+  // Avance (acompte) versée par l'auteur à la commande de la prestation : bornée
+  // au net à payer, imprimée sur la facture (« Avance » / « Solde à régler ») et
+  // encaissée comme un paiement réel (la facture est émise immédiatement).
+  const ttc = lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.taxRate / 100), 0);
+  const advanceAmount = advance ? Math.max(0, Math.min(Math.round(ttc * 100) / 100, Math.round(advance.amount * 100) / 100)) : 0;
   const invoice = await createInvoiceRecord(tx, {
     customerId: customer.id,
     sourceType: `${quote.serviceType}_quote`,
     sourceId: quote.id,
-    lines: quote.lines.map((l) => ({
-      isbnId: null,
-      manuscriptId: null, // pas de droits d'auteur sur une prestation
-      format: null,
-      description: l.description,
-      quantity: l.quantity,
-      unitPrice: Number(l.unitPrice),
-      taxRate: Number(l.taxRate),
-    })),
+    lines,
+    advanceAmount,
+    advanceLabel: advance?.label ?? null,
+    advanceMethod: advance?.method ?? null,
   });
+  if (advanceAmount > 0) await recordAdvancePayment(tx, invoice.id, advanceAmount, advance!.method);
 
   await tx.editorialQuote.update({
     where: { id: quote.id },

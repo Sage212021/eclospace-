@@ -7,8 +7,10 @@ import {
   confirmDelivery,
   uploadDeliveryProof,
   deliveryProofUrl,
+  listPaymentMethods,
   type DeliveryRow,
   type EligibleOrder,
+  type PaymentMethodDef,
 } from "../api/client";
 import { Card } from "./Card";
 import { Button } from "./Button";
@@ -32,8 +34,10 @@ export function DeliveriesSection({ canManage }: { canManage: boolean }) {
   const [period, setPeriod] = useState<Period>(currentPeriod());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  // Modal « nouvelle livraison » : commande choisie + transporteur + quantités.
-  const [form, setForm] = useState<{ orderId: string; carrier: string; qty: Record<string, string> } | null>(null);
+  // Modal « nouvelle livraison » : commande choisie + transporteur + quantités
+  // + acompte éventuel (montant, libellé, mode de paiement).
+  const [form, setForm] = useState<{ orderId: string; carrier: string; qty: Record<string, string>; advAmount: string; advLabel: string; advMethod: string } | null>(null);
+  const [methods, setMethods] = useState<PaymentMethodDef[]>([]);
 
   async function refresh() {
     const [dels, orders] = await Promise.all([listDeliveries(), listEligibleOrdersForDelivery()]);
@@ -43,6 +47,7 @@ export function DeliveriesSection({ canManage }: { canManage: boolean }) {
 
   useEffect(() => {
     refresh().catch((e) => setError(e instanceof Error ? e.message : "Chargement des livraisons impossible."));
+    listPaymentMethods().then((ms) => setMethods(ms.filter((m) => m.active))).catch(() => {});
   }, []);
 
   const money = new Intl.NumberFormat("fr-FR");
@@ -80,7 +85,7 @@ export function DeliveriesSection({ canManage }: { canManage: boolean }) {
     // Quantités par défaut = reliquat restant de chaque ligne.
     const qty: Record<string, string> = {};
     for (const l of order.lines) qty[l.isbn_id] = String(l.remaining);
-    setForm({ orderId: order.id, carrier: "", qty });
+    setForm({ orderId: order.id, carrier: "", qty, advAmount: "", advLabel: "Avance", advMethod: "" });
     setError(null);
     setMessage(null);
   }
@@ -104,8 +109,16 @@ export function DeliveriesSection({ canManage }: { canManage: boolean }) {
         return;
       }
     }
+    const advAmount = Number(form.advAmount);
+    if (form.advAmount.trim() && (!Number.isFinite(advAmount) || advAmount < 0)) {
+      setError("Montant d'acompte invalide.");
+      return;
+    }
+    const adv = advAmount > 0
+      ? { advance_amount: advAmount, advance_label: form.advLabel.trim() || "Avance", advance_method: form.advMethod || methods[0]?.code }
+      : {};
     try {
-      const created = await createDelivery(form.orderId, { carrier: form.carrier.trim() || undefined, lines });
+      const created = await createDelivery(form.orderId, { carrier: form.carrier.trim() || undefined, lines, ...adv });
       setForm(null);
       setMessage(`Livraison ${created.deliveryNumber} créée — vous pouvez imprimer le bon de livraison.`);
       await refresh();
@@ -271,6 +284,36 @@ export function DeliveriesSection({ canManage }: { canManage: boolean }) {
                 />
               </div>
             ))}
+          </div>
+
+          {/* Acompte (paiement en avance) encaissé à la livraison : le solde
+              restant (reliquat) est imprimé sur la facture. Facultatif. */}
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Acompte versé (facultatif)</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                type="number" min={0} inputMode="decimal"
+                value={form.advAmount}
+                onChange={(e) => setForm({ ...form, advAmount: e.target.value })}
+                placeholder="Montant versé"
+                style={{ width: 130, padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, textAlign: "right", fontFamily: "var(--font-mono)" }}
+              />
+              <input
+                value={form.advLabel}
+                onChange={(e) => setForm({ ...form, advLabel: e.target.value })}
+                placeholder="Libellé (ex. Avance)"
+                style={{ width: 190, padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13 }}
+              />
+              {methods.length > 0 && (
+                <select value={form.advMethod} onChange={(e) => setForm({ ...form, advMethod: e.target.value })} style={{ padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13 }}>
+                  <option value="">Mode de paiement…</option>
+                  {methods.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
+                </select>
+              )}
+            </div>
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 5 }}>
+              Laissez à 0 si aucun acompte. Sinon, la facture affichera « {form.advLabel.trim() || "Avance"} » et le « Solde à régler » (reliquat).
+            </div>
           </div>
         </Modal>
       )}

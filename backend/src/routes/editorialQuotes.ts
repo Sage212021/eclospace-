@@ -484,7 +484,21 @@ export default async function editorialQuoteRoutes(fastify: FastifyInstance) {
       return reply.code(409).send({ code: "quote_not_accepted", message: "La facture n'est possible qu'après acceptation du devis par l'auteur." });
     }
 
-    const invoice = await prisma.$transaction((tx) => createInvoiceFromEditorialQuote(tx, id));
+    // Avance (acompte) versée par l'auteur à la commande : facultative. Portée sur
+    // la facture (« Avance » / « Solde à régler ») et encaissée comme paiement réel.
+    const advSchema = z.object({
+      advance_amount: z.number().min(0).optional(),
+      advance_label: z.string().max(120).optional(),
+      advance_method: z.string().max(60).optional(),
+    });
+    const advParsed = advSchema.safeParse(request.body ?? {});
+    if (!advParsed.success) return reply.code(400).send({ code: "validation_error", message: "Avance invalide.", details: advParsed.error.issues });
+    const advAmount = advParsed.data.advance_amount ?? 0;
+    const advance = advAmount > 0
+      ? { amount: advAmount, label: advParsed.data.advance_label?.trim() || "Avance", method: advParsed.data.advance_method?.trim() || "cash" }
+      : undefined;
+
+    const invoice = await prisma.$transaction((tx) => createInvoiceFromEditorialQuote(tx, id, advance));
 
     await writeAuditLog({
       userId: request.user!.id,

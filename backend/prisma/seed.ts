@@ -2653,6 +2653,14 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-facture-acompte-reliquat-vente-prestation",
+      version: "2026.10",
+      title: "Nouveauté — Acompte et reliquat sur la facture de vente et de prestation",
+      body: "Vous pouviez déjà saisir un acompte sur la facture d'une « commande à facturer » (livre scolaire) ; c'est maintenant possible aussi sur les deux autres factures de la Finance. (1) FACTURE DE VENTE (depuis une livraison) : au moment de créer la livraison, un bloc « Acompte versé » permet d'indiquer le montant déjà payé, son libellé et le mode de paiement. (2) FACTURE DE PRESTATION ÉDITORIALE (compte d'auteur) : en cliquant « Établir la facture », une fenêtre propose de saisir l'acompte de l'auteur (montant, libellé, mode), avec l'aperçu du solde. Dans les deux cas, la facture imprimée fait apparaître « Avance » puis « Solde à régler » (le reliquat), et l'acompte est enregistré comme un encaissement réel (il réduit la créance). Laissez à 0 s'il n'y a pas d'acompte.",
+      permissionModules: ["finance", "commercial"],
+      departmentCodes: ["FIN", "COM", "DG"],
+    },
+    {
       slug: "2026-10-sage-journal-editorial-lot-h",
       version: "2026.10",
       title: "Nouveauté — SAGE : le journal éditorial de chaque ouvrage",

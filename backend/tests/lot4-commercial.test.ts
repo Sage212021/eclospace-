@@ -234,6 +234,35 @@ describe("Commercial, distribution et ventes (Lot 4)", () => {
     expect(orderDelivered.json().status).toBe("delivered");
   });
 
+  it("facture une livraison AVEC acompte : avance portée sur la facture + solde (reliquat) + encaissement réel", async () => {
+    const { isbnId } = await createIsbnWithStock("Manuscrit Commercial Acompte", 50);
+    const customer = await createCustomer("Librairie Acompte");
+    const order = await app.inject({
+      method: "POST",
+      url: "/api/v1/sales-orders",
+      headers: { cookie: adminCookie },
+      payload: { customer_id: customer.id, channel: "comptoir", location_id: warehouseId, lines: [{ isbn_id: isbnId, quantity: 10, unit_price: 10000 }] },
+    });
+
+    const delivery = await app.inject({
+      method: "POST",
+      url: `/api/v1/sales-orders/${order.json().id}/deliveries`,
+      headers: { cookie: adminCookie },
+      payload: { carrier: "Transporteur local", lines: [{ isbn_id: isbnId, quantity: 10 }], advance_amount: 40000, advance_label: "Acompte", advance_method: "cash" },
+    });
+    expect(delivery.statusCode).toBe(201);
+
+    // La facture auto-générée porte l'avance ; le solde (reliquat) = total − avance.
+    const invoice = await prisma.invoice.findFirstOrThrow({ where: { sourceType: "delivery", sourceId: delivery.json().id } });
+    expect(Number(invoice.advanceAmount)).toBe(40000);
+    expect(invoice.advanceLabel).toBe("Acompte");
+    // Solde (reliquat) = total − avance, et l'avance ne dépasse pas le total.
+    expect(Number(invoice.totalTtc)).toBeGreaterThanOrEqual(Number(invoice.advanceAmount));
+    // Encaissement réel enregistré (paiement lettré sur la facture).
+    const allocated = await prisma.paymentAllocation.aggregate({ where: { invoiceId: invoice.id }, _sum: { amount: true } });
+    expect(Number(allocated._sum.amount ?? 0)).toBe(40000);
+  });
+
   it("gère un dépôt-vente : mise en dépôt puis relevé de ventes réduisant le stock déposé (Ch. 17 §17.6)", async () => {
     const { isbnId } = await createIsbnWithStock("Manuscrit Commercial Depot Vente", 60);
     const customer = await createCustomer("Librairie Dépôt-Vente", "librairie");

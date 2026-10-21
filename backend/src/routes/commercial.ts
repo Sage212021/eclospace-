@@ -62,6 +62,11 @@ const salesOrderSchema = z.object({
 const deliverySchema = z.object({
   carrier: z.string().optional(),
   lines: z.array(z.object({ isbn_id: z.string().uuid(), quantity: z.number().int().positive() })).min(1),
+  // Avance (acompte) encaissée à la livraison : montant, libellé imprimé et mode
+  // de paiement. Facultatif ; le solde restant (reliquat) est imprimé sur la facture.
+  advance_amount: z.number().min(0).optional(),
+  advance_label: z.string().max(120).optional(),
+  advance_method: z.string().max(60).optional(),
 });
 
 // Une commande est « complètement livrée » quand, en cumulant toutes ses
@@ -868,8 +873,13 @@ export default async function commercialRoutes(fastify: FastifyInstance) {
 
           await tx.salesOrder.update({ where: { id }, data: { status: "shipped" } });
           // Ch. 18 §18.2 : la livraison d'une vente ferme génère automatiquement
-          // sa facture (et, en cascade, les droits d'auteur, Ch. 9 §9.5).
-          const invoice = await createInvoiceFromDelivery(tx, created.id);
+          // sa facture (et, en cascade, les droits d'auteur, Ch. 9 §9.5). Une
+          // avance (acompte) éventuellement versée est portée sur la facture.
+          const advAmount = parsed.data.advance_amount ?? 0;
+          const advance = advAmount > 0
+            ? { amount: advAmount, label: parsed.data.advance_label?.trim() || "Avance", method: parsed.data.advance_method?.trim() || "cash" }
+            : undefined;
+          const invoice = await createInvoiceFromDelivery(tx, created.id, advance);
           return { delivery: created, invoice };
         });
 

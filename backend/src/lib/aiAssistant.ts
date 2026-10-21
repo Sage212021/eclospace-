@@ -65,6 +65,26 @@ async function buildCatalogueContext(): Promise<string> {
   return `${header}\n${lines.join("\n")}`;
 }
 
+// Mémoire institutionnelle & éditoriale VALIDÉE (Lot 3) : connaissances durables
+// de la maison que SAGE doit prendre pour vraies. Seules les entrées validées et
+// non supprimées sont fournies. Bornée.
+const KNOWLEDGE_LABELS: Record<string, string> = {
+  institution: "Institution", editorial: "Éditorial", procedure: "Procédure",
+  collection: "Collection", decision: "Décision", autre: "Autre",
+};
+const KNOWLEDGE_MAX = 120;
+async function buildKnowledgeContext(): Promise<string> {
+  const entries = await prisma.aiKnowledge.findMany({
+    where: { status: "validated", deletedAt: null },
+    orderBy: [{ category: "asc" }, { updatedAt: "desc" }],
+    take: KNOWLEDGE_MAX,
+    select: { category: true, title: true, content: true },
+  });
+  if (entries.length === 0) return "";
+  const lines = entries.map((e) => `- [${KNOWLEDGE_LABELS[e.category] ?? e.category}] ${e.title} : ${e.content}`);
+  return `=== CONNAISSANCES VALIDÉES SUR ÉCLOSION ÉDITION (mémoire officielle de la maison) ===\nCes informations ont été validées par la Direction : tu les tiens pour exactes et tu t'y appuies en priorité. Si une information manque ou n'est pas ici, tu le dis sans l'inventer.\n${lines.join("\n")}`;
+}
+
 // Exécution (longue) en arrière-plan : remplit le message « assistant » en
 // attente à partir de l'historique de la conversation. Ne lève JAMAIS : toute
 // erreur est consignée sur le message.
@@ -95,10 +115,13 @@ export async function runConversationReply(assistantMessageId: string): Promise<
       return;
     }
 
-    // Contexte : la consigne de comportement + l'instantané RÉEL du catalogue
-    // d'Eclospace, pour répondre sur les ouvrages enregistrés sans rien inventer.
-    const catalogue = await buildCatalogueContext().catch(() => "");
-    const system = catalogue ? `${ASSISTANT_SYSTEM}\n\n${catalogue}` : ASSISTANT_SYSTEM;
+    // Contexte : la consigne de comportement + la mémoire validée de la maison
+    // + l'instantané RÉEL du catalogue d'Eclospace (sans rien inventer).
+    const [catalogue, knowledge] = await Promise.all([
+      buildCatalogueContext().catch(() => ""),
+      buildKnowledgeContext().catch(() => ""),
+    ]);
+    const system = [ASSISTANT_SYSTEM, knowledge, catalogue].filter(Boolean).join("\n\n");
 
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey });

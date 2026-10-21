@@ -2930,6 +2930,29 @@ export function renameSageConversation(id: string, title: string) {
 export function archiveSageConversation(id: string) {
   return request<{ ok: true }>(`/api/v1/sage/conversations/${id}`, { method: "DELETE" });
 }
+// Mémoire institutionnelle & éditoriale validée (connaissances de la maison).
+export type SageKnowledgeCategory = "institution" | "editorial" | "procedure" | "collection" | "decision" | "autre";
+export interface SageKnowledge {
+  id: string;
+  category: SageKnowledgeCategory;
+  title: string;
+  content: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+export function listSageKnowledge() {
+  return request<{ entries: SageKnowledge[] }>("/api/v1/sage/knowledge");
+}
+export function createSageKnowledge(input: { category: SageKnowledgeCategory; title: string; content: string }) {
+  return request<{ id: string }>("/api/v1/sage/knowledge", { method: "POST", body: JSON.stringify(input) });
+}
+export function updateSageKnowledge(id: string, input: Partial<{ category: SageKnowledgeCategory; title: string; content: string }>) {
+  return request<{ id: string }>(`/api/v1/sage/knowledge/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function deleteSageKnowledge(id: string) {
+  return request<{ ok: true }>(`/api/v1/sage/knowledge/${id}`, { method: "DELETE" });
+}
 
 export function toggleChecklistItem(itemId: string, checked: boolean) {
   return request<ChecklistItem>(`/api/v1/checklist-items/${itemId}`, { method: "PATCH", body: JSON.stringify({ checked }) });

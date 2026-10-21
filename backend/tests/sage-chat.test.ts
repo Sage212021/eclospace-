@@ -147,6 +147,38 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     expect(system).toContain(number);
   });
 
+  // ── Mémoire institutionnelle & éditoriale validée (Lot 3) ──
+  it("la mémoire de connaissances est réservée au DG / admin (403 pour un correcteur)", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/v1/sage/knowledge", headers: { cookie: correcteurCookie } });
+    expect(r.statusCode).toBe(403);
+    const c = await app.inject({ method: "POST", url: "/api/v1/sage/knowledge", headers: { cookie: correcteurCookie }, payload: { category: "institution", title: "X", content: "Y" } });
+    expect(c.statusCode).toBe(403);
+  });
+
+  it("le DG ajoute une connaissance validée ; SAGE s'en sert et elle est partagée/persistante", async () => {
+    const marker = `Frais d'étude ${rnd()}`;
+    const created = await app.inject({ method: "POST", url: "/api/v1/sage/knowledge", headers: { cookie: dgCookie }, payload: { category: "procedure", title: marker, content: `Les frais d'étude d'un manuscrit sont de 25 000 FCFA (${marker}).` } });
+    expect(created.statusCode).toBe(201);
+    const kid = created.json().id as string;
+
+    // Partagée : un AUTRE compte habilité (admin) la voit aussi.
+    const list = await app.inject({ method: "GET", url: "/api/v1/sage/knowledge", headers: { cookie: adminCookie } });
+    expect((list.json().entries as Array<{ id: string }>).some((e) => e.id === kid)).toBe(true);
+
+    // SAGE reçoit la mémoire validée dans son contexte.
+    const conv = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+    const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${conv.json().id}/messages`, headers: { cookie: dgCookie }, payload: { content: "Quels sont les frais d'étude d'un manuscrit ?" } });
+    await waitMessage(msg.json().assistant_message_id);
+    const system = calls[calls.length - 1]?.system ?? "";
+    expect(system).toContain("CONNAISSANCES VALIDÉES");
+    expect(system).toContain(marker);
+
+    // Supprimée → retirée de la liste et du contexte.
+    await app.inject({ method: "DELETE", url: `/api/v1/sage/knowledge/${kid}`, headers: { cookie: dgCookie } });
+    const list2 = await app.inject({ method: "GET", url: "/api/v1/sage/knowledge", headers: { cookie: dgCookie } });
+    expect((list2.json().entries as Array<{ id: string }>).some((e) => e.id === kid)).toBe(false);
+  });
+
   it("archive une conversation : elle quitte la liste", async () => {
     const created = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
     const convId = created.json().id as string;

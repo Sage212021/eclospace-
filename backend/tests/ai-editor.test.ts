@@ -137,6 +137,11 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     const lastUser = calls[calls.length - 1]?.messages as Array<{ role: string; content: string }> | undefined;
     const sent = lastUser?.map((x) => x.content).join(" ") ?? "";
     expect(sent).toContain("MANUSCRIT");
+    // Les règles de conversation naturelle (pas de tics d'IA, pas de méta-commentaire)
+    // sont bien portées par la consigne de comportement envoyée au modèle.
+    const system = calls[calls.length - 1]?.system ?? "";
+    expect(system).toContain("STYLE DE CONVERSATION");
+    expect(system).toContain("je vais procéder à l'analyse");
   });
 
   it("liste les conversations existantes (menu interne), une par ouvrage", async () => {

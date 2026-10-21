@@ -137,6 +137,29 @@ describe("devis de prestation éditoriale (compte d'auteur)", () => {
     expect(accept.json().acceptanceMethod).toBe("internal");
   });
 
+  it("facture une prestation AVEC acompte : avance stockée + solde (reliquat) + encaissement réel", async () => {
+    const author = await newAuthor();
+    const created = (await createQuote(author.id)).json();
+    await app.inject({ method: "POST", url: `/api/v1/editorial-quotes/${created.id}/accept`, headers: { cookie }, payload: { method: "internal", signer_name: `${author.firstName} ${author.lastName}`, consent: true } });
+
+    const inv = await app.inject({
+      method: "POST",
+      url: `/api/v1/editorial-quotes/${created.id}/invoice`,
+      headers: { cookie },
+      payload: { advance_amount: 50000, advance_label: "Acompte", advance_method: "cash" },
+    });
+    expect(inv.statusCode).toBe(201);
+    const invoice = inv.json();
+    // L'avance est portée sur la facture (impression « Avance » / « Solde à régler »).
+    expect(Number(invoice.advanceAmount)).toBe(50000);
+    expect(invoice.advanceLabel).toBe("Acompte");
+    // Le solde (reliquat) = total − avance.
+    expect(Number(invoice.totalTtc) - Number(invoice.advanceAmount)).toBe(75000);
+    // L'acompte est enregistré comme encaissement réel (paiement lettré).
+    const allocated = await prisma.paymentAllocation.aggregate({ where: { invoiceId: invoice.id }, _sum: { amount: true } });
+    expect(Number(allocated._sum.amount ?? 0)).toBe(50000);
+  });
+
   it("refuse la facture avant acceptation du devis (409)", async () => {
     const author = await newAuthor();
     const created = (await createQuote(author.id)).json();

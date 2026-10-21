@@ -2038,8 +2038,8 @@ export function acceptEditorialQuote(id: string, input: { method: "internal" | "
   return request<EditorialQuote>(`/api/v1/editorial-quotes/${id}/accept`, { method: "POST", body: JSON.stringify(input) });
 }
 
-export function invoiceEditorialQuote(id: string) {
-  return request<InvoiceDetail>(`/api/v1/editorial-quotes/${id}/invoice`, { method: "POST" });
+export function invoiceEditorialQuote(id: string, advance?: { advance_amount: number; advance_label?: string; advance_method?: string }) {
+  return request<InvoiceDetail>(`/api/v1/editorial-quotes/${id}/invoice`, { method: "POST", body: JSON.stringify(advance ?? {}) });
 }
 
 // Circuit devis → Éditorial → client → facture.
@@ -3849,7 +3849,7 @@ export function getDeliveryNote(id: string) {
   return request<DeliveryNote>(`/api/v1/deliveries/${id}/note`);
 }
 
-export function createDelivery(orderId: string, input: { carrier?: string; lines: { isbn_id: string; quantity: number }[] }) {
+export function createDelivery(orderId: string, input: { carrier?: string; lines: { isbn_id: string; quantity: number }[]; advance_amount?: number; advance_label?: string; advance_method?: string }) {
   return request<{ id: string; deliveryNumber: string }>(`/api/v1/sales-orders/${orderId}/deliveries`, {
     method: "POST",
     body: JSON.stringify(input),

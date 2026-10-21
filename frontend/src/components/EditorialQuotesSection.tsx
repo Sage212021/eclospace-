@@ -9,10 +9,12 @@ import {
   handQuoteToEditorial,
   listCustomers,
   listEditorialQuotes,
+  listPaymentMethods,
   sendEditorialQuote,
   type Customer,
   type EditorialQuote,
   type EditorialQuoteStatus,
+  type PaymentMethodDef,
   type ServiceType,
 } from "../api/client";
 import { printEditorialQuote, printInvoice } from "../lib/print";
@@ -86,11 +88,18 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [accepting, setAccepting] = useState<EditorialQuote | null>(null);
+  // Facturation : modal de saisie de l'acompte éventuel avant d'émettre la facture.
+  const [invoicing, setInvoicing] = useState<EditorialQuote | null>(null);
+  const [invAdv, setInvAdv] = useState({ amount: "", label: "Avance", method: "" });
+  const [methods, setMethods] = useState<PaymentMethodDef[]>([]);
 
   const refresh = () => listEditorialQuotes(manuscriptId).then(setQuotes).catch((e) => setError(e.message));
   useEffect(() => {
     refresh();
   }, [manuscriptId]);
+  useEffect(() => {
+    listPaymentMethods().then((ms) => setMethods(ms.filter((m) => m.active))).catch(() => {});
+  }, []);
 
   async function handleHandToEditorial(q: EditorialQuote) {
     setError(null);
@@ -160,18 +169,27 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
     }
   }
 
-  async function handleInvoice(q: EditorialQuote) {
-    const ok = await confirm({
-      title: "Établir la facture",
-      message: `Générer la facture de prestation depuis le devis ${q.quoteNumber} ?`,
-      detail: "Une facture émise est définitive (numérotation légale, non supprimable).",
-      confirmLabel: "Établir la facture",
-    });
-    if (!ok) return;
+  function openInvoice(q: EditorialQuote) {
+    setInvAdv({ amount: "", label: "Avance", method: "" });
+    setInvoicing(q);
+  }
+
+  async function doInvoice() {
+    const q = invoicing;
+    if (!q) return;
+    const advAmount = Number(invAdv.amount);
+    if (invAdv.amount.trim() && (!Number.isFinite(advAmount) || advAmount < 0)) {
+      setError("Montant d'acompte invalide.");
+      return;
+    }
+    const advance = advAmount > 0
+      ? { advance_amount: advAmount, advance_label: invAdv.label.trim() || "Avance", advance_method: invAdv.method || methods[0]?.code }
+      : undefined;
     setError(null);
     setInfo(null);
     try {
-      const invoice = await invoiceEditorialQuote(q.id);
+      const invoice = await invoiceEditorialQuote(q.id, advance);
+      setInvoicing(null);
       setInfo(`Facture ${invoice.invoiceNumber} générée depuis le devis ${q.quoteNumber}.`);
       refresh();
       printInvoice(invoice);
@@ -243,7 +261,7 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
               </button>
             )}
             {canCreate && q.status === "accepted" && (
-              <button onClick={() => handleInvoice(q)} style={{ ...secondaryButtonStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)", fontWeight: 600 }}>
+              <button onClick={() => openInvoice(q)} style={{ ...secondaryButtonStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)", fontWeight: 600 }}>
                 Générer la facture
               </button>
             )}
@@ -277,6 +295,49 @@ export function EditorialQuotesSection({ manuscriptId, defaultPartnerId, canCrea
           }}
         />
       )}
+
+      {invoicing && (() => {
+        const cur = invoicing.currency || "XAF";
+        const fmt = new Intl.NumberFormat("fr-FR", { style: "currency", currency: cur, maximumFractionDigits: 0 });
+        const ttc = Number(invoicing.totalTtc);
+        const adv = Math.max(0, Math.min(ttc, Number(invAdv.amount) || 0));
+        const solde = Math.round((ttc - adv) * 100) / 100;
+        return (
+          <Modal
+            title={`Établir la facture — devis ${invoicing.quoteNumber}`}
+            onClose={() => setInvoicing(null)}
+            footer={
+              <>
+                <Button variant="view" size="sm" onClick={() => setInvoicing(null)}>Annuler</Button>
+                <Button variant="add" size="sm" onClick={doInvoice}>Établir la facture</Button>
+              </>
+            }
+          >
+            <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--muted)" }}>
+              Montant total : <strong style={{ color: "var(--ink)", fontFamily: "var(--font-mono)" }}>{fmt.format(ttc)}</strong>. Une facture émise est définitive (numérotation légale).
+            </p>
+            <Field label="Acompte déjà versé par l'auteur (facultatif)">
+              <input type="number" min={0} inputMode="decimal" value={invAdv.amount} onChange={(e) => setInvAdv({ ...invAdv, amount: e.target.value })} placeholder="0" style={{ textAlign: "right", fontFamily: "var(--font-mono)" }} />
+            </Field>
+            <Field label="Libellé imprimé de l'acompte">
+              <input value={invAdv.label} onChange={(e) => setInvAdv({ ...invAdv, label: e.target.value })} placeholder="Avance" />
+            </Field>
+            {methods.length > 0 && (
+              <Field label="Mode de paiement de l'acompte">
+                <select value={invAdv.method} onChange={(e) => setInvAdv({ ...invAdv, method: e.target.value })}>
+                  <option value="">{methods[0]?.label} (par défaut)</option>
+                  {methods.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
+                </select>
+              </Field>
+            )}
+            {adv > 0 && (
+              <div style={{ fontSize: 12.5, color: "var(--ink)", marginTop: 6 }}>
+                {invAdv.label.trim() || "Avance"} : <strong style={{ fontFamily: "var(--font-mono)" }}>{fmt.format(adv)}</strong> → Solde à régler : <strong style={{ fontFamily: "var(--font-mono)", color: "var(--eclosion-dark, #9a7a12)" }}>{fmt.format(solde)}</strong>
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
     </CollapsibleSection>
   );
 }

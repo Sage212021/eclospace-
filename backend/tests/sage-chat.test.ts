@@ -8,10 +8,15 @@ vi.mock("@anthropic-ai/sdk", () => {
     messages = {
       create: async (args: { system?: string; messages?: unknown }) => {
         calls.push({ system: args.system, messages: args.messages });
+        // Tâche d'apprentissage : renvoyer un JSON structuré (proposition).
+        const isLearning = (args.system ?? "").includes("AMÉLIORATION");
+        const text = isLearning
+          ? '{"recurrent":["frais d\'étude des manuscrits"],"lacunes":["Montant exact non confirmé"],"propositions":[{"category":"procedure","title":"Frais d\'étude des manuscrits","content":"Les frais d\'étude s\'élèvent à 25 000 FCFA.","rationale":"Question posée plusieurs fois par le DG."}]}'
+          : "Je pense que cette collection mérite d'être étudiée : elle complèterait bien le catalogue.";
         return {
           model: "claude-sonnet-5",
           stop_reason: "end_turn",
-          content: [{ type: "text", text: "Je pense que cette collection mérite d'être étudiée : elle complèterait bien le catalogue." }],
+          content: [{ type: "text", text }],
           usage: { input_tokens: 80, output_tokens: 120 },
         };
       },
@@ -177,6 +182,43 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     await app.inject({ method: "DELETE", url: `/api/v1/sage/knowledge/${kid}`, headers: { cookie: dgCookie } });
     const list2 = await app.inject({ method: "GET", url: "/api/v1/sage/knowledge", headers: { cookie: dgCookie } });
     expect((list2.json().entries as Array<{ id: string }>).some((e) => e.id === kid)).toBe(false);
+  });
+
+  // ── Moteur d'apprentissage sous contrôle (Lot 4) ──
+  it("l'analyse est réservée au DG / admin (403 pour un correcteur)", async () => {
+    const r = await app.inject({ method: "POST", url: "/api/v1/sage/learning/analyze", headers: { cookie: correcteurCookie } });
+    expect(r.statusCode).toBe(403);
+  });
+
+  it("SAGE analyse les échanges, PROPOSE une fiche (pending), que le DG valide", async () => {
+    // Un échange préalable pour donner de la matière à l'analyse.
+    const conv = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: { content: "Rappelle-moi les frais d'étude des manuscrits." } });
+    await waitMessage(conv.json().assistant_message_id);
+
+    const run = await app.inject({ method: "POST", url: "/api/v1/sage/learning/analyze", headers: { cookie: dgCookie } });
+    expect(run.statusCode).toBe(202);
+
+    // Attendre la fin de l'analyse.
+    let latest: { status: string; proposal_count: number } | null = null;
+    for (let i = 0; i < 100; i++) {
+      latest = (await app.inject({ method: "GET", url: "/api/v1/sage/learning/latest", headers: { cookie: dgCookie } })).json().run;
+      if (latest && latest.status !== "pending") break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(latest?.status).toBe("done");
+    expect(latest!.proposal_count).toBeGreaterThanOrEqual(1);
+
+    // La proposition est en attente (pending), pas encore officielle.
+    const kList = await app.inject({ method: "GET", url: "/api/v1/sage/knowledge", headers: { cookie: dgCookie } });
+    const proposal = (kList.json().entries as Array<{ id: string; status: string; source: string }>).find((e) => e.status === "pending" && e.source === "sage");
+    expect(proposal).toBeTruthy();
+
+    // Validation → elle devient officielle.
+    const val = await app.inject({ method: "POST", url: `/api/v1/sage/knowledge/${proposal!.id}/validate`, headers: { cookie: dgCookie } });
+    expect(val.statusCode).toBe(200);
+    expect(val.json().status).toBe("validated");
+    const after = await prisma.aiKnowledge.findUniqueOrThrow({ where: { id: proposal!.id } });
+    expect(after.status).toBe("validated");
   });
 
   it("archive une conversation : elle quitte la liste", async () => {

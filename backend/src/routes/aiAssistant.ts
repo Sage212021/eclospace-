@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAnyRole } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { runConversationReply } from "../lib/aiAssistant.js";
+import { runLearningAnalysis } from "../lib/aiLearning.js";
 
 // Espace de dialogue privé DG ↔ SAGE (« Échanger avec SAGE »). Réservé à la
 // Direction générale et à l'administrateur. Conversations LIBRES, privées par
@@ -98,7 +99,7 @@ export default async function aiAssistantRoutes(fastify: FastifyInstance) {
     const entries = await prisma.aiKnowledge.findMany({
       where: { deletedAt: null },
       orderBy: [{ category: "asc" }, { updatedAt: "desc" }],
-      select: { id: true, category: true, title: true, content: true, status: true, createdAt: true, updatedAt: true },
+      select: { id: true, category: true, title: true, content: true, status: true, source: true, rationale: true, createdAt: true, updatedAt: true },
     });
     return reply.send({ entries });
   });
@@ -144,6 +145,37 @@ export default async function aiAssistantRoutes(fastify: FastifyInstance) {
     await prisma.aiKnowledge.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: request.user!.id } });
     await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "ai_knowledge", entityId: id, newValues: { deleted: true }, ipAddress: request.ip });
     return reply.send({ ok: true });
+  });
+
+  // Valider une PROPOSITION de SAGE (statut pending → validated) : elle entre
+  // alors dans la mémoire officielle et SAGE s'en sert. (Rejeter = DELETE.)
+  fastify.post("/api/v1/sage/knowledge/:id/validate", { preHandler: requireAnyRole(SAGE_ROLES) }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const existing = await prisma.aiKnowledge.findFirst({ where: { id, deletedAt: null }, select: { id: true, status: true } });
+    if (!existing) return reply.code(404).send({ code: "not_found", message: "Fiche introuvable." });
+    const updated = await prisma.aiKnowledge.update({ where: { id }, data: { status: "validated", validatedBy: request.user!.id, validatedAt: new Date() } });
+    await writeAuditLog({ userId: request.user!.id, action: "validate", entityType: "ai_knowledge", entityId: id, oldValues: { status: existing.status }, newValues: { status: "validated" }, ipAddress: request.ip });
+    return reply.send({ id: updated.id, status: updated.status });
+  });
+
+  // ── Moteur d'apprentissage sous contrôle (Lot 4) ───────────────────────────
+  // Lance une analyse des échanges récents du DG : SAGE repère récurrences et
+  // lacunes et propose des fiches (pending). Exécution en arrière-plan.
+  fastify.post("/api/v1/sage/learning/analyze", { preHandler: requireAnyRole(SAGE_ROLES) }, async (request, reply) => {
+    const owner = request.user!.id;
+    const already = await prisma.aiLearningRun.findFirst({ where: { ownerId: owner, status: "pending" }, select: { id: true } });
+    if (already) return reply.code(409).send({ code: "already_running", message: "Une analyse est déjà en cours." });
+    const run = await prisma.aiLearningRun.create({ data: { ownerId: owner, status: "pending" } });
+    await writeAuditLog({ userId: owner, action: "create", entityType: "ai_learning_run", entityId: run.id, ipAddress: request.ip });
+    void runLearningAnalysis(run.id);
+    return reply.code(202).send({ run_id: run.id });
+  });
+
+  // Dernière analyse du DG (état + résumé récurrences/lacunes).
+  fastify.get("/api/v1/sage/learning/latest", { preHandler: requireAnyRole(SAGE_ROLES) }, async (request, reply) => {
+    const run = await prisma.aiLearningRun.findFirst({ where: { ownerId: request.user!.id }, orderBy: { createdAt: "desc" } });
+    if (!run) return reply.send({ run: null });
+    return reply.send({ run: { id: run.id, status: run.status, summary: run.summary, proposal_count: run.proposalCount, error_message: run.errorMessage, created_at: run.createdAt } });
   });
 
   // Archiver (suppression logique) une conversation : elle quitte la liste.

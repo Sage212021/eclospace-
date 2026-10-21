@@ -5866,7 +5866,13 @@ model AiKnowledge {
   category    String    @default("institution")
   title       String
   content     String
+  // "validated" (saisie/validée par le DG) ; "pending" (proposée par SAGE, à
+  // valider — Lot 4) ; "rejected" (proposition écartée).
   status      String    @default("validated")
+  // "dg" (saisie humaine) ou "sage" (proposée par le moteur d'apprentissage).
+  source      String    @default("dg")
+  // Pourquoi SAGE la propose (pour une proposition « pending »).
+  rationale   String?
   createdBy   String?   @map("created_by")
   validatedBy String?   @map("validated_by")
   validatedAt DateTime? @map("validated_at")
@@ -5877,6 +5883,24 @@ model AiKnowledge {
 
   @@index([status])
   @@map("ai_knowledge")
+}
+
+// Journal d'une ANALYSE D'APPRENTISSAGE de SAGE (Lot 4) : SAGE relit les échanges
+// récents du DG, repère questions récurrentes et lacunes, et propose des fiches
+// de connaissance (AiKnowledge « pending »). Exécution en arrière-plan ; le
+// résumé (récurrences + lacunes) est consigné ici. Privé par propriétaire.
+model AiLearningRun {
+  id           String   @id @default(uuid())
+  ownerId      String   @map("owner_id")
+  status       String   @default("pending") // pending | done | erreur
+  summary      String   @default("")
+  proposalCount Int     @default(0) @map("proposal_count")
+  errorMessage String?  @map("error_message")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([ownerId])
+  @@map("ai_learning_runs")
 }
 
 // Mémoire de SAGE — Lot B. Le manuscrit est découpé en PASSAGES indexés

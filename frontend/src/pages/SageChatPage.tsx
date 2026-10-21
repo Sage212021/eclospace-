@@ -10,10 +10,14 @@ import {
   createSageKnowledge,
   updateSageKnowledge,
   deleteSageKnowledge,
+  validateSageKnowledge,
+  analyzeSageLearning,
+  getSageLearningLatest,
   type SageConversation,
   type SageDossier,
   type SageKnowledge,
   type SageKnowledgeCategory,
+  type SageLearningRun,
 } from "../api/client";
 
 const KNOWLEDGE_CATS: { value: SageKnowledgeCategory; label: string }[] = [
@@ -44,10 +48,21 @@ export function SageChatPage() {
   const [knowledge, setKnowledge] = useState<SageKnowledge[]>([]);
   const [kOpen, setKOpen] = useState(false);
   const [kForm, setKForm] = useState<{ id: string | null; category: SageKnowledgeCategory; title: string; content: string } | null>(null);
+  // Apprentissage (Lot 4) : dernière analyse + état.
+  const [learning, setLearning] = useState<SageLearningRun | null>(null);
 
   const loadConversations = () => listSageConversations().then((r) => setConversations(r.conversations)).catch(() => setConversations([]));
   const loadKnowledge = () => listSageKnowledge().then((r) => setKnowledge(r.entries)).catch(() => setKnowledge([]));
-  useEffect(() => { loadConversations(); loadKnowledge(); }, []);
+  const loadLearning = () => getSageLearningLatest().then((r) => setLearning(r.run)).catch(() => setLearning(null));
+  useEffect(() => { loadConversations(); loadKnowledge(); loadLearning(); }, []);
+
+  // Suivi de l'analyse d'apprentissage en cours.
+  useEffect(() => {
+    if (learning?.status !== "pending") return;
+    const t = setTimeout(() => { loadLearning(); loadKnowledge(); }, 4000);
+    return () => clearTimeout(t);
+    /* eslint-disable-next-line */
+  }, [learning]);
 
   const loadDossier = (id: string) =>
     getSageConversation(id).then((d) => { setDossier(d); loadConversations(); }).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
@@ -140,6 +155,22 @@ export function SageChatPage() {
     }
   }
 
+  async function acceptProposal(id: string) {
+    try { await validateSageKnowledge(id); await loadKnowledge(); } catch (e) { setError(e instanceof Error ? e.message : "Validation impossible."); }
+  }
+  async function rejectProposal(id: string) {
+    try { await deleteSageKnowledge(id); await loadKnowledge(); } catch (e) { setError(e instanceof Error ? e.message : "Rejet impossible."); }
+  }
+  async function analyze() {
+    setError(null);
+    try {
+      await analyzeSageLearning();
+      await loadLearning();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Analyse impossible.");
+    }
+  }
+
   // « Retenir » une réponse de SAGE comme décision/connaissance validée.
   async function rememberFromMessage(content: string) {
     const title = window.prompt("Retenir dans la mémoire de la maison.\n\nDonnez un titre court à cette connaissance :", "");
@@ -214,11 +245,48 @@ export function SageChatPage() {
                     </div>
                   </div>
                 )}
-                {knowledge.length === 0 ? (
-                  <p style={{ color: "var(--muted)", fontSize: 12.5, margin: 0 }}>Aucune fiche pour l'instant.</p>
+                {/* Apprentissage (Lot 4) : SAGE analyse les échanges et propose. */}
+                <div style={{ borderTop: "1px dashed var(--line)", paddingTop: 10, marginBottom: 10 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <button onClick={analyze} disabled={learning?.status === "pending"} style={{ ...rowBtnStyle, width: "auto", fontWeight: 700, padding: "6px 12px", opacity: learning?.status === "pending" ? 0.6 : 1 }}>
+                      {learning?.status === "pending" ? "Analyse en cours…" : "✨ Analyser mes échanges"}
+                    </button>
+                    <span style={{ fontSize: 11.5, color: "var(--muted)" }}>SAGE repère les questions récurrentes et ses lacunes, et propose des fiches à valider.</span>
+                  </div>
+                  {learning && learning.status === "done" && learning.summary && (
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8, whiteSpace: "pre-wrap", lineHeight: 1.5, background: "var(--ivory, #FAF8F2)", border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>{learning.summary}</div>
+                  )}
+                  {learning && learning.status === "erreur" && (
+                    <div style={{ fontSize: 12, color: "var(--alert)", marginTop: 8 }}>⚠ {learning.error_message || "L'analyse a échoué."}</div>
+                  )}
+                </div>
+
+                {/* Propositions de SAGE (à valider). */}
+                {knowledge.some((k) => k.status === "pending") && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", marginBottom: 6 }}>Propositions de SAGE — à valider</div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {knowledge.filter((k) => k.status === "pending").map((e) => (
+                        <div key={e.id} style={{ border: "1px solid var(--eclosion, #D9B21A)", borderRadius: 8, padding: "8px 10px", background: "#fffdf4" }}>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}><span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", marginRight: 6 }}>{KCAT_LABEL(e.category).toUpperCase()}</span>{e.title}</div>
+                          <div style={{ fontSize: 12, color: "var(--ink)", marginTop: 3, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{e.content}</div>
+                          {e.rationale && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3, fontStyle: "italic" }}>Pourquoi : {e.rationale}</div>}
+                          <div style={{ display: "flex", gap: 8, marginTop: 7 }}>
+                            <button onClick={() => acceptProposal(e.id)} style={{ background: "#2F7D4A", color: "#fff", border: "none", borderRadius: 7, padding: "5px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Valider</button>
+                            <button onClick={() => rejectProposal(e.id)} style={{ background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 7, padding: "5px 12px", fontWeight: 600, fontSize: 12, cursor: "pointer" }}>Rejeter</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Connaissances validées. */}
+                {knowledge.filter((k) => k.status === "validated").length === 0 ? (
+                  <p style={{ color: "var(--muted)", fontSize: 12.5, margin: 0 }}>Aucune fiche validée pour l'instant.</p>
                 ) : (
                   <div style={{ display: "grid", gap: 6 }}>
-                    {knowledge.map((e) => (
+                    {knowledge.filter((k) => k.status === "validated").map((e) => (
                       <div key={e.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", background: "var(--ivory, #FAF8F2)" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
                           <span style={{ fontSize: 13, fontWeight: 600 }}><span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)", marginRight: 6 }}>{KCAT_LABEL(e.category).toUpperCase()}</span>{e.title}</span>

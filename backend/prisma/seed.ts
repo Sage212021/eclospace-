@@ -2653,6 +2653,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-apprentissage-lot-4",
+      version: "2026.10",
+      title: "Nouveauté — SAGE apprend de vos échanges et vous propose des enrichissements",
+      body: "Dernière étape de la montée en puissance de SAGE : dans « Échanger avec SAGE » → « Connaissances de la maison », un bouton « ✨ Analyser mes échanges » lance une relecture de vos conversations récentes. SAGE en tire trois choses : les QUESTIONS RÉCURRENTES qui mériteraient une explication de référence, ses LACUNES (ce sur quoi il a manqué d'une information fiable) et des PROPOSITIONS de fiches de connaissance à ajouter à la mémoire de la maison. Rien n'entre tout seul : chaque proposition s'affiche « à valider » — vous cliquez « Valider » (elle devient officielle et SAGE s'en sert) ou « Rejeter ». SAGE ne propose que ce qui ressort clairement de vos échanges (par exemple une décision que vous avez prise) et n'invente jamais une règle ou un chiffre. C'est l'apprentissage « sous contrôle » : SAGE s'enrichit au fil du temps, mais la direction garde la main sur ce qui devient vérité de la maison. Réservé à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-memoire-connaissances-lot-3",
       version: "2026.10",
       title: "Nouveauté — SAGE retient durablement les connaissances de la maison",

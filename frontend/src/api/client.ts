@@ -2938,8 +2938,18 @@ export interface SageKnowledge {
   title: string;
   content: string;
   status: string;
+  source: string;
+  rationale: string | null;
   created_at: string;
   updated_at: string;
+}
+export interface SageLearningRun {
+  id: string;
+  status: "pending" | "done" | "erreur";
+  summary: string;
+  proposal_count: number;
+  error_message: string | null;
+  created_at: string;
 }
 export function listSageKnowledge() {
   return request<{ entries: SageKnowledge[] }>("/api/v1/sage/knowledge");
@@ -2952,6 +2962,15 @@ export function updateSageKnowledge(id: string, input: Partial<{ category: SageK
 }
 export function deleteSageKnowledge(id: string) {
   return request<{ ok: true }>(`/api/v1/sage/knowledge/${id}`, { method: "DELETE" });
+}
+export function validateSageKnowledge(id: string) {
+  return request<{ id: string; status: string }>(`/api/v1/sage/knowledge/${id}/validate`, { method: "POST" });
+}
+export function analyzeSageLearning() {
+  return request<{ run_id: string }>("/api/v1/sage/learning/analyze", { method: "POST" });
+}
+export function getSageLearningLatest() {
+  return request<{ run: SageLearningRun | null }>("/api/v1/sage/learning/latest");
 }
 
 export function toggleChecklistItem(itemId: string, checked: boolean) {

@@ -2653,6 +2653,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-dialogue-catalogue-erp-lot-2",
+      version: "2026.10",
+      title: "Nouveauté — SAGE connaît désormais les manuscrits d'Eclospace dans vos échanges",
+      body: "Dans « Échanger avec SAGE », SAGE s'appuie maintenant sur les VRAIS dossiers enregistrés dans Eclospace. Vous pouvez lui demander par exemple : « Quels manuscrits sont en attente d'évaluation ? », « Fais le point sur les projets en cours », « Quels projets sont bloqués et à quelle étape ? », « Retrouve le dossier du roman de tel auteur », « Compare les ouvrages de cette collection » ou « Prépare une synthèse des manuscrits qui attendent une décision ». Il lit les métadonnées réelles (référence, titre, auteur, genre, étape actuelle, dates) — pas une copie, la base elle-même. S'il ne trouve pas un ouvrage ou un auteur, il le dit clairement au lieu d'inventer. Pour analyser le TEXTE d'un manuscrit (et non ses informations de dossier), passez par son espace « SAGE — Éditeur ». Réservé, comme l'espace, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-espace-dialogue-dg-lot-1",
       version: "2026.10",
       title: "Nouveauté — « Échanger avec SAGE » : votre espace de dialogue privé",

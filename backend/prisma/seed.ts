@@ -2653,6 +2653,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-espace-dialogue-dg-lot-1",
+      version: "2026.10",
+      title: "Nouveauté — « Échanger avec SAGE » : votre espace de dialogue privé",
+      body: "Dans Pilotage, une nouvelle rubrique « Échanger avec SAGE » vous ouvre un espace de travail privé avec SAGE, l'éditeur de la maison — réservé à la Direction générale et à l'administrateur. Vous y dialoguez librement, comme avec un collaborateur éditorial : réfléchir à une collection, à un projet, à un manuscrit (déjà enregistré ou simple idée), demander un avis argumenté ou une synthèse. Pas de formulaire ni de catégorie à choisir : vous écrivez, SAGE répond. Vos conversations sont conservées (historique), vous pouvez en créer de nouvelles, les renommer, reprendre une discussion plus tard — et elles ne sont visibles que de vous. SAGE garde son franc-parler professionnel : il argumente, signale les risques et n'approuve pas tout par principe ; il n'invente jamais un chiffre, un statut ou une décision, et une idée discutée ne devient jamais une décision officielle tant que vous ne l'avez pas validée. C'est la première étape : la consultation directe des manuscrits de l'ERP et la mémoire des connaissances de la maison arriveront ensuite.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-facture-date-emission-impression",
       version: "2026.10",
       title: "Nouveauté — La facture porte la date de validation et la date d'impression",

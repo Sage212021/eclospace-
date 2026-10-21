@@ -2891,6 +2891,46 @@ export function getAiEditorJournal(manuscriptId: string) {
   return request<{ events: AiEditorJournalEvent[] }>(`/api/v1/ai-editor/${manuscriptId}/journal`);
 }
 
+// ── Espace de dialogue privé DG ↔ SAGE (« Échanger avec SAGE ») ──────────────
+export interface SageConversation {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+export interface SageMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  status: "pending" | "done" | "erreur";
+  error_message: string | null;
+  created_at: string;
+}
+export interface SageDossier {
+  id: string;
+  title: string;
+  messages: SageMessage[];
+}
+export function listSageConversations() {
+  return request<{ conversations: SageConversation[] }>("/api/v1/sage/conversations");
+}
+export function getSageConversation(id: string) {
+  return request<SageDossier>(`/api/v1/sage/conversations/${id}`);
+}
+export function createSageConversation(input?: { title?: string; content?: string }) {
+  return request<{ id: string; title: string; assistant_message_id: string | null }>("/api/v1/sage/conversations", { method: "POST", body: JSON.stringify(input ?? {}) });
+}
+export function sendSageMessage(id: string, content: string) {
+  return request<{ user_message_id: string; assistant_message_id: string }>(`/api/v1/sage/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ content }) });
+}
+export function renameSageConversation(id: string, title: string) {
+  return request<{ id: string; title: string }>(`/api/v1/sage/conversations/${id}`, { method: "PATCH", body: JSON.stringify({ title }) });
+}
+export function archiveSageConversation(id: string) {
+  return request<{ ok: true }>(`/api/v1/sage/conversations/${id}`, { method: "DELETE" });
+}
+
 export function toggleChecklistItem(itemId: string, checked: boolean) {
   return request<ChecklistItem>(`/api/v1/checklist-items/${itemId}`, { method: "PATCH", body: JSON.stringify({ checked }) });
 }

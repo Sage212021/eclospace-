@@ -31,6 +31,7 @@ const MyProductionWork = lazy(() => import("./pages/MyProductionWork").then((m) 
 const MyProductionValidations = lazy(() => import("./pages/MyProductionValidations").then((m) => ({ default: m.MyProductionValidations })));
 const ContractualisationInbox = lazy(() => import("./pages/ContractualisationPage").then((m) => ({ default: m.ContractualisationInbox })));
 const AiEditorPage = lazy(() => import("./pages/AiEditorPage").then((m) => ({ default: m.AiEditorPage })));
+const SageChatPage = lazy(() => import("./pages/SageChatPage").then((m) => ({ default: m.SageChatPage })));
 const IsbnBank = lazy(() => import("./pages/IsbnBank").then((m) => ({ default: m.IsbnBank })));
 const IsbnLoad = lazy(() => import("./pages/IsbnLoad").then((m) => ({ default: m.IsbnLoad })));
 const StockPage = lazy(() => import("./pages/StockPage").then((m) => ({ default: m.StockPage })));
@@ -102,6 +103,7 @@ type PageId =
   | "my-production-work"
   | "my-production-validations"
   | "ai-editor"
+  | "sage-chat"
   | "isbn-bank"
   | "isbn-load"
   | "editorial-quotes-inbox"
@@ -298,6 +300,8 @@ const NAV_POLES: NavPole[] = [
       // administrateur pour l'instant (ouverture au directeur éditorial plus
       // tard = ajouter DIR_EDITORIAL ici et dans EDITOR_ROLES côté serveur).
       { key: "pi-editeur-ia", label: "SAGE — Éditeur", anyRole: ["ADMIN_GENERAL", "DIR_GENERAL"] },
+      // Espace de dialogue privé du DG avec SAGE (conversations libres).
+      { key: "pi-sage-chat", label: "Échanger avec SAGE", anyRole: ["ADMIN_GENERAL", "DIR_GENERAL"] },
       { key: "pi-direction", label: "Direction générale", permission: "direction:consultation" },
       { key: "pi-rapports", label: "Rapports & statistiques", permission: "rapports:consultation" },
       { key: "pi-journal", label: "Journal d'activité", permission: "direction:consultation" },
@@ -325,6 +329,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "pr-mes-travaux": { page: "my-production-work" },
   "pi-mes-validations": { page: "my-production-validations" },
   "pi-editeur-ia": { page: "ai-editor" },
+  "pi-sage-chat": { page: "sage-chat" },
   "pr-a-publier": { page: "site-publish" },
   "pr-maquette": { stage: "MISE_EN_PAGE", heading: "Maquette & mise en page" },
   "pr-infographie": { stage: "INFOGRAPHIE", heading: "Infographie & couvertures" },
@@ -913,6 +918,7 @@ export function App() {
           </>
         )}
         {leaf && "page" in leaf && leaf.page === "ai-editor" && <AiEditorPage />}
+        {leaf && "page" in leaf && leaf.page === "sage-chat" && <SageChatPage />}
         {leaf && "page" in leaf && leaf.page === "isbn-bank" && (
           <IsbnBank canManage={permissions.has("isbn:administration")} onOpenManuscript={openManuscript} />
         )}

@@ -1454,6 +1454,15 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-sage-audit-catalogue-eclospace",
+      version: "2026.10",
+      title: "Nouveauté — SAGE audite votre catalogue Éclospace",
+      body: "Dans « Échanger avec SAGE », un nouveau panneau « 🔎 Audit du catalogue » passe en revue toutes les fiches du catalogue et vous signale, par ordre de priorité, ce qui manque ou cloche : ouvrage sans auteur, résumé absent ou trop court, genre non renseigné, biographie d'auteur manquante, couverture absente, mots-clés manquants, et — pour les ouvrages parus — ISBN ou prix manquant, plus les doublons (titres identiques, ISBN partagé). Chaque point nomme l'ouvrage, l'information actuelle, la correction proposée et le motif. C'est une lecture seule : SAGE ne modifie rien, et les changements sensibles (prix, ISBN, droits) restent soumis à votre validation. Pour l'instant, l'audit porte sur le catalogue interne Éclospace ; la comparaison avec le site public eclosion.cm pourra venir dans un second temps. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-editeur-culture-genres-titrologie",
       version: "2026.10",
       title: "Nouveauté — SAGE enrichi : culture littéraire, tous les genres, jeunesse africaine, bilinguisme et un livrable « Titrologie »",

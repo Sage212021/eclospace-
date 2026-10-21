@@ -98,6 +98,9 @@ describe("commandes à facturer + validation par seuil", () => {
     invoiceIds.push(inv.json().id);
     expect(inv.json().status).toBe("issued");
     expect(inv.json().needs_validation).toBe(false);
+    // Facture émise directement → date d'émission officielle posée tout de suite.
+    const invoice = await prisma.invoice.findUniqueOrThrow({ where: { id: inv.json().id } });
+    expect(invoice.issuedAt).not.toBeNull();
   });
 
   it("au-dessus du seuil : la facture attend la validation du DG, puis est validée", async () => {
@@ -106,6 +109,9 @@ describe("commandes à facturer + validation par seuil", () => {
     expect(inv.statusCode).toBe(201);
     invoiceIds.push(inv.json().id);
     expect(inv.json().status).toBe("pending_validation");
+    // En attente de validation → pas encore de date d'émission officielle.
+    const before = await prisma.invoice.findUniqueOrThrow({ where: { id: inv.json().id } });
+    expect(before.issuedAt).toBeNull();
 
     const pending = await app.inject({ method: "GET", url: "/api/v1/invoices/pending-validation", headers: { cookie: admin } });
     expect((pending.json() as { id: string }[]).some((i) => i.id === inv.json().id)).toBe(true);
@@ -113,6 +119,34 @@ describe("commandes à facturer + validation par seuil", () => {
     const val = await app.inject({ method: "POST", url: `/api/v1/invoices/${inv.json().id}/validate`, headers: { cookie: admin } });
     expect(val.statusCode).toBe(200);
     expect(val.json().status).toBe("issued");
+    // La date d'émission = le jour de la contre-validation définitive.
+    const after = await prisma.invoice.findUniqueOrThrow({ where: { id: inv.json().id } });
+    expect(after.issuedAt).not.toBeNull();
+  });
+
+  it("la Finance ajuste la date d'émission tant que la facture n'est pas tirée", async () => {
+    const order = await createOrder(300_000);
+    const inv = await app.inject({ method: "POST", url: `/api/v1/billing-orders/${order.json().id}/invoice`, headers: { cookie: admin } });
+    const invId = inv.json().id as string;
+    invoiceIds.push(invId);
+
+    // Date passée acceptée.
+    const ok = await app.inject({ method: "PATCH", url: `/api/v1/invoices/${invId}/issue-date`, headers: { cookie: admin }, payload: { issued_at: "2026-10-15" } });
+    expect(ok.statusCode).toBe(200);
+    const after = await prisma.invoice.findUniqueOrThrow({ where: { id: invId } });
+    expect(after.issuedAt?.toISOString().slice(0, 10)).toBe("2026-10-15");
+
+    // Date future refusée.
+    const future = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const bad = await app.inject({ method: "PATCH", url: `/api/v1/invoices/${invId}/issue-date`, headers: { cookie: admin }, payload: { issued_at: future } });
+    expect(bad.statusCode).toBe(409);
+    expect(bad.json().code).toBe("future_date");
+
+    // Une fois tirée (imprimée), la date est verrouillée.
+    await app.inject({ method: "POST", url: `/api/v1/invoices/${invId}/mark-printed`, headers: { cookie: admin } });
+    const locked = await app.inject({ method: "PATCH", url: `/api/v1/invoices/${invId}/issue-date`, headers: { cookie: admin }, payload: { issued_at: "2026-10-14" } });
+    expect(locked.statusCode).toBe(409);
+    expect(locked.json().code).toBe("already_printed");
   });
 
   it("remise saisie dès la commande : reprise à l'établissement si non redéfinie", async () => {

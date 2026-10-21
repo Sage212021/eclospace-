@@ -4087,6 +4087,9 @@ export interface Invoice {
   totalTtc: string;
   dueDate: string | null;
   createdAt: string;
+  // Date d'émission officielle (validation définitive) imprimée sur le document ;
+  // repli sur createdAt si absente. Ajustable par la Finance tant que non tirée.
+  issuedAt?: string | null;
   customer: { name: string };
   // Date de première impression : une fois « tirée », la facture n'est plus annulable.
   printedAt?: string | null;
@@ -4097,6 +4100,11 @@ export interface Invoice {
 }
 export function markInvoicePrinted(id: string) {
   return request<{ ok: true; printed_at: string | null }>(`/api/v1/invoices/${id}/mark-printed`, { method: "POST" });
+}
+
+// Ajuste la date d'émission imprimée sur la facture (tant qu'elle n'est pas tirée).
+export function adjustInvoiceIssueDate(id: string, issuedAt: string) {
+  return request<{ ok: true; issued_at: string | null }>(`/api/v1/invoices/${id}/issue-date`, { method: "PATCH", body: JSON.stringify({ issued_at: issuedAt }) });
 }
 
 // Correction avant impression : annule directement une facture non encore tirée

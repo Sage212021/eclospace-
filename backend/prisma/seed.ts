@@ -2653,6 +2653,14 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-facture-date-emission-impression",
+      version: "2026.10",
+      title: "Nouveauté — La facture porte la date de validation et la date d'impression",
+      body: "La date qui figure sur la facture est désormais celle de sa VALIDATION DÉFINITIVE (et non celle du jour où on a commencé à l'établir). Pour une facture au-dessus du seuil, c'est le jour où la Direction la contre-valide ; pour les autres, le jour où elle est émise. La facture affiche aussi la DATE D'IMPRESSION (le jour où le document est édité). Et la Finance peut AJUSTER cette date d'émission : sur une facture émise mais pas encore tirée, un bouton « Ajuster la date » permet de saisir la date exacte à imprimer (format AAAA-MM-JJ) — utile quand une facture est préparée un jour et validée/éditée un autre. Règle de sécurité : une fois la facture imprimée (« tirée »), elle fait foi et sa date ne peut plus être modifiée ; la date saisie ne peut pas non plus être postérieure à aujourd'hui. Chaque ajustement est tracé.",
+      permissionModules: ["finance"],
+      departmentCodes: ["FIN", "DG"],
+    },
+    {
       slug: "2026-10-sage-conversation-naturelle",
       version: "2026.10",
       title: "Nouveauté — SAGE converse de façon plus naturelle",

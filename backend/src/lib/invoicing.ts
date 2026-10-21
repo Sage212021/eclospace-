@@ -70,6 +70,10 @@ async function createInvoiceRecord(
       totalTtc: Math.round(totalTtc * 100) / 100,
       dueDate,
       status: params.status ?? "issued",
+      // Date d'émission officielle : fixée tout de suite si la facture est émise
+      // directement ; laissée vide si elle attend la contre-validation du DG
+      // (elle sera posée à la validation). Imprimée sur le document.
+      issuedAt: (params.status ?? "issued") === "pending_validation" ? null : new Date(),
       advanceAmount: Math.max(0, Math.round((params.advanceAmount ?? 0) * 100) / 100),
       advanceLabel: params.advanceLabel?.trim() || null,
       advanceMethod: params.advanceMethod ?? null,

@@ -6,11 +6,18 @@ const calls: { system?: string; messages?: unknown }[] = [];
 // Quand non vide, le faux modèle déclenche l'outil « dossier_manuscrit » sur cette
 // référence (pour tester le tool-calling), puis répond au tour suivant.
 let toolRef = "";
+// Quand vrai, simule une recherche web (bloc web_search_tool_result + texte).
+let webRef = false;
+// Quand vrai, le faux modèle ÉCHOUE si l'outil web est présent → force le repli
+// SANS recherche web (test de la dégradation gracieuse).
+let failWeb = false;
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
-      create: async (args: { system?: string; messages?: Array<{ role: string; content: unknown }>; tools?: unknown }) => {
+      create: async (args: { system?: string; messages?: Array<{ role: string; content: unknown }>; tools?: Array<{ name?: string }> }) => {
         calls.push({ system: args.system, messages: args.messages });
+        const hasWeb = Array.isArray(args.tools) && args.tools.some((t) => t?.name === "web_search");
+        if (failWeb && hasWeb) throw new Error("web search non supporté par ce modèle");
         if ((args.system ?? "").includes("AMÉLIORATION")) {
           return { model: "claude-sonnet-5", stop_reason: "end_turn", usage: { input_tokens: 80, output_tokens: 120 },
             content: [{ type: "text", text: '{"recurrent":["frais d\'étude des manuscrits"],"lacunes":["Montant exact non confirmé"],"propositions":[{"category":"procedure","title":"Frais d\'étude des manuscrits","content":"Les frais d\'étude s\'élèvent à 25 000 FCFA.","rationale":"Question posée plusieurs fois par le DG."}]}' }] };
@@ -18,6 +25,14 @@ vi.mock("@anthropic-ai/sdk", () => {
         const msgs = args.messages ?? [];
         const last = msgs[msgs.length - 1];
         const lastIsToolResult = !!last && Array.isArray(last.content) && (last.content as Array<{ type?: string }>).some((c) => c?.type === "tool_result");
+        if (hasWeb && webRef && !lastIsToolResult) {
+          return { model: "claude-sonnet-5", stop_reason: "end_turn", usage: { input_tokens: 80, output_tokens: 90 },
+            content: [
+              { type: "server_tool_use", id: "ws_1", name: "web_search", input: { query: "marché du livre" } },
+              { type: "web_search_tool_result", tool_use_id: "ws_1", content: [{ type: "web_search_result", url: "https://exemple.org/etude", title: "Étude de référence" }] },
+              { type: "text", text: "D'après une source consultée, voici ce qu'il en est." },
+            ] };
+        }
         if (args.tools && toolRef && !lastIsToolResult) {
           return { model: "claude-sonnet-5", stop_reason: "tool_use", usage: { input_tokens: 80, output_tokens: 40 },
             content: [{ type: "tool_use", id: "tool_1", name: "dossier_manuscrit", input: { reference: toolRef } }] };
@@ -283,6 +298,30 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     // Lecture seule : l'ouvrage n'est pas modifié par l'audit.
     const after = await prisma.manuscript.findUniqueOrThrow({ where: { manuscriptNumber: number } });
     expect(after.summary).toBeNull();
+  });
+
+  // ── Recherche web (accès Internet réel, section 16) ──
+  it("SAGE peut rechercher sur le Web et cite ses sources (traçabilité)", async () => {
+    webRef = true;
+    const conv = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+    const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${conv.json().id}/messages`, headers: { cookie: dgCookie }, payload: { content: "Quelles sont les tendances du marché du livre ?" } });
+    const assistant = await waitMessage(msg.json().assistant_message_id);
+    webRef = false;
+    expect(assistant.status).toBe("done");
+    // La réponse cite la source consultée (titre + lien) → traçabilité.
+    expect(assistant.content).toContain("Sources consultées sur le Web");
+    expect(assistant.content).toContain("https://exemple.org/etude");
+  });
+
+  it("dégradation gracieuse : si le modèle ne supporte pas la recherche web, SAGE répond quand même", async () => {
+    failWeb = true;
+    const conv = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+    const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${conv.json().id}/messages`, headers: { cookie: dgCookie }, payload: { content: "Une idée de collection ?" } });
+    const assistant = await waitMessage(msg.json().assistant_message_id);
+    failWeb = false;
+    // Malgré l'échec de l'outil web, SAGE retombe SANS recherche et répond.
+    expect(assistant.status).toBe("done");
+    expect(assistant.content.length).toBeGreaterThan(0);
   });
 
   it("archive une conversation : elle quitte la liste", async () => {

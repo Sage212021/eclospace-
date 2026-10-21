@@ -41,6 +41,8 @@ Tu n'affirmes jamais avoir lu un manuscrit intégral sur la seule foi d'un résu
 
 OUTILS DE RECHERCHE (données réelles d'Eclospace) : tu disposes d'outils pour (1) rechercher un manuscrit par titre, auteur ou référence, et (2) ouvrir son DOSSIER détaillé — étape actuelle dans le processus paramétré, collaborateur/service affecté, dernières opérations et validations enregistrées, étapes en attente ou blocages, et documents déjà déposés (type, date, déposant). Utilise ces outils dès que le DG pose une question précise sur un ouvrage enregistré ; ne te contente pas du catalogue résumé ci-dessous pour ces cas. Les documents que tu retrouves via le dossier sont automatiquement proposés au DG en ouverture/téléchargement : tu peux les nommer dans ta réponse (type, date, déposant) et indiquer lequel est le plus récent, sans jamais inventer un document, une étape ou une validation. Si le dossier ou un document n'existe pas, dis-le clairement.
 
+RECHERCHE WEB (accès Internet réel) : tu disposes d'un outil de recherche sur le Web. Déclenche une recherche quand une tâche l'exige vraiment — vérifier une donnée, une date, une statistique, une référence ou une actualité ; suivre le marché du livre et de l'édition ; te renseigner sur un auteur, un éditeur, une publication ou une norme — et évite-la quand tes informations suffisent. Hiérarchise les sources par fiabilité : officielles et institutionnelles pour le réglementaire ; publications scientifiques et ouvrages de référence pour le spécialisé ; sources primaires quand elles existent ; médias reconnus pour l'actualité ; sources professionnelles du livre pour le marché. Confronte plusieurs sources indépendantes quand l'enjeu ou le risque d'erreur le justifie, et ne tiens pas une information pour vraie du seul fait qu'elle apparaît dans les résultats. TRAÇABILITÉ : pour toute recherche importante, indique la source (titre, organisme ou auteur si connu, date si connue) et le lien, et distingue le fait vérifié, l'analyse, l'hypothèse et ce qui reste à confirmer. Tu ne FABRIQUES JAMAIS une référence, une citation, un lien ou une statistique : si tu ne trouves pas, tu le dis. CONFIDENTIALITÉ : tu n'envoies JAMAIS à la recherche web le contenu d'un manuscrit ni une information confidentielle d'Éclosion ; tu ne formules que des requêtes générales. Si la recherche est indisponible ou échoue, signale-le et appuie-toi prudemment sur ce que tu sais, sans rien inventer.
+
 VÉRITÉ ET LIMITES :
 - Tu n'inventes JAMAIS un statut, un titre, un nom d'auteur, une décision, une règle, un tarif ou une source. Quand tu ne sais pas, tu le dis et, si utile, tu indiques comment l'obtenir (vérifier dans l'ERP, auprès du service concerné).
 - Tu distingues toujours : une IDÉE explorée, une RECOMMANDATION de ta part, et une DÉCISION validée par le DG. Une proposition discutée ne devient jamais, à elle seule, une décision officielle de la maison.
@@ -123,6 +125,26 @@ const SAGE_TOOLS = [
     input_schema: { type: "object" as const, properties: { reference: { type: "string", description: "Référence, titre ou auteur du manuscrit." } }, required: ["reference"] },
   },
 ];
+
+// Recherche web côté serveur Anthropic (section 16) : Anthropic exécute la
+// recherche et renvoie les résultats (avec URL) dans la même réponse. Variante
+// « de base » (large compatibilité modèles). Si le modèle/clé ne la supporte
+// pas, l'appel échoue → on réessaie SANS cet outil (dégradation gracieuse).
+const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search", max_uses: 5 };
+
+type WebSource = { title: string; url: string };
+
+// Collecte les sources web (blocs `web_search_tool_result`) d'une réponse, pour
+// la traçabilité. En cas d'erreur de l'outil, le `content` est un OBJET (pas une
+// liste) : on l'ignore silencieusement.
+function collectWebSources(blocks: Array<{ type: string; content?: unknown }>, into: Map<string, WebSource>): void {
+  for (const b of blocks) {
+    if (b.type !== "web_search_tool_result" || !Array.isArray(b.content)) continue;
+    for (const item of b.content as Array<{ type?: string; url?: string; title?: string }>) {
+      if (item?.type === "web_search_result" && item.url) into.set(item.url, { title: item.title || item.url, url: item.url });
+    }
+  }
+}
 
 async function usernamesByIds(ids: (string | null | undefined)[]): Promise<Map<string, string>> {
   const clean = [...new Set(ids.filter((x): x is string => !!x))];
@@ -256,15 +278,35 @@ export async function runConversationReply(assistantMessageId: string): Promise<
     const client = new Anthropic({ apiKey });
 
     // Boucle de tool-calling : SAGE peut interroger l'ERP (rechercher / dossier)
-    // puis répondre. Lecture seule ; les documents rencontrés sont proposés au DG.
+    // ET le Web (recherche côté serveur Anthropic), puis répondre. Lecture seule ;
+    // les documents rencontrés sont proposés au DG, les sources web sont citées.
     const docs = new Map<string, DocAttachment>();
+    const webSources = new Map<string, WebSource>();
     const convo: { role: "user" | "assistant"; content: unknown }[] = messages.map((m) => ({ role: m.role, content: m.content }));
+    const toolNames = new Set(SAGE_TOOLS.map((t) => t.name));
+    // Dégradation gracieuse : si le modèle/clé ne supporte pas la recherche web,
+    // le 1er appel échoue → on repasse SANS l'outil web pour le reste de la réponse.
+    let webEnabled = true;
+    const callModel = async (): Promise<{ content: unknown[]; stop_reason?: string | null }> => {
+      const tools = webEnabled ? [...SAGE_TOOLS, WEB_SEARCH_TOOL] : SAGE_TOOLS;
+      try {
+        return await client.messages.create({ model: modelId, max_tokens: 4096, system, tools: tools as never, messages: convo as never });
+      } catch (err) {
+        if (webEnabled) { webEnabled = false; return await client.messages.create({ model: modelId, max_tokens: 4096, system, tools: SAGE_TOOLS as never, messages: convo as never }); }
+        throw err;
+      }
+    };
     let finalText = "";
-    for (let step = 0; step < 6; step++) {
-      const resp = await client.messages.create({ model: modelId, max_tokens: 4096, system, tools: SAGE_TOOLS, messages: convo as never });
-      const blocks = resp.content as Array<{ type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }>;
+    for (let step = 0; step < 8; step++) {
+      const resp = await callModel();
+      const blocks = resp.content as Array<{ type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown>; content?: unknown }>;
+      collectWebSources(blocks, webSources);
       finalText = blocks.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();
-      const toolUses = blocks.filter((b) => b.type === "tool_use");
+      // Recherche web serveur longue : la réponse peut être « en pause » → on la
+      // relance en ré-empilant le contenu partiel (aucun outil client à exécuter).
+      if (resp.stop_reason === "pause_turn") { convo.push({ role: "assistant", content: resp.content }); continue; }
+      // On n'exécute QUE nos outils client (les outils serveur sont déjà traités).
+      const toolUses = blocks.filter((b) => b.type === "tool_use" && toolNames.has(b.name ?? ""));
       if (toolUses.length === 0) break;
       convo.push({ role: "assistant", content: resp.content });
       const results = [];
@@ -273,6 +315,12 @@ export async function runConversationReply(assistantMessageId: string): Promise<
         results.push({ type: "tool_result", tool_use_id: tu.id, content: out });
       }
       convo.push({ role: "user", content: results });
+    }
+
+    // Traçabilité : liste des sources web consultées, ajoutée en pied de réponse.
+    if (webSources.size > 0) {
+      const list = [...webSources.values()].slice(0, 12).map((s) => `• ${s.title} — ${s.url}`).join("\n");
+      finalText = `${finalText}\n\n— Sources consultées sur le Web —\n${list}`.trim();
     }
 
     await prisma.aiConversationMessage.update({

@@ -1454,6 +1454,15 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-sage-recherche-web",
+      version: "2026.10",
+      title: "Nouveauté — SAGE peut chercher sur Internet (et cite ses sources)",
+      body: "Dans « Échanger avec SAGE », SAGE dispose maintenant d'une vraie recherche sur le Web : il peut vérifier une donnée, une date, une référence ou une actualité, suivre le marché du livre, se renseigner sur un auteur ou un éditeur, quand une question l'exige. Il privilégie les sources fiables (officielles, scientifiques, médias reconnus), les recoupe quand l'enjeu le justifie, et surtout il CITE ses sources : chaque réponse appuyée sur le Web se termine par la liste « Sources consultées » avec les liens. Il ne fabrique jamais une référence ou un lien : s'il ne trouve pas, il le dit. Il n'envoie jamais le contenu d'un manuscrit ni d'information confidentielle à la recherche. Si la recherche n'est pas disponible, il répond quand même avec ce qu'il sait, en le signalant. Pour l'instant cette recherche est active dans l'espace de dialogue DG ; elle pourra être étendue à « SAGE — Éditeur » (vérification documentaire, bibliographie, titrologie) dans un second temps. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-audit-catalogue-eclospace",
       version: "2026.10",
       title: "Nouveauté — SAGE audite votre catalogue Éclospace",

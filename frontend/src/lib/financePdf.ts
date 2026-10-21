@@ -447,7 +447,11 @@ export function invoicePdf(invoice: InvoiceDetail): jsPDF {
     fileName: `${docName} ${invoice.invoiceNumber}`,
     number: invoice.invoiceNumber,
     meta: [
-      { label: "Émise le", value: invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString("fr-FR") : "—" },
+      // Date d'émission = validation définitive (issuedAt) ; repli sur createdAt
+      // pour les anciennes factures. Pour une vraie facture, on imprime aussi la
+      // date d'édition/tirage (printedAt, sinon le jour où le document est produit).
+      { label: "Émise le", value: new Date((invoice.issuedAt ?? invoice.createdAt) ?? Date.now()).toLocaleDateString("fr-FR") },
+      ...(invoice.type === "invoice" ? [{ label: "Imprimée le", value: new Date(invoice.printedAt ?? Date.now()).toLocaleDateString("fr-FR") }] : []),
       { label: "Échéance", value: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString("fr-FR") : "—" },
     ],
     partyLabel: isCredit ? "Avoir au profit de" : "Facturé à",

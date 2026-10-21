@@ -427,7 +427,9 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     // La facture est émise ; si une AVANCE avait été saisie à l'établissement
     // (encaissement différé car au-dessus du seuil), on l'enregistre maintenant.
     await prisma.$transaction(async (tx) => {
-      await tx.invoice.update({ where: { id }, data: { status: "issued" } });
+      // La date d'émission officielle = ce jour, la contre-validation définitive
+      // (et non le jour où la facture a été commencée). Préservée si déjà posée.
+      await tx.invoice.update({ where: { id }, data: { status: "issued", issuedAt: invoice.issuedAt ?? new Date() } });
       if (Number(invoice.advanceAmount) > 0) {
         await recordAdvancePayment(tx, id, Number(invoice.advanceAmount), invoice.advanceMethod || "cash");
       }
@@ -629,6 +631,28 @@ export default async function billingOrderRoutes(fastify: FastifyInstance) {
     });
     await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "invoice", entityId: id, oldValues: { status: invoice.status, printed: false }, newValues: { status: "cancelled", beforePrint: true, reason: parsed.data.reason.trim() }, ipAddress: request.ip });
     return reply.send({ ok: true, status: "cancelled" });
+  });
+
+  // Ajuste la DATE D'ÉMISSION imprimée sur la facture (ex. la facture a été
+  // commencée un jour et n'est validée/éditée que plus tard : c'est cette date
+  // qui doit figurer). Réservé à la Finance, tant que la facture n'a pas été
+  // tirée (après le premier tirage elle fait foi et devient immuable). Tracé.
+  fastify.patch("/api/v1/invoices/:id/issue-date", { preHandler: requirePermission("finance", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ issued_at: z.coerce.date() }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Date d'émission invalide.", details: parsed.error.issues });
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) return reply.code(404).send({ code: "not_found", message: "Facture introuvable." });
+    if (invoice.status === "cancelled") return reply.code(409).send({ code: "already_cancelled", message: "Cette facture est annulée : sa date ne peut plus être modifiée." });
+    if (invoice.printedAt) return reply.code(409).send({ code: "already_printed", message: "Cette facture a déjà été tirée : elle fait foi et sa date ne peut plus être modifiée." });
+    // Pas de date dans le futur (une facture ne s'émet pas « en avance »).
+    const when = parsed.data.issued_at;
+    if (when.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+      return reply.code(409).send({ code: "future_date", message: "La date d'émission ne peut pas être postérieure à aujourd'hui." });
+    }
+    const updated = await prisma.invoice.update({ where: { id }, data: { issuedAt: when } });
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "invoice", entityId: id, oldValues: { issuedAt: invoice.issuedAt?.toISOString() ?? null }, newValues: { issuedAt: when.toISOString() }, ipAddress: request.ip });
+    return reply.send({ ok: true, issued_at: updated.issuedAt?.toISOString() ?? null });
   });
 
   // Marque une facture comme « tirée » (imprimée) à sa première impression :

@@ -4373,6 +4373,13 @@ model Invoice {
   dueDate         DateTime?     @map("due_date")
   status          InvoiceStatus @default(issued)
 
+  // Date d'ÉMISSION officielle (validation définitive) imprimée sur le document :
+  // renseignée quand la facture devient « émise » (à la création si émise
+  // directement, sinon à la contre-validation du DG pour une facture au-dessus du
+  // seuil). Ajustable par la Finance tant que la facture n'a pas été tirée. À
+  // défaut (anciennes factures), l'impression retombe sur createdAt.
+  issuedAt        DateTime?     @map("issued_at")
+
   // Avance (acompte) versée à l'établissement et son libellé imprimé (défaut
   // « Avance ») ; `advanceMethod` = mode de paiement de l'avance (code
   // payment_methods.code), conservé pour encaisser l'avance à la validation d'une

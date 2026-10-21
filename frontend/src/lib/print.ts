@@ -419,7 +419,8 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
   const isCredit = invoice.type === "credit_note";
   const isProforma = invoice.type === "proforma";
   const cur = invoice.currency || "XAF";
-  const created = invoice.createdAt ? fdate(invoice.createdAt) : "—";
+  // Date d'émission = validation définitive (issuedAt), repli sur createdAt.
+  const issued = fdate((invoice.issuedAt ?? invoice.createdAt) ?? new Date().toISOString());
   const due = invoice.dueDate ? fdate(invoice.dueDate) : "—";
   const docName = isCredit ? tr("Avoir", "Credit note") : isProforma ? tr("Facture proforma", "Proforma invoice") : tr("Facture", "Invoice");
 
@@ -456,7 +457,8 @@ export function printInvoice(invoice: InvoiceDetail, opts?: PrintOpts): void {
     }</div>
     <div class="meta">
       <span>${tr("N°", "No.")} <b class="num">${escapeHtml(invoice.invoiceNumber)}</b></span>
-      <span>${tr("Émise le", "Issued on")} <b class="num">${escapeHtml(created)}</b></span>
+      <span>${tr("Émise le", "Issued on")} <b class="num">${escapeHtml(issued)}</b></span>
+      ${invoice.type === "invoice" ? `<span>${tr("Imprimée le", "Printed on")} <b class="num">${escapeHtml(fdate(invoice.printedAt ?? new Date().toISOString()))}</b></span>` : ""}
       <span>${tr("Échéance", "Due")} <b class="num">${escapeHtml(due)}</b></span>
       <span><span class="badge">${escapeHtml(statusLabel(invoice.status))}</span></span>
     </div>

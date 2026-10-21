@@ -12,6 +12,7 @@ import {
   listExpenses,
   listInvoices,
   markInvoicePrinted,
+  adjustInvoiceIssueDate,
   cancelInvoiceBeforePrint,
   requestInvoiceCancellation,
   forceCancelInvoice,
@@ -239,6 +240,32 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
         .catch(() => {});
     } catch (err) {
       fail(err, "Échec de l'ouverture de la facture.");
+    }
+  }
+
+  // Ajuster la date d'émission imprimée (demande opérateur) : la facture a pu
+  // être commencée un jour et n'être validée/éditée que plus tard — c'est cette
+  // date qui doit figurer. Possible tant que la facture n'a pas été tirée.
+  async function handleAdjustDate(invoice: Invoice) {
+    const current = (invoice.issuedAt ?? invoice.createdAt ?? new Date().toISOString()).slice(0, 10);
+    const input = window.prompt(
+      `Date d'émission de la facture ${invoice.invoiceNumber} (celle qui sera imprimée sur le document).\n\nFormat : AAAA-MM-JJ (ex. ${current}) :`,
+      current,
+    );
+    if (input === null) return;
+    const v = input.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      setError("Date invalide. Utilisez le format AAAA-MM-JJ (ex. 2026-10-15).");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    try {
+      await adjustInvoiceIssueDate(invoice.id, v);
+      setMessage(`Date d'émission de la facture ${invoice.invoiceNumber} fixée au ${new Date(v).toLocaleDateString("fr-FR")}.`);
+      await refresh();
+    } catch (err) {
+      fail(err, "Ajustement de la date impossible.");
     }
   }
 
@@ -590,6 +617,8 @@ export function FinancePage({ canManage, canAdminister, canInitiateOrder, canVal
                   <Button variant="add" size="sm" onClick={() => setModal({ kind: "pay-invoice", invoice, receivedAt: new Date().toISOString().slice(0, 10), tenders: [{ method: paymentMethods.find((m) => m.active)?.code ?? "cash", bankAccountId: "", reference: "", amount: String(invoice.totalTtc) }] })}>
                     {t("fin.collect", "Encaisser")}
                   </Button>
+                  {/* Ajuster la date d'émission imprimée (avant tirage). */}
+                  {!invoice.printedAt && <Button variant="view" size="sm" onClick={() => handleAdjustDate(invoice)}>{t("fin.adjust_date", "Ajuster la date")}</Button>}
                   {/* Correction AVANT impression : tant que la facture n'a pas été
                       tirée, la Finance l'annule directement pour la réémettre corrigée. */}
                   {!invoice.printedAt && <Button variant="view" size="sm" onClick={() => handleCancelBeforePrint(invoice)}>{t("fin.correct_before_print", "Corriger avant impression")}</Button>}

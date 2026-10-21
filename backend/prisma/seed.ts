@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-stock-rattachement-selecteur-recherche",
+      version: "2026.10",
+      title: "Nouveauté — Rattacher un ouvrage absent : recherche de la fiche par son titre",
+      body: "Quand vous rattachez un ouvrage signalé « absent du catalogue » à une fiche existante, plus besoin de coller un identifiant technique : un petit panneau s'ouvre sous la demande. Tapez le titre (ou l'auteur, ou l'ISBN), choisissez la bonne fiche dans la liste qui s'affiche, sélectionnez le lieu de stockage, puis cliquez sur « Rattacher ». Le stock est crédité et la demande passe en « Fiche créée & stock rattaché ». La recherche part du titre déjà signalé, il n'y a donc souvent qu'à confirmer.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["STOCK", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-sage-competences-direction-editoriale",
       version: "2026.10",
       title: "Nouveauté — SAGE raisonne aussi en directeur éditorial",

@@ -2629,6 +2629,14 @@ async function main() {
       departmentCodes: ["MKT", "COM", "INFOG", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-magasin-reception-ouvrage-absent",
+      version: "2026.10",
+      title: "Nouveauté — Magasin : réception directe des ouvrages et signalement d'un ouvrage absent du catalogue",
+      body: "Le magasinier peut désormais réceptionner les ouvrages de façon autonome, dans « Stock & magasin » → « Réception des ouvrages ». (1) ENTRÉE DIRECTE : choisir l'ouvrage (titre/ISBN), saisir la quantité reçue, la date, la provenance (fournisseur/achat direct, don, régularisation, autre) et des observations ; le stock est mis à jour automatiquement et le mouvement est tracé (qui, quand, d'où). C'est une entrée COMPLÉMENTAIRE : les réceptions d'imprimerie restent sur le bon de commande et les retours clients sur le module retours, pour ne jamais compter deux fois. Possible dès qu'un ouvrage a une fiche, même s'il est encore en cours de production. (2) OUVRAGE ABSENT DU CATALOGUE : si le livre reçu n'a pas encore de fiche, « Signaler un ouvrage absent » transmet une demande de création de fiche au service habilité (éditorial/direction), avec les informations disponibles — sans inventer un ISBN ou une date manquante. Une fois la fiche créée/validée, le service rattache la demande et le stock reçu y est crédité. Chaque opération (entrée, demande, rattachement, rejet) est horodatée et tracée.",
+      permissionModules: ["stock"],
+      departmentCodes: ["STOCK", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-bat-flux-un-seul-profil-libelles-clairs",
       version: "2026.10",
       title: "Nouveauté — Bon à tirer : un parcours plus clair, géré par un seul profil",

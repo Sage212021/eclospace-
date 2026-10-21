@@ -34,6 +34,7 @@ import { StockDashboardSection } from "../components/StockDashboardSection";
 import { StockOverviewSection } from "../components/StockOverviewSection";
 import { ReplenishmentSection, type ReplenishmentPrefill } from "../components/ReplenishmentSection";
 import { StockInitialImportSection } from "../components/StockInitialImportSection";
+import { StockReceptionSection } from "../components/StockReceptionSection";
 import { GuidanceNote } from "../components/GuidanceNote";
 import { Modal, Field } from "../components/Modal";
 import { Button } from "../components/Button";
@@ -130,13 +131,14 @@ interface StockPageProps {
   canManage: boolean;
   canAdminister: boolean;
   canValidate?: boolean;
+  canFulfillFiche?: boolean;
 }
 
 // Stock et magasin (Ch. 16) : lieux, mouvements typés, alertes. Écran
 // transverse (un article de stock ne se rattache pas à un seul manuscrit).
 import { useI18n } from "../i18n";
 
-export function StockPage({ canManage, canAdminister, canValidate }: StockPageProps) {
+export function StockPage({ canManage, canAdminister, canValidate, canFulfillFiche }: StockPageProps) {
   const { t } = useI18n();
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [items, setItems] = useState<StockItem[]>([]);
@@ -297,6 +299,10 @@ export function StockPage({ canManage, canAdminister, canValidate }: StockPagePr
             ))}
           </div>
         </Card>
+      )}
+
+      {canManage && (
+        <StockReceptionSection isbns={isbns} locations={locations} canFulfillFiche={!!canFulfillFiche} onChange={bumpMovements} />
       )}
 
       <div id="reapprovisionnements">

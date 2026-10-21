@@ -3340,6 +3340,43 @@ export function listStockLocations() {
   return request<StockLocation[]>("/api/v1/stock-locations");
 }
 
+// Réception directe du magasinier (entrée complémentaire) + demande de fiche (Cas B).
+export type ReceptionProvenance = "fournisseur" | "don" | "regularisation" | "autre";
+export function createStockReception(input: { isbn_id: string; location_id: string; quantity: number; provenance: ReceptionProvenance; received_at?: string; observations?: string }) {
+  return request<{ id: string }>("/api/v1/stock/receptions", { method: "POST", body: JSON.stringify(input) });
+}
+export interface StockFicheRequest {
+  id: string;
+  status: "pending" | "fulfilled" | "rejected";
+  title: string;
+  author_name: string | null;
+  isbn: string | null;
+  collection: string | null;
+  format: string | null;
+  provenance: string | null;
+  quantity: number;
+  location: string | null;
+  observations: string | null;
+  requested_by: string | null;
+  resolved_by: string | null;
+  manuscript_id: string | null;
+  reject_reason: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+export function listStockFicheRequests(status?: "pending" | "fulfilled" | "rejected") {
+  return request<{ requests: StockFicheRequest[] }>(`/api/v1/stock/fiche-requests${status ? `?status=${status}` : ""}`);
+}
+export function createStockFicheRequest(input: { title: string; author_name?: string; isbn?: string; collection?: string; format?: string; provenance?: string; quantity?: number; location_id?: string; observations?: string }) {
+  return request<{ id: string }>("/api/v1/stock/fiche-requests", { method: "POST", body: JSON.stringify(input) });
+}
+export function fulfillStockFicheRequest(id: string, input: { isbn_id: string; location_id: string }) {
+  return request<{ ok: true }>(`/api/v1/stock/fiche-requests/${id}/fulfill`, { method: "POST", body: JSON.stringify(input) });
+}
+export function rejectStockFicheRequest(id: string, reason: string) {
+  return request<{ ok: true }>(`/api/v1/stock/fiche-requests/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
 export function createStockLocation(input: { type: StockLocationType; label: string; parent_id?: string; customer_id?: string }) {
   return request<StockLocation>("/api/v1/stock-locations", { method: "POST", body: JSON.stringify(input) });
 }

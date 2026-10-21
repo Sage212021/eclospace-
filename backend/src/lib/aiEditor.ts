@@ -163,7 +163,7 @@ Pour CHAQUE passage concerné : cite-le (chapitre / extrait), explique le risque
 // Lecture du MANUSCRIT déposé (texte exploitable) : PDF (couche texte), .docx
 // (via mammoth), ou texte brut. Les PDF scannés (sans texte) ne sont pas lus ici
 // — l'agent s'appuiera alors sur le rapport d'évaluation en le signalant.
-async function readManuscriptText(manuscriptId: string): Promise<{ ok: boolean; text: string; truncated: boolean; note?: string }> {
+export async function readManuscriptText(manuscriptId: string): Promise<{ ok: boolean; text: string; truncated: boolean; note?: string }> {
   const version = await resolveAiSourceVersion(manuscriptId, "evaluation").catch(() => null);
   if (!version) return { ok: false, text: "", truncated: false, note: "Aucun manuscrit n'est déposé pour cet ouvrage dans Eclospace." };
   let buffer: Buffer;

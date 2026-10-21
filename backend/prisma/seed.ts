@@ -2653,6 +2653,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-conversation-naturelle",
+      version: "2026.10",
+      title: "Nouveauté — SAGE converse de façon plus naturelle",
+      body: "SAGE parle désormais comme un vrai éditeur de la maison, pas comme un assistant qui récite des consignes. Concrètement : il répond directement à la question au lieu d'annoncer ce qu'il va faire ; il ne dit plus « je vais procéder à l'analyse », « j'ai bien pris en compte votre demande », « n'hésitez pas à me fournir davantage d'informations » et autres tournures d'assistant ; il ne commente plus son propre fonctionnement et ne se présente jamais comme une intelligence artificielle ; il suit le fil de l'échange sans redemander ce qui a déjà été dit, pose une question à la fois quand c'est nécessaire, et accepte de répondre en une seule phrase quand la question est simple. Les documents structurés (diagnostic, fiche de lecture, contrôles) gardent leur présentation claire — mais sans tics ni formules toutes faites. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-facture-acompte-reliquat-vente-prestation",
       version: "2026.10",
       title: "Nouveauté — Acompte et reliquat sur la facture de vente et de prestation",

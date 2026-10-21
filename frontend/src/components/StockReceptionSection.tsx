@@ -50,6 +50,11 @@ export function StockReceptionSection({ isbns, locations, canFulfillFiche, onCha
   const loadRequests = () => listStockFicheRequests().then((r) => setRequests(r.requests)).catch(() => setRequests([]));
   useEffect(() => { loadRequests(); }, []);
 
+  // Rattachement d'une demande à une fiche existante : sélecteur de recherche
+  // (chercher par titre / auteur / ISBN et choisir dans une liste) plutôt que de
+  // coller un identifiant technique.
+  const [attach, setAttach] = useState<{ req: StockFicheRequest; search: string; isbnId: string; locationId: string } | null>(null);
+
   async function submitReception() {
     const qty = Number(rec.quantity);
     if (!rec.isbn_id || !rec.location_id || !(qty > 0)) { setError("Choisissez l'ouvrage, le lieu et une quantité positive."); return; }
@@ -81,14 +86,19 @@ export function StockReceptionSection({ isbns, locations, canFulfillFiche, onCha
     }
   }
 
-  async function fulfill(r: StockFicheRequest) {
-    const isbn_id = window.prompt(`Rattacher « ${r.title} » à une fiche existante.\n\nCollez l'identifiant de l'ISBN (fiche) à rattacher :`, "");
-    if (!isbn_id || !isbn_id.trim()) return;
-    const location_id = locations[0]?.id;
-    if (!location_id) { setError("Aucun lieu de stockage disponible."); return; }
+  function openAttach(r: StockFicheRequest) {
+    setError(null); setMessage(null);
+    // Pré-remplit la recherche avec le titre signalé (point de départ naturel).
+    setAttach({ req: r, search: r.title ?? "", isbnId: "", locationId: locations[0]?.id ?? "" });
+  }
+  async function submitAttach() {
+    if (!attach) return;
+    if (!attach.isbnId) { setError("Choisissez la fiche (ISBN) à rattacher dans la liste."); return; }
+    if (!attach.locationId) { setError("Choisissez le lieu de stockage."); return; }
     try {
-      await fulfillStockFicheRequest(r.id, { isbn_id: isbn_id.trim(), location_id });
-      setMessage(`« ${r.title} » rattaché au catalogue et stock mis à jour.`);
+      await fulfillStockFicheRequest(attach.req.id, { isbn_id: attach.isbnId, location_id: attach.locationId });
+      setMessage(`« ${attach.req.title} » rattaché au catalogue et stock mis à jour.`);
+      setAttach(null);
       loadRequests(); onChange();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Rattachement impossible.");
@@ -170,6 +180,11 @@ export function StockReceptionSection({ isbns, locations, canFulfillFiche, onCha
           <div style={{ display: "grid", gap: 6 }}>
             {requests.map((r) => {
               const badge = STATUS_BADGE[r.status] ?? STATUS_BADGE.pending;
+              const isAttaching = attach?.req.id === r.id;
+              const q = attach?.search.trim().toLowerCase() ?? "";
+              const matches = isAttaching
+                ? isbns.filter((i) => !q || i.isbn13.toLowerCase().includes(q) || (i.manuscript?.title ?? "").toLowerCase().includes(q) || (i.author ?? "").toLowerCase().includes(q)).slice(0, 8)
+                : [];
               return (
                 <div key={r.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", background: "var(--ivory, #FAF8F2)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}>
@@ -180,10 +195,33 @@ export function StockReceptionSection({ isbns, locations, canFulfillFiche, onCha
                     {r.quantity > 0 ? `${r.quantity} ex. · ` : ""}{r.provenance ?? "provenance non précisée"}{r.isbn ? ` · ISBN ${r.isbn}` : ""} · signalé par {r.requested_by ?? "?"}
                     {r.reject_reason ? ` · motif : ${r.reject_reason}` : ""}
                   </div>
-                  {canFulfillFiche && r.status === "pending" && (
+                  {canFulfillFiche && r.status === "pending" && !isAttaching && (
                     <div style={{ display: "flex", gap: 8, marginTop: 7 }}>
-                      <button onClick={() => fulfill(r)} style={{ ...goldBtn, padding: "5px 12px", fontSize: 12 }}>Rattacher à une fiche</button>
+                      <button onClick={() => openAttach(r)} style={{ ...goldBtn, padding: "5px 12px", fontSize: 12 }}>Rattacher à une fiche</button>
                       <button onClick={() => reject(r)} style={{ background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 8, padding: "5px 12px", fontSize: 12, cursor: "pointer" }}>Rejeter</button>
+                    </div>
+                  )}
+                  {canFulfillFiche && r.status === "pending" && isAttaching && attach && (
+                    <div style={{ marginTop: 8, border: "1px solid var(--eclosion, #D9B21A)", borderRadius: 8, padding: 10, background: "#fff" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Rattacher à une fiche existante</div>
+                      <input autoFocus value={attach.search} onChange={(e) => setAttach({ ...attach, search: e.target.value, isbnId: "" })} placeholder="Chercher une fiche par titre, auteur ou ISBN…" style={{ ...inp, width: "100%", boxSizing: "border-box" }} />
+                      <div style={{ display: "grid", gap: 3, marginTop: 6, maxHeight: 180, overflowY: "auto" }}>
+                        {matches.length === 0 && <div style={{ fontSize: 11.5, color: "var(--muted)", padding: "4px 2px" }}>Aucune fiche ne correspond. Affinez la recherche.</div>}
+                        {matches.map((i) => {
+                          const sel = attach.isbnId === i.id;
+                          return (
+                            <button key={i.id} onClick={() => setAttach({ ...attach, isbnId: i.id })} style={{ textAlign: "left", fontSize: 12.5, padding: "6px 8px", borderRadius: 6, cursor: "pointer", border: sel ? "1px solid var(--eclosion, #D9B21A)" : "1px solid var(--line)", background: sel ? "var(--ivory, #FAF8F2)" : "#fff", fontWeight: sel ? 700 : 400 }}>{isbnLabel(i)}</button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                        <select value={attach.locationId} onChange={(e) => setAttach({ ...attach, locationId: e.target.value })} style={{ ...inp, flex: 1, minWidth: 160 }}>
+                          <option value="">— lieu de stockage —</option>
+                          {locations.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+                        </select>
+                        <button onClick={submitAttach} disabled={!attach.isbnId} style={{ ...goldBtn, padding: "6px 14px", fontSize: 12, opacity: attach.isbnId ? 1 : 0.5, cursor: attach.isbnId ? "pointer" : "not-allowed" }}>Rattacher{r.quantity > 0 ? ` (${r.quantity} ex.)` : ""}</button>
+                        <button onClick={() => setAttach(null)} style={{ background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>Annuler</button>
+                      </div>
                     </div>
                   )}
                 </div>

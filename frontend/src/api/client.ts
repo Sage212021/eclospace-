@@ -2878,6 +2878,18 @@ export function requestAiEditorTypographie(manuscriptId: string) {
 export function requestAiEditorCopyedit(manuscriptId: string, input: { chapter?: string; source_text?: string }) {
   return request<{ user_message_id: string; assistant_message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/copyedit`, { method: "POST", body: JSON.stringify(input) });
 }
+// Journal éditorial : historique lisible de toutes les interventions de SAGE.
+export interface AiEditorJournalEvent {
+  at: string;
+  kind: string;
+  label: string;
+  actor: string | null;
+  status: string | null;
+  detail: string | null;
+}
+export function getAiEditorJournal(manuscriptId: string) {
+  return request<{ events: AiEditorJournalEvent[] }>(`/api/v1/ai-editor/${manuscriptId}/journal`);
+}
 
 export function toggleChecklistItem(itemId: string, checked: boolean) {
   return request<ChecklistItem>(`/api/v1/checklist-items/${itemId}`, { method: "PATCH", body: JSON.stringify({ checked }) });

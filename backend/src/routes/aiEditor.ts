@@ -12,6 +12,23 @@ import { runEditorAnswer, runRewrite, REWRITE_MODES, assembleChapterText } from 
 // message est conservé et horodaté (table ai_editorial_messages).
 const EDITOR_ROLES = ["ADMIN_GENERAL", "DIR_GENERAL"];
 
+// Libellés lisibles des natures d'intervention (pour le journal éditorial).
+const KIND_LABEL: Record<string, string> = {
+  diagnostic: "Diagnostic éditorial",
+  chat: "Dialogue",
+  coherence: "Analyse de cohérence",
+  impact: "Conséquences d'une modification",
+  documentaire: "Vérification documentaire",
+  traduction: "Traduction",
+  fiche_lecture: "Fiche de lecture",
+  presentation: "Textes de présentation",
+  lettre_auteur: "Lettre à l'auteur",
+  copyedit: "Préparation de copie",
+  bibliographie: "Contrôle bibliographique",
+  typographie: "Contrôle typographique",
+};
+const REWRITE_MODE_LABEL: Record<string, string> = { fidele: "fidèle à l'auteur", renforce: "littérairement renforcé", alternatif: "proposition alternative" };
+
 function messageView(m: {
   id: string; kind: string; role: string; content: string; status: string; errorMessage: string | null; createdAt: Date; createdBy: string | null;
 }) {
@@ -313,6 +330,55 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
     });
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "ai_editorial_rewrite", entityId: rewriteId, newValues: { decision: parsed.data.decision }, ipAddress: request.ip });
     return reply.send({ id: updated.id, status: updated.status });
+  });
+
+  // JOURNAL ÉDITORIAL de l'ouvrage : historique LISIBLE de tout mouvement de
+  // SAGE (demandes, analyses, livrables, réécritures et leurs décisions,
+  // préparations de copie, suppressions). Construit en lecture seule à partir
+  // des données déjà tracées — y compris les messages supprimés (on montre la
+  // suppression comme un mouvement, sans ré-exposer le contenu effacé).
+  fastify.get("/api/v1/ai-editor/:manuscriptId/journal", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+    const { manuscriptId } = request.params as { manuscriptId: string };
+    const manuscript = await prisma.manuscript.findFirst({ where: { id: manuscriptId, deletedAt: null }, select: { id: true } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
+
+    const [messages, rewrites] = await Promise.all([
+      prisma.aiEditorialMessage.findMany({ where: { manuscriptId }, orderBy: { createdAt: "asc" } }),
+      prisma.aiEditorialRewrite.findMany({ where: { manuscriptId }, orderBy: { createdAt: "asc" } }),
+    ]);
+
+    const ids = new Set<string>();
+    for (const m of messages) { if (m.createdBy) ids.add(m.createdBy); if (m.deletedBy) ids.add(m.deletedBy); }
+    for (const r of rewrites) { if (r.createdBy) ids.add(r.createdBy); if (r.decidedBy) ids.add(r.decidedBy); }
+    const users = ids.size ? await prisma.user.findMany({ where: { id: { in: [...ids] } }, select: { id: true, username: true } }) : [];
+    const nameOf = (id: string | null) => (id ? users.find((u) => u.id === id)?.username ?? null : null);
+    const excerpt = (s: string) => { const t = s.replace(/\s+/g, " ").trim(); return t.length > 140 ? `${t.slice(0, 140)}…` : t; };
+
+    type Event = { at: string; kind: string; label: string; actor: string | null; status: string | null; detail: string | null };
+    const events: Event[] = [];
+    for (const m of messages) {
+      const kindLabel = KIND_LABEL[m.kind] ?? m.kind;
+      if (m.role === "user") {
+        // La préparation de copie range l'étiquette (« Préparation… — chapitre »)
+        // en 1re ligne : on la met en détail plutôt que l'extrait du texte.
+        const detail = m.kind === "copyedit" ? m.content.split("\n")[0] : excerpt(m.content);
+        events.push({ at: m.createdAt.toISOString(), kind: m.kind, label: `Demande : ${kindLabel}`, actor: nameOf(m.createdBy), status: null, detail });
+      } else {
+        events.push({ at: m.createdAt.toISOString(), kind: m.kind, label: kindLabel, actor: nameOf(m.createdBy), status: m.status, detail: null });
+      }
+      if (m.deletedAt) {
+        events.push({ at: m.deletedAt.toISOString(), kind: "suppression", label: `Message supprimé (${kindLabel})`, actor: nameOf(m.deletedBy), status: null, detail: null });
+      }
+    }
+    for (const r of rewrites) {
+      const mode = REWRITE_MODE_LABEL[r.mode] ?? r.mode;
+      events.push({ at: r.createdAt.toISOString(), kind: "reecriture", label: `Proposition de réécriture — ${mode}`, actor: nameOf(r.createdBy), status: r.status, detail: r.instruction ? excerpt(r.instruction) : null });
+      if (r.decidedAt && (r.status === "accepted" || r.status === "rejected")) {
+        events.push({ at: r.decidedAt.toISOString(), kind: "reecriture_decision", label: `Réécriture ${r.status === "accepted" ? "acceptée" : "refusée"}`, actor: nameOf(r.decidedBy), status: r.status, detail: null });
+      }
+    }
+    events.sort((a, b) => a.at.localeCompare(b.at));
+    return reply.send({ events });
   });
 
   // Supprimer (logiquement) un message du tchat. Le message est masqué de

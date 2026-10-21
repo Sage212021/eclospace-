@@ -19,6 +19,8 @@ import {
   requestAiEditorBibliographie,
   requestAiEditorTypographie,
   requestAiEditorCopyedit,
+  getAiEditorJournal,
+  type AiEditorJournalEvent,
   type Manuscript,
   type AiEditorDossier,
   type AiEditorMessage,
@@ -31,6 +33,18 @@ const REWRITE_MODE_LABELS: Record<RewriteMode, string> = {
   fidele: "Fidèle à l'auteur",
   renforce: "Littérairement renforcé",
   alternatif: "Proposition alternative",
+};
+
+// Journal éditorial : formatage de la date + libellés/couleurs de statut.
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+const STATUS_FR: Record<string, string> = {
+  pending: "en cours", done: "terminé", erreur: "échec", accepted: "acceptée", rejected: "refusée",
+};
+const STATUS_COLOR: Record<string, string> = {
+  pending: "#B87400", done: "#2F7D4A", erreur: "#B23A2E", accepted: "#2F7D4A", rejected: "var(--muted)",
 };
 
 // ÉCLOSION ÉDITORIAL IA — Lot A (lecture + diagnostic + dialogue). Réservé DG +
@@ -57,6 +71,10 @@ export function AiEditorPage() {
   const [ceMode, setCeMode] = useState<"chapter" | "paste">("chapter");
   const [ceChapter, setCeChapter] = useState("");
   const [ceSource, setCeSource] = useState("");
+  // Journal éditorial (chargé à la demande).
+  const [journal, setJournal] = useState<AiEditorJournalEvent[] | null>(null);
+  const [journalOpen, setJournalOpen] = useState(false);
+  const [journalBusy, setJournalBusy] = useState(false);
 
   const loadConversations = () => listAiEditorConversations().then((r) => setConversations(r.conversations)).catch(() => setConversations([]));
 
@@ -74,6 +92,7 @@ export function AiEditorPage() {
     if (!selectedId) { setDossier(null); return; }
     setError(null);
     setDossier(null);
+    setJournal(null); setJournalOpen(false);
     loadDossier(selectedId);
   }, [selectedId]);
 
@@ -278,6 +297,66 @@ export function AiEditorPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Préparation impossible.");
     } finally { setBusy(false); }
+  }
+
+  async function toggleJournal() {
+    if (journalOpen) { setJournalOpen(false); return; }
+    setJournalOpen(true);
+    if (journal || !selectedId) return;
+    setJournalBusy(true);
+    try {
+      const r = await getAiEditorJournal(selectedId);
+      setJournal(r.events);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Journal indisponible.");
+    } finally { setJournalBusy(false); }
+  }
+
+  async function refreshJournal() {
+    if (!selectedId) return;
+    setJournalBusy(true);
+    try {
+      const r = await getAiEditorJournal(selectedId);
+      setJournal(r.events);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Journal indisponible.");
+    } finally { setJournalBusy(false); }
+  }
+
+  // Export PDF du journal éditorial complet (règle d'or §9 : aucune mention
+  // de la manière dont les documents sont produits).
+  function downloadJournalPdf() {
+    if (!dossier || !journal || journal.length === 0) return;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 18;
+    const maxW = pageW - margin * 2;
+    let y = margin;
+    const ensure = (h: number) => { if (y + h > pageH - margin) { doc.addPage(); y = margin; } };
+
+    doc.setFont("helvetica", "bold"); doc.setFontSize(15);
+    doc.text("Journal éditorial", margin, y); y += 7;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(110);
+    doc.text(`Éditions Éclosion — Service éditorial · ${dossier.manuscript.title} (${dossier.manuscript.number})`, margin, y); y += 4;
+    doc.text(new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }), margin, y); y += 4;
+    doc.setDrawColor(217, 178, 26); doc.setLineWidth(0.5); doc.line(margin, y, pageW - margin, y); y += 7;
+
+    doc.setTextColor(20);
+    for (const e of journal) {
+      ensure(10);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+      doc.text(`${fmtDate(e.at)} — ${e.label}${e.status ? ` [${STATUS_FR[e.status] ?? e.status}]` : ""}`, margin, y); y += 4.6;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(90);
+      if (e.actor) { doc.text(`par ${e.actor}`, margin + 2, y); y += 4.4; }
+      if (e.detail) {
+        const lines = doc.splitTextToSize(e.detail, maxW - 2) as string[];
+        for (const l of lines) { ensure(4.4); doc.text(l, margin + 2, y); y += 4.4; }
+      }
+      doc.setTextColor(20); y += 1.5;
+    }
+    const safe = dossier.manuscript.number.replace(/[^\w.-]+/g, "-");
+    doc.save(`journal-editorial-${safe}.pdf`);
   }
 
   const diagnostic = dossier?.messages.find((m) => m.kind === "diagnostic");
@@ -626,6 +705,48 @@ export function AiEditorPage() {
             <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
               {rewrites.map((r) => <RewriteCard key={r.id} r={r} busy={busy} onDecide={decide} />)}
             </div>
+          </div>
+
+          {/* Journal éditorial : historique lisible de tout mouvement de SAGE */}
+          <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 14, marginTop: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>Journal éditorial</div>
+              <button onClick={toggleJournal} style={{ ...rowBtnStyle, width: "auto", fontWeight: 700, padding: "6px 12px" }}>
+                {journalOpen ? "Masquer le journal ▴" : "Afficher le journal ▾"}
+              </button>
+            </div>
+            <p style={{ color: "var(--muted)", fontSize: 12, margin: "6px 0 0", lineHeight: 1.5 }}>
+              L'historique daté de toutes les interventions de SAGE sur cet ouvrage (analyses, livrables, réécritures et leurs décisions, préparations de copie, suppressions). Consultable et téléchargeable en PDF.
+            </p>
+            {journalOpen && (
+              <div style={{ marginTop: 10 }}>
+                {journalBusy && !journal && <p style={{ color: "var(--muted)", fontSize: 12.5 }}>Chargement du journal…</p>}
+                {journal && journal.length === 0 && <p style={{ color: "var(--muted)", fontSize: 12.5 }}>Aucune intervention enregistrée pour l'instant.</p>}
+                {journal && journal.length > 0 && (
+                  <>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                      <button onClick={downloadJournalPdf} style={{ ...primaryBtnStyle, padding: "6px 13px" }}>📄 Télécharger le journal (PDF)</button>
+                      <button onClick={refreshJournal} disabled={journalBusy} style={{ ...rowBtnStyle, width: "auto", padding: "6px 12px", opacity: journalBusy ? 0.55 : 1 }}>Rafraîchir</button>
+                    </div>
+                    <div style={{ display: "grid", gap: 0 }}>
+                      {journal.map((e, i) => (
+                        <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--line)" }}>
+                          <span style={{ fontFamily: "var(--font-mono, ui-monospace, monospace)", fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap", flexShrink: 0 }}>{fmtDate(e.at)}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                              {e.label}
+                              {e.status && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: STATUS_COLOR[e.status] ?? "var(--muted)" }}>· {STATUS_FR[e.status] ?? e.status}</span>}
+                            </div>
+                            {e.actor && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>par {e.actor}</div>}
+                            {e.detail && <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2, lineHeight: 1.4 }}>{e.detail}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}

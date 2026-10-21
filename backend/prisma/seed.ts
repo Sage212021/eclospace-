@@ -2645,6 +2645,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-livrables-editoriaux-lot-f",
+      version: "2026.10",
+      title: "Nouveauté — SAGE rédige vos documents éditoriaux (fiche de lecture, 4e de couverture, lettre à l'auteur)",
+      body: "SAGE ne fait plus seulement analyser : il RÉDIGE pour vous, à partir de l'ouvrage, trois livrables prêts à l'emploi (section « Livrables éditoriaux » dans l'espace SAGE). (1) FICHE DE LECTURE : une synthèse courte et orientée décision — pitch, public, forces/faiblesses, et une recommandation claire (publier en l'état / après retravail / à revoir / ne pas retenir) avec ses arguments. (2) TEXTES DE PRÉSENTATION & PROMOTION : 4e de couverture, résumé catalogue, synopsis, argumentaire libraires/presse, accroche et mots-clés — utiles pour le catalogue. (3) LETTRE À L'AUTEUR : un courrier éditorial diplomate (forces, axes de travail classés par priorité, points laissés à sa liberté), signé « Le Service éditorial — Éditions Éclosion ». Chaque livrable se télécharge en PDF. Comme tout document livré par la maison, aucun ne mentionne la manière dont il a été produit, et SAGE n'invente ni citation de presse, ni prix, ni chiffre de vente. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-supprimer-message-export-pdf",
       version: "2026.10",
       title: "Nouveauté — SAGE : supprimer un message et télécharger une réponse en PDF",

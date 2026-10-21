@@ -172,6 +172,26 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
     return reply.code(202).send({ message_id: assistant.id });
   });
 
+  // ── Livrables éditoriaux (Lot F) : fiche de lecture, textes de présentation,
+  // lettre à l'auteur. Même patron que coherence/documentaire : un seul message
+  // « assistant » en attente, exécution en arrière-plan, manuscrit requis.
+  const deliverableKinds = ["fiche_lecture", "presentation", "lettre_auteur"] as const;
+  for (const kind of deliverableKinds) {
+    fastify.post(`/api/v1/ai-editor/:manuscriptId/${kind.replace("_", "-")}`, { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+      const { manuscriptId } = request.params as { manuscriptId: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id: manuscriptId, deletedAt: null }, select: { id: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
+      const manuscriptDoc = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "manuscrit", deletedAt: null }, select: { id: true } });
+      if (!manuscriptDoc) return reply.code(409).send({ code: "no_manuscript_file", message: "Aucun manuscrit n'est déposé pour cet ouvrage : déposez-le d'abord dans la fiche." });
+      const already = await prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, status: "pending" }, select: { id: true } });
+      if (already) return reply.code(409).send({ code: "already_running", message: "Une production est déjà en cours pour cet ouvrage. Patientez quelques instants." });
+      const assistant = await prisma.aiEditorialMessage.create({ data: { manuscriptId, kind, role: "assistant", status: "pending", content: "", createdBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "ai_editorial_message", entityId: assistant.id, newValues: { manuscriptId, kind }, ipAddress: request.ip });
+      void runEditorAnswer(assistant.id);
+      return reply.code(202).send({ message_id: assistant.id });
+    });
+  }
+
   // TRADUCTION fidèle d'un passage (français ↔ anglais). Le passage + la langue
   // cible sont conservés dans le message « user » ; la traduction en fond.
   const translateSchema = z.object({ source_text: z.string().trim().min(1).max(20000), target_lang: z.enum(["fr", "en"]) });

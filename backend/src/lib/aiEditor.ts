@@ -59,6 +59,43 @@ RÈGLE STRICTE : tu n'INVENTES JAMAIS de source, citation, statistique, auteur, 
 
 const TRANSLATION_TASK = `Traduis FIDÈLEMENT le passage fourni ci-dessus dans la LANGUE CIBLE indiquée, en préservant le sens, le registre, le ton et la voix de l'auteur, ainsi que la mise en paragraphes. Respecte les conventions typographiques de la langue cible. Rends UNIQUEMENT la traduction, sans aucun commentaire ni préambule.`;
 
+// ── Livrables éditoriaux (Lot F) : ce que l'éditeur PRODUIT ──────────────────
+
+const FICHE_LECTURE_TASK = `Rédige une FICHE DE LECTURE éditoriale : document SYNTHÉTIQUE et orienté DÉCISION (plus court et plus directif qu'un diagnostic). Adapte-la au genre. Structure avec ces intertitres :
+1) PITCH — 2 à 3 phrases qui résument l'ouvrage et son intérêt.
+2) IDENTITÉ — genre, sous-genre, public cible, longueur perçue.
+3) RÉSUMÉ — l'intrigue (roman) ou le propos et le plan (essai), de façon concise.
+4) POINTS FORTS.
+5) POINTS FAIBLES ET RISQUES.
+6) POSITIONNEMENT — à quel type d'ouvrages cela se rattache et pour quel lectorat (reste général ; n'invente pas de titres ni d'auteurs précis que tu ne connais pas avec certitude).
+7) TRAVAIL ÉDITORIAL REQUIS — nature et AMPLEUR du travail (léger / moyen / important).
+8) RECOMMANDATION — choisis clairement : « Publier en l'état », « Publier après retravail », « À revoir en profondeur » ou « Ne pas retenir », puis donne les arguments qui la justifient.
+Sois honnête et fondé sur le texte réel. Si le manuscrit est partiel ou illisible, dis-le et nuance la recommandation.`;
+
+const PRESENTATION_TASK = `Rédige les TEXTES DE PRÉSENTATION ET DE PROMOTION de l'ouvrage, prêts à l'emploi, dans le ton de l'œuvre et dans sa langue. Structure ta réponse avec EXACTEMENT ces intertitres :
+# 4E DE COUVERTURE
+Un texte accrocheur de 120 à 180 mots, qui donne envie sans divulgâcher la fin.
+# RÉSUMÉ COURT (CATALOGUE)
+2 à 3 phrases.
+# SYNOPSIS
+Un résumé plus complet (environ 200 à 300 mots) ; pour un essai, la thèse et les grandes parties.
+# ARGUMENTAIRE (LIBRAIRES / PRESSE)
+Pourquoi défendre ce livre : public visé, points forts, moments marquants, positionnement.
+# ACCROCHE
+Une seule phrase, type bandeau de couverture.
+# MOTS-CLÉS ET THÉMATIQUE
+8 à 12 mots-clés, puis 1 ou 2 catégories thématiques.
+Ces textes seront publiés au nom des Éditions Éclosion : n'y fais JAMAIS figurer d'indication sur la manière dont ils ont été produits. N'invente NI citation de presse, NI prix, NI chiffre de vente, NI comparaison trompeuse.`;
+
+const LETTRE_AUTEUR_TASK = `Rédige une LETTRE ÉDITORIALE À L'AUTEUR, prête à être envoyée au nom du Service éditorial des Éditions Éclosion. Ton diplomate, respectueux et professionnel, mais clair sur les demandes. Structure :
+- une ouverture qui reconnaît le travail accompli et les vraies qualités de l'œuvre ;
+- une synthèse des grandes FORCES du manuscrit ;
+- les AXES DE TRAVAIL demandés, classés par priorité, formulés comme des propositions argumentées (jamais des ordres), en renvoyant au chapitre / passage concerné quand c'est possible ;
+- les points explicitement laissés à la LIBERTÉ de l'auteur ;
+- une conclusion encourageante et les prochaines étapes.
+Appuie-toi sur le manuscrit, le rapport d'évaluation et le diagnostic éditorial s'il figure ci-dessus. N'invente rien ; ne promets ni publication ni succès commercial.
+Termine par la signature « Le Service éditorial — Éditions Éclosion ». La lettre est un document LIVRÉ : elle ne doit comporter AUCUNE mention d'une intelligence artificielle, ni dans le corps, ni dans la signature.`;
+
 function impactTask(change: string): string {
   return `L'auteur envisage (ou vient d'appliquer) la MODIFICATION suivante de l'œuvre :
 « ${change} »
@@ -334,6 +371,28 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
       await buildPassageIndex(manuscriptId).catch(() => {});
       block = (await buildContext(manuscriptId)).block;
       task = DOCUMENTAIRE_TASK;
+    } else if (assistant.kind === "fiche_lecture") {
+      // Fiche de lecture (livrable de décision) : lecture complète + rapport.
+      await buildPassageIndex(manuscriptId).catch(() => {});
+      block = (await buildContext(manuscriptId)).block;
+      task = FICHE_LECTURE_TASK;
+    } else if (assistant.kind === "presentation") {
+      // Textes de présentation & promotion : lecture complète + rapport.
+      await buildPassageIndex(manuscriptId).catch(() => {});
+      block = (await buildContext(manuscriptId)).block;
+      task = PRESENTATION_TASK;
+    } else if (assistant.kind === "lettre_auteur") {
+      // Lettre éditoriale à l'auteur : lecture complète + rapport + le
+      // diagnostic déjà établi s'il existe (pour en synthétiser les demandes).
+      await buildPassageIndex(manuscriptId).catch(() => {});
+      const [ctx, diag] = await Promise.all([
+        buildContext(manuscriptId),
+        prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, kind: "diagnostic", status: "done", deletedAt: null }, orderBy: { createdAt: "desc" }, select: { content: true } }),
+      ]);
+      block = diag?.content
+        ? `${ctx.block}\n\n=== DIAGNOSTIC ÉDITORIAL DÉJÀ ÉTABLI ===\n${diag.content}`
+        : ctx.block;
+      task = LETTRE_AUTEUR_TASK;
     } else if (assistant.kind === "traduction") {
       // Traduction : le passage + la langue cible sont portés par le dernier
       // message « user » de nature « traduction ». Pas de contexte manuscrit.

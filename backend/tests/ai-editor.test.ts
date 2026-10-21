@@ -181,4 +181,30 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     const del = await app.inject({ method: "DELETE", url: `/api/v1/ai-editor/messages/${assistantId}`, headers: { cookie: correcteurCookie } });
     expect(del.statusCode).toBe(403);
   });
+
+  // ── Livrables éditoriaux (Lot F) ──
+  for (const [path, kind] of [["fiche-lecture", "fiche_lecture"], ["presentation", "presentation"], ["lettre-auteur", "lettre_auteur"]] as const) {
+    it(`produit le livrable « ${kind} » en arrière-plan à partir du manuscrit`, async () => {
+      const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/${path}`, headers: { cookie: adminCookie } });
+      expect(r.statusCode).toBe(202);
+      const msg = await waitMessage(r.json().message_id);
+      expect(msg.status).toBe("done");
+      expect(msg.kind).toBe(kind);
+      expect(msg.content.length).toBeGreaterThan(0);
+      // Le manuscrit est bien transmis au modèle (contexte complet).
+      const sent = (calls[calls.length - 1]?.messages as Array<{ content: string }> | undefined)?.map((x) => x.content).join(" ") ?? "";
+      expect(sent).toContain("MANUSCRIT");
+    });
+
+    it(`refuse le livrable « ${kind} » sans manuscrit déposé (409)`, async () => {
+      const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withoutFile}/${path}`, headers: { cookie: adminCookie } });
+      expect(r.statusCode).toBe(409);
+      expect(r.json().code).toBe("no_manuscript_file");
+    });
+
+    it(`réserve le livrable « ${kind} » au DG / admin (403 pour un correcteur)`, async () => {
+      const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/${path}`, headers: { cookie: correcteurCookie } });
+      expect(r.statusCode).toBe(403);
+    });
+  }
 });

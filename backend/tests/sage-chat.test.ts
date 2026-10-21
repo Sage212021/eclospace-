@@ -129,6 +129,24 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     expect((list.json().conversations as Array<{ id: string }>).some((c) => c.id === convId)).toBe(false);
   });
 
+  it("s'appuie sur le CATALOGUE réel de l'ERP pour les questions sur les ouvrages enregistrés", async () => {
+    // Un ouvrage réel dans Eclospace.
+    const adminId = (await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).id;
+    const status = await prisma.workflowStatus.findFirstOrThrow();
+    const number = `DG-${rnd()}`;
+    await prisma.manuscript.create({ data: { manuscriptNumber: number, title: `Catalogue Test ${rnd()}`, language: "fr", statusId: status.id, ownerId: adminId, receivedAt: new Date(), createdBy: adminId, updatedBy: adminId } });
+
+    const created = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+    const convId = created.json().id as string;
+    const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${convId}/messages`, headers: { cookie: dgCookie }, payload: { content: "Quels sont les manuscrits enregistrés ?" } });
+    await waitMessage(msg.json().assistant_message_id);
+
+    // Les données RÉELLES du catalogue sont injectées dans le contexte du modèle.
+    const system = calls[calls.length - 1]?.system ?? "";
+    expect(system).toContain("CATALOGUE ECLOSPACE");
+    expect(system).toContain(number);
+  });
+
   it("archive une conversation : elle quitte la liste", async () => {
     const created = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
     const convId = created.json().id as string;

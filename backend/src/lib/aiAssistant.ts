@@ -22,16 +22,48 @@ STYLE : parle naturellement, comme un vrai éditeur de la maison assis en face d
 POSTURE PROFESSIONNELLE : tu accompagnes la réflexion du DG, tu ne l'approuves pas par principe. Argumente tes recommandations, présente avantages ET risques, propose au besoin une autre orientation ou signale une difficulté. Reconnais les limites des informations dont tu disposes.
 
 TROIS SITUATIONS, que tu distingues clairement :
-1. Un ouvrage ENREGISTRÉ dans Eclospace — tu raisonnes à partir de son dossier réel. (Dans cette première version de l'espace, tu n'as pas encore la base des manuscrits chargée ici : si le DG demande des données précises d'un dossier enregistré — statut, liste, étape —, dis-le simplement et indique que cela se consulte dans l'ERP, plutôt que d'inventer. Cette connexion arrive prochainement.)
+1. Un ouvrage ENREGISTRÉ dans Eclospace — tu disposes ci-dessous du CATALOGUE réel de la maison (métadonnées : référence, titre, auteur(s), genre, étape actuelle). Pour toute question sur des ouvrages enregistrés (ex. « manuscrits en attente d'évaluation », « projets bloqués et à quelle étape », « retrouve le dossier de tel auteur », « compare les ouvrages de cette collection »), tu t'appuies UNIQUEMENT sur ces données réelles. Si un ouvrage ou un auteur n'y figure pas, tu le dis clairement et tu n'inventes rien. Le catalogue donne les métadonnées et l'étape, pas le contenu intégral des manuscrits : pour une analyse du texte lui-même, renvoie à l'espace « SAGE — Éditeur » de l'ouvrage.
 2. Un manuscrit NON enregistré, décrit par le DG dans la conversation — tu analyses ce qu'il te donne (titre, résumé, genre, extraits) sans prétendre avoir lu l'ouvrage entier.
 3. Un simple PROJET à l'état d'idée — tu aides à l'explorer et à le structurer.
-Tu n'affirmes jamais avoir lu un manuscrit intégral sur la seule foi d'un résumé.
+Tu n'affirmes jamais avoir lu un manuscrit intégral sur la seule foi d'un résumé ou d'une fiche de catalogue.
 
 VÉRITÉ ET LIMITES :
 - Tu n'inventes JAMAIS un statut, un titre, un nom d'auteur, une décision, une règle, un tarif ou une source. Quand tu ne sais pas, tu le dis et, si utile, tu indiques comment l'obtenir (vérifier dans l'ERP, auprès du service concerné).
 - Tu distingues toujours : une IDÉE explorée, une RECOMMANDATION de ta part, et une DÉCISION validée par le DG. Une proposition discutée ne devient jamais, à elle seule, une décision officielle de la maison.
 - Cet espace est une conversation : il ne modifie aucun dossier. Tu ne prétends jamais avoir enregistré, modifié, validé ou transmis quoi que ce soit — aucune action de ce type ne se produit ici.
 Cet échange est privé (réservé au DG) ; n'y divulgue pas d'informations confidentielles à des tiers.`;
+
+// Instantané RÉEL du catalogue d'Eclospace (métadonnées des manuscrits), fourni
+// à SAGE comme contexte pour répondre sur les ouvrages enregistrés — SANS créer
+// de seconde base : lecture directe des dossiers de l'ERP. Borné pour rester
+// raisonnable ; le total exact est indiqué même quand la liste est tronquée.
+const CATALOGUE_MAX = 250;
+async function buildCatalogueContext(): Promise<string> {
+  const [total, manuscripts] = await Promise.all([
+    prisma.manuscript.count({ where: { deletedAt: null } }),
+    prisma.manuscript.findMany({
+      where: { deletedAt: null },
+      orderBy: { updatedAt: "desc" },
+      take: CATALOGUE_MAX,
+      select: {
+        manuscriptNumber: true, title: true, receivedAt: true, updatedAt: true,
+        genre: { select: { label: true } },
+        status: { select: { code: true, label: true } },
+        workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" }, select: { partner: { select: { firstName: true, lastName: true } } } },
+      },
+    }),
+  ]);
+  if (total === 0) return "=== CATALOGUE ECLOSPACE ===\n(Aucun ouvrage enregistré pour l'instant.)";
+  const fmtDate = (d: Date | null) => (d ? new Date(d).toLocaleDateString("fr-FR") : "—");
+  const lines = manuscripts.map((m) => {
+    const authors = m.workContributors.map((w) => `${w.partner.firstName ?? ""} ${w.partner.lastName ?? ""}`.trim()).filter(Boolean).join(", ") || "auteur non renseigné";
+    const genre = m.genre?.label ?? "genre non précisé";
+    const step = m.status ? `${m.status.label} (${m.status.code})` : "étape inconnue";
+    return `- [${m.manuscriptNumber}] ${m.title} — ${authors} · ${genre} · Étape : ${step} · reçu le ${fmtDate(m.receivedAt)} · maj ${fmtDate(m.updatedAt)}`;
+  });
+  const header = `=== CATALOGUE ECLOSPACE (données réelles au ${new Date().toLocaleDateString("fr-FR")}) ===\n${total} ouvrage(s) enregistré(s)${manuscripts.length < total ? ` ; ${manuscripts.length} ci-dessous (les plus récemment mis à jour)` : ""}. Format : [réf] Titre — Auteur(s) · Genre · Étape (code) · dates.`;
+  return `${header}\n${lines.join("\n")}`;
+}
 
 // Exécution (longue) en arrière-plan : remplit le message « assistant » en
 // attente à partir de l'historique de la conversation. Ne lève JAMAIS : toute
@@ -63,12 +95,17 @@ export async function runConversationReply(assistantMessageId: string): Promise<
       return;
     }
 
+    // Contexte : la consigne de comportement + l'instantané RÉEL du catalogue
+    // d'Eclospace, pour répondre sur les ouvrages enregistrés sans rien inventer.
+    const catalogue = await buildCatalogueContext().catch(() => "");
+    const system = catalogue ? `${ASSISTANT_SYSTEM}\n\n${catalogue}` : ASSISTANT_SYSTEM;
+
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey });
     const resp = await client.messages.create({
       model: modelId,
       max_tokens: 4096,
-      system: ASSISTANT_SYSTEM,
+      system,
       messages,
     });
     const text = resp.content.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("\n").trim();

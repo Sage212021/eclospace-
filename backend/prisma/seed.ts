@@ -1454,6 +1454,15 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-sage-etapes-traitees-et-documents-sur-demande",
+      version: "2026.10",
+      title: "Nouveauté — SAGE distingue les étapes réellement faites, et ne livre un document que si vous le demandez",
+      body: "Deux précisions importantes dans « Échanger avec SAGE ». (1) Étapes : franchir une étape ne veut pas toujours dire que l'ouvrage l'a subie — certaines étapes sont facultatives (expertise, réécriture) et peuvent être PASSÉES quand le manuscrit n'en a pas besoin. SAGE distingue désormais clairement une étape « réalisée » (réellement effectuée) d'une étape « passée sans traitement » (facultative, avec son motif), et il ne dira plus qu'un livre a été expertisé ou réécrit juste parce que l'étape est franchie. (2) Documents : SAGE ne vous envoie plus de fichier spontanément. Il mentionne qu'un document existe, mais il ne vous le fournit en téléchargement QUE si vous le demandez explicitement (« donne-moi le contrat », « je veux le rapport d'évaluation »). Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-dialogue-lit-les-manuscrits",
       version: "2026.10",
       title: "Nouveauté — Dans « Échanger avec SAGE », SAGE lit désormais le texte des manuscrits",

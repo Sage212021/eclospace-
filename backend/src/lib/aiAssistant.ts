@@ -40,7 +40,11 @@ TROIS SITUATIONS, que tu distingues clairement :
 3. Un simple PROJET à l'état d'idée — tu aides à l'explorer et à le structurer.
 Tu n'affirmes jamais avoir lu un manuscrit intégral sur la seule foi d'un résumé ou d'une fiche de catalogue.
 
-OUTILS DE RECHERCHE (données réelles d'Eclospace) : tu disposes d'outils pour (1) rechercher un manuscrit par titre, auteur ou référence, (2) ouvrir son DOSSIER détaillé — étape actuelle dans le processus paramétré, collaborateur/service affecté, dernières opérations et validations enregistrées, étapes en attente ou blocages, et documents déjà déposés (type, date, déposant) — et (3) LIRE le TEXTE réel du manuscrit (outil « lire_manuscrit ») : le contenu de l'ouvrage, intégral ou ciblé sur une question (passages pertinents). Tu es LE MÊME SAGE que « SAGE — Éditeur » : tu peux donc lire et analyser le texte des ouvrages directement dans cette conversation. Utilise ces outils dès que le DG pose une question précise sur un ouvrage enregistré ; ne te contente pas du catalogue résumé ci-dessous pour ces cas. Les documents que tu retrouves via le dossier sont automatiquement proposés au DG en ouverture/téléchargement : tu peux les nommer dans ta réponse (type, date, déposant) et indiquer lequel est le plus récent, sans jamais inventer un document, une étape, une validation ou un passage. Si le dossier, un document ou le texte d'un manuscrit n'existe pas ou n'a pas pu être lu, dis-le clairement.
+OUTILS DE RECHERCHE (données réelles d'Eclospace) : tu disposes d'outils pour (1) rechercher un manuscrit par titre, auteur ou référence, (2) ouvrir son DOSSIER détaillé — étape actuelle, collaborateur/service affecté, dernières opérations et validations, étapes franchies, et documents déjà déposés (type, date, déposant) —, (3) LIRE le TEXTE réel du manuscrit (outil « lire_manuscrit ») : le contenu de l'ouvrage, intégral ou ciblé sur une question (passages pertinents), et (4) RESTITUER un document (outil « restituer_document »). Tu es LE MÊME SAGE que « SAGE — Éditeur » : tu peux donc lire et analyser le texte des ouvrages directement dans cette conversation. Utilise ces outils dès que le DG pose une question précise sur un ouvrage enregistré.
+
+ÉTAPES RÉELLEMENT TRAITÉES vs ÉTAPES PASSÉES : franchir une étape ne signifie PAS forcément que l'ouvrage l'a subie. Certaines étapes sont FACULTATIVES (ex. l'expertise, la réécriture) : on peut les PASSER quand le manuscrit n'en a pas besoin. Le dossier indique donc, pour chaque étape franchie, un « traitement » : « réalisée » (réellement effectuée) ou « passée sans traitement (étape facultative non effectuée) », avec le motif. Tu ne dis JAMAIS qu'un ouvrage a été expertisé, réécrit ou corrigé du seul fait que l'étape est franchie : tu te fondes sur ce « traitement » et, en cas de doute, tu le dis ou tu lis les pièces réelles.
+
+RESTITUTION DE DOCUMENTS — SEULEMENT SUR DEMANDE : tu ne livres (n'attaches) un document QUE si le DG le demande explicitement (« donne-moi… », « je veux télécharger… »). Dans ce cas seulement, tu appelles « restituer_document » ; le fichier est alors proposé au DG en téléchargement. Autrement, tu te contentes de MENTIONNER qu'un document existe (type, date, déposant) sans le fournir. Tu n'inventes jamais un document, une étape, une validation, un passage ou un traitement. Si le dossier, un document ou le texte d'un manuscrit n'existe pas ou n'a pas pu être lu, dis-le clairement.
 
 RECHERCHE WEB (accès Internet réel) : tu disposes d'un outil de recherche sur le Web. Déclenche une recherche quand une tâche l'exige vraiment — vérifier une donnée, une date, une statistique, une référence ou une actualité ; suivre le marché du livre et de l'édition ; te renseigner sur un auteur, un éditeur, une publication ou une norme — et évite-la quand tes informations suffisent. Hiérarchise les sources par fiabilité : officielles et institutionnelles pour le réglementaire ; publications scientifiques et ouvrages de référence pour le spécialisé ; sources primaires quand elles existent ; médias reconnus pour l'actualité ; sources professionnelles du livre pour le marché. Confronte plusieurs sources indépendantes quand l'enjeu ou le risque d'erreur le justifie, et ne tiens pas une information pour vraie du seul fait qu'elle apparaît dans les résultats. TRAÇABILITÉ : pour toute recherche importante, indique la source (titre, organisme ou auteur si connu, date si connue) et le lien, et distingue le fait vérifié, l'analyse, l'hypothèse et ce qui reste à confirmer. Tu ne FABRIQUES JAMAIS une référence, une citation, un lien ou une statistique : si tu ne trouves pas, tu le dis. CONFIDENTIALITÉ : tu n'envoies JAMAIS à la recherche web le contenu d'un manuscrit ni une information confidentielle d'Éclosion ; tu ne formules que des requêtes générales. Si la recherche est indisponible ou échoue, signale-le et appuie-toi prudemment sur ce que tu sais, sans rien inventer.
 
@@ -130,6 +134,11 @@ const SAGE_TOOLS = [
     description: "LIT le TEXTE réel d'un manuscrit déposé dans Eclospace (le contenu de l'ouvrage, pas seulement ses métadonnées) — exactement comme « SAGE — Éditeur ». À utiliser pour analyser, résumer, citer ou commenter le texte d'un ouvrage. Sans « recherche », renvoie le texte du manuscrit (intégral ou extrait représentatif si très volumineux). Avec « recherche », renvoie les passages les plus pertinents pour cette question (plus ciblé).",
     input_schema: { type: "object" as const, properties: { reference: { type: "string", description: "Référence, titre ou auteur du manuscrit." }, recherche: { type: "string", description: "Facultatif : mots-clés/question pour ne récupérer que les passages pertinents." } }, required: ["reference"] },
   },
+  {
+    name: "restituer_document",
+    description: "Fournit au DG, en téléchargement, un document DÉJÀ déposé d'un ouvrage. À n'utiliser QUE si le DG demande EXPLICITEMENT d'obtenir, d'ouvrir ou de télécharger un document (ex. « donne-moi le contrat », « je veux le rapport d'évaluation »). Ne l'utilise jamais de ta propre initiative : sans demande explicite, contente-toi de MENTIONNER qu'un document existe. Précise le document voulu par son type ou son titre.",
+    input_schema: { type: "object" as const, properties: { reference: { type: "string", description: "Référence, titre ou auteur du manuscrit." }, document: { type: "string", description: "Le document demandé (type ou titre, même partiel) — ex. « contrat », « rapport d'évaluation », « couverture », « facture »." } }, required: ["reference", "document"] },
+  },
 ];
 
 // Recherche web côté serveur Anthropic (section 16) : Anthropic exécute la
@@ -211,16 +220,30 @@ async function executeTool(name: string, input: Record<string, unknown>, docs: M
       const currentStep = steps.find((s) => s.status.code === m.status?.code);
       const lastValidated = steps.filter((s) => s.validatedAt).sort((a, b) => (b.validatedAt!.getTime() - a.validatedAt!.getTime()))[0];
 
+      // Étapes franchies : DISTINGUE une étape réellement TRAITÉE d'une étape
+      // facultative simplement PASSÉE (realizationMode "passe" + skipReason) —
+      // franchir une étape ne signifie pas que l'ouvrage l'a subie.
+      const etapes = steps.filter((s) => s.validatedAt).map((s) => {
+        const passee = s.realizationMode === "passe";
+        return {
+          etape: s.status.label,
+          le: s.validatedAt!.toISOString().slice(0, 10),
+          traitement: passee ? "passée sans traitement (étape facultative non effectuée)" : "réalisée",
+          motif_du_passage: passee ? (s.skipReason ?? "non précisé") : null,
+        };
+      });
+
+      // Documents : on se contente de les LISTER (type, titre, date, déposant).
+      // On NE les attache PAS ici : la restitution d'un fichier se fait seulement
+      // si le DG la demande, via l'outil « restituer_document ».
       const docsOut = documents.map((d) => {
         const v = d.versions[0];
-        const label = `${DOC_KIND_LABELS[d.category] ?? d.category} — ${d.title}`;
-        if (v) docs.set(v.id, { version_id: v.id, label, kind: d.category, manuscript: m.title, download_path: `/api/v1/document-versions/${v.id}/download` });
         return {
           type: DOC_KIND_LABELS[d.category] ?? d.category, nom: d.title,
           version: v?.versionNumber ?? null,
           depose_le: v ? new Date(v.uploadedAt).toISOString().slice(0, 10) : null,
           depose_par: v?.uploadedBy ? names.get(v.uploadedBy) ?? null : null,
-          telechargeable: !!v,
+          disponible_sur_demande: !!v,
         };
       });
 
@@ -231,7 +254,7 @@ async function executeTool(name: string, input: Record<string, unknown>, docs: M
         affecte_a: currentStep?.responsibleId ? names.get(currentStep.responsibleId) ?? null : null,
         etape_pre_validee: currentStep?.preValidatedAt ? "1re signature posée, en attente de contre-validation" : null,
         derniere_operation: lastValidated ? `${lastValidated.status.label} validée le ${lastValidated.validatedAt!.toISOString().slice(0, 10)}${lastValidated.validationBy ? ` par ${names.get(lastValidated.validationBy) ?? "?"}` : ""}` : "Aucune validation d'étape enregistrée",
-        etapes_validees: steps.filter((s) => s.validatedAt).map((s) => `${s.status.label} (${s.validatedAt!.toISOString().slice(0, 10)})`),
+        etapes_franchies: etapes,
         rapports_ia_disponibles: aiJobs.map((j) => j.workType),
         documents: docsOut,
       });
@@ -258,6 +281,37 @@ async function executeTool(name: string, input: Record<string, unknown>, docs: M
         lu: read.ok, tronque: read.truncated, note: read.ok ? null : read.note,
         texte: read.ok ? read.text : null,
       });
+    }
+
+    if (name === "restituer_document") {
+      const m = await findManuscript(String(input.reference ?? ""));
+      if (!m) return JSON.stringify({ trouve: false, message: "Aucun manuscrit correspondant dans Eclospace." });
+      const wanted = String(input.document ?? "").trim();
+      const documents = await prisma.document.findMany({
+        where: { entityType: "manuscript", entityId: m.id, deletedAt: null },
+        select: { category: true, title: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true, versionNumber: true, uploadedAt: true } } },
+      });
+      const withVersion = documents.filter((d) => d.versions[0]);
+      if (withVersion.length === 0) return JSON.stringify({ trouve: true, restitue: false, message: "Aucun document téléchargeable n'est déposé pour cet ouvrage." });
+      const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const stop = new Set(["document", "documents", "fichier", "fichiers", "le", "la", "les", "du", "des", "de", "un", "une", "moi", "nous", "pour", "sur"]);
+      const tokens = norm(wanted).split(/\s+/).filter((t) => t.length >= 3 && !stop.has(t));
+      const scored = withVersion.map((d) => {
+        const hay = norm(`${DOC_KIND_LABELS[d.category] ?? d.category} ${d.category} ${d.title}`);
+        const full = wanted ? (hay.includes(norm(wanted)) ? 100 : 0) : 0;
+        const hits = tokens.filter((t) => hay.includes(t)).length;
+        return { d, score: full + hits };
+      }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 5);
+      if (scored.length === 0) {
+        return JSON.stringify({ trouve: true, restitue: false, message: `Aucun document ne correspond à « ${wanted} » pour cet ouvrage.`, documents_disponibles: [...new Set(withVersion.map((d) => DOC_KIND_LABELS[d.category] ?? d.category))] });
+      }
+      const restitues = scored.map(({ d }) => {
+        const v = d.versions[0];
+        const label = `${DOC_KIND_LABELS[d.category] ?? d.category} — ${d.title}`;
+        docs.set(v.id, { version_id: v.id, label, kind: d.category, manuscript: m.title, download_path: `/api/v1/document-versions/${v.id}/download` });
+        return { type: DOC_KIND_LABELS[d.category] ?? d.category, nom: d.title, depose_le: new Date(v.uploadedAt).toISOString().slice(0, 10) };
+      });
+      return JSON.stringify({ trouve: true, restitue: true, documents: restitues, note: "Ces documents sont proposés au DG en téléchargement." });
     }
 
     return JSON.stringify({ erreur: "Outil inconnu." });

@@ -257,6 +257,34 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     expect(assistant!.attachments![0].label).toContain("Rapport");
   });
 
+  // ── Audit interne du catalogue Éclospace (section 15) ──
+  it("réserve l'audit du catalogue au DG / admin (403 pour un correcteur)", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/v1/sage/catalogue-audit", headers: { cookie: correcteurCookie } });
+    expect(r.statusCode).toBe(403);
+  });
+
+  it("audite le catalogue réel et signale les manques (sans rien modifier)", async () => {
+    // Un ouvrage volontairement incomplet : sans résumé, sans auteur, sans genre.
+    const adminId = (await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).id;
+    const status = await prisma.workflowStatus.findFirstOrThrow();
+    const number = `AUD-${rnd()}`;
+    await prisma.manuscript.create({ data: { manuscriptNumber: number, title: `Fiche incomplète ${rnd()}`, language: "fr", statusId: status.id, ownerId: adminId, receivedAt: new Date(), createdBy: adminId, updatedBy: adminId } });
+
+    const r = await app.inject({ method: "GET", url: "/api/v1/sage/catalogue-audit", headers: { cookie: dgCookie } });
+    expect(r.statusCode).toBe(200);
+    const audit = r.json() as { total_manuscripts: number; findings: Array<{ manuscript_ref: string; category: string; field: string }>; counts: Record<string, number> };
+    expect(audit.total_manuscripts).toBeGreaterThan(0);
+    const mine = audit.findings.filter((f) => f.manuscript_ref === number);
+    // La fiche incomplète remonte : auteur manquant (urgent) + résumé + genre.
+    expect(mine.some((f) => f.field === "Auteur" && f.category === "urgentes")).toBe(true);
+    expect(mine.some((f) => f.field === "Résumé")).toBe(true);
+    expect(mine.some((f) => f.field === "Genre / catégorie")).toBe(true);
+
+    // Lecture seule : l'ouvrage n'est pas modifié par l'audit.
+    const after = await prisma.manuscript.findUniqueOrThrow({ where: { manuscriptNumber: number } });
+    expect(after.summary).toBeNull();
+  });
+
   it("archive une conversation : elle quitte la liste", async () => {
     const created = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
     const convId = created.json().id as string;

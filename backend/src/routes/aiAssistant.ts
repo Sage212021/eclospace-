@@ -5,6 +5,7 @@ import { requireAnyRole } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { runConversationReply } from "../lib/aiAssistant.js";
 import { runLearningAnalysis } from "../lib/aiLearning.js";
+import { runCatalogueAudit } from "../lib/catalogueAudit.js";
 
 // Espace de dialogue privé DG ↔ SAGE (« Échanger avec SAGE »). Réservé à la
 // Direction générale et à l'administrateur. Conversations LIBRES, privées par
@@ -176,6 +177,16 @@ export default async function aiAssistantRoutes(fastify: FastifyInstance) {
     const run = await prisma.aiLearningRun.findFirst({ where: { ownerId: request.user!.id }, orderBy: { createdAt: "desc" } });
     if (!run) return reply.send({ run: null });
     return reply.send({ run: { id: run.id, status: run.status, summary: run.summary, proposal_count: run.proposalCount, error_message: run.errorMessage, created_at: run.createdAt } });
+  });
+
+  // Audit INTERNE du catalogue Éclospace (section 15, volet catalogue). Lecture
+  // seule, 100 % déterministe : SAGE signale manques et anomalies sans rien
+  // inventer ni modifier. La comparaison avec le site public eclosion.cm n'est
+  // pas incluse ici (étape ultérieure). Consultation (lecture) : non journalisée,
+  // comme les autres GET de SAGE.
+  fastify.get("/api/v1/sage/catalogue-audit", { preHandler: requireAnyRole(SAGE_ROLES) }, async (_request, reply) => {
+    const audit = await runCatalogueAudit();
+    return reply.send(audit);
   });
 
   // Archiver (suppression logique) une conversation : elle quitte la liste.

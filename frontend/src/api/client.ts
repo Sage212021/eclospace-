@@ -2987,6 +2987,30 @@ export function analyzeSageLearning() {
 export function getSageLearningLatest() {
   return request<{ run: SageLearningRun | null }>("/api/v1/sage/learning/latest");
 }
+// Audit INTERNE du catalogue Éclospace (lecture seule, déterministe).
+export type CatalogueAuditCategory = "urgentes" | "editoriales" | "commerciales" | "presentation" | "a_confirmer";
+export type CatalogueAuditPriority = "urgent" | "important" | "mineur";
+export interface CatalogueAuditFinding {
+  category: CatalogueAuditCategory;
+  priority: CatalogueAuditPriority;
+  manuscript_id: string;
+  manuscript_ref: string;
+  manuscript_title: string;
+  field: string;
+  current: string;
+  suggestion: string;
+  reason: string;
+}
+export interface CatalogueAudit {
+  generated_at: string;
+  total_manuscripts: number;
+  counts: Record<CatalogueAuditCategory, number>;
+  findings: CatalogueAuditFinding[];
+  note: string;
+}
+export function getCatalogueAudit() {
+  return request<CatalogueAudit>("/api/v1/sage/catalogue-audit");
+}
 
 export function toggleChecklistItem(itemId: string, checked: boolean) {
   return request<ChecklistItem>(`/api/v1/checklist-items/${itemId}`, { method: "PATCH", body: JSON.stringify({ checked }) });

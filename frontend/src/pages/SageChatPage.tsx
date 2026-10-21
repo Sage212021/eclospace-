@@ -13,13 +13,25 @@ import {
   validateSageKnowledge,
   analyzeSageLearning,
   getSageLearningLatest,
+  getCatalogueAudit,
   sageAttachmentUrl,
   type SageConversation,
   type SageDossier,
   type SageKnowledge,
   type SageKnowledgeCategory,
   type SageLearningRun,
+  type CatalogueAudit,
+  type CatalogueAuditCategory,
 } from "../api/client";
+
+const AUDIT_CATS: { value: CatalogueAuditCategory; label: string }[] = [
+  { value: "urgentes", label: "Corrections urgentes" },
+  { value: "commerciales", label: "Mises à jour commerciales" },
+  { value: "editoriales", label: "Mises à jour éditoriales" },
+  { value: "presentation", label: "Présentation" },
+  { value: "a_confirmer", label: "À confirmer" },
+];
+const PRIO_COLOR: Record<string, string> = { urgent: "#B23A2E", important: "#B87400", mineur: "var(--muted)" };
 
 const KNOWLEDGE_CATS: { value: SageKnowledgeCategory; label: string }[] = [
   { value: "institution", label: "Institution" },
@@ -51,6 +63,11 @@ export function SageChatPage() {
   const [kForm, setKForm] = useState<{ id: string | null; category: SageKnowledgeCategory; title: string; content: string } | null>(null);
   // Apprentissage (Lot 4) : dernière analyse + état.
   const [learning, setLearning] = useState<SageLearningRun | null>(null);
+  // Audit interne du catalogue Éclospace (section 15).
+  const [audit, setAudit] = useState<CatalogueAudit | null>(null);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
 
   const loadConversations = () => listSageConversations().then((r) => setConversations(r.conversations)).catch(() => setConversations([]));
   const loadKnowledge = () => listSageKnowledge().then((r) => setKnowledge(r.entries)).catch(() => setKnowledge([]));
@@ -169,6 +186,17 @@ export function SageChatPage() {
       await loadLearning();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analyse impossible.");
+    }
+  }
+  async function runAudit() {
+    setAuditError(null);
+    setAuditLoading(true);
+    try {
+      setAudit(await getCatalogueAudit());
+    } catch (e) {
+      setAuditError(e instanceof Error ? e.message : "L'audit a échoué.");
+    } finally {
+      setAuditLoading(false);
     }
   }
 
@@ -299,6 +327,54 @@ export function SageChatPage() {
                         <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{e.content}</div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Audit interne du catalogue Éclospace (section 15, volet catalogue). */}
+          <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 12, marginTop: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700 }}>🔎 Audit du catalogue</div>
+              <button onClick={() => setAuditOpen((v) => !v)} style={{ ...rowBtnStyle, width: "auto", fontWeight: 700, padding: "5px 10px" }}>{auditOpen ? "Masquer ▴" : "Ouvrir ▾"}</button>
+            </div>
+            <p style={{ color: "var(--muted)", fontSize: 11.5, margin: "6px 0 0", lineHeight: 1.45 }}>
+              SAGE passe en revue les fiches du catalogue et signale les manques et anomalies (résumé, auteur, genre, biographie, couverture, ISBN, prix, doublons). Lecture seule : rien n'est modifié. Les changements sensibles (prix, ISBN, droits) restent soumis à votre validation. La comparaison avec le site public eclosion.cm n'est pas incluse ici.
+            </p>
+            {auditOpen && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <button onClick={runAudit} disabled={auditLoading} style={{ ...primaryBtnStyle, padding: "6px 13px", opacity: auditLoading ? 0.6 : 1 }}>{auditLoading ? "Analyse en cours…" : audit ? "Relancer l'audit" : "Lancer l'audit"}</button>
+                  {audit && <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{audit.total_manuscripts} ouvrage(s) examiné(s) · {audit.findings.length} point(s) relevé(s)</span>}
+                </div>
+                {auditError && <div style={{ fontSize: 12, color: "var(--alert)", marginTop: 8 }}>⚠ {auditError}</div>}
+                {audit && audit.findings.length === 0 && !auditLoading && (
+                  <p style={{ color: "var(--positive, #2F7D4A)", fontSize: 12.5, margin: "10px 0 0" }}>Aucune anomalie relevée : le catalogue est complet sur les points vérifiés.</p>
+                )}
+                {audit && audit.findings.length > 0 && (
+                  <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
+                    {AUDIT_CATS.filter((c) => audit.counts[c.value] > 0).map((c) => (
+                      <div key={c.value}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{c.label} <span style={{ color: "var(--muted)", fontWeight: 600 }}>({audit.counts[c.value]})</span></div>
+                        <div style={{ display: "grid", gap: 6 }}>
+                          {audit.findings.filter((f) => f.category === c.value).map((f, i) => (
+                            <div key={`${f.manuscript_id}-${f.field}-${i}`} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", background: "var(--ivory, #FAF8F2)" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 12.5, fontWeight: 600 }}>{f.field} — {f.manuscript_title} <span style={{ color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 11 }}>[{f.manuscript_ref}]</span></span>
+                                <span style={{ fontSize: 10.5, fontWeight: 700, color: PRIO_COLOR[f.priority] ?? "var(--muted)" }}>{f.priority.toUpperCase()}</span>
+                              </div>
+                              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, lineHeight: 1.45 }}>
+                                <span style={{ color: "var(--ink)" }}>Actuel :</span> {f.current}<br />
+                                <span style={{ color: "var(--ink)" }}>Proposition :</span> {f.suggestion}<br />
+                                <span style={{ fontStyle: "italic" }}>{f.reason}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    <p style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic", margin: 0, lineHeight: 1.45 }}>{audit.note}</p>
                   </div>
                 )}
               </div>

@@ -106,6 +106,10 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     const system = calls[calls.length - 1]?.system ?? "";
     expect(system).toContain("DIRECTEUR GÉNÉRAL");
     expect(system).toContain("Tu n'inventes JAMAIS");
+    // SAGE raisonne aussi en directeur éditorial (ligne, programme, acquisition, KPIs…).
+    expect(system).toContain("COMPÉTENCES DE DIRECTION ÉDITORIALE");
+    expect(system).toContain("LIGNE ÉDITORIALE");
+    expect(system).toContain("POLITIQUE D'ACQUISITION");
   });
 
   it("le premier message peut être envoyé dès la création, et sert de titre par défaut", async () => {

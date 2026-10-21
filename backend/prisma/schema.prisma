@@ -5814,6 +5814,47 @@ model AiEditorialMessage {
   @@map("ai_editorial_messages")
 }
 
+// ── Espace de dialogue privé DG ↔ SAGE (« Échanger avec SAGE ») ──────────────
+// Conversations LIBRES (non rattachées à un ouvrage) du directeur général avec
+// SAGE : réflexion éditoriale, projets, synthèses. Privées par propriétaire
+// (ownerId). Mémoire conversationnelle persistante. Fondation (Lot 1) ; les
+// lots suivants y brancheront la recherche ERP et les mémoires de connaissance.
+model AiConversation {
+  id        String    @id @default(uuid())
+  ownerId   String    @map("owner_id")
+  title     String    @default("Nouvelle conversation")
+  archivedAt DateTime? @map("archived_at")
+  createdBy String?   @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  messages  AiConversationMessage[]
+
+  @@index([ownerId])
+  @@map("ai_conversations")
+}
+
+model AiConversationMessage {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  conversation   AiConversation @relation(fields: [conversationId], references: [id])
+  // "user" (le DG) ou "assistant" (SAGE).
+  role           String
+  content        String   @default("")
+  // "pending" (réponse en cours en arrière-plan), "done", "erreur".
+  status         String   @default("done")
+  errorMessage   String?  @map("error_message")
+  model          String?
+  createdBy      String?  @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  // Suppression LOGIQUE (règle d'intégrité §13).
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by")
+
+  @@index([conversationId])
+  @@map("ai_conversation_messages")
+}
+
 // Mémoire de SAGE — Lot B. Le manuscrit est découpé en PASSAGES indexés
 // (recherche plein texte PostgreSQL) afin que l'agent réponde en CITANT le
 // passage exact (chapitre / extrait), au lieu de redonner tout le texte à chaque

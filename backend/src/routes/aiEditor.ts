@@ -26,6 +26,7 @@ const KIND_LABEL: Record<string, string> = {
   copyedit: "Préparation de copie",
   bibliographie: "Contrôle bibliographique",
   typographie: "Contrôle typographique",
+  titrologie: "Titrologie (propositions de titres)",
 };
 const REWRITE_MODE_LABEL: Record<string, string> = { fidele: "fidèle à l'auteur", renforce: "littérairement renforcé", alternatif: "proposition alternative" };
 
@@ -200,7 +201,7 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
   // ── Livrables éditoriaux (Lot F) : fiche de lecture, textes de présentation,
   // lettre à l'auteur. Même patron que coherence/documentaire : un seul message
   // « assistant » en attente, exécution en arrière-plan, manuscrit requis.
-  const deliverableKinds = ["fiche_lecture", "presentation", "lettre_auteur"] as const;
+  const deliverableKinds = ["fiche_lecture", "presentation", "lettre_auteur", "titrologie"] as const;
   for (const kind of deliverableKinds) {
     fastify.post(`/api/v1/ai-editor/:manuscriptId/${kind.replace("_", "-")}`, { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
       const { manuscriptId } = request.params as { manuscriptId: string };

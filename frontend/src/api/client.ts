@@ -2786,7 +2786,7 @@ export function updateBatFiles(batId: string, files: { interiorVersionId?: strin
 // ── Éditeur littéraire IA (« ÉCLOSION ÉDITORIAL IA ») — Lot A (DG + admin)
 export interface AiEditorMessage {
   id: string;
-  kind: "diagnostic" | "chat" | "coherence" | "impact" | "documentaire" | "traduction" | "fiche_lecture" | "presentation" | "lettre_auteur" | "copyedit" | "bibliographie" | "typographie";
+  kind: "diagnostic" | "chat" | "coherence" | "impact" | "documentaire" | "traduction" | "fiche_lecture" | "presentation" | "lettre_auteur" | "titrologie" | "copyedit" | "bibliographie" | "typographie";
   role: "user" | "assistant";
   content: string;
   status: "pending" | "done" | "erreur";
@@ -2867,6 +2867,9 @@ export function requestAiEditorPresentation(manuscriptId: string) {
 }
 export function requestAiEditorLettreAuteur(manuscriptId: string) {
   return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/lettre-auteur`, { method: "POST" });
+}
+export function requestAiEditorTitrologie(manuscriptId: string) {
+  return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/titrologie`, { method: "POST" });
 }
 // Préparation de copie & normes (Lot G).
 export function requestAiEditorBibliographie(manuscriptId: string) {

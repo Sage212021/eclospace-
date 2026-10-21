@@ -188,7 +188,7 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
   });
 
   // ── Livrables éditoriaux (Lot F) + contrôles de normes (Lot G) ──
-  for (const [path, kind] of [["fiche-lecture", "fiche_lecture"], ["presentation", "presentation"], ["lettre-auteur", "lettre_auteur"], ["bibliographie", "bibliographie"], ["typographie", "typographie"]] as const) {
+  for (const [path, kind] of [["fiche-lecture", "fiche_lecture"], ["presentation", "presentation"], ["lettre-auteur", "lettre_auteur"], ["titrologie", "titrologie"], ["bibliographie", "bibliographie"], ["typographie", "typographie"]] as const) {
     it(`produit le livrable « ${kind} » en arrière-plan à partir du manuscrit`, async () => {
       const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/${path}`, headers: { cookie: adminCookie } });
       expect(r.statusCode).toBe(202);

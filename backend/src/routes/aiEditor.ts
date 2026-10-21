@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAnyRole } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
-import { runEditorAnswer, runRewrite, REWRITE_MODES } from "../lib/aiEditor.js";
+import { runEditorAnswer, runRewrite, REWRITE_MODES, assembleChapterText } from "../lib/aiEditor.js";
 
 // ÉCLOSION ÉDITORIAL IA — Lot A (lecture + diagnostic + dialogue). Réservé à la
 // Direction générale et à l'administrateur (ouverture au directeur éditorial
@@ -57,18 +57,26 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
     if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
 
     // Sources déjà présentes dans l'ERP.
-    const [manuscriptDoc, evalReport, messages, passageCount, rewrites] = await Promise.all([
+    const [manuscriptDoc, evalReport, messages, passageCount, chapterGroups, rewrites] = await Promise.all([
       prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "manuscrit", deletedAt: null }, select: { id: true } }),
       prisma.aiReadingJob.findFirst({ where: { manuscriptId, workType: "evaluation", status: "termine", reportText: { not: null } }, select: { id: true } }),
       prisma.aiEditorialMessage.findMany({ where: { manuscriptId, deletedAt: null }, orderBy: { createdAt: "asc" } }),
       prisma.aiEditorialPassage.count({ where: { manuscriptId } }),
+      // Chapitres détectés lors de l'indexation (pour la préparation de copie
+      // chapitre par chapitre). Ordonnés par position dans l'ouvrage.
+      prisma.aiEditorialPassage.groupBy({ by: ["chapterLabel"], where: { manuscriptId, chapterLabel: { not: null } }, _min: { ordinal: true } }),
       prisma.aiEditorialRewrite.findMany({ where: { manuscriptId }, orderBy: { createdAt: "desc" }, take: 30 }),
     ]);
+    const chapters = chapterGroups
+      .filter((g) => g.chapterLabel)
+      .sort((a, b) => (a._min.ordinal ?? 0) - (b._min.ordinal ?? 0))
+      .map((g) => g.chapterLabel as string);
 
     return reply.send({
       manuscript: { id: manuscript.id, number: manuscript.manuscriptNumber, title: manuscript.title, genre: manuscript.genre?.label ?? null },
       sources: { has_manuscript_file: !!manuscriptDoc, has_evaluation_report: !!evalReport },
       memory: { passage_count: passageCount },
+      chapters,
       messages: messages.map(messageView),
       rewrites: rewrites.map((r) => ({
         id: r.id, mode: r.mode, instruction: r.instruction, source_text: r.sourceText, proposed_text: r.proposedText,
@@ -191,6 +199,58 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
       return reply.code(202).send({ message_id: assistant.id });
     });
   }
+
+  // ── Préparation de copie & normes (Lot G) : contrôle bibliographique et
+  // contrôle typographique — vues d'ensemble, même patron que documentaire.
+  const normKinds = ["bibliographie", "typographie"] as const;
+  for (const kind of normKinds) {
+    fastify.post(`/api/v1/ai-editor/:manuscriptId/${kind}`, { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+      const { manuscriptId } = request.params as { manuscriptId: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id: manuscriptId, deletedAt: null }, select: { id: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
+      const manuscriptDoc = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: manuscriptId, category: "manuscrit", deletedAt: null }, select: { id: true } });
+      if (!manuscriptDoc) return reply.code(409).send({ code: "no_manuscript_file", message: "Aucun manuscrit n'est déposé pour cet ouvrage : déposez-le d'abord dans la fiche." });
+      const already = await prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, status: "pending" }, select: { id: true } });
+      if (already) return reply.code(409).send({ code: "already_running", message: "Une analyse est déjà en cours pour cet ouvrage. Patientez quelques instants." });
+      const assistant = await prisma.aiEditorialMessage.create({ data: { manuscriptId, kind, role: "assistant", status: "pending", content: "", createdBy: request.user!.id } });
+      await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "ai_editorial_message", entityId: assistant.id, newValues: { manuscriptId, kind }, ipAddress: request.ip });
+      void runEditorAnswer(assistant.id);
+      return reply.code(202).send({ message_id: assistant.id });
+    });
+  }
+
+  // PRÉPARATION DE COPIE d'un chapitre (ou d'un passage collé) : texte corrigé +
+  // liste des corrections classées + niveau d'intervention. Le texte à préparer
+  // est assemblé ici (chapitre indexé) ou fourni directement, puis conservé dans
+  // le message « user » ; la préparation s'exécute en arrière-plan.
+  const copyeditSchema = z.object({
+    chapter: z.string().trim().min(1).max(200).optional(),
+    source_text: z.string().trim().min(1).max(24000).optional(),
+  }).refine((v) => v.chapter || v.source_text, { message: "Indiquez un chapitre ou collez un texte." });
+  fastify.post("/api/v1/ai-editor/:manuscriptId/copyedit", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+    const { manuscriptId } = request.params as { manuscriptId: string };
+    const parsed = copyeditSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Indiquez un chapitre ou collez un texte à préparer.", details: parsed.error.issues });
+    const manuscript = await prisma.manuscript.findFirst({ where: { id: manuscriptId, deletedAt: null }, select: { id: true } });
+    if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
+    const already = await prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, status: "pending" }, select: { id: true } });
+    if (already) return reply.code(409).send({ code: "already_running", message: "Une préparation est déjà en cours pour cet ouvrage. Patientez quelques instants." });
+
+    // Assemble le texte : soit le chapitre indexé choisi, soit le passage collé.
+    let text = parsed.data.source_text?.trim() ?? "";
+    let label = "passage collé";
+    if (parsed.data.chapter) {
+      text = await assembleChapterText(manuscriptId, parsed.data.chapter);
+      if (!text) return reply.code(409).send({ code: "chapter_not_found", message: "Ce chapitre n'a pas été retrouvé dans le manuscrit indexé. Lancez d'abord le diagnostic (qui indexe l'ouvrage), ou collez directement le texte à préparer." });
+      label = parsed.data.chapter;
+    }
+    const userContent = `Préparation de copie — ${label}\n\n${text}`;
+    const userMessage = await prisma.aiEditorialMessage.create({ data: { manuscriptId, kind: "copyedit", role: "user", status: "done", content: userContent, createdBy: request.user!.id } });
+    const assistant = await prisma.aiEditorialMessage.create({ data: { manuscriptId, kind: "copyedit", role: "assistant", status: "pending", content: "", createdBy: request.user!.id } });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "ai_editorial_message", entityId: userMessage.id, newValues: { manuscriptId, kind: "copyedit", chapter: parsed.data.chapter ?? null }, ipAddress: request.ip });
+    void runEditorAnswer(assistant.id);
+    return reply.code(202).send({ user_message_id: userMessage.id, assistant_message_id: assistant.id });
+  });
 
   // TRADUCTION fidèle d'un passage (français ↔ anglais). Le passage + la langue
   // cible sont conservés dans le message « user » ; la traduction en fond.

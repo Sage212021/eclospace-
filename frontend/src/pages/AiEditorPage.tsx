@@ -16,6 +16,9 @@ import {
   requestAiEditorFicheLecture,
   requestAiEditorPresentation,
   requestAiEditorLettreAuteur,
+  requestAiEditorBibliographie,
+  requestAiEditorTypographie,
+  requestAiEditorCopyedit,
   type Manuscript,
   type AiEditorDossier,
   type AiEditorMessage,
@@ -50,6 +53,10 @@ export function AiEditorPage() {
   const [impactChange, setImpactChange] = useState("");
   const [trSource, setTrSource] = useState("");
   const [trLang, setTrLang] = useState<"fr" | "en">("en");
+  // Préparation de copie : par chapitre indexé OU par passage collé.
+  const [ceMode, setCeMode] = useState<"chapter" | "paste">("chapter");
+  const [ceChapter, setCeChapter] = useState("");
+  const [ceSource, setCeSource] = useState("");
 
   const loadConversations = () => listAiEditorConversations().then((r) => setConversations(r.conversations)).catch(() => setConversations([]));
 
@@ -160,6 +167,9 @@ export function AiEditorPage() {
       fiche_lecture: "Fiche de lecture",
       presentation: "Textes de présentation",
       lettre_auteur: "Lettre à l'auteur",
+      copyedit: "Préparation de copie",
+      bibliographie: "Contrôle bibliographique",
+      typographie: "Contrôle typographique",
     };
     const title = KIND_TITLE[m.kind] ?? "Note éditoriale";
     const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -256,6 +266,20 @@ export function AiEditorPage() {
     } finally { setBusy(false); }
   }
 
+  async function runCopyedit() {
+    if (!selectedId) return;
+    const input = ceMode === "chapter" ? { chapter: ceChapter } : { source_text: ceSource.trim() };
+    if (ceMode === "chapter" ? !ceChapter : !ceSource.trim()) return;
+    setBusy(true); setError(null);
+    try {
+      await requestAiEditorCopyedit(selectedId, input);
+      if (ceMode === "paste") setCeSource("");
+      await loadDossier(selectedId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Préparation impossible.");
+    } finally { setBusy(false); }
+  }
+
   const diagnostic = dossier?.messages.find((m) => m.kind === "diagnostic");
   const chat = dossier?.messages.filter((m) => m.kind === "chat") ?? [];
   const coherence = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "coherence");
@@ -265,6 +289,10 @@ export function AiEditorPage() {
   const ficheLecture = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "fiche_lecture");
   const presentation = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "presentation");
   const lettreAuteur = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "lettre_auteur");
+  const bibliographie = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "bibliographie");
+  const typographie = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "typographie");
+  const copyedits = dossier?.messages.filter((m) => m.kind === "copyedit") ?? [];
+  const chapters = dossier?.chapters ?? [];
   const rewrites = dossier?.rewrites ?? [];
 
   return (
@@ -501,6 +529,78 @@ export function AiEditorPage() {
                 </div>
               );
             })}
+          </div>
+
+          {/* Préparation de copie & normes : ce que l'éditeur CORRIGE */}
+          <div style={{ border: "1px solid var(--line)", borderRadius: 12, background: "var(--card)", padding: 14, marginTop: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>Préparation de copie & normes</div>
+            <p style={{ color: "var(--muted)", fontSize: 12, margin: "0 0 10px", lineHeight: 1.5 }}>
+              SAGE prépare la copie d'un chapitre (texte corrigé + liste des corrections classées), contrôle et harmonise les références bibliographiques, et vérifie la typographie selon la langue. Il ne touche jamais au fond ni à la voix de l'auteur.
+            </p>
+
+            {/* Préparation de copie d'un chapitre (ou d'un passage collé) */}
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Préparation de copie</div>
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 8 }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5 }}>
+                <input type="radio" name="cemode" checked={ceMode === "chapter"} onChange={() => setCeMode("chapter")} /> Un chapitre de l'ouvrage
+              </label>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5 }}>
+                <input type="radio" name="cemode" checked={ceMode === "paste"} onChange={() => setCeMode("paste")} /> Un texte que je colle
+              </label>
+            </div>
+            {ceMode === "chapter" ? (
+              chapters.length > 0 ? (
+                <select value={ceChapter} onChange={(e) => setCeChapter(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, marginBottom: 8 }}>
+                  <option value="">— choisir un chapitre —</option>
+                  {chapters.map((c) => (<option key={c} value={c}>{c}</option>))}
+                </select>
+              ) : (
+                <p style={{ color: "var(--muted)", fontSize: 12, margin: "0 0 8px", lineHeight: 1.45 }}>Aucun chapitre indexé pour l'instant. Lancez d'abord le <b>diagnostic</b> (il découpe et indexe l'ouvrage), ou choisissez « Un texte que je colle ».</p>
+              )
+            ) : (
+              <textarea value={ceSource} onChange={(e) => setCeSource(e.target.value)} placeholder="Collez le chapitre ou le passage à préparer…" rows={5} style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, resize: "vertical", marginBottom: 8 }} />
+            )}
+            {(() => { const d = busy || pending || (ceMode === "chapter" ? !ceChapter : !ceSource.trim()); return (
+              <button onClick={runCopyedit} disabled={d} style={{ ...primaryBtnStyle, cursor: d ? "not-allowed" : "pointer", opacity: d ? 0.55 : 1 }}>Préparer la copie</button>
+            ); })()}
+            <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+              {copyedits.map((m) => (
+                m.role === "user" ? (
+                  <div key={m.id} style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 700 }}>✍ {m.content.split("\n")[0]}</div>
+                ) : (
+                  <div key={m.id} style={{ border: "1px solid var(--line)", borderRadius: 8, background: "var(--ivory, #FAF8F2)", padding: 10 }}>
+                    <MessageBody m={m} />
+                    <MsgActions m={m} busy={busy} onPdf={downloadPdf} onDelete={deleteMsg} />
+                  </div>
+                )
+              ))}
+            </div>
+
+            {/* Contrôle bibliographique */}
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 14, marginBottom: 4 }}>Références bibliographiques</div>
+            {(() => { const d = busy || pending || !dossier.sources.has_manuscript_file; return (
+              <button onClick={() => runDeliverable(requestAiEditorBibliographie, "Contrôle bibliographique")} disabled={d} title={!dossier.sources.has_manuscript_file ? "Déposez d'abord le manuscrit." : undefined} style={{ ...primaryBtnStyle, cursor: d ? "not-allowed" : "pointer", opacity: d ? 0.55 : 1 }}>
+                {bibliographie ? "Relancer le contrôle bibliographique" : "Contrôler & harmoniser la bibliographie"}
+              </button>); })()}
+            {bibliographie && (
+              <div style={{ border: "1px solid var(--line)", borderRadius: 8, background: "var(--ivory, #FAF8F2)", padding: 10, marginTop: 8 }}>
+                <MessageBody m={bibliographie} />
+                <MsgActions m={bibliographie} busy={busy} onPdf={downloadPdf} onDelete={deleteMsg} />
+              </div>
+            )}
+
+            {/* Contrôle typographique */}
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 14, marginBottom: 4 }}>Typographie</div>
+            {(() => { const d = busy || pending || !dossier.sources.has_manuscript_file; return (
+              <button onClick={() => runDeliverable(requestAiEditorTypographie, "Contrôle typographique")} disabled={d} title={!dossier.sources.has_manuscript_file ? "Déposez d'abord le manuscrit." : undefined} style={{ ...primaryBtnStyle, cursor: d ? "not-allowed" : "pointer", opacity: d ? 0.55 : 1 }}>
+                {typographie ? "Relancer le contrôle typographique" : "Vérifier la typographie"}
+              </button>); })()}
+            {typographie && (
+              <div style={{ border: "1px solid var(--line)", borderRadius: 8, background: "var(--ivory, #FAF8F2)", padding: 10, marginTop: 8 }}>
+                <MessageBody m={typographie} />
+                <MsgActions m={typographie} busy={busy} onPdf={downloadPdf} onDelete={deleteMsg} />
+              </div>
+            )}
           </div>
 
           {/* Atelier de réécriture */}

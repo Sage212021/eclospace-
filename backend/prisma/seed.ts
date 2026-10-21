@@ -2653,6 +2653,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-preparation-copie-normes-lot-g",
+      version: "2026.10",
+      title: "Nouveauté — SAGE prépare la copie et contrôle les normes (typographie, bibliographie)",
+      body: "SAGE gagne les gestes de la préparation de copie, dans l'espace SAGE, section « Préparation de copie & normes ». (1) PRÉPARATION DE COPIE : choisissez un chapitre de l'ouvrage (ceux détectés au diagnostic apparaissent dans une liste) ou collez un passage ; SAGE rend le texte corrigé (orthographe, grammaire, typographie, répétitions) AVEC la liste des corrections classées par catégorie et le niveau d'intervention retenu — sans toucher au fond ni à la voix de l'auteur. (2) RÉFÉRENCES BIBLIOGRAPHIQUES : il repère la norme utilisée (APA, Chicago, MLA…), signale les mélanges de normes, les citations sans entrée (et inversement), les références incomplètes, et propose une harmonisation — sans jamais inventer une source manquante. (3) TYPOGRAPHIE : il vérifie espaces insécables, guillemets, tirets de dialogue, capitales, italiques, nombres et dates selon la langue, avec des exemples avant → après et en distinguant la règle de la simple préférence de maison. Chaque résultat se télécharge en PDF. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-livrables-editoriaux-lot-f",
       version: "2026.10",
       title: "Nouveauté — SAGE rédige vos documents éditoriaux (fiche de lecture, 4e de couverture, lettre à l'auteur)",

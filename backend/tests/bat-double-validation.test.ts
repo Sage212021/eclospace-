@@ -237,5 +237,21 @@ describe("BAT Final — double validation (infographe puis Direction générale)
     const afterInfo = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscript.id}/bat-validation-state`, headers: { cookie: infographeCookie } });
     expect(afterInfo.json().is_pre_validator).toBe(true);
     expect(afterInfo.json().can_counter_validate).toBe(false);
+    // Une fois la 1re signature posée, l'infographe n'a PLUS d'action de
+    // pré-validation : le bouton « Valider (1re signature) » doit disparaître
+    // côté écran (il se resynchronise via ce champ après le rafraîchissement).
+    expect(afterInfo.json().can_pre_validate).toBe(false);
+  });
+
+  it("l'infographe peut pré-valider AVANT la 1re signature, plus après (can_pre_validate bascule)", async () => {
+    const { manuscript } = await manuscriptAtSignedBat("BAT DV Bascule Bouton");
+    const before = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscript.id}/bat-validation-state`, headers: { cookie: infographeCookie } });
+    expect(before.json().can_pre_validate).toBe(true);
+
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscript.id}/steps/VALIDATION_BAT/validate`, headers: { cookie: infographeCookie }, payload: {} });
+
+    const after = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscript.id}/bat-validation-state`, headers: { cookie: infographeCookie } });
+    expect(after.json().can_pre_validate).toBe(false);
+    expect(after.json().pre_validated).toBe(true);
   });
 });

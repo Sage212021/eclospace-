@@ -145,6 +145,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
   const [manuscript, setManuscript] = useState<ManuscriptWithExtras | null>(null);
   const [timeline, setTimeline] = useState<TimelineStep[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [error, setError] = useState<string | null>(null);
   // Focalisation par rubrique : on n'affiche que les sections de l'étape d'où
   // l'ouvrage a été ouvert. « Voir toute la fiche » lève la restriction.
@@ -170,6 +171,11 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
     const [m, t] = await Promise.all([getManuscript(manuscriptId), getManuscriptTimeline(manuscriptId)]);
     setManuscript(m);
     setTimeline(t);
+    // Jeton de rechargement : incrémenté à CHAQUE rafraîchissement pour que les
+    // sous-panneaux qui gardent leur propre état (ex. l'état des deux signatures
+    // du BAT Final) se resynchronisent, même quand l'ouvrage ne change pas
+    // d'étape (cas de la 1re signature, qui ne fait pas avancer l'ouvrage).
+    setReloadToken((n) => n + 1);
     return m;
   };
 
@@ -799,6 +805,7 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
             <GenericStepValidation
               manuscriptId={manuscript.id}
               stepCode={manuscript.status.code}
+              reloadToken={reloadToken}
               confirm={confirm}
               onValidated={(_status, opts) => advanceAfterValidation(opts?.confided ?? false)}
               onPending={(msg) => { setMessage(msg); void refresh(); }}
@@ -2118,6 +2125,7 @@ function StepAttachments({
 function GenericStepValidation({
   manuscriptId,
   stepCode,
+  reloadToken = 0,
   confirm,
   onValidated,
   onPending,
@@ -2129,6 +2137,7 @@ function GenericStepValidation({
 }: {
   manuscriptId: string;
   stepCode: string;
+  reloadToken?: number;
   confirm: (opts: { title: string; message: string; detail?: string; confirmLabel?: string }) => Promise<boolean>;
   onValidated: (status: string | null, opts?: { confided?: boolean }) => void;
   onPending?: (message: string) => void;
@@ -2183,7 +2192,10 @@ function GenericStepValidation({
         .catch(() => { if (alive) setBatState(null); });
     }
     return () => { alive = false; };
-  }, [manuscriptId, stepCode]);
+    // reloadToken : resynchronise l'état des deux signatures après la 1re
+    // signature (qui ne change ni l'ouvrage ni l'étape) — sinon le bouton
+    // « Valider (1re signature) » restait affiché et un 2e clic échouait.
+  }, [manuscriptId, stepCode, reloadToken]);
 
   const isOptional = optMeta?.is_optional === true;
   const canSkip = optMeta?.is_optional === true && optMeta.mode === "facultative";

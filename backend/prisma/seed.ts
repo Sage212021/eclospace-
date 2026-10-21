@@ -2645,6 +2645,14 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-bat-final-rafraichissement-1re-signature",
+      version: "2026.10",
+      title: "Nouveauté — BAT Final : l'écran se met à jour tout de suite après la 1re signature",
+      body: "Vous nous avez signalé une incohérence sur le BAT Final : après la 1re signature de l'infographe, le bouton « Valider le BAT (1re signature) » restait affiché/allumé, un nouveau clic renvoyait « le BAT est déjà pré-validé », et l'encadré continuait d'annoncer qu'on attendait la 1re signature. C'est corrigé : dès que la 1re signature est posée, la fiche se resynchronise immédiatement — le bouton de 1re signature disparaît et l'encadré passe à « En attente de la contre-validation de la Direction générale ». Pour rappel, l'ordre reste : l'infographe pose la 1re signature → la Direction générale contre-valide (une autre personne) → l'ouvrage passe à la contractualisation, puis à l'impression.",
+      permissionModules: ["bat"],
+      departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
+    },
+    {
       slug: "2026-10-sage-livrables-editoriaux-lot-f",
       version: "2026.10",
       title: "Nouveauté — SAGE rédige vos documents éditoriaux (fiche de lecture, 4e de couverture, lettre à l'auteur)",

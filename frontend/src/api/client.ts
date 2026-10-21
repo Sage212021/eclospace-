@@ -2899,13 +2899,25 @@ export interface SageConversation {
   updated_at: string;
   message_count: number;
 }
+export interface SageAttachment {
+  version_id: string;
+  label: string;
+  kind: string;
+  manuscript: string;
+  download_path: string;
+}
 export interface SageMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   status: "pending" | "done" | "erreur";
   error_message: string | null;
+  attachments: SageAttachment[] | null;
   created_at: string;
+}
+// URL absolue de téléchargement d'un document proposé par SAGE (cookie de session).
+export function sageAttachmentUrl(downloadPath: string): string {
+  return `${API_BASE}${downloadPath}`;
 }
 export interface SageDossier {
   id: string;

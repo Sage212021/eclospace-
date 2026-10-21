@@ -2653,6 +2653,15 @@ async function main() {
       departmentCodes: ["INFOG", "MAQ", "CQ", "DIRED", "DG"],
     },
     {
+      slug: "2026-10-sage-position-dossier-documents",
+      version: "2026.10",
+      title: "Nouveauté — SAGE retrouve la position exacte d'un manuscrit et ses documents",
+      body: "Dans « Échanger avec SAGE », vous pouvez désormais demander où en est un ouvrage et récupérer ses fichiers, en langage naturel : « Où en est le dossier du roman de tel auteur ? », « À quelle étape est bloqué ce manuscrit et qui en est responsable ? », « Montre-moi les documents déposés pour ce projet », « Retrouve le dernier rapport de correction ». SAGE va chercher dans les vrais dossiers d'Eclospace : il identifie l'étape actuelle dans le processus paramétré, le collaborateur affecté, la dernière validation enregistrée, les étapes en attente, puis liste les documents déposés (type, date, déposant). Les documents qu'il retrouve s'affichent sous sa réponse avec un lien pour les OUVRIR ou les TÉLÉCHARGER directement, sans naviguer dans les modules. Il distingue toujours la version la plus récente, et ne supprime ni ne remplace les anciennes. S'il ne trouve pas un dossier ou un document, il le dit — il n'invente jamais une étape, un statut ou un fichier. Réservé à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-apprentissage-lot-4",
       version: "2026.10",
       title: "Nouveauté — SAGE apprend de vos échanges et vous propose des enrichissements",

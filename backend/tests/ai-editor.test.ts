@@ -182,8 +182,8 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     expect(del.statusCode).toBe(403);
   });
 
-  // ── Livrables éditoriaux (Lot F) ──
-  for (const [path, kind] of [["fiche-lecture", "fiche_lecture"], ["presentation", "presentation"], ["lettre-auteur", "lettre_auteur"]] as const) {
+  // ── Livrables éditoriaux (Lot F) + contrôles de normes (Lot G) ──
+  for (const [path, kind] of [["fiche-lecture", "fiche_lecture"], ["presentation", "presentation"], ["lettre-auteur", "lettre_auteur"], ["bibliographie", "bibliographie"], ["typographie", "typographie"]] as const) {
     it(`produit le livrable « ${kind} » en arrière-plan à partir du manuscrit`, async () => {
       const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/${path}`, headers: { cookie: adminCookie } });
       expect(r.statusCode).toBe(202);
@@ -207,4 +207,32 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
       expect(r.statusCode).toBe(403);
     });
   }
+
+  // ── Préparation de copie (Lot G) ──
+  it("prépare la copie d'un passage collé (texte corrigé en arrière-plan)", async () => {
+    const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/copyedit`, headers: { cookie: adminCookie }, payload: { source_text: "Il etait une fois un roi,qui vivait  dans un chateau." } });
+    expect(r.statusCode).toBe(202);
+    const msg = await waitMessage(r.json().assistant_message_id);
+    expect(msg.status).toBe("done");
+    expect(msg.kind).toBe("copyedit");
+    // Le texte à préparer est bien transmis au modèle.
+    const sent = (calls[calls.length - 1]?.messages as Array<{ content: string }> | undefined)?.map((x) => x.content).join(" ") ?? "";
+    expect(sent).toContain("TEXTE À PRÉPARER");
+  });
+
+  it("refuse la préparation de copie sans chapitre ni texte (400)", async () => {
+    const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/copyedit`, headers: { cookie: adminCookie }, payload: {} });
+    expect(r.statusCode).toBe(400);
+  });
+
+  it("signale un chapitre inconnu (409 chapter_not_found)", async () => {
+    const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/copyedit`, headers: { cookie: adminCookie }, payload: { chapter: "Chapitre inexistant 999" } });
+    expect(r.statusCode).toBe(409);
+    expect(r.json().code).toBe("chapter_not_found");
+  });
+
+  it("réserve la préparation de copie au DG / admin (403 pour un correcteur)", async () => {
+    const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/copyedit`, headers: { cookie: correcteurCookie }, payload: { source_text: "Un texte." } });
+    expect(r.statusCode).toBe(403);
+  });
 });

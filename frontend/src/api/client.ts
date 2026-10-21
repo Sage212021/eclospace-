@@ -2786,7 +2786,7 @@ export function updateBatFiles(batId: string, files: { interiorVersionId?: strin
 // ── Éditeur littéraire IA (« ÉCLOSION ÉDITORIAL IA ») — Lot A (DG + admin)
 export interface AiEditorMessage {
   id: string;
-  kind: "diagnostic" | "chat" | "coherence" | "impact" | "documentaire" | "traduction" | "fiche_lecture" | "presentation" | "lettre_auteur";
+  kind: "diagnostic" | "chat" | "coherence" | "impact" | "documentaire" | "traduction" | "fiche_lecture" | "presentation" | "lettre_auteur" | "copyedit" | "bibliographie" | "typographie";
   role: "user" | "assistant";
   content: string;
   status: "pending" | "done" | "erreur";
@@ -2811,6 +2811,7 @@ export interface AiEditorDossier {
   manuscript: { id: string; number: string; title: string; genre: string | null };
   sources: { has_manuscript_file: boolean; has_evaluation_report: boolean };
   memory: { passage_count: number };
+  chapters: string[];
   messages: AiEditorMessage[];
   rewrites: AiEditorRewrite[];
 }
@@ -2866,6 +2867,16 @@ export function requestAiEditorPresentation(manuscriptId: string) {
 }
 export function requestAiEditorLettreAuteur(manuscriptId: string) {
   return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/lettre-auteur`, { method: "POST" });
+}
+// Préparation de copie & normes (Lot G).
+export function requestAiEditorBibliographie(manuscriptId: string) {
+  return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/bibliographie`, { method: "POST" });
+}
+export function requestAiEditorTypographie(manuscriptId: string) {
+  return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/typographie`, { method: "POST" });
+}
+export function requestAiEditorCopyedit(manuscriptId: string, input: { chapter?: string; source_text?: string }) {
+  return request<{ user_message_id: string; assistant_message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/copyedit`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export function toggleChecklistItem(itemId: string, checked: boolean) {

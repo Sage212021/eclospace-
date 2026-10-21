@@ -87,6 +87,31 @@ Une seule phrase, type bandeau de couverture.
 8 à 12 mots-clés, puis 1 ou 2 catégories thématiques.
 Ces textes seront publiés au nom des Éditions Éclosion : n'y fais JAMAIS figurer d'indication sur la manière dont ils ont été produits. N'invente NI citation de presse, NI prix, NI chiffre de vente, NI comparaison trompeuse.`;
 
+// ── Préparation de copie & normes (Lot G) : ce que l'éditeur CORRIGE ──────────
+
+const COPYEDIT_TASK = `Procède à une PRÉPARATION DE COPIE du texte fourni ci-dessus (un chapitre ou un passage).
+Avant toute chose, identifie le NIVEAU d'intervention réellement nécessaire (correction linguistique de surface, préparation de copie, ou révision stylistique) — et n'en fais pas plus que nécessaire : préserve la voix de l'auteur, ne réécris pas ce qui n'a pas besoin de l'être.
+Corrige : orthographe, grammaire et conjugaison ; ponctuation et typographie (selon la langue du texte) ; répétitions involontaires et maladresses manifestes ; incohérences de surface (accords, temps). Ne touche NI au fond, NI aux faits, NI aux choix stylistiques délibérés.
+Structure ta réponse avec EXACTEMENT ces intertitres :
+# NIVEAU D'INTERVENTION
+Le niveau retenu, en une phrase, et pourquoi.
+# TEXTE PRÉPARÉ
+Le texte corrigé, intégral, prêt à être relu (aucun commentaire ici).
+# CORRECTIONS
+La liste des corrections, CLASSÉES par catégorie (Orthographe / Grammaire / Typographie / Répétitions & style / Cohérence de surface). Pour chacune, cite brièvement l'avant → l'après. Si une catégorie est vide, écris « Néant. ».
+Si le texte fourni est vide ou illisible, dis-le et ne fabrique rien.`;
+
+const BIBLIO_TASK = `Procède à un CONTRÔLE ET À UNE HARMONISATION DES RÉFÉRENCES BIBLIOGRAPHIQUES de l'ouvrage, adapté à son genre.
+- Repère la ou les normes apparemment utilisées (APA, MLA, Chicago, Harvard, Vancouver, ISO 690…) et signale si PLUSIEURS variantes sont mélangées.
+- Vérifie la COHÉRENCE citations ↔ bibliographie : appels de citation sans entrée correspondante, et entrées jamais citées.
+- Repère les références INCOMPLÈTES (auteur, titre, année, éditeur, pages, URL/DOI manquants) et les formats irréguliers.
+- Propose une HARMONISATION vers UNE seule norme : indique laquelle est la plus adaptée ici, et donne des exemples AVANT → APRÈS de références corrigées (à partir des informations réellement présentes).
+RÈGLE STRICTE : tu n'INVENTES JAMAIS d'auteur, de titre, d'année, d'éditeur, de page, de DOI ni de source. Quand une information manque pour compléter une référence, tu le SIGNALES comme « à compléter » sans la deviner. Pour un ouvrage sans bibliographie (roman…), indique-le simplement. Localise chaque point (chapitre / note / section) quand c'est possible.`;
+
+const TYPO_TASK = `Procède à un CONTRÔLE TYPOGRAPHIQUE de l'ouvrage, selon les conventions de SA langue (les usages français, britanniques et américains diffèrent — ne les uniformise pas).
+Passe en revue : espaces (notamment les espaces insécables avant ; : ! ? » et après «), guillemets et citations, tirets (cadratin/demi-cadratin) et tirets de dialogue, apostrophes, capitales et petites capitales, italiques (titres, mots étrangers), nombres, dates, heures et unités, appels de notes, points de suspension, ponctuation des listes et légendes.
+Pour chaque type de problème : explique la règle applicable, donne des exemples AVANT → APRÈS tirés du texte, et indique s'il s'agit d'une NORME, d'une recommandation ou d'un simple choix de maison (ne présente jamais une préférence comme une obligation universelle). Classe par catégorie et localise (chapitre / extrait). N'invente rien ; si le texte est partiel, signale-le.`;
+
 const LETTRE_AUTEUR_TASK = `Rédige une LETTRE ÉDITORIALE À L'AUTEUR, prête à être envoyée au nom du Service éditorial des Éditions Éclosion. Ton diplomate, respectueux et professionnel, mais clair sur les demandes. Structure :
 - une ouverture qui reconnaît le travail accompli et les vraies qualités de l'œuvre ;
 - une synthèse des grandes FORCES du manuscrit ;
@@ -255,6 +280,21 @@ export async function retrievePassages(manuscriptId: string, query: string, k = 
   return fallback.map((p) => ({ ordinal: p.ordinal, chapterLabel: p.chapterLabel, content: p.content }));
 }
 
+// Assemble le texte d'UN chapitre à partir des passages indexés (préparation de
+// copie chapitre par chapitre, Lot G). Renvoie le texte concaténé dans l'ordre,
+// borné pour rester dans la capacité du modèle. Vide si le chapitre est inconnu.
+const CHAPTER_CHAR_BUDGET = 24000;
+export async function assembleChapterText(manuscriptId: string, chapterLabel: string): Promise<string> {
+  const passages = await prisma.aiEditorialPassage.findMany({
+    where: { manuscriptId, chapterLabel },
+    orderBy: { ordinal: "asc" },
+    select: { content: true },
+  });
+  let text = passages.map((p) => p.content).join("\n\n");
+  if (text.length > CHAPTER_CHAR_BUDGET) text = text.slice(0, CHAPTER_CHAR_BUDGET);
+  return text.trim();
+}
+
 // ── Atelier de réécriture (Lot C) ──
 export const REWRITE_MODES = ["fidele", "renforce", "alternatif"] as const;
 export type RewriteMode = (typeof REWRITE_MODES)[number];
@@ -393,6 +433,38 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
         ? `${ctx.block}\n\n=== DIAGNOSTIC ÉDITORIAL DÉJÀ ÉTABLI ===\n${diag.content}`
         : ctx.block;
       task = LETTRE_AUTEUR_TASK;
+    } else if (assistant.kind === "bibliographie") {
+      // Contrôle & harmonisation bibliographique : vue d'ensemble → lecture
+      // complète (capée) du manuscrit, comme la vérification documentaire.
+      await buildPassageIndex(manuscriptId).catch(() => {});
+      block = (await buildContext(manuscriptId)).block;
+      task = BIBLIO_TASK;
+    } else if (assistant.kind === "typographie") {
+      // Contrôle typographique : vue d'ensemble → lecture complète (capée).
+      await buildPassageIndex(manuscriptId).catch(() => {});
+      block = (await buildContext(manuscriptId)).block;
+      task = TYPO_TASK;
+    } else if (assistant.kind === "copyedit") {
+      // Préparation de copie : le texte à préparer (chapitre assemblé ou passage
+      // collé) est porté par le dernier message « user » de nature « copyedit ».
+      // On n'envoie PAS tout le manuscrit (inutile) : juste l'en-tête, des repères
+      // sur la voix de l'auteur (diagnostic) et le texte à corriger.
+      const [src, diag, header] = await Promise.all([
+        prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, kind: "copyedit", role: "user", status: "done", deletedAt: null }, orderBy: { createdAt: "desc" }, select: { content: true } }),
+        prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, kind: "diagnostic", status: "done", deletedAt: null }, orderBy: { createdAt: "desc" }, select: { content: true } }),
+        manuscriptHeader(manuscriptId),
+      ]);
+      // Le message « user » commence par une ligne d'étiquette (« Préparation de
+      // copie — <chapitre> ») suivie du texte : on ne garde que le texte.
+      const raw = src?.content ?? "";
+      const sep = raw.indexOf("\n\n");
+      const textToPrepare = sep >= 0 ? raw.slice(sep + 2).trim() : raw.trim();
+      block = [
+        `=== FICHE DE L'OUVRAGE ===\n${header || "(non renseignée)"}`,
+        diag?.content ? `=== REPÈRES SUR LA VOIX DE L'AUTEUR (diagnostic) ===\n${diag.content}` : "",
+        `=== TEXTE À PRÉPARER ===\n${textToPrepare || "(texte non fourni)"}`,
+      ].filter(Boolean).join("\n\n");
+      task = COPYEDIT_TASK;
     } else if (assistant.kind === "traduction") {
       // Traduction : le passage + la langue cible sont portés par le dernier
       // message « user » de nature « traduction ». Pas de contexte manuscrit.

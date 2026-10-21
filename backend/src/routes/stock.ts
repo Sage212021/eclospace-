@@ -1806,4 +1806,137 @@ export default async function stockRoutes(fastify: FastifyInstance) {
     if (locIds.length === 0) return reply.send({ location_id: null, recus: 0, vendus: 0, retournes: 0, offerts: 0, pertes: 0, detenus: 0, a_justifier: 0 });
     return reply.send({ location_id: locIds[0], ...(await commercialStockReport(locIds)) });
   });
+
+  // ── Réception directe du magasinier (Cas A) ────────────────────────────────
+  // Entrée en stock COMPLÉMENTAIRE pour les cas non couverts par les circuits
+  // automatiques (achat/don/régularisation) : les réceptions d'imprimerie passent
+  // par le bon de commande et les retours clients par le module retours — on
+  // n'enregistre donc PAS ici ces provenances, afin d'éviter tout double comptage.
+  // Pas de blocage selon l'étape de l'ouvrage : dès qu'il a une fiche/ISBN, on
+  // peut recevoir. Traçabilité : movedBy + movedAt + journal d'audit.
+  const RECEPTION_PROVENANCE: Record<string, string> = {
+    fournisseur: "Fournisseur (achat direct)", don: "Don reçu", regularisation: "Régularisation d'entrée", autre: "Autre provenance",
+  };
+  const receptionSchema = z.object({
+    isbn_id: z.string().uuid(),
+    location_id: z.string().uuid(),
+    quantity: z.number().int().positive(),
+    provenance: z.enum(["fournisseur", "don", "regularisation", "autre"]),
+    received_at: z.coerce.date().optional(),
+    observations: z.string().trim().max(1000).optional(),
+  });
+  fastify.post("/api/v1/stock/receptions", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const parsed = receptionSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs de réception invalides.", details: parsed.error.issues });
+    const d = parsed.data;
+    const [isbn, location] = await Promise.all([
+      prisma.isbn.findUnique({ where: { id: d.isbn_id }, select: { id: true } }),
+      prisma.stockLocation.findUnique({ where: { id: d.location_id }, select: { id: true } }),
+    ]);
+    if (!isbn) return reply.code(404).send({ code: "not_found", message: "Ouvrage (ISBN) introuvable." });
+    if (!location) return reply.code(404).send({ code: "not_found", message: "Lieu de stockage introuvable." });
+    if (d.received_at && d.received_at.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+      return reply.code(409).send({ code: "future_date", message: "La date de réception ne peut pas être dans le futur." });
+    }
+    const movement = await prisma.$transaction(async (tx) => {
+      const m = await tx.stockMovement.create({
+        data: {
+          type: "supplier_in", isbnId: d.isbn_id, printRun: 0, toLocationId: d.location_id, quantity: d.quantity,
+          reason: d.observations || null, beneficiary: RECEPTION_PROVENANCE[d.provenance], referenceType: "direct_reception",
+          status: "completed", condition: "vendable", movedBy: request.user!.id, ...(d.received_at ? { movedAt: d.received_at } : {}),
+        },
+      });
+      await adjustStockItem(tx, d.isbn_id, d.location_id, 0, d.quantity);
+      return m;
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "stock_movement", entityId: movement.id, newValues: { reception: true, provenance: d.provenance, quantity: d.quantity }, ipAddress: request.ip });
+    return reply.code(201).send({ id: movement.id });
+  });
+
+  // ── Cas B : ouvrage reçu ABSENT du catalogue → demande de création de fiche ─
+  const ficheRequestSchema = z.object({
+    title: z.string().trim().min(1).max(300),
+    author_name: z.string().trim().max(200).optional(),
+    isbn: z.string().trim().max(20).optional(),
+    collection: z.string().trim().max(120).optional(),
+    format: z.string().trim().max(60).optional(),
+    provenance: z.enum(["imprimerie", "fournisseur", "don", "retour_librairie", "autre"]).optional(),
+    quantity: z.number().int().min(0).default(0),
+    location_id: z.string().uuid().optional(),
+    observations: z.string().trim().max(1000).optional(),
+  });
+  fastify.post("/api/v1/stock/fiche-requests", { preHandler: requirePermission("stock", "saisie") }, async (request, reply) => {
+    const parsed = ficheRequestSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Demande invalide.", details: parsed.error.issues });
+    const d = parsed.data;
+    const req = await prisma.stockFicheRequest.create({
+      data: { requestedBy: request.user!.id, title: d.title, authorName: d.author_name || null, isbn: d.isbn || null, collection: d.collection || null, format: d.format || null, provenance: d.provenance || null, quantity: d.quantity, locationId: d.location_id || null, observations: d.observations || null },
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "stock_fiche_request", entityId: req.id, newValues: { title: d.title, quantity: d.quantity }, ipAddress: request.ip });
+    for (const roleCode of ["DIR_EDITORIAL", "DIR_GENERAL"]) {
+      await notifyRole({ roleCode, type: "autre", priority: "medium", title: "Ouvrage reçu absent du catalogue", body: `Le magasin a reçu « ${d.title} »${d.author_name ? ` (${d.author_name})` : ""} sans fiche dans Eclospace. Une fiche est à créer/compléter.`, entityType: "stock_fiche_request", entityId: req.id }).catch(() => {});
+    }
+    return reply.code(201).send({ id: req.id });
+  });
+
+  fastify.get("/api/v1/stock/fiche-requests", { preHandler: requirePermission("stock", "consultation") }, async (request, reply) => {
+    const q = request.query as { status?: string };
+    const where = q.status ? { status: q.status } : {};
+    const rows = await prisma.stockFicheRequest.findMany({ where, orderBy: { createdAt: "desc" }, take: 200 });
+    const userIds = [...new Set(rows.flatMap((r) => [r.requestedBy, r.resolvedBy].filter((x): x is string => !!x)))];
+    const locIds = [...new Set(rows.map((r) => r.locationId).filter((x): x is string => !!x))];
+    const [users, locs] = await Promise.all([
+      userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, username: true } }) : [],
+      locIds.length ? prisma.stockLocation.findMany({ where: { id: { in: locIds } }, select: { id: true, label: true } }) : [],
+    ]);
+    const uname = (id: string | null) => (id ? users.find((u) => u.id === id)?.username ?? null : null);
+    const lname = (id: string | null) => (id ? locs.find((l) => l.id === id)?.label ?? null : null);
+    return reply.send({
+      requests: rows.map((r) => ({
+        id: r.id, status: r.status, title: r.title, author_name: r.authorName, isbn: r.isbn, collection: r.collection, format: r.format,
+        provenance: r.provenance, quantity: r.quantity, location: lname(r.locationId), observations: r.observations,
+        requested_by: uname(r.requestedBy), resolved_by: uname(r.resolvedBy), manuscript_id: r.manuscriptId, reject_reason: r.rejectReason,
+        created_at: r.createdAt, resolved_at: r.resolvedAt,
+      })),
+    });
+  });
+
+  const fulfillSchema = z.object({ isbn_id: z.string().uuid(), location_id: z.string().uuid() });
+  fastify.post("/api/v1/stock/fiche-requests/:id/fulfill", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = fulfillSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Indiquez l'ouvrage (ISBN) et le lieu de stockage.", details: parsed.error.issues });
+    const req = await prisma.stockFicheRequest.findUnique({ where: { id } });
+    if (!req) return reply.code(404).send({ code: "not_found", message: "Demande introuvable." });
+    if (req.status !== "pending") return reply.code(409).send({ code: "not_pending", message: "Cette demande a déjà été traitée." });
+    const isbn = await prisma.isbn.findUnique({ where: { id: parsed.data.isbn_id }, select: { id: true, manuscriptId: true } });
+    if (!isbn) return reply.code(404).send({ code: "not_found", message: "Ouvrage (ISBN) introuvable." });
+    const location = await prisma.stockLocation.findUnique({ where: { id: parsed.data.location_id }, select: { id: true } });
+    if (!location) return reply.code(404).send({ code: "not_found", message: "Lieu de stockage introuvable." });
+
+    await prisma.$transaction(async (tx) => {
+      if (req.quantity > 0) {
+        const m = await tx.stockMovement.create({
+          data: { type: "supplier_in", isbnId: isbn.id, printRun: 0, toLocationId: parsed.data.location_id, quantity: req.quantity, reason: req.observations || null, beneficiary: req.provenance ? `Réception — ${req.provenance}` : "Réception (fiche créée)", referenceType: "fiche_request", referenceId: req.id, status: "completed", condition: "vendable", movedBy: request.user!.id },
+        });
+        await adjustStockItem(tx, isbn.id, parsed.data.location_id, 0, req.quantity);
+        void m;
+      }
+      await tx.stockFicheRequest.update({ where: { id }, data: { status: "fulfilled", manuscriptId: isbn.manuscriptId, resolvedBy: request.user!.id, resolvedAt: new Date() } });
+    });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "stock_fiche_request", entityId: id, newValues: { status: "fulfilled", isbnId: isbn.id, quantity: req.quantity }, ipAddress: request.ip });
+    return reply.send({ ok: true });
+  });
+
+  fastify.post("/api/v1/stock/fiche-requests/:id/reject", { preHandler: requirePermission("manuscripts", "saisie") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ reason: z.string().trim().min(1).max(500) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Un motif est requis." });
+    const req = await prisma.stockFicheRequest.findUnique({ where: { id }, select: { id: true, status: true } });
+    if (!req) return reply.code(404).send({ code: "not_found", message: "Demande introuvable." });
+    if (req.status !== "pending") return reply.code(409).send({ code: "not_pending", message: "Cette demande a déjà été traitée." });
+    await prisma.stockFicheRequest.update({ where: { id }, data: { status: "rejected", rejectReason: parsed.data.reason.trim(), resolvedBy: request.user!.id, resolvedAt: new Date() } });
+    await writeAuditLog({ userId: request.user!.id, action: "status_change", entityType: "stock_fiche_request", entityId: id, newValues: { status: "rejected" }, ipAddress: request.ip });
+    return reply.send({ ok: true });
+  });
 }

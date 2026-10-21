@@ -3630,6 +3630,34 @@ enum StockMovementStatus {
   cancelled // mouvement annulé (contre-passation) — corrige une saisie erronée
 }
 
+// Demande de CRÉATION/COMPLÉTION de fiche pour un ouvrage reçu au magasin mais
+// ABSENT du catalogue (Cas B). Le magasinier transmet les informations dont il
+// dispose ; le service habilité crée/complète la fiche puis rattache le stock.
+// On n'invente aucune donnée manquante (ISBN, date…) : elles restent vides tant
+// que le service compétent ne les a pas renseignées. Traçabilité complète.
+model StockFicheRequest {
+  id           String    @id @default(uuid())
+  requestedBy  String    @map("requested_by")
+  status       String    @default("pending") // pending | fulfilled | rejected
+  title        String
+  authorName   String?   @map("author_name")
+  isbn         String?
+  collection   String?
+  format       String?
+  provenance   String?
+  quantity     Int       @default(0)
+  locationId   String?   @map("location_id")
+  observations String?
+  manuscriptId String?   @map("manuscript_id") // fiche rattachée à la résolution
+  resolvedBy   String?   @map("resolved_by")
+  resolvedAt   DateTime? @map("resolved_at")
+  rejectReason String?   @map("reject_reason")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([status])
+  @@map("stock_fiche_requests")
+}
+
 model StockMovement {
   id             String              @id @default(uuid())
   type           StockMovementType

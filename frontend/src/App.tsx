@@ -935,7 +935,7 @@ export function App() {
           <RightsMatrixPage canManage={permissions.has("users:administration")} />
         )}
         {leaf && "page" in leaf && leaf.page === "stock" && (
-          <StockPage canManage={permissions.has("stock:saisie")} canAdminister={permissions.has("stock:administration")} canValidate={permissions.has("stock:validation")} />
+          <StockPage canManage={permissions.has("stock:saisie")} canAdminister={permissions.has("stock:administration")} canValidate={permissions.has("stock:validation")} canFulfillFiche={permissions.has("manuscripts:saisie")} />
         )}
         {leaf && "page" in leaf && leaf.page === "commercial" && (
           <CommercialPage canManage={permissions.has("commercial:saisie")} canValidate={permissions.has("commercial:administration")} canInitiateOrder={canInitiateOrder} canSeeTeam={permissions.has("commercial:validation")} />

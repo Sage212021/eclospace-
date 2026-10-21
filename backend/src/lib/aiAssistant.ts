@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import { loadConfig, readApiKey, resolveModelId } from "./aiConfig.js";
 
@@ -26,6 +27,8 @@ TROIS SITUATIONS, que tu distingues clairement :
 2. Un manuscrit NON enregistré, décrit par le DG dans la conversation — tu analyses ce qu'il te donne (titre, résumé, genre, extraits) sans prétendre avoir lu l'ouvrage entier.
 3. Un simple PROJET à l'état d'idée — tu aides à l'explorer et à le structurer.
 Tu n'affirmes jamais avoir lu un manuscrit intégral sur la seule foi d'un résumé ou d'une fiche de catalogue.
+
+OUTILS DE RECHERCHE (données réelles d'Eclospace) : tu disposes d'outils pour (1) rechercher un manuscrit par titre, auteur ou référence, et (2) ouvrir son DOSSIER détaillé — étape actuelle dans le processus paramétré, collaborateur/service affecté, dernières opérations et validations enregistrées, étapes en attente ou blocages, et documents déjà déposés (type, date, déposant). Utilise ces outils dès que le DG pose une question précise sur un ouvrage enregistré ; ne te contente pas du catalogue résumé ci-dessous pour ces cas. Les documents que tu retrouves via le dossier sont automatiquement proposés au DG en ouverture/téléchargement : tu peux les nommer dans ta réponse (type, date, déposant) et indiquer lequel est le plus récent, sans jamais inventer un document, une étape ou une validation. Si le dossier ou un document n'existe pas, dis-le clairement.
 
 VÉRITÉ ET LIMITES :
 - Tu n'inventes JAMAIS un statut, un titre, un nom d'auteur, une décision, une règle, un tarif ou une source. Quand tu ne sais pas, tu le dis et, si utile, tu indiques comment l'obtenir (vérifier dans l'ERP, auprès du service concerné).
@@ -85,6 +88,121 @@ async function buildKnowledgeContext(): Promise<string> {
   return `=== CONNAISSANCES VALIDÉES SUR ÉCLOSION ÉDITION (mémoire officielle de la maison) ===\nCes informations ont été validées par la Direction : tu les tiens pour exactes et tu t'y appuies en priorité. Si une information manque ou n'est pas ici, tu le dis sans l'inventer.\n${lines.join("\n")}`;
 }
 
+// ── Outils de lecture de l'ERP (tool-calling) : position exacte d'un manuscrit
+// et documents déposés. Lecture seule ; aucune donnée inventée. ───────────────
+
+export type DocAttachment = { version_id: string; label: string; kind: string; manuscript: string; download_path: string };
+
+const DOC_KIND_LABELS: Record<string, string> = {
+  manuscrit: "Manuscrit", rapport_lecture: "Rapport de lecture/évaluation", contrat: "Contrat", bat: "BAT",
+  facture: "Facture", visuel: "Visuel", rapport_comparaison: "Rapport de comparaison", couverture: "Couverture",
+  livre_monte: "Livre monté", piece_archivage: "Pièce d'archivage", piece_etape: "Pièce d'étape",
+  preuve_livraison: "Preuve de livraison", justificatif_stock: "Justificatif de stock", cni: "CNI", niu: "NIU", autre: "Autre",
+};
+
+const SAGE_TOOLS = [
+  {
+    name: "rechercher_manuscrits",
+    description: "Recherche des manuscrits enregistrés dans Eclospace par titre, auteur ou référence. Renvoie les correspondances (référence, titre, auteur, genre, étape actuelle).",
+    input_schema: { type: "object" as const, properties: { query: { type: "string", description: "Titre, nom d'auteur ou référence (même partiel)." } }, required: ["query"] },
+  },
+  {
+    name: "dossier_manuscrit",
+    description: "Ouvre le dossier détaillé d'UN manuscrit enregistré : identité, étape actuelle dans le processus, collaborateur/service affecté, dernières opérations et validations, étapes en attente ou blocages, et documents déposés (type, date, déposant). À utiliser pour répondre précisément sur un ouvrage.",
+    input_schema: { type: "object" as const, properties: { reference: { type: "string", description: "Référence, titre ou auteur du manuscrit." } }, required: ["reference"] },
+  },
+];
+
+async function usernamesByIds(ids: (string | null | undefined)[]): Promise<Map<string, string>> {
+  const clean = [...new Set(ids.filter((x): x is string => !!x))];
+  if (clean.length === 0) return new Map();
+  const users = await prisma.user.findMany({ where: { id: { in: clean } }, select: { id: true, username: true } });
+  return new Map(users.map((u) => [u.id, u.username]));
+}
+
+const manuscriptSelect = {
+  id: true, manuscriptNumber: true, title: true, summary: true, receivedAt: true, updatedAt: true,
+  genre: { select: { label: true } },
+  status: { select: { id: true, code: true, label: true } },
+  workContributors: { where: { role: "author" }, orderBy: { displayOrder: "asc" as const }, select: { partner: { select: { firstName: true, lastName: true } } } },
+} satisfies Prisma.ManuscriptSelect;
+
+function authorsOf(m: { workContributors: { partner: { firstName: string | null; lastName: string | null } }[] }): string {
+  return m.workContributors.map((w) => `${w.partner.firstName ?? ""} ${w.partner.lastName ?? ""}`.trim()).filter(Boolean).join(", ") || "auteur non renseigné";
+}
+
+async function findManuscript(ref: string) {
+  const q = ref.trim();
+  if (!q) return null;
+  let m = await prisma.manuscript.findFirst({ where: { deletedAt: null, manuscriptNumber: { equals: q, mode: "insensitive" } }, select: manuscriptSelect });
+  if (!m) m = await prisma.manuscript.findFirst({ where: { deletedAt: null, OR: [{ manuscriptNumber: { contains: q, mode: "insensitive" } }, { title: { contains: q, mode: "insensitive" } }] }, orderBy: { updatedAt: "desc" }, select: manuscriptSelect });
+  if (!m) m = await prisma.manuscript.findFirst({ where: { deletedAt: null, workContributors: { some: { role: "author", partner: { OR: [{ firstName: { contains: q, mode: "insensitive" } }, { lastName: { contains: q, mode: "insensitive" } }] } } } }, orderBy: { updatedAt: "desc" }, select: manuscriptSelect });
+  return m;
+}
+
+// Exécute un outil ; renvoie le JSON (texte) à remettre au modèle. Les documents
+// rencontrés sont collectés dans `docs` (pour être proposés au DG).
+async function executeTool(name: string, input: Record<string, unknown>, docs: Map<string, DocAttachment>): Promise<string> {
+  try {
+    if (name === "rechercher_manuscrits") {
+      const q = String(input.query ?? "").trim();
+      const matches = q
+        ? await prisma.manuscript.findMany({
+            where: { deletedAt: null, OR: [{ manuscriptNumber: { contains: q, mode: "insensitive" } }, { title: { contains: q, mode: "insensitive" } }, { workContributors: { some: { role: "author", partner: { OR: [{ firstName: { contains: q, mode: "insensitive" } }, { lastName: { contains: q, mode: "insensitive" } }] } } } }] },
+            orderBy: { updatedAt: "desc" }, take: 15, select: manuscriptSelect,
+          })
+        : [];
+      return JSON.stringify({
+        count: matches.length,
+        resultats: matches.map((m) => ({ reference: m.manuscriptNumber, titre: m.title, auteur: authorsOf(m), genre: m.genre?.label ?? null, etape: m.status ? `${m.status.label} (${m.status.code})` : null })),
+      });
+    }
+
+    if (name === "dossier_manuscrit") {
+      const m = await findManuscript(String(input.reference ?? ""));
+      if (!m) return JSON.stringify({ trouve: false, message: "Aucun manuscrit correspondant dans Eclospace." });
+
+      const [steps, documents, aiJobs] = await Promise.all([
+        prisma.manuscriptStep.findMany({ where: { manuscriptId: m.id }, include: { status: { select: { code: true, label: true, stepOrder: true } } }, orderBy: { status: { stepOrder: "asc" } } }),
+        prisma.document.findMany({ where: { entityType: "manuscript", entityId: m.id, deletedAt: null }, select: { id: true, category: true, title: true, createdAt: true, versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true, versionNumber: true, uploadedAt: true, uploadedBy: true } } } }),
+        prisma.aiReadingJob.findMany({ where: { manuscriptId: m.id, status: "termine" }, select: { workType: true, launchedAt: true } }),
+      ]);
+      const names = await usernamesByIds([...steps.map((s) => s.responsibleId), ...steps.map((s) => s.validationBy), ...documents.flatMap((d) => d.versions.map((v) => v.uploadedBy))]);
+
+      const currentStep = steps.find((s) => s.status.code === m.status?.code);
+      const lastValidated = steps.filter((s) => s.validatedAt).sort((a, b) => (b.validatedAt!.getTime() - a.validatedAt!.getTime()))[0];
+
+      const docsOut = documents.map((d) => {
+        const v = d.versions[0];
+        const label = `${DOC_KIND_LABELS[d.category] ?? d.category} — ${d.title}`;
+        if (v) docs.set(v.id, { version_id: v.id, label, kind: d.category, manuscript: m.title, download_path: `/api/v1/document-versions/${v.id}/download` });
+        return {
+          type: DOC_KIND_LABELS[d.category] ?? d.category, nom: d.title,
+          version: v?.versionNumber ?? null,
+          depose_le: v ? new Date(v.uploadedAt).toISOString().slice(0, 10) : null,
+          depose_par: v?.uploadedBy ? names.get(v.uploadedBy) ?? null : null,
+          telechargeable: !!v,
+        };
+      });
+
+      return JSON.stringify({
+        trouve: true,
+        reference: m.manuscriptNumber, titre: m.title, auteur: authorsOf(m), genre: m.genre?.label ?? null, resume: m.summary ?? null,
+        etape_actuelle: m.status ? `${m.status.label} (${m.status.code})` : null,
+        affecte_a: currentStep?.responsibleId ? names.get(currentStep.responsibleId) ?? null : null,
+        etape_pre_validee: currentStep?.preValidatedAt ? "1re signature posée, en attente de contre-validation" : null,
+        derniere_operation: lastValidated ? `${lastValidated.status.label} validée le ${lastValidated.validatedAt!.toISOString().slice(0, 10)}${lastValidated.validationBy ? ` par ${names.get(lastValidated.validationBy) ?? "?"}` : ""}` : "Aucune validation d'étape enregistrée",
+        etapes_validees: steps.filter((s) => s.validatedAt).map((s) => `${s.status.label} (${s.validatedAt!.toISOString().slice(0, 10)})`),
+        rapports_ia_disponibles: aiJobs.map((j) => j.workType),
+        documents: docsOut,
+      });
+    }
+    return JSON.stringify({ erreur: "Outil inconnu." });
+  } catch {
+    return JSON.stringify({ erreur: "La lecture du dossier a échoué." });
+  }
+}
+
 // Exécution (longue) en arrière-plan : remplit le message « assistant » en
 // attente à partir de l'historique de la conversation. Ne lève JAMAIS : toute
 // erreur est consignée sur le message.
@@ -125,14 +243,31 @@ export async function runConversationReply(assistantMessageId: string): Promise<
 
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey });
-    const resp = await client.messages.create({
-      model: modelId,
-      max_tokens: 4096,
-      system,
-      messages,
+
+    // Boucle de tool-calling : SAGE peut interroger l'ERP (rechercher / dossier)
+    // puis répondre. Lecture seule ; les documents rencontrés sont proposés au DG.
+    const docs = new Map<string, DocAttachment>();
+    const convo: { role: "user" | "assistant"; content: unknown }[] = messages.map((m) => ({ role: m.role, content: m.content }));
+    let finalText = "";
+    for (let step = 0; step < 6; step++) {
+      const resp = await client.messages.create({ model: modelId, max_tokens: 4096, system, tools: SAGE_TOOLS, messages: convo as never });
+      const blocks = resp.content as Array<{ type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }>;
+      finalText = blocks.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();
+      const toolUses = blocks.filter((b) => b.type === "tool_use");
+      if (toolUses.length === 0) break;
+      convo.push({ role: "assistant", content: resp.content });
+      const results = [];
+      for (const tu of toolUses) {
+        const out = await executeTool(tu.name ?? "", tu.input ?? {}, docs);
+        results.push({ type: "tool_result", tool_use_id: tu.id, content: out });
+      }
+      convo.push({ role: "user", content: results });
+    }
+
+    await prisma.aiConversationMessage.update({
+      where: { id: assistantMessageId },
+      data: { content: finalText || "(réponse vide)", status: "done", model: modelId, attachments: docs.size ? [...docs.values()] : undefined },
     });
-    const text = resp.content.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("\n").trim();
-    await prisma.aiConversationMessage.update({ where: { id: assistantMessageId }, data: { content: text || "(réponse vide)", status: "done", model: modelId } });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Échec de la réponse de SAGE.";
     await prisma.aiConversationMessage.update({ where: { id: assistantMessageId }, data: { status: "erreur", errorMessage: message } }).catch(() => {});

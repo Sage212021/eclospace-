@@ -13,6 +13,7 @@ import {
   validateSageKnowledge,
   analyzeSageLearning,
   getSageLearningLatest,
+  sageAttachmentUrl,
   type SageConversation,
   type SageDossier,
   type SageKnowledge,
@@ -327,6 +328,16 @@ export function SageChatPage() {
                       <span style={{ color: "var(--alert)" }}>⚠ {m.error_message || "La réponse a échoué."}</span>
                     ) : (
                       <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{m.content}</div>
+                    )}
+                    {m.role === "assistant" && m.status === "done" && m.attachments && m.attachments.length > 0 && (
+                      <div style={{ marginTop: 8, borderTop: "1px solid var(--line)", paddingTop: 7, display: "grid", gap: 4 }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>Documents déposés</div>
+                        {m.attachments.map((a) => (
+                          <a key={a.version_id} href={sageAttachmentUrl(a.download_path)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--eclosion-dark, #9a7a12)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                            📎 {a.label}
+                          </a>
+                        ))}
+                      </div>
                     )}
                     {m.role === "assistant" && m.status === "done" && m.content && (
                       <button onClick={() => rememberFromMessage(m.content)} title="Retenir dans la mémoire de la maison" style={{ background: "none", border: "none", padding: 0, marginTop: 6, fontSize: 11.5, color: "var(--muted)", cursor: "pointer", textDecoration: "underline" }}>📌 Retenir</button>

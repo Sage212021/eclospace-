@@ -5845,6 +5845,9 @@ model AiConversationMessage {
   status         String   @default("done")
   errorMessage   String?  @map("error_message")
   model          String?
+  // Documents retrouvés par SAGE et proposés au DG (ouverture/téléchargement) :
+  // liste de { version_id, label, kind, manuscript, download_path }.
+  attachments    Json?
   createdBy      String?  @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
   // Suppression LOGIQUE (règle d'intégrité §13).

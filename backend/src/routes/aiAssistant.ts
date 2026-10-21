@@ -11,8 +11,8 @@ import { runLearningAnalysis } from "../lib/aiLearning.js";
 // propriétaire (un DG ne voit que ses propres conversations). Fondation (Lot 1).
 const SAGE_ROLES = ["ADMIN_GENERAL", "DIR_GENERAL"];
 
-function messageView(m: { id: string; role: string; content: string; status: string; errorMessage: string | null; createdAt: Date }) {
-  return { id: m.id, role: m.role, content: m.content, status: m.status, error_message: m.errorMessage, created_at: m.createdAt };
+function messageView(m: { id: string; role: string; content: string; status: string; errorMessage: string | null; attachments: unknown; createdAt: Date }) {
+  return { id: m.id, role: m.role, content: m.content, status: m.status, error_message: m.errorMessage, attachments: m.attachments ?? null, created_at: m.createdAt };
 }
 
 export default async function aiAssistantRoutes(fastify: FastifyInstance) {

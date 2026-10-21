@@ -3,22 +3,27 @@ import type { FastifyInstance } from "fastify";
 
 // API Claude simulée : le faux client renvoie un texte fixe (aucun appel réseau).
 const calls: { system?: string; messages?: unknown }[] = [];
+// Quand non vide, le faux modèle déclenche l'outil « dossier_manuscrit » sur cette
+// référence (pour tester le tool-calling), puis répond au tour suivant.
+let toolRef = "";
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
-      create: async (args: { system?: string; messages?: unknown }) => {
+      create: async (args: { system?: string; messages?: Array<{ role: string; content: unknown }>; tools?: unknown }) => {
         calls.push({ system: args.system, messages: args.messages });
-        // Tâche d'apprentissage : renvoyer un JSON structuré (proposition).
-        const isLearning = (args.system ?? "").includes("AMÉLIORATION");
-        const text = isLearning
-          ? '{"recurrent":["frais d\'étude des manuscrits"],"lacunes":["Montant exact non confirmé"],"propositions":[{"category":"procedure","title":"Frais d\'étude des manuscrits","content":"Les frais d\'étude s\'élèvent à 25 000 FCFA.","rationale":"Question posée plusieurs fois par le DG."}]}'
-          : "Je pense que cette collection mérite d'être étudiée : elle complèterait bien le catalogue.";
-        return {
-          model: "claude-sonnet-5",
-          stop_reason: "end_turn",
-          content: [{ type: "text", text }],
-          usage: { input_tokens: 80, output_tokens: 120 },
-        };
+        if ((args.system ?? "").includes("AMÉLIORATION")) {
+          return { model: "claude-sonnet-5", stop_reason: "end_turn", usage: { input_tokens: 80, output_tokens: 120 },
+            content: [{ type: "text", text: '{"recurrent":["frais d\'étude des manuscrits"],"lacunes":["Montant exact non confirmé"],"propositions":[{"category":"procedure","title":"Frais d\'étude des manuscrits","content":"Les frais d\'étude s\'élèvent à 25 000 FCFA.","rationale":"Question posée plusieurs fois par le DG."}]}' }] };
+        }
+        const msgs = args.messages ?? [];
+        const last = msgs[msgs.length - 1];
+        const lastIsToolResult = !!last && Array.isArray(last.content) && (last.content as Array<{ type?: string }>).some((c) => c?.type === "tool_result");
+        if (args.tools && toolRef && !lastIsToolResult) {
+          return { model: "claude-sonnet-5", stop_reason: "tool_use", usage: { input_tokens: 80, output_tokens: 40 },
+            content: [{ type: "tool_use", id: "tool_1", name: "dossier_manuscrit", input: { reference: toolRef } }] };
+        }
+        return { model: "claude-sonnet-5", stop_reason: "end_turn", usage: { input_tokens: 80, output_tokens: 120 },
+          content: [{ type: "text", text: lastIsToolResult ? "Voici l'état du dossier et les documents déposés." : "Je pense que cette collection mérite d'être étudiée : elle complèterait bien le catalogue." }] };
       },
     };
     constructor(_o: unknown) {}
@@ -219,6 +224,33 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     expect(val.json().status).toBe("validated");
     const after = await prisma.aiKnowledge.findUniqueOrThrow({ where: { id: proposal!.id } });
     expect(after.status).toBe("validated");
+  });
+
+  it("retrouve le dossier d'un manuscrit via l'outil et propose les documents déposés au téléchargement", async () => {
+    const adminId = (await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).id;
+    const status = await prisma.workflowStatus.findFirstOrThrow();
+    const number = `DOSS-${rnd()}`;
+    const ms = await prisma.manuscript.create({ data: { manuscriptNumber: number, title: `Dossier Test ${rnd()}`, language: "fr", statusId: status.id, ownerId: adminId, receivedAt: new Date(), createdBy: adminId, updatedBy: adminId } });
+    await prisma.document.create({
+      data: {
+        entityType: "manuscript", entityId: ms.id, category: "rapport_lecture", title: "Rapport d'évaluation", createdBy: adminId,
+        versions: { create: { versionNumber: 1, filePath: "eval.pdf", fileSize: 10, mimeType: "application/pdf", sha256Hash: `h-${number}`, uploadedBy: adminId } },
+      },
+    });
+
+    toolRef = number;
+    const conv = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+    const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${conv.json().id}/messages`, headers: { cookie: dgCookie }, payload: { content: `Où en est le dossier ${number} et quels documents ont été déposés ?` } });
+    await waitMessage(msg.json().assistant_message_id);
+    toolRef = "";
+
+    // L'outil dossier_manuscrit a renvoyé le document → proposé en téléchargement.
+    const dossier = await app.inject({ method: "GET", url: `/api/v1/sage/conversations/${conv.json().id}`, headers: { cookie: dgCookie } });
+    const messages = dossier.json().messages as Array<{ role: string; attachments: Array<{ label: string; download_path: string }> | null }>;
+    const assistant = [...messages].reverse().find((m) => m.role === "assistant");
+    expect(assistant?.attachments?.length).toBeGreaterThanOrEqual(1);
+    expect(assistant!.attachments![0].download_path).toContain("/api/v1/document-versions/");
+    expect(assistant!.attachments![0].label).toContain("Rapport");
   });
 
   it("archive une conversation : elle quitte la liste", async () => {

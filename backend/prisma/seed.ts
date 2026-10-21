@@ -1454,6 +1454,13 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-sage-competences-direction-editoriale",
+      version: "2026.10",
+      title: "Nouveauté — SAGE raisonne aussi en directeur éditorial",
+      body: "Dans votre espace « Échanger avec SAGE », SAGE ne travaille plus seulement manuscrit par manuscrit : il raisonne désormais comme un directeur éditorial expérimenté quand vous abordez la vie de la maison. Il peut vous aider à formuler et faire respecter la ligne éditoriale, à bâtir et équilibrer un programme (par genre, par collection, par période), à juger l'intérêt et le risque d'un projet à acquérir, à situer un ouvrage dans la chaîne et repérer les goulots, à peser le coût/tirage/prix dans une recommandation, à suivre des indicateurs éditoriaux, et à préparer une note de décision claire. Il s'appuie toujours sur les données RÉELLES de l'ERP et la mémoire validée de la maison : il n'invente aucun chiffre ni aucune parution, et il distingue toujours une idée, une recommandation et une décision — les arbitrages restent les vôtres.",
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-10-bat-preparation-acces-direct",
       version: "2026.10",
       title: "Nouveauté — BAT Final : accès direct à la préparation du bon à tirer",

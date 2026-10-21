@@ -1454,6 +1454,15 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-sage-editeur-culture-genres-titrologie",
+      version: "2026.10",
+      title: "Nouveauté — SAGE enrichi : culture littéraire, tous les genres, jeunesse africaine, bilinguisme et un livrable « Titrologie »",
+      body: "SAGE — Éditeur gagne en expertise. Il mobilise désormais explicitement une culture littéraire africaine ET européenne pour situer un manuscrit et en analyser les ressorts, accompagne TOUS les genres (fiction, jeunesse, essais, autobiographies/documents, ouvrages académiques, écrits professionnels) en appliquant à chacun ses codes, et porte une attention particulière à la littérature jeunesse — y compris africaine (traditions, langues, imaginaires, sans stéréotypes), avec une analyse adaptée à l'âge du lecteur. Son bilinguisme français/anglais est affirmé (correction, révision et traduction dans les deux sens, documents bilingues). Côté actualité : il repère ce qui doit être actualisé dans un texte, mais reste honnête — il ne dispose pas ici de source connectée en temps réel, donc il SIGNALE ce qui est à vérifier sans jamais inventer une date ou un chiffre. Nouveau livrable « TITROLOGIE » dans la section Livrables : à partir du contenu réel de l'ouvrage, SAGE propose 10 titres (et sous-titres), les compare, recommande un titre + un titre alternatif et apprécie le potentiel commercial — en signalant les vérifications restant à faire (titres déjà publiés, disponibilité) plutôt qu'en les inventant. Téléchargeable en PDF. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-stock-rattachement-selecteur-recherche",
       version: "2026.10",
       title: "Nouveauté — Rattacher un ouvrage absent : recherche de la fiche par son titre",

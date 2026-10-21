@@ -16,6 +16,7 @@ import {
   requestAiEditorFicheLecture,
   requestAiEditorPresentation,
   requestAiEditorLettreAuteur,
+  requestAiEditorTitrologie,
   requestAiEditorBibliographie,
   requestAiEditorTypographie,
   requestAiEditorCopyedit,
@@ -186,6 +187,7 @@ export function AiEditorPage() {
       fiche_lecture: "Fiche de lecture",
       presentation: "Textes de présentation",
       lettre_auteur: "Lettre à l'auteur",
+      titrologie: "Titrologie — propositions de titres",
       copyedit: "Préparation de copie",
       bibliographie: "Contrôle bibliographique",
       typographie: "Contrôle typographique",
@@ -368,6 +370,7 @@ export function AiEditorPage() {
   const ficheLecture = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "fiche_lecture");
   const presentation = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "presentation");
   const lettreAuteur = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "lettre_auteur");
+  const titrologie = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "titrologie");
   const bibliographie = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "bibliographie");
   const typographie = [...(dossier?.messages ?? [])].reverse().find((m) => m.kind === "typographie");
   const copyedits = dossier?.messages.filter((m) => m.kind === "copyedit") ?? [];
@@ -590,6 +593,7 @@ export function AiEditorPage() {
               { key: "fiche", title: "Fiche de lecture", desc: "Synthèse orientée décision : pitch, public, forces/faiblesses et recommandation (publier / retravailler / refuser).", msg: ficheLecture, fn: requestAiEditorFicheLecture, label: "Fiche de lecture" },
               { key: "presentation", title: "Textes de présentation & promotion", desc: "4e de couverture, résumé catalogue, synopsis, argumentaire libraires/presse, accroche, mots-clés.", msg: presentation, fn: requestAiEditorPresentation, label: "Textes de présentation" },
               { key: "lettre", title: "Lettre à l'auteur", desc: "Courrier éditorial diplomate (forces, axes de travail par priorité, points laissés libres), signé au nom du Service éditorial.", msg: lettreAuteur, fn: requestAiEditorLettreAuteur, label: "Lettre à l'auteur" },
+              { key: "titrologie", title: "Titrologie — propositions de titres", desc: "À partir du contenu réel : 10 titres (et sous-titres), comparatif, recommandation + titre alternatif, et appréciation du potentiel commercial. Vérifications externes (titres déjà publiés, disponibilité) signalées, jamais inventées.", msg: titrologie, fn: requestAiEditorTitrologie, label: "Titrologie" },
             ] as const).map((d) => {
               const disabled = busy || pending || !dossier.sources.has_manuscript_file;
               return (

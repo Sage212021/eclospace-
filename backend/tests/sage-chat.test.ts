@@ -11,6 +11,9 @@ let webRef = false;
 // Quand vrai, le faux modèle ÉCHOUE si l'outil web est présent → force le repli
 // SANS recherche web (test de la dégradation gracieuse).
 let failWeb = false;
+// Quand non vide, le faux modèle déclenche l'outil « lire_manuscrit » sur cette
+// référence (pour tester la lecture du texte d'un manuscrit depuis le dialogue DG).
+let readRef = "";
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
@@ -32,6 +35,10 @@ vi.mock("@anthropic-ai/sdk", () => {
               { type: "web_search_tool_result", tool_use_id: "ws_1", content: [{ type: "web_search_result", url: "https://exemple.org/etude", title: "Étude de référence" }] },
               { type: "text", text: "D'après une source consultée, voici ce qu'il en est." },
             ] };
+        }
+        if (args.tools && readRef && !lastIsToolResult) {
+          return { model: "claude-sonnet-5", stop_reason: "tool_use", usage: { input_tokens: 80, output_tokens: 40 },
+            content: [{ type: "tool_use", id: "read_1", name: "lire_manuscrit", input: { reference: readRef } }] };
         }
         if (args.tools && toolRef && !lastIsToolResult) {
           return { model: "claude-sonnet-5", stop_reason: "tool_use", usage: { input_tokens: 80, output_tokens: 40 },
@@ -298,6 +305,25 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     // Lecture seule : l'ouvrage n'est pas modifié par l'audit.
     const after = await prisma.manuscript.findUniqueOrThrow({ where: { manuscriptNumber: number } });
     expect(after.summary).toBeNull();
+  });
+
+  // ── Lecture du texte des manuscrits depuis le dialogue DG (même SAGE que l'éditeur) ──
+  it("peut LIRE le texte d'un manuscrit déposé via l'outil (connexion à SAGE — Éditeur)", async () => {
+    const adminId = (await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).id;
+    const status = await prisma.workflowStatus.findFirstOrThrow();
+    const number = `LIRE-${rnd()}`;
+    await prisma.manuscript.create({ data: { manuscriptNumber: number, title: `À lire ${rnd()}`, language: "fr", statusId: status.id, ownerId: adminId, receivedAt: new Date(), createdBy: adminId, updatedBy: adminId } });
+
+    readRef = number;
+    const conv = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+    const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${conv.json().id}/messages`, headers: { cookie: dgCookie }, payload: { content: `Résume-moi le manuscrit ${number}.` } });
+    const assistant = await waitMessage(msg.json().assistant_message_id);
+    readRef = "";
+    expect(assistant.status).toBe("done");
+    // L'outil lire_manuscrit a été appelé et son résultat (réf + état de lecture)
+    // a bien été renvoyé au modèle au tour suivant.
+    const sawRead = calls.some((c) => { const s = JSON.stringify(c.messages ?? ""); return s.includes(number) && s.includes("lire_manuscrit"); });
+    expect(sawRead).toBe(true);
   });
 
   // ── Recherche web (accès Internet réel, section 16) ──

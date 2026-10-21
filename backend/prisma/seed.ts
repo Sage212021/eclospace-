@@ -1454,6 +1454,15 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-sage-dialogue-lit-les-manuscrits",
+      version: "2026.10",
+      title: "Nouveauté — Dans « Échanger avec SAGE », SAGE lit désormais le texte des manuscrits",
+      body: "« Échanger avec SAGE » et « SAGE — Éditeur », c'est le même SAGE. Désormais, dans votre espace de dialogue, SAGE peut LIRE le texte réel de n'importe quel manuscrit déposé dans Eclospace — plus besoin d'ouvrir l'écran de l'ouvrage pour qu'il l'analyse. Demandez-lui par exemple « résume-moi tel manuscrit », « que penses-tu du chapitre 3 de tel ouvrage », « compare le style de ces deux textes » : il va lire le contenu (intégralement, ou en se concentrant sur les passages pertinents pour votre question) et répondre ici, en se fondant sur le texte réellement lu. Si un manuscrit n'a pas de fichier lisible (par exemple un PDF scanné sans texte), il vous le dit au lieu d'inventer. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-recherche-web",
       version: "2026.10",
       title: "Nouveauté — SAGE peut chercher sur Internet (et cite ses sources)",

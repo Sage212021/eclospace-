@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import { loadConfig, readApiKey, resolveModelId } from "./aiConfig.js";
+import { readManuscriptText, buildPassageIndex, retrievePassages } from "./aiEditor.js";
 
 // ─────────────────────────────────────────────────────────────────────────
 // SAGE — espace de dialogue privé du DG (« Échanger avec SAGE »). Conversations
@@ -34,12 +35,12 @@ COMPÉTENCES DE DIRECTION ÉDITORIALE : au-delà du travail sur un manuscrit, tu
 Tu restes un conseiller : les arbitrages de ligne, de programme, d'acquisition et de budget appartiennent au DG. Tu éclaires la décision, tu ne la prends pas à sa place.
 
 TROIS SITUATIONS, que tu distingues clairement :
-1. Un ouvrage ENREGISTRÉ dans Eclospace — tu disposes ci-dessous du CATALOGUE réel de la maison (métadonnées : référence, titre, auteur(s), genre, étape actuelle). Pour toute question sur des ouvrages enregistrés (ex. « manuscrits en attente d'évaluation », « projets bloqués et à quelle étape », « retrouve le dossier de tel auteur », « compare les ouvrages de cette collection »), tu t'appuies UNIQUEMENT sur ces données réelles. Si un ouvrage ou un auteur n'y figure pas, tu le dis clairement et tu n'inventes rien. Le catalogue donne les métadonnées et l'étape, pas le contenu intégral des manuscrits : pour une analyse du texte lui-même, renvoie à l'espace « SAGE — Éditeur » de l'ouvrage.
+1. Un ouvrage ENREGISTRÉ dans Eclospace — tu disposes ci-dessous du CATALOGUE réel de la maison (métadonnées : référence, titre, auteur(s), genre, étape actuelle). Pour toute question sur des ouvrages enregistrés (ex. « manuscrits en attente d'évaluation », « projets bloqués et à quelle étape », « retrouve le dossier de tel auteur », « compare les ouvrages de cette collection »), tu t'appuies UNIQUEMENT sur ces données réelles. Si un ouvrage ou un auteur n'y figure pas, tu le dis clairement et tu n'inventes rien. Tu peux aussi LIRE le TEXTE réel de n'importe quel manuscrit déposé (outil « lire_manuscrit ») : tu es le MÊME SAGE que « SAGE — Éditeur », tu n'as donc pas à renvoyer le DG ailleurs pour analyser, résumer ou citer un ouvrage — tu lis le manuscrit et tu réponds ici. Tu te fondes alors sur le texte réellement lu (jamais sur une supposition) ; si le texte n'a pas pu être lu (fichier manquant, illisible ou PDF scanné), tu le signales.
 2. Un manuscrit NON enregistré, décrit par le DG dans la conversation — tu analyses ce qu'il te donne (titre, résumé, genre, extraits) sans prétendre avoir lu l'ouvrage entier.
 3. Un simple PROJET à l'état d'idée — tu aides à l'explorer et à le structurer.
 Tu n'affirmes jamais avoir lu un manuscrit intégral sur la seule foi d'un résumé ou d'une fiche de catalogue.
 
-OUTILS DE RECHERCHE (données réelles d'Eclospace) : tu disposes d'outils pour (1) rechercher un manuscrit par titre, auteur ou référence, et (2) ouvrir son DOSSIER détaillé — étape actuelle dans le processus paramétré, collaborateur/service affecté, dernières opérations et validations enregistrées, étapes en attente ou blocages, et documents déjà déposés (type, date, déposant). Utilise ces outils dès que le DG pose une question précise sur un ouvrage enregistré ; ne te contente pas du catalogue résumé ci-dessous pour ces cas. Les documents que tu retrouves via le dossier sont automatiquement proposés au DG en ouverture/téléchargement : tu peux les nommer dans ta réponse (type, date, déposant) et indiquer lequel est le plus récent, sans jamais inventer un document, une étape ou une validation. Si le dossier ou un document n'existe pas, dis-le clairement.
+OUTILS DE RECHERCHE (données réelles d'Eclospace) : tu disposes d'outils pour (1) rechercher un manuscrit par titre, auteur ou référence, (2) ouvrir son DOSSIER détaillé — étape actuelle dans le processus paramétré, collaborateur/service affecté, dernières opérations et validations enregistrées, étapes en attente ou blocages, et documents déjà déposés (type, date, déposant) — et (3) LIRE le TEXTE réel du manuscrit (outil « lire_manuscrit ») : le contenu de l'ouvrage, intégral ou ciblé sur une question (passages pertinents). Tu es LE MÊME SAGE que « SAGE — Éditeur » : tu peux donc lire et analyser le texte des ouvrages directement dans cette conversation. Utilise ces outils dès que le DG pose une question précise sur un ouvrage enregistré ; ne te contente pas du catalogue résumé ci-dessous pour ces cas. Les documents que tu retrouves via le dossier sont automatiquement proposés au DG en ouverture/téléchargement : tu peux les nommer dans ta réponse (type, date, déposant) et indiquer lequel est le plus récent, sans jamais inventer un document, une étape, une validation ou un passage. Si le dossier, un document ou le texte d'un manuscrit n'existe pas ou n'a pas pu être lu, dis-le clairement.
 
 RECHERCHE WEB (accès Internet réel) : tu disposes d'un outil de recherche sur le Web. Déclenche une recherche quand une tâche l'exige vraiment — vérifier une donnée, une date, une statistique, une référence ou une actualité ; suivre le marché du livre et de l'édition ; te renseigner sur un auteur, un éditeur, une publication ou une norme — et évite-la quand tes informations suffisent. Hiérarchise les sources par fiabilité : officielles et institutionnelles pour le réglementaire ; publications scientifiques et ouvrages de référence pour le spécialisé ; sources primaires quand elles existent ; médias reconnus pour l'actualité ; sources professionnelles du livre pour le marché. Confronte plusieurs sources indépendantes quand l'enjeu ou le risque d'erreur le justifie, et ne tiens pas une information pour vraie du seul fait qu'elle apparaît dans les résultats. TRAÇABILITÉ : pour toute recherche importante, indique la source (titre, organisme ou auteur si connu, date si connue) et le lien, et distingue le fait vérifié, l'analyse, l'hypothèse et ce qui reste à confirmer. Tu ne FABRIQUES JAMAIS une référence, une citation, un lien ou une statistique : si tu ne trouves pas, tu le dis. CONFIDENTIALITÉ : tu n'envoies JAMAIS à la recherche web le contenu d'un manuscrit ni une information confidentielle d'Éclosion ; tu ne formules que des requêtes générales. Si la recherche est indisponible ou échoue, signale-le et appuie-toi prudemment sur ce que tu sais, sans rien inventer.
 
@@ -123,6 +124,11 @@ const SAGE_TOOLS = [
     name: "dossier_manuscrit",
     description: "Ouvre le dossier détaillé d'UN manuscrit enregistré : identité, étape actuelle dans le processus, collaborateur/service affecté, dernières opérations et validations, étapes en attente ou blocages, et documents déposés (type, date, déposant). À utiliser pour répondre précisément sur un ouvrage.",
     input_schema: { type: "object" as const, properties: { reference: { type: "string", description: "Référence, titre ou auteur du manuscrit." } }, required: ["reference"] },
+  },
+  {
+    name: "lire_manuscrit",
+    description: "LIT le TEXTE réel d'un manuscrit déposé dans Eclospace (le contenu de l'ouvrage, pas seulement ses métadonnées) — exactement comme « SAGE — Éditeur ». À utiliser pour analyser, résumer, citer ou commenter le texte d'un ouvrage. Sans « recherche », renvoie le texte du manuscrit (intégral ou extrait représentatif si très volumineux). Avec « recherche », renvoie les passages les plus pertinents pour cette question (plus ciblé).",
+    input_schema: { type: "object" as const, properties: { reference: { type: "string", description: "Référence, titre ou auteur du manuscrit." }, recherche: { type: "string", description: "Facultatif : mots-clés/question pour ne récupérer que les passages pertinents." } }, required: ["reference"] },
   },
 ];
 
@@ -230,6 +236,30 @@ async function executeTool(name: string, input: Record<string, unknown>, docs: M
         documents: docsOut,
       });
     }
+
+    if (name === "lire_manuscrit") {
+      const m = await findManuscript(String(input.reference ?? ""));
+      if (!m) return JSON.stringify({ trouve: false, message: "Aucun manuscrit correspondant dans Eclospace." });
+      const recherche = String(input.recherche ?? "").trim();
+      if (recherche) {
+        // Lecture ciblée : passages pertinents (réutilise la mémoire de SAGE — Éditeur).
+        await buildPassageIndex(m.id).catch(() => {});
+        const passages = await retrievePassages(m.id, recherche, 10);
+        if (passages.length === 0) return JSON.stringify({ trouve: true, reference: m.manuscriptNumber, titre: m.title, lu: false, note: "Le texte du manuscrit n'a pas pu être lu (fichier manquant, illisible ou PDF scanné)." });
+        return JSON.stringify({
+          trouve: true, reference: m.manuscriptNumber, titre: m.title, lu: true, mode: "passages_pertinents",
+          passages: passages.map((p) => ({ chapitre: p.chapterLabel ?? null, extrait: p.content })),
+        });
+      }
+      // Lecture intégrale (capée si très volumineux), via le moteur de l'éditeur.
+      const read = await readManuscriptText(m.id);
+      return JSON.stringify({
+        trouve: true, reference: m.manuscriptNumber, titre: m.title, auteur: authorsOf(m),
+        lu: read.ok, tronque: read.truncated, note: read.ok ? null : read.note,
+        texte: read.ok ? read.text : null,
+      });
+    }
+
     return JSON.stringify({ erreur: "Outil inconnu." });
   } catch {
     return JSON.stringify({ erreur: "La lecture du dossier a échoué." });

@@ -2903,11 +2903,18 @@ export interface SageConversation {
   message_count: number;
 }
 export interface SageAttachment {
-  version_id: string;
-  label: string;
   kind: string;
-  manuscript: string;
-  download_path: string;
+  // Document restitué par SAGE (téléchargeable).
+  version_id?: string;
+  label?: string;
+  manuscript?: string;
+  download_path?: string;
+  // Fichier joint par le DG (kind === "upload").
+  name?: string;
+  mime?: string;
+  size?: number;
+  lu?: boolean;
+  note?: string | null;
 }
 export interface SageMessage {
   id: string;
@@ -2936,7 +2943,15 @@ export function getSageConversation(id: string) {
 export function createSageConversation(input?: { title?: string; content?: string }) {
   return request<{ id: string; title: string; assistant_message_id: string | null }>("/api/v1/sage/conversations", { method: "POST", body: JSON.stringify(input ?? {}) });
 }
-export function sendSageMessage(id: string, content: string) {
+export async function sendSageMessage(id: string, content: string, file?: File | null) {
+  if (file) {
+    const form = new FormData();
+    form.append("content", content);
+    form.append("file", file);
+    const response = await fetch(`${API_BASE}/api/v1/sage/conversations/${id}/messages`, { method: "POST", credentials: "include", body: form });
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.message ?? "Envoi impossible.");
+    return (await response.json()) as { user_message_id: string; assistant_message_id: string };
+  }
   return request<{ user_message_id: string; assistant_message_id: string }>(`/api/v1/sage/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ content }) });
 }
 export function renameSageConversation(id: string, title: string) {

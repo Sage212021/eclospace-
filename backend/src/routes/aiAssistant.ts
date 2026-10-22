@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAnyRole } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
-import { runConversationReply } from "../lib/aiAssistant.js";
+import { runConversationReply, extractUploadText, type UploadAttachment } from "../lib/aiAssistant.js";
 import { runLearningAnalysis } from "../lib/aiLearning.js";
 import { runCatalogueAudit } from "../lib/catalogueAudit.js";
 
@@ -12,8 +12,21 @@ import { runCatalogueAudit } from "../lib/catalogueAudit.js";
 // propriétaire (un DG ne voit que ses propres conversations). Fondation (Lot 1).
 const SAGE_ROLES = ["ADMIN_GENERAL", "DIR_GENERAL"];
 
+// Nettoie les pièces jointes pour l'affichage : on NE renvoie PAS au navigateur
+// le texte extrait d'un fichier joint (potentiellement volumineux), juste son
+// identité (nom, type, taille, lisibilité).
+function sanitizeAttachments(attachments: unknown): unknown[] | null {
+  if (!Array.isArray(attachments)) return null;
+  const out = attachments.map((a) => {
+    const o = a as Record<string, unknown>;
+    if (o && o.kind === "upload") return { kind: "upload", name: o.name, mime: o.mime, size: o.size, lu: o.lu, note: o.note ?? null };
+    return a;
+  });
+  return out.length ? out : null;
+}
+
 function messageView(m: { id: string; role: string; content: string; status: string; errorMessage: string | null; attachments: unknown; createdAt: Date }) {
-  return { id: m.id, role: m.role, content: m.content, status: m.status, error_message: m.errorMessage, attachments: m.attachments ?? null, created_at: m.createdAt };
+  return { id: m.id, role: m.role, content: m.content, status: m.status, error_message: m.errorMessage, attachments: sanitizeAttachments(m.attachments), created_at: m.createdAt };
 }
 
 export default async function aiAssistantRoutes(fastify: FastifyInstance) {
@@ -59,19 +72,42 @@ export default async function aiAssistantRoutes(fastify: FastifyInstance) {
     return reply.code(201).send({ id: conv.id, title: conv.title, assistant_message_id: assistantMessageId });
   });
 
-  // Envoyer un message dans une conversation existante.
+  // Envoyer un message dans une conversation existante. JSON pour le texte seul ;
+  // multipart pour joindre un fichier (PDF, .docx, texte) que SAGE lira.
   const messageSchema = z.object({ content: z.string().trim().min(1).max(8000) });
   fastify.post("/api/v1/sage/conversations/:id/messages", { preHandler: requireAnyRole(SAGE_ROLES) }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const parsed = messageSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Message invalide.", details: parsed.error.issues });
     const conv = await prisma.aiConversation.findFirst({ where: { id, ownerId: request.user!.id, archivedAt: null }, select: { id: true } });
     if (!conv) return reply.code(404).send({ code: "not_found", message: "Conversation introuvable." });
     const already = await prisma.aiConversationMessage.findFirst({ where: { conversationId: id, status: "pending" }, select: { id: true } });
     if (already) return reply.code(409).send({ code: "already_running", message: "SAGE est en train de répondre. Patientez un instant." });
 
+    // Texte + pièce jointe éventuelle.
+    let content = "";
+    let upload: UploadAttachment | null = null;
+    if (request.isMultipart()) {
+      for await (const part of request.parts()) {
+        if (part.type === "file") {
+          const buf = await part.toBuffer();
+          if (buf.byteLength > 0) {
+            const ex = await extractUploadText(buf, part.mimetype || "application/octet-stream", part.filename || "piece-jointe");
+            upload = { kind: "upload", name: part.filename || "piece-jointe", mime: part.mimetype || "application/octet-stream", size: buf.byteLength, lu: ex.ok, text: ex.ok ? ex.text : "", note: ex.ok ? undefined : ex.note };
+          }
+        } else if (part.fieldname === "content" && typeof part.value === "string") {
+          content = part.value;
+        }
+      }
+    } else {
+      const parsed = messageSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Message invalide.", details: parsed.error.issues });
+      content = parsed.data.content;
+    }
+    content = content.trim().slice(0, 8000);
+    if (!content && !upload) return reply.code(400).send({ code: "validation_error", message: "Message vide : saisissez un texte ou joignez un fichier." });
+    const finalContent = content || `(Fichier joint : ${upload!.name})`;
+
     const owner = request.user!.id;
-    const userMessage = await prisma.aiConversationMessage.create({ data: { conversationId: id, role: "user", status: "done", content: parsed.data.content, createdBy: owner } });
+    const userMessage = await prisma.aiConversationMessage.create({ data: { conversationId: id, role: "user", status: "done", content: finalContent, attachments: upload ? [upload] : undefined, createdBy: owner } });
     const assistant = await prisma.aiConversationMessage.create({ data: { conversationId: id, role: "assistant", status: "pending", content: "", createdBy: owner } });
     await prisma.aiConversation.update({ where: { id }, data: { updatedAt: new Date() } });
     await writeAuditLog({ userId: owner, action: "create", entityType: "ai_conversation_message", entityId: userMessage.id, newValues: { conversationId: id, role: "user" }, ipAddress: request.ip });

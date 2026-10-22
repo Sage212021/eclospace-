@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import { loadConfig, readApiKey, resolveModelId } from "./aiConfig.js";
 import { readManuscriptText, buildPassageIndex, retrievePassages } from "./aiEditor.js";
+import { extractPdfText } from "./aiRunner.js";
 
 // ─────────────────────────────────────────────────────────────────────────
 // SAGE — espace de dialogue privé du DG (« Échanger avec SAGE »). Conversations
@@ -43,6 +44,8 @@ TROIS SITUATIONS, que tu distingues clairement :
 2. Un manuscrit NON enregistré, décrit par le DG dans la conversation — tu analyses ce qu'il te donne (titre, résumé, genre, extraits) sans prétendre avoir lu l'ouvrage entier.
 3. Un simple PROJET à l'état d'idée — tu aides à l'explorer et à le structurer.
 Tu n'affirmes jamais avoir lu un manuscrit intégral sur la seule foi d'un résumé ou d'une fiche de catalogue.
+
+FICHIERS JOINTS PAR LE DG : le DG peut joindre un fichier à la conversation (PDF, .docx, texte). Son contenu t'est fourni, inséré sous « [Fichier joint par le DG : … ] ». Tu l'analyses, le résumes ou le commentes comme demandé, en te fondant sur ce texte réel. Si le fichier n'a pas pu être lu (PDF scanné, format non pris en charge), c'est indiqué : dis-le au DG au lieu d'inventer. Un fichier joint est confidentiel : tu ne le transmets jamais à la recherche web.
 
 OUTILS DE RECHERCHE (données réelles d'Eclospace) : tu disposes d'outils pour (1) rechercher un manuscrit par titre, auteur ou référence, (2) ouvrir son DOSSIER détaillé — étape actuelle, collaborateur/service affecté, dernières opérations et validations, étapes franchies, et documents déjà déposés (type, date, déposant) —, (3) LIRE le TEXTE réel du manuscrit (outil « lire_manuscrit ») : le contenu de l'ouvrage, intégral ou ciblé sur une question (passages pertinents), et (4) RESTITUER un document (outil « restituer_document »). Tu es LE MÊME SAGE que « SAGE — Éditeur » : tu peux donc lire et analyser le texte des ouvrages directement dans cette conversation. Utilise ces outils dès que le DG pose une question précise sur un ouvrage enregistré.
 
@@ -114,6 +117,40 @@ async function buildKnowledgeContext(): Promise<string> {
 // et documents déposés. Lecture seule ; aucune donnée inventée. ───────────────
 
 export type DocAttachment = { version_id: string; label: string; kind: string; manuscript: string; download_path: string };
+
+// Pièce jointe TÉLÉVERSÉE par le DG dans la conversation (section « joindre un
+// fichier »). On en extrait le texte à la réception ; ce texte est fourni à SAGE
+// comme contexte (jamais renvoyé tel quel au navigateur — voir messageView).
+export type UploadAttachment = { kind: "upload"; name: string; mime: string; size: number; lu: boolean; text: string; note?: string };
+
+// Lecture du texte d'un fichier joint (PDF à couche texte, .docx, texte brut).
+// Borné pour rester raisonnable. Les PDF scannés (sans texte) ne sont pas lus.
+const UPLOAD_CHAR_BUDGET = 80_000;
+export async function extractUploadText(buffer: Buffer, mime: string, filename: string): Promise<{ ok: boolean; text: string; truncated: boolean; note?: string }> {
+  const name = (filename || "").toLowerCase();
+  const m = (mime || "").toLowerCase();
+  try {
+    if (m.includes("pdf") || name.endsWith(".pdf")) {
+      const extracted = await extractPdfText(buffer, UPLOAD_CHAR_BUDGET);
+      if (extracted && extracted.text.replace(/\s/g, "").length > 50) return { ok: true, text: extracted.text.slice(0, UPLOAD_CHAR_BUDGET), truncated: extracted.text.length > UPLOAD_CHAR_BUDGET };
+      return { ok: false, text: "", truncated: false, note: "PDF sans texte exploitable (probablement scanné)." };
+    }
+    if (m.includes("word") || name.endsWith(".docx")) {
+      const mammoth = (await import("mammoth")).default;
+      const res = await mammoth.extractRawText({ buffer });
+      const t = (res.value ?? "").trim();
+      if (t.replace(/\s/g, "").length > 20) return { ok: true, text: t.slice(0, UPLOAD_CHAR_BUDGET), truncated: t.length > UPLOAD_CHAR_BUDGET };
+      return { ok: false, text: "", truncated: false, note: "Document .docx sans texte exploitable." };
+    }
+    if (m.startsWith("text/") || m.includes("json") || /\.(txt|md|markdown|csv|tsv|rtf|log)$/.test(name)) {
+      const t = buffer.toString("utf8");
+      if (t.replace(/\s/g, "").length > 0) return { ok: true, text: t.slice(0, UPLOAD_CHAR_BUDGET), truncated: t.length > UPLOAD_CHAR_BUDGET };
+    }
+    return { ok: false, text: "", truncated: false, note: "Format non pris en charge : joignez un PDF texte, un .docx ou un fichier texte." };
+  } catch {
+    return { ok: false, text: "", truncated: false, note: "Le texte du fichier n'a pas pu être extrait." };
+  }
+}
 
 const DOC_KIND_LABELS: Record<string, string> = {
   manuscrit: "Manuscrit", rapport_lecture: "Rapport de lecture/évaluation", contrat: "Contrat", bat: "BAT",
@@ -347,7 +384,19 @@ export async function runConversationReply(assistantMessageId: string): Promise<
       orderBy: { createdAt: "asc" },
       take: 40,
     });
-    const messages = history.map((m) => ({ role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant", content: m.content }));
+    const messages = history.map((m) => {
+      let content = m.content;
+      // Pièces jointes téléversées par le DG : on inline leur texte extrait pour
+      // que SAGE le lise (il n'est pas renvoyé au navigateur).
+      const atts = Array.isArray(m.attachments) ? (m.attachments as unknown[]) : [];
+      for (const a of atts) {
+        const u = a as Partial<UploadAttachment> | null;
+        if (!u || u.kind !== "upload") continue;
+        if (u.lu && u.text) content += `\n\n[Fichier joint par le DG : ${u.name}]\n${u.text}`;
+        else content += `\n\n[Fichier joint par le DG : ${u.name} — non lisible : ${u.note ?? "format non pris en charge"}]`;
+      }
+      return { role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant", content };
+    });
     if (messages.length === 0 || messages[messages.length - 1].role !== "user") {
       // Sécurité : s'il n'y a pas de dernier message utilisateur, on ne fabrique rien.
       await prisma.aiConversationMessage.update({ where: { id: assistantMessageId }, data: { status: "erreur", errorMessage: "Aucune question à traiter." } }).catch(() => {});

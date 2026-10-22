@@ -1454,6 +1454,15 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-sage-joindre-un-fichier",
+      version: "2026.10",
+      title: "Nouveauté — Joindre un fichier dans la conversation avec SAGE",
+      body: "Dans « Échanger avec SAGE », vous pouvez maintenant JOINDRE un fichier à vos messages grâce au bouton 📎 à côté de la zone de saisie. SAGE en lit le contenu et vous répond dessus : résumé, avis, comparaison, relecture… Formats pris en charge : PDF (avec texte), Word (.docx) et fichiers texte (.txt, .md, .csv). Si le fichier n'est pas lisible (par exemple un PDF scanné sans texte), SAGE vous le dit au lieu de deviner. Le fichier reste confidentiel : son contenu n'est jamais envoyé à la recherche Web. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-voix-plus-naturelle",
       version: "2026.10",
       title: "Nouveauté — SAGE écrit de façon plus naturelle, moins « robot »",

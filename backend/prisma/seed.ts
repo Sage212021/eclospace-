@@ -1454,6 +1454,15 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-sage-voix-plus-naturelle",
+      version: "2026.10",
+      title: "Nouveauté — SAGE écrit de façon plus naturelle, moins « robot »",
+      body: "Vous trouviez que SAGE parlait encore trop comme une IA. On a resserré sa manière d'écrire pour qu'elle ressemble à celle d'un vrai éditeur, ou d'un homme du métier qui rédige un rapport : des phrases de longueurs variées (parfois très courtes), moins de listes à puces automatiques, pas de plan annoncé ni de résumé répété à la fin, un avis qui tranche plutôt qu'une synthèse prudente sur tous les angles, et surtout la fin des formules creuses (« il est important de noter que », « n'hésitez pas à »…) et de l'emphase systématique (tout n'est pas « essentiel » ou « incroyable »). Ces règles s'appliquent dans « Échanger avec SAGE » comme dans « SAGE — Éditeur », y compris dans les documents qu'il rédige (fiche de lecture, lettre à l'auteur, rapports). Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-etapes-traitees-et-documents-sur-demande",
       version: "2026.10",
       title: "Nouveauté — SAGE distingue les étapes réellement faites, et ne livre un document que si vous le demandez",

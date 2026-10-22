@@ -140,7 +140,7 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     // Les règles de conversation naturelle (pas de tics d'IA, pas de méta-commentaire)
     // sont bien portées par la consigne de comportement envoyée au modèle.
     const system = calls[calls.length - 1]?.system ?? "";
-    expect(system).toContain("STYLE DE CONVERSATION");
+    expect(system).toContain("ÉCRIS COMME UN ÉDITEUR");
     expect(system).toContain("je vais procéder à l'analyse");
   });
 

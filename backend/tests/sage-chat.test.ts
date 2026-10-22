@@ -389,6 +389,47 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     expect(assistant.content.length).toBeGreaterThan(0);
   });
 
+  // ── Pièce jointe dans la conversation DG ──
+  function multipartMessage(content: string, filename: string, mime: string, fileBody: Buffer) {
+    const boundary = "----ecl" + Math.random().toString(36).slice(2);
+    const parts = [
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="content"\r\n\r\n${content}\r\n`),
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${mime}\r\n\r\n`),
+      fileBody,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ];
+    return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` };
+  }
+
+  it("le DG joint un fichier : SAGE en lit le texte, et le texte extrait n'est pas renvoyé au navigateur", async () => {
+    const marker = `SECRET-${rnd()}`;
+    const conv = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+    const convId = conv.json().id as string;
+    const mp = multipartMessage("Que penses-tu de ce texte ?", "note.txt", "text/plain", Buffer.from(`Note de travail. ${marker} Fin.`, "utf8"));
+    const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${convId}/messages`, headers: { cookie: dgCookie, "content-type": mp.contentType }, payload: mp.body });
+    expect(msg.statusCode).toBe(202);
+    await waitMessage(msg.json().assistant_message_id);
+
+    // Le texte du fichier est bien transmis au modèle (contexte).
+    const sawFile = calls.some((c) => JSON.stringify(c.messages ?? "").includes(marker));
+    expect(sawFile).toBe(true);
+
+    // Dans l'historique : le message user porte la pièce jointe (nom, lisible),
+    // mais le texte extrait n'est PAS exposé au navigateur.
+    const dossier = await app.inject({ method: "GET", url: `/api/v1/sage/conversations/${convId}`, headers: { cookie: dgCookie } });
+    const messages = dossier.json().messages as Array<{ role: string; attachments: Array<Record<string, unknown>> | null }>;
+    const user = messages.find((m) => m.role === "user");
+    expect(user?.attachments?.[0]?.name).toBe("note.txt");
+    expect(user?.attachments?.[0]?.lu).toBe(true);
+    expect("text" in (user!.attachments![0])).toBe(false);
+  });
+
+  it("refuse un message vide sans texte ni fichier", async () => {
+    const conv = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+    const r = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${conv.json().id}/messages`, headers: { cookie: dgCookie }, payload: { content: "   " } });
+    expect(r.statusCode).toBe(400);
+  });
+
   it("archive une conversation : elle quitte la liste", async () => {
     const created = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
     const convId = created.json().id as string;

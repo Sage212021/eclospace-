@@ -54,6 +54,8 @@ export function SageChatPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dossier, setDossier] = useState<SageDossier | null>(null);
   const [input, setInput] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -115,11 +117,13 @@ export function SageChatPage() {
   }
 
   async function send() {
-    if (!selectedId || !input.trim()) return;
+    if (!selectedId || (!input.trim() && !file)) return;
     setBusy(true); setError(null);
     try {
-      await sendSageMessage(selectedId, input.trim());
+      await sendSageMessage(selectedId, input.trim(), file);
       setInput("");
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       await loadDossier(selectedId);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Envoi impossible.");
@@ -405,14 +409,18 @@ export function SageChatPage() {
                     ) : (
                       <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{m.content}</div>
                     )}
-                    {m.role === "assistant" && m.status === "done" && m.attachments && m.attachments.length > 0 && (
+                    {m.attachments && m.attachments.length > 0 && (
                       <div style={{ marginTop: 8, borderTop: "1px solid var(--line)", paddingTop: 7, display: "grid", gap: 4 }}>
-                        <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>Documents déposés</div>
-                        {m.attachments.map((a) => (
-                          <a key={a.version_id} href={sageAttachmentUrl(a.download_path)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--eclosion-dark, #9a7a12)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>{m.role === "user" ? "Fichier joint" : "Documents déposés"}</div>
+                        {m.attachments.map((a, i) => a.kind === "upload" ? (
+                          <span key={i} style={{ fontSize: 12, color: "var(--ink)", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                            📎 {a.name}{a.lu === false ? <em style={{ color: "var(--alert)", fontStyle: "normal" }}> — non lisible</em> : null}
+                          </span>
+                        ) : a.download_path ? (
+                          <a key={a.version_id ?? i} href={sageAttachmentUrl(a.download_path)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--eclosion-dark, #9a7a12)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
                             📎 {a.label}
                           </a>
-                        ))}
+                        ) : null)}
                       </div>
                     )}
                     {m.role === "assistant" && m.status === "done" && m.content && (
@@ -423,7 +431,15 @@ export function SageChatPage() {
               ))}
               <div ref={endRef} />
             </div>
+            {file && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--ink)", background: "var(--ivory, #FAF8F2)", border: "1px solid var(--line)", borderRadius: 8, padding: "6px 10px", marginBottom: 8 }}>
+                <span>📎 {file.name} <span style={{ color: "var(--muted)" }}>({Math.max(1, Math.round(file.size / 1024))} Ko)</span></span>
+                <button onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }} title="Retirer le fichier" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 13 }}>✕</button>
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+              <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt,.md,.csv,.rtf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style={{ display: "none" }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+              <button onClick={() => fileInputRef.current?.click()} disabled={busy || pending} title="Joindre un fichier (PDF, Word, texte)" style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px", fontSize: 15, cursor: busy || pending ? "not-allowed" : "pointer", opacity: busy || pending ? 0.55 : 1 }}>📎</button>
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -432,7 +448,7 @@ export function SageChatPage() {
                 rows={2}
                 style={{ flex: 1, padding: "9px 11px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13.5, resize: "vertical" }}
               />
-              <button onClick={send} disabled={busy || pending || !input.trim()} style={{ ...primaryBtnStyle, whiteSpace: "nowrap", cursor: busy || pending || !input.trim() ? "not-allowed" : "pointer", opacity: busy || pending || !input.trim() ? 0.55 : 1 }}>Envoyer</button>
+              <button onClick={send} disabled={busy || pending || (!input.trim() && !file)} style={{ ...primaryBtnStyle, whiteSpace: "nowrap", cursor: busy || pending || (!input.trim() && !file) ? "not-allowed" : "pointer", opacity: busy || pending || (!input.trim() && !file) ? 0.55 : 1 }}>Envoyer</button>
             </div>
             {pending && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>SAGE rédige sa réponse… elle s'affichera ici (vous pouvez patienter ou revenir plus tard).</div>}
           </div>

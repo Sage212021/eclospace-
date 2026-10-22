@@ -13,6 +13,7 @@ import {
   type Genre,
 } from "../api/client";
 import { BulkCoverUpload } from "../components/BulkCoverUpload";
+import { MissingCoversWorklist } from "../components/MissingCoversWorklist";
 
 // Pôle Marketing & Distribution — CATALOGUE des ouvrages.
 // Grille visuelle des couvertures, alimentée automatiquement par les ouvrages
@@ -153,6 +154,7 @@ export function CataloguePage({ onOpenManuscript, canAdmin, canUploadCovers }: {
         </label>
       </div>
 
+      {canUploadCovers && <MissingCoversWorklist reloadToken={reloadTick} />}
       {canUploadCovers && <BulkCoverUpload onDone={() => setReloadTick((t) => t + 1)} />}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>

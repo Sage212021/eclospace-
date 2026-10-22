@@ -14,6 +14,9 @@ let failWeb = false;
 // Quand non vide, le faux modèle déclenche l'outil « lire_manuscrit » sur cette
 // référence (pour tester la lecture du texte d'un manuscrit depuis le dialogue DG).
 let readRef = "";
+// Quand non vide, le faux modèle déclenche l'outil « restituer_document » sur cette
+// référence (pour tester la livraison d'un document UNIQUEMENT sur demande du DG).
+let docRef = "";
 vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     messages = {
@@ -39,6 +42,10 @@ vi.mock("@anthropic-ai/sdk", () => {
         if (args.tools && readRef && !lastIsToolResult) {
           return { model: "claude-sonnet-5", stop_reason: "tool_use", usage: { input_tokens: 80, output_tokens: 40 },
             content: [{ type: "tool_use", id: "read_1", name: "lire_manuscrit", input: { reference: readRef } }] };
+        }
+        if (args.tools && docRef && !lastIsToolResult) {
+          return { model: "claude-sonnet-5", stop_reason: "tool_use", usage: { input_tokens: 80, output_tokens: 40 },
+            content: [{ type: "tool_use", id: "doc_1", name: "restituer_document", input: { reference: docRef, document: "rapport d'évaluation" } }] };
         }
         if (args.tools && toolRef && !lastIsToolResult) {
           return { model: "claude-sonnet-5", stop_reason: "tool_use", usage: { input_tokens: 80, output_tokens: 40 },
@@ -252,11 +259,43 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
     expect(after.status).toBe("validated");
   });
 
-  it("retrouve le dossier d'un manuscrit via l'outil et propose les documents déposés au téléchargement", async () => {
+  it("le dossier LISTE les documents sans les livrer, et distingue une étape traitée d'une étape passée", async () => {
+    const adminId = (await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).id;
+    const statuses = await prisma.workflowStatus.findMany({ orderBy: { stepOrder: "asc" }, take: 2 });
+    const number = `DOSS-${rnd()}`;
+    const ms = await prisma.manuscript.create({ data: { manuscriptNumber: number, title: `Dossier Test ${rnd()}`, language: "fr", statusId: statuses[0].id, ownerId: adminId, receivedAt: new Date(), createdBy: adminId, updatedBy: adminId } });
+    await prisma.document.create({
+      data: {
+        entityType: "manuscript", entityId: ms.id, category: "rapport_lecture", title: "Rapport d'évaluation", createdBy: adminId,
+        versions: { create: { versionNumber: 1, filePath: "eval.pdf", fileSize: 10, mimeType: "application/pdf", sha256Hash: `h-${number}`, uploadedBy: adminId } },
+      },
+    });
+    // Une étape validée mais PASSÉE (facultative non effectuée) avec motif.
+    await prisma.manuscriptStep.create({ data: { manuscriptId: ms.id, statusId: statuses[0].id, validatedAt: new Date(), realizationMode: "passe", skipReason: "Manuscrit déjà abouti : expertise non nécessaire." } });
+    // Une étape validée et RÉALISÉE.
+    if (statuses[1]) await prisma.manuscriptStep.create({ data: { manuscriptId: ms.id, statusId: statuses[1].id, validatedAt: new Date(), realizationMode: "realise" } });
+
+    toolRef = number;
+    const conv = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
+    const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${conv.json().id}/messages`, headers: { cookie: dgCookie }, payload: { content: `Où en est le dossier ${number} ?` } });
+    await waitMessage(msg.json().assistant_message_id);
+    toolRef = "";
+
+    // Le dossier NE livre PAS les documents (pas d'attachement sans demande).
+    const dossier = await app.inject({ method: "GET", url: `/api/v1/sage/conversations/${conv.json().id}`, headers: { cookie: dgCookie } });
+    const messages = dossier.json().messages as Array<{ role: string; attachments: unknown }>;
+    const assistant = [...messages].reverse().find((m) => m.role === "assistant");
+    expect(assistant?.attachments ?? null).toBeNull();
+    // Le résultat de l'outil transmis au modèle distingue étape passée / réalisée.
+    const sawTreatment = calls.some((c) => { const s = JSON.stringify(c.messages ?? ""); return s.includes("passée sans traitement") && s.includes("expertise non nécessaire"); });
+    expect(sawTreatment).toBe(true);
+  });
+
+  it("ne livre un document QUE sur demande explicite (outil restituer_document)", async () => {
     const adminId = (await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).id;
     const status = await prisma.workflowStatus.findFirstOrThrow();
-    const number = `DOSS-${rnd()}`;
-    const ms = await prisma.manuscript.create({ data: { manuscriptNumber: number, title: `Dossier Test ${rnd()}`, language: "fr", statusId: status.id, ownerId: adminId, receivedAt: new Date(), createdBy: adminId, updatedBy: adminId } });
+    const number = `REST-${rnd()}`;
+    const ms = await prisma.manuscript.create({ data: { manuscriptNumber: number, title: `À restituer ${rnd()}`, language: "fr", statusId: status.id, ownerId: adminId, receivedAt: new Date(), createdBy: adminId, updatedBy: adminId } });
     await prisma.document.create({
       data: {
         entityType: "manuscript", entityId: ms.id, category: "rapport_lecture", title: "Rapport d'évaluation", createdBy: adminId,
@@ -264,13 +303,13 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
       },
     });
 
-    toolRef = number;
+    docRef = number;
     const conv = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
-    const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${conv.json().id}/messages`, headers: { cookie: dgCookie }, payload: { content: `Où en est le dossier ${number} et quels documents ont été déposés ?` } });
+    const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${conv.json().id}/messages`, headers: { cookie: dgCookie }, payload: { content: `Donne-moi le rapport d'évaluation de ${number}.` } });
     await waitMessage(msg.json().assistant_message_id);
-    toolRef = "";
+    docRef = "";
 
-    // L'outil dossier_manuscrit a renvoyé le document → proposé en téléchargement.
+    // Sur demande explicite, le document est proposé en téléchargement.
     const dossier = await app.inject({ method: "GET", url: `/api/v1/sage/conversations/${conv.json().id}`, headers: { cookie: dgCookie } });
     const messages = dossier.json().messages as Array<{ role: string; attachments: Array<{ label: string; download_path: string }> | null }>;
     const assistant = [...messages].reverse().find((m) => m.role === "assistant");

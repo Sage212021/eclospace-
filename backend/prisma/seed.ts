@@ -1454,6 +1454,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-catalogue-couvertures-manquantes-liste",
+      version: "2026.10",
+      title: "Nouveauté — Liste des couvertures manquantes (pour aller les récupérer, puis les déposer en masse)",
+      body: "Dans le Catalogue, au-dessus de « Ajouter les couvertures en masse », une nouvelle rubrique « 🖼️ Couvertures manquantes » recense tous les ouvrages SANS couverture, regroupés par catégorie, avec le compte exact. Un bouton « ⬇ Exporter la liste (CSV) » télécharge un tableau (Titre, Auteur(s), Catégorie, Référence, Année) ouvrable dans Excel. La marche à suivre : exportez la liste, récupérez ces couvertures sur le site d'Éclosion, puis déposez-les toutes d'un coup via « Ajouter les couvertures en masse » — elles se rattachent automatiquement par titre. Les couvertures déjà présentes ne sont jamais touchées. Visible pour les personnes autorisées à gérer les couvertures.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["INFOG", "DIRED", "COM", "DG"],
+    },
+    {
       slug: "2026-10-enregistrement-infographe-obligatoire",
       version: "2026.10",
       title: "Nouveauté — L'infographe qui suivra le manuscrit se désigne (obligatoirement) dès l'enregistrement",

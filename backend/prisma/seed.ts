@@ -1454,10 +1454,10 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
-      slug: "2026-10-enregistrement-infographe-pressenti",
+      slug: "2026-10-enregistrement-infographe-obligatoire",
       version: "2026.10",
-      title: "Nouveauté — Désigner dès l'enregistrement l'infographe qui suivra le manuscrit",
-      body: "Sur la fiche d'enregistrement d'un manuscrit (au moment où il part à l'évaluation), l'éditorial peut maintenant indiquer, dans « Traitement éditorial », l'INFOGRAPHE PRESSENTI qui suivra l'ouvrage. L'intérêt : le moment venu, à la correction de couverture, le rapport de correction est adressé automatiquement à cet infographe pour intégration — plus besoin de chercher à qui l'envoyer. Le champ est facultatif (« à désigner plus tard ») et reste modifiable ensuite depuis le cycle de correction. Seuls les membres du département Infographie peuvent être choisis.",
+      title: "Nouveauté — L'infographe qui suivra le manuscrit se désigne (obligatoirement) dès l'enregistrement",
+      body: "Sur la fiche d'enregistrement d'un manuscrit (au moment où il part à l'évaluation), l'éditorial doit désormais indiquer, dans « Traitement éditorial », l'INFOGRAPHE qui suivra l'ouvrage — ce choix n'est plus facultatif, l'enregistrement ne se valide pas sans lui. L'intérêt : le moment venu, à la correction de couverture, le rapport de correction est adressé automatiquement à cet infographe pour intégration, sans avoir à chercher à qui l'envoyer. Le choix reste modifiable ensuite depuis le cycle de correction. Seuls les membres du département Infographie peuvent être choisis.",
       permissionModules: ["manuscripts"],
       departmentCodes: ["DIRED", "INFOG", "DG"],
     },

@@ -1454,6 +1454,23 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-enregistrement-infographe-pressenti",
+      version: "2026.10",
+      title: "Nouveauté — Désigner dès l'enregistrement l'infographe qui suivra le manuscrit",
+      body: "Sur la fiche d'enregistrement d'un manuscrit (au moment où il part à l'évaluation), l'éditorial peut maintenant indiquer, dans « Traitement éditorial », l'INFOGRAPHE PRESSENTI qui suivra l'ouvrage. L'intérêt : le moment venu, à la correction de couverture, le rapport de correction est adressé automatiquement à cet infographe pour intégration — plus besoin de chercher à qui l'envoyer. Le champ est facultatif (« à désigner plus tard ») et reste modifiable ensuite depuis le cycle de correction. Seuls les membres du département Infographie peuvent être choisis.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "INFOG", "DG"],
+    },
+    {
+      slug: "2026-10-sage-fichier-joint-limite-relevee",
+      version: "2026.10",
+      title: "Nouveauté — Joindre un fichier plus volumineux dans la conversation avec SAGE",
+      body: "La lecture des fichiers joints à « Échanger avec SAGE » accepte désormais des documents bien plus longs : jusqu'à l'équivalent d'un manuscrit entier (au lieu d'un gros chapitre). Concrètement, si vous joignez un long rapport ou un ouvrage complet en PDF texte ou Word, SAGE en lit la quasi-totalité avant de répondre. Pour un document vraiment énorme, il lit un large extrait et vous le signale. Rappel : pour faire travailler SAGE sur un manuscrit complet de façon durable, le plus sûr reste de le déposer dans la fiche de l'ouvrage. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-sage-joindre-un-fichier",
       version: "2026.10",
       title: "Nouveauté — Joindre un fichier dans la conversation avec SAGE",

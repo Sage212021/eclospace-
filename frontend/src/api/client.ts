@@ -544,6 +544,7 @@ export function createManuscript(input: {
   owner_id: string;
   evaluation_fee_choice?: "non_defini" | "a_payer" | "sans_frais";
   author_response_delay_days?: number;
+  cover_integrator_id?: string | null;
   author: NewAuthorInput;
 }) {
   return request<Manuscript>("/api/v1/manuscripts", { method: "POST", body: JSON.stringify(input) });

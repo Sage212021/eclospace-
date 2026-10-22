@@ -716,6 +716,7 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (!coverIntegratorId) { onError("Choisissez l'infographe qui suivra le manuscrit."); return; }
     setSubmitting(true);
     try {
       // Ne transmet que les champs auteur renseignés ; dates → ISO.
@@ -802,14 +803,14 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
           {evalFee === "a_payer" && <div style={{ fontSize: 11.5, color: "var(--eclosion-dark, #9a7a12)", marginTop: 6 }}>→ Une demande de facture de frais de dépôt sera transmise automatiquement à la Finance à l'enregistrement.</div>}
         </div>
         <LabeledInput label="Délai de réponse à l'auteur (jours)"><input type="number" min={0} value={responseDelay} onChange={(e) => setResponseDelay(e.target.value)} placeholder="Ex. 60" /></LabeledInput>
-        <LabeledInput label="Infographe pressenti (facultatif)">
-          <select value={coverIntegratorId} onChange={(e) => setCoverIntegratorId(e.target.value)}>
-            <option value="">— à désigner plus tard —</option>
+        <LabeledInput label="Infographe qui suivra le manuscrit *">
+          <select value={coverIntegratorId} onChange={(e) => setCoverIntegratorId(e.target.value)} required>
+            <option value="" disabled>— choisir l'infographe —</option>
             {infographes.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
           </select>
         </LabeledInput>
         <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "var(--muted)", marginTop: -4 }}>
-          L'infographe qui suivra ce manuscrit. En le renseignant dès l'évaluation, le rapport de correction de couverture lui sera adressé automatiquement pour intégration, le moment venu. Modifiable plus tard.
+          Obligatoire : l'infographe qui suivra ce manuscrit. En le désignant dès l'évaluation, le rapport de correction de couverture lui sera adressé automatiquement pour intégration, le moment venu. Modifiable plus tard.
         </div>
       </div>
 

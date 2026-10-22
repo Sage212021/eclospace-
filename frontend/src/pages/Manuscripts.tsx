@@ -11,6 +11,7 @@ import {
   listGenres,
   listManuscripts,
   listUsers,
+  getCoverIntegrators,
   getManuscriptsHistoryByDay,
   type CatalogueFilters,
   type Collection,
@@ -702,12 +703,15 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
   const [a, setA] = useState({ ...EMPTY_AUTHOR });
   const [evalFee, setEvalFee] = useState<"non_defini" | "a_payer" | "sans_frais">("non_defini");
   const [responseDelay, setResponseDelay] = useState("");
+  const [coverIntegratorId, setCoverIntegratorId] = useState("");
+  const [infographes, setInfographes] = useState<{ id: string; name: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const set = (k: keyof typeof EMPTY_AUTHOR, v: string) => setA((cur) => ({ ...cur, [k]: v }));
 
   useEffect(() => {
     listGenres().then((g) => { setGenres(g); if (g[0]) setGenreId(g[0].id); });
     listUsers().then((u) => { setUsers(u); if (u[0]) setOwnerId(u[0].id); });
+    getCoverIntegrators().then(setInfographes).catch(() => setInfographes([]));
   }, []);
 
   async function handleSubmit(event: React.FormEvent) {
@@ -726,6 +730,7 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
         title, genre_id: genreId, language, owner_id: ownerId,
         evaluation_fee_choice: evalFee,
         ...(responseDelay.trim() ? { author_response_delay_days: Number(responseDelay) } : {}),
+        ...(coverIntegratorId ? { cover_integrator_id: coverIntegratorId } : {}),
         author: author as unknown as Parameters<typeof createManuscript>[0]["author"],
       });
       onCreated(manuscript);
@@ -797,6 +802,15 @@ function NewManuscriptForm({ onCreated, onError }: { onCreated: (m: Manuscript) 
           {evalFee === "a_payer" && <div style={{ fontSize: 11.5, color: "var(--eclosion-dark, #9a7a12)", marginTop: 6 }}>→ Une demande de facture de frais de dépôt sera transmise automatiquement à la Finance à l'enregistrement.</div>}
         </div>
         <LabeledInput label="Délai de réponse à l'auteur (jours)"><input type="number" min={0} value={responseDelay} onChange={(e) => setResponseDelay(e.target.value)} placeholder="Ex. 60" /></LabeledInput>
+        <LabeledInput label="Infographe pressenti (facultatif)">
+          <select value={coverIntegratorId} onChange={(e) => setCoverIntegratorId(e.target.value)}>
+            <option value="">— à désigner plus tard —</option>
+            {infographes.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+          </select>
+        </LabeledInput>
+        <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "var(--muted)", marginTop: -4 }}>
+          L'infographe qui suivra ce manuscrit. En le renseignant dès l'évaluation, le rapport de correction de couverture lui sera adressé automatiquement pour intégration, le moment venu. Modifiable plus tard.
+        </div>
       </div>
 
       <div style={{ marginTop: 14 }}>

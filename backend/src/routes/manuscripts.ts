@@ -143,6 +143,9 @@ const createManuscriptSchema = z.object({
   // Fiche enrichie : choix des frais de dépôt d'évaluation + délai de réponse.
   evaluation_fee_choice: z.enum(["non_defini", "a_payer", "sans_frais"]).optional(),
   author_response_delay_days: z.number().int().min(0).max(365).optional(),
+  // Infographe pressenti pour SUIVRE le manuscrit (renseigné dès l'évaluation) :
+  // à la correction de couverture, le rapport lui est adressé pour intégration.
+  cover_integrator_id: z.string().uuid().nullable().optional(),
   author: authorSchema,
 });
 
@@ -307,6 +310,12 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       where: { stepOrder: receptionStatus.stepOrder + 1 },
     });
 
+    // Infographe pressenti (facultatif) : doit être un infographe actif.
+    if (body.cover_integrator_id) {
+      const ok = await prisma.user.findFirst({ where: { id: body.cover_integrator_id, status: "active", deletedAt: null, userRoles: { some: { revokedAt: null, role: { department: { code: "INFOG" } } } } }, select: { id: true } });
+      if (!ok) return reply.code(400).send({ code: "invalid_integrator", message: "L'infographe pressenti doit être un membre actif du département Infographie." });
+    }
+
     const manuscriptNumber = await nextManuscriptNumber();
     const now = new Date();
 
@@ -347,6 +356,7 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
           receivedAt: now,
           evaluationFeeChoice: body.evaluation_fee_choice ?? "non_defini",
           authorResponseDelayDays: body.author_response_delay_days,
+          coverIntegratorId: body.cover_integrator_id ?? undefined,
           createdBy: request.user!.id,
           updatedBy: request.user!.id,
           workContributors: {

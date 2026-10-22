@@ -124,8 +124,10 @@ export type DocAttachment = { version_id: string; label: string; kind: string; m
 export type UploadAttachment = { kind: "upload"; name: string; mime: string; size: number; lu: boolean; text: string; note?: string };
 
 // Lecture du texte d'un fichier joint (PDF à couche texte, .docx, texte brut).
-// Borné pour rester raisonnable. Les PDF scannés (sans texte) ne sont pas lus.
-const UPLOAD_CHAR_BUDGET = 80_000;
+// Borné pour rester raisonnable (le texte est réinjecté à chaque tour de la
+// conversation). Plafond aligné sur un manuscrit entier ; au-delà, SAGE lit un
+// large extrait et le signale. Les PDF scannés (sans texte) ne sont pas lus.
+const UPLOAD_CHAR_BUDGET = 240_000;
 export async function extractUploadText(buffer: Buffer, mime: string, filename: string): Promise<{ ok: boolean; text: string; truncated: boolean; note?: string }> {
   const name = (filename || "").toLowerCase();
   const m = (mime || "").toLowerCase();

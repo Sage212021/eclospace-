@@ -402,12 +402,18 @@ function columnWidths(header: string[]): number[] {
     return 1.5;
   });
   const sum = weights.reduce((a, b) => a + b, 0) || 1;
-  return weights.map((w) => Math.max(650, Math.round((TOTAL * w) / sum)));
+  // Largeur MINIMALE plus généreuse (≈ 16 mm) : une colonne étroite accueille au
+  // moins un mot court sans le couper. Ce sont des largeurs PRÉFÉRÉES : en mode
+  // autofit, Word élargit encore une colonne si son contenu l'exige.
+  return weights.map((w) => Math.max(900, Math.round((TOTAL * w) / sum)));
 }
 
 // Tableau (ex. grille d'évaluation) : en-tête noir/texte blanc, zébrure ivoire,
 // colonnes numériques centrées, filets discrets — rendu maison Éclosion.
-// Largeurs FIXES pour une mise en page économe en papier.
+// Mode AUTOFIT : Word élargit une colonne pour NE PAS couper les mots, tout en
+// partant des largeurs préférées (présentation harmonisée). Marges de cellule
+// généreuses (les cases « respirent ») et lignes non scindées entre deux pages.
+const CELL_MARGINS = { top: 80, bottom: 80, left: 150, right: 150 };
 function buildTable(rows: string[][]): Table {
   const b = { style: BorderStyle.SINGLE, size: 2, color: ECL.line };
   const borders = { top: b, bottom: b, left: b, right: b };
@@ -416,21 +422,23 @@ function buildTable(rows: string[][]): Table {
   const numericCol = (ci: number) => /coef|^note|^\/1|^\/2/.test((header[ci] || "").toLowerCase().trim());
   const headRow = new TableRow({
     tableHeader: true,
+    cantSplit: true,
     children: header.map((h, ci) => new TableCell({
       width: { size: widths[ci], type: WidthType.DXA },
       shading: { fill: ECL.noir, color: "auto", type: "clear" as never },
-      margins: { top: 60, bottom: 60, left: 100, right: 100 },
+      margins: CELL_MARGINS,
       borders,
       children: [new Paragraph({ children: inlineRuns(h, { color: ECL.white, size: 19, bold: true }) })],
     })),
   });
   const dataRows = rows.slice(1).map((r, i) => new TableRow({
+    cantSplit: true,
     children: r.map((c, ci) => {
       const gauge = scoreRuns(c); // jauge visuelle si la cellule est un score
       return new TableCell({
         width: { size: widths[ci] ?? 1500, type: WidthType.DXA },
         shading: { fill: i % 2 ? ECL.ivoire : ECL.white, color: "auto", type: "clear" as never },
-        margins: { top: 50, bottom: 50, left: 100, right: 100 },
+        margins: CELL_MARGINS,
         borders,
         children: [new Paragraph({
           alignment: gauge || numericCol(ci) ? AlignmentType.CENTER : AlignmentType.LEFT,
@@ -439,7 +447,7 @@ function buildTable(rows: string[][]): Table {
       });
     }),
   }));
-  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: widths, layout: TableLayoutType.FIXED, rows: [headRow, ...dataRows] });
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: widths, layout: TableLayoutType.AUTOFIT, rows: [headRow, ...dataRows] });
 }
 
 // Rendu .docx du rapport, aux couleurs Éclosion. Interprète le Markdown produit

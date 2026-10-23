@@ -1464,6 +1464,14 @@ async function main() {
       departmentCodes: ["DIRED", "CORR", "INFOG", "DG"],
     },
     {
+      slug: "2026-10-avancement-toujours-visible",
+      version: "2026.10",
+      title: "Nouveauté — Avancement d'une relecture toujours visible (barre animée + chrono)",
+      body: "Au lancement d'une relecture (correction) ou d'une évaluation, l'avancement s'affiche désormais en permanence. Explication : le pourcentage chiffré n'est possible que lorsque le travail se découpe en étapes comptables (par exemple la génération du manuscrit corrigé, découpée en tranches, ou la lecture intégrale par segments d'un gros manuscrit). La rédaction du rapport — et une évaluation complète — se fait en une seule passe de l'IA : il n'y a pas d'étapes à compter, donc pas de pourcentage réel à afficher sans l'inventer. À la place, on montre maintenant une petite barre animée « en cours » accompagnée du temps écoulé (⏱ m:ss), pour que vous voyiez toujours que l'analyse progresse. Le pourcentage chiffré, lui, reste affiché dès qu'il est réellement mesurable.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "COMLEC", "DG"],
+    },
+    {
       slug: "2026-10-rapports-tableaux-mieux-presentes",
       version: "2026.10",
       title: "Nouveauté — Tableaux des rapports mieux présentés (plus de mots coupés)",

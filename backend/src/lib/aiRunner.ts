@@ -415,17 +415,19 @@ function columnWidths(header: string[]): number[] {
 // généreuses (les cases « respirent ») et lignes non scindées entre deux pages.
 const CELL_MARGINS = { top: 80, bottom: 80, left: 150, right: 150 };
 
-// Pastille de SÉVÉRITÉ (C1/C2/C3/S) dans les annotations de correction : fonds
-// pastel + texte NOIR GRAS, repris EXACTEMENT du modèle de rapport validé par
-// l'opérateur (rendu de référence). C1 bloquante = rose · C2 importante = pêche
-// · C3 mineure = jaune pâle · S suggestion = vert pâle.
+// Pastille de SÉVÉRITÉ (C1/C2/C3/S) dans les annotations de correction : fond
+// doux + texte coloré en gras, aux COULEURS SÉMANTIQUES DE LA CHARTE ÉCLOSION
+// (jamais de bleu). On garde la structure de tableau soignée demandée par
+// l'opérateur, mais on maintient l'identité visuelle de la maison.
+// C1 bloquante = rouge critique #B23A2E · C2 importante = ambre retard #B87400 ·
+// C3 mineure = gris neutre · S suggestion = or de la marque (ce n'est pas une erreur).
 function severityBadge(value: string): { fill: string; color: string } | null {
   const t = (value || "").trim();
   if (t.length > 24) return null;
-  if (/^C1\b/i.test(t)) return { fill: "F4CCCC", color: ECL.ink }; // bloquante (rose)
-  if (/^C2\b/i.test(t)) return { fill: "FCE5CD", color: ECL.ink }; // importante (pêche)
-  if (/^C3\b/i.test(t)) return { fill: "FFF2CC", color: ECL.ink }; // mineure (jaune pâle)
-  if (/^S\b/.test(t)) return { fill: "D9EAD3", color: ECL.ink }; // suggestion (vert pâle)
+  if (/^C1\b/i.test(t)) return { fill: "F6E4E1", color: "B23A2E" }; // rouge critique
+  if (/^C2\b/i.test(t)) return { fill: "FBEEDA", color: "B87400" }; // ambre important
+  if (/^C3\b/i.test(t)) return { fill: "EFEDE6", color: ECL.grey }; // gris neutre mineur
+  if (/^S\b/.test(t)) return { fill: "FAF8F2", color: ECL.orDark }; // or doux suggestion
   return null;
 }
 

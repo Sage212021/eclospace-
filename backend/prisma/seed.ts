@@ -1464,6 +1464,14 @@ async function main() {
       departmentCodes: ["DIRED", "CORR", "INFOG", "DG"],
     },
     {
+      slug: "2026-10-rapports-tableaux-annotations-paysage",
+      version: "2026.10",
+      title: "Nouveauté — Tableaux d'annotations en paysage (lisibles et imprimables)",
+      body: "Dans les rapports de relecture (BAT1 et BAT2), le grand tableau des annotations de correction (8 colonnes) s'affiche désormais sur une page en PAYSAGE : il y tient entièrement, les colonnes sont larges et « À corriger » tient sur une ligne — fini les cases serrées et les mots coupés. Le reste du rapport (texte, synthèse, grille de notation) reste en portrait, comme avant. Les rapports d'évaluation, qui n'ont pas de grand tableau d'annotations, restent entièrement en portrait. Cette mise en page s'applique de la même façon au BAT1 et au BAT2.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "COMLEC", "INFOG", "DG"],
+    },
+    {
       slug: "2026-10-avancement-toujours-visible",
       version: "2026.10",
       title: "Nouveauté — Avancement d'une relecture toujours visible (barre animée + chrono)",

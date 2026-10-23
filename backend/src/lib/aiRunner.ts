@@ -415,17 +415,17 @@ function columnWidths(header: string[]): number[] {
 // généreuses (les cases « respirent ») et lignes non scindées entre deux pages.
 const CELL_MARGINS = { top: 80, bottom: 80, left: 150, right: 150 };
 
-// Pastille de SÉVÉRITÉ (C1/C2/C3/S) dans les annotations de correction : fond
-// doux + texte coloré, aux couleurs sémantiques de la maison (jamais de bleu).
-// C1 bloquante = rouge · C2 importante = ambre · C3 mineure = neutre · S
-// suggestion = or doux (ce n'est pas une erreur).
+// Pastille de SÉVÉRITÉ (C1/C2/C3/S) dans les annotations de correction : fonds
+// pastel + texte NOIR GRAS, repris EXACTEMENT du modèle de rapport validé par
+// l'opérateur (rendu de référence). C1 bloquante = rose · C2 importante = pêche
+// · C3 mineure = jaune pâle · S suggestion = vert pâle.
 function severityBadge(value: string): { fill: string; color: string } | null {
   const t = (value || "").trim();
   if (t.length > 24) return null;
-  if (/^C1\b/i.test(t)) return { fill: "F6E4E1", color: "B23A2E" }; // rouge critique
-  if (/^C2\b/i.test(t)) return { fill: "FBEEDA", color: "B87400" }; // ambre important
-  if (/^C3\b/i.test(t)) return { fill: "EFEDE6", color: "5B6472" }; // neutre mineur
-  if (/^S\b/.test(t)) return { fill: "FAF8F2", color: "9A7A12" }; // or doux suggestion
+  if (/^C1\b/i.test(t)) return { fill: "F4CCCC", color: ECL.ink }; // bloquante (rose)
+  if (/^C2\b/i.test(t)) return { fill: "FCE5CD", color: ECL.ink }; // importante (pêche)
+  if (/^C3\b/i.test(t)) return { fill: "FFF2CC", color: ECL.ink }; // mineure (jaune pâle)
+  if (/^S\b/.test(t)) return { fill: "D9EAD3", color: ECL.ink }; // suggestion (vert pâle)
   return null;
 }
 

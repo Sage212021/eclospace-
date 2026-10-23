@@ -389,23 +389,30 @@ function keyValueBlock(rows: string[][]): Paragraph[] {
   }));
 }
 
-// Largeurs de colonnes (en dixièmes de point, DXA) calculées d'après les
-// en-têtes : colonnes de synthèse (commentaire, explication, observation…)
-// larges ; colonnes courtes (n°, coefficient, note, page, sévérité, statut)
-// étroites — pour que le texte respire et que les lignes soient moins hautes.
+// Largeur utile d'une page A4 portrait (marges 1440 twips de chaque côté).
+const PAGE_W = 9026;
+
+// Largeurs de colonnes (DXA), calées sur le MODÈLE de rapport apprécié (BAT1) :
+// N° et Sévérité très étroits ; colonnes de texte (Élément, Constat, Correction)
+// et « Statut »/« Justification » GÉNÉREUSES pour que les mots ne soient pas
+// coupés et que les cases restent lisibles. Chaque colonne a un minimum propre à
+// son type. Si la somme dépasse la largeur de page (tableau d'annotations à 8
+// colonnes), le tableau s'étend au-delà (comme le modèle BAT1), plutôt que de
+// comprimer les cases à la largeur de la page.
 function columnWidths(header: string[]): number[] {
-  const TOTAL = 9020; // largeur utile A4 portrait (marges par défaut)
-  const weights = header.map((h) => {
+  const spec = header.map((h) => {
     const t = h.toLowerCase().trim();
-    if (/^n°|^n$|coef|^note|^\/1|^\/2|^page|s[ée]v|statut|note ?\//.test(t)) return 0.7;
-    if (/commentaire|explication|observation|constat|recommandation|correction|texte original|d[ée]tail|améliorat|demand/.test(t)) return 3.0;
-    return 1.5;
+    if (/^n°|^n$/.test(t)) return { min: 480, weight: 0.4 }; // numéro : juste quelques chiffres
+    if (/s[ée]v/.test(t)) return { min: 680, weight: 0.5 }; // « C1/C2/C3/S »
+    if (/statut/.test(t)) return { min: 1450, weight: 1.2 }; // « À corriger » sur une ligne
+    if (/page|emplacement/.test(t)) return { min: 1300, weight: 1.2 };
+    if (/justif/.test(t)) return { min: 1900, weight: 1.9 };
+    if (/commentaire|explication|observation|constat|recommandation|correction|texte original|[ée]l[ée]ment|d[ée]tail|améliorat|demand/.test(t)) return { min: 2200, weight: 2.6 };
+    if (/coef|^note|^\/1|^\/2|note ?\//.test(t)) return { min: 1000, weight: 0.9 }; // colonnes de note
+    return { min: 1500, weight: 1.5 };
   });
-  const sum = weights.reduce((a, b) => a + b, 0) || 1;
-  // Largeur MINIMALE plus généreuse (≈ 16 mm) : une colonne étroite accueille au
-  // moins un mot court sans le couper. Ce sont des largeurs PRÉFÉRÉES : en mode
-  // autofit, Word élargit encore une colonne si son contenu l'exige.
-  return weights.map((w) => Math.max(900, Math.round((TOTAL * w) / sum)));
+  const sumW = spec.reduce((a, b) => a + b.weight, 0) || 1;
+  return spec.map((s) => Math.max(s.min, Math.round((PAGE_W * s.weight) / sumW)));
 }
 
 // Tableau (ex. grille d'évaluation) : en-tête noir/texte blanc, zébrure ivoire,
@@ -465,7 +472,13 @@ function buildTable(rows: string[][]): Table {
       });
     }),
   }));
-  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: widths, layout: TableLayoutType.AUTOFIT, rows: [headRow, ...dataRows] });
+  // Un tableau étroit (≤ largeur de page, ex. grille de notation) occupe 100 % de
+  // la page. Un tableau large (annotations à 8 colonnes) garde ses colonnes
+  // généreuses (largeur DXA = somme), quitte à s'étendre au-delà de la page —
+  // c'est ainsi que le modèle BAT1 reste lisible, sans cases serrées.
+  const total = widths.reduce((a, w) => a + w, 0);
+  const tableWidth = total > PAGE_W ? { size: total, type: WidthType.DXA } : { size: 100, type: WidthType.PERCENTAGE };
+  return new Table({ width: tableWidth, columnWidths: widths, layout: TableLayoutType.AUTOFIT, rows: [headRow, ...dataRows] });
 }
 
 // Rendu .docx du rapport, aux couleurs Éclosion. Interprète le Markdown produit

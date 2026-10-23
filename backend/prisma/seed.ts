@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-annotations-severite-pastilles-couleur",
+      version: "2026.10",
+      title: "Nouveauté — Sévérités C1/C2/C3/S en pastilles colorées dans les annotations",
+      body: "Dans les tableaux d'annotations de correction (BAT1/BAT2), la colonne « Sévérité » s'affiche désormais en pastilles colorées, plus lisibles d'un coup d'œil : C1 (bloquante) en rouge, C2 (importante) en ambre, C3 (mineure) en gris neutre, S (suggestion) en or doux — avec un fond assorti et un texte en gras centré. Les couleurs sont celles de la maison (aucun bleu) : on garde la cohérence de la charte Éclosion tout en se rapprochant du rendu soigné que vous souhaitiez. Présentation seule, aucun changement sur le contenu des rapports.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "INFOG", "DG"],
+    },
+    {
       slug: "2026-10-rapports-tableaux-mieux-presentes",
       version: "2026.10",
       title: "Nouveauté — Tableaux des rapports mieux présentés (plus de mots coupés)",

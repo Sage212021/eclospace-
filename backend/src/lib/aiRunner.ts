@@ -414,6 +414,21 @@ function columnWidths(header: string[]): number[] {
 // partant des largeurs préférées (présentation harmonisée). Marges de cellule
 // généreuses (les cases « respirent ») et lignes non scindées entre deux pages.
 const CELL_MARGINS = { top: 80, bottom: 80, left: 150, right: 150 };
+
+// Pastille de SÉVÉRITÉ (C1/C2/C3/S) dans les annotations de correction : fond
+// doux + texte coloré, aux couleurs sémantiques de la maison (jamais de bleu).
+// C1 bloquante = rouge · C2 importante = ambre · C3 mineure = neutre · S
+// suggestion = or doux (ce n'est pas une erreur).
+function severityBadge(value: string): { fill: string; color: string } | null {
+  const t = (value || "").trim();
+  if (t.length > 24) return null;
+  if (/^C1\b/i.test(t)) return { fill: "F6E4E1", color: "B23A2E" }; // rouge critique
+  if (/^C2\b/i.test(t)) return { fill: "FBEEDA", color: "B87400" }; // ambre important
+  if (/^C3\b/i.test(t)) return { fill: "EFEDE6", color: "5B6472" }; // neutre mineur
+  if (/^S\b/.test(t)) return { fill: "FAF8F2", color: "9A7A12" }; // or doux suggestion
+  return null;
+}
+
 function buildTable(rows: string[][]): Table {
   const b = { style: BorderStyle.SINGLE, size: 2, color: ECL.line };
   const borders = { top: b, bottom: b, left: b, right: b };
@@ -435,14 +450,15 @@ function buildTable(rows: string[][]): Table {
     cantSplit: true,
     children: r.map((c, ci) => {
       const gauge = scoreRuns(c); // jauge visuelle si la cellule est un score
+      const sev = gauge ? null : severityBadge(c); // pastille de sévérité (C1/C2/C3/S)
       return new TableCell({
         width: { size: widths[ci] ?? 1500, type: WidthType.DXA },
-        shading: { fill: i % 2 ? ECL.ivoire : ECL.white, color: "auto", type: "clear" as never },
+        shading: { fill: sev ? sev.fill : i % 2 ? ECL.ivoire : ECL.white, color: "auto", type: "clear" as never },
         margins: CELL_MARGINS,
         borders,
         children: [new Paragraph({
-          alignment: gauge || numericCol(ci) ? AlignmentType.CENTER : AlignmentType.LEFT,
-          children: gauge ?? inlineRuns(c, { color: numericCol(ci) ? ECL.orDark : ECL.ink, size: 19, bold: numericCol(ci) }),
+          alignment: gauge || sev || numericCol(ci) ? AlignmentType.CENTER : AlignmentType.LEFT,
+          children: gauge ?? (sev ? inlineRuns(c, { color: sev.color, size: 19, bold: true }) : inlineRuns(c, { color: numericCol(ci) ? ECL.orDark : ECL.ink, size: 19, bold: numericCol(ci) })),
         })],
       });
     }),

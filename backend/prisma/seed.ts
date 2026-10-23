@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-rapports-tableaux-mieux-presentes",
+      version: "2026.10",
+      title: "Nouveauté — Tableaux des rapports mieux présentés (plus de mots coupés)",
+      body: "Dans les documents Word générés (rapports de relecture, d'évaluation, manuscrit corrigé), les tableaux sont désormais plus lisibles : les colonnes s'ajustent automatiquement à leur contenu (fini les mots coupés en plein milieu), les cases ont plus de marge (elles « respirent »), et une ligne de tableau ne se coupe plus entre deux pages. La présentation reste harmonisée et aux couleurs de la maison. Aucun changement sur le fond des rapports, uniquement la mise en forme.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "INFOG", "DG"],
+    },
+    {
       slug: "2026-10-bat-lecture-integrale-par-segments",
       version: "2026.10",
       title: "Nouveauté — Relectures BAT1 et BAT2 renforcées : lecture intégrale du manuscrit",

@@ -35,6 +35,14 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Horloge pour le « temps écoulé » affiché pendant une analyse en cours (les
+  // phases non découpables — rapport, évaluation — n'ont pas de pourcentage réel,
+  // on montre alors une barre animée + le chrono).
+  const [now, setNow] = useState(() => Date.now());
+  const fmtElapsed = (fromIso: string) => {
+    const s = Math.max(0, Math.floor((now - new Date(fromIso).getTime()) / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
   // Évaluation : type de manuscrit choisi par le relecteur pour adapter la
   // GRILLE transmise à l'IA. "" = automatique (selon le domaine de l'ouvrage).
   const [genres, setGenres] = useState<Genre[]>([]);
@@ -117,6 +125,13 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
   // on suit l'avancement du job en rafraîchissant régulièrement, jusqu'à
   // « Terminé » ou « Erreur ». Le bouton reste en « analyse en cours » pendant ce
   // temps ; l'utilisateur peut quitter l'écran, le job se poursuit côté serveur.
+  // Fait avancer le chrono tant qu'une analyse tourne (sans ralentir sinon).
+  useEffect(() => {
+    if (!jobs.some((j) => j.status === "en_cours" || j.status === "en_attente")) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [jobs]);
+
   async function launch() {
     setBusy(true); setErr(null); setNote(null);
     try {
@@ -197,6 +212,7 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
 
   return (
     <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 12, background: "var(--paper, #FAF8F2)" }}>
+      <style>{`@keyframes ecl-indet-move { 0% { left: -40%; } 100% { left: 100%; } } .ecl-indet-bar { animation: ecl-indet-move 1.15s ease-in-out infinite; }`}</style>
       <div style={{ fontWeight: 600, fontSize: 14 }}>🤖 {title}</div>
       <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "4px 0 10px", lineHeight: 1.6 }}>
         Le relecteur d'Éclosion analyse le manuscrit déposé et rédige le rapport, classé automatiquement dans les Documents de
@@ -289,9 +305,9 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
               <div key={j.id} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 12, flexWrap: "wrap" }}>
                 <span style={{ fontFamily: "var(--font-mono)" }}>{new Date(j.launchedAt).toLocaleString("fr-FR")}</span>
                 <span style={{ fontWeight: 700, color: STATUS_COLORS[j.status] }}>{STATUS_LABELS[j.status]}</span>
-                {j.status === "en_cours" && (j.progressLabel || j.progressTotal) ? (
+                {j.status === "en_cours" ? (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", color: "var(--eclosion-dark, #9A7A12)", fontWeight: 600 }}>
-                    {j.progressLabel && <span>{j.progressLabel}</span>}
+                    <span>{j.progressLabel || "Analyse en cours…"}</span>
                     {j.progressTotal ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                         <span style={{ width: 90, height: 8, background: "var(--line)", borderRadius: 999, overflow: "hidden", display: "inline-block" }}>
@@ -300,7 +316,16 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
                         <strong style={{ fontFamily: "var(--font-mono)" }}>{Math.round(((j.progressDone ?? 0) / j.progressTotal) * 100)} %</strong>
                         <span style={{ color: "var(--muted)" }}>({j.progressDone ?? 0}/{j.progressTotal})</span>
                       </span>
-                    ) : null}
+                    ) : (
+                      // Phase non découpable (rapport, évaluation) : pas de pourcentage
+                      // réel possible → barre animée « en cours » + temps écoulé.
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 90, height: 8, background: "var(--line)", borderRadius: 999, overflow: "hidden", display: "inline-block", position: "relative" }}>
+                          <span className="ecl-indet-bar" style={{ position: "absolute", top: 0, bottom: 0, width: "40%", background: "var(--eclosion, #D9B21A)", borderRadius: 999 }} />
+                        </span>
+                        <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>⏱ {fmtElapsed(j.launchedAt)}</span>
+                      </span>
+                    )}
                   </span>
                 ) : null}
                 {(j.status === "en_cours" || j.status === "en_attente") && (

@@ -133,8 +133,13 @@ export async function buildCorrectionMethodText(opts: { bookTypeCode?: string | 
     "Grille de contrôle à appliquer pour ce type d'ouvrage (chaque point = à vérifier ; la sévérité entre crochets est indicative, ajuste-la au cas réel) :",
     grille,
     "",
+    "MÉTHODE DE LECTURE (obligatoire) : lis le manuscrit INTÉGRALEMENT et SÉQUENTIELLEMENT, phrase par phrase — jamais un simple échantillon de passages. Vérifie accords et constructions dans leur contexte, et la cohérence des corrections sur l'ensemble du document. Distingue l'erreur CERTAINE, l'anomalie PROBABLE et la SUGGESTION stylistique. Ne réduis pas artificiellement le nombre d'anomalies parce que le manuscrit a déjà été relu : il correspond aux anomalies réellement présentes. Évite les faux positifs. Ta note et ton verdict sont PROPORTIONNÉS à la lecture réellement effectuée : ne conclus jamais qu'un manuscrit est « presque prêt » si des anomalies subsistent ou si la lecture n'a pas couvert tout le texte.",
+    opts.relecture === 2
+      ? "SPÉCIFICITÉ BAT2 : ta mission dépasse la vérification des corrections du BAT1. Au-delà du suivi des demandes antérieures, effectue une RELECTURE AUTONOME et COMPLÈTE de la version intégrée pour découvrir les erreurs que le BAT1 n'a pas vues et celles introduites pendant l'intégration."
+      : "",
+    "",
     SEVERITY_GUIDE,
     "",
     RELIABILITY_RULES,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }

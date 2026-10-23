@@ -6,6 +6,7 @@ import { storeFile } from "./storage.js";
 import { writeAuditLog } from "./audit.js";
 import { loadConfig, readApiKey, resolveModelId, type WorkType } from "./aiConfig.js";
 import { buildCorrectionMethodText } from "./correctionProfile.js";
+import { segmentText, runAnomalySweep, SEGMENT_CHARS } from "./correctionSweep.js";
 import { parseAnomaliesJson, ANOMALY_EXTRACTION_SYSTEM, anomalyExtractionUser } from "./correctionAnomalies.js";
 
 // Moteur de relecture assistée (Lot IA-1). Orchestration : préparer le manuscrit,
@@ -768,6 +769,15 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     const domaine = [manuscript.genre?.label, manuscript.collection?.label].filter(Boolean).join(" / ") || "(non renseigné)";
 
     const capped = prepared.kind === "text" ? capManuscriptText(prepared.text) : { text: "", truncated: false };
+    // Correction (BAT1/BAT2) sur un manuscrit TEXTE volumineux : on ne se contente
+    // PLUS d'un extrait (début/milieu/fin). On fera une LECTURE INTÉGRALE par
+    // segments (plus bas) ; le relevé consolidé alimentera le rapport. On évite donc
+    // la note « extrait représentatif » et on prépare les segments ordonnés.
+    const willSweep = (params.workType === "correction_1" || params.workType === "correction_2")
+      && prepared.kind === "text" && prepared.text.length > SEGMENT_CHARS;
+    let correctionMethodText = "";
+    let sweepInput = 0;
+    let sweepOutput = 0;
     let userText = fillTemplate(prompt.userTemplate, {
       manuscrit: prepared.kind === "text" ? capped.text : prepared.kind === "images" ? "(le document est joint sous forme d'images ci-dessus — analyse-les visuellement)" : "(le manuscrit est joint en PDF ci-dessous)",
       domaines_collections: await domainesCollectionsText(),
@@ -776,7 +786,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       domaine,
       recommandation_editeur: params.editorRecommendation?.trim() || "(aucune)",
     });
-    if (capped.truncated) {
+    if (capped.truncated && !willSweep) {
       userText += "\n\n(Note : le manuscrit est très volumineux ; l'analyse porte sur un EXTRAIT REPRÉSENTATIF — début, passage central et fin. Signale-le clairement dans le rapport et invite à une relecture complète si nécessaire.)";
     }
 
@@ -829,7 +839,8 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         const bt = await prisma.bookType.findUnique({ where: { code: params.bookTypeCode }, select: { label: true } });
         bookTypeLabel = bt?.label ?? params.bookTypeCode;
       }
-      userText += "\n\n" + (await buildCorrectionMethodText({ bookTypeCode: params.bookTypeCode, bookTypeLabel, support: params.support, relecture }));
+      correctionMethodText = await buildCorrectionMethodText({ bookTypeCode: params.bookTypeCode, bookTypeLabel, support: params.support, relecture });
+      userText += "\n\n" + correctionMethodText;
     }
 
     // Relecture 2 du manuscrit : contrôle APRÈS intégration. On joint le rapport de
@@ -841,6 +852,37 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       userText += prevR1
         ? "\n\n=== CONTRÔLE APRÈS INTÉGRATION (RELECTURE 2) ===\nCi-dessous le RAPPORT DE LA 1re RELECTURE. Pour CHAQUE correction qui y était demandée, indique dans le tableau de suivi R2 son résultat : CORRIGÉE / NON CORRIGÉE / PARTIELLEMENT CORRIGÉE / CORRECTION MODIFIÉE / NOUVELLE ANOMALIE, avec sa localisation. Puis effectue une nouvelle passe de contrôle (nouvelles erreurs introduites, cohérence finale).\n\n--- DÉBUT RAPPORT RELECTURE 1 ---\n" + prevR1 + "\n--- FIN RAPPORT RELECTURE 1 ---"
         : "\n\n=== CONTRÔLE APRÈS INTÉGRATION (RELECTURE 2) ===\nLe rapport de la 1re relecture est introuvable : signale-le, et effectue un contrôle qualité complet de la version intégrée (corrections visibles, nouvelles anomalies, cohérence finale).";
+    }
+
+    // LECTURE INTÉGRALE PAR SEGMENTS (BAT1/BAT2, manuscrit texte volumineux).
+    // On relève TOUTES les anomalies, segment par segment, sur l'ENSEMBLE du
+    // texte — aucun échantillonnage — puis on consolide. Le relevé devient la
+    // matière de la rubrique d'annotations, avec une couverture vérifiée (N/N).
+    if (willSweep && prepared.kind === "text") {
+      const segments = segmentText(prepared.text, SEGMENT_CHARS);
+      const passLabel = params.workType === "correction_2" ? "BAT2 (deuxième relecture, sur la version intégrée)" : "BAT1 (première relecture)";
+      await prisma.aiReadingJob.update({ where: { id: jobId }, data: { progressLabel: `Lecture intégrale par segments (0/${segments.length})…`, progressDone: 0, progressTotal: segments.length, progressAt: new Date() } }).catch(() => {});
+      const sweepClient = new Anthropic({ apiKey });
+      const sweep = await runAnomalySweep({
+        client: sweepClient,
+        model: modelId,
+        segments,
+        passLabel,
+        methodBlock: correctionMethodText || "(grille de correction non configurée — applique une correction éditoriale générale, rigoureuse et complète)",
+        onProgress: async (done, totalSeg) => {
+          await prisma.aiReadingJob.update({ where: { id: jobId }, data: { progressLabel: `Lecture intégrale par segments (${done}/${totalSeg})…`, progressDone: done, progressTotal: totalSeg, progressAt: new Date() } }).catch(() => {});
+        },
+        beforeEach: () => throwIfCancelled(jobId),
+      });
+      sweepInput += sweep.inputTokens;
+      sweepOutput += sweep.outputTokens;
+      userText +=
+        `\n\n=== RELEVÉ D'ANOMALIES — LECTURE INTÉGRALE PAR SEGMENTS (${sweep.coveredSegments}/${sweep.totalSegments} segments, couverture ${sweep.coveredSegments === sweep.totalSegments ? "100 %" : Math.round((100 * sweep.coveredSegments) / sweep.totalSegments) + " %"}) ===\n` +
+        "Le manuscrit a été lu INTÉGRALEMENT, segment par segment (ci-dessous le relevé consolidé de TOUTES les anomalies trouvées sur l'ENSEMBLE du texte). " +
+        "Ta rubrique d'annotations DOIT reprendre ces anomalies (consolidées, sans doublon, classées par ordre d'apparition), en y ajoutant toute anomalie supplémentaire que tu repères. " +
+        "N'écarte pas une anomalie du relevé sans raison. Ton verdict et ta note doivent être proportionnés à cette lecture intégrale : ne conclus jamais que le manuscrit est « presque prêt » si des anomalies subsistent.\n" +
+        sweep.releve;
+      await prisma.aiReadingJob.update({ where: { id: jobId }, data: { progressLabel: "Rédaction du rapport de relecture…", progressDone: null, progressTotal: null, progressAt: new Date() } }).catch(() => {});
     }
 
     let content: Anthropic.MessageParam["content"] =
@@ -894,9 +936,9 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
     // Battement : le rapport est rédigé, on rafraîchit l'horodatage de progrès
     // (empêche un balayage « interrompu » si le rapport a été long).
     await prisma.aiReadingJob.update({ where: { id: jobId }, data: { progressAt: new Date() } }).catch(() => {});
-    // Coût cumulé sur tous les appels (rapport + complétions + éventuelle réécriture).
-    let totalInput = first.usage.input_tokens;
-    let totalOutput = first.usage.output_tokens;
+    // Coût cumulé sur tous les appels (lecture par segments + rapport + complétions + éventuelle réécriture).
+    let totalInput = first.usage.input_tokens + sweepInput;
+    let totalOutput = first.usage.output_tokens + sweepOutput;
 
     // GARANTIE DE COMPLÉTUDE — le rapport doit aller entièrement de la première à
     // la dernière rubrique (ex. A → M), y compris la conclusion (M) rédigée en

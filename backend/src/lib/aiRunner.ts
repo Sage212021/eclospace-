@@ -1,5 +1,5 @@
 import zlib from "node:zlib";
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType, TableLayoutType } from "docx";
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType, TableLayoutType, PageOrientation } from "docx";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "./prisma.js";
 import { storeFile } from "./storage.js";
@@ -481,6 +481,14 @@ function buildTable(rows: string[][]): Table {
   return new Table({ width: tableWidth, columnWidths: widths, layout: TableLayoutType.AUTOFIT, rows: [headRow, ...dataRows] });
 }
 
+// Un tableau est « large » (ex. annotations à 8 colonnes) quand ses colonnes
+// dépassent la largeur utile d'une page portrait → il sera placé en PAYSAGE pour
+// l'impression (il y tient entièrement et se lit sans cases serrées).
+function tableIsWide(rows: string[][]): boolean {
+  const header = rows[0] ?? [];
+  return columnWidths(header).reduce((a, w) => a + w, 0) > PAGE_W;
+}
+
 // Rendu .docx du rapport, aux couleurs Éclosion. Interprète le Markdown produit
 // par le relecteur : titres (#/##/###), gras (**…**), listes à puces (- …) et
 // tableaux (| … |). En-tête et pied maison ; titres de section soulignés d'or.
@@ -500,6 +508,9 @@ export async function renderReportDocx(reportTitle: string, body: string, opts: 
       ]
     : [new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: reportTitle, bold: true, size: 32, color: ECL.noir, font: FONT })] })];
 
+  // Index des tableaux LARGES (à placer en paysage pour l'impression).
+  const wideTableIdx = new Set<number>();
+
   const lines = body.split("\n");
   let i = 0;
   while (i < lines.length) {
@@ -515,7 +526,7 @@ export async function renderReportDocx(reportTitle: string, body: string, opts: 
       // Identification / infos document (clé : valeur) → texte compact ; sinon
       // vrai tableau à largeurs fixes.
       if (isKeyValueTable(rows)) { for (const p of keyValueBlock(rows)) children.push(p); }
-      else children.push(buildTable(rows));
+      else { if (tableIsWide(rows)) wideTableIdx.add(children.length); children.push(buildTable(rows)); }
       children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
       continue;
     }
@@ -549,9 +560,27 @@ export async function renderReportDocx(reportTitle: string, body: string, opts: 
   // Pied de page maison.
   children.push(new Paragraph({ border: { top: { style: BorderStyle.SINGLE, size: 6, color: ECL.line, space: 6 } }, spacing: { before: 260 }, children: [new TextRun({ text: "Ce rapport est un avis argumenté du relecteur d'Éclosion Édition ; il ne constitue pas une décision éditoriale finale.", italics: true, size: 16, color: ECL.grey, font: FONT })] }));
 
+  // Découpage en SECTIONS : la prose reste en PORTRAIT ; chaque tableau LARGE
+  // (annotations BAT1/BAT2) part dans sa propre section en PAYSAGE, où il tient
+  // entièrement et s'imprime sans cases serrées. Les rapports sans tableau large
+  // (évaluation : grille à 2 colonnes) restent intégralement en portrait.
+  const landscape = { page: { size: { orientation: PageOrientation.LANDSCAPE } } };
+  const sections: { properties?: typeof landscape; children: (Paragraph | Table)[] }[] = [];
+  let buf: (Paragraph | Table)[] = [];
+  for (let k = 0; k < children.length; k++) {
+    if (wideTableIdx.has(k)) {
+      if (buf.length) { sections.push({ children: buf }); buf = []; }
+      sections.push({ properties: landscape, children: [children[k]] });
+    } else {
+      buf.push(children[k]);
+    }
+  }
+  if (buf.length) sections.push({ children: buf });
+  if (sections.length === 0) sections.push({ children });
+
   const doc = new Document({
     styles: { default: { document: { run: { font: FONT, size: 21, color: ECL.ink } } } },
-    sections: [{ children }],
+    sections,
   });
   return Packer.toBuffer(doc);
 }

@@ -70,6 +70,20 @@ function isServiceContract(c: { type: string; economicModel?: string | null }): 
   return c.economicModel === "compte_auteur" || ["prestation", "correction", "illustration"].includes(c.type);
 }
 
+// Des droits d'auteur s'appliquent-ils ? Oui pour un type rémunérant l'auteur
+// (édition, coédition, cession, traduction) à compte d'éditeur ou à demi. Pilote
+// l'affichage des champs « droits » (taux, à-valoir, durée de cession, relevés).
+function royaltiesApplyFor(type: string, economicModel?: string | null): boolean {
+  return ["edition", "coedition", "cession", "traduction"].includes(type) && (economicModel === "compte_editeur" || economicModel === "compte_demi");
+}
+// Est-ce la maison qui PAIE la contrepartie (→ retenue fiscale pertinente) ? Oui
+// quand des droits s'appliquent, ou pour une prestation que nous commandons ;
+// NON en « compte d'auteur » (c'est l'auteur qui nous paie).
+function weOwePayeeFor(type: string, economicModel?: string | null): boolean {
+  if (economicModel === "compte_auteur") return false;
+  return royaltiesApplyFor(type, economicModel) || ["prestation", "correction", "illustration"].includes(type);
+}
+
 // Libellés courts du modèle économique (D-054) pour l'affichage sur la fiche.
 const ECONOMIC_MODEL_LABELS: Record<string, string> = {
   compte_editeur: "à compte d'éditeur",
@@ -890,6 +904,7 @@ const CONTRACT_TYPE_OPTIONS: { value: string; label: string }[] = [
 // est persistée et tracée. Interdite une fois le contrat signé/actif (409).
 function EditContractModal({ contract, onClose, onSaved, onError }: { contract: Contract; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
   const [type, setType] = useState(contract.type);
+  const [economicModel, setEconomicModel] = useState<"compte_editeur" | "compte_auteur" | "compte_demi" | "autre">(contract.economicModel ?? "compte_editeur");
   const [rate, setRate] = useState<number>(10);
   const [advance, setAdvance] = useState<number>(0);
   const [durationYears, setDurationYears] = useState<number>(0);
@@ -898,6 +913,7 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
 
   useEffect(() => {
     getContract(contract.id).then((c) => {
+      if (c.economicModel) setEconomicModel(c.economicModel);
       const firstRate = c.royaltyTerms?.tiers?.[0]?.rate;
       if (typeof firstRate === "number") setRate(Math.round(firstRate * 100));
       const adv = c.royaltyTerms?.advanceAmount;
@@ -908,14 +924,19 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contract.id]);
 
+  // Champs de droits d'auteur affichés selon le type + le modèle économique.
+  const royaltiesApply = royaltiesApplyFor(type, economicModel);
+
   async function save() {
     setBusy(true);
     try {
       await updateContractTerms(contract.id, {
         type,
-        rate: rate / 100,
-        advance_amount: advance,
-        duration_months: durationYears > 0 ? durationYears * 12 : null,
+        economic_model: economicModel,
+        // Les termes de droits ne sont transmis que s'ils s'appliquent.
+        ...(royaltiesApply
+          ? { rate: rate / 100, advance_amount: advance, duration_months: durationYears > 0 ? durationYears * 12 : null }
+          : {}),
       });
       onSaved();
     } catch (e) {
@@ -936,10 +957,21 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
           <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <label style={{ fontSize: 12 }}>Type<select value={type} onChange={(e) => setType(e.target.value)} style={inputStyle}>{CONTRACT_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
-              <label style={{ fontSize: 12 }}>Taux de droits (%)<input type="number" min={0} max={100} value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} /></label>
-              <label style={{ fontSize: 12 }}>Avance (FCFA)<input type="number" min={0} value={advance} onChange={(e) => setAdvance(Number(e.target.value))} style={inputStyle} /></label>
-              <label style={{ fontSize: 12 }}>Durée de la cession (années)<input type="number" min={0} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={inputStyle} /></label>
+              <label style={{ fontSize: 12 }}>Modèle économique<select value={economicModel} onChange={(e) => setEconomicModel(e.target.value as typeof economicModel)} style={inputStyle}>
+                <option value="compte_editeur">À compte d'éditeur</option>
+                <option value="compte_auteur">À compte d'auteur</option>
+                <option value="compte_demi">À compte à demi</option>
+                <option value="autre">Autre modèle</option>
+              </select></label>
+              {royaltiesApply && <label style={{ fontSize: 12 }}>Taux de droits (%)<input type="number" min={0} max={100} value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} /></label>}
+              {royaltiesApply && <label style={{ fontSize: 12 }}>Avance (à-valoir, FCFA)<input type="number" min={0} value={advance} onChange={(e) => setAdvance(Number(e.target.value))} style={inputStyle} /></label>}
+              {royaltiesApply && <label style={{ fontSize: 12 }}>Durée de la cession (années)<input type="number" min={0} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={inputStyle} /></label>}
             </div>
+            {!royaltiesApply && (
+              <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>
+                Contrat de prestation / à compte d'auteur : pas de droits d'auteur. Les conditions financières (coût, acompte, livraison) se saisissent à la création du contrat ; ici vous ajustez le type et le modèle économique.
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
               <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Annuler</button>
               <button onClick={save} disabled={busy} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
@@ -1555,11 +1587,11 @@ function NewContractForm({
 
   const selectedPartner = partners.find((p) => p.id === partnerId);
 
-  // Les droits d'auteur s'appliquent-ils ? Oui pour un type « rémunérant l'auteur »
-  // (édition, coédition, cession, traduction) à compte d'éditeur ou à demi. Non pour
-  // un compte d'auteur, ou un contrat de service (correction, illustration, prestation).
-  const AUTHOR_TYPES = ["edition", "coedition", "cession", "traduction"];
-  const royaltiesApply = AUTHOR_TYPES.includes(type) && (economicModel === "compte_editeur" || economicModel === "compte_demi");
+  // Les droits d'auteur s'appliquent-ils ? (type rémunérant l'auteur à compte
+  // d'éditeur ou à demi). Sinon : contrat de prestation / à compte d'auteur.
+  const royaltiesApply = royaltiesApplyFor(type, economicModel);
+  // La maison paie-t-elle la contrepartie (→ retenue fiscale pertinente) ?
+  const weOwePayee = weOwePayeeFor(type, economicModel);
   // La fourchette 8–15 % ne s'impose qu'à une édition à compte d'éditeur (D-054).
   const rangeEnforced = type === "edition" && economicModel === "compte_editeur";
 
@@ -1590,8 +1622,7 @@ function NewContractForm({
               service_deposit: serviceDeposit,
               ...(economicModel === "compte_auteur" && serviceCopies > 0 ? { service_copies: serviceCopies } : {}),
               ...(serviceDelivery.trim() ? { service_delivery: serviceDelivery.trim() } : {}),
-              payment_schedule: paymentSchedule,
-              ...(taxWithholding > 0 ? { tax_withholding_pct: taxWithholding } : {}),
+              ...(weOwePayee && taxWithholding > 0 ? { tax_withholding_pct: taxWithholding } : {}),
             },
       });
       onCreated();
@@ -1630,14 +1661,20 @@ function NewContractForm({
             + Nouveau partenaire
           </button>
         </div>
-        <label style={{ fontSize: 12 }}>
-          Avance (FCFA)
-          <input type="number" value={advance} onChange={(e) => setAdvance(Number(e.target.value))} style={inputStyle} />
-        </label>
-        <label style={{ fontSize: 12 }}>
-          Durée de la cession (années)
-          <input type="number" min={0} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={inputStyle} />
-        </label>
+        {/* « Avance » (à-valoir) et « Durée de la cession » : propres aux contrats
+            à droits d'auteur. Masqués pour une prestation / un compte d'auteur. */}
+        {royaltiesApply && (
+          <>
+            <label style={{ fontSize: 12 }}>
+              Avance (à-valoir, FCFA)
+              <input type="number" value={advance} onChange={(e) => setAdvance(Number(e.target.value))} style={inputStyle} />
+            </label>
+            <label style={{ fontSize: 12 }}>
+              Durée de la cession (années)
+              <input type="number" min={0} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={inputStyle} />
+            </label>
+          </>
+        )}
       </div>
 
       {/* Modèle économique (D-054) — distinct du type ; détermine les champs
@@ -1680,9 +1717,14 @@ function NewContractForm({
               </select>
             </label>
           )}
-          <label style={{ fontSize: 12 }}>Retenue fiscale (%)
-            <input type="number" min={0} max={100} step={0.5} value={taxWithholding} onChange={(e) => setTaxWithholding(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
-          </label>
+          {/* Retenue fiscale : pertinente seulement quand la MAISON paie la
+              contrepartie (droits d'auteur, ou prestataire que nous commandons).
+              Jamais en compte d'auteur (c'est l'auteur qui paie la maison). */}
+          {weOwePayee && (
+            <label style={{ fontSize: 12 }}>Retenue fiscale (%)
+              <input type="number" min={0} max={100} step={0.5} value={taxWithholding} onChange={(e) => setTaxWithholding(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+            </label>
+          )}
           {royaltiesApply && (
             <label style={{ fontSize: 12 }}>Périodicité des relevés
               <select value={statementPeriodicity} onChange={(e) => setStatementPeriodicity(e.target.value as typeof statementPeriodicity)} style={inputStyle}>
@@ -1693,15 +1735,18 @@ function NewContractForm({
               </select>
             </label>
           )}
-          <label style={{ fontSize: 12 }}>Échéancier de paiement
-            <select value={paymentSchedule} onChange={(e) => setPaymentSchedule(e.target.value)} style={inputStyle}>
-              <option value="a_la_signature">À la signature</option>
-              <option value="mensuel">Mensuel</option>
-              <option value="trimestriel">Trimestriel</option>
-              <option value="semestriel">Semestriel</option>
-              <option value="annuel">Annuel</option>
-            </select>
-          </label>
+          {/* Échéancier des droits d'auteur : propre aux contrats à droits. */}
+          {royaltiesApply && (
+            <label style={{ fontSize: 12 }}>Échéancier de paiement
+              <select value={paymentSchedule} onChange={(e) => setPaymentSchedule(e.target.value)} style={inputStyle}>
+                <option value="a_la_signature">À la signature</option>
+                <option value="mensuel">Mensuel</option>
+                <option value="trimestriel">Trimestriel</option>
+                <option value="semestriel">Semestriel</option>
+                <option value="annuel">Annuel</option>
+              </select>
+            </label>
+          )}
         </div>
 
         {royaltiesApply ? (

@@ -523,6 +523,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
       const parsed = z
         .object({
           type: z.nativeEnum(ContractType).optional(),
+          economic_model: z.nativeEnum(EconomicModel).nullish(),
           duration_months: z.number().int().positive().max(1200).nullish(),
           rate: z.number().min(0).max(1).optional(),
           advance_amount: z.number().min(0).optional(),
@@ -551,6 +552,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
           where: { id },
           data: {
             type: b.type ?? contract.type,
+            economicModel: b.economic_model === undefined ? contract.economicModel : b.economic_model,
             durationMonths: b.duration_months === undefined ? contract.durationMonths : b.duration_months,
             updatedBy: request.user!.id,
           },

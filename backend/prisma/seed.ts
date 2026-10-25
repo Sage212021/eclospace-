@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-formulaire-coherent-modele",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : le formulaire s'adapte au type, et le modèle est corrigeable",
+      body: "Le formulaire de contrat n'affiche plus que les champs qui ont du sens : « Avance (à-valoir) », « Durée de la cession », « Périodicité des relevés » et « Échéancier de paiement » n'apparaissent QUE pour un contrat à droits d'auteur. Pour une prestation ou un contrat à compte d'auteur, on saisit uniquement coût, acompte, exemplaires et livraison. La « Retenue fiscale » n'apparaît que lorsque c'est la maison qui paie la contrepartie (jamais en compte d'auteur, où c'est l'auteur qui paie). Et vous pouvez désormais CORRIGER le modèle économique d'un contrat non signé via « Modifier / enregistrer » — utile si un contrat affichait « à compte d'éditeur » alors qu'il devait être « à compte d'auteur ».",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-contrats-modeles-editables-sans-code",
       version: "2026.10",
       title: "Nouveauté — Contrats : modifier les modèles vous-même, sans développeur",

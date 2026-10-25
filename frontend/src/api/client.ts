@@ -1841,7 +1841,7 @@ export function signContract(
 }
 
 // Modifier les termes d'un contrat non signé (type, taux, avance, durée).
-export function updateContractTerms(id: string, input: { type?: string; duration_months?: number | null; rate?: number; advance_amount?: number }) {
+export function updateContractTerms(id: string, input: { type?: string; economic_model?: string | null; duration_months?: number | null; rate?: number; advance_amount?: number }) {
   return request<ContractDetail>(`/api/v1/contracts/${id}/terms`, { method: "PATCH", body: JSON.stringify(input) });
 }
 

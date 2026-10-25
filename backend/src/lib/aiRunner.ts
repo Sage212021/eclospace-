@@ -438,17 +438,31 @@ function severityBadge(value: string): { fill: string; color: string } | null {
   return null;
 }
 
+// Un tableau est « large » dès qu'il a 5 colonnes ou plus (annotations de
+// correction, suivi des corrections) : il passe en PAYSAGE et surtout en
+// AJUSTEMENT AUTOMATIQUE AU CONTENU (chaque colonne prend la largeur de son texte
+// le plus long — rien n'est coupé, « Sévérité » a sa place). Un tableau étroit
+// (≤ 4 colonnes, ex. grille de notation) garde des largeurs proportionnées et
+// occupe la page.
+function tableIsWide(rows: string[][]): boolean {
+  return (rows[0]?.length ?? 0) >= 5;
+}
+
 function buildTable(rows: string[][]): Table {
   const b = { style: BorderStyle.SINGLE, size: 2, color: ECL.line };
   const borders = { top: b, bottom: b, left: b, right: b };
   const header = rows[0] ?? [];
-  const widths = columnWidths(header);
+  const wide = tableIsWide(rows);
+  // Tableau large : AUCUNE largeur fixe (Word ajuste au contenu). Étroit :
+  // largeurs proportionnées pour occuper la page.
+  const widths = wide ? [] : columnWidths(header);
+  const cellWidth = (ci: number) => (wide ? undefined : { size: widths[ci] ?? 1500, type: WidthType.DXA });
   const numericCol = (ci: number) => /coef|^note|^\/1|^\/2/.test((header[ci] || "").toLowerCase().trim());
   const headRow = new TableRow({
     tableHeader: true,
     cantSplit: true,
     children: header.map((h, ci) => new TableCell({
-      width: { size: widths[ci], type: WidthType.DXA },
+      width: cellWidth(ci),
       shading: { fill: ECL.noir, color: "auto", type: "clear" as never },
       margins: CELL_MARGINS,
       borders,
@@ -461,7 +475,7 @@ function buildTable(rows: string[][]): Table {
       const gauge = scoreRuns(c); // jauge visuelle si la cellule est un score
       const sev = gauge ? null : severityBadge(c); // pastille de sévérité (C1/C2/C3/S)
       return new TableCell({
-        width: { size: widths[ci] ?? 1500, type: WidthType.DXA },
+        width: cellWidth(ci),
         shading: { fill: sev ? sev.fill : i % 2 ? ECL.ivoire : ECL.white, color: "auto", type: "clear" as never },
         margins: CELL_MARGINS,
         borders,
@@ -472,21 +486,16 @@ function buildTable(rows: string[][]): Table {
       });
     }),
   }));
-  // Un tableau étroit (≤ largeur de page, ex. grille de notation) occupe 100 % de
-  // la page. Un tableau large (annotations à 8 colonnes) garde ses colonnes
-  // généreuses (largeur DXA = somme), quitte à s'étendre au-delà de la page —
-  // c'est ainsi que le modèle BAT1 reste lisible, sans cases serrées.
+  if (wide) {
+    // Ajustement automatique au contenu : ni largeur de table ni grille imposée →
+    // chaque colonne s'adapte à la longueur réelle de son texte (comme le modèle
+    // BAT1). En paysage, la table dispose de toute la largeur pour s'étaler.
+    return new Table({ layout: TableLayoutType.AUTOFIT, rows: [headRow, ...dataRows] });
+  }
+  // Tableau étroit (grille de notation…) : largeurs proportionnées, pleine page.
   const total = widths.reduce((a, w) => a + w, 0);
   const tableWidth = total > PAGE_W ? { size: total, type: WidthType.DXA } : { size: 100, type: WidthType.PERCENTAGE };
   return new Table({ width: tableWidth, columnWidths: widths, layout: TableLayoutType.AUTOFIT, rows: [headRow, ...dataRows] });
-}
-
-// Un tableau est « large » (ex. annotations à 8 colonnes) quand ses colonnes
-// dépassent la largeur utile d'une page portrait → il sera placé en PAYSAGE pour
-// l'impression (il y tient entièrement et se lit sans cases serrées).
-function tableIsWide(rows: string[][]): boolean {
-  const header = rows[0] ?? [];
-  return columnWidths(header).reduce((a, w) => a + w, 0) > PAGE_W;
 }
 
 // Rendu .docx du rapport, aux couleurs Éclosion. Interprète le Markdown produit

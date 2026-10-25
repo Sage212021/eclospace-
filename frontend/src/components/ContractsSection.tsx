@@ -61,6 +61,14 @@ const STATUS_LABELS: Record<ContractStatus, string> = {
   terminated: "Résilié",
 };
 
+// Libellés courts du modèle économique (D-054) pour l'affichage sur la fiche.
+const ECONOMIC_MODEL_LABELS: Record<string, string> = {
+  compte_editeur: "à compte d'éditeur",
+  compte_auteur: "à compte d'auteur",
+  compte_demi: "à compte à demi",
+  autre: "autre modèle",
+};
+
 const PARTNER_CATEGORY_LABELS: Record<PartnerCategory, string> = {
   auteur: "Auteur",
   correcteur: "Correcteur",
@@ -170,7 +178,8 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
         <div key={contract.id} style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 10, fontSize: 13 }}>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>{contract.contractNumber}</div>
           <div>
-            {contract.type} — {contract.partner.firstName} {contract.partner.lastName}
+            {contract.type}
+            {contract.economicModel ? ` (${ECONOMIC_MODEL_LABELS[contract.economicModel] ?? contract.economicModel})` : ""} — {contract.partner.firstName} {contract.partner.lastName}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
             <span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion)", borderRadius: 999, padding: "2px 10px", fontSize: 11 }}>
@@ -1293,7 +1302,16 @@ function NewContractForm({
   onError: (m: string) => void;
 }) {
   const [type, setType] = useState("edition");
+  // Modèle économique (D-054) — axe distinct du type. Pilote l'affichage :
+  // droits d'auteur quand ils s'appliquent, sinon champs de prestation.
+  const [economicModel, setEconomicModel] = useState<"compte_editeur" | "compte_auteur" | "compte_demi" | "autre">("compte_editeur");
   const [advance, setAdvance] = useState(0);
+  // Champs « prestation / à compte d'auteur » (contrats sans droits d'auteur) —
+  // stockés dans les termes financiers (aucune table dédiée).
+  const [serviceCost, setServiceCost] = useState(0);
+  const [serviceDeposit, setServiceDeposit] = useState(0);
+  const [serviceCopies, setServiceCopies] = useState(0);
+  const [serviceDelivery, setServiceDelivery] = useState("");
   // Durée de la cession (terme du contrat) — variable d'un auteur à l'autre,
   // reprise automatiquement sur le contrat imprimé. 0 = non précisée.
   const [durationYears, setDurationYears] = useState(5);
@@ -1319,22 +1337,44 @@ function NewContractForm({
 
   const selectedPartner = partners.find((p) => p.id === partnerId);
 
+  // Les droits d'auteur s'appliquent-ils ? Oui pour un type « rémunérant l'auteur »
+  // (édition, coédition, cession, traduction) à compte d'éditeur ou à demi. Non pour
+  // un compte d'auteur, ou un contrat de service (correction, illustration, prestation).
+  const AUTHOR_TYPES = ["edition", "coedition", "cession", "traduction"];
+  const royaltiesApply = AUTHOR_TYPES.includes(type) && (economicModel === "compte_editeur" || economicModel === "compte_demi");
+  // La fourchette 8–15 % ne s'impose qu'à une édition à compte d'éditeur (D-054).
+  const rangeEnforced = type === "edition" && economicModel === "compte_editeur";
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     try {
       await createContract({
         type,
+        economic_model: economicModel,
         manuscript_id: manuscriptId,
         partner_id: partnerId,
         ...(durationYears > 0 ? { duration_months: durationYears * 12 } : {}),
-        financial_terms: {
-          base,
-          tiers: tiers.map((t) => ({ up_to: t.up_to, rate: t.rate / 100 })),
-          advance_amount: advance,
-          payment_schedule: paymentSchedule,
-          statement_periodicity: statementPeriodicity,
-          ...(taxWithholding > 0 ? { tax_withholding_pct: taxWithholding } : {}),
-        },
+        financial_terms: royaltiesApply
+          ? {
+              // Contrat avec droits d'auteur : base + paliers (moteur de droits).
+              base,
+              tiers: tiers.map((t) => ({ up_to: t.up_to, rate: t.rate / 100 })),
+              advance_amount: advance,
+              payment_schedule: paymentSchedule,
+              statement_periodicity: statementPeriodicity,
+              ...(taxWithholding > 0 ? { tax_withholding_pct: taxWithholding } : {}),
+            }
+          : {
+              // Contrat de prestation / à compte d'auteur : AUCUN palier de droits
+              // (on n'envoie ni base ni tiers → pas de RoyaltyTerms créés). Les
+              // conditions financières de la prestation vivent dans les termes.
+              service_cost: serviceCost,
+              service_deposit: serviceDeposit,
+              ...(economicModel === "compte_auteur" && serviceCopies > 0 ? { service_copies: serviceCopies } : {}),
+              ...(serviceDelivery.trim() ? { service_delivery: serviceDelivery.trim() } : {}),
+              payment_schedule: paymentSchedule,
+              ...(taxWithholding > 0 ? { tax_withholding_pct: taxWithholding } : {}),
+            },
       });
       onCreated();
     } catch (err) {
@@ -1382,6 +1422,23 @@ function NewContractForm({
         </label>
       </div>
 
+      {/* Modèle économique (D-054) — distinct du type ; détermine les champs
+          financiers affichés (droits d'auteur vs prestation). */}
+      <label style={{ fontSize: 12, display: "block", marginTop: 10 }}>
+        Modèle économique
+        <select value={economicModel} onChange={(e) => setEconomicModel(e.target.value as typeof economicModel)} style={inputStyle}>
+          <option value="compte_editeur">À compte d'éditeur (l'éditeur finance, l'auteur perçoit des droits)</option>
+          <option value="compte_auteur">À compte d'auteur (l'auteur finance la fabrication)</option>
+          <option value="compte_demi">À compte à demi (coûts et recettes partagés)</option>
+          <option value="autre">Autre modèle (précisé dans les termes)</option>
+        </select>
+      </label>
+      <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>
+        {royaltiesApply
+          ? "Des droits d'auteur s'appliquent : renseignez la base et les paliers ci-dessous."
+          : "Pas de droits d'auteur pour ce modèle : renseignez les conditions de la prestation ci-dessous."}
+      </div>
+
       {selectedPartner && (
         <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
           Coordonnées :{" "}
@@ -1397,23 +1454,27 @@ function NewContractForm({
       <div style={{ marginTop: 12, border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
         <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8, color: "var(--eclosion-dark, #9a7a12)" }}>Termes financiers (propres à cet auteur / cet ouvrage)</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <label style={{ fontSize: 12 }}>Base de calcul
-            <select value={base} onChange={(e) => setBase(e.target.value as typeof base)} style={inputStyle}>
-              <option value="prix_public_ht">Prix public HT</option>
-              <option value="prix_net_editeur">Prix net éditeur</option>
-            </select>
-          </label>
+          {royaltiesApply && (
+            <label style={{ fontSize: 12 }}>Base de calcul
+              <select value={base} onChange={(e) => setBase(e.target.value as typeof base)} style={inputStyle}>
+                <option value="prix_public_ht">Prix public HT</option>
+                <option value="prix_net_editeur">Prix net éditeur</option>
+              </select>
+            </label>
+          )}
           <label style={{ fontSize: 12 }}>Retenue fiscale (%)
             <input type="number" min={0} max={100} step={0.5} value={taxWithholding} onChange={(e) => setTaxWithholding(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
           </label>
-          <label style={{ fontSize: 12 }}>Périodicité des relevés
-            <select value={statementPeriodicity} onChange={(e) => setStatementPeriodicity(e.target.value as typeof statementPeriodicity)} style={inputStyle}>
-              <option value="mensuelle">Mensuelle</option>
-              <option value="trimestrielle">Trimestrielle</option>
-              <option value="semestrielle">Semestrielle</option>
-              <option value="annuelle">Annuelle</option>
-            </select>
-          </label>
+          {royaltiesApply && (
+            <label style={{ fontSize: 12 }}>Périodicité des relevés
+              <select value={statementPeriodicity} onChange={(e) => setStatementPeriodicity(e.target.value as typeof statementPeriodicity)} style={inputStyle}>
+                <option value="mensuelle">Mensuelle</option>
+                <option value="trimestrielle">Trimestrielle</option>
+                <option value="semestrielle">Semestrielle</option>
+                <option value="annuelle">Annuelle</option>
+              </select>
+            </label>
+          )}
           <label style={{ fontSize: 12 }}>Échéancier de paiement
             <select value={paymentSchedule} onChange={(e) => setPaymentSchedule(e.target.value)} style={inputStyle}>
               <option value="a_la_signature">À la signature</option>
@@ -1425,26 +1486,54 @@ function NewContractForm({
           </label>
         </div>
 
-        <div style={{ fontSize: 12, marginTop: 12, fontWeight: 600 }}>Paliers de droits d'auteur (taux entre 8 % et 15 %)</div>
-        <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>Un seul palier = taux unique. Plusieurs paliers = taux progressif selon le nombre d'exemplaires vendus.</div>
-        {tiers.map((tri, i) => {
-          const last = i === tiers.length - 1;
-          return (
-            <div key={i} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span style={{ fontSize: 12, color: "var(--muted)" }}>Jusqu'à</span>
-              {last ? (
-                <span style={{ fontSize: 12.5, fontStyle: "italic", minWidth: 120 }}>au-delà (dernier palier)</span>
-              ) : (
-                <input type="number" min={1} value={tri.up_to ?? ""} onChange={(e) => setTier(i, { up_to: e.target.value ? Number(e.target.value) : null })} placeholder="ex. 3000" style={{ ...inputStyle, width: 120, display: "inline-block", marginTop: 0 }} />
-              )}
-              <span style={{ fontSize: 12, color: "var(--muted)" }}>exemplaires →</span>
-              <input type="number" min={8} max={15} step={0.5} value={tri.rate} onChange={(e) => setTier(i, { rate: Number(e.target.value) || 0 })} style={{ ...inputStyle, width: 90, display: "inline-block", marginTop: 0 }} />
-              <span style={{ fontSize: 12, color: "var(--muted)" }}>%</span>
-              {tiers.length > 1 && <button type="button" onClick={() => removeTier(i)} style={{ ...secondaryButtonStyle, padding: "3px 8px", color: "var(--alert, #C4661F)" }}>Retirer</button>}
+        {royaltiesApply ? (
+          <>
+            <div style={{ fontSize: 12, marginTop: 12, fontWeight: 600 }}>
+              Paliers de droits d'auteur {rangeEnforced ? "(taux entre 8 % et 15 %)" : "(taux libre)"}
             </div>
-          );
-        })}
-        <button type="button" onClick={addTier} style={{ ...secondaryButtonStyle, marginTop: 4 }}>+ Ajouter un palier</button>
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>Un seul palier = taux unique. Plusieurs paliers = taux progressif selon le nombre d'exemplaires vendus.</div>
+            {tiers.map((tri, i) => {
+              const last = i === tiers.length - 1;
+              return (
+                <div key={i} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>Jusqu'à</span>
+                  {last ? (
+                    <span style={{ fontSize: 12.5, fontStyle: "italic", minWidth: 120 }}>au-delà (dernier palier)</span>
+                  ) : (
+                    <input type="number" min={1} value={tri.up_to ?? ""} onChange={(e) => setTier(i, { up_to: e.target.value ? Number(e.target.value) : null })} placeholder="ex. 3000" style={{ ...inputStyle, width: 120, display: "inline-block", marginTop: 0 }} />
+                  )}
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>exemplaires →</span>
+                  <input type="number" min={rangeEnforced ? 8 : 0} max={rangeEnforced ? 15 : 100} step={0.5} value={tri.rate} onChange={(e) => setTier(i, { rate: Number(e.target.value) || 0 })} style={{ ...inputStyle, width: 90, display: "inline-block", marginTop: 0 }} />
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>%</span>
+                  {tiers.length > 1 && <button type="button" onClick={() => removeTier(i)} style={{ ...secondaryButtonStyle, padding: "3px 8px", color: "var(--alert, #C4661F)" }}>Retirer</button>}
+                </div>
+              );
+            })}
+            <button type="button" onClick={addTier} style={{ ...secondaryButtonStyle, marginTop: 4 }}>+ Ajouter un palier</button>
+          </>
+        ) : (
+          <>
+            {/* Contrat de prestation / à compte d'auteur : conditions financières
+                de la prestation (aucun droit d'auteur). */}
+            <div style={{ fontSize: 12, marginTop: 12, fontWeight: 600 }}>Conditions de la prestation</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 6 }}>
+              <label style={{ fontSize: 12 }}>Coût total (FCFA)
+                <input type="number" min={0} value={serviceCost} onChange={(e) => setServiceCost(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>Acompte (FCFA)
+                <input type="number" min={0} value={serviceDeposit} onChange={(e) => setServiceDeposit(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              {economicModel === "compte_auteur" && (
+                <label style={{ fontSize: 12 }}>Nombre d'exemplaires
+                  <input type="number" min={0} value={serviceCopies} onChange={(e) => setServiceCopies(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+                </label>
+              )}
+              <label style={{ fontSize: 12, gridColumn: economicModel === "compte_auteur" ? "auto" : "1 / span 2" }}>Conditions de livraison
+                <input type="text" value={serviceDelivery} onChange={(e) => setServiceDelivery(e.target.value)} placeholder="ex. livraison sous 30 jours après BAT" style={inputStyle} />
+              </label>
+            </div>
+          </>
+        )}
       </div>
       <button type="submit" style={{ ...secondaryButtonStyle, marginTop: 10, background: "var(--eclosion)", color: "#fff", border: "none" }}>
         Créer le contrat

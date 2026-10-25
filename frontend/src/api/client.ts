@@ -1750,6 +1750,8 @@ export interface Contract {
   id: string;
   contractNumber: string;
   type: string;
+  // Modèle économique (D-054) ; null pour les contrats antérieurs.
+  economicModel?: "compte_editeur" | "compte_auteur" | "compte_demi" | "autre" | null;
   status: ContractStatus;
   signedAt: string | null;
   partner: { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; whatsapp?: string | null } & AuthorIdentity;
@@ -1839,6 +1841,7 @@ export function setContractArticleOverride(id: string, article: number, text: st
 
 export function createContract(input: {
   type: string;
+  economic_model?: string;
   manuscript_id?: string;
   partner_id: string;
   parent_contract_id?: string;

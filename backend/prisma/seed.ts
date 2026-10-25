@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-modele-economique-formulaire-dynamique",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : modèle économique et formulaire qui s'adapte",
+      body: "À la création d'un contrat, vous choisissez désormais le « modèle économique » : à compte d'éditeur, à compte d'auteur, à compte à demi, ou autre. Le formulaire s'adapte tout seul : les paliers de droits d'auteur n'apparaissent QUE lorsqu'ils s'appliquent (par ex. une édition à compte d'éditeur). Pour une prestation (correction, illustration, service) ou un contrat à compte d'auteur, vous renseignez à la place les conditions de la prestation (coût total, acompte, nombre d'exemplaires, livraison) — sans paliers de droits inutiles. Enfin, la fourchette 8–15 % ne s'impose plus qu'à l'édition à compte d'éditeur ; pour les autres contrats, le taux est libre.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-parcours-production-contractualisation",
       version: "2026.10",
       title: "Nouveauté — La « Contractualisation » apparaît dans le Parcours de production",

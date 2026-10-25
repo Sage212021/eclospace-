@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-parcours-production-contractualisation",
+      version: "2026.10",
+      title: "Nouveauté — La « Contractualisation » apparaît dans le Parcours de production",
+      body: "Sur la fiche d'un ouvrage, le « Parcours de production » affiche désormais l'étape « Contractualisation », juste après la « Validation du BAT Final » et avant l'« Impression » (c'est l'ordre réel du circuit). Elle se marque « En cours » (→) pendant que le contrat est en train d'être établi, « Terminée » (✓) une fois la contractualisation validée, et reste « Verrouillée » (🔒) tant que le BAT n'est pas validé. Vous suivez ainsi d'un coup d'œil où en est le contrat dans la fabrication du livre.",
+      permissionModules: ["manuscripts", "contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-annotations-severite-pastilles-couleur",
       version: "2026.10",
       title: "Nouveauté — Sévérités C1/C2/C3/S en pastilles colorées dans les annotations",

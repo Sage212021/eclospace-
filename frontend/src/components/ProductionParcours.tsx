@@ -14,6 +14,10 @@ const SEGMENT: { code: string; short: string }[] = [
   { code: "INFOGRAPHIE", short: "Infographie & couverture" },
   { code: "ATTRIBUTION_REFERENCES", short: "ISBN / références" },
   { code: "VALIDATION_BAT", short: "BAT (vérification finale)" },
+  // Décision D-010 : la Contractualisation s'enchaîne juste après la validation
+  // du BAT Final et avant l'impression. Elle apparaît donc ici dans le parcours
+  // (→ « En cours » pendant l'établissement du contrat, ✓ une fois validée).
+  { code: "CONTRACTUALISATION", short: "Contractualisation" },
   { code: "IMPRESSION", short: "Impression" },
   { code: "CONTROLE_QUALITE_IMPRESSION", short: "Contrôle qualité" },
 ];

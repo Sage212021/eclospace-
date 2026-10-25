@@ -1132,9 +1132,13 @@ export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<P
       ? ov.split(/\n{2,}/).map((p2) => par(escapeHtml(p2).replace(/\n/g, "<br>"))).join("") +
         `<p style="margin:2px 0 0;font-size:9.5px;color:#9a7a12;font-style:italic">Article ajusté pour ce contrat.</p>`
       : corps;
+    // `data-article` : repère l'article pour l'aperçu cliquable (cliquer un
+    // article dans l'aperçu l'ouvre à l'édition). Neutre à l'impression/PDF.
     return `
+    <div class="art" data-article="${n}">
     <h3 style="font-family:Georgia,serif;font-size:14px;margin:20px 0 6px;color:#0b0b0c;border-bottom:1px solid #e7e2d4;padding-bottom:3px">ARTICLE ${n} — ${titre}</h3>
-    ${body}`;
+    ${body}
+    </div>`;
   };
   const li = (items: string[]) => `<ul style="margin:6px 0 6px 4px;padding-left:16px;font-size:12px;line-height:1.5">${items.map((i) => `<li style="margin:3px 0">${i}</li>`).join("")}</ul>`;
 

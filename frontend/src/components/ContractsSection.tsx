@@ -971,6 +971,8 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
   // Surcharge d'article.
   const [artN, setArtN] = useState(1);
   const [artText, setArtText] = useState("");
+  // Zone de texte de l'article, focalisée quand on clique un article dans l'aperçu.
+  const artTextRef = useRef<HTMLTextAreaElement>(null);
   // Clauses additionnelles (édition locale avant enregistrement).
   const [clauses, setClauses] = useState<{ title: string; body: string }[]>([]);
   // Identité éditeur + branding (cachet/signature DG) pour un APERÇU fidèle au
@@ -1035,6 +1037,18 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
   // Aperçu HTML (corps du contrat) régénéré à chaque frappe.
   const previewHtml = workingDetail ? buildAuthorContractHtml(workingDetail, pub, sign) : "";
 
+  // Aperçu cliquable : cliquer un article dans l'aperçu l'ouvre à l'édition
+  // (sélecteur positionné + zone de texte focalisée). Seuls les articles
+  // standard 1–15 sont éditables ici (les clauses additionnelles se gèrent à part).
+  const onPreviewClick = (e: React.MouseEvent) => {
+    const el = (e.target as HTMLElement).closest("[data-article]");
+    if (!el) return;
+    const n = Number(el.getAttribute("data-article"));
+    if (!Number.isFinite(n) || n < 1 || n > 15) return;
+    setArtN(n);
+    setTimeout(() => artTextRef.current?.focus(), 0);
+  };
+
   // Imprimer / Télécharger le PDF à partir de la copie de travail (WYSIWYG).
   const printWorking = () => { if (workingDetail) printAuthorContract(workingDetail, {}, pub, sign); };
   const pdfWorking = () => { if (workingDetail) downloadAuthorContractPdf(workingDetail, pub, brand).catch((e) => onError(e instanceof Error ? e.message : "PDF impossible.")); };
@@ -1059,7 +1073,7 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
             </select>
           </label>
           <label style={{ fontSize: 12, display: "block" }}>Texte de remplacement de l'article {artN} ({label})
-            <textarea value={artText} onChange={(e) => setArtText(e.target.value)} onPaste={(e) => pasteTidied(e, artText, setArtText)} rows={6} placeholder="Laissez vide pour conserver le texte standard du modèle." style={{ ...inputStyle, resize: "vertical" }} />
+            <textarea ref={artTextRef} value={artText} onChange={(e) => setArtText(e.target.value)} onPaste={(e) => pasteTidied(e, artText, setArtText)} rows={6} placeholder="Laissez vide pour conserver le texte standard du modèle." style={{ ...inputStyle, resize: "vertical" }} />
           </label>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
             {overrides[String(artN)] && <button onClick={() => saveOverride(true)} disabled={busy} style={secondaryButtonStyle}>Rétablir le texte standard</button>}
@@ -1092,8 +1106,8 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
         {/* Colonne d'aperçu — rendu live du contrat (reflète la saisie en cours).
             L'en-tête officiel et le filigrane s'ajoutent à l'impression/PDF. */}
         <div style={{ flex: "1 1 360px", minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Aperçu du contrat</div>
-          <div className="ecl-contract-preview" style={{ border: "1px solid var(--line)", borderRadius: 8, background: "#fff", padding: 16, maxHeight: "62vh", overflowY: "auto", color: "#0b0b0c" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Aperçu du contrat <span style={{ fontWeight: 400, color: "var(--muted)" }}>— cliquez un article pour le modifier</span></div>
+          <div className="ecl-contract-preview" onClick={onPreviewClick} style={{ border: "1px solid var(--line)", borderRadius: 8, background: "#fff", padding: 16, maxHeight: "62vh", overflowY: "auto", color: "#0b0b0c" }}>
             <style>{`
               .ecl-contract-preview .doc__title { font-family: Georgia, serif; font-size: 19px; margin: 6px 0 2px; color:#0b0b0c; }
               .ecl-contract-preview .meta { display:flex; gap:20px; flex-wrap:wrap; margin:4px 0 12px; font-size:12px; color:#444; }
@@ -1101,11 +1115,14 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
               .ecl-contract-preview .party__label { font-size:10.5px; text-transform:uppercase; letter-spacing:.6px; color:#6b7280; margin-bottom:3px; }
               .ecl-contract-preview .num { font-family: ui-monospace, "IBM Plex Mono", monospace; }
               .ecl-contract-preview h3 { font-family: Georgia, serif; }
+              .ecl-contract-preview .art { cursor: pointer; border-radius: 6px; padding: 2px 8px; margin: 0 -8px; transition: background .12s; }
+              .ecl-contract-preview .art:hover { background: #faf8f2; }
+              .ecl-contract-preview .art[data-article="${artN}"] { background: var(--eclosion-soft, #f6efd8); box-shadow: inset 0 0 0 1px var(--eclosion, #D9B21A); }
             `}</style>
             {/* eslint-disable-next-line react/no-danger */}
             <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
           </div>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Aperçu du corps du contrat. L'en-tête Éclosion, le filigrane et le pied de page s'ajoutent automatiquement à l'impression et au PDF.</div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Cliquez un article dans l'aperçu pour l'ouvrir à l'édition à gauche. L'en-tête Éclosion, le filigrane et le pied de page s'ajoutent automatiquement à l'impression et au PDF.</div>
         </div>
         </div>{/* fin grille édition / aperçu */}
 

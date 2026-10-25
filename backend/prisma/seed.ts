@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-apercu-cliquable",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : cliquez un article dans l'aperçu pour le modifier",
+      body: "Dans la fenêtre « Aperçu & modifier le contrat », l'aperçu est maintenant cliquable : cliquez directement sur un article dans l'aperçu et il s'ouvre aussitôt à l'édition à gauche (la zone de texte se place sur cet article). L'article en cours de modification est surligné en or dans l'aperçu. Plus besoin de chercher le numéro de l'article dans la liste déroulante.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-contrats-apercu-et-modification-avant-generation",
       version: "2026.10",
       title: "Nouveauté — Contrats : aperçu complet et modifiable avant de générer",

@@ -77,4 +77,18 @@ describe("modèle économique & applicabilité des droits (D-054)", () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe("royalty_rate_invalid");
   });
+
+  it("le modèle économique est corrigeable sur un contrat existant (PATCH /terms)", async () => {
+    // Contrat créé SANS modèle (null) → corrigé ensuite en « compte d'auteur ».
+    const res = await create({ type: "edition", financial_terms: {} });
+    expect(res.statusCode).toBe(201);
+    const id = res.json().id;
+    createdIds.push(id);
+    expect(res.json().economicModel ?? null).toBeNull();
+
+    const patch = await app.inject({ method: "PATCH", url: `/api/v1/contracts/${id}/terms`, headers: { cookie }, payload: { economic_model: "compte_auteur" } });
+    expect(patch.statusCode).toBe(200);
+    const after = await prisma.contract.findUnique({ where: { id } });
+    expect(after!.economicModel).toBe("compte_auteur");
+  });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createContract,
   createPartner,
@@ -35,7 +35,7 @@ import {
   type SignatureParty,
   type ChatDirectoryEntry,
 } from "../api/client";
-import { printContract, printAuthorContract, AUTHOR_CONTRACT_ARTICLES } from "../lib/print";
+import { printContract, printAuthorContract, buildAuthorContractHtml, AUTHOR_CONTRACT_ARTICLES } from "../lib/print";
 import { pasteTidied } from "../lib/tidyProse";
 import { getBranding } from "../api/client";
 import { buildAuthorContractPdf, downloadAuthorContractPdf } from "../lib/contractPdf";
@@ -212,7 +212,7 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
                 { label: "Transférer (messagerie / WhatsApp)", onSelect: () => setTransferContract(contract) },
                 ...(canCreate && !["active", "terminated", "expired"].includes(contract.status) ? [{ label: "Modifier / enregistrer", onSelect: () => setEditContract(contract) }] : []),
                 ...(canCreate ? [{ label: "Ajouter un avenant", onSelect: () => setAmendContract(contract) }] : []),
-                ...(canCreate && !["active", "terminated", "expired"].includes(contract.status) ? [{ label: "Ajouter un article", onSelect: () => setArticleContract(contract) }] : []),
+                ...(canCreate && !["active", "terminated", "expired"].includes(contract.status) ? [{ label: "👁 Aperçu & modifier le contrat", onSelect: () => setArticleContract(contract) }] : []),
               ]}
             />
             {canValidate && contract.status === "awaiting_signature" && (
@@ -973,6 +973,18 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
   const [artText, setArtText] = useState("");
   // Clauses additionnelles (édition locale avant enregistrement).
   const [clauses, setClauses] = useState<{ title: string; body: string }[]>([]);
+  // Identité éditeur + branding (cachet/signature DG) pour un APERÇU fidèle au
+  // document final — chargés une fois à l'ouverture.
+  const [pub, setPub] = useState<Awaited<ReturnType<typeof getPublisherIdentity>> | null>(null);
+  const [brand, setBrand] = useState<Awaited<ReturnType<typeof getBranding>> | null>(null);
+  useEffect(() => {
+    getPublisherIdentity().then(setPub).catch(() => setPub(null));
+    getBranding().then(setBrand).catch(() => setBrand(null));
+  }, []);
+  // Signature/cachet apposés sur l'aperçu seulement si le réglage l'autorise.
+  const sign = brand && brand.auto_sign_contracts
+    ? { cachet: brand.cachet_generale, signature: brand.signature_dg, dgName: brand.dg_name, dgTitle: brand.dg_title }
+    : null;
 
   const load = () => getContract(contract.id).then((d) => {
     setDetail(d);
@@ -1008,12 +1020,34 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
   }
 
   const label = AUTHOR_CONTRACT_ARTICLES.find((a) => a.n === artN)?.title ?? "";
+
+  // Copie de travail du contrat reflétant les ajustements EN COURS DE SAISIE
+  // (surcharge de l'article sélectionné + clauses), pour un aperçu live : ce que
+  // l'on voit est ce qui sera imprimé/téléchargé.
+  const workingDetail = useMemo<ContractDetail | null>(() => {
+    if (!detail) return null;
+    const ov: Record<string, string> = { ...((detail.articleOverrides ?? {}) as Record<string, string>) };
+    ov[String(artN)] = artText; // "" = texte standard du modèle
+    const clean = clauses.map((c) => ({ title: c.title.trim(), body: c.body.trim() })).filter((c) => c.title.length >= 2 && c.body.length >= 2);
+    return { ...detail, articleOverrides: ov, customClauses: clean };
+  }, [detail, artN, artText, clauses]);
+
+  // Aperçu HTML (corps du contrat) régénéré à chaque frappe.
+  const previewHtml = workingDetail ? buildAuthorContractHtml(workingDetail, pub, sign) : "";
+
+  // Imprimer / Télécharger le PDF à partir de la copie de travail (WYSIWYG).
+  const printWorking = () => { if (workingDetail) printAuthorContract(workingDetail, {}, pub, sign); };
+  const pdfWorking = () => { if (workingDetail) downloadAuthorContractPdf(workingDetail, pub, brand).catch((e) => onError(e instanceof Error ? e.message : "PDF impossible.")); };
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
-      <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 620, width: "100%", maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Ajuster le contrat avant impression — {contract.contractNumber}</div>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Modifiez le texte d'un article ou ajoutez/retirez des clauses. L'impression et le PDF reflètent vos ajustements. Impossible une fois le contrat signé.</div>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 1000, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Aperçu et modification du contrat — {contract.contractNumber}</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Modifiez le texte d'un article ou ajoutez/retirez des clauses : l'aperçu à droite se met à jour à la saisie. Quand tout vous convient, imprimez ou téléchargez le PDF. Les ajustements doivent être enregistrés pour être conservés ; impossible une fois le contrat signé.</div>
 
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+        {/* Colonne d'édition */}
+        <div style={{ flex: "1 1 320px", minWidth: 0 }}>
         {/* Surcharge d'un article standard */}
         <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 12, marginBottom: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Ajuster le texte d'un article</div>
@@ -1053,8 +1087,31 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
             <button onClick={saveClauses} disabled={busy} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>{busy ? "Enregistrement…" : "Enregistrer les clauses"}</button>
           </div>
         </div>
+        </div>{/* fin colonne d'édition */}
 
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+        {/* Colonne d'aperçu — rendu live du contrat (reflète la saisie en cours).
+            L'en-tête officiel et le filigrane s'ajoutent à l'impression/PDF. */}
+        <div style={{ flex: "1 1 360px", minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Aperçu du contrat</div>
+          <div className="ecl-contract-preview" style={{ border: "1px solid var(--line)", borderRadius: 8, background: "#fff", padding: 16, maxHeight: "62vh", overflowY: "auto", color: "#0b0b0c" }}>
+            <style>{`
+              .ecl-contract-preview .doc__title { font-family: Georgia, serif; font-size: 19px; margin: 6px 0 2px; color:#0b0b0c; }
+              .ecl-contract-preview .meta { display:flex; gap:20px; flex-wrap:wrap; margin:4px 0 12px; font-size:12px; color:#444; }
+              .ecl-contract-preview .meta b { color:#0b0b0c; }
+              .ecl-contract-preview .party__label { font-size:10.5px; text-transform:uppercase; letter-spacing:.6px; color:#6b7280; margin-bottom:3px; }
+              .ecl-contract-preview .num { font-family: ui-monospace, "IBM Plex Mono", monospace; }
+              .ecl-contract-preview h3 { font-family: Georgia, serif; }
+            `}</style>
+            {/* eslint-disable-next-line react/no-danger */}
+            <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+          </div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Aperçu du corps du contrat. L'en-tête Éclosion, le filigrane et le pied de page s'ajoutent automatiquement à l'impression et au PDF.</div>
+        </div>
+        </div>{/* fin grille édition / aperçu */}
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
+          <button onClick={printWorking} style={secondaryButtonStyle}>🖨 Imprimer</button>
+          <button onClick={pdfWorking} style={{ ...secondaryButtonStyle, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)" }}>📄 Télécharger le PDF</button>
           <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Fermer</button>
         </div>
       </div>

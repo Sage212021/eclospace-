@@ -1080,7 +1080,12 @@ export const AUTHOR_CONTRACT_ARTICLES: { n: number; title: string }[] = [
   { n: 15, title: "LITIGES" },
 ];
 
-export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): void {
+// Corps HTML du contrat d'édition (articles 1–15 + clauses additionnelles),
+// réutilisable à la fois pour l'impression/PDF et pour l'APERÇU à l'écran avant
+// génération. Les surcharges d'articles (articleOverrides) et les clauses
+// additionnelles (customClauses) sont prises en compte — l'aperçu reflète donc
+// fidèlement les ajustements saisis.
+export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): string {
   const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
   const p = c.partner;
   const BL = (w = 26) => `<span style="color:#9aa1ad">${"…".repeat(w)}</span>`;
@@ -1214,7 +1219,13 @@ export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publish
       </div>
     </div>`;
 
-  openPrintWindow(`Contrat d'édition ${c.contractNumber}`, body, opts);
+  return body;
+}
+
+// Impression / PDF du contrat d'édition (ouvre la fenêtre d'impression maison,
+// avec en-tête officiel, filigrane et pied). Délègue le corps à buildAuthorContractHtml.
+export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): void {
+  openPrintWindow(`Contrat d'édition ${c.contractNumber}`, buildAuthorContractHtml(c, publisher, sign), opts);
 }
 
 // Fiche collaborateur prête à imprimer / PDF (refonte RH — barre d'actions

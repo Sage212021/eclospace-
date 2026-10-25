@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-apercu-et-modification-avant-generation",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : aperçu complet et modifiable avant de générer",
+      body: "Sur un contrat non signé, le menu « Contrat d'édition » propose « 👁 Aperçu & modifier le contrat » : vous voyez le contrat ENTIER à l'écran et, à côté, vous pouvez modifier le texte de n'importe quel article ou ajouter des clauses — l'aperçu se met à jour au fur et à mesure que vous tapez. Quand tout vous convient, vous imprimez ou téléchargez le PDF directement depuis cette fenêtre (ce que vous voyez est ce qui sort). Pensez à « Enregistrer » vos ajustements pour les conserver sur le contrat.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-contrats-modele-economique-formulaire-dynamique",
       version: "2026.10",
       title: "Nouveauté — Contrats : modèle économique et formulaire qui s'adapte",

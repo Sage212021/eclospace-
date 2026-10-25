@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-modeles-editables-sans-code",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : modifier les modèles vous-même, sans développeur",
+      body: "Nouveau bouton « 📝 Modèles de contrats » (droit « contrats — validation ») : vous y modifiez le TEXTE PAR DÉFAUT de chaque article, pour le contrat d'édition comme pour le contrat de prestation, sans passer par un développeur. Laissez un article vide = texte standard de la maison. Vos textes s'appliquent à tous les contrats à venir ; un ajustement propre à un contrat reste prioritaire. Vous pouvez insérer des champs automatiques comme {{titre}}, {{auteur}}, {{taux}}, {{duree}}, {{cout}}, {{acompte}} qui se remplissent tout seuls à la génération. L'aperçu, l'impression et le PDF reflètent vos modèles.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-contrats-document-par-type",
       version: "2026.10",
       title: "Nouveauté — Contrats : le document généré s'adapte au type",

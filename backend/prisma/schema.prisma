@@ -2523,6 +2523,26 @@ model ContractNumberCounter {
   @@map("contract_number_counters")
 }
 
+// Bibliothèque de modèles de contrat (§9, D-054) : texte PAR DÉFAUT d'un article
+// standard, éditable depuis l'ERP SANS modifier le code. `templateKey` = famille
+// de document ("edition" | "service"), `articleNumber` = n° de l'article. Quand
+// une ligne existe, son `body` remplace le texte codé en dur pour CE type de
+// document, sur TOUS les contrats — sauf la surcharge propre à un contrat
+// (articleOverrides) qui reste prioritaire. Le texte peut contenir des champs
+// {{...}} (titre, auteur, taux, durée…) remplacés à la génération. Pas de
+// suppression logique : une ligne absente = « texte standard du code ».
+model ContractClauseTemplate {
+  id            String   @id @default(uuid())
+  templateKey   String   @map("template_key")
+  articleNumber Int      @map("article_number")
+  body          String
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  updatedBy     String?  @map("updated_by")
+
+  @@unique([templateKey, articleNumber])
+  @@map("contract_clause_templates")
+}
+
 enum ContractType {
   edition
   coedition

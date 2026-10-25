@@ -1464,6 +1464,14 @@ async function main() {
       departmentCodes: ["DIRED", "CORR", "INFOG", "DG"],
     },
     {
+      slug: "2026-10-rapports-tableaux-ajustement-contenu",
+      version: "2026.10",
+      title: "Nouveauté — Les colonnes des tableaux s'adaptent à la longueur du texte",
+      body: "Les grands tableaux des rapports (annotations de correction, suivi des corrections) s'ajustent maintenant AUTOMATIQUEMENT au contenu : chaque colonne prend la largeur de son texte le plus long, au lieu d'une largeur fixe qui coupait les mots. Par exemple, la colonne « Sévérité » n'est plus tronquée — sa case s'agrandit pour afficher le mot en entier. Combiné à la mise en page paysage, les cases ne sont plus serrées et tout se lit aisément, comme sur le modèle de rapport de référence.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "COMLEC", "INFOG", "DG"],
+    },
+    {
       slug: "2026-10-rapports-tableaux-annotations-paysage",
       version: "2026.10",
       title: "Nouveauté — Tableaux d'annotations en paysage (lisibles et imprimables)",

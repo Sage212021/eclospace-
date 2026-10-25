@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { ContractDispatchChannel, ContractDocumentKind, ContractType, ContractStatus, RoyaltyBase, SignatureParty, StatementPeriodicity } from "@prisma/client";
+import { ContractDispatchChannel, ContractDocumentKind, ContractType, ContractStatus, EconomicModel, RoyaltyBase, SignatureParty, StatementPeriodicity } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { canPrepareContractForManuscript } from "../lib/contractualisation.js";
@@ -109,10 +109,20 @@ function contractDocView(d: {
 }
 
 // Bornes réglementaires du taux de droits d'auteur (décision opérateur du
-// 20/07/2026) : réglable par ouvrage, mais toujours entre 8 % et 15 %. Les
-// contrats déjà signés ne sont pas recalculés (pas de mise à jour rétroactive).
+// 20/07/2026) : entre 8 % et 15 %. Révision du 25/10/2026 (D-054) : cette
+// fourchette ne s'impose PLUS qu'aux contrats d'ÉDITION à compte d'éditeur ;
+// les autres modèles/types ont un taux libre (« ne pas imposer une fourchette
+// unique à tous les contrats »). Les contrats déjà signés ne sont pas recalculés.
 const MIN_ROYALTY_RATE = 0.08;
 const MAX_ROYALTY_RATE = 0.15;
+
+// La fourchette 8–15 % s'applique-t-elle à ce contrat ? Oui pour une édition à
+// compte d'éditeur — ou une édition sans modèle précisé (contrats antérieurs à
+// D-054 : comportement hérité conservé). Non ailleurs (taux libre).
+function royaltyRangeEnforced(type: ContractType, economicModel: EconomicModel | null | undefined): boolean {
+  if (type !== "edition") return false;
+  return economicModel === "compte_editeur" || economicModel == null;
+}
 
 const financialTermsSchema = z
   .object({
@@ -129,6 +139,7 @@ const financialTermsSchema = z
 
 const createContractSchema = z.object({
   type: z.nativeEnum(ContractType),
+  economic_model: z.nativeEnum(EconomicModel).optional(),
   manuscript_id: z.string().uuid().optional(),
   partner_id: z.string().uuid(),
   parent_contract_id: z.string().uuid().optional(),
@@ -187,13 +198,22 @@ export default async function contractRoutes(fastify: FastifyInstance) {
     }
     const body = parsed.data;
 
-    // Taux de droits d'auteur borné à 8 %–15 % par ouvrage (contrôle serveur, en
-    // plus du choix côté écran). S'applique à chaque palier saisi.
+    // Contrôle serveur des taux de droits d'auteur. Garde-fou générique d'abord
+    // (un taux reste une fraction entre 0 et 100 %), puis la fourchette 8–15 %
+    // UNIQUEMENT pour une édition à compte d'éditeur (D-054) — ailleurs, le taux
+    // est libre à la demande de l'opérateur.
+    const enforceRange = royaltyRangeEnforced(body.type, body.economic_model);
     for (const tier of body.financial_terms.tiers ?? []) {
-      if (tier.rate < MIN_ROYALTY_RATE - 1e-9 || tier.rate > MAX_ROYALTY_RATE + 1e-9) {
+      if (tier.rate < -1e-9 || tier.rate > 1 + 1e-9) {
+        return reply.code(400).send({
+          code: "royalty_rate_invalid",
+          message: `Le taux de droits d'auteur doit être compris entre 0 % et 100 % (valeur reçue : ${(tier.rate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %).`,
+        });
+      }
+      if (enforceRange && (tier.rate < MIN_ROYALTY_RATE - 1e-9 || tier.rate > MAX_ROYALTY_RATE + 1e-9)) {
         return reply.code(400).send({
           code: "royalty_rate_out_of_bounds",
-          message: `Le taux de droits d'auteur doit être compris entre 8 % et 15 % (valeur reçue : ${(tier.rate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %).`,
+          message: `Pour un contrat d'édition à compte d'éditeur, le taux de droits d'auteur doit être compris entre 8 % et 15 % (valeur reçue : ${(tier.rate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %).`,
         });
       }
     }
@@ -241,6 +261,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         data: {
           contractNumber,
           type: body.type,
+          economicModel: body.economic_model,
           manuscriptId: body.manuscript_id,
           partnerId: body.partner_id,
           parentContractId: body.parent_contract_id,

@@ -2534,6 +2534,19 @@ enum ContractType {
   avenant
 }
 
+// Modèle économique du contrat (demande opérateur du 25/10/2026) — AXE DISTINCT
+// du type juridique : un même type (ex. édition) peut relever de plusieurs
+// modèles. Détermine notamment si des droits d'auteur s'appliquent (compte
+// d'éditeur / à demi) ou si l'auteur finance la fabrication (compte d'auteur).
+// Nullable : les contrats antérieurs n'en portent pas (comportement hérité
+// conservé). Cf. docs/06_Registre_des_decisions.md (D-054).
+enum EconomicModel {
+  compte_editeur // à compte d'éditeur : l'éditeur finance, l'auteur perçoit des droits
+  compte_auteur // à compte d'auteur : l'auteur finance la fabrication (prestation)
+  compte_demi // à compte à demi : coûts et recettes partagés
+  autre // autre modèle autorisé (précisé dans les termes)
+}
+
 // Circuit de validation Ch. 9 §9.8 (preparation → legal_review → direction_approval
 // → awaiting_signature → active), plus expired/terminated (§9.3).
 enum ContractStatus {
@@ -2549,10 +2562,13 @@ enum ContractStatus {
 // La « partie contractante » du Ch. 9 §9.3 (auteur, prestataire...) est
 // couverte par la fiche Partenaire unique (décision opérateur du 04/07/2026).
 model Contract {
-  id             String       @id @default(uuid())
-  contractNumber String       @unique @map("contract_number")
+  id             String         @id @default(uuid())
+  contractNumber String         @unique @map("contract_number")
   type           ContractType
-  manuscriptId   String?      @map("manuscript_id")
+  // Modèle économique (D-054) — distinct du type ; null pour les contrats
+  // antérieurs (comportement hérité). Pilote l'applicabilité des droits d'auteur.
+  economicModel  EconomicModel? @map("economic_model")
+  manuscriptId   String?        @map("manuscript_id")
   manuscript     Manuscript?  @relation(fields: [manuscriptId], references: [id])
   partnerId      String       @map("partner_id")
   partner        Partner      @relation(fields: [partnerId], references: [id])

@@ -35,7 +35,7 @@ import {
   type SignatureParty,
   type ChatDirectoryEntry,
 } from "../api/client";
-import { printContract, printAuthorContract, buildAuthorContractHtml, AUTHOR_CONTRACT_ARTICLES } from "../lib/print";
+import { printContract, printAuthorContract, buildAuthorContractHtml, AUTHOR_CONTRACT_ARTICLES, printServiceContract, buildServiceContractHtml, SERVICE_CONTRACT_ARTICLES } from "../lib/print";
 import { pasteTidied } from "../lib/tidyProse";
 import { getBranding } from "../api/client";
 import { buildAuthorContractPdf, downloadAuthorContractPdf } from "../lib/contractPdf";
@@ -60,6 +60,13 @@ const STATUS_LABELS: Record<ContractStatus, string> = {
   expired: "Expiré",
   terminated: "Résilié",
 };
+
+// Quel document générer ? Un contrat de PRESTATION / à compte d'auteur pour les
+// types de service (prestation, correction, illustration) ou le modèle « à compte
+// d'auteur » ; sinon le contrat d'édition (comportement existant). D-054 / §9.
+function isServiceContract(c: { type: string; economicModel?: string | null }): boolean {
+  return c.economicModel === "compte_auteur" || ["prestation", "correction", "illustration"].includes(c.type);
+}
 
 // Libellés courts du modèle économique (D-054) pour l'affichage sur la fiche.
 const ECONOMIC_MODEL_LABELS: Record<string, string> = {
@@ -187,25 +194,26 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
             </span>
             <DocPrintMenu label="Fiche (résumé)" onPrint={(o) => getContract(contract.id).then((c) => printContract(c, o)).catch((e) => setError(e.message))} />
             <DocPrintMenu
-              label="Contrat d'édition"
-              onDownloadPdf={() =>
+              label={isServiceContract(contract) ? "Contrat (prestation)" : "Contrat d'édition"}
+              // PDF vectoriel « net » : disponible pour le contrat d'édition
+              // (modèle jsPDF). Le contrat de prestation passe par l'impression
+              // (bouton « Enregistrer en PDF » de la fenêtre).
+              onDownloadPdf={isServiceContract(contract) ? undefined : () =>
                 Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null), getBranding().catch(() => null)])
                   .then(([c, pub, brand]) => downloadAuthorContractPdf(c, pub, brand))
                   .catch((e) => setError(e.message))
               }
               onPrint={(o) =>
                 Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null), getBranding().catch(() => null)])
-                  .then(([c, pub, brand]) =>
-                    printAuthorContract(
-                      c,
-                      o,
-                      pub,
-                      // Signature + cachet DG apposés seulement si le réglage l'autorise.
-                      brand && brand.auto_sign_contracts
-                        ? { cachet: brand.cachet_generale, signature: brand.signature_dg, dgName: brand.dg_name, dgTitle: brand.dg_title }
-                        : null,
-                    ),
-                  )
+                  .then(([c, pub, brand]) => {
+                    // Signature + cachet DG apposés seulement si le réglage l'autorise.
+                    const sign = brand && brand.auto_sign_contracts
+                      ? { cachet: brand.cachet_generale, signature: brand.signature_dg, dgName: brand.dg_name, dgTitle: brand.dg_title }
+                      : null;
+                    // Document adapté au type / au modèle économique (§9).
+                    if (isServiceContract(c)) printServiceContract(c, o, pub, sign);
+                    else printAuthorContract(c, o, pub, sign);
+                  })
                   .catch((e) => setError(e.message))
               }
               extras={[
@@ -966,6 +974,13 @@ function AmendmentModal({ parent, manuscriptId, onClose, onCreated, onError }: {
 // (ajouter / modifier / retirer). L'impression/PDF reflète les ajustements ;
 // tout est tracé ; verrouillé dès signature (côté serveur).
 function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contract; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
+  // Document adapté au type / au modèle économique (§9) : contrat de prestation /
+  // à compte d'auteur, ou contrat d'édition. Détermine le modèle d'articles et le
+  // générateur d'aperçu.
+  const service = isServiceContract(contract);
+  const ARTICLES = service ? SERVICE_CONTRACT_ARTICLES : AUTHOR_CONTRACT_ARTICLES;
+  const maxArt = ARTICLES.length;
+  const buildHtml = service ? buildServiceContractHtml : buildAuthorContractHtml;
   const [detail, setDetail] = useState<ContractDetail | null>(null);
   const [busy, setBusy] = useState(false);
   // Surcharge d'article.
@@ -1021,7 +1036,7 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
     finally { setBusy(false); }
   }
 
-  const label = AUTHOR_CONTRACT_ARTICLES.find((a) => a.n === artN)?.title ?? "";
+  const label = ARTICLES.find((a) => a.n === artN)?.title ?? "";
 
   // Copie de travail du contrat reflétant les ajustements EN COURS DE SAISIE
   // (surcharge de l'article sélectionné + clauses), pour un aperçu live : ce que
@@ -1035,22 +1050,23 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
   }, [detail, artN, artText, clauses]);
 
   // Aperçu HTML (corps du contrat) régénéré à chaque frappe.
-  const previewHtml = workingDetail ? buildAuthorContractHtml(workingDetail, pub, sign) : "";
+  const previewHtml = workingDetail ? buildHtml(workingDetail, pub, sign) : "";
 
   // Aperçu cliquable : cliquer un article dans l'aperçu l'ouvre à l'édition
-  // (sélecteur positionné + zone de texte focalisée). Seuls les articles
-  // standard 1–15 sont éditables ici (les clauses additionnelles se gèrent à part).
+  // (sélecteur positionné + zone de texte focalisée). Seuls les articles standard
+  // (1..maxArt) sont éditables ici (les clauses additionnelles se gèrent à part).
   const onPreviewClick = (e: React.MouseEvent) => {
     const el = (e.target as HTMLElement).closest("[data-article]");
     if (!el) return;
     const n = Number(el.getAttribute("data-article"));
-    if (!Number.isFinite(n) || n < 1 || n > 15) return;
+    if (!Number.isFinite(n) || n < 1 || n > maxArt) return;
     setArtN(n);
     setTimeout(() => artTextRef.current?.focus(), 0);
   };
 
   // Imprimer / Télécharger le PDF à partir de la copie de travail (WYSIWYG).
-  const printWorking = () => { if (workingDetail) printAuthorContract(workingDetail, {}, pub, sign); };
+  const printWorking = () => { if (!workingDetail) return; if (service) printServiceContract(workingDetail, {}, pub, sign); else printAuthorContract(workingDetail, {}, pub, sign); };
+  // PDF vectoriel « net » : seulement pour le contrat d'édition (modèle jsPDF).
   const pdfWorking = () => { if (workingDetail) downloadAuthorContractPdf(workingDetail, pub, brand).catch((e) => onError(e instanceof Error ? e.message : "PDF impossible.")); };
 
   return (
@@ -1067,7 +1083,7 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Ajuster le texte d'un article</div>
           <label style={{ fontSize: 12, display: "block", marginBottom: 8 }}>Article
             <select value={artN} onChange={(e) => setArtN(Number(e.target.value))} style={inputStyle}>
-              {AUTHOR_CONTRACT_ARTICLES.map((a) => (
+              {ARTICLES.map((a) => (
                 <option key={a.n} value={a.n}>Article {a.n} — {a.title}{overrides[String(a.n)] ? " (ajusté)" : ""}</option>
               ))}
             </select>
@@ -1127,8 +1143,8 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
         </div>{/* fin grille édition / aperçu */}
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
-          <button onClick={printWorking} style={secondaryButtonStyle}>🖨 Imprimer</button>
-          <button onClick={pdfWorking} style={{ ...secondaryButtonStyle, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)" }}>📄 Télécharger le PDF</button>
+          <button onClick={printWorking} style={secondaryButtonStyle}>🖨 Imprimer / PDF</button>
+          {!service && <button onClick={pdfWorking} style={{ ...secondaryButtonStyle, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)" }}>📄 Télécharger le PDF (net)</button>}
           <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Fermer</button>
         </div>
       </div>

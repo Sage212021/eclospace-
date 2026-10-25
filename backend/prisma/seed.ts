@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-document-par-type",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : le document généré s'adapte au type",
+      body: "Le contrat généré correspond désormais au type réel : un contrat d'édition pour l'édition, et un CONTRAT DE PRESTATION (ou « à compte d'auteur ») pour une prestation, une correction, une illustration ou un contrat à compte d'auteur — avec les bonnes clauses (objet, prix et acompte, délais et livraison, obligations, propriété des droits, confidentialité, résiliation, litiges) et les conditions financières de la prestation. Avant, c'était toujours un « contrat d'édition » qui sortait. Le modèle économique s'affiche aussi en tête du contrat. L'aperçu, la modification des textes et l'aperçu cliquable fonctionnent pour les deux types.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-contrats-apercu-cliquable",
       version: "2026.10",
       title: "Nouveauté — Contrats : cliquez un article dans l'aperçu pour le modifier",

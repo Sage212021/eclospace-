@@ -1080,6 +1080,33 @@ export const AUTHOR_CONTRACT_ARTICLES: { n: number; title: string }[] = [
   { n: 15, title: "LITIGES" },
 ];
 
+// Libellé lisible du modèle économique (D-054), repris en tête des contrats.
+export function economicModelLabelFr(m?: string | null): string {
+  switch (m) {
+    case "compte_editeur": return "à compte d'éditeur";
+    case "compte_auteur": return "à compte d'auteur";
+    case "compte_demi": return "à compte à demi";
+    case "autre": return "autre modèle";
+    default: return "";
+  }
+}
+
+// Articles standard du contrat de PRESTATION / à compte d'auteur (modèle maison,
+// clauses validées Éclosion) — exposés pour la surcharge ponctuelle d'un article.
+export const SERVICE_CONTRACT_ARTICLES: { n: number; title: string }[] = [
+  { n: 1, title: "OBJET DU CONTRAT" },
+  { n: 2, title: "DESCRIPTION DE LA PRESTATION" },
+  { n: 3, title: "PRIX ET MODALITÉS DE PAIEMENT" },
+  { n: 4, title: "DÉLAIS ET LIVRAISON" },
+  { n: 5, title: "OBLIGATIONS DU PRESTATAIRE" },
+  { n: 6, title: "OBLIGATIONS DU CLIENT" },
+  { n: 7, title: "PROPRIÉTÉ ET DROITS" },
+  { n: 8, title: "CONFIDENTIALITÉ" },
+  { n: 9, title: "RÉSILIATION" },
+  { n: 10, title: "FORCE MAJEURE" },
+  { n: 11, title: "LITIGES" },
+];
+
 // Corps HTML du contrat d'édition (articles 1–15 + clauses additionnelles),
 // réutilisable à la fois pour l'impression/PDF et pour l'APERÇU à l'écran avant
 // génération. Les surcharges d'articles (articleOverrides) et les clauses
@@ -1142,9 +1169,10 @@ export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<P
   };
   const li = (items: string[]) => `<ul style="margin:6px 0 6px 4px;padding-left:16px;font-size:12px;line-height:1.5">${items.map((i) => `<li style="margin:3px 0">${i}</li>`).join("")}</ul>`;
 
+  const modelMeta = c.economicModel ? `<span>Modèle : <b>${escapeHtml(economicModelLabelFr(c.economicModel))}</b></span>` : "";
   const body = `
     <div class="doc__title">CONTRAT D'ÉDITION À COMPTE D'ÉDITEUR</div>
-    <div class="meta"><span>Contrat n° <b class="num">${escapeHtml(c.contractNumber)}</b></span></div>
+    <div class="meta"><span>Contrat n° <b class="num">${escapeHtml(c.contractNumber)}</b></span>${modelMeta}</div>
 
     <p style="margin:4px 0 2px;font-size:12px"><b>Entre les soussignés</b></p>
     <p style="margin:6px 0;font-size:12px;line-height:1.55">
@@ -1230,6 +1258,131 @@ export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<P
 // avec en-tête officiel, filigrane et pied). Délègue le corps à buildAuthorContractHtml.
 export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): void {
   openPrintWindow(`Contrat d'édition ${c.contractNumber}`, buildAuthorContractHtml(c, publisher, sign), opts);
+}
+
+// Titre du document de prestation selon le type / le modèle économique.
+function serviceContractTitle(c: ContractDetail): string {
+  if (c.economicModel === "compte_auteur") return "CONTRAT D'ÉDITION À COMPTE D'AUTEUR";
+  switch (c.type) {
+    case "correction": return "CONTRAT DE PRESTATION — CORRECTION";
+    case "illustration": return "CONTRAT DE PRESTATION — ILLUSTRATION";
+    case "traduction": return "CONTRAT DE TRADUCTION";
+    default: return "CONTRAT DE PRESTATION DE SERVICES";
+  }
+}
+
+// Montant FCFA lisible (chasse fixe), ou pointillés si non renseigné.
+function fcfa(v: unknown, blank: string): string {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n) || n <= 0) return blank;
+  return `<b class="num">${n.toLocaleString("fr-FR")} FCFA</b>`;
+}
+
+// Corps HTML du contrat de PRESTATION / à compte d'auteur. Mêmes principes que le
+// contrat d'édition : aucune donnée codée en dur (tout vient de la fiche), ce que
+// le système ne stocke pas reste en pointillés, surcharges d'articles et clauses
+// additionnelles prises en compte (éditable par contrat, sans modifier le code).
+export function buildServiceContractHtml(c: ContractDetail, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): string {
+  const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
+  const p = c.partner;
+  const BL = (w = 26) => `<span style="color:#9aa1ad">${"…".repeat(w)}</span>`;
+  const esc = (v?: string | null) => (v && v.trim() ? escapeHtml(v) : null);
+  const client = `${esc(p.firstName) ?? ""} ${esc(p.lastName) ?? ""}`.trim() || BL(20);
+  const email = esc(p.email) ?? BL(30);
+  const tel = esc(p.phone) ?? BL(16);
+  const titre = esc(c.manuscript?.title) ?? BL(40);
+  // Partie contractante : « le Client » en général, « l'Auteur » à compte d'auteur.
+  const role = c.economicModel === "compte_auteur" ? "l'Auteur" : "le Client";
+  const ft = (c.financialTerms ?? {}) as Record<string, unknown>;
+  const cost = fcfa(ft.service_cost, BL(8));
+  const deposit = fcfa(ft.service_deposit, BL(8));
+  const copies = typeof ft.service_copies === "number" && ft.service_copies > 0 ? `<b class="num">${ft.service_copies}</b>` : BL(5);
+  const delivery = esc(typeof ft.service_delivery === "string" ? ft.service_delivery : null) ?? BL(30);
+
+  const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
+  const overrides = (c.articleOverrides && typeof c.articleOverrides === "object" && !Array.isArray(c.articleOverrides)
+    ? c.articleOverrides
+    : {}) as Record<string, string>;
+  const art = (n: number, t: string, corps: string) => {
+    const ov = overrides[String(n)];
+    const inner = ov
+      ? ov.split(/\n{2,}/).map((p2) => par(escapeHtml(p2).replace(/\n/g, "<br>"))).join("") +
+        `<p style="margin:2px 0 0;font-size:9.5px;color:#9a7a12;font-style:italic">Article ajusté pour ce contrat.</p>`
+      : corps;
+    return `
+    <div class="art" data-article="${n}">
+    <h3 style="font-family:Georgia,serif;font-size:14px;margin:20px 0 6px;color:#0b0b0c;border-bottom:1px solid #e7e2d4;padding-bottom:3px">ARTICLE ${n} — ${t}</h3>
+    ${inner}
+    </div>`;
+  };
+
+  const modelMeta = c.economicModel ? `<span>Modèle : <b>${escapeHtml(economicModelLabelFr(c.economicModel))}</b></span>` : "";
+  const prestationLabel = c.economicModel === "compte_auteur"
+    ? "la fabrication et l'édition à compte d'auteur de l'ouvrage"
+    : c.type === "correction" ? "la correction éditoriale de l'ouvrage"
+    : c.type === "illustration" ? "l'illustration de l'ouvrage"
+    : c.type === "traduction" ? "la traduction de l'ouvrage"
+    : "la prestation de services portant sur l'ouvrage";
+
+  const body = `
+    <div class="doc__title">${escapeHtml(serviceContractTitle(c))}</div>
+    <div class="meta"><span>Contrat n° <b class="num">${escapeHtml(c.contractNumber)}</b></span>${modelMeta}</div>
+
+    <p style="margin:4px 0 2px;font-size:12px"><b>Entre les soussignés</b></p>
+    <p style="margin:6px 0;font-size:12px;line-height:1.55">
+      M./Mme <b>${client}</b>, Tél. : ${tel}, Email : ${email},<br>
+      <i>Ci-après dénommé(e) « ${role} », d'une part ;</i>
+    </p>
+    <p style="margin:6px 0;font-size:12px;line-height:1.55">
+      Et : <b>${ED.name}</b>, ${ED.desc} ${ED.rc}, N° Contribuable ${ED.niu}. Siège social : ${ED.siege} ; Tél : ${ED.tel}, Email : ${ED.email} Site web : ${ED.web} Représentée par ${ED.rep},<br>
+      <i>Ci-après dénommée « le Prestataire », d'autre part ;</i>
+    </p>
+    <p style="margin:6px 0;font-size:12px"><b>Il a été convenu ce qui suit :</b></p>
+
+    ${art(1, "OBJET DU CONTRAT", par(`Le présent contrat a pour objet ${prestationLabel} intitulé « <b>${titre}</b> », dans les conditions ci-après définies.`))}
+
+    ${art(2, "DESCRIPTION DE LA PRESTATION", `
+      ${par("Le Prestataire s'engage à exécuter la prestation avec soin et selon les règles de l'art, conformément aux attentes exprimées par " + role + " et aux standards de la maison.")}
+      ${par(`Nombre d'exemplaires concernés (le cas échéant) : ${copies}.`)}`)}
+
+    ${art(3, "PRIX ET MODALITÉS DE PAIEMENT", `
+      ${par(`Le coût total de la prestation est fixé à ${cost}. Un acompte de ${deposit} est versé à la commande ; le solde est réglé selon les modalités convenues entre les parties.`)}
+      ${par("Les paiements s'effectuent par virement bancaire, espèces ou transfert d'argent mobile. Le virement bancaire est obligatoire pour toute somme égale ou supérieure à 150 000 FCFA.")}`)}
+
+    ${art(4, "DÉLAIS ET LIVRAISON", par(`Conditions et délais de livraison : ${delivery}. Tout retard imputable à l'une des parties est signalé sans délai à l'autre partie.`))}
+
+    ${art(5, "OBLIGATIONS DU PRESTATAIRE", par("Le Prestataire exécute la prestation conformément à l'objet du contrat, informe " + role + " de l'avancement, et livre un travail conforme aux conditions convenues."))}
+
+    ${art(6, "OBLIGATIONS DU CLIENT", par("« " + role.charAt(0).toUpperCase() + role.slice(1) + " » fournit en temps utile tous les éléments nécessaires à la prestation, garantit disposer des droits sur les contenus remis, et règle le prix aux échéances convenues."))}
+
+    ${art(7, "PROPRIÉTÉ ET DROITS", par("Sauf stipulation contraire, " + role + " demeure titulaire des droits sur l'œuvre. Le Prestataire ne saurait exploiter le travail au-delà de l'objet du présent contrat sans accord écrit. Toute cession de droits distincte fait l'objet d'un contrat séparé."))}
+
+    ${art(8, "CONFIDENTIALITÉ", par("Chaque partie s'engage à préserver la confidentialité des informations échangées dans le cadre du présent contrat, pendant toute sa durée et après son terme."))}
+
+    ${art(9, "RÉSILIATION", par("En cas de manquement grave de l'une des parties à ses obligations, l'autre partie peut résilier le contrat après mise en demeure restée sans effet pendant 15 jours. Les prestations exécutées et les acomptes versés sont décomptés à due proportion."))}
+
+    ${art(10, "FORCE MAJEURE", par("Aucune des parties ne saurait être tenue responsable d'un manquement résultant d'un cas de force majeure. Les obligations sont suspendues pendant la durée de l'événement."))}
+
+    ${art(11, "LITIGES", par("Le présent contrat est soumis à la loi camerounaise. Tout différend fera l'objet d'une tentative d'arrangement amiable ; à défaut, seuls les tribunaux de Yaoundé sont compétents."))}
+
+    ${(c.customClauses ?? []).map((cl, i) => art(12 + i, (esc(cl.title) ?? "").toUpperCase(), par(escapeHtml(cl.body)))).join("")}
+
+    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
+    <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
+    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap">
+      <div style="flex:1; min-width:200px"><div class="party__label">${escapeHtml(role.charAt(0).toUpperCase() + role.slice(1))}</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
+      <div style="flex:1; min-width:200px">
+        <div class="party__label">Le Prestataire</div>
+        ${editorSignatureBlock(sign)}
+      </div>
+    </div>`;
+
+  return body;
+}
+
+// Impression / PDF du contrat de prestation / à compte d'auteur.
+export function printServiceContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): void {
+  openPrintWindow(`${serviceContractTitle(c)} ${c.contractNumber}`, buildServiceContractHtml(c, publisher, sign), opts);
 }
 
 // Fiche collaborateur prête à imprimer / PDF (refonte RH — barre d'actions

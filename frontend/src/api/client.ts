@@ -1793,6 +1793,10 @@ export interface ContractClause {
 export interface ContractDetail extends Contract {
   effectiveAt?: string | null;
   durationMonths?: number | null;
+  // Termes financiers (JSON) : paliers de droits pour l'édition, ou conditions
+  // de prestation (service_cost, service_deposit, service_copies, service_delivery)
+  // pour un contrat de prestation / à compte d'auteur (D-054).
+  financialTerms?: Record<string, unknown> | null;
   customClauses?: ContractClause[] | null;
   articleOverrides?: Record<string, string> | null;
   territories: string[];

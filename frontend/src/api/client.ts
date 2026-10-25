@@ -1816,6 +1816,21 @@ export function getContract(id: string) {
   return request<ContractDetail>(`/api/v1/contracts/${id}`);
 }
 
+// Bibliothèque de modèles de contrat (§9) : texte par défaut d'un article, par
+// type de document (edition | service), éditable sans code.
+export interface ContractClauseTemplateRow {
+  template_key: "edition" | "service";
+  article_number: number;
+  body: string;
+  updated_at?: string;
+}
+export function getContractTemplates() {
+  return request<ContractClauseTemplateRow[]>("/api/v1/contract-templates");
+}
+export function setContractClauseTemplate(template_key: "edition" | "service", article_number: number, body: string) {
+  return request<{ ok: true }>("/api/v1/contract-templates", { method: "PUT", body: JSON.stringify({ template_key, article_number, body }) });
+}
+
 // Signature « simple / interne » d'une partie (Phase B) : accord horodaté, lié à
 // une empreinte des clauses, tracé au journal. Renvoie le contrat rafraîchi.
 export function signContract(

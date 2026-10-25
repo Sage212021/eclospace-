@@ -1080,6 +1080,37 @@ export const AUTHOR_CONTRACT_ARTICLES: { n: number; title: string }[] = [
   { n: 15, title: "LITIGES" },
 ];
 
+// Remplace les champs {{clef}} d'un texte de modèle par leurs valeurs (plates).
+// Un champ inconnu est laissé visible, pour signaler une éventuelle faute de
+// frappe plutôt que de disparaître silencieusement.
+function fillPlaceholders(text: string, ctx: Record<string, string>): string {
+  return text.replace(/\{\{\s*([a-zA-Z_]+)\s*\}\}/g, (m, key: string) => {
+    const v = ctx[key.toLowerCase()];
+    return v !== undefined && v !== "" ? v : m;
+  });
+}
+
+// Corps d'un article : priorité à la surcharge PROPRE au contrat (articleOverrides),
+// puis au texte par défaut du MODÈLE éditable (templates), sinon null (→ le texte
+// standard codé est utilisé). Le texte est converti en paragraphes et ses champs
+// {{…}} remplacés. `ajusted` = vrai seulement pour une surcharge propre au contrat
+// (qui porte la mention « Article ajusté pour ce contrat »).
+function resolveArticleBody(
+  n: number,
+  overrides: Record<string, string>,
+  templates: Record<number, string> | undefined,
+  ctx: Record<string, string>,
+  par: (t: string) => string,
+): { html: string; ajusted: boolean } | null {
+  const ov = overrides[String(n)];
+  const tpl = templates?.[n];
+  const raw = ov ?? tpl;
+  if (raw === undefined || raw === null) return null;
+  const filled = fillPlaceholders(raw, ctx);
+  const html = filled.split(/\n{2,}/).map((p2) => par(escapeHtml(p2).replace(/\n/g, "<br>"))).join("");
+  return { html, ajusted: ov !== undefined };
+}
+
 // Libellé lisible du modèle économique (D-054), repris en tête des contrats.
 export function economicModelLabelFr(m?: string | null): string {
   switch (m) {
@@ -1112,7 +1143,7 @@ export const SERVICE_CONTRACT_ARTICLES: { n: number; title: string }[] = [
 // génération. Les surcharges d'articles (articleOverrides) et les clauses
 // additionnelles (customClauses) sont prises en compte — l'aperçu reflète donc
 // fidèlement les ajustements saisis.
-export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): string {
+export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null, templates?: Record<number, string>): string {
   const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
   const p = c.partner;
   const BL = (w = 26) => `<span style="color:#9aa1ad">${"…".repeat(w)}</span>`;
@@ -1148,16 +1179,27 @@ export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<P
     : `${BL(6)} années`;
 
   const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
-  // Surcharges ponctuelles saisies avant impression : un article surchargé
-  // remplace le corps du modèle par le texte de l'éditeur (marqué « ajusté »).
+  // Valeurs (plates) disponibles comme champs {{…}} dans les textes de modèle /
+  // les surcharges, pour qu'un texte réécrit reste dynamique.
+  const tauxPlain = rt?.tiers?.length ? rt.tiers.map((t) => pct(Number(t.rate))).filter((v, i, a) => a.indexOf(v) === i).join(" / ") : "";
+  const dureePlain = c.durationMonths ? (c.durationMonths % 12 === 0 ? `${c.durationMonths / 12} année(s)` : `${c.durationMonths} mois`) : "";
+  const ctx: Record<string, string> = {
+    numero: c.contractNumber,
+    titre: (c.manuscript?.title ?? "").trim(),
+    auteur: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(),
+    editeur: ED.name,
+    modele: economicModelLabelFr(c.economicModel),
+    taux: tauxPlain,
+    duree: dureePlain,
+  };
+  // Surcharge PROPRE au contrat > modèle éditable (templates) > texte standard codé.
   const overrides = (c.articleOverrides && typeof c.articleOverrides === "object" && !Array.isArray(c.articleOverrides)
     ? c.articleOverrides
     : {}) as Record<string, string>;
   const art = (n: number, titre: string, corps: string) => {
-    const ov = overrides[String(n)];
-    const body = ov
-      ? ov.split(/\n{2,}/).map((p2) => par(escapeHtml(p2).replace(/\n/g, "<br>"))).join("") +
-        `<p style="margin:2px 0 0;font-size:9.5px;color:#9a7a12;font-style:italic">Article ajusté pour ce contrat.</p>`
+    const custom = resolveArticleBody(n, overrides, templates, ctx, par);
+    const body = custom
+      ? custom.html + (custom.ajusted ? `<p style="margin:2px 0 0;font-size:9.5px;color:#9a7a12;font-style:italic">Article ajusté pour ce contrat.</p>` : "")
       : corps;
     // `data-article` : repère l'article pour l'aperçu cliquable (cliquer un
     // article dans l'aperçu l'ouvre à l'édition). Neutre à l'impression/PDF.
@@ -1256,8 +1298,8 @@ export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<P
 
 // Impression / PDF du contrat d'édition (ouvre la fenêtre d'impression maison,
 // avec en-tête officiel, filigrane et pied). Délègue le corps à buildAuthorContractHtml.
-export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): void {
-  openPrintWindow(`Contrat d'édition ${c.contractNumber}`, buildAuthorContractHtml(c, publisher, sign), opts);
+export function printAuthorContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null, templates?: Record<number, string>): void {
+  openPrintWindow(`Contrat d'édition ${c.contractNumber}`, buildAuthorContractHtml(c, publisher, sign, templates), opts);
 }
 
 // Titre du document de prestation selon le type / le modèle économique.
@@ -1282,7 +1324,7 @@ function fcfa(v: unknown, blank: string): string {
 // contrat d'édition : aucune donnée codée en dur (tout vient de la fiche), ce que
 // le système ne stocke pas reste en pointillés, surcharges d'articles et clauses
 // additionnelles prises en compte (éditable par contrat, sans modifier le code).
-export function buildServiceContractHtml(c: ContractDetail, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): string {
+export function buildServiceContractHtml(c: ContractDetail, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null, templates?: Record<number, string>): string {
   const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
   const p = c.partner;
   const BL = (w = 26) => `<span style="color:#9aa1ad">${"…".repeat(w)}</span>`;
@@ -1300,14 +1342,26 @@ export function buildServiceContractHtml(c: ContractDetail, publisher?: Partial<
   const delivery = esc(typeof ft.service_delivery === "string" ? ft.service_delivery : null) ?? BL(30);
 
   const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
+  // Champs {{…}} disponibles dans les textes de modèle / surcharges (valeurs plates).
+  const ctx: Record<string, string> = {
+    numero: c.contractNumber,
+    titre: (c.manuscript?.title ?? "").trim(),
+    auteur: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(),
+    client: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(),
+    editeur: ED.name,
+    modele: economicModelLabelFr(c.economicModel),
+    cout: typeof ft.service_cost === "number" && ft.service_cost > 0 ? `${ft.service_cost.toLocaleString("fr-FR")} FCFA` : "",
+    acompte: typeof ft.service_deposit === "number" && ft.service_deposit > 0 ? `${ft.service_deposit.toLocaleString("fr-FR")} FCFA` : "",
+    exemplaires: typeof ft.service_copies === "number" && ft.service_copies > 0 ? String(ft.service_copies) : "",
+    livraison: typeof ft.service_delivery === "string" ? ft.service_delivery.trim() : "",
+  };
   const overrides = (c.articleOverrides && typeof c.articleOverrides === "object" && !Array.isArray(c.articleOverrides)
     ? c.articleOverrides
     : {}) as Record<string, string>;
   const art = (n: number, t: string, corps: string) => {
-    const ov = overrides[String(n)];
-    const inner = ov
-      ? ov.split(/\n{2,}/).map((p2) => par(escapeHtml(p2).replace(/\n/g, "<br>"))).join("") +
-        `<p style="margin:2px 0 0;font-size:9.5px;color:#9a7a12;font-style:italic">Article ajusté pour ce contrat.</p>`
+    const custom = resolveArticleBody(n, overrides, templates, ctx, par);
+    const inner = custom
+      ? custom.html + (custom.ajusted ? `<p style="margin:2px 0 0;font-size:9.5px;color:#9a7a12;font-style:italic">Article ajusté pour ce contrat.</p>` : "")
       : corps;
     return `
     <div class="art" data-article="${n}">
@@ -1381,8 +1435,8 @@ export function buildServiceContractHtml(c: ContractDetail, publisher?: Partial<
 }
 
 // Impression / PDF du contrat de prestation / à compte d'auteur.
-export function printServiceContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null): void {
-  openPrintWindow(`${serviceContractTitle(c)} ${c.contractNumber}`, buildServiceContractHtml(c, publisher, sign), opts);
+export function printServiceContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null, templates?: Record<number, string>): void {
+  openPrintWindow(`${serviceContractTitle(c)} ${c.contractNumber}`, buildServiceContractHtml(c, publisher, sign, templates), opts);
 }
 
 // Fiche collaborateur prête à imprimer / PDF (refonte RH — barre d'actions

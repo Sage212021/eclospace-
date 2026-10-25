@@ -615,6 +615,37 @@ export default async function contractRoutes(fastify: FastifyInstance) {
   const assertEditable = (contract: { status: string; _count: { signatures: number } }) =>
     !["active", "terminated", "expired"].includes(contract.status) && contract._count.signatures === 0;
 
+  // §9 — Bibliothèque de MODÈLES de contrat : texte par défaut d'un article,
+  // éditable sans toucher au code. Lecture (consultation) : la liste des textes
+  // par défaut personnalisés, par type de document.
+  fastify.get("/api/v1/contract-templates", { preHandler: requirePermission("contracts", "consultation") }, async (_request, reply) => {
+    const rows = await prisma.contractClauseTemplate.findMany({ orderBy: [{ templateKey: "asc" }, { articleNumber: "asc" }] });
+    return reply.send(rows.map((r) => ({ template_key: r.templateKey, article_number: r.articleNumber, body: r.body, updated_at: r.updatedAt })));
+  });
+
+  // Écriture (validation = autorité juridique / DG) : définir ou effacer le texte
+  // par défaut d'un article d'un type de document. `body` vide = revenir au texte
+  // standard (la ligne est supprimée). S'applique à TOUS les contrats à venir.
+  fastify.put("/api/v1/contract-templates", { preHandler: requirePermission("contracts", "validation") }, async (request, reply) => {
+    const parsed = z
+      .object({ template_key: z.enum(["edition", "service"]), article_number: z.number().int().min(1).max(15), body: z.string().max(8000) })
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    const { template_key, article_number } = parsed.data;
+    const body = parsed.data.body.trim();
+    if (!body) {
+      await prisma.contractClauseTemplate.deleteMany({ where: { templateKey: template_key, articleNumber: article_number } });
+    } else {
+      await prisma.contractClauseTemplate.upsert({
+        where: { templateKey_articleNumber: { templateKey: template_key, articleNumber: article_number } },
+        update: { body, updatedBy: request.user!.id },
+        create: { templateKey: template_key, articleNumber: article_number, body, updatedBy: request.user!.id },
+      });
+    }
+    await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "contract_template", entityId: `${template_key}:${article_number}`, newValues: { cleared: !body }, ipAddress: request.ip });
+    return reply.send({ ok: true });
+  });
+
   // Surcharger le TEXTE d'un article standard avant impression (ajuster un point).
   // `text` vide retire la surcharge (l'article revient au texte du modèle).
   // Possible tant que le contrat n'est pas signé.

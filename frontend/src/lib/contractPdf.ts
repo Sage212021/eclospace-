@@ -82,7 +82,7 @@ function articles(vars: { titre: string; dureeTxt: string; tauxTxt: string }): {
 // Construit le PDF du contrat d'édition et le renvoie sous forme de Blob.
 // `sign` (facultatif) : signature + cachet DG apposés dans la case « L'éditeur »
 // (images déjà encrées, fond transparent) quand la maison signe automatiquement.
-export function buildAuthorContractPdf(c: ContractDetail, publisher?: Partial<PublisherLegal> | null, sign?: ContractPdfSign | null): Blob {
+export function buildAuthorContractPdf(c: ContractDetail, publisher?: Partial<PublisherLegal> | null, sign?: ContractPdfSign | null, templates?: Record<number, string>): Blob {
   const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
   const p = c.partner;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -146,9 +146,28 @@ export function buildAuthorContractPdf(c: ContractDetail, publisher?: Partial<Pu
     : `${dots(6)} années`;
 
   const base = articles({ titre, dureeTxt, tauxTxt });
+  // §9 — Surcharge PROPRE au contrat (articleOverrides) > modèle éditable
+  // (templates) > texte standard. Champs {{…}} remplacés (valeurs plates).
+  const overrides = (c.articleOverrides && typeof c.articleOverrides === "object" && !Array.isArray(c.articleOverrides)
+    ? (c.articleOverrides as Record<string, string>)
+    : {});
+  const ctx: Record<string, string> = {
+    numero: c.contractNumber,
+    titre: (c.manuscript?.title ?? "").trim(),
+    auteur: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(),
+    editeur: ED.name,
+    taux: rt?.tiers?.length ? rt.tiers.map((t) => pct(Number(t.rate))).filter((v, i, a) => a.indexOf(v) === i).join(" / ") : "",
+    duree: c.durationMonths ? (c.durationMonths % 12 === 0 ? `${c.durationMonths / 12} année(s)` : `${c.durationMonths} mois`) : "",
+  };
+  const fill = (t: string) => t.replace(/\{\{\s*([a-zA-Z_]+)\s*\}\}/g, (m, k: string) => (ctx[k.toLowerCase()] ? ctx[k.toLowerCase()] : m));
+  const resolved = base.map((a) => {
+    const raw = overrides[String(a.n)] ?? templates?.[a.n];
+    if (raw === undefined || raw === null || !String(raw).trim()) return a;
+    return { ...a, paras: fill(String(raw)).split(/\n{2,}/).map((s) => s.replace(/\n/g, " ").trim()).filter(Boolean) };
+  });
   // Articles additionnels propres au contrat (clauses ajoutées), numérotés 16+.
   const extra = (c.customClauses ?? []).map((cl, i) => ({ n: 16 + i, title: (cl.title || "").toUpperCase(), paras: [cl.body] }));
-  for (const a of [...base, ...extra]) {
+  for (const a of [...resolved, ...extra]) {
     ensure(12);
     y += 2;
     text(`ARTICLE ${a.n} — ${a.title}`, { bold: true, size: 10.5, gap: 1 });
@@ -201,13 +220,14 @@ export async function downloadAuthorContractPdf(
   c: ContractDetail,
   publisher?: Partial<PublisherLegal> | null,
   branding?: Branding | null,
+  templates?: Record<number, string>,
 ): Promise<void> {
   let sign: ContractPdfSign | undefined;
   if (branding && branding.auto_sign_contracts) {
     const [cachet, signature] = await Promise.all([inkStamp(branding.cachet_generale), inkStamp(branding.signature_dg)]);
     sign = { cachet, signature, dgName: branding.dg_name, dgTitle: branding.dg_title };
   }
-  const blob = buildAuthorContractPdf(c, publisher, sign);
+  const blob = buildAuthorContractPdf(c, publisher, sign, templates);
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

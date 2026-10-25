@@ -14,6 +14,8 @@ import {
   addContractClause,
   replaceContractClauses,
   setContractArticleOverride,
+  getContractTemplates,
+  setContractClauseTemplate,
   type ContractDetail,
   listContractDocuments,
   uploadContractDocument,
@@ -119,11 +121,24 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
   // Incrémenté à chaque envoi enregistré : recharge les journaux d'envoi.
   const [dispatchVersion, setDispatchVersion] = useState(0);
   const bumpDispatch = () => setDispatchVersion((v) => v + 1);
+  // Modèles de contrat éditables (§9) : texte par défaut des articles, par type.
+  const [templates, setTemplates] = useState<{ edition: Record<number, string>; service: Record<number, string> }>({ edition: {}, service: {} });
+  const [showTemplates, setShowTemplates] = useState(false);
+  const loadTemplates = () =>
+    getContractTemplates()
+      .then((rows) => {
+        const m = { edition: {} as Record<number, string>, service: {} as Record<number, string> };
+        for (const r of rows) m[r.template_key][r.article_number] = r.body;
+        setTemplates(m);
+      })
+      .catch(() => {});
+  const templateMapFor = (c: { type: string; economicModel?: string | null }) => (isServiceContract(c) ? templates.service : templates.edition);
 
   const refresh = () => listContracts(manuscriptId).then(setContracts).catch((e) => setError(e.message));
 
   useEffect(() => {
     refresh();
+    loadTemplates();
   }, [manuscriptId]);
 
   async function advance(contract: Contract) {
@@ -151,7 +166,12 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
 
   return (
     <CollapsibleSection title="Contrats" storageKey="fiche:contrats">
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        {canValidate && (
+          <button onClick={() => setShowTemplates(true)} style={secondaryButtonStyle} title="Modifier les textes par défaut des contrats (sans développeur)">
+            📝 Modèles de contrats
+          </button>
+        )}
         {canCreate && (
           <button onClick={() => setShowForm((v) => !v)} style={secondaryButtonStyle}>
             {showForm ? "Annuler" : "+ Nouveau contrat"}
@@ -200,7 +220,7 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
               // (bouton « Enregistrer en PDF » de la fenêtre).
               onDownloadPdf={isServiceContract(contract) ? undefined : () =>
                 Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null), getBranding().catch(() => null)])
-                  .then(([c, pub, brand]) => downloadAuthorContractPdf(c, pub, brand))
+                  .then(([c, pub, brand]) => downloadAuthorContractPdf(c, pub, brand, templates.edition))
                   .catch((e) => setError(e.message))
               }
               onPrint={(o) =>
@@ -210,9 +230,10 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
                     const sign = brand && brand.auto_sign_contracts
                       ? { cachet: brand.cachet_generale, signature: brand.signature_dg, dgName: brand.dg_name, dgTitle: brand.dg_title }
                       : null;
-                    // Document adapté au type / au modèle économique (§9).
-                    if (isServiceContract(c)) printServiceContract(c, o, pub, sign);
-                    else printAuthorContract(c, o, pub, sign);
+                    // Document adapté au type / au modèle économique (§9), avec
+                    // les textes par défaut du modèle éditable.
+                    if (isServiceContract(c)) printServiceContract(c, o, pub, sign, templates.service);
+                    else printAuthorContract(c, o, pub, sign, templates.edition);
                   })
                   .catch((e) => setError(e.message))
               }
@@ -329,8 +350,18 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
       {articleContract && (
         <ArticleModal
           contract={articleContract}
+          templates={templates}
           onClose={() => setArticleContract(null)}
           onSaved={() => { setArticleContract(null); refresh(); }}
+          onError={setError}
+        />
+      )}
+      {showTemplates && (
+        <ContractTemplatesModal
+          templates={templates}
+          onClose={() => setShowTemplates(false)}
+          canEdit={canValidate}
+          onSaved={loadTemplates}
           onError={setError}
         />
       )}
@@ -973,7 +1004,7 @@ function AmendmentModal({ parent, manuscriptId, onClose, onCreated, onError }: {
 // texte d'un article standard (1–15) et gérer les clauses additionnelles
 // (ajouter / modifier / retirer). L'impression/PDF reflète les ajustements ;
 // tout est tracé ; verrouillé dès signature (côté serveur).
-function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contract; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
+function ArticleModal({ contract, templates, onClose, onSaved, onError }: { contract: Contract; templates: { edition: Record<number, string>; service: Record<number, string> }; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
   // Document adapté au type / au modèle économique (§9) : contrat de prestation /
   // à compte d'auteur, ou contrat d'édition. Détermine le modèle d'articles et le
   // générateur d'aperçu.
@@ -981,6 +1012,8 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
   const ARTICLES = service ? SERVICE_CONTRACT_ARTICLES : AUTHOR_CONTRACT_ARTICLES;
   const maxArt = ARTICLES.length;
   const buildHtml = service ? buildServiceContractHtml : buildAuthorContractHtml;
+  // Textes par défaut du modèle éditable pour ce type de document.
+  const tplMap = service ? templates.service : templates.edition;
   const [detail, setDetail] = useState<ContractDetail | null>(null);
   const [busy, setBusy] = useState(false);
   // Surcharge d'article.
@@ -1049,8 +1082,9 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
     return { ...detail, articleOverrides: ov, customClauses: clean };
   }, [detail, artN, artText, clauses]);
 
-  // Aperçu HTML (corps du contrat) régénéré à chaque frappe.
-  const previewHtml = workingDetail ? buildHtml(workingDetail, pub, sign) : "";
+  // Aperçu HTML (corps du contrat) régénéré à chaque frappe — avec les textes
+  // par défaut du modèle éditable (les surcharges du contrat restent prioritaires).
+  const previewHtml = workingDetail ? buildHtml(workingDetail, pub, sign, tplMap) : "";
 
   // Aperçu cliquable : cliquer un article dans l'aperçu l'ouvre à l'édition
   // (sélecteur positionné + zone de texte focalisée). Seuls les articles standard
@@ -1065,9 +1099,9 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
   };
 
   // Imprimer / Télécharger le PDF à partir de la copie de travail (WYSIWYG).
-  const printWorking = () => { if (!workingDetail) return; if (service) printServiceContract(workingDetail, {}, pub, sign); else printAuthorContract(workingDetail, {}, pub, sign); };
+  const printWorking = () => { if (!workingDetail) return; if (service) printServiceContract(workingDetail, {}, pub, sign, tplMap); else printAuthorContract(workingDetail, {}, pub, sign, tplMap); };
   // PDF vectoriel « net » : seulement pour le contrat d'édition (modèle jsPDF).
-  const pdfWorking = () => { if (workingDetail) downloadAuthorContractPdf(workingDetail, pub, brand).catch((e) => onError(e instanceof Error ? e.message : "PDF impossible.")); };
+  const pdfWorking = () => { if (workingDetail) downloadAuthorContractPdf(workingDetail, pub, brand, tplMap).catch((e) => onError(e instanceof Error ? e.message : "PDF impossible.")); };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
@@ -1146,6 +1180,100 @@ function ArticleModal({ contract, onClose, onSaved, onError }: { contract: Contr
           <button onClick={printWorking} style={secondaryButtonStyle}>🖨 Imprimer / PDF</button>
           {!service && <button onClick={pdfWorking} style={{ ...secondaryButtonStyle, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)" }}>📄 Télécharger le PDF (net)</button>}
           <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Fermer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// §9 — « Modèles de contrats » : éditer SANS CODE le texte par défaut de chaque
+// article, par type de document (Édition / Prestation). Vide = texte standard de
+// la maison. Les champs {{…}} restent remplis automatiquement à la génération.
+// S'applique à tous les contrats à venir ; la surcharge propre à un contrat reste
+// prioritaire. Réservé à l'autorité juridique / direction (canEdit = validation).
+const TEMPLATE_PLACEHOLDERS: Record<"edition" | "service", string> = {
+  edition: "{{titre}} {{auteur}} {{editeur}} {{numero}} {{modele}} {{taux}} {{duree}}",
+  service: "{{titre}} {{auteur}} {{editeur}} {{numero}} {{modele}} {{cout}} {{acompte}} {{exemplaires}} {{livraison}}",
+};
+function ContractTemplatesModal({ templates, canEdit, onClose, onSaved, onError }: {
+  templates: { edition: Record<number, string>; service: Record<number, string> };
+  canEdit: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+  onError: (m: string) => void;
+}) {
+  const [key, setKey] = useState<"edition" | "service">("edition");
+  const [drafts, setDrafts] = useState<{ edition: Record<number, string>; service: Record<number, string> }>({
+    edition: { ...templates.edition },
+    service: { ...templates.service },
+  });
+  const [busy, setBusy] = useState<number | null>(null);
+  const ARTICLES = key === "service" ? SERVICE_CONTRACT_ARTICLES : AUTHOR_CONTRACT_ARTICLES;
+  const setDraft = (n: number, v: string) => setDrafts((d) => ({ ...d, [key]: { ...d[key], [n]: v } }));
+
+  async function save(n: number) {
+    setBusy(n);
+    try {
+      await setContractClauseTemplate(key, n, (drafts[key][n] ?? "").trim());
+      onSaved();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Enregistrement du modèle impossible.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 18, maxWidth: 720, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontFamily: "var(--font-title)", fontSize: 16, marginBottom: 4 }}>Modèles de contrats</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>
+          Modifiez ici le texte PAR DÉFAUT de chaque article, sans développeur. Laissez vide pour garder le texte standard de la maison. Ces textes s'appliquent à <b>tous les contrats à venir</b> ; un ajustement propre à un contrat reste prioritaire.{!canEdit && " (Lecture seule : droit « contrats (validation) » requis pour modifier.)"}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {(["edition", "service"] as const).map((k) => (
+            <button key={k} onClick={() => setKey(k)} style={{ ...secondaryButtonStyle, ...(key === k ? { background: "var(--eclosion)", color: "#fff", border: "none" } : {}) }}>
+              {k === "edition" ? "Contrat d'édition" : "Contrat de prestation"}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>
+          Champs insérables (remplis automatiquement) : <code style={{ fontFamily: "var(--font-mono, monospace)" }}>{TEMPLATE_PLACEHOLDERS[key]}</code>
+        </div>
+
+        <div style={{ display: "grid", gap: 12 }}>
+          {ARTICLES.map((a) => {
+            const standard = !((drafts[key][a.n] ?? "").trim());
+            return (
+              <div key={a.n} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>
+                  Article {a.n} — {a.title}{standard ? <span style={{ fontWeight: 400, color: "var(--muted)" }}> · texte standard</span> : <span style={{ fontWeight: 400, color: "var(--eclosion-dark, #9a7a12)" }}> · personnalisé</span>}
+                </div>
+                <textarea
+                  value={drafts[key][a.n] ?? ""}
+                  onChange={(e) => setDraft(a.n, e.target.value)}
+                  onPaste={(e) => pasteTidied(e, drafts[key][a.n] ?? "", (next) => setDraft(a.n, next))}
+                  rows={4}
+                  disabled={!canEdit}
+                  placeholder="Laissez vide pour conserver le texte standard de la maison."
+                  style={{ ...inputStyle, resize: "vertical" }}
+                />
+                {canEdit && (
+                  <div style={{ textAlign: "right", marginTop: 6 }}>
+                    <button onClick={() => save(a.n)} disabled={busy === a.n} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>
+                      {busy === a.n ? "…" : "Enregistrer cet article"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+          <button onClick={onClose} style={secondaryButtonStyle}>Fermer</button>
         </div>
       </div>
     </div>

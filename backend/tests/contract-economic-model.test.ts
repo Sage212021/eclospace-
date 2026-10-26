@@ -91,4 +91,25 @@ describe("modèle économique & applicabilité des droits (D-054)", () => {
     const after = await prisma.contract.findUnique({ where: { id } });
     expect(after!.economicModel).toBe("compte_auteur");
   });
+
+  it("les conditions de prestation sont corrigeables via PATCH /terms", async () => {
+    const res = await create({ type: "prestation", economic_model: "compte_auteur", financial_terms: { service_cost: 100000, service_deposit: 20000 } });
+    expect(res.statusCode).toBe(201);
+    const id = res.json().id;
+    createdIds.push(id);
+
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/contracts/${id}/terms`,
+      headers: { cookie },
+      payload: { service_cost: 450000, service_deposit: 150000, service_copies: 80, service_delivery: "sous 45 jours" },
+    });
+    expect(patch.statusCode).toBe(200);
+    const after = await prisma.contract.findUnique({ where: { id } });
+    const ft = after!.financialTerms as Record<string, unknown>;
+    expect(ft.service_cost).toBe(450000);
+    expect(ft.service_deposit).toBe(150000);
+    expect(ft.service_copies).toBe(80);
+    expect(ft.service_delivery).toBe("sous 45 jours");
+  });
 });

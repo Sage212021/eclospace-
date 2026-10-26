@@ -253,11 +253,17 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
               }
               extras={[
                 { label: "Transférer (messagerie / WhatsApp)", onSelect: () => setTransferContract(contract) },
-                ...(canCreate && !["active", "terminated", "expired"].includes(contract.status) ? [{ label: "Modifier / enregistrer", onSelect: () => setEditContract(contract) }] : []),
                 ...(canCreate ? [{ label: "Ajouter un avenant", onSelect: () => setAmendContract(contract) }] : []),
-                ...(canCreate && !["active", "terminated", "expired"].includes(contract.status) ? [{ label: "👁 Aperçu & modifier le contrat", onSelect: () => setArticleContract(contract) }] : []),
+                ...(canCreate && !["active", "terminated", "expired"].includes(contract.status) ? [{ label: "👁 Aperçu & modifier le contrat (clauses)", onSelect: () => setArticleContract(contract) }] : []),
               ]}
             />
+            {/* « Modifier » VISIBLE (plus seulement dans le menu) : revenir sur les
+                renseignements du contrat tant qu'il n'est pas signé. */}
+            {canCreate && !["active", "terminated", "expired"].includes(contract.status) && (
+              <button onClick={() => setEditContract(contract)} style={secondaryButtonStyle}>
+                ✏️ Modifier
+              </button>
+            )}
             {canValidate && contract.status === "awaiting_signature" && (
               <button onClick={() => setSigning(contract)} style={{ ...secondaryButtonStyle, borderColor: "var(--eclosion)", color: "var(--eclosion)", fontWeight: 600 }}>
                 ✍️ Signer
@@ -267,8 +273,8 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
               STATUS_CHAIN.indexOf(contract.status) >= 0 &&
               contract.status !== "awaiting_signature" &&
               STATUS_CHAIN.indexOf(contract.status) < STATUS_CHAIN.length - 1 && (
-                <button onClick={() => advance(contract)} style={secondaryButtonStyle}>
-                  Faire avancer →
+                <button onClick={() => advance(contract)} style={secondaryButtonStyle} title="Valide l'étape en cours et passe à la suivante du circuit de contractualisation">
+                  Faire avancer → {STATUS_LABELS[STATUS_CHAIN[STATUS_CHAIN.indexOf(contract.status) + 1]]}
                 </button>
               )}
             {canValidate && !["active", "terminated", "expired"].includes(contract.status) && (
@@ -281,6 +287,16 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
               </button>
             )}
           </div>
+
+          {/* Repère sur le circuit de contractualisation : « Faire avancer » fait
+              progresser le contrat d'une étape ; à « En attente de signature » on
+              SIGNE ; « Actif » = contrat validé et en vigueur. */}
+          {canValidate && !["terminated", "expired"].includes(contract.status) && (
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+              Circuit : En préparation → Relecture juridique → Validation direction → En attente de signature (✍️ on signe) → Actif.{" "}
+              {contract.status === "active" ? "✅ Contrat validé et en vigueur." : contract.status === "awaiting_signature" ? "Étape : à signer." : "« Faire avancer » valide l'étape en cours et passe à la suivante."}
+            </div>
+          )}
 
           {/* Coordonnées de la contrepartie — e-mail et WhatsApp pour les notifications. */}
           <ContactBlock partner={contract.partner} canEdit={canCreate} onChanged={refresh} onError={setError} />
@@ -908,6 +924,11 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
   const [rate, setRate] = useState<number>(10);
   const [advance, setAdvance] = useState<number>(0);
   const [durationYears, setDurationYears] = useState<number>(0);
+  // Conditions de prestation / à compte d'auteur.
+  const [serviceCost, setServiceCost] = useState<number>(0);
+  const [serviceDeposit, setServiceDeposit] = useState<number>(0);
+  const [serviceCopies, setServiceCopies] = useState<number>(0);
+  const [serviceDelivery, setServiceDelivery] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -919,6 +940,11 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
       const adv = c.royaltyTerms?.advanceAmount;
       if (adv != null) setAdvance(Number(adv));
       if (c.durationMonths) setDurationYears(Math.round(c.durationMonths / 12));
+      const ft = (c.financialTerms ?? {}) as Record<string, unknown>;
+      if (typeof ft.service_cost === "number") setServiceCost(ft.service_cost);
+      if (typeof ft.service_deposit === "number") setServiceDeposit(ft.service_deposit);
+      if (typeof ft.service_copies === "number") setServiceCopies(ft.service_copies);
+      if (typeof ft.service_delivery === "string") setServiceDelivery(ft.service_delivery);
       setLoaded(true);
     }).catch((e) => onError(e instanceof Error ? e.message : "Chargement impossible."));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -933,10 +959,15 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
       await updateContractTerms(contract.id, {
         type,
         economic_model: economicModel,
-        // Les termes de droits ne sont transmis que s'ils s'appliquent.
+        // Droits d'auteur OU conditions de prestation, selon le modèle.
         ...(royaltiesApply
           ? { rate: rate / 100, advance_amount: advance, duration_months: durationYears > 0 ? durationYears * 12 : null }
-          : {}),
+          : {
+              service_cost: serviceCost,
+              service_deposit: serviceDeposit,
+              ...(economicModel === "compte_auteur" ? { service_copies: serviceCopies } : {}),
+              service_delivery: serviceDelivery.trim(),
+            }),
       });
       onSaved();
     } catch (e) {
@@ -966,12 +997,12 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
               {royaltiesApply && <label style={{ fontSize: 12 }}>Taux de droits (%)<input type="number" min={0} max={100} value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} /></label>}
               {royaltiesApply && <label style={{ fontSize: 12 }}>Avance (à-valoir, FCFA)<input type="number" min={0} value={advance} onChange={(e) => setAdvance(Number(e.target.value))} style={inputStyle} /></label>}
               {royaltiesApply && <label style={{ fontSize: 12 }}>Durée de la cession (années)<input type="number" min={0} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={inputStyle} /></label>}
+              {/* Conditions de prestation / à compte d'auteur, corrigeables ici. */}
+              {!royaltiesApply && <label style={{ fontSize: 12 }}>Coût total (FCFA)<input type="number" min={0} value={serviceCost} onChange={(e) => setServiceCost(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {!royaltiesApply && <label style={{ fontSize: 12 }}>Acompte (FCFA)<input type="number" min={0} value={serviceDeposit} onChange={(e) => setServiceDeposit(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {!royaltiesApply && economicModel === "compte_auteur" && <label style={{ fontSize: 12 }}>Nombre d'exemplaires<input type="number" min={0} value={serviceCopies} onChange={(e) => setServiceCopies(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {!royaltiesApply && <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Conditions de livraison<input type="text" value={serviceDelivery} onChange={(e) => setServiceDelivery(e.target.value)} placeholder="ex. livraison sous 30 jours après BAT" style={inputStyle} /></label>}
             </div>
-            {!royaltiesApply && (
-              <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>
-                Contrat de prestation / à compte d'auteur : pas de droits d'auteur. Les conditions financières (coût, acompte, livraison) se saisissent à la création du contrat ; ici vous ajustez le type et le modèle économique.
-              </div>
-            )}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
               <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Annuler</button>
               <button onClick={save} disabled={busy} style={{ ...secondaryButtonStyle, background: "var(--eclosion)", color: "#fff", border: "none" }}>{busy ? "Enregistrement…" : "Enregistrer"}</button>

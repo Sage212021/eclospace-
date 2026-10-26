@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-modifier-visible-et-circuit",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : bouton « Modifier » visible et circuit de validation clarifié",
+      body: "Un bouton « ✏️ Modifier » est désormais visible directement sur chaque contrat non signé (plus besoin de le chercher dans un menu). Il permet de revenir corriger les renseignements AVANT signature : type, modèle économique, et — pour une prestation / un compte d'auteur — le coût total, l'acompte, le nombre d'exemplaires et les conditions de livraison. Le bouton « Faire avancer » indique maintenant l'étape suivante (ex. « Faire avancer → Relecture juridique ») et une ligne rappelle tout le circuit : En préparation → Relecture juridique → Validation direction → En attente de signature (on signe avec ✍️) → Actif. C'est bien « Faire avancer » qui valide la contractualisation étape par étape ; « Actif » = contrat validé et en vigueur.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-contrats-formulaire-coherent-modele",
       version: "2026.10",
       title: "Nouveauté — Contrats : le formulaire s'adapte au type, et le modèle est corrigeable",

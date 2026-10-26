@@ -527,6 +527,11 @@ export default async function contractRoutes(fastify: FastifyInstance) {
           duration_months: z.number().int().positive().max(1200).nullish(),
           rate: z.number().min(0).max(1).optional(),
           advance_amount: z.number().min(0).optional(),
+          // Conditions de prestation / à compte d'auteur (termes financiers JSON).
+          service_cost: z.number().min(0).optional(),
+          service_deposit: z.number().min(0).optional(),
+          service_copies: z.number().int().min(0).optional(),
+          service_delivery: z.string().max(400).optional(),
         })
         .safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
@@ -569,6 +574,16 @@ export default async function contractRoutes(fastify: FastifyInstance) {
           const fin = (contract.financialTerms as Record<string, unknown> | null) ?? { base: "prix_public_ht", payment_schedule: "semestriel" };
           fin.tiers = tiers;
           fin.advance_amount = advance;
+          await tx.contract.update({ where: { id }, data: { financialTerms: JSON.parse(JSON.stringify(fin)) } });
+        }
+        // Conditions de prestation / à compte d'auteur : fusionnées dans les
+        // termes financiers (JSON) sans toucher aux paliers de droits éventuels.
+        if (b.service_cost !== undefined || b.service_deposit !== undefined || b.service_copies !== undefined || b.service_delivery !== undefined) {
+          const fin = (contract.financialTerms as Record<string, unknown> | null) ?? {};
+          if (b.service_cost !== undefined) fin.service_cost = b.service_cost;
+          if (b.service_deposit !== undefined) fin.service_deposit = b.service_deposit;
+          if (b.service_copies !== undefined) fin.service_copies = b.service_copies;
+          if (b.service_delivery !== undefined) fin.service_delivery = b.service_delivery.trim();
           await tx.contract.update({ where: { id }, data: { financialTerms: JSON.parse(JSON.stringify(fin)) } });
         }
       });

@@ -1819,7 +1819,7 @@ export function getContract(id: string) {
 // Bibliothèque de modèles de contrat (§9) : texte par défaut d'un article, par
 // type de document (edition | service), éditable sans code.
 export interface ContractClauseTemplateRow {
-  template_key: "edition" | "service";
+  template_key: "edition" | "service" | "auteur";
   article_number: number;
   body: string;
   updated_at?: string;
@@ -1827,7 +1827,7 @@ export interface ContractClauseTemplateRow {
 export function getContractTemplates() {
   return request<ContractClauseTemplateRow[]>("/api/v1/contract-templates");
 }
-export function setContractClauseTemplate(template_key: "edition" | "service", article_number: number, body: string) {
+export function setContractClauseTemplate(template_key: "edition" | "service" | "auteur", article_number: number, body: string) {
   return request<{ ok: true }>("/api/v1/contract-templates", { method: "PUT", body: JSON.stringify({ template_key, article_number, body }) });
 }
 
@@ -1841,7 +1841,7 @@ export function signContract(
 }
 
 // Modifier les termes d'un contrat non signé (type, taux, avance, durée).
-export function updateContractTerms(id: string, input: { type?: string; economic_model?: string | null; duration_months?: number | null; rate?: number; advance_amount?: number; service_cost?: number; service_deposit?: number; service_copies?: number; service_delivery?: string }) {
+export function updateContractTerms(id: string, input: { type?: string; economic_model?: string | null; duration_months?: number | null; rate?: number; advance_amount?: number; service_cost?: number; service_deposit?: number; service_copies?: number; service_delivery?: string; editorial_fees?: number; print_copies?: number; print_unit_cost?: number; sale_price_min?: number; logo_pct?: number; distribution_pct?: number; duration_years?: number; territory?: string }) {
   return request<ContractDetail>(`/api/v1/contracts/${id}/terms`, { method: "PATCH", body: JSON.stringify(input) });
 }
 

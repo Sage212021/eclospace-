@@ -1439,6 +1439,148 @@ export function printServiceContract(c: ContractDetail, opts?: PrintOpts, publis
   openPrintWindow(`${serviceContractTitle(c)} ${c.contractNumber}`, buildServiceContractHtml(c, publisher, sign, templates), opts);
 }
 
+// Articles standard du CONTRAT D'ÉDITION À COMPTE D'AUTEUR (modèle maison Éclosion :
+// l'auteur finance l'édition, l'éditeur réalise les prestations et est rémunéré
+// par quota / % — PAS de droits d'auteur versés). 7 articles, fidèles au modèle.
+export const AUTHOR_ACCOUNT_CONTRACT_ARTICLES: { n: number; title: string }[] = [
+  { n: 1, title: "OBJET DU CONTRAT" },
+  { n: 2, title: "OBLIGATIONS DE L'AUTEUR" },
+  { n: 3, title: "OBLIGATIONS DE L'ÉDITEUR" },
+  { n: 4, title: "PRÉROGATIVES DE L'ÉDITEUR" },
+  { n: 5, title: "DURÉE ET ÉTENDUE TERRITORIALE" },
+  { n: 6, title: "VENTE, RÉMUNÉRATION DE L'AUTEUR ET DE L'ÉDITEUR" },
+  { n: 7, title: "LITIGES" },
+];
+
+// Montant FCFA plat (pour les champs {{…}}), ou pointillés si non renseigné.
+function moneyPlain(v: unknown): string {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n) || n <= 0) return "……………";
+  return `${n.toLocaleString("fr-FR")} francs CFA`;
+}
+
+// Corps HTML du contrat d'édition À COMPTE D'AUTEUR (modèle BIKORO), avec champs
+// éditables ({{frais_editoriaux}}, {{nb_exemplaires}}, {{cout_unitaire}},
+// {{cout_impression}}, {{prix_mini}}, {{pct_logo}}, {{pct_distribution}},
+// {{pct_total}}, {{duree}}, {{territoire}}). Mêmes mécaniques que les autres
+// contrats : surcharges d'articles + modèle éditable + clauses additionnelles.
+export function buildAuthorAccountContractHtml(c: ContractDetail, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null, templates?: Record<number, string>): string {
+  const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
+  const p = c.partner;
+  const BL = (w = 20) => `<span style="color:#9aa1ad">${"…".repeat(w)}</span>`;
+  const esc = (v?: string | null) => (v && v.trim() ? escapeHtml(v) : null);
+  const auteur = `${esc(p.firstName) ?? ""} ${esc(p.lastName) ?? ""}`.trim() || BL(20);
+  const titre = esc(c.manuscript?.title) ?? BL(30);
+  const ft = (c.financialTerms ?? {}) as Record<string, unknown>;
+  const num = (k: string): number => (typeof ft[k] === "number" ? (ft[k] as number) : Number(ft[k])) || 0;
+  const copies = num("print_copies");
+  const unit = num("print_unit_cost");
+  const printTotal = copies > 0 && unit > 0 ? copies * unit : num("print_cost");
+  const logo = num("logo_pct") || 10;
+  const distrib = num("distribution_pct") || 25;
+  const duree = num("duration_years") || 5;
+  const territoire = esc(typeof ft.territory === "string" ? (ft.territory as string) : null) ?? "Cameroun";
+  const ctx: Record<string, string> = {
+    numero: c.contractNumber,
+    titre: (c.manuscript?.title ?? "").trim(),
+    auteur: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(),
+    editeur: ED.name,
+    modele: economicModelLabelFr(c.economicModel),
+    frais_editoriaux: moneyPlain(ft.editorial_fees),
+    nb_exemplaires: copies > 0 ? String(copies) : "……",
+    cout_unitaire: moneyPlain(unit),
+    cout_impression: moneyPlain(printTotal),
+    prix_mini: moneyPlain(ft.sale_price_min),
+    pct_logo: String(logo),
+    pct_distribution: String(distrib),
+    pct_total: String(logo + distrib),
+    duree: String(duree),
+    territoire,
+  };
+
+  const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
+  const li = (items: string[]) => `<ul style="margin:6px 0 6px 4px;padding-left:16px;font-size:12px;line-height:1.5">${items.map((i) => `<li style="margin:3px 0">${i}</li>`).join("")}</ul>`;
+  const overrides = (c.articleOverrides && typeof c.articleOverrides === "object" && !Array.isArray(c.articleOverrides) ? c.articleOverrides : {}) as Record<string, string>;
+  const art = (n: number, t: string, corps: string) => {
+    const custom = resolveArticleBody(n, overrides, templates, ctx, par);
+    const inner = custom
+      ? custom.html + (custom.ajusted ? `<p style="margin:2px 0 0;font-size:9.5px;color:#9a7a12;font-style:italic">Article ajusté pour ce contrat.</p>` : "")
+      : corps;
+    return `
+    <div class="art" data-article="${n}">
+    <h3 style="font-family:Georgia,serif;font-size:14px;margin:20px 0 6px;color:#0b0b0c;border-bottom:1px solid #e7e2d4;padding-bottom:3px">ARTICLE ${n} — ${t}</h3>
+    ${inner}
+    </div>`;
+  };
+
+  const modelMeta = c.economicModel ? `<span>Modèle : <b>${escapeHtml(economicModelLabelFr(c.economicModel))}</b></span>` : "";
+  const fraisTxt = moneyPlain(ft.editorial_fees);
+  const body = `
+    <div class="doc__title">CONTRAT D'ÉDITION À COMPTE D'AUTEUR</div>
+    <div class="meta"><span>Contrat n° <b class="num">${escapeHtml(c.contractNumber)}</b></span>${modelMeta}</div>
+
+    <p style="margin:4px 0 2px;font-size:12px"><b>Entre les soussignés,</b></p>
+    <p style="margin:6px 0;font-size:12px;line-height:1.55">
+      M./Mme <b>${auteur}</b>, Tél. : ${esc(p.phone) ?? BL(14)}, Email : ${esc(p.email) ?? BL(24)},<br>
+      <i>Ci-après dénommé « l'Auteur », d'une part ;</i>
+    </p>
+    <p style="margin:6px 0;font-size:12px;line-height:1.55">
+      Et : <b>${ED.name}</b>, ${ED.desc} ${ED.rc}, N° Contribuable ${ED.niu}. Siège social : ${ED.siege} ; Tél : ${ED.tel}, Email : ${ED.email} Site web : ${ED.web} Représentée par ${ED.rep},<br>
+      <i>Ci-après dénommée « l'Éditeur », d'autre part ;</i>
+    </p>
+    <p style="margin:6px 0;font-size:12px"><b>Il est convenu ce qui suit :</b></p>
+
+    ${art(1, "OBJET DU CONTRAT", `
+      ${par(`Dans l'optique de la publication et la vente au Cameroun de son livre sous forme imprimée intitulé « <b>${titre}</b> », ci-après dénommé « l'œuvre », l'Auteur confie à l'Éditeur la réalisation des prestations suivantes :`)}
+      ${li(["la relecture de l'œuvre ;", "le montage de l'œuvre et la production du fichier numérique ;", "l'édition de l'œuvre en nombre d'exemplaires commandés par l'Auteur ;", "la publication de l'œuvre ;", "le marketing et la communication en vue de la vente de l'œuvre."])}
+      ${par("Toute prestation non expressément confiée aux termes du présent contrat demeure la seule propriété de l'Auteur et ne pourra être réalisée par l'Éditeur, sauf accord formel de l'Auteur faisant l'objet d'un nouveau contrat ou d'un avenant au présent contrat.")}`)}
+
+    ${art(2, "OBLIGATIONS DE L'AUTEUR", `
+      ${par("<b>1/ Clause de garantie et financement.</b> L'Auteur déclare que son œuvre est originale, ne contenant ni emprunt à une création protégée par la propriété intellectuelle, ni propos à caractère diffamatoire. Il garantit qu'elle ne fait l'objet d'aucun autre contrat ni droit de préférence consenti à un tiers, et qu'il a capacité de signer le présent contrat.")}
+      ${par(`L'Auteur s'engage à financer entièrement l'édition de son œuvre : les frais éditoriaux, arrêtés à <b>${fraisTxt}</b>, ainsi que les frais d'impression de tous les exemplaires. Le cas échéant, l'Auteur peut solliciter l'Éditeur, ou accepter sa sollicitation, pour le cofinancement des coûts d'impression. L'Auteur s'engage à rémunérer l'Éditeur conformément à l'article 6.`)}
+      ${par("<b>2/ Remise des éléments.</b> L'Auteur s'engage à remettre à l'Éditeur, qui en accuse réception, l'œuvre dans sa forme définitive et complète dans un délai de 3 mois au plus tard, ce qui fait courir les délais de publication.")}`)}
+
+    ${art(3, "OBLIGATIONS DE L'ÉDITEUR", `
+      ${par("<b>1/ Restitution et remise.</b> L'Éditeur restitue les documents originaux sur simple demande, au plus tard trois (03) mois après la publication, et remet à l'Auteur le fichier numérique de l'œuvre dans un délai d'un (01) mois à compter de la publication. L'Éditeur est SEUL habilité à procéder à la fabrication des exemplaires, après commande formelle de l'Auteur ; toute fabrication par l'une des parties sans autorisation de l'autre constitue un motif de résiliation à ses torts.")}
+      ${par(`Après fabrication, l'Éditeur remet tous les exemplaires à l'Auteur en vue de la répartition actée par procès-verbal signé des deux parties. Le premier tirage de <b>${copies > 0 ? copies : BL(4)}</b> exemplaires est arrêté à <b>${moneyPlain(printTotal)}</b>${unit > 0 ? ` (soit ${moneyPlain(unit)} l'unité)` : ""}. Quelques exemplaires, exempts des droits de l'Auteur et de la rémunération de l'Éditeur, sont réservés :`)}
+      ${li(["05 exemplaires destinés au dépôt légal ;", "03 exemplaires destinés au service de presse, à la promotion et à la publicité ;", "02 exemplaires destinés aux justificatifs."])}
+      ${par("<b>2/ Épreuves et bon à tirer.</b> L'Éditeur envoie les épreuves à l'Auteur, qui les lit, corrige et retourne sous trois (03) semaines, revêtues de son « bon à tirer ». À défaut, l'Éditeur peut confier les fichiers à un correcteur de son choix (moyennant contribution de l'Auteur) ou résilier le contrat.")}
+      ${par(`<b>3/ Publication.</b> L'Éditeur s'engage à publier l'œuvre dès remise des frais afférents par l'Auteur, au plus tard un mois après la remise des éléments. Si l'ouvrage n'est pas publié dans les six (06) mois suivant la remise des éléments et des frais, le contrat est résilié aux torts exclusifs de l'Éditeur, après mise en demeure restée sans effet pendant un (01) mois.`)}
+      ${par("<b>4/ Marketing, communication et vente.</b> L'Éditeur accompagne l'Auteur dans la diffusion et le suivi de l'œuvre auprès du public, par les moyens et canaux de marketing et de communication.")}`)}
+
+    ${art(4, "PRÉROGATIVES DE L'ÉDITEUR", `
+      ${par("L'Éditeur détermine, sous réserve du droit moral de l'Auteur, le format et la présentation de l'œuvre. Les éléments promotionnels relèvent de l'Auteur, sauf s'il les confie en tout ou partie à l'Éditeur (par consensus des deux parties).")}
+      ${par("L'Éditeur n'apporte à l'œuvre aucune modification sans autorisation écrite de l'Auteur, et fait figurer sur la couverture et les documents promotionnels le nom de l'Auteur ou son pseudonyme.")}`)}
+
+    ${art(5, "DURÉE ET ÉTENDUE TERRITORIALE", `
+      ${par(`<b>1/ Durée.</b> Le présent contrat est constitué pour une durée de <b>${duree} (0${duree}) ans</b>, tacitement reconductible pour une même durée, sauf lettre recommandée avec accusé de réception adressée au plus tard trois (03) mois avant l'échéance.`)}
+      ${par(`<b>2/ Territoire.</b> Le présent contrat prendra effet en/au <b>${territoire}</b>.`)}`)}
+
+    ${art(6, "VENTE, RÉMUNÉRATION DE L'AUTEUR ET DE L'ÉDITEUR", `
+      ${par(`<b>1/ Prix de vente.</b> Le prix du livre, pouvant varier selon la demande, est fixé par l'Auteur et l'Éditeur et consigné dans un procès-verbal signé des deux parties. Le prix minimum de vente retenu pour la rémunération est de <b>${moneyPlain(ft.sale_price_min)}</b>.`)}
+      ${par(`<b>2/ Rémunération.</b> L'Auteur dispose de son stock comme il l'entend ; l'Éditeur perçoit <b>${logo} %</b> d'utilisation du logo sur chaque livre. Si l'Auteur confie tout son stock à la gestion de l'Éditeur, <b>${distrib} %</b> sont prélevés pour les frais de distribution et <b>${logo} %</b> pour l'utilisation du logo, soit <b>${logo + distrib} %</b>.`)}`)}
+
+    ${art(7, "LITIGES", par("Le présent contrat est soumis à la loi camerounaise. Tout différend fera l'objet d'une tentative d'arrangement amiable ; à défaut, seuls les tribunaux de Yaoundé sont compétents."))}
+
+    ${(c.customClauses ?? []).map((cl, i) => art(8 + i, (esc(cl.title) ?? "").toUpperCase(), par(escapeHtml(cl.body)))).join("")}
+
+    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
+    <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
+    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap">
+      <div style="flex:1; min-width:200px"><div class="party__label">L'Auteur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
+      <div style="flex:1; min-width:200px">
+        <div class="party__label">L'Éditeur</div>
+        ${editorSignatureBlock(sign)}
+      </div>
+    </div>`;
+
+  return body;
+}
+
+export function printAuthorAccountContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null, templates?: Record<number, string>): void {
+  openPrintWindow(`Contrat d'édition à compte d'auteur ${c.contractNumber}`, buildAuthorAccountContractHtml(c, publisher, sign, templates), opts);
+}
+
 // Fiche collaborateur prête à imprimer / PDF (refonte RH — barre d'actions
 // standard). Récapitule l'état civil professionnel, le poste, le cycle de vie et
 // le solde de congés, sur l'en-tête maison. Données non confidentielles.

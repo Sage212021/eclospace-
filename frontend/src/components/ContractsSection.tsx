@@ -37,7 +37,7 @@ import {
   type SignatureParty,
   type ChatDirectoryEntry,
 } from "../api/client";
-import { printContract, printAuthorContract, buildAuthorContractHtml, AUTHOR_CONTRACT_ARTICLES, printServiceContract, buildServiceContractHtml, SERVICE_CONTRACT_ARTICLES } from "../lib/print";
+import { printContract, printAuthorContract, buildAuthorContractHtml, AUTHOR_CONTRACT_ARTICLES, printServiceContract, buildServiceContractHtml, SERVICE_CONTRACT_ARTICLES, printAuthorAccountContract, buildAuthorAccountContractHtml, AUTHOR_ACCOUNT_CONTRACT_ARTICLES } from "../lib/print";
 import { pasteTidied } from "../lib/tidyProse";
 import { getBranding } from "../api/client";
 import { buildAuthorContractPdf, downloadAuthorContractPdf } from "../lib/contractPdf";
@@ -68,6 +68,17 @@ const STATUS_LABELS: Record<ContractStatus, string> = {
 // d'auteur » ; sinon le contrat d'édition (comportement existant). D-054 / §9.
 function isServiceContract(c: { type: string; economicModel?: string | null }): boolean {
   return c.economicModel === "compte_auteur" || ["prestation", "correction", "illustration"].includes(c.type);
+}
+
+// Quel DOCUMENT générer selon le modèle économique et le type (§9) :
+// « auteur » = contrat d'édition à compte d'auteur (modèle BIKORO, 7 articles) ;
+// « service » = prestation de services (correction/illustration/prestation) ;
+// « edition » = contrat d'édition à compte d'éditeur (15 articles).
+type ContractKind = "auteur" | "service" | "edition";
+function contractKind(c: { type: string; economicModel?: string | null }): ContractKind {
+  if (c.economicModel === "compte_auteur") return "auteur";
+  if (["prestation", "correction", "illustration"].includes(c.type)) return "service";
+  return "edition";
 }
 
 // Des droits d'auteur s'appliquent-ils ? Oui pour un type rémunérant l'auteur
@@ -136,17 +147,16 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
   const [dispatchVersion, setDispatchVersion] = useState(0);
   const bumpDispatch = () => setDispatchVersion((v) => v + 1);
   // Modèles de contrat éditables (§9) : texte par défaut des articles, par type.
-  const [templates, setTemplates] = useState<{ edition: Record<number, string>; service: Record<number, string> }>({ edition: {}, service: {} });
+  const [templates, setTemplates] = useState<{ edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string> }>({ edition: {}, service: {}, auteur: {} });
   const [showTemplates, setShowTemplates] = useState(false);
   const loadTemplates = () =>
     getContractTemplates()
       .then((rows) => {
-        const m = { edition: {} as Record<number, string>, service: {} as Record<number, string> };
+        const m = { edition: {} as Record<number, string>, service: {} as Record<number, string>, auteur: {} as Record<number, string> };
         for (const r of rows) m[r.template_key][r.article_number] = r.body;
         setTemplates(m);
       })
       .catch(() => {});
-  const templateMapFor = (c: { type: string; economicModel?: string | null }) => (isServiceContract(c) ? templates.service : templates.edition);
 
   const refresh = () => listContracts(manuscriptId).then(setContracts).catch((e) => setError(e.message));
 
@@ -228,11 +238,11 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
             </span>
             <DocPrintMenu label="Fiche (résumé)" onPrint={(o) => getContract(contract.id).then((c) => printContract(c, o)).catch((e) => setError(e.message))} />
             <DocPrintMenu
-              label={isServiceContract(contract) ? "Contrat (prestation)" : "Contrat d'édition"}
+              label={contractKind(contract) === "auteur" ? "Contrat (compte d'auteur)" : contractKind(contract) === "service" ? "Contrat (prestation)" : "Contrat d'édition"}
               // PDF vectoriel « net » : disponible pour le contrat d'édition
-              // (modèle jsPDF). Le contrat de prestation passe par l'impression
-              // (bouton « Enregistrer en PDF » de la fenêtre).
-              onDownloadPdf={isServiceContract(contract) ? undefined : () =>
+              // (modèle jsPDF). Les contrats prestation / compte d'auteur passent
+              // par l'impression (bouton « Enregistrer en PDF » de la fenêtre).
+              onDownloadPdf={contractKind(contract) !== "edition" ? undefined : () =>
                 Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null), getBranding().catch(() => null)])
                   .then(([c, pub, brand]) => downloadAuthorContractPdf(c, pub, brand, templates.edition))
                   .catch((e) => setError(e.message))
@@ -244,9 +254,11 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
                     const sign = brand && brand.auto_sign_contracts
                       ? { cachet: brand.cachet_generale, signature: brand.signature_dg, dgName: brand.dg_name, dgTitle: brand.dg_title }
                       : null;
-                    // Document adapté au type / au modèle économique (§9), avec
+                    // Document adapté au modèle économique / au type (§9), avec
                     // les textes par défaut du modèle éditable.
-                    if (isServiceContract(c)) printServiceContract(c, o, pub, sign, templates.service);
+                    const kind = contractKind(c);
+                    if (kind === "auteur") printAuthorAccountContract(c, o, pub, sign, templates.auteur);
+                    else if (kind === "service") printServiceContract(c, o, pub, sign, templates.service);
                     else printAuthorContract(c, o, pub, sign, templates.edition);
                   })
                   .catch((e) => setError(e.message))
@@ -927,8 +939,16 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
   // Conditions de prestation / à compte d'auteur.
   const [serviceCost, setServiceCost] = useState<number>(0);
   const [serviceDeposit, setServiceDeposit] = useState<number>(0);
-  const [serviceCopies, setServiceCopies] = useState<number>(0);
   const [serviceDelivery, setServiceDelivery] = useState<string>("");
+  // Champs du contrat à compte d'auteur.
+  const [editorialFees, setEditorialFees] = useState<number>(0);
+  const [printCopies, setPrintCopies] = useState<number>(0);
+  const [printUnitCost, setPrintUnitCost] = useState<number>(0);
+  const [salePriceMin, setSalePriceMin] = useState<number>(20000);
+  const [logoPct, setLogoPct] = useState<number>(10);
+  const [distributionPct, setDistributionPct] = useState<number>(25);
+  const [aaDurationYears, setAaDurationYears] = useState<number>(5);
+  const [territory, setTerritory] = useState<string>("Cameroun");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -943,15 +963,23 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
       const ft = (c.financialTerms ?? {}) as Record<string, unknown>;
       if (typeof ft.service_cost === "number") setServiceCost(ft.service_cost);
       if (typeof ft.service_deposit === "number") setServiceDeposit(ft.service_deposit);
-      if (typeof ft.service_copies === "number") setServiceCopies(ft.service_copies);
       if (typeof ft.service_delivery === "string") setServiceDelivery(ft.service_delivery);
+      if (typeof ft.editorial_fees === "number") setEditorialFees(ft.editorial_fees);
+      if (typeof ft.print_copies === "number") setPrintCopies(ft.print_copies);
+      if (typeof ft.print_unit_cost === "number") setPrintUnitCost(ft.print_unit_cost);
+      if (typeof ft.sale_price_min === "number") setSalePriceMin(ft.sale_price_min);
+      if (typeof ft.logo_pct === "number") setLogoPct(ft.logo_pct);
+      if (typeof ft.distribution_pct === "number") setDistributionPct(ft.distribution_pct);
+      if (typeof ft.duration_years === "number") setAaDurationYears(ft.duration_years);
+      if (typeof ft.territory === "string") setTerritory(ft.territory);
       setLoaded(true);
     }).catch((e) => onError(e instanceof Error ? e.message : "Chargement impossible."));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contract.id]);
 
-  // Champs de droits d'auteur affichés selon le type + le modèle économique.
+  // Champs affichés selon le type + le modèle économique.
   const royaltiesApply = royaltiesApplyFor(type, economicModel);
+  const authorAccount = economicModel === "compte_auteur";
 
   async function save() {
     setBusy(true);
@@ -959,15 +987,12 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
       await updateContractTerms(contract.id, {
         type,
         economic_model: economicModel,
-        // Droits d'auteur OU conditions de prestation, selon le modèle.
+        // Droits d'auteur / compte d'auteur / prestation, selon le modèle.
         ...(royaltiesApply
           ? { rate: rate / 100, advance_amount: advance, duration_months: durationYears > 0 ? durationYears * 12 : null }
-          : {
-              service_cost: serviceCost,
-              service_deposit: serviceDeposit,
-              ...(economicModel === "compte_auteur" ? { service_copies: serviceCopies } : {}),
-              service_delivery: serviceDelivery.trim(),
-            }),
+          : authorAccount
+            ? { editorial_fees: editorialFees, print_copies: printCopies, print_unit_cost: printUnitCost, sale_price_min: salePriceMin, logo_pct: logoPct, distribution_pct: distributionPct, duration_years: aaDurationYears, territory: territory.trim() || "Cameroun" }
+            : { service_cost: serviceCost, service_deposit: serviceDeposit, service_delivery: serviceDelivery.trim() }),
       });
       onSaved();
     } catch (e) {
@@ -997,11 +1022,19 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
               {royaltiesApply && <label style={{ fontSize: 12 }}>Taux de droits (%)<input type="number" min={0} max={100} value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} /></label>}
               {royaltiesApply && <label style={{ fontSize: 12 }}>Avance (à-valoir, FCFA)<input type="number" min={0} value={advance} onChange={(e) => setAdvance(Number(e.target.value))} style={inputStyle} /></label>}
               {royaltiesApply && <label style={{ fontSize: 12 }}>Durée de la cession (années)<input type="number" min={0} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={inputStyle} /></label>}
-              {/* Conditions de prestation / à compte d'auteur, corrigeables ici. */}
-              {!royaltiesApply && <label style={{ fontSize: 12 }}>Coût total (FCFA)<input type="number" min={0} value={serviceCost} onChange={(e) => setServiceCost(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
-              {!royaltiesApply && <label style={{ fontSize: 12 }}>Acompte (FCFA)<input type="number" min={0} value={serviceDeposit} onChange={(e) => setServiceDeposit(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
-              {!royaltiesApply && economicModel === "compte_auteur" && <label style={{ fontSize: 12 }}>Nombre d'exemplaires<input type="number" min={0} value={serviceCopies} onChange={(e) => setServiceCopies(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
-              {!royaltiesApply && <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Conditions de livraison<input type="text" value={serviceDelivery} onChange={(e) => setServiceDelivery(e.target.value)} placeholder="ex. livraison sous 30 jours après BAT" style={inputStyle} /></label>}
+              {/* Contrat à compte d'auteur (modèle BIKORO), corrigeable ici. */}
+              {authorAccount && <label style={{ fontSize: 12 }}>Frais éditoriaux (FCFA)<input type="number" min={0} value={editorialFees} onChange={(e) => setEditorialFees(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {authorAccount && <label style={{ fontSize: 12 }}>Nb exemplaires (1er tirage)<input type="number" min={0} value={printCopies} onChange={(e) => setPrintCopies(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {authorAccount && <label style={{ fontSize: 12 }}>Coût d'impression / ex. (FCFA)<input type="number" min={0} value={printUnitCost} onChange={(e) => setPrintUnitCost(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {authorAccount && <label style={{ fontSize: 12 }}>Prix de vente mini (FCFA)<input type="number" min={0} value={salePriceMin} onChange={(e) => setSalePriceMin(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {authorAccount && <label style={{ fontSize: 12 }}>% éditeur (logo)<input type="number" min={0} max={100} value={logoPct} onChange={(e) => setLogoPct(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {authorAccount && <label style={{ fontSize: 12 }}>% distribution<input type="number" min={0} max={100} value={distributionPct} onChange={(e) => setDistributionPct(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {authorAccount && <label style={{ fontSize: 12 }}>Durée (années)<input type="number" min={0} value={aaDurationYears} onChange={(e) => setAaDurationYears(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {authorAccount && <label style={{ fontSize: 12 }}>Territoire<input type="text" value={territory} onChange={(e) => setTerritory(e.target.value)} style={inputStyle} /></label>}
+              {/* Prestation de services (hors compte d'auteur), corrigeable ici. */}
+              {!royaltiesApply && !authorAccount && <label style={{ fontSize: 12 }}>Coût total (FCFA)<input type="number" min={0} value={serviceCost} onChange={(e) => setServiceCost(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {!royaltiesApply && !authorAccount && <label style={{ fontSize: 12 }}>Acompte (FCFA)<input type="number" min={0} value={serviceDeposit} onChange={(e) => setServiceDeposit(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {!royaltiesApply && !authorAccount && <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Conditions de livraison<input type="text" value={serviceDelivery} onChange={(e) => setServiceDelivery(e.target.value)} placeholder="ex. livraison sous 30 jours après BAT" style={inputStyle} /></label>}
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
               <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Annuler</button>
@@ -1067,16 +1100,17 @@ function AmendmentModal({ parent, manuscriptId, onClose, onCreated, onError }: {
 // texte d'un article standard (1–15) et gérer les clauses additionnelles
 // (ajouter / modifier / retirer). L'impression/PDF reflète les ajustements ;
 // tout est tracé ; verrouillé dès signature (côté serveur).
-function ArticleModal({ contract, templates, onClose, onSaved, onError }: { contract: Contract; templates: { edition: Record<number, string>; service: Record<number, string> }; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
+function ArticleModal({ contract, templates, onClose, onSaved, onError }: { contract: Contract; templates: { edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string> }; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
   // Document adapté au type / au modèle économique (§9) : contrat de prestation /
   // à compte d'auteur, ou contrat d'édition. Détermine le modèle d'articles et le
   // générateur d'aperçu.
-  const service = isServiceContract(contract);
-  const ARTICLES = service ? SERVICE_CONTRACT_ARTICLES : AUTHOR_CONTRACT_ARTICLES;
+  const kind = contractKind(contract);
+  const service = kind !== "edition"; // prestation OU compte d'auteur = pas de droits
+  const ARTICLES = kind === "auteur" ? AUTHOR_ACCOUNT_CONTRACT_ARTICLES : kind === "service" ? SERVICE_CONTRACT_ARTICLES : AUTHOR_CONTRACT_ARTICLES;
   const maxArt = ARTICLES.length;
-  const buildHtml = service ? buildServiceContractHtml : buildAuthorContractHtml;
+  const buildHtml = kind === "auteur" ? buildAuthorAccountContractHtml : kind === "service" ? buildServiceContractHtml : buildAuthorContractHtml;
   // Textes par défaut du modèle éditable pour ce type de document.
-  const tplMap = service ? templates.service : templates.edition;
+  const tplMap = kind === "auteur" ? templates.auteur : kind === "service" ? templates.service : templates.edition;
   const [detail, setDetail] = useState<ContractDetail | null>(null);
   const [busy, setBusy] = useState(false);
   // Surcharge d'article.
@@ -1162,7 +1196,7 @@ function ArticleModal({ contract, templates, onClose, onSaved, onError }: { cont
   };
 
   // Imprimer / Télécharger le PDF à partir de la copie de travail (WYSIWYG).
-  const printWorking = () => { if (!workingDetail) return; if (service) printServiceContract(workingDetail, {}, pub, sign, tplMap); else printAuthorContract(workingDetail, {}, pub, sign, tplMap); };
+  const printWorking = () => { if (!workingDetail) return; if (kind === "auteur") printAuthorAccountContract(workingDetail, {}, pub, sign, tplMap); else if (kind === "service") printServiceContract(workingDetail, {}, pub, sign, tplMap); else printAuthorContract(workingDetail, {}, pub, sign, tplMap); };
   // PDF vectoriel « net » : seulement pour le contrat d'édition (modèle jsPDF).
   const pdfWorking = () => { if (workingDetail) downloadAuthorContractPdf(workingDetail, pub, brand, tplMap).catch((e) => onError(e instanceof Error ? e.message : "PDF impossible.")); };
 
@@ -1254,24 +1288,26 @@ function ArticleModal({ contract, templates, onClose, onSaved, onError }: { cont
 // la maison. Les champs {{…}} restent remplis automatiquement à la génération.
 // S'applique à tous les contrats à venir ; la surcharge propre à un contrat reste
 // prioritaire. Réservé à l'autorité juridique / direction (canEdit = validation).
-const TEMPLATE_PLACEHOLDERS: Record<"edition" | "service", string> = {
+const TEMPLATE_PLACEHOLDERS: Record<"edition" | "service" | "auteur", string> = {
   edition: "{{titre}} {{auteur}} {{editeur}} {{numero}} {{modele}} {{taux}} {{duree}}",
   service: "{{titre}} {{auteur}} {{editeur}} {{numero}} {{modele}} {{cout}} {{acompte}} {{exemplaires}} {{livraison}}",
+  auteur: "{{titre}} {{auteur}} {{editeur}} {{numero}} {{frais_editoriaux}} {{nb_exemplaires}} {{cout_unitaire}} {{cout_impression}} {{prix_mini}} {{pct_logo}} {{pct_distribution}} {{pct_total}} {{duree}} {{territoire}}",
 };
 function ContractTemplatesModal({ templates, canEdit, onClose, onSaved, onError }: {
-  templates: { edition: Record<number, string>; service: Record<number, string> };
+  templates: { edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string> };
   canEdit: boolean;
   onClose: () => void;
   onSaved: () => void;
   onError: (m: string) => void;
 }) {
-  const [key, setKey] = useState<"edition" | "service">("edition");
-  const [drafts, setDrafts] = useState<{ edition: Record<number, string>; service: Record<number, string> }>({
+  const [key, setKey] = useState<"edition" | "service" | "auteur">("edition");
+  const [drafts, setDrafts] = useState<{ edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string> }>({
     edition: { ...templates.edition },
     service: { ...templates.service },
+    auteur: { ...templates.auteur },
   });
   const [busy, setBusy] = useState<number | null>(null);
-  const ARTICLES = key === "service" ? SERVICE_CONTRACT_ARTICLES : AUTHOR_CONTRACT_ARTICLES;
+  const ARTICLES = key === "auteur" ? AUTHOR_ACCOUNT_CONTRACT_ARTICLES : key === "service" ? SERVICE_CONTRACT_ARTICLES : AUTHOR_CONTRACT_ARTICLES;
   const setDraft = (n: number, v: string) => setDrafts((d) => ({ ...d, [key]: { ...d[key], [n]: v } }));
 
   async function save(n: number) {
@@ -1295,9 +1331,9 @@ function ContractTemplatesModal({ templates, canEdit, onClose, onSaved, onError 
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          {(["edition", "service"] as const).map((k) => (
+          {(["edition", "auteur", "service"] as const).map((k) => (
             <button key={k} onClick={() => setKey(k)} style={{ ...secondaryButtonStyle, ...(key === k ? { background: "var(--eclosion)", color: "#fff", border: "none" } : {}) }}>
-              {k === "edition" ? "Contrat d'édition" : "Contrat de prestation"}
+              {k === "edition" ? "À compte d'éditeur" : k === "auteur" ? "À compte d'auteur" : "Prestation"}
             </button>
           ))}
         </div>
@@ -1593,6 +1629,15 @@ function NewContractForm({
   const [serviceDeposit, setServiceDeposit] = useState(0);
   const [serviceCopies, setServiceCopies] = useState(0);
   const [serviceDelivery, setServiceDelivery] = useState("");
+  // Champs du contrat À COMPTE D'AUTEUR (modèle BIKORO) — valeurs par défaut maison.
+  const [editorialFees, setEditorialFees] = useState(0);
+  const [printCopies, setPrintCopies] = useState(0);
+  const [printUnitCost, setPrintUnitCost] = useState(0);
+  const [salePriceMin, setSalePriceMin] = useState(20000);
+  const [logoPct, setLogoPct] = useState(10);
+  const [distributionPct, setDistributionPct] = useState(25);
+  const [aaDurationYears, setAaDurationYears] = useState(5);
+  const [territory, setTerritory] = useState("Cameroun");
   // Durée de la cession (terme du contrat) — variable d'un auteur à l'autre,
   // reprise automatiquement sur le contrat imprimé. 0 = non précisée.
   const [durationYears, setDurationYears] = useState(5);
@@ -1623,38 +1668,51 @@ function NewContractForm({
   const royaltiesApply = royaltiesApplyFor(type, economicModel);
   // La maison paie-t-elle la contrepartie (→ retenue fiscale pertinente) ?
   const weOwePayee = weOwePayeeFor(type, economicModel);
+  // Contrat à compte d'auteur (modèle BIKORO) : champs dédiés.
+  const authorAccount = economicModel === "compte_auteur";
   // La fourchette 8–15 % ne s'impose qu'à une édition à compte d'éditeur (D-054).
   const rangeEnforced = type === "edition" && economicModel === "compte_editeur";
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     try {
+      const financial_terms = royaltiesApply
+        ? {
+            // Contrat avec droits d'auteur : base + paliers (moteur de droits).
+            base,
+            tiers: tiers.map((t) => ({ up_to: t.up_to, rate: t.rate / 100 })),
+            advance_amount: advance,
+            payment_schedule: paymentSchedule,
+            statement_periodicity: statementPeriodicity,
+            ...(taxWithholding > 0 ? { tax_withholding_pct: taxWithholding } : {}),
+          }
+        : authorAccount
+          ? {
+              // Contrat À COMPTE D'AUTEUR : conditions propres (aucun palier de droits).
+              editorial_fees: editorialFees,
+              print_copies: printCopies,
+              print_unit_cost: printUnitCost,
+              sale_price_min: salePriceMin,
+              logo_pct: logoPct,
+              distribution_pct: distributionPct,
+              duration_years: aaDurationYears,
+              territory: territory.trim() || "Cameroun",
+            }
+          : {
+              // Contrat de prestation : coût, acompte, livraison (aucun palier).
+              service_cost: serviceCost,
+              service_deposit: serviceDeposit,
+              ...(serviceDelivery.trim() ? { service_delivery: serviceDelivery.trim() } : {}),
+              ...(weOwePayee && taxWithholding > 0 ? { tax_withholding_pct: taxWithholding } : {}),
+            };
       await createContract({
         type,
         economic_model: economicModel,
         manuscript_id: manuscriptId,
         partner_id: partnerId,
-        ...(durationYears > 0 ? { duration_months: durationYears * 12 } : {}),
-        financial_terms: royaltiesApply
-          ? {
-              // Contrat avec droits d'auteur : base + paliers (moteur de droits).
-              base,
-              tiers: tiers.map((t) => ({ up_to: t.up_to, rate: t.rate / 100 })),
-              advance_amount: advance,
-              payment_schedule: paymentSchedule,
-              statement_periodicity: statementPeriodicity,
-              ...(taxWithholding > 0 ? { tax_withholding_pct: taxWithholding } : {}),
-            }
-          : {
-              // Contrat de prestation / à compte d'auteur : AUCUN palier de droits
-              // (on n'envoie ni base ni tiers → pas de RoyaltyTerms créés). Les
-              // conditions financières de la prestation vivent dans les termes.
-              service_cost: serviceCost,
-              service_deposit: serviceDeposit,
-              ...(economicModel === "compte_auteur" && serviceCopies > 0 ? { service_copies: serviceCopies } : {}),
-              ...(serviceDelivery.trim() ? { service_delivery: serviceDelivery.trim() } : {}),
-              ...(weOwePayee && taxWithholding > 0 ? { tax_withholding_pct: taxWithholding } : {}),
-            },
+        // La durée de cession n'est pertinente que pour un contrat à droits.
+        ...(royaltiesApply && durationYears > 0 ? { duration_months: durationYears * 12 } : {}),
+        financial_terms,
       });
       onCreated();
     } catch (err) {
@@ -1722,7 +1780,9 @@ function NewContractForm({
       <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>
         {royaltiesApply
           ? "Des droits d'auteur s'appliquent : renseignez la base et les paliers ci-dessous."
-          : "Pas de droits d'auteur pour ce modèle : renseignez les conditions de la prestation ci-dessous."}
+          : authorAccount
+            ? "Contrat à compte d'auteur : l'auteur finance l'édition ; renseignez les conditions ci-dessous (frais, tirage, % éditeur)."
+            : "Pas de droits d'auteur pour ce modèle : renseignez les conditions de la prestation ci-dessous."}
       </div>
 
       {selectedPartner && (
@@ -1805,10 +1865,42 @@ function NewContractForm({
             })}
             <button type="button" onClick={addTier} style={{ ...secondaryButtonStyle, marginTop: 4 }}>+ Ajouter un palier</button>
           </>
+        ) : authorAccount ? (
+          <>
+            {/* Contrat d'édition À COMPTE D'AUTEUR (modèle BIKORO) : l'auteur
+                finance l'édition ; l'éditeur est rémunéré par % (logo / distribution). */}
+            <div style={{ fontSize: 12, marginTop: 12, fontWeight: 600 }}>Conditions du contrat à compte d'auteur</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 6 }}>
+              <label style={{ fontSize: 12 }}>Frais éditoriaux (FCFA)
+                <input type="number" min={0} value={editorialFees} onChange={(e) => setEditorialFees(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>Nombre d'exemplaires (1er tirage)
+                <input type="number" min={0} value={printCopies} onChange={(e) => setPrintCopies(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>Coût d'impression / exemplaire (FCFA)
+                <input type="number" min={0} value={printUnitCost} onChange={(e) => setPrintUnitCost(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>Prix de vente minimum (FCFA)
+                <input type="number" min={0} value={salePriceMin} onChange={(e) => setSalePriceMin(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>% éditeur (utilisation du logo)
+                <input type="number" min={0} max={100} value={logoPct} onChange={(e) => setLogoPct(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>% distribution (si stock confié)
+                <input type="number" min={0} max={100} value={distributionPct} onChange={(e) => setDistributionPct(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>Durée (années)
+                <input type="number" min={0} value={aaDurationYears} onChange={(e) => setAaDurationYears(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>Territoire
+                <input type="text" value={territory} onChange={(e) => setTerritory(e.target.value)} style={inputStyle} />
+              </label>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Coût du 1er tirage = {printCopies > 0 && printUnitCost > 0 ? (printCopies * printUnitCost).toLocaleString("fr-FR") + " FCFA" : "nb exemplaires × coût unitaire"}. Exemplaires exempts repris au contrat : 5 dépôt légal, 3 presse, 2 justificatifs.</div>
+          </>
         ) : (
           <>
-            {/* Contrat de prestation / à compte d'auteur : conditions financières
-                de la prestation (aucun droit d'auteur). */}
+            {/* Contrat de prestation de services : coût, acompte, livraison. */}
             <div style={{ fontSize: 12, marginTop: 12, fontWeight: 600 }}>Conditions de la prestation</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 6 }}>
               <label style={{ fontSize: 12 }}>Coût total (FCFA)
@@ -1817,12 +1909,7 @@ function NewContractForm({
               <label style={{ fontSize: 12 }}>Acompte (FCFA)
                 <input type="number" min={0} value={serviceDeposit} onChange={(e) => setServiceDeposit(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
               </label>
-              {economicModel === "compte_auteur" && (
-                <label style={{ fontSize: 12 }}>Nombre d'exemplaires
-                  <input type="number" min={0} value={serviceCopies} onChange={(e) => setServiceCopies(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
-                </label>
-              )}
-              <label style={{ fontSize: 12, gridColumn: economicModel === "compte_auteur" ? "auto" : "1 / span 2" }}>Conditions de livraison
+              <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Conditions de livraison
                 <input type="text" value={serviceDelivery} onChange={(e) => setServiceDelivery(e.target.value)} placeholder="ex. livraison sous 30 jours après BAT" style={inputStyle} />
               </label>
             </div>

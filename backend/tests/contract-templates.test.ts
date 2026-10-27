@@ -47,8 +47,17 @@ describe("modèles de contrat éditables (§9)", () => {
     expect(after.length).toBe(0);
   });
 
+  it("accepte la clef de modèle « auteur » (contrat à compte d'auteur)", async () => {
+    const put = await app.inject({ method: "PUT", url: "/api/v1/contract-templates", headers: { cookie }, payload: { template_key: "auteur", article_number: 6, body: "Rémunération : {{pct_logo}} % logo ; {{pct_distribution}} % distribution." } });
+    expect(put.statusCode).toBe(200);
+    const list = await app.inject({ method: "GET", url: "/api/v1/contract-templates", headers: { cookie } });
+    const row = (list.json() as { template_key: string; article_number: number }[]).find((r) => r.template_key === "auteur" && r.article_number === 6);
+    expect(row).toBeTruthy();
+    await app.inject({ method: "PUT", url: "/api/v1/contract-templates", headers: { cookie }, payload: { template_key: "auteur", article_number: 6, body: "" } });
+  });
+
   it("refuse une clef de modèle ou un numéro d'article invalide", async () => {
-    const badKey = await app.inject({ method: "PUT", url: "/api/v1/contract-templates", headers: { cookie }, payload: { template_key: "autre", article_number: 1, body: "x" } });
+    const badKey = await app.inject({ method: "PUT", url: "/api/v1/contract-templates", headers: { cookie }, payload: { template_key: "xxx", article_number: 1, body: "x" } });
     expect(badKey.statusCode).toBe(400);
     const badNum = await app.inject({ method: "PUT", url: "/api/v1/contract-templates", headers: { cookie }, payload: { template_key: "edition", article_number: 99, body: "x" } });
     expect(badNum.statusCode).toBe(400);

@@ -541,6 +541,12 @@ export default async function contractRoutes(fastify: FastifyInstance) {
           distribution_pct: z.number().min(0).max(100).optional(),
           duration_years: z.number().int().min(0).max(99).optional(),
           territory: z.string().max(200).optional(),
+          // Conditions du contrat À COMPTE À DEMI (termes financiers JSON).
+          total_cost: z.number().min(0).optional(),
+          author_cost_share_pct: z.number().min(0).max(100).optional(),
+          author_revenue_share_pct: z.number().min(0).max(100).optional(),
+          sale_price: z.number().min(0).optional(),
+          statement_periodicity: z.enum(["mensuelle", "trimestrielle", "semestrielle", "annuelle"]).optional(),
         })
         .safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
@@ -589,11 +595,13 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         // termes financiers (JSON) sans toucher aux paliers de droits éventuels.
         const svcKeys = ["service_cost", "service_deposit", "service_copies", "service_delivery"] as const;
         const aaKeys = ["editorial_fees", "print_copies", "print_unit_cost", "sale_price_min", "logo_pct", "distribution_pct", "duration_years", "territory"] as const;
-        const touched = [...svcKeys, ...aaKeys].some((k) => b[k] !== undefined);
+        const demiKeys = ["total_cost", "author_cost_share_pct", "author_revenue_share_pct", "sale_price", "statement_periodicity"] as const;
+        const touched = [...svcKeys, ...aaKeys, ...demiKeys].some((k) => b[k] !== undefined);
         if (touched) {
           const fin = (contract.financialTerms as Record<string, unknown> | null) ?? {};
           for (const k of svcKeys) if (b[k] !== undefined) fin[k] = typeof b[k] === "string" ? (b[k] as string).trim() : b[k];
           for (const k of aaKeys) if (b[k] !== undefined) fin[k] = typeof b[k] === "string" ? (b[k] as string).trim() : b[k];
+          for (const k of demiKeys) if (b[k] !== undefined) fin[k] = typeof b[k] === "string" ? (b[k] as string).trim() : b[k];
           await tx.contract.update({ where: { id }, data: { financialTerms: JSON.parse(JSON.stringify(fin)) } });
         }
       });
@@ -655,7 +663,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
   // standard (la ligne est supprimée). S'applique à TOUS les contrats à venir.
   fastify.put("/api/v1/contract-templates", { preHandler: requirePermission("contracts", "validation") }, async (request, reply) => {
     const parsed = z
-      .object({ template_key: z.enum(["edition", "service", "auteur"]), article_number: z.number().int().min(1).max(15), body: z.string().max(8000) })
+      .object({ template_key: z.enum(["edition", "service", "auteur", "demi"]), article_number: z.number().int().min(1).max(15), body: z.string().max(8000) })
       .safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
     const { template_key, article_number } = parsed.data;

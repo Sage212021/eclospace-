@@ -138,4 +138,25 @@ describe("modèle économique & applicabilité des droits (D-054)", () => {
     expect(ft.distribution_pct).toBe(30);
     expect(ft.print_copies).toBe(200); // inchangé
   });
+
+  it("conditions À COMPTE À DEMI (partage frais + recettes) enregistrées et corrigeables", async () => {
+    const res = await create({
+      type: "edition",
+      economic_model: "compte_demi",
+      financial_terms: { total_cost: 2000000, author_cost_share_pct: 50, author_revenue_share_pct: 50, print_copies: 200, sale_price: 15000, statement_periodicity: "semestrielle", duration_years: 5, territory: "Cameroun" },
+    });
+    expect(res.statusCode).toBe(201);
+    const id = res.json().id;
+    createdIds.push(id);
+    expect(res.json().economicModel).toBe("compte_demi");
+    const terms = await prisma.royaltyTerms.findUnique({ where: { contractId: id } });
+    expect(terms).toBeNull(); // pas de paliers de droits
+    const patch = await app.inject({ method: "PATCH", url: `/api/v1/contracts/${id}/terms`, headers: { cookie }, payload: { author_cost_share_pct: 60, author_revenue_share_pct: 40 } });
+    expect(patch.statusCode).toBe(200);
+    const c = await prisma.contract.findUnique({ where: { id } });
+    const ft = c!.financialTerms as Record<string, unknown>;
+    expect(ft.author_cost_share_pct).toBe(60);
+    expect(ft.author_revenue_share_pct).toBe(40);
+    expect(ft.total_cost).toBe(2000000); // inchangé
+  });
 });

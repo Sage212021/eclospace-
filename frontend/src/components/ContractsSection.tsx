@@ -37,7 +37,7 @@ import {
   type SignatureParty,
   type ChatDirectoryEntry,
 } from "../api/client";
-import { printContract, printAuthorContract, buildAuthorContractHtml, AUTHOR_CONTRACT_ARTICLES, printServiceContract, buildServiceContractHtml, SERVICE_CONTRACT_ARTICLES, printAuthorAccountContract, buildAuthorAccountContractHtml, AUTHOR_ACCOUNT_CONTRACT_ARTICLES } from "../lib/print";
+import { printContract, printAuthorContract, buildAuthorContractHtml, AUTHOR_CONTRACT_ARTICLES, printServiceContract, buildServiceContractHtml, SERVICE_CONTRACT_ARTICLES, printAuthorAccountContract, buildAuthorAccountContractHtml, AUTHOR_ACCOUNT_CONTRACT_ARTICLES, printDemiContract, buildDemiContractHtml, DEMI_CONTRACT_ARTICLES } from "../lib/print";
 import { pasteTidied } from "../lib/tidyProse";
 import { getBranding } from "../api/client";
 import { buildAuthorContractPdf, downloadAuthorContractPdf } from "../lib/contractPdf";
@@ -74,9 +74,10 @@ function isServiceContract(c: { type: string; economicModel?: string | null }): 
 // « auteur » = contrat d'édition à compte d'auteur (modèle BIKORO, 7 articles) ;
 // « service » = prestation de services (correction/illustration/prestation) ;
 // « edition » = contrat d'édition à compte d'éditeur (15 articles).
-type ContractKind = "auteur" | "service" | "edition";
+type ContractKind = "auteur" | "demi" | "service" | "edition";
 function contractKind(c: { type: string; economicModel?: string | null }): ContractKind {
   if (c.economicModel === "compte_auteur") return "auteur";
+  if (c.economicModel === "compte_demi") return "demi";
   if (["prestation", "correction", "illustration"].includes(c.type)) return "service";
   return "edition";
 }
@@ -85,7 +86,10 @@ function contractKind(c: { type: string; economicModel?: string | null }): Contr
 // (édition, coédition, cession, traduction) à compte d'éditeur ou à demi. Pilote
 // l'affichage des champs « droits » (taux, à-valoir, durée de cession, relevés).
 function royaltiesApplyFor(type: string, economicModel?: string | null): boolean {
-  return ["edition", "coedition", "cession", "traduction"].includes(type) && (economicModel === "compte_editeur" || economicModel === "compte_demi");
+  // Les droits d'auteur (paliers) ne concernent que le compte d'éditeur. Le compte
+  // à demi a désormais son propre contrat (partage frais + recettes), le compte
+  // d'auteur aussi — ils ne passent plus par les paliers de droits.
+  return ["edition", "coedition", "cession", "traduction"].includes(type) && economicModel === "compte_editeur";
 }
 // Est-ce la maison qui PAIE la contrepartie (→ retenue fiscale pertinente) ? Oui
 // quand des droits s'appliquent, ou pour une prestation que nous commandons ;
@@ -147,12 +151,12 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
   const [dispatchVersion, setDispatchVersion] = useState(0);
   const bumpDispatch = () => setDispatchVersion((v) => v + 1);
   // Modèles de contrat éditables (§9) : texte par défaut des articles, par type.
-  const [templates, setTemplates] = useState<{ edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string> }>({ edition: {}, service: {}, auteur: {} });
+  const [templates, setTemplates] = useState<{ edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string>; demi: Record<number, string> }>({ edition: {}, service: {}, auteur: {}, demi: {} });
   const [showTemplates, setShowTemplates] = useState(false);
   const loadTemplates = () =>
     getContractTemplates()
       .then((rows) => {
-        const m = { edition: {} as Record<number, string>, service: {} as Record<number, string>, auteur: {} as Record<number, string> };
+        const m = { edition: {} as Record<number, string>, service: {} as Record<number, string>, auteur: {} as Record<number, string>, demi: {} as Record<number, string> };
         for (const r of rows) m[r.template_key][r.article_number] = r.body;
         setTemplates(m);
       })
@@ -238,7 +242,7 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
             </span>
             <DocPrintMenu label="Fiche (résumé)" onPrint={(o) => getContract(contract.id).then((c) => printContract(c, o)).catch((e) => setError(e.message))} />
             <DocPrintMenu
-              label={contractKind(contract) === "auteur" ? "Contrat (compte d'auteur)" : contractKind(contract) === "service" ? "Contrat (prestation)" : "Contrat d'édition"}
+              label={contractKind(contract) === "auteur" ? "Contrat (compte d'auteur)" : contractKind(contract) === "demi" ? "Contrat (compte à demi)" : contractKind(contract) === "service" ? "Contrat (prestation)" : "Contrat d'édition"}
               // PDF vectoriel « net » : disponible pour le contrat d'édition
               // (modèle jsPDF). Les contrats prestation / compte d'auteur passent
               // par l'impression (bouton « Enregistrer en PDF » de la fenêtre).
@@ -258,6 +262,7 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
                     // les textes par défaut du modèle éditable.
                     const kind = contractKind(c);
                     if (kind === "auteur") printAuthorAccountContract(c, o, pub, sign, templates.auteur);
+                    else if (kind === "demi") printDemiContract(c, o, pub, sign, templates.demi);
                     else if (kind === "service") printServiceContract(c, o, pub, sign, templates.service);
                     else printAuthorContract(c, o, pub, sign, templates.edition);
                   })
@@ -949,6 +954,12 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
   const [distributionPct, setDistributionPct] = useState<number>(25);
   const [aaDurationYears, setAaDurationYears] = useState<number>(5);
   const [territory, setTerritory] = useState<string>("Cameroun");
+  // Champs du contrat à compte à demi.
+  const [totalCost, setTotalCost] = useState<number>(0);
+  const [authorCostSharePct, setAuthorCostSharePct] = useState<number>(50);
+  const [authorRevenueSharePct, setAuthorRevenueSharePct] = useState<number>(50);
+  const [salePrice, setSalePrice] = useState<number>(0);
+  const [demiPeriodicity, setDemiPeriodicity] = useState<"mensuelle" | "trimestrielle" | "semestrielle" | "annuelle">("semestrielle");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -972,6 +983,11 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
       if (typeof ft.distribution_pct === "number") setDistributionPct(ft.distribution_pct);
       if (typeof ft.duration_years === "number") setAaDurationYears(ft.duration_years);
       if (typeof ft.territory === "string") setTerritory(ft.territory);
+      if (typeof ft.total_cost === "number") setTotalCost(ft.total_cost);
+      if (typeof ft.author_cost_share_pct === "number") setAuthorCostSharePct(ft.author_cost_share_pct);
+      if (typeof ft.author_revenue_share_pct === "number") setAuthorRevenueSharePct(ft.author_revenue_share_pct);
+      if (typeof ft.sale_price === "number") setSalePrice(ft.sale_price);
+      if (typeof ft.statement_periodicity === "string") setDemiPeriodicity(ft.statement_periodicity as typeof demiPeriodicity);
       setLoaded(true);
     }).catch((e) => onError(e instanceof Error ? e.message : "Chargement impossible."));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -980,6 +996,7 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
   // Champs affichés selon le type + le modèle économique.
   const royaltiesApply = royaltiesApplyFor(type, economicModel);
   const authorAccount = economicModel === "compte_auteur";
+  const demiAccount = economicModel === "compte_demi";
 
   async function save() {
     setBusy(true);
@@ -987,12 +1004,14 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
       await updateContractTerms(contract.id, {
         type,
         economic_model: economicModel,
-        // Droits d'auteur / compte d'auteur / prestation, selon le modèle.
+        // Droits d'auteur / compte d'auteur / compte à demi / prestation.
         ...(royaltiesApply
           ? { rate: rate / 100, advance_amount: advance, duration_months: durationYears > 0 ? durationYears * 12 : null }
           : authorAccount
             ? { editorial_fees: editorialFees, print_copies: printCopies, print_unit_cost: printUnitCost, sale_price_min: salePriceMin, logo_pct: logoPct, distribution_pct: distributionPct, duration_years: aaDurationYears, territory: territory.trim() || "Cameroun" }
-            : { service_cost: serviceCost, service_deposit: serviceDeposit, service_delivery: serviceDelivery.trim() }),
+            : demiAccount
+              ? { total_cost: totalCost, author_cost_share_pct: authorCostSharePct, author_revenue_share_pct: authorRevenueSharePct, print_copies: printCopies, sale_price: salePrice, statement_periodicity: demiPeriodicity, duration_years: aaDurationYears, territory: territory.trim() || "Cameroun" }
+              : { service_cost: serviceCost, service_deposit: serviceDeposit, service_delivery: serviceDelivery.trim() }),
       });
       onSaved();
     } catch (e) {
@@ -1031,10 +1050,19 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
               {authorAccount && <label style={{ fontSize: 12 }}>% distribution<input type="number" min={0} max={100} value={distributionPct} onChange={(e) => setDistributionPct(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
               {authorAccount && <label style={{ fontSize: 12 }}>Durée (années)<input type="number" min={0} value={aaDurationYears} onChange={(e) => setAaDurationYears(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
               {authorAccount && <label style={{ fontSize: 12 }}>Territoire<input type="text" value={territory} onChange={(e) => setTerritory(e.target.value)} style={inputStyle} /></label>}
-              {/* Prestation de services (hors compte d'auteur), corrigeable ici. */}
-              {!royaltiesApply && !authorAccount && <label style={{ fontSize: 12 }}>Coût total (FCFA)<input type="number" min={0} value={serviceCost} onChange={(e) => setServiceCost(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
-              {!royaltiesApply && !authorAccount && <label style={{ fontSize: 12 }}>Acompte (FCFA)<input type="number" min={0} value={serviceDeposit} onChange={(e) => setServiceDeposit(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
-              {!royaltiesApply && !authorAccount && <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Conditions de livraison<input type="text" value={serviceDelivery} onChange={(e) => setServiceDelivery(e.target.value)} placeholder="ex. livraison sous 30 jours après BAT" style={inputStyle} /></label>}
+              {/* Contrat à compte à demi (partage frais + recettes), corrigeable ici. */}
+              {demiAccount && <label style={{ fontSize: 12 }}>Coût total d'édition (FCFA)<input type="number" min={0} value={totalCost} onChange={(e) => setTotalCost(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {demiAccount && <label style={{ fontSize: 12 }}>Nb exemplaires (1er tirage)<input type="number" min={0} value={printCopies} onChange={(e) => setPrintCopies(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {demiAccount && <label style={{ fontSize: 12 }}>% frais auteur<input type="number" min={0} max={100} value={authorCostSharePct} onChange={(e) => setAuthorCostSharePct(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} style={inputStyle} /></label>}
+              {demiAccount && <label style={{ fontSize: 12 }}>% recettes auteur<input type="number" min={0} max={100} value={authorRevenueSharePct} onChange={(e) => setAuthorRevenueSharePct(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} style={inputStyle} /></label>}
+              {demiAccount && <label style={{ fontSize: 12 }}>Prix de vente (FCFA)<input type="number" min={0} value={salePrice} onChange={(e) => setSalePrice(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {demiAccount && <label style={{ fontSize: 12 }}>Périodicité des comptes<select value={demiPeriodicity} onChange={(e) => setDemiPeriodicity(e.target.value as typeof demiPeriodicity)} style={inputStyle}><option value="mensuelle">Mensuelle</option><option value="trimestrielle">Trimestrielle</option><option value="semestrielle">Semestrielle</option><option value="annuelle">Annuelle</option></select></label>}
+              {demiAccount && <label style={{ fontSize: 12 }}>Durée (années)<input type="number" min={0} value={aaDurationYears} onChange={(e) => setAaDurationYears(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {demiAccount && <label style={{ fontSize: 12 }}>Territoire<input type="text" value={territory} onChange={(e) => setTerritory(e.target.value)} style={inputStyle} /></label>}
+              {/* Prestation de services (hors compte d'auteur / à demi), corrigeable ici. */}
+              {!royaltiesApply && !authorAccount && !demiAccount && <label style={{ fontSize: 12 }}>Coût total (FCFA)<input type="number" min={0} value={serviceCost} onChange={(e) => setServiceCost(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {!royaltiesApply && !authorAccount && !demiAccount && <label style={{ fontSize: 12 }}>Acompte (FCFA)<input type="number" min={0} value={serviceDeposit} onChange={(e) => setServiceDeposit(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {!royaltiesApply && !authorAccount && !demiAccount && <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Conditions de livraison<input type="text" value={serviceDelivery} onChange={(e) => setServiceDelivery(e.target.value)} placeholder="ex. livraison sous 30 jours après BAT" style={inputStyle} /></label>}
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
               <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Annuler</button>
@@ -1100,17 +1128,16 @@ function AmendmentModal({ parent, manuscriptId, onClose, onCreated, onError }: {
 // texte d'un article standard (1–15) et gérer les clauses additionnelles
 // (ajouter / modifier / retirer). L'impression/PDF reflète les ajustements ;
 // tout est tracé ; verrouillé dès signature (côté serveur).
-function ArticleModal({ contract, templates, onClose, onSaved, onError }: { contract: Contract; templates: { edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string> }; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
+function ArticleModal({ contract, templates, onClose, onSaved, onError }: { contract: Contract; templates: { edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string>; demi: Record<number, string> }; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
   // Document adapté au type / au modèle économique (§9) : contrat de prestation /
   // à compte d'auteur, ou contrat d'édition. Détermine le modèle d'articles et le
   // générateur d'aperçu.
   const kind = contractKind(contract);
-  const service = kind !== "edition"; // prestation OU compte d'auteur = pas de droits
-  const ARTICLES = kind === "auteur" ? AUTHOR_ACCOUNT_CONTRACT_ARTICLES : kind === "service" ? SERVICE_CONTRACT_ARTICLES : AUTHOR_CONTRACT_ARTICLES;
+  const ARTICLES = kind === "auteur" ? AUTHOR_ACCOUNT_CONTRACT_ARTICLES : kind === "demi" ? DEMI_CONTRACT_ARTICLES : kind === "service" ? SERVICE_CONTRACT_ARTICLES : AUTHOR_CONTRACT_ARTICLES;
   const maxArt = ARTICLES.length;
-  const buildHtml = kind === "auteur" ? buildAuthorAccountContractHtml : kind === "service" ? buildServiceContractHtml : buildAuthorContractHtml;
+  const buildHtml = kind === "auteur" ? buildAuthorAccountContractHtml : kind === "demi" ? buildDemiContractHtml : kind === "service" ? buildServiceContractHtml : buildAuthorContractHtml;
   // Textes par défaut du modèle éditable pour ce type de document.
-  const tplMap = kind === "auteur" ? templates.auteur : kind === "service" ? templates.service : templates.edition;
+  const tplMap = kind === "auteur" ? templates.auteur : kind === "demi" ? templates.demi : kind === "service" ? templates.service : templates.edition;
   const [detail, setDetail] = useState<ContractDetail | null>(null);
   const [busy, setBusy] = useState(false);
   // Surcharge d'article.
@@ -1196,7 +1223,7 @@ function ArticleModal({ contract, templates, onClose, onSaved, onError }: { cont
   };
 
   // Imprimer / Télécharger le PDF à partir de la copie de travail (WYSIWYG).
-  const printWorking = () => { if (!workingDetail) return; if (kind === "auteur") printAuthorAccountContract(workingDetail, {}, pub, sign, tplMap); else if (kind === "service") printServiceContract(workingDetail, {}, pub, sign, tplMap); else printAuthorContract(workingDetail, {}, pub, sign, tplMap); };
+  const printWorking = () => { if (!workingDetail) return; if (kind === "auteur") printAuthorAccountContract(workingDetail, {}, pub, sign, tplMap); else if (kind === "demi") printDemiContract(workingDetail, {}, pub, sign, tplMap); else if (kind === "service") printServiceContract(workingDetail, {}, pub, sign, tplMap); else printAuthorContract(workingDetail, {}, pub, sign, tplMap); };
   // PDF vectoriel « net » : seulement pour le contrat d'édition (modèle jsPDF).
   const pdfWorking = () => { if (workingDetail) downloadAuthorContractPdf(workingDetail, pub, brand, tplMap).catch((e) => onError(e instanceof Error ? e.message : "PDF impossible.")); };
 
@@ -1275,7 +1302,7 @@ function ArticleModal({ contract, templates, onClose, onSaved, onError }: { cont
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
           <button onClick={printWorking} style={secondaryButtonStyle}>🖨 Imprimer / PDF</button>
-          {!service && <button onClick={pdfWorking} style={{ ...secondaryButtonStyle, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)" }}>📄 Télécharger le PDF (net)</button>}
+          {kind === "edition" && <button onClick={pdfWorking} style={{ ...secondaryButtonStyle, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)" }}>📄 Télécharger le PDF (net)</button>}
           <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Fermer</button>
         </div>
       </div>
@@ -1288,26 +1315,28 @@ function ArticleModal({ contract, templates, onClose, onSaved, onError }: { cont
 // la maison. Les champs {{…}} restent remplis automatiquement à la génération.
 // S'applique à tous les contrats à venir ; la surcharge propre à un contrat reste
 // prioritaire. Réservé à l'autorité juridique / direction (canEdit = validation).
-const TEMPLATE_PLACEHOLDERS: Record<"edition" | "service" | "auteur", string> = {
+const TEMPLATE_PLACEHOLDERS: Record<"edition" | "service" | "auteur" | "demi", string> = {
   edition: "{{titre}} {{auteur}} {{editeur}} {{numero}} {{modele}} {{taux}} {{duree}}",
   service: "{{titre}} {{auteur}} {{editeur}} {{numero}} {{modele}} {{cout}} {{acompte}} {{exemplaires}} {{livraison}}",
   auteur: "{{titre}} {{auteur}} {{editeur}} {{numero}} {{frais_editoriaux}} {{nb_exemplaires}} {{cout_unitaire}} {{cout_impression}} {{prix_mini}} {{pct_logo}} {{pct_distribution}} {{pct_total}} {{duree}} {{territoire}}",
+  demi: "{{titre}} {{auteur}} {{editeur}} {{numero}} {{cout_total}} {{part_auteur_frais}} {{part_editeur_frais}} {{montant_part_auteur}} {{nb_exemplaires}} {{part_auteur_recettes}} {{part_editeur_recettes}} {{prix_vente}} {{periodicite}} {{duree}} {{territoire}}",
 };
 function ContractTemplatesModal({ templates, canEdit, onClose, onSaved, onError }: {
-  templates: { edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string> };
+  templates: { edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string>; demi: Record<number, string> };
   canEdit: boolean;
   onClose: () => void;
   onSaved: () => void;
   onError: (m: string) => void;
 }) {
-  const [key, setKey] = useState<"edition" | "service" | "auteur">("edition");
-  const [drafts, setDrafts] = useState<{ edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string> }>({
+  const [key, setKey] = useState<"edition" | "service" | "auteur" | "demi">("edition");
+  const [drafts, setDrafts] = useState<{ edition: Record<number, string>; service: Record<number, string>; auteur: Record<number, string>; demi: Record<number, string> }>({
     edition: { ...templates.edition },
     service: { ...templates.service },
     auteur: { ...templates.auteur },
+    demi: { ...templates.demi },
   });
   const [busy, setBusy] = useState<number | null>(null);
-  const ARTICLES = key === "auteur" ? AUTHOR_ACCOUNT_CONTRACT_ARTICLES : key === "service" ? SERVICE_CONTRACT_ARTICLES : AUTHOR_CONTRACT_ARTICLES;
+  const ARTICLES = key === "auteur" ? AUTHOR_ACCOUNT_CONTRACT_ARTICLES : key === "demi" ? DEMI_CONTRACT_ARTICLES : key === "service" ? SERVICE_CONTRACT_ARTICLES : AUTHOR_CONTRACT_ARTICLES;
   const setDraft = (n: number, v: string) => setDrafts((d) => ({ ...d, [key]: { ...d[key], [n]: v } }));
 
   async function save(n: number) {
@@ -1331,9 +1360,9 @@ function ContractTemplatesModal({ templates, canEdit, onClose, onSaved, onError 
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          {(["edition", "auteur", "service"] as const).map((k) => (
+          {(["edition", "auteur", "demi", "service"] as const).map((k) => (
             <button key={k} onClick={() => setKey(k)} style={{ ...secondaryButtonStyle, ...(key === k ? { background: "var(--eclosion)", color: "#fff", border: "none" } : {}) }}>
-              {k === "edition" ? "À compte d'éditeur" : k === "auteur" ? "À compte d'auteur" : "Prestation"}
+              {k === "edition" ? "À compte d'éditeur" : k === "auteur" ? "À compte d'auteur" : k === "demi" ? "À compte à demi" : "Prestation"}
             </button>
           ))}
         </div>
@@ -1638,6 +1667,12 @@ function NewContractForm({
   const [distributionPct, setDistributionPct] = useState(25);
   const [aaDurationYears, setAaDurationYears] = useState(5);
   const [territory, setTerritory] = useState("Cameroun");
+  // Champs du contrat À COMPTE À DEMI (partage frais + recettes).
+  const [totalCost, setTotalCost] = useState(0);
+  const [authorCostSharePct, setAuthorCostSharePct] = useState(50);
+  const [authorRevenueSharePct, setAuthorRevenueSharePct] = useState(50);
+  const [salePrice, setSalePrice] = useState(0);
+  const [demiPeriodicity, setDemiPeriodicity] = useState<"mensuelle" | "trimestrielle" | "semestrielle" | "annuelle">("semestrielle");
   // Durée de la cession (terme du contrat) — variable d'un auteur à l'autre,
   // reprise automatiquement sur le contrat imprimé. 0 = non précisée.
   const [durationYears, setDurationYears] = useState(5);
@@ -1670,6 +1705,8 @@ function NewContractForm({
   const weOwePayee = weOwePayeeFor(type, economicModel);
   // Contrat à compte d'auteur (modèle BIKORO) : champs dédiés.
   const authorAccount = economicModel === "compte_auteur";
+  // Contrat à compte à demi (partage des frais et des recettes) : champs dédiés.
+  const demiAccount = economicModel === "compte_demi";
   // La fourchette 8–15 % ne s'impose qu'à une édition à compte d'éditeur (D-054).
   const rangeEnforced = type === "edition" && economicModel === "compte_editeur";
 
@@ -1695,6 +1732,18 @@ function NewContractForm({
               sale_price_min: salePriceMin,
               logo_pct: logoPct,
               distribution_pct: distributionPct,
+              duration_years: aaDurationYears,
+              territory: territory.trim() || "Cameroun",
+            }
+          : demiAccount
+          ? {
+              // Contrat À COMPTE À DEMI : partage des frais et des recettes.
+              total_cost: totalCost,
+              author_cost_share_pct: authorCostSharePct,
+              author_revenue_share_pct: authorRevenueSharePct,
+              print_copies: printCopies,
+              sale_price: salePrice,
+              statement_periodicity: demiPeriodicity,
               duration_years: aaDurationYears,
               territory: territory.trim() || "Cameroun",
             }
@@ -1782,7 +1831,9 @@ function NewContractForm({
           ? "Des droits d'auteur s'appliquent : renseignez la base et les paliers ci-dessous."
           : authorAccount
             ? "Contrat à compte d'auteur : l'auteur finance l'édition ; renseignez les conditions ci-dessous (frais, tirage, % éditeur)."
-            : "Pas de droits d'auteur pour ce modèle : renseignez les conditions de la prestation ci-dessous."}
+            : demiAccount
+              ? "Contrat à compte à demi : frais ET recettes partagés entre l'auteur et l'éditeur ; renseignez les quotes-parts ci-dessous."
+              : "Pas de droits d'auteur pour ce modèle : renseignez les conditions de la prestation ci-dessous."}
       </div>
 
       {selectedPartner && (
@@ -1897,6 +1948,43 @@ function NewContractForm({
               </label>
             </div>
             <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Coût du 1er tirage = {printCopies > 0 && printUnitCost > 0 ? (printCopies * printUnitCost).toLocaleString("fr-FR") + " FCFA" : "nb exemplaires × coût unitaire"}. Exemplaires exempts repris au contrat : 5 dépôt légal, 3 presse, 2 justificatifs.</div>
+          </>
+        ) : demiAccount ? (
+          <>
+            {/* Contrat à compte à demi : partage des frais et des recettes. */}
+            <div style={{ fontSize: 12, marginTop: 12, fontWeight: 600 }}>Conditions du contrat à compte à demi (partage frais + recettes)</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 6 }}>
+              <label style={{ fontSize: 12 }}>Coût total d'édition (FCFA)
+                <input type="number" min={0} value={totalCost} onChange={(e) => setTotalCost(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>Nombre d'exemplaires (1er tirage)
+                <input type="number" min={0} value={printCopies} onChange={(e) => setPrintCopies(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>% frais à la charge de l'auteur
+                <input type="number" min={0} max={100} value={authorCostSharePct} onChange={(e) => setAuthorCostSharePct(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>% recettes pour l'auteur
+                <input type="number" min={0} max={100} value={authorRevenueSharePct} onChange={(e) => setAuthorRevenueSharePct(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>Prix de vente (FCFA)
+                <input type="number" min={0} value={salePrice} onChange={(e) => setSalePrice(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>Périodicité des comptes
+                <select value={demiPeriodicity} onChange={(e) => setDemiPeriodicity(e.target.value as typeof demiPeriodicity)} style={inputStyle}>
+                  <option value="mensuelle">Mensuelle</option>
+                  <option value="trimestrielle">Trimestrielle</option>
+                  <option value="semestrielle">Semestrielle</option>
+                  <option value="annuelle">Annuelle</option>
+                </select>
+              </label>
+              <label style={{ fontSize: 12 }}>Durée (années)
+                <input type="number" min={0} value={aaDurationYears} onChange={(e) => setAaDurationYears(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>Territoire
+                <input type="text" value={territory} onChange={(e) => setTerritory(e.target.value)} style={inputStyle} />
+              </label>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Frais : auteur {authorCostSharePct} % / éditeur {Math.max(0, 100 - authorCostSharePct)} %. Recettes : auteur {authorRevenueSharePct} % / éditeur {Math.max(0, 100 - authorRevenueSharePct)} %.</div>
           </>
         ) : (
           <>

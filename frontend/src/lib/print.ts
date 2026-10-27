@@ -1581,6 +1581,149 @@ export function printAuthorAccountContract(c: ContractDetail, opts?: PrintOpts, 
   openPrintWindow(`Contrat d'édition à compte d'auteur ${c.contractNumber}`, buildAuthorAccountContractHtml(c, publisher, sign, templates), opts);
 }
 
+// Articles standard du CONTRAT D'ÉDITION À COMPTE À DEMI (dérivé des usages
+// professionnels de l'édition + modèle maison Éclosion) : l'auteur et l'éditeur
+// PARTAGENT les frais d'édition/fabrication ET les recettes, selon des quotes-parts
+// convenues. Distinct du compte d'éditeur (droits d'auteur) et du compte d'auteur
+// (l'auteur finance seul). 8 articles.
+export const DEMI_CONTRACT_ARTICLES: { n: number; title: string }[] = [
+  { n: 1, title: "OBJET DU CONTRAT" },
+  { n: 2, title: "OBLIGATIONS DE L'AUTEUR" },
+  { n: 3, title: "OBLIGATIONS DE L'ÉDITEUR" },
+  { n: 4, title: "PARTAGE DES FRAIS D'ÉDITION" },
+  { n: 5, title: "PARTAGE DES RECETTES ET REDDITION DES COMPTES" },
+  { n: 6, title: "DURÉE ET ÉTENDUE TERRITORIALE" },
+  { n: 7, title: "RÉSILIATION ET FORCE MAJEURE" },
+  { n: 8, title: "LITIGES" },
+];
+
+// Corps HTML du contrat d'édition À COMPTE À DEMI, avec champs éditables
+// ({{cout_total}}, {{part_auteur_frais}}, {{part_editeur_frais}},
+// {{montant_part_auteur}}, {{nb_exemplaires}}, {{part_auteur_recettes}},
+// {{part_editeur_recettes}}, {{prix_vente}}, {{periodicite}}, {{duree}},
+// {{territoire}}). Mêmes mécaniques que les autres contrats.
+export function buildDemiContractHtml(c: ContractDetail, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null, templates?: Record<number, string>): string {
+  const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
+  const p = c.partner;
+  const BL = (w = 20) => `<span style="color:#9aa1ad">${"…".repeat(w)}</span>`;
+  const esc = (v?: string | null) => (v && v.trim() ? escapeHtml(v) : null);
+  const auteur = `${esc(p.firstName) ?? ""} ${esc(p.lastName) ?? ""}`.trim() || BL(20);
+  const titre = esc(c.manuscript?.title) ?? BL(30);
+  const ft = (c.financialTerms ?? {}) as Record<string, unknown>;
+  const num = (k: string): number => (typeof ft[k] === "number" ? (ft[k] as number) : Number(ft[k])) || 0;
+  const coutTotal = num("total_cost");
+  const partAuteur = num("author_cost_share_pct") || 50;
+  const partEditeur = Math.max(0, 100 - partAuteur);
+  const partAuteurRec = num("author_revenue_share_pct") || 50;
+  const partEditeurRec = Math.max(0, 100 - partAuteurRec);
+  const copies = num("print_copies");
+  const duree = num("duration_years") || 5;
+  const territoire = esc(typeof ft.territory === "string" ? (ft.territory as string) : null) ?? "Cameroun";
+  const periodicite = esc(typeof ft.statement_periodicity === "string" ? (ft.statement_periodicity as string) : null) ?? "semestrielle";
+  const montantPartAuteur = coutTotal > 0 ? Math.round((coutTotal * partAuteur) / 100) : 0;
+  const ctx: Record<string, string> = {
+    numero: c.contractNumber,
+    titre: (c.manuscript?.title ?? "").trim(),
+    auteur: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(),
+    editeur: ED.name,
+    modele: economicModelLabelFr(c.economicModel),
+    cout_total: moneyPlain(coutTotal),
+    part_auteur_frais: String(partAuteur),
+    part_editeur_frais: String(partEditeur),
+    montant_part_auteur: moneyPlain(montantPartAuteur),
+    nb_exemplaires: copies > 0 ? String(copies) : "……",
+    part_auteur_recettes: String(partAuteurRec),
+    part_editeur_recettes: String(partEditeurRec),
+    prix_vente: moneyPlain(ft.sale_price),
+    periodicite,
+    duree: String(duree),
+    territoire,
+  };
+
+  const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
+  const li = (items: string[]) => `<ul style="margin:6px 0 6px 4px;padding-left:16px;font-size:12px;line-height:1.5">${items.map((i) => `<li style="margin:3px 0">${i}</li>`).join("")}</ul>`;
+  const overrides = (c.articleOverrides && typeof c.articleOverrides === "object" && !Array.isArray(c.articleOverrides) ? c.articleOverrides : {}) as Record<string, string>;
+  const art = (n: number, t: string, corps: string) => {
+    const custom = resolveArticleBody(n, overrides, templates, ctx, par);
+    const inner = custom
+      ? custom.html + (custom.ajusted ? `<p style="margin:2px 0 0;font-size:9.5px;color:#9a7a12;font-style:italic">Article ajusté pour ce contrat.</p>` : "")
+      : corps;
+    return `
+    <div class="art" data-article="${n}">
+    <h3 style="font-family:Georgia,serif;font-size:14px;margin:20px 0 6px;color:#0b0b0c;border-bottom:1px solid #e7e2d4;padding-bottom:3px">ARTICLE ${n} — ${t}</h3>
+    ${inner}
+    </div>`;
+  };
+
+  const modelMeta = c.economicModel ? `<span>Modèle : <b>${escapeHtml(economicModelLabelFr(c.economicModel))}</b></span>` : "";
+  const body = `
+    <div class="doc__title">CONTRAT D'ÉDITION À COMPTE À DEMI</div>
+    <div class="meta"><span>Contrat n° <b class="num">${escapeHtml(c.contractNumber)}</b></span>${modelMeta}</div>
+
+    <p style="margin:4px 0 2px;font-size:12px"><b>Entre les soussignés,</b></p>
+    <p style="margin:6px 0;font-size:12px;line-height:1.55">
+      M./Mme <b>${auteur}</b>, Tél. : ${esc(p.phone) ?? BL(14)}, Email : ${esc(p.email) ?? BL(24)},<br>
+      <i>Ci-après dénommé « l'Auteur », d'une part ;</i>
+    </p>
+    <p style="margin:6px 0;font-size:12px;line-height:1.55">
+      Et : <b>${ED.name}</b>, ${ED.desc} ${ED.rc}, N° Contribuable ${ED.niu}. Siège social : ${ED.siege} ; Tél : ${ED.tel}, Email : ${ED.email} Site web : ${ED.web} Représentée par ${ED.rep},<br>
+      <i>Ci-après dénommée « l'Éditeur », d'autre part ;</i>
+    </p>
+    <p style="margin:6px 0;font-size:12px"><b>Il est convenu ce qui suit :</b></p>
+
+    ${art(1, "OBJET DU CONTRAT", `
+      ${par(`Le présent contrat a pour objet l'édition <b>à compte à demi</b> de l'œuvre intitulée « <b>${titre}</b> », ci-après dénommée « l'œuvre » : l'Auteur et l'Éditeur conviennent de PARTAGER les frais d'édition et de fabrication ainsi que les recettes issues de la vente, selon les quotes-parts définies aux articles 4 et 5.`)}
+      ${par("L'Éditeur assure la relecture, le montage, la fabrication, la publication et la diffusion de l'œuvre. Toute exploitation non expressément prévue au présent contrat demeure soumise à l'accord écrit des deux parties, par avenant.")}`)}
+
+    ${art(2, "OBLIGATIONS DE L'AUTEUR", `
+      ${par("<b>1/ Garantie.</b> L'Auteur déclare que son œuvre est originale, ne contenant ni emprunt à une création protégée, ni propos diffamatoire, et qu'elle ne fait l'objet d'aucun autre contrat ni droit de préférence consenti à un tiers.")}
+      ${par("<b>2/ Remise des éléments.</b> L'Auteur remet à l'Éditeur, qui en accuse réception, l'œuvre dans sa forme définitive et complète dans un délai de 3 mois au plus tard.")}
+      ${par(`<b>3/ Participation aux frais.</b> Au titre du compte à demi, l'Auteur prend en charge <b>${partAuteur} %</b> des frais d'édition et de fabrication, soit <b>${moneyPlain(montantPartAuteur)}</b> sur un coût total de ${moneyPlain(coutTotal)} (cf. article 4).`)}`)}
+
+    ${art(3, "OBLIGATIONS DE L'ÉDITEUR", `
+      ${par(`<b>1/ Fabrication et publication.</b> L'Éditeur assure la fabrication et publie l'œuvre dans un délai raisonnable après remise des éléments et versement de la quote-part de l'Auteur ; à défaut de publication dans les six (06) mois, le contrat peut être résilié aux torts de l'Éditeur après mise en demeure restée sans effet pendant un (01) mois.`)}
+      ${par(`<b>2/ Prise en charge.</b> L'Éditeur prend en charge <b>${partEditeur} %</b> des frais d'édition et de fabrication.`)}
+      ${par("<b>3/ Diffusion et reddition.</b> L'Éditeur assure une exploitation permanente et suivie (diffusion, disponibilité, promotion) et rend compte à l'Auteur des ventes et des recettes de façon claire et transparente, selon la périodicité convenue à l'article 5.")}`)}
+
+    ${art(4, "PARTAGE DES FRAIS D'ÉDITION", `
+      ${par(`Le coût total d'édition et de fabrication (dont le premier tirage de <b>${copies > 0 ? copies : BL(4)}</b> exemplaires) est arrêté à <b>${moneyPlain(coutTotal)}</b>. Il est réparti entre les parties comme suit :`)}
+      ${li([`Auteur : <b>${partAuteur} %</b> (soit ${moneyPlain(montantPartAuteur)}) ;`, `Éditeur : <b>${partEditeur} %</b>.`])}
+      ${par("Tout dépassement de coût est porté à la connaissance des parties et réparti selon la même clé, sauf accord contraire consigné par avenant.")}`)}
+
+    ${art(5, "PARTAGE DES RECETTES ET REDDITION DES COMPTES", `
+      ${par(`Le prix de vente de l'œuvre est fixé à <b>${moneyPlain(ft.sale_price)}</b>, révisable d'un commun accord consigné par procès-verbal. Les recettes nettes des ventes (après déduction des frais de distribution éventuels) sont partagées comme suit :`)}
+      ${li([`Auteur : <b>${partAuteurRec} %</b> ;`, `Éditeur : <b>${partEditeurRec} %</b>.`])}
+      ${par(`L'Éditeur établit un relevé des ventes et des recettes selon une périodicité <b>${periodicite}</b> et verse à l'Auteur la part lui revenant. Le virement bancaire est obligatoire pour toute somme égale ou supérieure à 150 000 FCFA.`)}`)}
+
+    ${art(6, "DURÉE ET ÉTENDUE TERRITORIALE", `
+      ${par(`<b>1/ Durée.</b> Le présent contrat est conclu pour une durée de <b>${duree} (0${duree}) ans</b>, tacitement reconductible pour une même durée, sauf lettre recommandée avec accusé de réception adressée au plus tard trois (03) mois avant l'échéance.`)}
+      ${par(`<b>2/ Territoire.</b> Le présent contrat prendra effet en/au <b>${territoire}</b>.`)}`)}
+
+    ${art(7, "RÉSILIATION ET FORCE MAJEURE", `
+      ${par("En cas de manquement grave de l'une des parties à ses obligations, l'autre partie peut résilier le contrat après mise en demeure restée sans effet pendant 30 jours. Les frais engagés et les recettes perçues sont alors décomptés selon les quotes-parts convenues.")}
+      ${par("Aucune des parties ne saurait être tenue responsable d'un manquement résultant d'un cas de force majeure ; les obligations sont suspendues pendant la durée de l'événement.")}`)}
+
+    ${art(8, "LITIGES", par("Le présent contrat est soumis à la loi camerounaise. Tout différend fera l'objet d'une tentative d'arrangement amiable ; à défaut, seuls les tribunaux de Yaoundé sont compétents."))}
+
+    ${(c.customClauses ?? []).map((cl, i) => art(9 + i, (esc(cl.title) ?? "").toUpperCase(), par(escapeHtml(cl.body)))).join("")}
+
+    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
+    <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
+    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap">
+      <div style="flex:1; min-width:200px"><div class="party__label">L'Auteur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
+      <div style="flex:1; min-width:200px">
+        <div class="party__label">L'Éditeur</div>
+        ${editorSignatureBlock(sign)}
+      </div>
+    </div>`;
+
+  return body;
+}
+
+export function printDemiContract(c: ContractDetail, opts?: PrintOpts, publisher?: Partial<PublisherLegal> | null, sign?: ContractStampData | null, templates?: Record<number, string>): void {
+  openPrintWindow(`Contrat d'édition à compte à demi ${c.contractNumber}`, buildDemiContractHtml(c, publisher, sign, templates), opts);
+}
+
 // Fiche collaborateur prête à imprimer / PDF (refonte RH — barre d'actions
 // standard). Récapitule l'état civil professionnel, le poste, le cycle de vie et
 // le solde de congés, sur l'en-tête maison. Données non confidentielles.

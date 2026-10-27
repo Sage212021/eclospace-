@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-compte-a-demi",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : modèle « à compte à demi » (partage frais et recettes)",
+      body: "Le troisième modèle de contrat est disponible : « à compte à demi ». Conforme aux usages professionnels de l'édition, l'auteur et l'éditeur PARTAGENT les frais d'édition ET les recettes selon des quotes-parts que vous fixez (par défaut 50/50). Document distinct en 8 articles (objet, obligations de chaque partie, partage des frais, partage des recettes et reddition des comptes, durée & territoire, résiliation & force majeure, litiges). À la création / modification, vous saisissez : coût total d'édition, nombre d'exemplaires du 1er tirage, % frais à la charge de l'auteur, % recettes pour l'auteur, prix de vente, périodicité des comptes, durée, territoire. Les trois modèles sont désormais bien distincts : à compte d'éditeur, à compte d'auteur, à compte à demi. Texte éditable sans code via « 📝 Modèles de contrats » (onglet « À compte à demi »).",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-contrats-compte-auteur-modele-maison",
       version: "2026.10",
       title: "Nouveauté — Contrats : vrai contrat « à compte d'auteur » (modèle maison)",

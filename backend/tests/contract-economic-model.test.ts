@@ -112,4 +112,30 @@ describe("modèle économique & applicabilité des droits (D-054)", () => {
     expect(ft.service_copies).toBe(80);
     expect(ft.service_delivery).toBe("sous 45 jours");
   });
+
+  it("conditions À COMPTE D'AUTEUR (modèle BIKORO) enregistrées et corrigeables", async () => {
+    const res = await create({
+      type: "edition",
+      economic_model: "compte_auteur",
+      financial_terms: { editorial_fees: 375000, print_copies: 200, print_unit_cost: 10000, sale_price_min: 20000, logo_pct: 10, distribution_pct: 25, duration_years: 5, territory: "Cameroun" },
+    });
+    expect(res.statusCode).toBe(201);
+    const id = res.json().id;
+    createdIds.push(id);
+    const terms = await prisma.royaltyTerms.findUnique({ where: { contractId: id } });
+    expect(terms).toBeNull(); // pas de droits d'auteur
+    let c = await prisma.contract.findUnique({ where: { id } });
+    let ft = c!.financialTerms as Record<string, unknown>;
+    expect(ft.editorial_fees).toBe(375000);
+    expect(ft.print_copies).toBe(200);
+    expect(ft.logo_pct).toBe(10);
+
+    const patch = await app.inject({ method: "PATCH", url: `/api/v1/contracts/${id}/terms`, headers: { cookie }, payload: { editorial_fees: 400000, distribution_pct: 30 } });
+    expect(patch.statusCode).toBe(200);
+    c = await prisma.contract.findUnique({ where: { id } });
+    ft = c!.financialTerms as Record<string, unknown>;
+    expect(ft.editorial_fees).toBe(400000);
+    expect(ft.distribution_pct).toBe(30);
+    expect(ft.print_copies).toBe(200); // inchangé
+  });
 });

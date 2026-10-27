@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-compte-auteur-modele-maison",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : vrai contrat « à compte d'auteur » (modèle maison)",
+      body: "Le contrat « à compte d'auteur » est désormais un document distinct et fidèle au modèle de la maison (7 articles : objet, obligations de l'auteur qui finance l'édition, obligations de l'éditeur avec 1er tirage et exemplaires exempts, prérogatives, durée & territoire, vente & rémunération par % logo/distribution, litiges) — et non plus le contrat de prestation générique. À la création (et en modification), vous renseignez les bons champs : frais éditoriaux, nombre d'exemplaires du 1er tirage, coût d'impression par exemplaire, prix de vente minimum, % éditeur (logo), % distribution, durée, territoire. Les trois modèles sont maintenant bien différents : à compte d'éditeur (droits d'auteur), à compte d'auteur (l'auteur finance), et à compte à demi (à venir). Vous pouvez aussi éditer le texte par défaut de ce contrat dans « 📝 Modèles de contrats » (onglet « À compte d'auteur »).",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-relecture-coquilles-verrouillage",
       version: "2026.10",
       title: "Nouveauté — Relecture BAT1/BAT2 : détection renforcée des coquilles et des noms propres",

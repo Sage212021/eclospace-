@@ -527,11 +527,20 @@ export default async function contractRoutes(fastify: FastifyInstance) {
           duration_months: z.number().int().positive().max(1200).nullish(),
           rate: z.number().min(0).max(1).optional(),
           advance_amount: z.number().min(0).optional(),
-          // Conditions de prestation / à compte d'auteur (termes financiers JSON).
+          // Conditions de prestation (termes financiers JSON).
           service_cost: z.number().min(0).optional(),
           service_deposit: z.number().min(0).optional(),
           service_copies: z.number().int().min(0).optional(),
           service_delivery: z.string().max(400).optional(),
+          // Conditions du contrat À COMPTE D'AUTEUR (termes financiers JSON).
+          editorial_fees: z.number().min(0).optional(),
+          print_copies: z.number().int().min(0).optional(),
+          print_unit_cost: z.number().min(0).optional(),
+          sale_price_min: z.number().min(0).optional(),
+          logo_pct: z.number().min(0).max(100).optional(),
+          distribution_pct: z.number().min(0).max(100).optional(),
+          duration_years: z.number().int().min(0).max(99).optional(),
+          territory: z.string().max(200).optional(),
         })
         .safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
@@ -578,12 +587,13 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         }
         // Conditions de prestation / à compte d'auteur : fusionnées dans les
         // termes financiers (JSON) sans toucher aux paliers de droits éventuels.
-        if (b.service_cost !== undefined || b.service_deposit !== undefined || b.service_copies !== undefined || b.service_delivery !== undefined) {
+        const svcKeys = ["service_cost", "service_deposit", "service_copies", "service_delivery"] as const;
+        const aaKeys = ["editorial_fees", "print_copies", "print_unit_cost", "sale_price_min", "logo_pct", "distribution_pct", "duration_years", "territory"] as const;
+        const touched = [...svcKeys, ...aaKeys].some((k) => b[k] !== undefined);
+        if (touched) {
           const fin = (contract.financialTerms as Record<string, unknown> | null) ?? {};
-          if (b.service_cost !== undefined) fin.service_cost = b.service_cost;
-          if (b.service_deposit !== undefined) fin.service_deposit = b.service_deposit;
-          if (b.service_copies !== undefined) fin.service_copies = b.service_copies;
-          if (b.service_delivery !== undefined) fin.service_delivery = b.service_delivery.trim();
+          for (const k of svcKeys) if (b[k] !== undefined) fin[k] = typeof b[k] === "string" ? (b[k] as string).trim() : b[k];
+          for (const k of aaKeys) if (b[k] !== undefined) fin[k] = typeof b[k] === "string" ? (b[k] as string).trim() : b[k];
           await tx.contract.update({ where: { id }, data: { financialTerms: JSON.parse(JSON.stringify(fin)) } });
         }
       });
@@ -645,7 +655,7 @@ export default async function contractRoutes(fastify: FastifyInstance) {
   // standard (la ligne est supprimée). S'applique à TOUS les contrats à venir.
   fastify.put("/api/v1/contract-templates", { preHandler: requirePermission("contracts", "validation") }, async (request, reply) => {
     const parsed = z
-      .object({ template_key: z.enum(["edition", "service"]), article_number: z.number().int().min(1).max(15), body: z.string().max(8000) })
+      .object({ template_key: z.enum(["edition", "service", "auteur"]), article_number: z.number().int().min(1).max(15), body: z.string().max(8000) })
       .safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
     const { template_key, article_number } = parsed.data;

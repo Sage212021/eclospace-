@@ -40,7 +40,7 @@ import {
 import { printContract, printAuthorContract, buildAuthorContractHtml, AUTHOR_CONTRACT_ARTICLES, printServiceContract, buildServiceContractHtml, SERVICE_CONTRACT_ARTICLES, printAuthorAccountContract, buildAuthorAccountContractHtml, AUTHOR_ACCOUNT_CONTRACT_ARTICLES, printDemiContract, buildDemiContractHtml, DEMI_CONTRACT_ARTICLES } from "../lib/print";
 import { pasteTidied } from "../lib/tidyProse";
 import { getBranding } from "../api/client";
-import { buildAuthorContractPdf, downloadAuthorContractPdf } from "../lib/contractPdf";
+import { downloadAuthorContractPdf, buildTransferContractPdf } from "../lib/contractPdf";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
@@ -358,11 +358,15 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
       {/* Transfert du contrat d'édition généré (PDF construit côté navigateur). */}
       {transferContract && (
         <TransferDocDialog
-          title={`Contrat d'édition ${transferContract.contractNumber}`}
+          title={`${contractKind(transferContract) === "auteur" ? "Contrat d'édition à compte d'auteur" : contractKind(transferContract) === "demi" ? "Contrat d'édition à compte à demi" : contractKind(transferContract) === "service" ? "Contrat de prestation" : "Contrat d'édition"} ${transferContract.contractNumber}`}
           fileName={`Contrat-${transferContract.contractNumber}.pdf`}
           getFile={async () => {
-            const [c, pub] = await Promise.all([getContract(transferContract.id), getPublisherIdentity().catch(() => null)]);
-            return new File([buildAuthorContractPdf(c, pub)], `Contrat-${transferContract.contractNumber}.pdf`, { type: "application/pdf" });
+            // Document TRANSFÉRÉ fidèle au modèle du contrat (§9) — pas toujours l'édition.
+            const kind = contractKind(transferContract);
+            const tpl = kind === "auteur" ? templates.auteur : kind === "demi" ? templates.demi : kind === "service" ? templates.service : templates.edition;
+            const [c, pub, brand] = await Promise.all([getContract(transferContract.id), getPublisherIdentity().catch(() => null), getBranding().catch(() => null)]);
+            const blob = await buildTransferContractPdf(c, kind, pub, brand, tpl);
+            return new File([blob], `Contrat-${transferContract.contractNumber}.pdf`, { type: "application/pdf" });
           }}
           partnerWhatsapp={transferContract.partner.whatsapp}
           contractId={transferContract.id}

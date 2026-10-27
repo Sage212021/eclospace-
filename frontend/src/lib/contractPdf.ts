@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import { EDITEUR_LEGAL, type PublisherLegal } from "./print";
+import { EDITEUR_LEGAL, buildAuthorContractHtml, buildAuthorAccountContractHtml, buildDemiContractHtml, buildServiceContractHtml, type PublisherLegal } from "./print";
 import { drawWatermark } from "./pdfWatermark";
 import { inkStamp, type InkedImage } from "./stampInk";
 import type { ContractDetail, Branding } from "../api/client";
@@ -234,4 +234,109 @@ export async function downloadAuthorContractPdf(
   a.download = `Contrat-${c.contractNumber}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// PDF générique construit À PARTIR DU MÊME HTML que l'aperçu/impression, pour que
+// le document TRANSFÉRÉ (messagerie / WhatsApp) corresponde EXACTEMENT au contrat
+// affiché — quel que soit le modèle (édition, compte d'auteur, compte à demi,
+// prestation). On parse les blocs (titre, articles, paragraphes, listes) et on
+// rend en texte ; la zone de signature est dessinée par jsPDF (non coupée) à
+// partir de `sign` (images encrées), comme le PDF natif.
+export function buildContractPdfFromHtml(html: string, publisher?: Partial<PublisherLegal> | null, sign?: ContractPdfSign | null): Blob {
+  const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const L = 18, R = 192, W = R - L, bottom = 282;
+  let y = 20;
+  drawWatermark(doc);
+  const ensure = (h: number) => { if (y + h > bottom) { doc.addPage(); drawWatermark(doc); y = 20; } };
+  const text = (s: string, opts?: { size?: number; bold?: boolean; gap?: number }) => {
+    const size = opts?.size ?? 9.5;
+    doc.setFont("helvetica", opts?.bold ? "bold" : "normal");
+    doc.setFontSize(size);
+    doc.setTextColor(0);
+    for (const chunk of s.split("\n")) {
+      const lines = doc.splitTextToSize(chunk, W) as string[];
+      for (const line of lines) { ensure(size * 0.42 + 1.4); doc.text(line, L, y); y += size * 0.42 + 1.4; }
+    }
+    y += opts?.gap ?? 1.6;
+  };
+
+  // En-tête éditeur (identique au PDF natif).
+  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.text(ED.name, L, y); y += 6;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+  doc.text(doc.splitTextToSize(`${ED.desc} ${ED.rc} · N° Contribuable ${ED.niu}. Siège : ${ED.siege} · Tél ${ED.tel} · ${ED.email} · ${ED.web}`, W) as string[], L, y);
+  y += 10; doc.setDrawColor(200); doc.line(L, y, R, y); y += 8;
+
+  const root = new DOMParser().parseFromString(`<div id="w">${html}</div>`, "text/html").getElementById("w");
+  const blockText = (el: Element): string => {
+    const c2 = el.cloneNode(true) as HTMLElement;
+    c2.querySelectorAll("br").forEach((b) => b.replaceWith("\n"));
+    return (c2.textContent || "").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{2,}/g, "\n").trim();
+  };
+
+  const renderSignatures = () => {
+    ensure(46);
+    y += 2;
+    const colR = L + W / 2;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(0);
+    doc.text("L'auteur", L, y); doc.text("L'éditeur", colR, y);
+    const sigTop = y + 3;
+    if (sign?.signature) { const h = 15; const w = Math.min(46, (h * sign.signature.w) / sign.signature.h); try { doc.addImage(sign.signature.url, "PNG", colR, sigTop, w, h, "trSig", "SLOW"); } catch { /* ignore */ } }
+    if (sign?.cachet) { const h = 30; const w = Math.min(42, (h * sign.cachet.w) / sign.cachet.h); try { doc.addImage(sign.cachet.url, "PNG", colR + 22, sigTop - 3, w, h, "trCachet", "SLOW"); } catch { /* ignore */ } }
+    y = sigTop + (sign && (sign.signature || sign.cachet) ? 32 : 13);
+    doc.setDrawColor(120); doc.line(L, y, L + 60, y); doc.line(colR, y, colR + 60, y); y += 4;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(110);
+    doc.text("Signature (lu et approuvé)", L, y); doc.text("Signature & cachet", colR, y);
+    if (sign?.dgName) {
+      y += 5; doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(0); doc.text(sign.dgName, colR, y);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(90);
+      for (const line of (sign.dgTitle ?? "").split("\n").map((s) => s.trim()).filter(Boolean)) { y += 3.6; doc.text(line, colR, y); }
+    }
+    doc.setTextColor(0);
+  };
+
+  for (const el of Array.from(root?.children ?? [])) {
+    const cls = el.getAttribute("class") || "";
+    if (cls.includes("doc__title")) { ensure(10); y += 2; text(blockText(el), { bold: true, size: 14, gap: 1 }); continue; }
+    if (cls.includes("meta")) { text(blockText(el), { size: 8, gap: 2 }); continue; }
+    if (cls.includes("art")) {
+      ensure(14); y += 2;
+      const h3 = el.querySelector("h3");
+      if (h3) text(blockText(h3), { bold: true, size: 10.5, gap: 1 });
+      for (const child of Array.from(el.children)) {
+        if (child.tagName === "H3") continue;
+        if (child.tagName === "UL") { for (const liEl of Array.from(child.querySelectorAll("li"))) text("• " + blockText(liEl)); }
+        else text(blockText(child));
+      }
+      continue;
+    }
+    if (el.querySelector && el.querySelector(".party__label")) { renderSignatures(); continue; }
+    const t = blockText(el);
+    if (t) text(t);
+  }
+
+  return doc.output("blob");
+}
+
+// Prépare le PDF du contrat À TRANSFÉRER, fidèle au MODÈLE (édition / compte
+// d'auteur / compte à demi / prestation) — même contenu que l'aperçu.
+export async function buildTransferContractPdf(
+  c: ContractDetail,
+  kind: "edition" | "auteur" | "demi" | "service",
+  publisher?: Partial<PublisherLegal> | null,
+  branding?: Branding | null,
+  templates?: Record<number, string>,
+): Promise<Blob> {
+  let sign: ContractPdfSign | undefined;
+  if (branding && branding.auto_sign_contracts) {
+    const [cachet, signature] = await Promise.all([inkStamp(branding.cachet_generale), inkStamp(branding.signature_dg)]);
+    sign = { cachet, signature, dgName: branding.dg_name, dgTitle: branding.dg_title };
+  }
+  // HTML sans signature intégrée (la signature est dessinée par jsPDF depuis `sign`).
+  const html =
+    kind === "auteur" ? buildAuthorAccountContractHtml(c, publisher, null, templates)
+    : kind === "demi" ? buildDemiContractHtml(c, publisher, null, templates)
+    : kind === "service" ? buildServiceContractHtml(c, publisher, null, templates)
+    : buildAuthorContractHtml(c, publisher, null, templates);
+  return buildContractPdfFromHtml(html, publisher, sign);
 }

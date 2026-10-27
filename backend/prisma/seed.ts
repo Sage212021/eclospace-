@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-transfert-bon-document-signature",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : le transfert envoie le bon contrat, signature complète",
+      body: "Deux corrections sur les contrats : (1) quand vous transférez un contrat par messagerie ou WhatsApp, le PDF envoyé correspond désormais EXACTEMENT au contrat affiché (compte d'auteur, compte à demi, prestation…), et non plus systématiquement le contrat d'édition en 15 articles ; (2) la zone de signature (signature + cachet de la Direction générale) n'est plus coupée entre deux pages, ni à l'impression ni dans le PDF transféré — elle reste groupée.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-contrats-compte-a-demi",
       version: "2026.10",
       title: "Nouveauté — Contrats : modèle « à compte à demi » (partage frais et recettes)",

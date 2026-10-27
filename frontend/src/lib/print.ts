@@ -1285,7 +1285,7 @@ export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<P
 
     <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
-    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap">
+    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap; page-break-inside:avoid; break-inside:avoid">
       <div style="flex:1; min-width:200px"><div class="party__label">L'auteur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
       <div style="flex:1; min-width:200px">
         <div class="party__label">L'éditeur</div>
@@ -1423,7 +1423,7 @@ export function buildServiceContractHtml(c: ContractDetail, publisher?: Partial<
 
     <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
-    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap">
+    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap; page-break-inside:avoid; break-inside:avoid">
       <div style="flex:1; min-width:200px"><div class="party__label">${escapeHtml(role.charAt(0).toUpperCase() + role.slice(1))}</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
       <div style="flex:1; min-width:200px">
         <div class="party__label">Le Prestataire</div>
@@ -1566,7 +1566,7 @@ export function buildAuthorAccountContractHtml(c: ContractDetail, publisher?: Pa
 
     <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
-    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap">
+    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap; page-break-inside:avoid; break-inside:avoid">
       <div style="flex:1; min-width:200px"><div class="party__label">L'Auteur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
       <div style="flex:1; min-width:200px">
         <div class="party__label">L'Éditeur</div>
@@ -1709,7 +1709,7 @@ export function buildDemiContractHtml(c: ContractDetail, publisher?: Partial<Pub
 
     <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
-    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap">
+    <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap; page-break-inside:avoid; break-inside:avoid">
       <div style="flex:1; min-width:200px"><div class="party__label">L'Auteur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
       <div style="flex:1; min-width:200px">
         <div class="party__label">L'Éditeur</div>

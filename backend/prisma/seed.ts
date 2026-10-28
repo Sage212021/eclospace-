@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { dispatchReleaseNotes, SYSTEM_SENDER_USERNAME } from "../src/lib/releaseNotes.js";
 import { BRANDING_KEY, BRANDING_DEFAULTS } from "../src/lib/branding.js";
 import { DEFAULT_BOOK_TYPES, DEFAULT_PROFILES } from "../src/lib/correctionProfile.js";
+import { AI_CONFIG_KEY } from "../src/lib/aiConfig.js";
 import { readFileSync } from "node:fs";
 
 const prisma = new PrismaClient();
@@ -3745,6 +3746,24 @@ async function main() {
         console.log("Cachet « Direction éditoriale » : cachet officiel installé (était absent).");
       }
     }
+  }
+
+  // Montée en gamme UNIQUE des lectures de fond (demande opérateur : appliquer
+  // « Haut de gamme » = Opus aux BAT1/BAT2/évaluation sur l'instance existante).
+  // La config IA enregistrée prime sur le défaut du code ; on la normalise donc
+  // UNE SEULE FOIS (marqueur), sans jamais refaire ce forçage ensuite — l'admin
+  // reste libre de rechoisir le niveau dans Réglages → IA.
+  const AI_READING_PREMIUM_MARKER = "ai_reading_premium_applied";
+  const aiPremiumDone = await prisma.setting.findUnique({ where: { key: AI_READING_PREMIUM_MARKER } });
+  if (!aiPremiumDone) {
+    const row = await prisma.setting.findUnique({ where: { key: AI_CONFIG_KEY } });
+    if (row) {
+      const cfg = (row.value ?? {}) as { models?: Record<string, string> };
+      const models = { ...(cfg.models ?? {}), evaluation: "premium", correction_1: "premium", correction_2: "premium" };
+      await prisma.setting.update({ where: { key: AI_CONFIG_KEY }, data: { value: { ...cfg, models } } });
+      console.log("IA : lectures de fond (évaluation, BAT1, BAT2) réglées sur « Haut de gamme » (Opus).");
+    }
+    await prisma.setting.create({ data: { key: AI_READING_PREMIUM_MARKER, value: true } });
   }
 
   console.log("Seed Lot 0 terminé.");

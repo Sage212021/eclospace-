@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { dispatchReleaseNotes, SYSTEM_SENDER_USERNAME } from "../src/lib/releaseNotes.js";
 import { BRANDING_KEY, BRANDING_DEFAULTS } from "../src/lib/branding.js";
 import { DEFAULT_BOOK_TYPES, DEFAULT_PROFILES } from "../src/lib/correctionProfile.js";
+import { AI_CONFIG_KEY } from "../src/lib/aiConfig.js";
 import { readFileSync } from "node:fs";
 
 const prisma = new PrismaClient();
@@ -1455,6 +1456,14 @@ async function main() {
   // c'est le critère principal. `departmentCodes` reste un complément (« ou le
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
+    {
+      slug: "2026-10-relecture-reflexion-approfondie",
+      version: "2026.10",
+      title: "Nouveauté — Relecture BAT1/BAT2 & évaluation : lecture plus profonde (réflexion approfondie)",
+      body: "La relecture automatique (BAT1, BAT2) et le rapport d'évaluation lisent désormais « plus en profondeur », pour se rapprocher de la finesse d'une lecture humaine attentive. Deux leviers : (1) la RÉFLEXION APPROFONDIE est activée — avant de relever les anomalies d'un passage ou de rédiger le rapport, le relecteur raisonne longuement (meilleure détection des coquilles fines, accords, accents, noms propres douteux) ; (2) ces lectures peuvent tourner sur le modèle le plus fin (« Haut de gamme »). ⚙️ IMPORTANT : pour en bénéficier sur VOTRE installation, un administrateur doit ouvrir Réglages → IA éditoriale et régler « Rapport d'évaluation », « Relecture BAT1 » et « Relecture BAT2 » sur « Haut de gamme (analyse fine) », puis enregistrer. À noter : une lecture plus profonde est plus lente et coûte davantage par ouvrage — c'est le prix de la finesse. Relancez BAT1/BAT2 sur un ouvrage pour profiter du nouveau réglage.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "COMLEC", "DG"],
+    },
     {
       slug: "2026-10-contrats-transfert-papier-entete",
       version: "2026.10",
@@ -3737,6 +3746,24 @@ async function main() {
         console.log("Cachet « Direction éditoriale » : cachet officiel installé (était absent).");
       }
     }
+  }
+
+  // Montée en gamme UNIQUE des lectures de fond (demande opérateur : appliquer
+  // « Haut de gamme » = Opus aux BAT1/BAT2/évaluation sur l'instance existante).
+  // La config IA enregistrée prime sur le défaut du code ; on la normalise donc
+  // UNE SEULE FOIS (marqueur), sans jamais refaire ce forçage ensuite — l'admin
+  // reste libre de rechoisir le niveau dans Réglages → IA.
+  const AI_READING_PREMIUM_MARKER = "ai_reading_premium_applied";
+  const aiPremiumDone = await prisma.setting.findUnique({ where: { key: AI_READING_PREMIUM_MARKER } });
+  if (!aiPremiumDone) {
+    const row = await prisma.setting.findUnique({ where: { key: AI_CONFIG_KEY } });
+    if (row) {
+      const cfg = (row.value ?? {}) as { models?: Record<string, string> };
+      const models = { ...(cfg.models ?? {}), evaluation: "premium", correction_1: "premium", correction_2: "premium" };
+      await prisma.setting.update({ where: { key: AI_CONFIG_KEY }, data: { value: { ...cfg, models } } });
+      console.log("IA : lectures de fond (évaluation, BAT1, BAT2) réglées sur « Haut de gamme » (Opus).");
+    }
+    await prisma.setting.create({ data: { key: AI_READING_PREMIUM_MARKER, value: true } });
   }
 
   console.log("Seed Lot 0 terminé.");

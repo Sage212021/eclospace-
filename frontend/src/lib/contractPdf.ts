@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
-import { EDITEUR_LEGAL, buildAuthorContractHtml, buildAuthorAccountContractHtml, buildDemiContractHtml, buildServiceContractHtml, type PublisherLegal } from "./print";
+import { EDITEUR_LEGAL, HOUSE, buildAuthorContractHtml, buildAuthorAccountContractHtml, buildDemiContractHtml, buildServiceContractHtml, type PublisherLegal } from "./print";
 import { drawWatermark } from "./pdfWatermark";
+import { ECLOSION_LOGO_PNG, ECLOSION_LOGO_RATIO } from "./payslipAssets";
 import { inkStamp, type InkedImage } from "./stampInk";
 import type { ContractDetail, Branding } from "../api/client";
 
@@ -243,12 +244,50 @@ export async function downloadAuthorContractPdf(
 // rend en texte ; la zone de signature est dessinée par jsPDF (non coupée) à
 // partir de `sign` (images encrées), comme le PDF natif.
 export function buildContractPdfFromHtml(html: string, publisher?: Partial<PublisherLegal> | null, sign?: ContractPdfSign | null): Blob {
-  const ED = { ...EDITEUR_LEGAL, ...(publisher ?? {}) };
+  void publisher; // l'identité de l'éditeur dans le corps vient déjà du HTML ; l'en-tête ci-dessous reprend le papier à en-tête officiel (HOUSE).
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const L = 18, R = 192, W = R - L, bottom = 282;
-  let y = 20;
-  drawWatermark(doc);
-  const ensure = (h: number) => { if (y + h > bottom) { doc.addPage(); drawWatermark(doc); y = 20; } };
+  const L = 18, R = 192, W = R - L;
+  const INK: [number, number, number] = [11, 11, 12];
+  const GOLD: [number, number, number] = [217, 178, 26];
+  const MUTED: [number, number, number] = [107, 114, 128];
+  const LINE: [number, number, number] = [231, 226, 212];
+
+  // En-tête officiel (papier à en-tête Éclosion) : logo à gauche, coordonnées à
+  // droite, bandeau « Éclosion Édition Sarl » + métiers, filet noir/or — IDENTIQUE
+  // à la version imprimée (openPrintWindow) et aux factures/devis. Renvoie le y
+  // sous l'en-tête. Dessine aussi le filigrane de la page.
+  const houseHeader = (): number => {
+    drawWatermark(doc);
+    const top = 12;
+    const logoW = 42, logoH = logoW / ECLOSION_LOGO_RATIO;
+    try { doc.addImage(ECLOSION_LOGO_PNG, "PNG", L, top, logoW, logoH, "eclLogoCt", "SLOW"); } catch { /* logo indisponible : on continue sans */ }
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.6); doc.setTextColor(...MUTED);
+    const coord = [HOUSE.address, HOUSE.poBox, `Tél ${HOUSE.phone}`, HOUSE.email, HOUSE.website.replace(/^https?:\/\//, ""), `RC ${HOUSE.rccm} · NIU ${HOUSE.niu}`];
+    let cy = top + 2;
+    for (const ln of coord) { for (const w of doc.splitTextToSize(ln, 90) as string[]) { doc.text(w, R, cy, { align: "right" }); cy += 3.3; } }
+    let by = Math.max(top + logoH, cy) + 5;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...INK);
+    doc.text("Éclosion Édition Sarl", (L + R) / 2, by, { align: "center" }); by += 4.6;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.6); doc.setTextColor(...INK);
+    doc.text("Édition du livre   |   Conception et réalisation des supports de communication   |   Imprimerie offset et numérique", (L + R) / 2, by, { align: "center" }); by += 3.6;
+    doc.setFillColor(...INK); doc.rect(L, by, W * 0.62, 0.9, "F");
+    doc.setFillColor(...GOLD); doc.rect(L + W * 0.62, by, W * 0.38, 0.9, "F");
+    return by + 7;
+  };
+
+  // Pied officiel : mentions légales + « Document généré par Éclospace le … ».
+  const footer = (): void => {
+    const fy = 282;
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(L, fy, R, fy);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(...INK);
+    doc.text(`${HOUSE.legalName} · RCCM : ${HOUSE.rccm} · NIU : ${HOUSE.niu} · N° Affil. CNPS : ${HOUSE.cnps}`, L, fy + 4);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(...MUTED);
+    doc.text(`Document généré par Éclospace le ${new Date().toLocaleString("fr-FR")}.`, L, fy + 8);
+  };
+
+  const bottom = 272; // laisse la place au pied de page
+  let y = houseHeader();
+  const ensure = (h: number) => { if (y + h > bottom) { footer(); doc.addPage(); y = houseHeader(); } };
   const text = (s: string, opts?: { size?: number; bold?: boolean; gap?: number }) => {
     const size = opts?.size ?? 9.5;
     doc.setFont("helvetica", opts?.bold ? "bold" : "normal");
@@ -260,12 +299,6 @@ export function buildContractPdfFromHtml(html: string, publisher?: Partial<Publi
     }
     y += opts?.gap ?? 1.6;
   };
-
-  // En-tête éditeur (identique au PDF natif).
-  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.text(ED.name, L, y); y += 6;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8);
-  doc.text(doc.splitTextToSize(`${ED.desc} ${ED.rc} · N° Contribuable ${ED.niu}. Siège : ${ED.siege} · Tél ${ED.tel} · ${ED.email} · ${ED.web}`, W) as string[], L, y);
-  y += 10; doc.setDrawColor(200); doc.line(L, y, R, y); y += 8;
 
   const root = new DOMParser().parseFromString(`<div id="w">${html}</div>`, "text/html").getElementById("w");
   const blockText = (el: Element): string => {
@@ -315,6 +348,7 @@ export function buildContractPdfFromHtml(html: string, publisher?: Partial<Publi
     if (t) text(t);
   }
 
+  footer();
   return doc.output("blob");
 }
 

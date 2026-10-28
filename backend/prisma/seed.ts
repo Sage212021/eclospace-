@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-transfert-papier-entete",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : le PDF transféré a enfin le papier à en-tête (logo, bandeau, pied)",
+      body: "Quand vous transfériez un contrat par la messagerie interne (ou WhatsApp), le PDF sortait en « texte brut » : le contenu était bon, mais il lui manquait l'habillage (logo, bandeau « Éclosion Édition Sarl », coordonnées, filet or/noir, pied officiel). C'est corrigé : le PDF transféré a maintenant EXACTEMENT le même papier à en-tête que la version imprimée — logo Éclosion en haut à gauche, coordonnées à droite (adresse Kondengui, BP, téléphones, e-mail, site, RC, NIU), bandeau de marque avec les métiers, filet or/noir, filigrane ampoule et pied de page légal. Cela s'applique aux quatre modèles (à compte d'éditeur, à compte d'auteur, à compte à demi, prestation). La signature et le cachet de la Direction générale restent apposés et non coupés.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-contrats-adresse-entete-et-champs",
       version: "2026.10",
       title: "Nouveauté — Contrats : adresse officielle du papier à en-tête et champs à remplir",

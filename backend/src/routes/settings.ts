@@ -13,14 +13,17 @@ import { getBranding, patchBranding, BRANDING_KEY, BRANDING_STAMP_KEYS } from ".
 // de contrat) ; servent tant qu'aucune saisie n'a été faite.
 const PUBLISHER_KEY = "publisher_identity";
 const PUBLISHER_DEFAULTS = {
-  name: "EDITIONS ECLOSION",
+  // Aligné sur l'EN-TÊTE officiel (HOUSE, print.ts) — source unique de l'identité
+  // de la maison, pour que le CORPS des contrats porte la même adresse que le
+  // papier à en-tête (demande opérateur du 28/10/2026).
+  name: "ECLOSION EDITION SARL",
   desc: "entreprise de prestation de services en édition, communication, imprimerie…",
-  rc: "N°RC /YAO/2019/B/1441",
+  rc: "RC/YAO/2019/B/144",
   niu: "M021912751174Y",
-  siege: "Yaoundé, Hippodrome, BP. 33071, Yaoundé",
-  tel: "677 157 326",
-  email: "editioneclosion@gmail.com",
-  web: "www.eclosion.cm",
+  siege: "Carrefour INSTIC – Nouvelle route Kondengui, B.P. 33071 Yaoundé, Cameroun",
+  tel: "(+237) 654 366 663 / 698 03 15 02 / 678 70 40 86",
+  email: "eclosionedition@gmail.com",
+  web: "https://www.eclosion.cm",
   rep: "Mme Christelle NOAH, Directeur Général",
   ville: "Yaoundé",
   // Identifiants employeur CNPS, servent au DIPE mensuel (déclaration CNPS).

@@ -1841,7 +1841,7 @@ export function signContract(
 }
 
 // Modifier les termes d'un contrat non signé (type, taux, avance, durée).
-export function updateContractTerms(id: string, input: { type?: string; economic_model?: string | null; duration_months?: number | null; rate?: number; advance_amount?: number; service_cost?: number; service_deposit?: number; service_copies?: number; service_delivery?: string; editorial_fees?: number; print_copies?: number; print_unit_cost?: number; sale_price_min?: number; logo_pct?: number; distribution_pct?: number; duration_years?: number; territory?: string; total_cost?: number; author_cost_share_pct?: number; author_revenue_share_pct?: number; sale_price?: number; statement_periodicity?: string }) {
+export function updateContractTerms(id: string, input: { type?: string; economic_model?: string | null; duration_months?: number | null; rate?: number; advance_amount?: number; service_cost?: number; service_deposit?: number; service_copies?: number; service_delivery?: string; editorial_fees?: number; print_copies?: number; print_unit_cost?: number; sale_price_min?: number; logo_pct?: number; distribution_pct?: number; duration_years?: number; territory?: string; total_cost?: number; author_cost_share_pct?: number; author_revenue_share_pct?: number; sale_price?: number; statement_periodicity?: string; print_run?: number; public_price_ht?: number; publication_date?: string; signing_date?: string }) {
   return request<ContractDetail>(`/api/v1/contracts/${id}/terms`, { method: "PATCH", body: JSON.stringify(input) });
 }
 

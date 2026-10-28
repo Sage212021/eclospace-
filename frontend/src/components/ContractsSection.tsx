@@ -964,6 +964,11 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
   const [authorRevenueSharePct, setAuthorRevenueSharePct] = useState<number>(50);
   const [salePrice, setSalePrice] = useState<number>(0);
   const [demiPeriodicity, setDemiPeriodicity] = useState<"mensuelle" | "trimestrielle" | "semestrielle" | "annuelle">("semestrielle");
+  // Champs « à remplir » du contrat d'édition + date de signature.
+  const [printRun, setPrintRun] = useState<number>(0);
+  const [publicPriceHt, setPublicPriceHt] = useState<number>(0);
+  const [publicationDate, setPublicationDate] = useState<string>("");
+  const [signingDate, setSigningDate] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -992,6 +997,10 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
       if (typeof ft.author_revenue_share_pct === "number") setAuthorRevenueSharePct(ft.author_revenue_share_pct);
       if (typeof ft.sale_price === "number") setSalePrice(ft.sale_price);
       if (typeof ft.statement_periodicity === "string") setDemiPeriodicity(ft.statement_periodicity as typeof demiPeriodicity);
+      if (typeof ft.print_run === "number") setPrintRun(ft.print_run);
+      if (typeof ft.public_price_ht === "number") setPublicPriceHt(ft.public_price_ht);
+      if (typeof ft.publication_date === "string") setPublicationDate(ft.publication_date);
+      if (typeof ft.signing_date === "string") setSigningDate(ft.signing_date);
       setLoaded(true);
     }).catch((e) => onError(e instanceof Error ? e.message : "Chargement impossible."));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1008,9 +1017,11 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
       await updateContractTerms(contract.id, {
         type,
         economic_model: economicModel,
+        // Date de signature (commune à tous les modèles).
+        signing_date: signingDate.trim(),
         // Droits d'auteur / compte d'auteur / compte à demi / prestation.
         ...(royaltiesApply
-          ? { rate: rate / 100, advance_amount: advance, duration_months: durationYears > 0 ? durationYears * 12 : null }
+          ? { rate: rate / 100, advance_amount: advance, duration_months: durationYears > 0 ? durationYears * 12 : null, print_run: printRun, public_price_ht: publicPriceHt, publication_date: publicationDate.trim() }
           : authorAccount
             ? { editorial_fees: editorialFees, print_copies: printCopies, print_unit_cost: printUnitCost, sale_price_min: salePriceMin, logo_pct: logoPct, distribution_pct: distributionPct, duration_years: aaDurationYears, territory: territory.trim() || "Cameroun" }
             : demiAccount
@@ -1045,6 +1056,9 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
               {royaltiesApply && <label style={{ fontSize: 12 }}>Taux de droits (%)<input type="number" min={0} max={100} value={rate} onChange={(e) => setRate(Number(e.target.value))} style={inputStyle} /></label>}
               {royaltiesApply && <label style={{ fontSize: 12 }}>Avance (à-valoir, FCFA)<input type="number" min={0} value={advance} onChange={(e) => setAdvance(Number(e.target.value))} style={inputStyle} /></label>}
               {royaltiesApply && <label style={{ fontSize: 12 }}>Durée de la cession (années)<input type="number" min={0} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={inputStyle} /></label>}
+              {royaltiesApply && <label style={{ fontSize: 12 }}>Tirage (nb exemplaires)<input type="number" min={0} value={printRun} onChange={(e) => setPrintRun(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {royaltiesApply && <label style={{ fontSize: 12 }}>Prix public HT (FCFA)<input type="number" min={0} value={publicPriceHt} onChange={(e) => setPublicPriceHt(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
+              {royaltiesApply && <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Date de publication prévue<input type="text" value={publicationDate} onChange={(e) => setPublicationDate(e.target.value)} placeholder="ex. 30/06/2026" style={inputStyle} /></label>}
               {/* Contrat à compte d'auteur (modèle BIKORO), corrigeable ici. */}
               {authorAccount && <label style={{ fontSize: 12 }}>Frais éditoriaux (FCFA)<input type="number" min={0} value={editorialFees} onChange={(e) => setEditorialFees(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
               {authorAccount && <label style={{ fontSize: 12 }}>Nb exemplaires (1er tirage)<input type="number" min={0} value={printCopies} onChange={(e) => setPrintCopies(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
@@ -1067,6 +1081,7 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
               {!royaltiesApply && !authorAccount && !demiAccount && <label style={{ fontSize: 12 }}>Coût total (FCFA)<input type="number" min={0} value={serviceCost} onChange={(e) => setServiceCost(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
               {!royaltiesApply && !authorAccount && !demiAccount && <label style={{ fontSize: 12 }}>Acompte (FCFA)<input type="number" min={0} value={serviceDeposit} onChange={(e) => setServiceDeposit(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
               {!royaltiesApply && !authorAccount && !demiAccount && <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Conditions de livraison<input type="text" value={serviceDelivery} onChange={(e) => setServiceDelivery(e.target.value)} placeholder="ex. livraison sous 30 jours après BAT" style={inputStyle} /></label>}
+              <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Date de signature (facultatif)<input type="text" value={signingDate} onChange={(e) => setSigningDate(e.target.value)} placeholder="laisser vide = à compléter à la main" style={inputStyle} /></label>
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
               <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Annuler</button>
@@ -1677,6 +1692,11 @@ function NewContractForm({
   const [authorRevenueSharePct, setAuthorRevenueSharePct] = useState(50);
   const [salePrice, setSalePrice] = useState(0);
   const [demiPeriodicity, setDemiPeriodicity] = useState<"mensuelle" | "trimestrielle" | "semestrielle" | "annuelle">("semestrielle");
+  // Champs « à remplir » du contrat d'édition + date de signature (sinon pointillés).
+  const [printRun, setPrintRun] = useState(0);
+  const [publicPriceHt, setPublicPriceHt] = useState(0);
+  const [publicationDate, setPublicationDate] = useState("");
+  const [signingDate, setSigningDate] = useState("");
   // Durée de la cession (terme du contrat) — variable d'un auteur à l'autre,
   // reprise automatiquement sur le contrat imprimé. 0 = non précisée.
   const [durationYears, setDurationYears] = useState(5);
@@ -1726,6 +1746,10 @@ function NewContractForm({
             payment_schedule: paymentSchedule,
             statement_periodicity: statementPeriodicity,
             ...(taxWithholding > 0 ? { tax_withholding_pct: taxWithholding } : {}),
+            // Champs « à remplir » du contrat d'édition (sinon pointillés).
+            ...(printRun > 0 ? { print_run: printRun } : {}),
+            ...(publicPriceHt > 0 ? { public_price_ht: publicPriceHt } : {}),
+            ...(publicationDate.trim() ? { publication_date: publicationDate.trim() } : {}),
           }
         : authorAccount
           ? {
@@ -1765,7 +1789,8 @@ function NewContractForm({
         partner_id: partnerId,
         // La durée de cession n'est pertinente que pour un contrat à droits.
         ...(royaltiesApply && durationYears > 0 ? { duration_months: durationYears * 12 } : {}),
-        financial_terms,
+        // Date de signature (commune à tous les modèles) si renseignée.
+        financial_terms: { ...financial_terms, ...(signingDate.trim() ? { signing_date: signingDate.trim() } : {}) },
       });
       onCreated();
     } catch (err) {
@@ -1919,6 +1944,18 @@ function NewContractForm({
               );
             })}
             <button type="button" onClick={addTier} style={{ ...secondaryButtonStyle, marginTop: 4 }}>+ Ajouter un palier</button>
+            {/* Champs « à remplir » du contrat d'édition (sinon pointillés sur le PDF). */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+              <label style={{ fontSize: 12 }}>Tirage (nombre d'exemplaires)
+                <input type="number" min={0} value={printRun} onChange={(e) => setPrintRun(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12 }}>Prix public HT (FCFA)
+                <input type="number" min={0} value={publicPriceHt} onChange={(e) => setPublicPriceHt(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Date de publication prévue
+                <input type="text" value={publicationDate} onChange={(e) => setPublicationDate(e.target.value)} placeholder="ex. 30/06/2026" style={inputStyle} />
+              </label>
+            </div>
           </>
         ) : authorAccount ? (
           <>
@@ -2007,6 +2044,10 @@ function NewContractForm({
             </div>
           </>
         )}
+        {/* Date de signature — commune à tous les modèles (« Fait à …, le … »). */}
+        <label style={{ fontSize: 12, display: "block", marginTop: 12 }}>Date de signature (facultatif)
+          <input type="text" value={signingDate} onChange={(e) => setSigningDate(e.target.value)} placeholder="laisser vide = à compléter à la main" style={inputStyle} />
+        </label>
       </div>
       <button type="submit" style={{ ...secondaryButtonStyle, marginTop: 10, background: "var(--eclosion)", color: "#fff", border: "none" }}>
         Créer le contrat

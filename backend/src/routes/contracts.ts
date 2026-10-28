@@ -547,6 +547,11 @@ export default async function contractRoutes(fastify: FastifyInstance) {
           author_revenue_share_pct: z.number().min(0).max(100).optional(),
           sale_price: z.number().min(0).optional(),
           statement_periodicity: z.enum(["mensuelle", "trimestrielle", "semestrielle", "annuelle"]).optional(),
+          // Champs « à remplir » du contrat d'édition + date de signature (JSON).
+          print_run: z.number().int().min(0).optional(),
+          public_price_ht: z.number().min(0).optional(),
+          publication_date: z.string().max(60).optional(),
+          signing_date: z.string().max(60).optional(),
         })
         .safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
@@ -596,12 +601,14 @@ export default async function contractRoutes(fastify: FastifyInstance) {
         const svcKeys = ["service_cost", "service_deposit", "service_copies", "service_delivery"] as const;
         const aaKeys = ["editorial_fees", "print_copies", "print_unit_cost", "sale_price_min", "logo_pct", "distribution_pct", "duration_years", "territory"] as const;
         const demiKeys = ["total_cost", "author_cost_share_pct", "author_revenue_share_pct", "sale_price", "statement_periodicity"] as const;
-        const touched = [...svcKeys, ...aaKeys, ...demiKeys].some((k) => b[k] !== undefined);
+        const fillKeys = ["print_run", "public_price_ht", "publication_date", "signing_date"] as const;
+        const touched = [...svcKeys, ...aaKeys, ...demiKeys, ...fillKeys].some((k) => b[k] !== undefined);
         if (touched) {
           const fin = (contract.financialTerms as Record<string, unknown> | null) ?? {};
           for (const k of svcKeys) if (b[k] !== undefined) fin[k] = typeof b[k] === "string" ? (b[k] as string).trim() : b[k];
           for (const k of aaKeys) if (b[k] !== undefined) fin[k] = typeof b[k] === "string" ? (b[k] as string).trim() : b[k];
           for (const k of demiKeys) if (b[k] !== undefined) fin[k] = typeof b[k] === "string" ? (b[k] as string).trim() : b[k];
+          for (const k of fillKeys) if (b[k] !== undefined) fin[k] = typeof b[k] === "string" ? (b[k] as string).trim() : b[k];
           await tx.contract.update({ where: { id }, data: { financialTerms: JSON.parse(JSON.stringify(fin)) } });
         }
       });

@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-contrats-adresse-entete-et-champs",
+      version: "2026.10",
+      title: "Nouveauté — Contrats : adresse officielle du papier à en-tête et champs à remplir",
+      body: "Deux améliorations sur les contrats : (1) l'adresse et les coordonnées de l'éditeur portées sur le contrat sont désormais celles du papier à en-tête officiel de la maison (siège : Carrefour INSTIC – Nouvelle route Kondengui, B.P. 33071 Yaoundé ; téléphones, e-mail, site, RCCM et NIU à jour) — fini l'ancienne adresse. Vous pouvez d'ailleurs ajuster cette identité une fois pour toutes dans Réglages → Identité de l'éditeur. (2) De nouveaux champs permettent de renseigner ce qui restait en pointillés dans le contrat : pour l'édition, le TIRAGE (nombre d'exemplaires), le PRIX PUBLIC HT et la DATE DE PUBLICATION prévue ; et pour tous les contrats, la DATE DE SIGNATURE (« Fait à Yaoundé, le … »). Si vous laissez un champ vide, les pointillés restent, à remplir à la main.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DIRED", "JURID", "FIN", "DG"],
+    },
+    {
       slug: "2026-10-contrats-transfert-bon-document-signature",
       version: "2026.10",
       title: "Nouveauté — Contrats : le transfert envoie le bon contrat, signature complète",

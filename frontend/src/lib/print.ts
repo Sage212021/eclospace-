@@ -1002,15 +1002,19 @@ export interface PublisherLegal {
   name: string; desc: string; rc: string; niu: string; siege: string;
   tel: string; email: string; web: string; rep: string; ville: string;
 }
+// Identité LÉGALE de l'éditeur dans le CORPS des contrats — alignée sur l'en-tête
+// officiel (HOUSE) : même adresse, mêmes coordonnées que le papier à en-tête.
+// Sert de valeur par défaut ; l'identité stockée (Réglages → Identité de l'éditeur)
+// la remplace si elle est renseignée.
 export const EDITEUR_LEGAL: PublisherLegal = {
-  name: "EDITIONS ECLOSION",
+  name: HOUSE.legalName,
   desc: "entreprise de prestation de services en édition, communication, imprimerie…",
-  rc: "N°RC /YAO/2019/B/1441",
-  niu: "M021912751174Y",
-  siege: "Yaoundé, Hippodrome, BP. 33071, Yaoundé",
-  tel: "677 157 326",
-  email: "editioneclosion@gmail.com",
-  web: "www.eclosion.cm",
+  rc: HOUSE.rccm,
+  niu: HOUSE.niu,
+  siege: `${HOUSE.address}, ${HOUSE.poBox}`,
+  tel: HOUSE.phone,
+  email: HOUSE.email,
+  web: HOUSE.website,
   rep: "Mme Christelle NOAH, Directeur Général",
   ville: "Yaoundé",
 };
@@ -1111,6 +1115,14 @@ function resolveArticleBody(
   return { html, ajusted: ov !== undefined };
 }
 
+// Date de signature (« Fait à …, le … ») : valeur saisie ou pointillés. Commune
+// aux quatre modèles de contrat.
+function signingDateHtml(c: ContractDetail): string {
+  const ft = (c.financialTerms ?? {}) as Record<string, unknown>;
+  const d = typeof ft.signing_date === "string" ? ft.signing_date.trim() : "";
+  return d ? `<b>${escapeHtml(d)}</b>` : `<span style="color:#9aa1ad">${"…".repeat(14)}</span>`;
+}
+
 // Libellé lisible du modèle économique (D-054), repris en tête des contrats.
 export function economicModelLabelFr(m?: string | null): string {
   switch (m) {
@@ -1179,6 +1191,16 @@ export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<P
     : `${BL(6)} années`;
 
   const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
+  // Champs « à remplir » du contrat d'édition (sinon pointillés) : tirage, prix
+  // public HT, date de publication, date de signature.
+  const ftE = (c.financialTerms ?? {}) as Record<string, unknown>;
+  const numE = (k: string): number => (typeof ftE[k] === "number" ? (ftE[k] as number) : Number(ftE[k])) || 0;
+  const tiragePlain = numE("print_run") > 0 ? String(numE("print_run")) : "";
+  const pphtPlain = numE("public_price_ht") > 0 ? `${numE("public_price_ht").toLocaleString("fr-FR")} FCFA` : "";
+  const datePubPlain = typeof ftE.publication_date === "string" && ftE.publication_date.trim() ? ftE.publication_date.trim() : "";
+  const tirageHtml = tiragePlain ? `<b class="num">${escapeHtml(tiragePlain)}</b>` : BL(8);
+  const pphtHtml = pphtPlain ? `<b class="num">${escapeHtml(pphtPlain)}</b>` : `${BL(8)} FCFA`;
+  const datePubHtml = datePubPlain ? `<b>${escapeHtml(datePubPlain)}</b>` : BL(12);
   // Valeurs (plates) disponibles comme champs {{…}} dans les textes de modèle /
   // les surcharges, pour qu'un texte réécrit reste dynamique.
   const tauxPlain = rt?.tiers?.length ? rt.tiers.map((t) => pct(Number(t.rate))).filter((v, i, a) => a.indexOf(v) === i).join(" / ") : "";
@@ -1191,6 +1213,10 @@ export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<P
     modele: economicModelLabelFr(c.economicModel),
     taux: tauxPlain,
     duree: dureePlain,
+    tirage: tiragePlain,
+    prix_public: pphtPlain,
+    date_publication: datePubPlain,
+    date_signature: typeof ftE.signing_date === "string" ? ftE.signing_date.trim() : "",
   };
   // Surcharge PROPRE au contrat > modèle éditable (templates) > texte standard codé.
   const overrides = (c.articleOverrides && typeof c.articleOverrides === "object" && !Array.isArray(c.articleOverrides)
@@ -1259,14 +1285,14 @@ export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<P
       ${par("L'éditeur détermine, sous réserve du droit moral de l'auteur : le format de l'ouvrage, sa présentation et son prix de vente. Les éléments promotionnels relèvent de l'éditeur et sont soumis à l'auteur pour approbation.")}
       ${par("L'éditeur s'engage à faire figurer sur la couverture et les documents promotionnels le nom de l'auteur ou son pseudonyme, et à n'apporter à l'œuvre aucune modification sans autorisation écrite.")}`)}
 
-    ${art(8, "TIRAGE", par(`L'éditeur s'engage à faire imprimer <b>${BL(8)}</b> exemplaires, tirés en une seule fois et constituant le premier tirage. Lors du premier tirage, l'éditeur remet gratuitement 3 exemplaires à l'auteur pour son usage personnel, puis un exemplaire pour chaque nouveau tirage ou édition.`))}
+    ${art(8, "TIRAGE", par(`L'éditeur s'engage à faire imprimer <b>${tirageHtml}</b> exemplaires, tirés en une seule fois et constituant le premier tirage. Lors du premier tirage, l'éditeur remet gratuitement 3 exemplaires à l'auteur pour son usage personnel, puis un exemplaire pour chaque nouveau tirage ou édition.`))}
 
-    ${art(9, "PUBLICATION SOUS FORME IMPRIMÉE", par(`L'éditeur s'engage à publier l'œuvre au plus tard le <b>${BL(12)}</b>. Si l'ouvrage n'est pas publié dans les 6 mois suivant la remise des éléments, le contrat est résilié aux torts exclusifs de l'éditeur, après mise en demeure restée sans effet pendant 1 mois.`))}
+    ${art(9, "PUBLICATION SOUS FORME IMPRIMÉE", par(`L'éditeur s'engage à publier l'œuvre au plus tard le ${datePubHtml}. Si l'ouvrage n'est pas publié dans les 6 mois suivant la remise des éléments, le contrat est résilié aux torts exclusifs de l'éditeur, après mise en demeure restée sans effet pendant 1 mois.`))}
 
     ${art(10, "EXPLOITATION PERMANENTE ET SUIVIE", par("À compter de la publication, l'éditeur assure une diffusion active : présentation aux catalogues papier et numérique, disponibilité dans au moins une base interprofessionnelle, qualité conforme aux règles de l'art, satisfaction des commandes dans les meilleurs délais. À défaut, la cession est résiliée de plein droit après mise en demeure restée sans effet pendant 6 mois."))}
 
     ${art(11, "RÉMUNÉRATION DE L'AUTEUR", `
-      ${par(`<b>1/ Exploitation principale.</b> En contrepartie de la cession, l'éditeur verse à l'auteur des droits d'auteur de <b>${tauxTxt}</b> sur chaque exemplaire vendu, calculés sur le prix de vente public hors taxes (PPHT) de l'ouvrage, fixé à <b>${BL(8)} FCFA</b>.`)}
+      ${par(`<b>1/ Exploitation principale.</b> En contrepartie de la cession, l'éditeur verse à l'auteur des droits d'auteur de <b>${tauxTxt}</b> sur chaque exemplaire vendu, calculés sur le prix de vente public hors taxes (PPHT) de l'ouvrage, fixé à <b>${pphtHtml}</b>.`)}
       ${par(`<b>2/ Droits seconds et dérivés.</b> En cas de cessions à des tiers, l'éditeur verse à l'auteur <b>${tauxTxt}</b> des sommes brutes encaissées ou comptabilisées. Aucune commission annexe ne peut être déduite de l'assiette de calcul.`)}
       ${par("<b>3/ Exemplaires sans droit.</b> La rémunération ne porte pas sur : les 5 exemplaires du dépôt légal, au plus 3 exemplaires de service de presse/promotion, 2 exemplaires de justificatifs, 3 exemplaires remis gratuitement à l'auteur.")}`)}
 
@@ -1283,7 +1309,7 @@ export function buildAuthorContractHtml(c: ContractDetail, publisher?: Partial<P
 
     ${(c.customClauses ?? []).map((cl, i) => art(16 + i, (esc(cl.title) ?? "").toUpperCase(), par(escapeHtml(cl.body)))).join("")}
 
-    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
+    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${signingDateHtml(c)}</p>
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
     <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap; page-break-inside:avoid; break-inside:avoid">
       <div style="flex:1; min-width:200px"><div class="party__label">L'auteur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
@@ -1421,7 +1447,7 @@ export function buildServiceContractHtml(c: ContractDetail, publisher?: Partial<
 
     ${(c.customClauses ?? []).map((cl, i) => art(12 + i, (esc(cl.title) ?? "").toUpperCase(), par(escapeHtml(cl.body)))).join("")}
 
-    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
+    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${signingDateHtml(c)}</p>
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
     <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap; page-break-inside:avoid; break-inside:avoid">
       <div style="flex:1; min-width:200px"><div class="party__label">${escapeHtml(role.charAt(0).toUpperCase() + role.slice(1))}</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
@@ -1564,7 +1590,7 @@ export function buildAuthorAccountContractHtml(c: ContractDetail, publisher?: Pa
 
     ${(c.customClauses ?? []).map((cl, i) => art(8 + i, (esc(cl.title) ?? "").toUpperCase(), par(escapeHtml(cl.body)))).join("")}
 
-    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
+    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${signingDateHtml(c)}</p>
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
     <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap; page-break-inside:avoid; break-inside:avoid">
       <div style="flex:1; min-width:200px"><div class="party__label">L'Auteur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>
@@ -1707,7 +1733,7 @@ export function buildDemiContractHtml(c: ContractDetail, publisher?: Partial<Pub
 
     ${(c.customClauses ?? []).map((cl, i) => art(9 + i, (esc(cl.title) ?? "").toUpperCase(), par(escapeHtml(cl.body)))).join("")}
 
-    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${BL(14)}</p>
+    <p style="margin:22px 0 4px;font-size:12px">Fait à ${ED.ville}, le ${signingDateHtml(c)}</p>
     <p style="margin:2px 0 8px;font-size:12px">En deux (02) exemplaires.</p>
     <div style="margin-top:28px; display:flex; gap:60px; flex-wrap:wrap; page-break-inside:avoid; break-inside:avoid">
       <div style="flex:1; min-width:200px"><div class="party__label">L'Auteur</div><div style="border-top:1px solid #0b0b0c; margin-top:44px; padding-top:4px; font-size:10.5px; color:#6b7280">Signature (lu et approuvé)</div></div>

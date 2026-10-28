@@ -7,6 +7,7 @@ import { writeAuditLog } from "./audit.js";
 import { loadConfig, readApiKey, resolveModelId, type WorkType } from "./aiConfig.js";
 import { buildCorrectionMethodText } from "./correctionProfile.js";
 import { segmentText, runAnomalySweep, SEGMENT_CHARS } from "./correctionSweep.js";
+import { withThinking } from "./aiThinking.js";
 import { parseAnomaliesJson, ANOMALY_EXTRACTION_SYSTEM, anomalyExtractionUser } from "./correctionAnomalies.js";
 
 // Moteur de relecture assistée (Lot IA-1). Orchestration : préparer le manuscrit,
@@ -245,6 +246,9 @@ function fillTemplate(tpl: string, vars: Record<string, string>): string {
 // La complétude A→M n'est PAS assurée par un gros budget (risqué), mais par la
 // boucle de complétion ci-dessous, qui enchaîne plusieurs appels au besoin.
 const REPORT_MAX_TOKENS = 8000;
+// Budget de « réflexion approfondie » pour la rédaction du rapport (1er appel)
+// quand le modèle la gère (Sonnet/Opus). max_tokens est élargi en conséquence.
+const REPORT_THINK_BUDGET = 4000;
 
 // Rubriques du gabarit ABSENTES du texte produit. Une rubrique est « présente »
 // si son intitulé de section apparaît (ex. « ## A. … », « **A.** », « A. … » en
@@ -1003,9 +1007,12 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       blocks.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("\n").trim();
 
     await throwIfCancelled(jobId); // arrêt coopératif avant le 1er appel (coûteux)
+    // Réflexion approfondie sur la RÉDACTION DU RAPPORT (1er appel, sans préfixe
+    // assistant → compatible). Les continuations ci-dessous préfixent la réponse
+    // de l'assistant : la réflexion y est donc volontairement absente.
     const first = await client.messages.create({
       model: modelId,
-      max_tokens: REPORT_MAX_TOKENS,
+      ...withThinking(modelId, REPORT_MAX_TOKENS, REPORT_THINK_BUDGET),
       system: systemPrompt,
       messages: [{ role: "user", content }],
     });

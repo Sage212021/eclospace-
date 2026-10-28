@@ -33,9 +33,12 @@ function defaultConfig(): AiEditorialConfig {
   return {
     enabled: false,
     accountLabel: "",
-    // Les analyses lourdes (expertise scientifique, réécriture) démarrent en
-    // « intermédiaire » (équilibré) ; l'admin peut ajuster chaque type ensuite.
-    models: { evaluation: "leger", correction_1: "leger", correction_2: "leger", couverture: "leger", expertise: "intermediaire", reecriture: "intermediaire" },
+    // Les LECTURES de fond (évaluation, relectures BAT1/BAT2) démarrent en
+    // « haut de gamme » (Opus) : profondeur d'analyse proche de la conversation,
+    // avec réflexion approfondie activée côté moteur. Les analyses lourdes
+    // (expertise, réécriture) en « intermédiaire ». L'admin ajuste chaque type
+    // ensuite dans Réglages → IA.
+    models: { evaluation: "premium", correction_1: "premium", correction_2: "premium", couverture: "leger", expertise: "intermediaire", reecriture: "intermediaire" },
     allowedConfidentiality: ["public", "interne", "restreint"],
     apiKeyCiphertext: null,
     apiKeyLast4: null,

@@ -1,4 +1,10 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import { withThinking } from "./aiThinking.js";
+
+// Budget de « réflexion approfondie » par segment (jetons de raisonnement) quand
+// le modèle la gère (Sonnet/Opus). Le relecteur réfléchit avant de lister les
+// anomalies du segment — meilleure détection des coquilles fines.
+const SWEEP_THINK_BUDGET = 3000;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Lecture INTÉGRALE par segments (renforcement BAT1/BAT2, demande opérateur).
@@ -87,7 +93,7 @@ export async function runAnomalySweep(opts: {
       "- [catégorie · sévérité C1/C2/C3/S] « passage fautif cité exactement » → correction proposée (justification courte si utile)\n" +
       `Si le segment ne contient aucune anomalie, écris exactement : « Segment ${i + 1} : RAS ».`;
     try {
-      const resp = await opts.client.messages.create({ model: opts.model, max_tokens: opts.maxTokens ?? 4000, system, messages: [{ role: "user", content: user }] });
+      const resp = await opts.client.messages.create({ model: opts.model, ...withThinking(opts.model, opts.maxTokens ?? 4000, SWEEP_THINK_BUDGET), system, messages: [{ role: "user", content: user }] });
       inTok += resp.usage?.input_tokens ?? 0;
       outTok += resp.usage?.output_tokens ?? 0;
       const txt = (resp.content as Array<{ type: string; text?: string }>).filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();

@@ -1456,6 +1456,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-relecture-reflexion-approfondie",
+      version: "2026.10",
+      title: "Nouveauté — Relecture BAT1/BAT2 & évaluation : lecture plus profonde (réflexion approfondie)",
+      body: "La relecture automatique (BAT1, BAT2) et le rapport d'évaluation lisent désormais « plus en profondeur », pour se rapprocher de la finesse d'une lecture humaine attentive. Deux leviers : (1) la RÉFLEXION APPROFONDIE est activée — avant de relever les anomalies d'un passage ou de rédiger le rapport, le relecteur raisonne longuement (meilleure détection des coquilles fines, accords, accents, noms propres douteux) ; (2) ces lectures peuvent tourner sur le modèle le plus fin (« Haut de gamme »). ⚙️ IMPORTANT : pour en bénéficier sur VOTRE installation, un administrateur doit ouvrir Réglages → IA éditoriale et régler « Rapport d'évaluation », « Relecture BAT1 » et « Relecture BAT2 » sur « Haut de gamme (analyse fine) », puis enregistrer. À noter : une lecture plus profonde est plus lente et coûte davantage par ouvrage — c'est le prix de la finesse. Relancez BAT1/BAT2 sur un ouvrage pour profiter du nouveau réglage.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "COMLEC", "DG"],
+    },
+    {
       slug: "2026-10-contrats-transfert-papier-entete",
       version: "2026.10",
       title: "Nouveauté — Contrats : le PDF transféré a enfin le papier à en-tête (logo, bandeau, pied)",

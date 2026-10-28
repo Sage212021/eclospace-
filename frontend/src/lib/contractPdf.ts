@@ -268,8 +268,19 @@ export function buildContractPdfFromHtml(html: string, publisher?: Partial<Publi
     let by = Math.max(top + logoH, cy) + 5;
     doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...INK);
     doc.text("Éclosion Édition Sarl", (L + R) / 2, by, { align: "center" }); by += 4.6;
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7.6); doc.setTextColor(...INK);
-    doc.text("Édition du livre   |   Conception et réalisation des supports de communication   |   Imprimerie offset et numérique", (L + R) / 2, by, { align: "center" }); by += 3.6;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.6);
+    // Métiers centrés : texte en noir, séparateurs « | » en or (comme à l'écran).
+    const metiers = ["Édition du livre", "Conception et réalisation des supports de communication", "Imprimerie offset et numérique"];
+    const sep = "   |   ";
+    const segW = (s: string) => doc.getTextWidth(s);
+    let totalW = 0;
+    metiers.forEach((m, i) => { totalW += segW(m); if (i < metiers.length - 1) totalW += segW(sep); });
+    let mx = (L + R) / 2 - totalW / 2;
+    metiers.forEach((m, i) => {
+      doc.setTextColor(...INK); doc.text(m, mx, by); mx += segW(m);
+      if (i < metiers.length - 1) { doc.setTextColor(...GOLD); doc.text(sep, mx, by); mx += segW(sep); }
+    });
+    by += 3.6;
     doc.setFillColor(...INK); doc.rect(L, by, W * 0.62, 0.9, "F");
     doc.setFillColor(...GOLD); doc.rect(L + W * 0.62, by, W * 0.38, 0.9, "F");
     return by + 7;

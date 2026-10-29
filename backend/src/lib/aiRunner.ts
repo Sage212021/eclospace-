@@ -1400,6 +1400,19 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       }
     }
 
+    // COLLABORATION DES DEUX IA (demande opérateur) : dès que le RAPPORT
+    // D'ÉVALUATION est prêt, SAGE (éditeur virtuel) génère AUTOMATIQUEMENT, à
+    // partir du rapport + du manuscrit intégral, un « Guide éditorial
+    // d'amélioration » distinct, rangé en brouillon (à valider par le comité
+    // avant transmission à l'auteur). Best-effort : n'échoue jamais le rapport.
+    if (params.workType === "evaluation" && reportText) {
+      try {
+        const { generateImprovementGuide } = await import("./improvementGuide.js");
+        const guideId = await generateImprovementGuide({ manuscriptId: manuscript.id, reportText, userId: params.userId });
+        if (guideId) producedIds.push(guideId);
+      } catch { /* le guide est best-effort : le rapport reste le livrable */ }
+    }
+
     const costUsd = (totalInput * price.in + totalOutput * price.out) / 1_000_000;
     const costEstimate = Math.round(costUsd * 600 * 100) / 100; // ≈ FCFA (1 USD ≈ 600 XAF)
 

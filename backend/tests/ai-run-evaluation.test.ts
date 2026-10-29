@@ -156,19 +156,21 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     expect(report.versions[0].mimeType).toContain("wordprocessingml");
 
     // La STRUCTURE IMPOSÉE (rubriques A–M) est réellement transmise à l'IA.
-    const lastSystem = sdkCalls[sdkCalls.length - 1]?.system ?? "";
-    expect(lastSystem).toContain("STRUCTURE IMPOSÉE");
-    expect(lastSystem).toContain("A. Identification du manuscrit");
-    expect(lastSystem).toContain("M. Avis final du relecteur");
+    // NB : le PREMIER appel est celui de l'ÉVALUATION (les appels suivants
+    // peuvent être la génération du guide d'amélioration par SAGE).
+    const evalSystem = sdkCalls[0]?.system ?? "";
+    expect(evalSystem).toContain("STRUCTURE IMPOSÉE");
+    expect(evalSystem).toContain("A. Identification du manuscrit");
+    expect(evalSystem).toContain("M. Avis final du relecteur");
     // Les consignes de forme PROPRES au gabarit d'évaluation sont transmises,
     // et l'évaluation n'est PAS poussée vers des annotations de correction.
-    expect(lastSystem).toContain("NON un rapport de correction");
-    expect(lastSystem).not.toContain("correction proposée");
+    expect(evalSystem).toContain("NON un rapport de correction");
+    expect(evalSystem).not.toContain("correction proposée");
     // La grille officielle (critères + coefficients) est transmise à l'IA.
-    const lastUser = sdkCalls[sdkCalls.length - 1]?.user ?? "";
-    expect(lastUser).toContain("GRILLE D'ÉVALUATION OFFICIELLE");
-    expect(lastUser).toContain("Adéquation avec la ligne éditoriale d'Éclosion Édition");
-    expect(lastUser).toContain("coefficient 3");
+    const evalUser = sdkCalls[0]?.user ?? "";
+    expect(evalUser).toContain("GRILLE D'ÉVALUATION OFFICIELLE");
+    expect(evalUser).toContain("Adéquation avec la ligne éditoriale d'Éclosion Édition");
+    expect(evalUser).toContain("coefficient 3");
   });
 
   it("le type choisi par le relecteur (grid_genre_id) adapte la grille transmise à l'IA", async () => {
@@ -181,6 +183,10 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
     const genreId = own!.genre!.id;
     const genreLabel = own!.genre!.label;
 
+    // `sdkCalls` s'accumule sur tout le fichier : on repère l'index du 1er appel
+    // de CETTE évaluation (le premier nouvel appel après l'inject) — les appels
+    // suivants peuvent être la génération du guide d'amélioration par SAGE.
+    const startIdx = sdkCalls.length;
     const res = await app.inject({
       method: "POST", url: "/api/v1/ai-editorial/run", headers: { cookie: adminCookie },
       payload: { manuscript_id: manuscriptId, work_type: "evaluation", step_code: "COMITE_LECTURE", grid_genre_id: genreId },
@@ -190,9 +196,9 @@ describe("IA éditoriale — exécution d'un rapport d'évaluation (Lot IA-1)", 
 
     // La grille transmise annonce le TYPE choisi et reprend un critère PROPRE à ce
     // domaine (celui-ci n'existe pas tel quel dans la grille par défaut).
-    const lastUser = sdkCalls[sdkCalls.length - 1]?.user ?? "";
-    expect(lastUser).toContain(`adaptée au type « ${genreLabel} »`);
-    expect(lastUser).toContain(own!.label);
+    const evalUser = sdkCalls[startIdx]?.user ?? "";
+    expect(evalUser).toContain(`adaptée au type « ${genreLabel} »`);
+    expect(evalUser).toContain(own!.label);
   });
 
   it("le journal des jobs du manuscrit est consultable et signale un rapport téléchargeable", async () => {

@@ -1612,6 +1612,11 @@ model ReleaseNote {
 enum DocumentCategory {
   manuscrit
   rapport_lecture
+  // Guide éditorial d'amélioration produit par SAGE (éditeur virtuel) à partir
+  // du rapport d'évaluation + du manuscrit intégral : transforme les
+  // observations en recommandations concrètes pour l'auteur. Brouillon validé
+  // par le comité avant transmission.
+  guide_amelioration
   contrat
   bat
   facture

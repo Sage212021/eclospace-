@@ -1457,6 +1457,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-guide-amelioration-sage",
+      version: "2026.10",
+      title: "Nouveauté — SAGE produit un « Guide éditorial d'amélioration » après l'évaluation",
+      body: "Deux intelligences se relaient désormais sur chaque manuscrit. L'évaluation éditoriale DIAGNOSTIQUE (rapport pour le comité) ; puis SAGE, l'éditeur virtuel, transforme ces observations en SOLUTIONS. Dès que le rapport d'évaluation est prêt, SAGE lit le rapport ET le manuscrit intégral, et génère automatiquement un document distinct, le « Guide éditorial d'amélioration du manuscrit » : synthèse, observations détaillées (numérotées EVAL-001, EVAL-002…), localisation (chapitre/section/passage), explication éditoriale, recommandations adaptées au genre, exemples concrets, priorités (majeures/importantes/secondaires) et feuille de route. SAGE n'invente pas de contenu pour combler une lacune et peut signaler un désaccord ou un point « à vérifier par le comité ». Le guide apparaît dans les documents de l'ouvrage (rubrique « Guide éditorial d'amélioration »), en BROUILLON : le comité l'examine ; il n'est pas visible par l'auteur tant qu'il n'est pas partagé. (Suite à venir : suivi des observations, mode « assistance à la réécriture » et accompagnement interactif de l'auteur.)",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "COMLEC", "DG"],
+    },
+    {
       slug: "2026-10-infographe-obligatoire-evaluation",
       version: "2026.10",
       title: "Nouveauté — Infographe obligatoire pour envoyer un manuscrit en évaluation",

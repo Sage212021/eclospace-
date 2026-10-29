@@ -438,8 +438,8 @@ export function SageChatPage() {
               </div>
             )}
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-              <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt,.md,.csv,.rtf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style={{ display: "none" }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-              <button onClick={() => fileInputRef.current?.click()} disabled={busy || pending} title="Joindre un fichier (PDF, Word, texte)" style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px", fontSize: 15, cursor: busy || pending ? "not-allowed" : "pointer", opacity: busy || pending ? 0.55 : 1 }}>📎</button>
+              <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt,.md,.csv,.rtf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,image/*" style={{ display: "none" }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+              <button onClick={() => fileInputRef.current?.click()} disabled={busy || pending} title="Joindre un fichier (PDF, Word, image, texte)" style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px", fontSize: 15, cursor: busy || pending ? "not-allowed" : "pointer", opacity: busy || pending ? 0.55 : 1 }}>📎</button>
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

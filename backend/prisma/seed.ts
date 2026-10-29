@@ -1457,6 +1457,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-relecture-blocage-lecture-incomplete",
+      version: "2026.10",
+      title: "Nouveauté — Relecture BAT1/BAT2 : plus jamais un rapport sur une lecture partielle",
+      body: "Fiabilité renforcée : si, lors d'une relecture BAT1/BAT2, un passage du manuscrit n'a pas pu être analysé (incident technique), le système réessaie automatiquement ce passage ; s'il échoue encore, la relecture est ARRÊTÉE au lieu de produire un rapport qui présenterait une lecture partielle comme intégrale. Le relecteur voit alors un message clair (« Lecture incomplète : X/Y passages analysés — relancez la relecture »), l'incident est journalisé, et il suffit de relancer. Un rapport n'est donc produit que lorsque la totalité du manuscrit a bien été lue. (Les PDF scannés restent lus par la reconnaissance visuelle, sans logiciel supplémentaire.)",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "COMLEC", "DG"],
+    },
+    {
       slug: "2026-10-rapports-sans-mentions-techniques",
       version: "2026.10",
       title: "Nouveauté — Rapports de relecture/évaluation : fini les mentions techniques trompeuses",

@@ -1457,6 +1457,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-relecture-couverture-tous-fichiers",
+      version: "2026.10",
+      title: "Nouveauté — Relecture de couverture : lecture de (presque) tous les fichiers",
+      body: "La relecture de couverture refusait certains fichiers (« trop crypté / trop compressé », ou illisibles). C'est corrigé. Désormais, le fichier déposé est reconnu à son contenu réel (même si l'extension ou le type est faux) et converti automatiquement pour la lecture : les images haute définition d'impression (JPEG, PNG, GIF, BMP, TIFF, y compris en CMYK ou très lourdes) sont réduites et ré-encodées proprement ; les WEBP, PDF (texte ou image) et DOCX sont pris en charge. Deux cas donnent maintenant un message CLAIR au lieu d'un échec obscur : un PDF protégé par mot de passe (« fournissez une version non protégée ») et un fichier de conception non lisible directement — PSD, AI, EPS, SVG, HEIC — (« exportez une version aplatie en JPEG ou PNG, ou un PDF, puis redéposez »). En clair : déposez votre couverture telle quelle, le relecteur sait la lire dans la très grande majorité des cas ; et quand c'est vraiment impossible, il vous dit exactement quoi faire.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "COMLEC", "DG"],
+    },
+    {
       slug: "2026-10-relecture-reflexion-approfondie",
       version: "2026.10",
       title: "Nouveauté — Relecture BAT1/BAT2 & évaluation : lecture plus profonde (réflexion approfondie)",

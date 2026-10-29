@@ -70,7 +70,7 @@ function extractDocxXml(buffer: Buffer): string | null {
   return null;
 }
 
-type PageImage = { base64: string; mediaType: "image/jpeg" };
+type PageImage = { base64: string; mediaType: "image/jpeg" | "image/webp" };
 type ManuscriptInput = { kind: "text"; text: string } | { kind: "pdf"; base64: string } | { kind: "images"; images: PageImage[] };
 
 function isPdfBuffer(mime: string, buffer: Buffer): boolean {
@@ -173,15 +173,92 @@ export async function extractPdfImages(buffer: Buffer, opts?: { maxPages?: numbe
   }
 }
 
-function prepareManuscript(mime: string, name: string, buffer: Buffer): ManuscriptInput {
-  const lower = name.toLowerCase();
-  if (mime === "application/pdf" || lower.endsWith(".pdf")) {
-    return { kind: "pdf", base64: buffer.toString("base64") };
+const mo = (buf: Buffer) => (buf.length / (1024 * 1024)).toFixed(1);
+
+// Message d'erreur CLAIR et actionnable quand un fichier (couverture/manuscrit)
+// n'est pas lisible : on dit la vraie cause et COMMENT fournir une version lisible.
+function unreadableFileError(reason: string): AiRunError {
+  return new AiRunError(
+    "file_unreadable",
+    `Le relecteur n'a pas pu lire ce fichier : ${reason}. `
+      + "Formats lus directement : PDF (texte sélectionnable ou image), JPEG, PNG, GIF, BMP, TIFF, WEBP, DOCX, texte. "
+      + "Pour un fichier de conception (PSD, AI, EPS, SVG, HEIC…) ou protégé par mot de passe, exportez une version APLATIE en JPEG ou PNG (ou un PDF non protégé), puis redéposez le fichier et relancez.",
+  );
+}
+
+// Le fichier ressemble-t-il à du TEXTE (et non à un binaire illisible) ? On
+// échantillonne le début : trop d'octets nuls / de contrôle = binaire.
+export function looksTextual(buffer: Buffer): boolean {
+  const n = Math.min(buffer.length, 4096);
+  if (n === 0) return true;
+  let bad = 0;
+  for (let i = 0; i < n; i++) {
+    const b = buffer[i];
+    if (b === 0) return false; // octet nul = binaire certain
+    // Autorise tab/LF/CR et tout ≥ 32 ; compte les autres caractères de contrôle.
+    if (b < 9 || (b > 13 && b < 32)) bad++;
   }
-  if (mime.includes("wordprocessingml") || lower.endsWith(".docx")) {
+  return bad / n < 0.1;
+}
+
+// Normalise un fichier VISUEL ou TEXTE vers un format que l'IA lit de façon
+// FIABLE (demande opérateur : « les relecteurs doivent pouvoir lire tout type de
+// fichier, convertir, etc. »). On détecte le VRAI format d'après les octets (le
+// mime/extension déposés sont souvent faux), puis :
+//   • DOCX → texte ; • image matricielle (JPEG/PNG/GIF/BMP/TIFF) → réduite ≤ 1600 px
+//   et ré-encodée JPEG (CMYK→RGB) → vision ; • WEBP → tel quel (vision) ;
+//   • texte lisible → texte ; • sinon (PSD/AI/EPS/SVG/HEIC/binaire inconnu) →
+//   message clair. Le PDF est traité en amont (extraction texte / rastérisation).
+export async function prepareVisualOrText(mime: string, buffer: Buffer): Promise<ManuscriptInput> {
+  if (mime.includes("wordprocessingml")) {
     return { kind: "text", text: docxToText(buffer) };
   }
-  return { kind: "text", text: buffer.toString("utf8") };
+  // Vrai format d'après la signature des octets (robuste aux mimes erronés).
+  let realMime = mime || "";
+  try {
+    const { fileTypeFromBuffer } = await import("file-type");
+    const ft = await fileTypeFromBuffer(buffer);
+    if (ft?.mime) realMime = ft.mime;
+  } catch { /* détection indisponible : on garde le mime déposé */ }
+
+  if (realMime.includes("wordprocessingml")) return { kind: "text", text: docxToText(buffer) };
+
+  // WEBP : accepté tel quel par la vision (jimp ne le décode pas). Au-delà de la
+  // limite d'image de l'API, on ne peut pas le réduire sans décodeur → message clair.
+  if (realMime === "image/webp") {
+    if (buffer.length <= 4_500_000) return { kind: "images", images: [{ base64: buffer.toString("base64"), mediaType: "image/webp" }] };
+    throw unreadableFileError(`l'image WEBP est trop lourde (${mo(buffer)} Mo) pour être transmise`);
+  }
+
+  // Images matricielles : on NORMALISE systématiquement (réduction ≤ 1600 px,
+  // ré-encodage JPEG qualité 85, conversion CMYK→RGB) pour qu'une couverture
+  // haute définition impression passe toujours la vision de l'IA.
+  if (realMime.startsWith("image/")) {
+    try {
+      const { optimizeImage } = await import("./imageOptimize.js");
+      const opt = await optimizeImage(buffer, { maxLongSide: 1600, quality: 85, format: "jpeg" });
+      return { kind: "images", images: [{ base64: opt.buffer.toString("base64"), mediaType: "image/jpeg" }] };
+    } catch {
+      throw unreadableFileError(`le format image « ${realMime} » n'est pas décodable directement`);
+    }
+  }
+
+  // Texte lisible (txt, csv, md, html, ou fichier sans signature binaire).
+  if (looksTextual(buffer)) return { kind: "text", text: buffer.toString("utf8") };
+
+  throw unreadableFileError("le format du fichier n'est pas reconnu");
+}
+
+// Un PDF est-il protégé par mot de passe (ouverture impossible sans clé) ?
+// Utilisé UNIQUEMENT dans le chemin d'échec, pour un message précis.
+async function pdfIsPasswordProtected(buffer: Buffer): Promise<boolean> {
+  try {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    await pdfjs.getDocument({ data: new Uint8Array(buffer), isEvalSupported: false }).promise;
+    return false;
+  } catch (e) {
+    return Boolean(e && typeof e === "object" && (e as { name?: string }).name === "PasswordException");
+  }
 }
 
 // Grille d'évaluation OFFICIELLE de la maison (critères + coefficients, en base),
@@ -824,6 +901,13 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
           const images = pages <= IMAGE_PAGE_CAP ? await extractPdfImages(buffer, { maxPages: IMAGE_PAGE_CAP, maxDim: 1600 }) : null;
           if (images && images.length > 0) {
             prepared = { kind: "images", images };
+          } else if (await pdfIsPasswordProtected(buffer)) {
+            // Vraie cause « crypté » : PDF protégé par mot de passe → illisible
+            // sans la clé. Message précis plutôt qu'un vague « trop volumineux ».
+            throw new AiRunError(
+              "pdf_encrypted",
+              "Ce PDF est protégé par mot de passe : le relecteur ne peut pas l'ouvrir. Fournissez une version NON protégée (ou exportez la couverture en JPEG/PNG), puis relancez.",
+            );
           } else {
             // Impossible de convertir : message CLAIR selon la vraie cause (trop de
             // pages OU fichier trop lourd). On n'affiche plus « 1 pages … trop
@@ -842,7 +926,7 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
         }
       }
     } else {
-      prepared = prepareManuscript(version.mimeType, `f${version.versionNumber}`, buffer);
+      prepared = await prepareVisualOrText(version.mimeType, buffer);
     }
 
     const author = manuscript.workContributors.find((c) => c.role === "author")?.partner;

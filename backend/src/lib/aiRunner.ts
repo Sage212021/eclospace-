@@ -391,6 +391,14 @@ export function capManuscriptText(text: string): { text: string; truncated: bool
   return { text: parts.join(""), truncated: true };
 }
 
+// FIABILITÉ (demande opérateur) : une relecture par segments n'est « complète »
+// que si TOUS les segments attendus ont été effectivement analysés. Sert de
+// garde : on ne produit pas un rapport présenté comme intégral sur une lecture
+// partielle (après les nouvelles tentatives par segment).
+export function isReadingCoverageComplete(covered: number, total: number): boolean {
+  return covered >= total;
+}
+
 // Récupère le texte du rapport de couverture du BAT PRÉCÉDENT (dernière relecture
 // de couverture terminée sur cet ouvrage, autre que le job courant) — pour que le
 // BAT2 puisse suivre les corrections effectivement demandées au passage précédent.
@@ -1051,8 +1059,15 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       });
       sweepInput += sweep.inputTokens;
       sweepOutput += sweep.outputTokens;
+      // FIABILITÉ : on ne présente JAMAIS une lecture partielle comme intégrale.
+      // Si un segment n'a pas pu être analysé malgré la nouvelle tentative, on
+      // BLOQUE le rapport, on journalise, et on invite à relancer (reprise).
+      if (!isReadingCoverageComplete(sweep.coveredSegments, sweep.totalSegments)) {
+        console.error(`[ai-reading] couverture incomplète job=${jobId} manuscrit=${manuscript.id} : ${sweep.coveredSegments}/${sweep.totalSegments} segments analysés.`);
+        throw new AiRunError("coverage_incomplete", `Lecture incomplète : ${sweep.coveredSegments}/${sweep.totalSegments} segments analysés malgré une nouvelle tentative. Le rapport n'est pas produit — relancez la relecture.`);
+      }
       userText +=
-        `\n\n=== RELEVÉ D'ANOMALIES — LECTURE INTÉGRALE PAR SEGMENTS (${sweep.coveredSegments}/${sweep.totalSegments} segments, couverture ${sweep.coveredSegments === sweep.totalSegments ? "100 %" : Math.round((100 * sweep.coveredSegments) / sweep.totalSegments) + " %"}) ===\n` +
+        `\n\n=== RELEVÉ D'ANOMALIES — LECTURE INTÉGRALE PAR SEGMENTS (${sweep.coveredSegments}/${sweep.totalSegments} segments) ===\n` +
         "Le manuscrit a été lu INTÉGRALEMENT, segment par segment (ci-dessous le relevé consolidé de TOUTES les anomalies trouvées sur l'ENSEMBLE du texte). " +
         "Ta rubrique d'annotations DOIT reprendre ces anomalies (consolidées, sans doublon, classées par ordre d'apparition), en y ajoutant toute anomalie supplémentaire que tu repères. " +
         "N'écarte pas une anomalie du relevé sans raison. Ton verdict et ta note doivent être proportionnés à cette lecture intégrale : ne conclus jamais que le manuscrit est « presque prêt » si des anomalies subsistent.\n" +

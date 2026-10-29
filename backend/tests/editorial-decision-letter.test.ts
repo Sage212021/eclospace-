@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, seedManuscriptSourceFile } from "./helpers.js";
+import { extractSessionCookie, seedManuscriptSourceFile, seedInfographe } from "./helpers.js";
 
 // Réponse à l'auteur à la décision éditoriale (audit éditorial, point n°1) : une
 // lettre est adressée à l'auteur pour toute décision terminale, à partir de
@@ -44,7 +44,7 @@ describe("réponse à l'auteur à la décision éditoriale", () => {
     });
     const m = create.json();
     await seedManuscriptSourceFile(m.id);
-    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/VERIF_ADMIN/validate`, headers: { cookie }, payload: {} });
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/VERIF_ADMIN/validate`, headers: { cookie }, payload: { infographe_id: await seedInfographe() } });
     const assign = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/reading-assignments`, headers: { cookie }, payload: { reader_id: adminId, due_at: "2026-12-31T00:00:00.000Z" } });
     const criteria = await prisma.evaluationCriterion.findMany();
     await app.inject({ method: "POST", url: `/api/v1/reading-assignments/${assign.json().id}/evaluation`, headers: { cookie }, payload: { scores: criteria.map((c) => ({ criterion_id: c.id, score: 8 })), recommendation: "accept" } });

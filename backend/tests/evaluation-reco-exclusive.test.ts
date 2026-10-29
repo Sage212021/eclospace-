@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, seedManuscriptSourceFile } from "./helpers.js";
+import { extractSessionCookie, seedManuscriptSourceFile, seedInfographe } from "./helpers.js";
 
 // RAPPORT D'ÉVALUATION — CHOIX EXCLUSIF (demande opérateur) : recommandation
 // PRÉDÉFINIE OU PERSONNALISÉE (texte libre), jamais les deux. Garde-fou métier
@@ -40,7 +40,7 @@ describe("Rapport d'évaluation — recommandation exclusive (prédéfinie OU pe
     });
     const m = create.json();
     await seedManuscriptSourceFile(m.id);
-    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/VERIF_ADMIN/validate`, headers: { cookie }, payload: {} });
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/VERIF_ADMIN/validate`, headers: { cookie }, payload: { infographe_id: await seedInfographe() } });
     const asg = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/reading-assignments`, headers: { cookie }, payload: { reader_id: adminId, due_at: "2026-12-31T00:00:00.000Z" } });
     return asg.json().id;
   }

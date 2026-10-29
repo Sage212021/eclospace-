@@ -38,6 +38,8 @@ import {
   deleteAcceptanceCondition,
   updateManuscriptRegistration,
   validateStep,
+  getCoverIntegrators,
+  getCoverIntegrator,
   getNextAssignees,
   getOptionalStep,
   getBatValidationState,
@@ -159,6 +161,27 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
   // Reprise d'un dossier confié à un collègue (motif obligatoire + traçabilité).
   const [takeoverMotif, setTakeoverMotif] = useState("");
   const [takeoverBusy, setTakeoverBusy] = useState(false);
+  // Infographe en charge de la production, désigné OBLIGATOIREMENT à l'envoi en
+  // évaluation (étape VERIF_ADMIN → Comité de lecture).
+  const [evalInfographes, setEvalInfographes] = useState<{ id: string; name: string }[]>([]);
+  const [evalInfographeId, setEvalInfographeId] = useState("");
+  const evalStatusCode = manuscript?.status.code;
+  const evalManuscriptId = manuscript?.id;
+  useEffect(() => {
+    if (evalStatusCode !== "VERIF_ADMIN" || !evalManuscriptId) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const [list, current] = await Promise.all([getCoverIntegrators(), getCoverIntegrator(evalManuscriptId).catch(() => null)]);
+        if (!alive) return;
+        setEvalInfographes(list);
+        if (current?.integrator?.id) setEvalInfographeId(current.integrator.id);
+      } catch {
+        if (alive) setEvalInfographes([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [evalStatusCode, evalManuscriptId]);
   const focus = originKey ? FOCUS_BY_ORIGIN[originKey] ?? null : null;
   const activeFocus = showAll ? null : focus;
   const show = (mod: string) => activeFocus === null || activeFocus === mod;
@@ -590,17 +613,29 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
         )}
 
         {manuscript.status.code === "VERIF_ADMIN" && canValidate && (
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+              <span>Infographe en charge de la production <span style={{ color: "var(--danger, #B23A2E)" }}>*</span></span>
+              <select
+                value={evalInfographeId}
+                onChange={(e) => setEvalInfographeId(e.target.value)}
+                style={{ padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, minWidth: 220 }}
+              >
+                <option value="">— Choisir l'infographe —</option>
+                {evalInfographes.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </label>
             <ActionButton
+              disabled={!evalInfographeId}
               onClick={() =>
                 confirmThenAdvance(
                   {
-                    title: "Valider l'étape",
-                    message: "Confirmer que le dossier est conforme ?",
-                    detail: "Le manuscrit passera au comité de lecture.",
-                    confirmLabel: "Dossier conforme",
+                    title: "Envoyer en évaluation",
+                    message: "Confirmer que le dossier est conforme et l'envoyer au comité de lecture ?",
+                    detail: `L'ouvrage part en évaluation ; l'infographe désigné en suivra la production.`,
+                    confirmLabel: "Envoyer en évaluation",
                   },
-                  () => validateStep(manuscript.id, "VERIF_ADMIN", { outcome: "conforme" }),
+                  () => validateStep(manuscript.id, "VERIF_ADMIN", { outcome: "conforme", infographe_id: evalInfographeId }),
                 )
               }
             >

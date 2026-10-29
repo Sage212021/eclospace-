@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { extractSessionCookie, seedManuscriptSourceFile } from "./helpers.js";
+import { extractSessionCookie, seedManuscriptSourceFile, createUserWithRole } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 // Blocage d'étape : la « Vérification administrative » ne se valide pas tant que
@@ -18,12 +18,14 @@ describe("blocage d'étape : vérification administrative incomplète", () => {
   let cookie: string;
   let adminId: string;
   let genreId: string;
+  let infographeId: string;
 
   beforeAll(async () => {
     app = await buildApp();
     cookie = await login(app, "admin", ADMIN_PASSWORD);
     adminId = (await prisma.user.findUniqueOrThrow({ where: { username: "admin" } })).id;
     genreId = (await prisma.genre.findUniqueOrThrow({ where: { code: "ROMAN" } })).id;
+    infographeId = (await createUserWithRole(`info_${Math.random().toString(36).slice(2, 7)}`, "RESP_INFOGRAPHIE", "InfoGraph123!")).id;
   });
 
   afterAll(async () => {
@@ -54,10 +56,20 @@ describe("blocage d'étape : vérification administrative incomplète", () => {
     expect(res.json().message as string).toContain("fichier source");
   });
 
-  it("autorise la validation quand la fiche est complète et le fichier source déposé (200)", async () => {
+  it("refuse l'envoi en évaluation sans infographe désigné, même dossier complet (400)", async () => {
     const id = await create({ evaluation_fee_choice: "sans_frais" }, { first_name: "Com", last_name: "Plet", email: "a@example.com", id_type: "CNI", id_number: "123456" });
     await seedManuscriptSourceFile(id);
     const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/steps/VERIF_ADMIN/validate`, headers: { cookie }, payload: {} });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe("infographe_required");
+  });
+
+  it("autorise la validation quand la fiche est complète, le fichier source déposé ET un infographe désigné (200)", async () => {
+    const id = await create({ evaluation_fee_choice: "sans_frais" }, { first_name: "Com", last_name: "Plet", email: "a@example.com", id_type: "CNI", id_number: "123456" });
+    await seedManuscriptSourceFile(id);
+    const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${id}/steps/VERIF_ADMIN/validate`, headers: { cookie }, payload: { infographe_id: infographeId } });
     expect(res.statusCode).toBe(200);
+    const m = await prisma.manuscript.findUniqueOrThrow({ where: { id }, select: { coverIntegratorId: true } });
+    expect(m.coverIntegratorId).toBe(infographeId);
   });
 });

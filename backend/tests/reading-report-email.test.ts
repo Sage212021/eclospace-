@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { createUserWithRole, extractSessionCookie } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, seedInfographe } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 // Envoi par e-mail de la version finale du rapport de lecture : autorisations
@@ -38,7 +38,7 @@ describe("envoi e-mail de la version finale du rapport", () => {
 
     // Manuscrit complet → validation VERIF_ADMIN → affectation du relecteur.
     const m = (await app.inject({ method: "POST", url: "/api/v1/manuscripts", headers: { cookie: adminCookie }, payload: { title: `Email ${rnd()}`, genre_id: genreId, language: "fr", owner_id: adminId, evaluation_fee_choice: "sans_frais", author: { first_name: "A", last_name: "B", email: "a@example.com", id_type: "CNI", id_number: "1" } } })).json();
-    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/VERIF_ADMIN/validate`, headers: { cookie: adminCookie }, payload: {} });
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/steps/VERIF_ADMIN/validate`, headers: { cookie: adminCookie }, payload: { infographe_id: await seedInfographe() } });
     const a = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${m.id}/reading-assignments`, headers: { cookie: adminCookie }, payload: { reader_id: readerId, due_at: "2026-12-31T00:00:00.000Z" } });
     assignmentId = a.json().id;
   });

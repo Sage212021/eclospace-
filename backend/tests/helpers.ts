@@ -31,6 +31,14 @@ export async function createUserWithRole(username: string, roleCode: string, pas
   return user;
 }
 
+// Infographe de production partagé pour les tests : désigner un infographe est
+// désormais OBLIGATOIRE pour envoyer un manuscrit en évaluation (VERIF_ADMIN →
+// Comité de lecture). Les flux de test qui passent cette étape fournissent donc
+// cet id dans le payload `infographe_id`. Idempotent (upsert par username).
+export async function seedInfographe(username = "test_infographe"): Promise<string> {
+  return (await createUserWithRole(username, "RESP_INFOGRAPHIE", "InfoGraph123!")).id;
+}
+
 export function extractSessionCookie(setCookieHeader: string | string[] | undefined): string {
   const raw = Array.isArray(setCookieHeader) ? setCookieHeader[0] : setCookieHeader;
   if (!raw) throw new Error("Aucun cookie de session reçu.");

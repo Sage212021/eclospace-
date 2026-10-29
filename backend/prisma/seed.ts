@@ -1457,6 +1457,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-infographe-obligatoire-evaluation",
+      version: "2026.10",
+      title: "Nouveauté — Infographe obligatoire pour envoyer un manuscrit en évaluation",
+      body: "Désormais, au moment où vous envoyez un manuscrit en évaluation (validation de la vérification administrative → comité de lecture), vous DEVEZ désigner l'infographe qui traitera l'ouvrage en production. Un champ « Infographe en charge de la production » apparaît à cet instant : tant qu'il n'est pas renseigné, le bouton reste bloqué et l'ouvrage ne part pas en évaluation (message : « Désignez l'infographe qui traitera l'ouvrage en production avant de l'envoyer en évaluation »). L'infographe ainsi désigné est fixé dès le départ et suit l'ouvrage sur toute la production (mise en page, infographie, attribution des références), conformément à la règle « même agent sur toute la production ».",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "INFOG", "COMLEC", "DG"],
+    },
+    {
       slug: "2026-10-sage-joindre-image",
       version: "2026.10",
       title: "Nouveauté — SAGE : joignez une image (couverture, capture…) dans la conversation",

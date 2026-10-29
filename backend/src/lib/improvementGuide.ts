@@ -22,8 +22,11 @@ import { withThinking } from "./aiThinking.js";
 export const GUIDE_CATEGORY = "guide_amelioration";
 export const GUIDE_TITLE = "GUIDE ÉDITORIAL D'AMÉLIORATION DU MANUSCRIT";
 
-const GUIDE_MAX_TOKENS = 8000;
-const GUIDE_THINK_BUDGET = 4000;
+// Budget de sortie du guide. Avec réflexion approfondie, max_tokens =
+// réponse + budget de réflexion ; on garde le total ≤ 8192 (limite de sortie la
+// plus basse des modèles) pour ne jamais dépasser le plafond d'un modèle donné.
+const GUIDE_ANSWER_TOKENS = 5000;
+const GUIDE_THINK_BUDGET = 3000;
 
 // Consigne de SAGE pour le guide. Règle d'or : jamais de mention « IA » dans le
 // livrable ; SAGE écrit au nom du Service éditorial des Éditions Éclosion.
@@ -84,7 +87,7 @@ export async function generateImprovementGuide(opts: { manuscriptId: string; rep
 
     const first = await client.messages.create({
       model: modelId,
-      ...withThinking(modelId, GUIDE_MAX_TOKENS, GUIDE_THINK_BUDGET),
+      ...withThinking(modelId, GUIDE_ANSWER_TOKENS, GUIDE_THINK_BUDGET),
       system: GUIDE_SYSTEM,
       messages: [{ role: "user", content: user }],
     });
@@ -95,7 +98,7 @@ export async function generateImprovementGuide(opts: { manuscriptId: string; rep
     for (let i = 0; i < 3 && stop === "max_tokens"; i++) {
       const cont = await client.messages.create({
         model: modelId,
-        max_tokens: GUIDE_MAX_TOKENS,
+        max_tokens: GUIDE_ANSWER_TOKENS,
         system: GUIDE_SYSTEM,
         messages: [{ role: "user", content: user }, { role: "assistant", content: guideText }],
       });

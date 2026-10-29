@@ -6089,6 +6089,21 @@ model GuideObservation {
   note           String?
   decidedById    String?  @map("decided_by_id")
   decidedAt      DateTime? @map("decided_at")
+
+  // Mode « assistance à la réécriture » (Phase 2b) : SAGE PROPOSE une correction
+  // pour cette observation, sans jamais modifier le manuscrit en silence.
+  // L'humain compare (original / problème / proposition / justification) puis
+  // accepte, modifie ou refuse. SAGE peut aussi conclure qu'une réécriture n'est
+  // PAS la réponse (recherche/approfondissement requis) → statut « non_applicable ».
+  // none · proposee · acceptee · modifiee · refusee · non_applicable
+  rewriteStatus        String    @default("none") @map("rewrite_status")
+  rewriteOriginal      String?   @map("rewrite_original")
+  rewriteProblem       String?   @map("rewrite_problem")
+  rewriteProposal      String?   @map("rewrite_proposal")
+  rewriteJustification String?   @map("rewrite_justification")
+  rewriteDecidedById   String?   @map("rewrite_decided_by_id")
+  rewriteDecidedAt     DateTime? @map("rewrite_decided_at")
+
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 

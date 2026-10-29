@@ -202,3 +202,59 @@ async function extractGuideObservations(client: Anthropic, model: string, guideT
     })
     .filter((o) => o.code || o.title || o.recommendation);
 }
+
+// ── Mode « assistance à la réécriture » (Phase 2b) ──────────────────────────
+// SAGE PROPOSE une correction pour UNE observation, sans jamais modifier le
+// manuscrit en silence. L'humain compare puis accepte/modifie/refuse. SAGE peut
+// conclure qu'une réécriture ne suffit pas (recherche/approfondissement requis).
+const REWRITE_SYSTEM =
+  "Tu es SAGE, l'éditeur de la maison Éclosion Édition. On te donne UNE observation d'amélioration (identifiant, intitulé, localisation, recommandation) et le MANUSCRIT INTÉGRAL. " +
+  "Pour CETTE observation uniquement, tu proposes une correction CONCRÈTE, en respectant l'intention de l'auteur et le genre de l'ouvrage. Tu ne modifies JAMAIS le manuscrit en silence et tu n'inventes aucun contenu. " +
+  "Renvoie UNIQUEMENT un objet JSON, sans texte autour : " +
+  "{\"applicable\": true, \"original\": \"le passage original concerné, cité tel quel (vide si non localisable)\", \"problem\": \"le problème, une à deux phrases\", \"proposal\": \"ta proposition de reformulation ou de réorganisation\", \"justification\": \"pourquoi cette proposition respecte l'intention de l'auteur et le genre\"}. " +
+  "Si une simple réécriture NE SUFFIT PAS (l'observation exige des recherches, des données ou un approfondissement de la réflexion de l'auteur), mets \"applicable\": false, laisse \"proposal\" vide, et explique dans \"problem\" et \"justification\" ce que l'auteur doit faire — SANS inventer de contenu. " +
+  "Tu n'indiques jamais qu'une intelligence artificielle est intervenue.";
+
+export async function proposeRewriteForObservation(obsId: string): Promise<{ ok: boolean; status: string } | null> {
+  const obs = await prisma.guideObservation.findUnique({ where: { id: obsId } });
+  if (!obs) return null;
+  const cfg = await loadConfig();
+  const apiKey = readApiKey(cfg);
+  if (!cfg.enabled || !apiKey) return null;
+  const modelId = resolveModelId(cfg.models.reecriture ?? "intermediaire");
+  const ms = await readManuscriptText(obs.manuscriptId);
+  const manuscriptText = ms.ok ? capManuscriptText(ms.text).text : "";
+  const user =
+    `=== OBSERVATION ===\nIdentifiant : ${obs.code}\nIntitulé : ${obs.title ?? ""}\nLocalisation : ${obs.location ?? "(non précisée)"}\nRecommandation : ${obs.recommendation ?? ""}\n\n` +
+    `=== MANUSCRIT INTÉGRAL ===\n${manuscriptText || "(texte du manuscrit indisponible : signale-le et propose la démarche)"}\n\n` +
+    "=== CONSIGNE ===\nProduis l'objet JSON demandé pour CETTE observation.";
+  const { default: Anthropic } = await import("@anthropic-ai/sdk");
+  const client = new Anthropic({ apiKey });
+  const resp = await client.messages.create({ model: modelId, ...withThinking(modelId, 3000, 2500), system: REWRITE_SYSTEM, messages: [{ role: "user", content: user }] });
+  const text = resp.content.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("");
+  let obj: Record<string, unknown> = {};
+  try {
+    obj = JSON.parse(text.replace(/```json/gi, "").replace(/```/g, "").trim()) as Record<string, unknown>;
+  } catch {
+    const s = salvageObjects(text);
+    if (s.length) obj = s[0] as Record<string, unknown>;
+  }
+  const str = (v: unknown, max = 6000): string | null => {
+    if (v === null || v === undefined) return null;
+    const t = String(v).trim();
+    return t ? t.slice(0, max) : null;
+  };
+  const applicable = obj.applicable !== false;
+  const status = applicable ? "proposee" : "non_applicable";
+  await prisma.guideObservation.update({
+    where: { id: obsId },
+    data: {
+      rewriteStatus: status,
+      rewriteOriginal: str(obj.original),
+      rewriteProblem: str(obj.problem),
+      rewriteProposal: applicable ? str(obj.proposal) : null,
+      rewriteJustification: str(obj.justification),
+    },
+  });
+  return { ok: true, status };
+}

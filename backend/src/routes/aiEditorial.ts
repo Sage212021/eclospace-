@@ -5,6 +5,7 @@ import { requireAnyRole, requirePermission, requireAnyPermission } from "../lib/
 import { startAiReading, executeAiReading, AiRunError, extractAnomaliesForJob } from "../lib/aiRunner.js";
 import { SUPPORTS } from "../lib/correctionProfile.js";
 import { isAnomalyStatus } from "../lib/correctionAnomalies.js";
+import { GUIDE_CATEGORY } from "../lib/improvementGuide.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { isDirection } from "../lib/stepDocuments.js";
 import { myCorrectionIntegrations } from "../lib/correctionIntegrations.js";
@@ -778,6 +779,83 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
       reply.header("content-type", version.mimeType);
       reply.header("content-disposition", `attachment; filename="livrable_${docId.slice(0, 8)}.docx"`);
       return reply.send(buffer);
+    },
+  );
+
+  // ── GUIDE ÉDITORIAL D'AMÉLIORATION (SAGE) — Phase 2 ──────────────────────
+  // Suivi actionnable : le guide (.docx) + ses observations EVAL-xxx suivables,
+  // et la validation du comité « pour transmission à l'auteur ».
+  const GUIDE_OBS_STATUSES = ["a_traiter", "en_cours", "traite", "ecarte", "a_verifier"];
+
+  // Dernier guide d'amélioration du manuscrit (document + version récente).
+  async function latestGuide(manuscriptId: string) {
+    return prisma.document.findFirst({
+      where: { entityType: "manuscript", entityId: manuscriptId, category: GUIDE_CATEGORY, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+    });
+  }
+
+  // État du guide + fiches d'observations.
+  fastify.get(
+    "/api/v1/manuscripts/:id/improvement-guide",
+    { preHandler: requireAnyPermission(AI_JOB_READ_PERMS) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const guide = await latestGuide(id);
+      const observations = await prisma.guideObservation.findMany({ where: { manuscriptId: id }, orderBy: { number: "asc" } });
+      const v = guide?.versions[0];
+      return reply.send({
+        guide: guide
+          ? { document_id: guide.id, title: guide.title, created_at: guide.createdAt, validated: v?.status === "validated", version_id: v?.id ?? null }
+          : null,
+        observations: observations.map((o) => ({
+          id: o.id, code: o.code, number: o.number, title: o.title, priority: o.priority,
+          location: o.location, recommendation: o.recommendation, status: o.status, note: o.note,
+        })),
+      });
+    },
+  );
+
+  // Met à jour l'état de traitement d'une observation (suivi de révision).
+  const obsPatchSchema = z.object({ status: z.string().optional(), note: z.string().max(2000).nullable().optional() });
+  fastify.patch(
+    "/api/v1/manuscripts/:id/improvement-guide/observations/:obsId",
+    { preHandler: requireAnyPermission(AI_JOB_LAUNCH_PERMS) },
+    async (request, reply) => {
+      const { id, obsId } = request.params as { id: string; obsId: string };
+      const parsed = obsPatchSchema.safeParse(request.body ?? {});
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Champs invalides." });
+      const obs = await prisma.guideObservation.findFirst({ where: { id: obsId, manuscriptId: id } });
+      if (!obs) return reply.code(404).send({ code: "not_found", message: "Observation introuvable." });
+      const data: { status?: string; note?: string | null; decidedById?: string; decidedAt?: Date } = {};
+      if (parsed.data.status !== undefined) {
+        if (!GUIDE_OBS_STATUSES.includes(parsed.data.status)) return reply.code(400).send({ code: "invalid_status", message: "Statut d'observation invalide." });
+        data.status = parsed.data.status;
+        data.decidedById = request.user!.id;
+        data.decidedAt = new Date();
+      }
+      if (parsed.data.note !== undefined) data.note = parsed.data.note;
+      const updated = await prisma.guideObservation.update({ where: { id: obsId }, data });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "guide_observation", entityId: obsId, newValues: { status: updated.status }, ipAddress: request.ip });
+      return reply.send({ ok: true, status: updated.status });
+    },
+  );
+
+  // Validation du guide par le comité : le marque « validé » (prêt pour
+  // transmission à l'auteur). Tant qu'il est en brouillon, il n'est pas transmis.
+  fastify.post(
+    "/api/v1/manuscripts/:id/improvement-guide/validate",
+    { preHandler: requireAnyPermission(AI_JOB_LAUNCH_PERMS) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const guide = await latestGuide(id);
+      const v = guide?.versions[0];
+      if (!guide || !v) return reply.code(404).send({ code: "not_found", message: "Aucun guide d'amélioration à valider pour ce manuscrit." });
+      if (v.status === "validated") return reply.send({ ok: true, already: true });
+      await prisma.documentVersion.update({ where: { id: v.id }, data: { status: "validated" } });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "document", entityId: guide.id, newValues: { guide_validated: true }, ipAddress: request.ip });
+      return reply.send({ ok: true });
     },
   );
 }

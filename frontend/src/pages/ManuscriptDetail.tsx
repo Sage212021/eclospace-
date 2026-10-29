@@ -76,6 +76,7 @@ import { IsbnSection } from "../components/IsbnSection";
 import { BatSection } from "../components/BatSection";
 import { PrintingSection } from "../components/PrintingSection";
 import { AttachmentsSection } from "../components/AttachmentsSection";
+import { GuideObservationsPanel } from "../components/GuideObservationsPanel";
 import { ReadingEvaluationsSection } from "../components/ReadingEvaluationsSection";
 import { AuthorFilesSection } from "../components/AuthorFilesSection";
 import { FundingCheckpoint } from "../components/FundingCheckpoint";
@@ -1096,7 +1097,10 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
       {/* Pièces jointes : disponibles à toutes les étapes, pour tous les pôles
           autorisés (couvertures, contrats scannés, pièces finance, archivage…). */}
       {activeFocus === null && permissions.has("documents:consultation") && (
-        <AttachmentsSection manuscriptId={manuscript.id} canManage={permissions.has("documents:saisie")} />
+        <>
+          <GuideObservationsPanel manuscriptId={manuscript.id} canManage={permissions.has("comite_lecture:saisie") || permissions.has("manuscripts:saisie") || permissions.has("tasks:saisie")} />
+          <AttachmentsSection manuscriptId={manuscript.id} canManage={permissions.has("documents:saisie")} />
+        </>
       )}
     </div>
   );

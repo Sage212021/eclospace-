@@ -995,6 +995,25 @@ export function setCoverIntegrator(manuscriptId: string, userId: string | null) 
   return request<{ ok: boolean }>(`/api/v1/manuscripts/${manuscriptId}/cover-integrator`, { method: "PUT", body: JSON.stringify({ user_id: userId }) });
 }
 
+// Guide éditorial d'amélioration (SAGE) + ses observations suivables (Phase 2).
+export interface GuideObservation {
+  id: string; code: string; number: number; title: string | null; priority: string;
+  location: string | null; recommendation: string | null; status: string; note: string | null;
+}
+export interface ImprovementGuideState {
+  guide: { document_id: string; title: string; created_at: string; validated: boolean; version_id: string | null } | null;
+  observations: GuideObservation[];
+}
+export function getImprovementGuide(manuscriptId: string) {
+  return request<ImprovementGuideState>(`/api/v1/manuscripts/${manuscriptId}/improvement-guide`);
+}
+export function updateGuideObservation(manuscriptId: string, obsId: string, input: { status?: string; note?: string | null }) {
+  return request<{ ok: true; status: string }>(`/api/v1/manuscripts/${manuscriptId}/improvement-guide/observations/${obsId}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function validateImprovementGuide(manuscriptId: string) {
+  return request<{ ok: true }>(`/api/v1/manuscripts/${manuscriptId}/improvement-guide/validate`, { method: "POST" });
+}
+
 // Livrable de sortie d'une étape (verrou « pas d'avancement sans le fichier »).
 export interface StepDeliverableMeta {
   step_code: string;

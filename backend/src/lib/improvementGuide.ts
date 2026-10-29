@@ -4,6 +4,8 @@ import { renderReportDocx, capManuscriptText } from "./aiRunner.js";
 import { readManuscriptText } from "./aiEditor.js";
 import { storeFile } from "./storage.js";
 import { withThinking } from "./aiThinking.js";
+import { salvageObjects } from "./correctionAnomalies.js";
+import type Anthropic from "@anthropic-ai/sdk";
 
 // ─────────────────────────────────────────────────────────────────────────
 // GUIDE ÉDITORIAL D'AMÉLIORATION DU MANUSCRIT (collaboration des deux IA).
@@ -133,9 +135,70 @@ export async function generateImprovementGuide(opts: { manuscriptId: string; rep
         },
       },
     });
+
+    // Version ACTIONNABLE : on extrait du guide les observations EVAL-xxx en
+    // fiches SUIVABLES (recommandation + priorité + état de traitement), que le
+    // comité et l'auteur pourront suivre. Best-effort : n'empêche jamais la
+    // livraison du guide lui-même (qui reste le document de référence).
+    try {
+      const obs = await extractGuideObservations(client, modelId, guideText);
+      if (obs.length) {
+        await prisma.guideObservation.createMany({
+          data: obs.map((o, i) => ({
+            manuscriptId: m.id,
+            documentId: created.id,
+            number: i + 1,
+            code: o.code || `EVAL-${String(i + 1).padStart(3, "0")}`,
+            title: o.title,
+            priority: o.priority,
+            location: o.location,
+            recommendation: o.recommendation,
+          })),
+        });
+      }
+    } catch { /* les fiches sont best-effort ; le guide .docx reste le livrable */ }
+
     return created.id;
   } catch {
     // Best-effort : un échec du guide ne doit jamais perturber le rapport d'évaluation.
     return null;
   }
+}
+
+// Extraction STRUCTURÉE des observations du guide (EVAL-xxx) en fiches suivables.
+const OBS_EXTRACTION_SYSTEM =
+  "On te donne un GUIDE ÉDITORIAL D'AMÉLIORATION. Renvoie UNIQUEMENT un tableau JSON des observations qu'il contient, sans aucun texte autour. " +
+  "Chaque élément : {\"code\":\"EVAL-001\",\"title\":\"intitulé court de l'observation\",\"priority\":\"majeure|importante|secondaire\",\"location\":\"chapitre/section/passage si connu, sinon null\",\"recommendation\":\"la recommandation et la méthode, en une à deux phrases\"}. " +
+  "Reprends EXACTEMENT les identifiants EVAL-xxx du guide et la priorité indiquée dans la rubrique « Priorités de révision ». N'invente aucune observation ; ne renvoie que ce qui figure dans le guide.";
+
+interface ParsedObservation { code: string; title: string | null; priority: string; location: string | null; recommendation: string | null; }
+
+function normPriority(v: unknown): string {
+  const s = String(v ?? "").toLowerCase();
+  if (s.includes("majeur")) return "majeure";
+  if (s.includes("secondaire") || s.includes("mineur")) return "secondaire";
+  return "importante";
+}
+function obsStr(v: unknown, max = 2000): string | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  return s ? s.slice(0, max) : null;
+}
+
+async function extractGuideObservations(client: Anthropic, model: string, guideText: string): Promise<ParsedObservation[]> {
+  const resp = await client.messages.create({ model, max_tokens: 4000, system: OBS_EXTRACTION_SYSTEM, messages: [{ role: "user", content: `=== GUIDE ===\n${guideText}` }] });
+  const text = resp.content.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("");
+  let arr: unknown[] = [];
+  try {
+    const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) arr = parsed;
+  } catch { /* tableau tronqué/entouré de texte : on récupère objet par objet */ }
+  if (arr.length === 0) arr = salvageObjects(text);
+  return arr
+    .map((o) => {
+      const r = (o ?? {}) as Record<string, unknown>;
+      return { code: obsStr(r.code, 32) ?? "", title: obsStr(r.title, 300), priority: normPriority(r.priority), location: obsStr(r.location, 300), recommendation: obsStr(r.recommendation) };
+    })
+    .filter((o) => o.code || o.title || o.recommendation);
 }

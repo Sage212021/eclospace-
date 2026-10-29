@@ -77,6 +77,7 @@ export async function runAnomalySweep(opts: {
     "Tu relèves AUSSI les coquilles qui paraissent mineures (une lettre en trop/en moins, un accent, un accord) : ce sont précisément celles qui passent inaperçues et qu'un lecteur humain voit. " +
     "Tu distingues l'ERREUR CERTAINE de la simple SUGGESTION de style : une préférence stylistique n'est jamais présentée comme une faute. " +
     "Tu ne réduis pas artificiellement le nombre d'anomalies : il correspond à ce que CE segment contient réellement. " +
+    "Tu ne mentionnes JAMAIS une limite de lecture, d'extraction ou de traitement du fichier, et tu ne déclares pas le segment « coupé » ou « incomplet » pour une raison technique. Tu ne signales une rupture réelle (phrase inachevée, passage manifestement manquant) QUE si tu peux CITER le passage exact concerné de CE segment. " +
     "Tu n'écris NI préambule NI conclusion : seulement la liste.\n\n" +
     opts.methodBlock;
 
@@ -92,16 +93,25 @@ export async function runAnomalySweep(opts: {
       "Relève TOUTES les anomalies de CE segment, une par ligne, au format :\n" +
       "- [catégorie · sévérité C1/C2/C3/S] « passage fautif cité exactement » → correction proposée (justification courte si utile)\n" +
       `Si le segment ne contient aucune anomalie, écris exactement : « Segment ${i + 1} : RAS ».`;
-    try {
-      const resp = await opts.client.messages.create({ model: opts.model, ...withThinking(opts.model, opts.maxTokens ?? 4000, SWEEP_THINK_BUDGET), system, messages: [{ role: "user", content: user }] });
-      inTok += resp.usage?.input_tokens ?? 0;
-      outTok += resp.usage?.output_tokens ?? 0;
-      const txt = (resp.content as Array<{ type: string; text?: string }>).filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();
-      releve += `\n\n----- SEGMENT ${i + 1}/${total} -----\n${txt || `Segment ${i + 1} : RAS`}`;
-      covered++;
-    } catch (e) {
-      if (e instanceof Error && e.name === "AiCancelledError") throw e;
-      releve += `\n\n----- SEGMENT ${i + 1}/${total} -----\n(Segment non analysé : incident technique sur ce segment.)`;
+    // Jusqu'à 2 tentatives : un incident ponctuel sur un segment ne doit pas
+    // laisser un trou de couverture ni une mention technique dans le relevé.
+    let done = false;
+    for (let attempt = 0; attempt < 2 && !done; attempt++) {
+      try {
+        const resp = await opts.client.messages.create({ model: opts.model, ...withThinking(opts.model, opts.maxTokens ?? 4000, SWEEP_THINK_BUDGET), system, messages: [{ role: "user", content: user }] });
+        inTok += resp.usage?.input_tokens ?? 0;
+        outTok += resp.usage?.output_tokens ?? 0;
+        const txt = (resp.content as Array<{ type: string; text?: string }>).filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();
+        releve += `\n\n----- SEGMENT ${i + 1}/${total} -----\n${txt || `Segment ${i + 1} : RAS`}`;
+        covered++;
+        done = true;
+      } catch (e) {
+        if (e instanceof Error && e.name === "AiCancelledError") throw e;
+        // Échec persistant : on N'INJECTE AUCUNE mention technique dans le relevé
+        // éditorial (elle fuiterait dans le rapport). Le segment reste simplement
+        // NON couvert — la couverture (coveredSegments/totalSegments) le reflète,
+        // et l'appelant décide quoi faire (reprise / signalement technique).
+      }
     }
     if (opts.onProgress) await opts.onProgress(i + 1, total);
   }

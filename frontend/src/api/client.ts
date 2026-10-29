@@ -7307,6 +7307,19 @@ export function getAuthorWork(id: string) {
   return request<AuthorWorkDetail>(`/api/v1/author/works/${id}`);
 }
 
+// Espace Auteur : guide d'amélioration transmis par le comité (Phase 3).
+export interface AuthorGuideObservation {
+  id: string; code: string; title: string | null; priority: string;
+  location: string | null; recommendation: string | null; proposal: string | null; status: string;
+}
+export interface AuthorImprovementGuide { available: boolean; observations: AuthorGuideObservation[] }
+export function getAuthorImprovementGuide(workId: string) {
+  return request<AuthorImprovementGuide>(`/api/v1/author/works/${workId}/improvement-guide`);
+}
+export function setAuthorObservationStatus(workId: string, obsId: string, status: "a_traiter" | "en_cours" | "traite") {
+  return request<{ ok: true; status: string }>(`/api/v1/author/works/${workId}/improvement-guide/observations/${obsId}`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
 // --- Espace Auteur : échange de fichiers (inc. 2a) -----------------------------
 export interface AuthorFile {
   id: string;

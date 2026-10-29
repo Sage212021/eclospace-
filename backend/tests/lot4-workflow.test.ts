@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { createUserWithRole, extractSessionCookie, uniqueIsbnPrefix, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload , seedVc1 } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, uniqueIsbnPrefix, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload , seedVc1, seedInfographe } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
@@ -70,7 +70,7 @@ describe("Intégration workflow — étapes 16 à 18 (Lot 4)", () => {
     const manuscript = createResponse.json();
     await seedManuscriptSourceFile(manuscript.id);
 
-    await validate(manuscript.id, "VERIF_ADMIN");
+    await validate(manuscript.id, "VERIF_ADMIN", { infographe_id: await seedInfographe() });
     const assignResponse = await app.inject({
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/reading-assignments`,

@@ -51,7 +51,7 @@ function str(v: unknown, max = 4000): string | null {
 // (tableau) est tronqué ou mal clôturé. Suit la profondeur d'accolades en
 // respectant les chaînes et les échappements, et tente un JSON.parse par objet
 // de premier niveau ; les objets incomplets (fin de texte) sont ignorés.
-function salvageObjects(text: string): unknown[] {
+export function salvageObjects(text: string): unknown[] {
   const out: unknown[] = [];
   const starts: number[] = []; // pile des indices de « { » ouverts
   let inStr = false;

@@ -1457,6 +1457,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-guide-amelioration-suivi-validation",
+      version: "2026.10",
+      title: "Nouveauté — Guide d'amélioration : suivi des observations et validation du comité",
+      body: "Le « Guide éditorial d'amélioration » produit par SAGE devient ACTIONNABLE. Sur la fiche de l'ouvrage, un panneau « Guide éditorial d'amélioration » affiche chaque observation (EVAL-001, EVAL-002…) avec sa priorité (majeure / importante / secondaire), sa localisation et la recommandation. Le comité suit le traitement de chacune (à traiter · en cours · traité · écarté · à vérifier) et dispose d'un bouton « Valider pour transmission à l'auteur » : tant que le guide est en brouillon, il n'est pas transmis ; une fois validé, il est marqué transmissible. Le document complet reste disponible dans « Documents ». (À venir : mode « assistance à la réécriture » — proposition de correction avec texte original, problème, proposition et justification — et accompagnement interactif de l'auteur avec SAGE.)",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "COMLEC", "DG"],
+    },
+    {
       slug: "2026-10-guide-amelioration-sage",
       version: "2026.10",
       title: "Nouveauté — SAGE produit un « Guide éditorial d'amélioration » après l'évaluation",

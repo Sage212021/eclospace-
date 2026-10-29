@@ -210,7 +210,7 @@ export async function extractUploadAttachment(buffer: Buffer, mime: string, file
 }
 
 const DOC_KIND_LABELS: Record<string, string> = {
-  manuscrit: "Manuscrit", rapport_lecture: "Rapport de lecture/évaluation", contrat: "Contrat", bat: "BAT",
+  manuscrit: "Manuscrit", rapport_lecture: "Rapport de lecture/évaluation", guide_amelioration: "Guide éditorial d'amélioration", contrat: "Contrat", bat: "BAT",
   facture: "Facture", visuel: "Visuel", rapport_comparaison: "Rapport de comparaison", couverture: "Couverture",
   livre_monte: "Livre monté", piece_archivage: "Pièce d'archivage", piece_etape: "Pièce d'étape",
   preuve_livraison: "Preuve de livraison", justificatif_stock: "Justificatif de stock", cni: "CNI", niu: "NIU", autre: "Autre",

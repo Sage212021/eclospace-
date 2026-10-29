@@ -6,6 +6,7 @@ import { requireAuthor, requirePermission } from "../lib/permissions.js";
 import { validatePasswordComplexity } from "../lib/passwordPolicy.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
+import { GUIDE_CATEGORY } from "../lib/improvementGuide.js";
 import { notifyUsers } from "../lib/notify.js";
 import type { FastifyRequest } from "fastify";
 
@@ -156,6 +157,52 @@ export default async function authorRoutes(fastify: FastifyInstance) {
       publication_date: m.publicationDate,
       timeline,
     });
+  });
+
+  // ── Guide d'amélioration transmis à l'auteur (Phase 3) ──────────────────
+  // L'auteur ne voit le guide QUE lorsque le comité l'a validé (« transmis »).
+  // Il consulte les recommandations et les propositions retenues, et suit SA
+  // progression de révision (à traiter · en cours · traité).
+  const AUTHOR_OWN = async (partnerId: string, manuscriptId: string) =>
+    prisma.workContributor.findFirst({ where: { partnerId, role: "author", manuscriptId, manuscript: { deletedAt: null } }, select: { id: true } });
+
+  fastify.get("/api/v1/author/works/:id/improvement-guide", { preHandler: requireAuthor }, async (request, reply) => {
+    const partnerId = request.user!.partnerId!;
+    const { id } = request.params as { id: string };
+    if (!(await AUTHOR_OWN(partnerId, id))) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable." });
+    const guide = await prisma.document.findFirst({
+      where: { entityType: "manuscript", entityId: id, category: GUIDE_CATEGORY, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+    });
+    // Tant que le comité n'a pas validé le guide, rien n'est transmis à l'auteur.
+    if (!guide || guide.versions[0]?.status !== "validated") return reply.send({ available: false, observations: [] });
+    const observations = await prisma.guideObservation.findMany({ where: { manuscriptId: id }, orderBy: { number: "asc" } });
+    return reply.send({
+      available: true,
+      observations: observations.map((o) => ({
+        id: o.id, code: o.code, title: o.title, priority: o.priority, location: o.location,
+        recommendation: o.recommendation, status: o.status,
+        // On ne montre à l'auteur que la proposition RETENUE (acceptée ou modifiée).
+        proposal: o.rewriteStatus === "acceptee" || o.rewriteStatus === "modifiee" ? o.rewriteProposal : null,
+      })),
+    });
+  });
+
+  const authorObsSchema = z.object({ status: z.enum(["a_traiter", "en_cours", "traite"]) });
+  fastify.patch("/api/v1/author/works/:id/improvement-guide/observations/:obsId", { preHandler: requireAuthor }, async (request, reply) => {
+    const partnerId = request.user!.partnerId!;
+    const { id, obsId } = request.params as { id: string; obsId: string };
+    if (!(await AUTHOR_OWN(partnerId, id))) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable." });
+    const parsed = authorObsSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Statut invalide." });
+    // Transmission requise : l'auteur ne peut suivre que si le guide est validé.
+    const guide = await prisma.document.findFirst({ where: { entityType: "manuscript", entityId: id, category: GUIDE_CATEGORY, deletedAt: null }, orderBy: { createdAt: "desc" }, include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } } });
+    if (!guide || guide.versions[0]?.status !== "validated") return reply.code(409).send({ code: "not_transmitted", message: "Le guide ne vous a pas encore été transmis." });
+    const obs = await prisma.guideObservation.findFirst({ where: { id: obsId, manuscriptId: id } });
+    if (!obs) return reply.code(404).send({ code: "not_found", message: "Observation introuvable." });
+    await prisma.guideObservation.update({ where: { id: obsId }, data: { status: parsed.data.status } });
+    return reply.send({ ok: true, status: parsed.data.status });
   });
 
   // --- Côté personnel (éditorial/administration) : créer/relier un compte

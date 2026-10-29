@@ -20,6 +20,7 @@ import {
 import { useI18n } from "../../i18n";
 import { useConfirm } from "../../components/ConfirmProvider";
 import { AuthorMessages } from "./AuthorMessages";
+import { AuthorImprovementGuideSection } from "./AuthorImprovementGuideSection";
 
 function humanSize(n: number | null | undefined): string {
   if (!n || n <= 0) return "";
@@ -243,6 +244,9 @@ export function AuthorPortal({ userName, onLogout }: { userName: string; onLogou
                 );
               })}
             </ol>
+
+            {/* Recommandations d'amélioration transmises par le comité (Phase 3) */}
+            <AuthorImprovementGuideSection workId={detail.id} />
 
             {/* Fichiers : dépôt par l'auteur + documents partagés par la maison */}
             <h4 style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: 1, color: "var(--marine, #0b0b0c)", marginTop: 22 }}>{t("author.files", "Fichiers")}</h4>

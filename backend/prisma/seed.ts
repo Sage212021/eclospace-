@@ -1457,6 +1457,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-guide-amelioration-transmission-auteur",
+      version: "2026.10",
+      title: "Nouveauté — Le guide d'amélioration est transmis à l'auteur dans son espace",
+      body: "Quand le comité VALIDE le guide d'amélioration (« Valider pour transmission à l'auteur »), l'auteur le voit aussitôt dans son espace personnel, à la fiche de son ouvrage : chaque recommandation (avec sa priorité et, s'il y en a une, la proposition de réécriture retenue), et un suivi de SA progression de révision (à traiter · en cours · traité). Tant que le comité n'a pas validé, rien n'est transmis. Côté comité : vous validez depuis le panneau « Guide éditorial d'amélioration » de la fiche du manuscrit. (Prochaine étape : échange interactif de l'auteur avec SAGE sur ses passages révisés.)",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "COMLEC", "DG"],
+    },
+    {
       slug: "2026-10-guide-amelioration-mode-reecriture",
       version: "2026.10",
       title: "Nouveauté — Guide d'amélioration : SAGE peut proposer une réécriture (vous décidez)",

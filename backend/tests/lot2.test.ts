@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { storeFile } from "../src/lib/storage.js";
-import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload , seedVc1 } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile, seedCorrectionCycle, seedStepDeliverable, realizationPayload , seedVc1, seedInfographe } from "./helpers.js";
 import { buildDocx } from "./docxFixture.js";
 import type { FastifyInstance } from "fastify";
 
@@ -55,7 +55,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/steps/VERIF_ADMIN/validate`,
       headers: { cookie: adminCookie },
-      payload: {},
+      payload: { infographe_id: await seedInfographe() },
     });
     const assignResponse = await app.inject({
       method: "POST",
@@ -247,7 +247,7 @@ describe("contrats, tâches/Gantt, correction et comparateur (Lot 2)", () => {
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/steps/VERIF_ADMIN/validate`,
       headers: { cookie: adminCookie },
-      payload: {},
+      payload: { infographe_id: await seedInfographe() },
     });
 
     const blocked = await app.inject({

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile, seedInfographe } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD ?? "TestAdmin123!";
@@ -171,7 +171,7 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/steps/VERIF_ADMIN/validate`,
       headers: { cookie: adminCookie },
-      payload: {},
+      payload: { infographe_id: await seedInfographe() },
     });
 
     const assignResponse = await app.inject({
@@ -226,7 +226,7 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
       method: "POST",
       url: `/api/v1/manuscripts/${manuscript.id}/steps/VERIF_ADMIN/validate`,
       headers: { cookie: adminCookie },
-      payload: {},
+      payload: { infographe_id: await seedInfographe() },
     });
     const assignResponse = await app.inject({
       method: "POST",

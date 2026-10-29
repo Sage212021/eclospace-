@@ -600,6 +600,9 @@ export function validateStep(
     outcome?: "conforme" | "incomplet";
     requires_rewrite?: boolean;
     assignee_id?: string;
+    // Infographe en charge de la production, désigné à l'envoi en évaluation
+    // (obligatoire au passage vers le Comité de lecture).
+    infographe_id?: string | null;
     // Étapes « à option » (Expertise, Réécriture, Projet) : décision de l'opérateur.
     step_decision?: "realise" | "passe";
     skip_reason?: string;

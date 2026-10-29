@@ -155,6 +155,11 @@ const validateStepSchema = z.object({
   // l'étape suivante. Facultatif : sans désignation, tout le service concerné
   // est notifié (comportement historique).
   assignee_id: z.string().uuid().optional(),
+  // Infographe en charge de la PRODUCTION de l'ouvrage, désigné au moment de
+  // l'envoi en évaluation (→ Comité de lecture). OBLIGATOIRE à ce passage :
+  // tant qu'aucun infographe n'est désigné (ici ou déjà sur le manuscrit), le
+  // manuscrit ne part pas en évaluation (demande opérateur 29/10).
+  infographe_id: z.string().uuid().nullable().optional(),
   // Étapes « à option » (Expertise, Réécriture, Projet) : décision explicite de
   // l'opérateur — « realise » (réaliser, avec les éléments renseignés) ou
   // « passe » (passer, motif obligatoire, autorisé seulement si l'étape est
@@ -276,7 +281,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const { observations, outcome, requires_rewrite, assignee_id, step_decision, skip_reason, realization } = parsed.data;
+      const { observations, outcome, requires_rewrite, assignee_id, infographe_id, step_decision, skip_reason, realization } = parsed.data;
       const now = new Date();
 
       // Étapes « à option » (Expertise, Réécriture, Projet) : l'opérateur décide
@@ -793,6 +798,32 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // INFOGRAPHE OBLIGATOIRE POUR L'ENVOI EN ÉVALUATION (demande opérateur
+      // 29/10) : on ne met pas un ouvrage en évaluation (→ Comité de lecture)
+      // sans avoir désigné l'infographe qui le traitera en production. L'écran
+      // propose un champ « infographe » ; on accepte sa désignation ici (ou on
+      // exige qu'elle existe déjà sur le manuscrit), sinon le passage est refusé.
+      let setInfographeId: string | null = null;
+      if (nextStatus?.code === "COMITE_LECTURE") {
+        if (infographe_id) {
+          const info = await prisma.user.findFirst({
+            where: { id: infographe_id, status: "active", deletedAt: null, userRoles: { some: { revokedAt: null, role: { department: { code: "INFOG" } } } } },
+            select: { id: true },
+          });
+          if (!info) {
+            return reply.code(400).send({ code: "invalid_infographe", message: "L'infographe choisi n'est pas un membre actif du département Infographie." });
+          }
+          setInfographeId = info.id;
+        }
+        const effectiveInfographe = setInfographeId ?? manuscript.coverIntegratorId;
+        if (!effectiveInfographe) {
+          return reply.code(400).send({
+            code: "infographe_required",
+            message: "Désignez l'infographe qui traitera l'ouvrage en production avant de l'envoyer en évaluation.",
+          });
+        }
+      }
+
       // « MÊME AGENT SUR TOUTE LA PRODUCTION » (demande opérateur 03/10) :
       // l'infographe désigné à l'intégration des corrections de couverture
       // (coverIntegratorId) devient le PROPRIÉTAIRE DE PRODUCTION et suit/exécute
@@ -831,7 +862,7 @@ export default async function workflowRoutes(fastify: FastifyInstance) {
         });
 
         if (nextStatus) {
-          await tx.manuscript.update({ where: { id }, data: { statusId: nextStatus.id, updatedBy: request.user!.id } });
+          await tx.manuscript.update({ where: { id }, data: { statusId: nextStatus.id, updatedBy: request.user!.id, ...(setInfographeId ? { coverIntegratorId: setInfographeId } : {}) } });
           await tx.stepTransition.create({
             data: {
               manuscriptId: id,

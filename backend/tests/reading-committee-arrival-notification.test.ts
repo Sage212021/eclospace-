@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile, seedInfographe } from "./helpers.js";
 
 // Phénomène signalé : un membre du comité voyait des notifications « à traiter »
 // pour des manuscrits qu'il ne retrouvait pas dans « Mes lectures » — car
@@ -48,7 +48,7 @@ describe("notification d'arrivée au comité de lecture (à répartir, pas à li
     ).json();
     await seedManuscriptSourceFile(created.id);
 
-    const validate = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${created.id}/steps/VERIF_ADMIN/validate`, headers: { cookie: adminCookie }, payload: {} });
+    const validate = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${created.id}/steps/VERIF_ADMIN/validate`, headers: { cookie: adminCookie }, payload: { infographe_id: await seedInfographe() } });
     expect(validate.statusCode).toBe(200);
     expect(validate.json().status).toBe("COMITE_LECTURE");
 

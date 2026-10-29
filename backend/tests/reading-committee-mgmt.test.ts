@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile } from "./helpers.js";
+import { createUserWithRole, extractSessionCookie, seedManuscriptSourceFile, seedInfographe } from "./helpers.js";
 import type { FastifyInstance } from "fastify";
 
 // Gestion du comité de lecture (demande opérateur du 29/07/2026) : anti-doublon
@@ -48,7 +48,7 @@ describe("comité de lecture : doublon, retrait, clôture", () => {
       })
     ).json();
     await seedManuscriptSourceFile(created.id);
-    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${created.id}/steps/VERIF_ADMIN/validate`, headers: { cookie: adminCookie }, payload: {} });
+    await app.inject({ method: "POST", url: `/api/v1/manuscripts/${created.id}/steps/VERIF_ADMIN/validate`, headers: { cookie: adminCookie }, payload: { infographe_id: await seedInfographe() } });
     return created;
   }
 

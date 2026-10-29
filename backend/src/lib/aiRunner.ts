@@ -8,6 +8,7 @@ import { loadConfig, readApiKey, resolveModelId, type WorkType } from "./aiConfi
 import { buildCorrectionMethodText } from "./correctionProfile.js";
 import { segmentText, runAnomalySweep, SEGMENT_CHARS } from "./correctionSweep.js";
 import { withThinking } from "./aiThinking.js";
+import { sanitizeEditorialReport } from "./reportSanitizer.js";
 import { parseAnomaliesJson, ANOMALY_EXTRACTION_SYSTEM, anomalyExtractionUser } from "./correctionAnomalies.js";
 
 // Moteur de relecture assistée (Lot IA-1). Orchestration : préparer le manuscrit,
@@ -367,7 +368,13 @@ export function firstSectionHeadingIndex(text: string, keys: string[]): number {
 // prend donc un ratio prudent d'~2 car./token et une BONNE MARGE : 240 000 car.
 // ≈ 120 000 tokens de manuscrit, + le prompt (grille, structure) ≈ 130 000 tokens
 // au total, très en deçà des 200 000 — sans risque de « prompt too long ».
-export const MANUSCRIT_CHAR_BUDGET = 240_000;
+// Budget élargi pour lire le manuscrit le plus INTÉGRALEMENT possible avant toute
+// troncature, tout en restant SOUS les 200 000 tokens de contexte : en français
+// dense (~2 car./token, borne prudente), 300 000 caractères ≈ 150 000 tokens, ce
+// qui laisse la place à la grille, aux consignes et à la rédaction. Au-delà, la
+// relecture BAT1/BAT2 lit par segments ordonnés ; seule une évaluation d'un
+// ouvrage hors-norme pourrait encore être écrêtée (traité côté technique).
+export const MANUSCRIT_CHAR_BUDGET = 300_000;
 export function capManuscriptText(text: string): { text: string; truncated: boolean } {
   if (text.length <= MANUSCRIT_CHAR_BUDGET) return { text, truncated: false };
   const head = Math.floor(MANUSCRIT_CHAR_BUDGET * 0.5);
@@ -952,7 +959,10 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       recommandation_editeur: params.editorRecommendation?.trim() || "(aucune)",
     });
     if (capped.truncated && !willSweep) {
-      userText += "\n\n(Note : le manuscrit est très volumineux ; l'analyse porte sur un EXTRAIT REPRÉSENTATIF — début, passage central et fin. Signale-le clairement dans le rapport et invite à une relecture complète si nécessaire.)";
+      // Fichier très volumineux : on n'instruit PLUS le modèle d'ANNONCER un
+      // « extrait » dans le rapport (formulation technique interdite). Il analyse
+      // le texte fourni tel quel ; la complétude relève du suivi technique.
+      userText += "\n\n(Consigne interne : analyse le texte fourni ci-dessus tel quel. N'évoque JAMAIS dans le rapport une limite de lecture, d'extraction ou la longueur du fichier, et n'écris pas que le manuscrit serait « coupé » ou « incomplet » pour cette raison. Ne signale une rupture (phrase inachevée, chapitre manquant) QUE si tu peux citer le passage exact concerné dans le texte.)";
     }
 
     // Éléments d'identification à reporter tels quels : la DATE du jour (date à
@@ -1187,6 +1197,12 @@ export async function executeAiReading(jobId: string, params: AiRunParams): Prom
       }
     }
     if (!reportText) reportText = "Le relecteur n'a produit aucun texte.";
+    // QUALITÉ ÉDITORIALE (demande opérateur) : on retire du rapport toute
+    // formulation révélant une LIMITATION TECHNIQUE (« extrait représentatif »,
+    // « je n'ai pas pu lire la totalité »…) — ces mentions ne sont pas des
+    // constats éditoriaux. Les vraies anomalies du texte (localisées) sont
+    // préservées.
+    reportText = sanitizeEditorialReport(reportText).text;
 
     const price = PRICES[modelId] ?? PRICES["claude-haiku-4-5"];
 

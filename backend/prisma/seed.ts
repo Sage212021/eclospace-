@@ -1457,6 +1457,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-rapports-sans-mentions-techniques",
+      version: "2026.10",
+      title: "Nouveauté — Rapports de relecture/évaluation : fini les mentions techniques trompeuses",
+      body: "Les rapports (BAT1, BAT2, évaluation) ne portent plus de formulations qui venaient d'une limite interne et non d'un vrai constat éditorial — par exemple « le manuscrit semble coupé », « le document s'arrête brusquement » ou « je n'ai pas pu lire la totalité du fichier ». Trois mesures : (1) on ne demande plus au relecteur d'annoncer un « extrait » dans le rapport, et un garde-fou retire ces phrases techniques si elles apparaissent ; (2) le manuscrit est lu plus largement avant toute mise en extrait, et la relecture BAT1/BAT2 réessaie automatiquement un passage en cas d'incident (plus de trou ni de mention « segment non analysé » dans le rapport) ; (3) les vraies anomalies du texte — phrase inachevée, chapitre manquant, rupture — restent signalées, à condition d'être localisées et citées. En résumé : le rapport parle de votre manuscrit, pas du fonctionnement de l'outil.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "CORR", "COMLEC", "DG"],
+    },
+    {
       slug: "2026-10-guide-amelioration-transmission-auteur",
       version: "2026.10",
       title: "Nouveauté — Le guide d'amélioration est transmis à l'auteur dans son espace",

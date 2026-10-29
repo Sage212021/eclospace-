@@ -43,15 +43,31 @@ describe("Lecture intégrale par segments (renforcement BAT1/BAT2)", () => {
     expect(res.outputTokens).toBe(15);
   });
 
-  it("un incident sur un segment n'interrompt pas le balayage (couverture partielle signalée)", async () => {
-    const calls: string[] = [];
-    let n = 0;
-    const flaky = {
-      messages: { create: async () => { n += 1; if (n === 2) throw new Error("boom"); calls.push("ok"); return { content: [{ type: "text", text: "RAS" }], usage: { input_tokens: 1, output_tokens: 1 } }; } },
+  it("un incident PASSAGER sur un segment est rattrapé par une 2ᵉ tentative (couverture intégrale)", async () => {
+    let bravo = 0;
+    const transient = {
+      messages: { create: async (args: { messages?: { content?: unknown }[] }) => {
+        const c = String(args.messages?.[0]?.content ?? "");
+        if (c.includes("Bravo")) { bravo += 1; if (bravo === 1) throw new Error("boom"); }
+        return { content: [{ type: "text", text: "RAS" }], usage: { input_tokens: 1, output_tokens: 1 } };
+      } },
     } as never;
-    const res = await runAnomalySweep({ client: flaky, model: "m", segments: ["a", "b", "c"], passLabel: "BAT1", methodBlock: "M" });
+    const res = await runAnomalySweep({ client: transient, model: "m", segments: ["Alpha.", "Bravo.", "Charlie."], passLabel: "BAT1", methodBlock: "M" });
+    expect(res.coveredSegments).toBe(3); // le segment est rattrapé → couverture 3/3
+  });
+
+  it("un échec PERSISTANT laisse le segment non couvert SANS injecter de mention technique dans le relevé", async () => {
+    const stubborn = {
+      messages: { create: async (args: { messages?: { content?: unknown }[] }) => {
+        const c = String(args.messages?.[0]?.content ?? "");
+        if (c.includes("Bravo")) throw new Error("boom"); // échoue aux 2 tentatives
+        return { content: [{ type: "text", text: "RAS" }], usage: { input_tokens: 1, output_tokens: 1 } };
+      } },
+    } as never;
+    const res = await runAnomalySweep({ client: stubborn, model: "m", segments: ["Alpha.", "Bravo.", "Charlie."], passLabel: "BAT1", methodBlock: "M" });
     expect(res.totalSegments).toBe(3);
-    expect(res.coveredSegments).toBe(2); // le segment en échec est compté comme non couvert
-    expect(res.releve).toContain("Segment non analysé");
+    expect(res.coveredSegments).toBe(2); // « Bravo » jamais couvert
+    // AUCUNE formulation technique ne doit figurer dans le relevé éditorial.
+    expect(res.releve).not.toMatch(/non analysé|incident technique|limitation/i);
   });
 });

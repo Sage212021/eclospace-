@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getImprovementGuide, updateGuideObservation, validateImprovementGuide, type ImprovementGuideState } from "../api/client";
+import { getImprovementGuide, updateGuideObservation, validateImprovementGuide, requestGuideRewrite, decideGuideRewrite, type ImprovementGuideState, type GuideObservation } from "../api/client";
 
 // Guide éditorial d'amélioration (SAGE) — suivi des observations EVAL-xxx et
 // validation du comité « pour transmission à l'auteur » (Phase 2). N'affiche
@@ -81,10 +81,85 @@ export function GuideObservationsPanel({ manuscriptId, canManage }: { manuscript
               </div>
               {o.location && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>Localisation : {o.location}</div>}
               {o.recommendation && <div style={{ fontSize: 12.5, marginTop: 3, lineHeight: 1.45 }}>{o.recommendation}</div>}
+              <RewriteBlock obs={o} manuscriptId={manuscriptId} canManage={canManage} onChange={load} />
             </div>
           ))}
         </div>
       )}
     </section>
+  );
+}
+
+// Mode « assistance à la réécriture » (Phase 2b) : SAGE propose, l'humain décide.
+const lbl: React.CSSProperties = { fontWeight: 600, color: "var(--muted)", marginRight: 4 };
+const quote: React.CSSProperties = { borderLeft: "3px solid var(--line)", padding: "2px 8px", marginTop: 2, whiteSpace: "pre-wrap", lineHeight: 1.45 };
+const ghostBtn: React.CSSProperties = { background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer" };
+const primBtn: React.CSSProperties = { background: "var(--eclosion)", color: "#fff", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" };
+const taStyle: React.CSSProperties = { width: "100%", padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12.5, resize: "vertical", marginTop: 2 };
+const errStyle: React.CSSProperties = { color: "#B23A2E", fontSize: 12, marginLeft: 8 };
+
+function RewriteBlock({ obs, manuscriptId, canManage, onChange }: { obs: GuideObservation; manuscriptId: string; canManage: boolean; onChange: () => Promise<void> | void }) {
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(obs.rewrite_proposal ?? "");
+  const [err, setErr] = useState<string | null>(null);
+  const st = obs.rewrite_status;
+
+  async function run(fn: () => Promise<unknown>) {
+    setBusy(true); setErr(null);
+    try { await fn(); await onChange(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Action impossible."); }
+    finally { setBusy(false); }
+  }
+
+  if (st === "none") {
+    if (!canManage) return null;
+    return (
+      <div style={{ marginTop: 6 }}>
+        <button disabled={busy} onClick={() => run(() => requestGuideRewrite(manuscriptId, obs.id))} style={ghostBtn}>{busy ? "SAGE rédige…" : "✍️ Proposer une réécriture (SAGE)"}</button>
+        {err && <span style={errStyle}>{err}</span>}
+      </div>
+    );
+  }
+  if (st === "non_applicable") {
+    return (
+      <div style={{ marginTop: 6, fontSize: 12, background: "#fff", border: "1px dashed var(--line)", borderRadius: 6, padding: "7px 9px" }}>
+        <b>Réécriture non adaptée</b> — une recherche ou un approfondissement est nécessaire (pas de texte inventé).
+        {obs.rewrite_problem && <div style={{ marginTop: 3 }}>{obs.rewrite_problem}</div>}
+        {obs.rewrite_justification && <div style={{ marginTop: 3, color: "var(--muted)" }}>{obs.rewrite_justification}</div>}
+        {canManage && <div style={{ marginTop: 5 }}><button disabled={busy} onClick={() => run(() => requestGuideRewrite(manuscriptId, obs.id))} style={ghostBtn}>↻ Redemander</button>{err && <span style={errStyle}>{err}</span>}</div>}
+      </div>
+    );
+  }
+  const decided = st === "acceptee" || st === "refusee";
+  const tag = st === "acceptee" ? " · acceptée" : st === "refusee" ? " · refusée" : st === "modifiee" ? " · modifiée" : "";
+  return (
+    <div style={{ marginTop: 6, fontSize: 12, background: "#fff", border: "1px solid var(--line)", borderRadius: 6, padding: "8px 10px" }}>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Proposition de réécriture{tag}</div>
+      {obs.rewrite_original && <div style={{ marginBottom: 4 }}><span style={lbl}>Texte original</span><div style={quote}>{obs.rewrite_original}</div></div>}
+      {obs.rewrite_problem && <div style={{ marginBottom: 4 }}><span style={lbl}>Problème</span>{obs.rewrite_problem}</div>}
+      <div style={{ marginBottom: 4 }}><span style={lbl}>Proposition</span>
+        {editing ? <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={4} style={taStyle} /> : <div style={{ ...quote, borderLeftColor: "#2F7D4A" }}>{obs.rewrite_proposal}</div>}
+      </div>
+      {obs.rewrite_justification && <div style={{ marginBottom: 4, color: "var(--muted)" }}><span style={lbl}>Justification</span>{obs.rewrite_justification}</div>}
+      {canManage && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+          {editing ? (
+            <>
+              <button disabled={busy} onClick={() => run(async () => { await decideGuideRewrite(manuscriptId, obs.id, { decision: "modifiee", proposal: draft }); setEditing(false); })} style={primBtn}>Enregistrer la modification</button>
+              <button disabled={busy} onClick={() => { setEditing(false); setDraft(obs.rewrite_proposal ?? ""); }} style={ghostBtn}>Annuler</button>
+            </>
+          ) : (
+            <>
+              {!decided && <button disabled={busy} onClick={() => run(() => decideGuideRewrite(manuscriptId, obs.id, { decision: "acceptee" }))} style={primBtn}>Accepter</button>}
+              {!decided && <button disabled={busy} onClick={() => { setDraft(obs.rewrite_proposal ?? ""); setEditing(true); }} style={ghostBtn}>Modifier</button>}
+              {!decided && <button disabled={busy} onClick={() => run(() => decideGuideRewrite(manuscriptId, obs.id, { decision: "refusee" }))} style={ghostBtn}>Refuser</button>}
+              <button disabled={busy} onClick={() => run(() => requestGuideRewrite(manuscriptId, obs.id))} style={ghostBtn}>↻ Nouvelle proposition</button>
+            </>
+          )}
+          {err && <span style={errStyle}>{err}</span>}
+        </div>
+      )}
+    </div>
   );
 }

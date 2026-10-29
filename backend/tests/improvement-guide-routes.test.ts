@@ -58,6 +58,22 @@ describe("guide d'amélioration — suivi + validation (Phase 2)", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("refuse une décision de réécriture quand aucune proposition n'existe (409)", async () => {
+    const res = await app.inject({ method: "PATCH", url: `/api/v1/manuscripts/${manuscriptId}/improvement-guide/observations/${obsId}/rewrite`, headers: { cookie }, payload: { decision: "acceptee" } });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it("enregistre la décision humaine sur une proposition de réécriture", async () => {
+    // On simule une proposition déjà produite par SAGE (sans appel IA).
+    await prisma.guideObservation.update({ where: { id: obsId }, data: { rewriteStatus: "proposee", rewriteOriginal: "Phrase d'origine.", rewriteProblem: "Trop vague.", rewriteProposal: "Phrase reformulée, plus précise.", rewriteJustification: "Clarté sans trahir l'intention." } });
+    const res = await app.inject({ method: "PATCH", url: `/api/v1/manuscripts/${manuscriptId}/improvement-guide/observations/${obsId}/rewrite`, headers: { cookie }, payload: { decision: "modifiee", proposal: "Version retenue par l'éditeur." } });
+    expect(res.statusCode).toBe(200);
+    const after = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${manuscriptId}/improvement-guide`, headers: { cookie } });
+    const obs = after.json().observations[0];
+    expect(obs.rewrite_status).toBe("modifiee");
+    expect(obs.rewrite_proposal).toBe("Version retenue par l'éditeur.");
+  });
+
   it("valide le guide pour transmission", async () => {
     const res = await app.inject({ method: "POST", url: `/api/v1/manuscripts/${manuscriptId}/improvement-guide/validate`, headers: { cookie } });
     expect(res.statusCode).toBe(200);

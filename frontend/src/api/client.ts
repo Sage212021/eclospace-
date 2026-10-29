@@ -999,6 +999,9 @@ export function setCoverIntegrator(manuscriptId: string, userId: string | null) 
 export interface GuideObservation {
   id: string; code: string; number: number; title: string | null; priority: string;
   location: string | null; recommendation: string | null; status: string; note: string | null;
+  // Mode « assistance à la réécriture » (Phase 2b).
+  rewrite_status: string; rewrite_original: string | null; rewrite_problem: string | null;
+  rewrite_proposal: string | null; rewrite_justification: string | null;
 }
 export interface ImprovementGuideState {
   guide: { document_id: string; title: string; created_at: string; validated: boolean; version_id: string | null } | null;
@@ -1012,6 +1015,12 @@ export function updateGuideObservation(manuscriptId: string, obsId: string, inpu
 }
 export function validateImprovementGuide(manuscriptId: string) {
   return request<{ ok: true }>(`/api/v1/manuscripts/${manuscriptId}/improvement-guide/validate`, { method: "POST" });
+}
+export function requestGuideRewrite(manuscriptId: string, obsId: string) {
+  return request<{ ok: true; status: string }>(`/api/v1/manuscripts/${manuscriptId}/improvement-guide/observations/${obsId}/rewrite`, { method: "POST" });
+}
+export function decideGuideRewrite(manuscriptId: string, obsId: string, input: { decision: "acceptee" | "modifiee" | "refusee"; proposal?: string }) {
+  return request<{ ok: true; status: string }>(`/api/v1/manuscripts/${manuscriptId}/improvement-guide/observations/${obsId}/rewrite`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
 // Livrable de sortie d'une étape (verrou « pas d'avancement sans le fichier »).

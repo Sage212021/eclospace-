@@ -1457,6 +1457,14 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-guide-amelioration-mode-reecriture",
+      version: "2026.10",
+      title: "Nouveauté — Guide d'amélioration : SAGE peut proposer une réécriture (vous décidez)",
+      body: "Pour chaque observation du guide, un bouton « ✍️ Proposer une réécriture » demande à SAGE une correction CONCRÈTE — présentée en quatre volets : le TEXTE ORIGINAL concerné, le PROBLÈME, la PROPOSITION de reformulation/réorganisation et la JUSTIFICATION. Rien n'est modifié en silence : vous gardez la main et pouvez Accepter, Modifier (le texte reste éditable) ou Refuser la proposition, ou en redemander une autre. Si une simple réécriture ne suffit pas (l'observation exige une recherche, des données ou un approfondissement), SAGE l'indique clairement (« Réécriture non adaptée ») au lieu d'inventer du contenu. Les livrables ne mentionnent jamais qu'une intelligence artificielle est intervenue.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DIRED", "COMLEC", "DG"],
+    },
+    {
       slug: "2026-10-guide-amelioration-suivi-validation",
       version: "2026.10",
       title: "Nouveauté — Guide d'amélioration : suivi des observations et validation du comité",

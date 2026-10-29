@@ -5,7 +5,7 @@ import { requireAnyRole, requirePermission, requireAnyPermission } from "../lib/
 import { startAiReading, executeAiReading, AiRunError, extractAnomaliesForJob } from "../lib/aiRunner.js";
 import { SUPPORTS } from "../lib/correctionProfile.js";
 import { isAnomalyStatus } from "../lib/correctionAnomalies.js";
-import { GUIDE_CATEGORY } from "../lib/improvementGuide.js";
+import { GUIDE_CATEGORY, proposeRewriteForObservation } from "../lib/improvementGuide.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { isDirection } from "../lib/stepDocuments.js";
 import { myCorrectionIntegrations } from "../lib/correctionIntegrations.js";
@@ -812,6 +812,8 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
         observations: observations.map((o) => ({
           id: o.id, code: o.code, number: o.number, title: o.title, priority: o.priority,
           location: o.location, recommendation: o.recommendation, status: o.status, note: o.note,
+          rewrite_status: o.rewriteStatus, rewrite_original: o.rewriteOriginal, rewrite_problem: o.rewriteProblem,
+          rewrite_proposal: o.rewriteProposal, rewrite_justification: o.rewriteJustification,
         })),
       });
     },
@@ -839,6 +841,53 @@ export default async function aiEditorialRoutes(fastify: FastifyInstance) {
       const updated = await prisma.guideObservation.update({ where: { id: obsId }, data });
       await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "guide_observation", entityId: obsId, newValues: { status: updated.status }, ipAddress: request.ip });
       return reply.send({ ok: true, status: updated.status });
+    },
+  );
+
+  // Mode « assistance à la réécriture » : SAGE propose une correction pour CETTE
+  // observation (original · problème · proposition · justification), sans modifier
+  // le manuscrit. Peut conclure « non applicable » (recherche requise).
+  fastify.post(
+    "/api/v1/manuscripts/:id/improvement-guide/observations/:obsId/rewrite",
+    { preHandler: requireAnyPermission(AI_JOB_LAUNCH_PERMS) },
+    async (request, reply) => {
+      const { id, obsId } = request.params as { id: string; obsId: string };
+      const obs = await prisma.guideObservation.findFirst({ where: { id: obsId, manuscriptId: id }, select: { id: true } });
+      if (!obs) return reply.code(404).send({ code: "not_found", message: "Observation introuvable." });
+      const r = await proposeRewriteForObservation(obsId).catch(() => null);
+      if (!r) return reply.code(502).send({ code: "rewrite_failed", message: "La proposition de réécriture n'a pas pu être produite (IA indisponible ?)." });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "guide_observation", entityId: obsId, newValues: { rewrite_status: r.status }, ipAddress: request.ip });
+      return reply.send(r);
+    },
+  );
+
+  // Décision humaine sur la proposition de réécriture : accepter / modifier /
+  // refuser (l'auteur ou le comité garde la main ; une modification enregistre le
+  // texte retenu). SAGE ne décide jamais à la place de l'humain.
+  const rewriteDecisionSchema = z.object({ decision: z.enum(["acceptee", "modifiee", "refusee"]), proposal: z.string().max(6000).optional() });
+  fastify.patch(
+    "/api/v1/manuscripts/:id/improvement-guide/observations/:obsId/rewrite",
+    { preHandler: requireAnyPermission(AI_JOB_LAUNCH_PERMS) },
+    async (request, reply) => {
+      const { id, obsId } = request.params as { id: string; obsId: string };
+      const parsed = rewriteDecisionSchema.safeParse(request.body ?? {});
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Décision invalide." });
+      const obs = await prisma.guideObservation.findFirst({ where: { id: obsId, manuscriptId: id } });
+      if (!obs) return reply.code(404).send({ code: "not_found", message: "Observation introuvable." });
+      if (obs.rewriteStatus === "none" || obs.rewriteStatus === "non_applicable") {
+        return reply.code(409).send({ code: "no_proposal", message: "Aucune proposition de réécriture à décider pour cette observation." });
+      }
+      await prisma.guideObservation.update({
+        where: { id: obsId },
+        data: {
+          rewriteStatus: parsed.data.decision,
+          ...(parsed.data.decision === "modifiee" && parsed.data.proposal !== undefined ? { rewriteProposal: parsed.data.proposal } : {}),
+          rewriteDecidedById: request.user!.id,
+          rewriteDecidedAt: new Date(),
+        },
+      });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "guide_observation", entityId: obsId, newValues: { rewrite_decision: parsed.data.decision }, ipAddress: request.ip });
+      return reply.send({ ok: true, status: parsed.data.decision });
     },
   );
 

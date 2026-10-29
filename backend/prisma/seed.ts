@@ -1457,6 +1457,13 @@ async function main() {
   // pôle concerné »). La Direction générale reçoit toujours toutes les notes.
   const releaseNotes: { slug: string; version: string; title: string; body: string; audienceAll?: boolean; permissionModules?: string[]; departmentCodes?: string[]; roleCodes?: string[] }[] = [
     {
+      slug: "2026-10-sage-joindre-image",
+      version: "2026.10",
+      title: "Nouveauté — SAGE : joignez une image (couverture, capture…) dans la conversation",
+      body: "Dans « Échanger avec SAGE », vous pouviez déjà joindre un PDF, un Word ou un fichier texte. Vous pouvez maintenant joindre AUSSI une image — JPEG, PNG, GIF, WEBP, BMP, TIFF — et SAGE la VOIT réellement (il peut la décrire, la commenter, repérer un souci sur une couverture, etc.). Les images d'impression (haute définition, CMYK) et les PDF scannés (sans texte sélectionnable) sont convertis automatiquement pour être lus. Cliquez simplement sur le trombone 📎, choisissez votre fichier, ajoutez votre question et envoyez. (Astuce : pour que SAGE revienne sur une image, rejoignez-la au message concerné — l'image est rattachée au tour où vous la déposez.)",
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
       slug: "2026-10-relecture-couverture-tous-fichiers",
       version: "2026.10",
       title: "Nouveauté — Relecture de couverture : lecture de (presque) tous les fichiers",

@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import { loadConfig, readApiKey, resolveModelId } from "./aiConfig.js";
 import { readManuscriptText, buildPassageIndex, retrievePassages } from "./aiEditor.js";
-import { extractPdfText } from "./aiRunner.js";
+import { extractPdfText, extractPdfImages } from "./aiRunner.js";
 
 // ─────────────────────────────────────────────────────────────────────────
 // SAGE — espace de dialogue privé du DG (« Échanger avec SAGE »). Conversations
@@ -121,7 +121,13 @@ export type DocAttachment = { version_id: string; label: string; kind: string; m
 // Pièce jointe TÉLÉVERSÉE par le DG dans la conversation (section « joindre un
 // fichier »). On en extrait le texte à la réception ; ce texte est fourni à SAGE
 // comme contexte (jamais renvoyé tel quel au navigateur — voir messageView).
-export type UploadAttachment = { kind: "upload"; name: string; mime: string; size: number; lu: boolean; text: string; note?: string };
+export type SageImageMedia = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+export type UploadAttachment = {
+  kind: "upload"; name: string; mime: string; size: number; lu: boolean; text: string; note?: string;
+  // Présent quand le fichier joint est une IMAGE (ou un PDF-image) : pages
+  // normalisées que SAGE « voit » (vision). Jamais renvoyé au navigateur.
+  images?: { base64: string; mediaType: SageImageMedia }[];
+};
 
 // Lecture du texte d'un fichier joint (PDF à couche texte, .docx, texte brut).
 // Borné pour rester raisonnable (le texte est réinjecté à chaque tour de la
@@ -152,6 +158,55 @@ export async function extractUploadText(buffer: Buffer, mime: string, filename: 
   } catch {
     return { ok: false, text: "", truncated: false, note: "Le texte du fichier n'a pas pu être extrait." };
   }
+}
+
+// Prépare une pièce jointe COMPLÈTE pour SAGE : on lit le TEXTE (PDF texte,
+// .docx, texte) OU, si le fichier est une IMAGE (couverture, capture, scan) ou un
+// PDF-image, on le convertit en image(s) que SAGE « voit » (vision). Le vrai
+// format est détecté d'après les octets (robuste aux mimes/extensions faux).
+// Objectif : pouvoir joindre « tout type de fichier » dans la conversation.
+export async function extractUploadAttachment(buffer: Buffer, mime: string, filename: string): Promise<UploadAttachment> {
+  const base = { kind: "upload" as const, name: filename || "piece-jointe", mime: mime || "application/octet-stream", size: buffer.byteLength };
+  const m = (mime || "").toLowerCase();
+  const name = (filename || "").toLowerCase();
+  let real = m;
+  try {
+    const { fileTypeFromBuffer } = await import("file-type");
+    const ft = await fileTypeFromBuffer(buffer);
+    if (ft?.mime) real = ft.mime;
+  } catch { /* détection indisponible : on garde le mime déposé */ }
+
+  // PDF : texte d'abord ; sinon (scanné/image) → premières pages en images.
+  const isPdf = real.includes("pdf") || m.includes("pdf") || name.endsWith(".pdf") || buffer.subarray(0, 5).toString("latin1") === "%PDF-";
+  if (isPdf) {
+    const ex = await extractUploadText(buffer, "application/pdf", filename);
+    if (ex.ok) return { ...base, lu: true, text: ex.text, note: ex.note };
+    const imgs = await extractPdfImages(buffer, { maxPages: 3, maxDim: 1280 });
+    if (imgs && imgs.length) return { ...base, lu: true, text: "", images: imgs.map((i) => ({ base64: i.base64, mediaType: i.mediaType })) };
+    return { ...base, lu: false, text: "", note: "PDF sans texte exploitable (scanné) et non convertible. Fournissez un PDF à texte sélectionnable ou une image." };
+  }
+
+  // Image WEBP : acceptée telle quelle par la vision (jimp ne la décode pas).
+  if (real === "image/webp") {
+    if (buffer.length <= 4_500_000) return { ...base, lu: true, text: "", images: [{ base64: buffer.toString("base64"), mediaType: "image/webp" }] };
+    return { ...base, lu: false, text: "", note: `Image WEBP trop lourde (${(buffer.length / (1024 * 1024)).toFixed(1)} Mo).` };
+  }
+
+  // Images matricielles (JPEG/PNG/GIF/BMP/TIFF, y compris CMYK/haute déf.) :
+  // normalisées en JPEG ≤ 1280 px pour la vision (coût maîtrisé).
+  if (real.startsWith("image/")) {
+    try {
+      const { optimizeImage } = await import("./imageOptimize.js");
+      const opt = await optimizeImage(buffer, { maxLongSide: 1280, quality: 82, format: "jpeg" });
+      return { ...base, lu: true, text: "", images: [{ base64: opt.buffer.toString("base64"), mediaType: "image/jpeg" }] };
+    } catch {
+      return { ...base, lu: false, text: "", note: `Format image « ${real} » non décodable. Exportez en JPEG ou PNG.` };
+    }
+  }
+
+  // Texte / .docx : extraction via l'extracteur de texte existant.
+  const ex = await extractUploadText(buffer, mime, filename);
+  return { ...base, lu: ex.ok, text: ex.ok ? ex.text : "", note: ex.ok ? undefined : ex.note };
 }
 
 const DOC_KIND_LABELS: Record<string, string> = {
@@ -394,7 +449,8 @@ export async function runConversationReply(assistantMessageId: string): Promise<
       for (const a of atts) {
         const u = a as Partial<UploadAttachment> | null;
         if (!u || u.kind !== "upload") continue;
-        if (u.lu && u.text) content += `\n\n[Fichier joint par le DG : ${u.name}]\n${u.text}`;
+        if (u.images && u.images.length) content += `\n\n[Image jointe par le DG : ${u.name} — voir l'image ci-jointe]`;
+        else if (u.lu && u.text) content += `\n\n[Fichier joint par le DG : ${u.name}]\n${u.text}`;
         else content += `\n\n[Fichier joint par le DG : ${u.name} — non lisible : ${u.note ?? "format non pris en charge"}]`;
       }
       return { role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant", content };
@@ -422,6 +478,27 @@ export async function runConversationReply(assistantMessageId: string): Promise<
     const docs = new Map<string, DocAttachment>();
     const webSources = new Map<string, WebSource>();
     const convo: { role: "user" | "assistant"; content: unknown }[] = messages.map((m) => ({ role: m.role, content: m.content }));
+    // VISION : on joint les images du DERNIER message utilisateur (le tour en
+    // cours) comme blocs d'image, pour que SAGE les « voie ». On se borne au tour
+    // courant (coût maîtrisé : les images ne sont pas renvoyées à chaque tour).
+    const lastIdx = convo.length - 1;
+    if (lastIdx >= 0 && convo[lastIdx].role === "user") {
+      const lastAtts = Array.isArray(history[lastIdx]?.attachments) ? (history[lastIdx].attachments as unknown[]) : [];
+      const imgs: { base64: string; mediaType: SageImageMedia }[] = [];
+      for (const a of lastAtts) {
+        const u = a as Partial<UploadAttachment> | null;
+        if (u?.kind === "upload" && Array.isArray(u.images)) for (const im of u.images) imgs.push(im);
+      }
+      if (imgs.length) {
+        convo[lastIdx] = {
+          role: "user",
+          content: [
+            { type: "text", text: String(convo[lastIdx].content) },
+            ...imgs.map((im) => ({ type: "image", source: { type: "base64", media_type: im.mediaType, data: im.base64 } })),
+          ],
+        };
+      }
+    }
     const toolNames = new Set(SAGE_TOOLS.map((t) => t.name));
     // Dégradation gracieuse : si le modèle/clé ne supporte pas la recherche web,
     // le 1er appel échoue → on repasse SANS l'outil web pour le reste de la réponse.

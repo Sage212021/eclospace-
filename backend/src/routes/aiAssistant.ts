@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAnyRole } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
-import { runConversationReply, extractUploadText, type UploadAttachment } from "../lib/aiAssistant.js";
+import { runConversationReply, extractUploadAttachment, type UploadAttachment } from "../lib/aiAssistant.js";
 import { runLearningAnalysis } from "../lib/aiLearning.js";
 import { runCatalogueAudit } from "../lib/catalogueAudit.js";
 
@@ -73,7 +73,8 @@ export default async function aiAssistantRoutes(fastify: FastifyInstance) {
   });
 
   // Envoyer un message dans une conversation existante. JSON pour le texte seul ;
-  // multipart pour joindre un fichier (PDF, .docx, texte) que SAGE lira.
+  // multipart pour joindre un fichier (PDF, .docx, texte, OU image/PDF-image) que
+  // SAGE lira (texte) ou « verra » (vision) selon le format déposé.
   const messageSchema = z.object({ content: z.string().trim().min(1).max(8000) });
   fastify.post("/api/v1/sage/conversations/:id/messages", { preHandler: requireAnyRole(SAGE_ROLES) }, async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -90,8 +91,7 @@ export default async function aiAssistantRoutes(fastify: FastifyInstance) {
         if (part.type === "file") {
           const buf = await part.toBuffer();
           if (buf.byteLength > 0) {
-            const ex = await extractUploadText(buf, part.mimetype || "application/octet-stream", part.filename || "piece-jointe");
-            upload = { kind: "upload", name: part.filename || "piece-jointe", mime: part.mimetype || "application/octet-stream", size: buf.byteLength, lu: ex.ok, text: ex.ok ? ex.text : "", note: ex.ok ? undefined : ex.note };
+            upload = await extractUploadAttachment(buf, part.mimetype || "application/octet-stream", part.filename || "piece-jointe");
           }
         } else if (part.fieldname === "content" && typeof part.value === "string") {
           content = part.value;

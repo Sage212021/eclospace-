@@ -5866,6 +5866,11 @@ model AiEditorialMessage {
   // "user" (opérateur) ou "assistant" (agent).
   role         String
   content      String   @default("")
+  // Pièce jointe éventuelle au message (PDF/.docx/texte/image) que l'opérateur
+  // joint au dialogue : SAGE la lit (texte) ou la « voit » (vision) avant de
+  // répondre. JSON { kind:"upload", name, mime, size, lu, text?, note?, images? }.
+  // Jamais renvoyée telle quelle au navigateur (seul le nom est exposé).
+  attachments  Json?
   // "pending" (réponse en cours de rédaction en arrière-plan), "done", "erreur".
   status       String   @default("done")
   errorMessage String?  @map("error_message")

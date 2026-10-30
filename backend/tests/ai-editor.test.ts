@@ -144,6 +144,52 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     expect(system).toContain("je vais procéder à l'analyse");
   });
 
+  // ── Pièce jointe au dialogue éditorial (PDF/.docx/texte/image) ──
+  function multipartMessage(content: string, filename: string, mime: string, fileBody: Buffer) {
+    const boundary = "----ecl" + Math.random().toString(36).slice(2);
+    const parts = [
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="content"\r\n\r\n${content}\r\n`),
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${mime}\r\n\r\n`),
+      fileBody,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ];
+    return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` };
+  }
+
+  it("lit un document joint au dialogue : SAGE en reçoit le texte, non renvoyé au navigateur", async () => {
+    const marker = `PIECE-${rnd()}`;
+    const mp = multipartMessage("Que penses-tu de cette note ?", "note.txt", "text/plain", Buffer.from(`Note annexe de l'éditeur. ${marker} Fin de note.`, "utf8"));
+    const msg = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/message`, headers: { cookie: adminCookie, "content-type": mp.contentType }, payload: mp.body });
+    expect(msg.statusCode).toBe(202);
+    const assistant = await waitMessage(msg.json().assistant_message_id);
+    expect(assistant.status).toBe("done");
+
+    // Le texte du document joint est bien transmis au modèle (SAGE l'a « lu »).
+    const sawFile = calls.some((c) => JSON.stringify(c.messages ?? "").includes(marker));
+    expect(sawFile).toBe(true);
+
+    // Dans l'historique : le message opérateur porte la pièce jointe (nom, lisible),
+    // mais le texte extrait n'est PAS exposé au navigateur.
+    const listed = await app.inject({ method: "GET", url: `/api/v1/ai-editor/${withFile}`, headers: { cookie: adminCookie } });
+    const chat = (listed.json().messages as Array<{ role: string; content: string; attachment: { name: string; lu: boolean } | null }>).filter((m) => m.role === "user");
+    const withAtt = chat.find((m) => m.attachment);
+    expect(withAtt?.attachment?.name).toBe("note.txt");
+    expect(withAtt?.attachment?.lu).toBe(true);
+    expect(JSON.stringify(listed.json().messages)).not.toContain(marker);
+  });
+
+  it("accepte un document seul (sans question saisie) au dialogue", async () => {
+    const mp = multipartMessage("", "dossier.txt", "text/plain", Buffer.from("Contenu du dossier joint par l'opérateur.", "utf8"));
+    const msg = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/message`, headers: { cookie: adminCookie, "content-type": mp.contentType }, payload: mp.body });
+    expect(msg.statusCode).toBe(202);
+    const assistant = await waitMessage(msg.json().assistant_message_id);
+    expect(assistant.status).toBe("done");
+    const listed = await app.inject({ method: "GET", url: `/api/v1/ai-editor/${withFile}`, headers: { cookie: adminCookie } });
+    const u = (listed.json().messages as Array<{ role: string; content: string; attachment: { name: string } | null }>).find((m) => m.role === "user" && m.attachment?.name === "dossier.txt");
+    expect(u).toBeTruthy();
+    expect(u!.content).toContain("Document joint");
+  });
+
   it("liste les conversations existantes (menu interne), une par ouvrage", async () => {
     const r = await app.inject({ method: "GET", url: "/api/v1/ai-editor", headers: { cookie: adminCookie } });
     expect(r.statusCode).toBe(200);

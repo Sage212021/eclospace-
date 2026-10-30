@@ -2847,6 +2847,7 @@ export interface AiEditorMessage {
   error_message: string | null;
   created_at: string;
   created_by: string | null;
+  attachment?: { name: string; lu: boolean } | null;
 }
 export type RewriteMode = "fidele" | "renforce" | "alternatif";
 export interface AiEditorRewrite {
@@ -2888,7 +2889,16 @@ export function deleteAiEditorMessage(messageId: string) {
 export function diagnoseAiEditor(manuscriptId: string) {
   return request<{ message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/diagnose`, { method: "POST" });
 }
-export function sendAiEditorMessage(manuscriptId: string, content: string) {
+export async function sendAiEditorMessage(manuscriptId: string, content: string, file?: File | null) {
+  if (file) {
+    // Multipart : question + document joint (PDF/.docx/texte/image) que SAGE lit.
+    const form = new FormData();
+    if (content) form.append("content", content);
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/api/v1/ai-editor/${manuscriptId}/message`, { method: "POST", credentials: "include", body: form });
+    if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? `Erreur ${res.status}`);
+    return res.json() as Promise<{ user_message_id: string; assistant_message_id: string }>;
+  }
   return request<{ user_message_id: string; assistant_message_id: string }>(`/api/v1/ai-editor/${manuscriptId}/message`, {
     method: "POST",
     body: JSON.stringify({ content }),

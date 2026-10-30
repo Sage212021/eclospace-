@@ -3190,6 +3190,15 @@ async function main() {
       permissionModules: ["manuscripts", "contracts"],
       departmentCodes: ["DG", "DIRED", "JURID", "FIN", "RH"],
     },
+    {
+      slug: "2026-10-sage-editeur-piece-jointe-dialogue",
+      version: "2026.10",
+      title: "Nouveauté — SAGE, l'éditeur : joignez un document à la conversation",
+      body: "Dans « SAGE — Éditeur », vous pouvez maintenant JOINDRE un document à votre message (bouton 📎 à côté de la zone de saisie) : un PDF, un fichier Word (.docx), un texte, ou une image (couverture, page scannée, tableau…). SAGE LIT le document avant de vous répondre. Exemples : collez le dénouement d'un chapitre en PDF et demandez « Est-ce assez préparé ? » ; joignez une note de l'auteur et demandez un avis ; envoyez une maquette de couverture pour qu'il la commente. Vous pouvez envoyer un document seul (sans question) ou avec une question : dans les deux cas, il s'appuie sur ce que vous avez joint EN PLUS du manuscrit et du rapport déjà au dossier. La pièce jointe reste rattachée à l'échange (son nom s'affiche avec un 📎), mais le texte extrait n'est jamais renvoyé au navigateur, et chaque envoi est tracé au journal. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

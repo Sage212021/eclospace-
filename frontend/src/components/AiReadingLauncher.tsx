@@ -43,6 +43,17 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
     const s = Math.max(0, Math.floor((now - new Date(fromIso).getTime()) / 1000));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
+  // Estimation d'avancement pour les phases NON découpables (évaluation, rédaction
+  // du rapport) : un seul appel au modèle, sans pourcentage « réel » mesurable. On
+  // présente alors une estimation lissée à partir du temps écoulé — une courbe qui
+  // monte vite puis ralentit et PLAFONNE sous 100 % tant que ce n'est pas terminé
+  // (elle n'affiche jamais « 100 % » avant la fin). Cela donne « une idée de
+  // l'évolution » ; le « ~ » signale qu'il s'agit d'une estimation.
+  const estimatedPct = (fromIso: string) => {
+    const s = Math.max(0, (now - new Date(fromIso).getTime()) / 1000);
+    const tau = 55; // s — vitesse de montée (≈ 61 % à 55 s, ≈ 86 % à 110 s), plafond 96 %
+    return Math.min(96, Math.max(3, Math.round(96 * (1 - Math.exp(-s / tau)))));
+  };
   // Évaluation : type de manuscrit choisi par le relecteur pour adapter la
   // GRILLE transmise à l'IA. "" = automatique (selon le domaine de l'ouvrage).
   const [genres, setGenres] = useState<Genre[]>([]);
@@ -293,7 +304,7 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
         style={{ marginTop: 8, background: "var(--eclosion)", color: "#0B0B0C", border: "none", borderRadius: 6, padding: "9px 16px", fontSize: 13.5, fontWeight: 700, cursor: inProgress ? "default" : "pointer" }}
       >
         {inProgress
-          ? (runningPct !== null ? `Analyse en cours… ${runningPct} %` : "Analyse en cours… (patientez)")
+          ? (runningPct !== null ? `Analyse en cours… ${runningPct} %` : running ? `Analyse en cours… ~${estimatedPct(running.launchedAt)} %` : "Analyse en cours… (patientez)")
           : "Lancer avec Claude"}
       </button>
 
@@ -318,11 +329,13 @@ export function AiReadingLauncher({ manuscriptId, workType, stepCode, title, hin
                       </span>
                     ) : (
                       // Phase non découpable (rapport, évaluation) : pas de pourcentage
-                      // réel possible → barre animée « en cours » + temps écoulé.
+                      // mesurable → estimation lissée sur le temps écoulé (« ~X % »,
+                      // plafonnée sous 100 % jusqu'à la fin) + temps écoulé.
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ width: 90, height: 8, background: "var(--line)", borderRadius: 999, overflow: "hidden", display: "inline-block", position: "relative" }}>
-                          <span className="ecl-indet-bar" style={{ position: "absolute", top: 0, bottom: 0, width: "40%", background: "var(--eclosion, #D9B21A)", borderRadius: 999 }} />
+                        <span style={{ width: 90, height: 8, background: "var(--line)", borderRadius: 999, overflow: "hidden", display: "inline-block" }}>
+                          <span style={{ display: "block", height: "100%", width: `${estimatedPct(j.launchedAt)}%`, background: "var(--eclosion, #D9B21A)", transition: "width .6s linear" }} />
                         </span>
+                        <strong style={{ fontFamily: "var(--font-mono)" }}>~{estimatedPct(j.launchedAt)} %</strong>
                         <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>⏱ {fmtElapsed(j.launchedAt)}</span>
                       </span>
                     )}

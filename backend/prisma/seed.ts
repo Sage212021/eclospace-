@@ -3200,6 +3200,14 @@ async function main() {
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
     {
+      slug: "2026-10-relecture-ia-avancement-pourcentage",
+      version: "2026.10",
+      title: "Nouveauté — Relecture IA : l'avancement s'affiche en pourcentage",
+      body: "Pendant une analyse IA (évaluation, BAT1, BAT2), l'écran montre désormais un POURCENTAGE d'avancement, pas seulement un chrono. Pour la lecture par segments (BAT1/BAT2), c'est le pourcentage RÉEL (ex. « 7/12 — 58 % »). Pour les phases non découpables (l'évaluation, ou la rédaction finale du rapport), qui se font en une seule passe, on affiche une ESTIMATION lissée notée « ~ » (ex. « ~72 % ») : elle avance régulièrement et reste sous 100 % tant que ce n'est pas terminé, pour vous donner une idée de l'évolution. Le bouton d'analyse et la ligne d'historique reprennent ce pourcentage.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["DIRED", "CORR", "INFOG", "SECR", "DG"],
+    },
+    {
       slug: "2026-10-sage-editeur-signature-service-uniquement",
       version: "2026.10",
       title: "Nouveauté — SAGE : les lettres sont signées du Service éditorial, pas de « SAGE »",

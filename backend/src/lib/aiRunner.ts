@@ -588,10 +588,15 @@ function buildTable(rows: string[][]): Table {
     // BAT1). En paysage, la table dispose de toute la largeur pour s'étaler.
     return new Table({ layout: TableLayoutType.AUTOFIT, rows: [headRow, ...dataRows] });
   }
-  // Tableau étroit (grille de notation…) : largeurs proportionnées, pleine page.
+  // Tableau étroit (grille d'évaluation, notation…) : largeurs proportionnées,
+  // PLEINE PAGE. On force une mise en page FIXE (et non « AUTOFIT au contenu », qui
+  // faisait rétrécir le tableau sur la moitié gauche quand les cellules étaient
+  // courtes) : Word respecte alors les largeurs de colonnes et le tableau occupe
+  // toute la largeur utile — les colonnes de texte « respirent » au lieu d'être
+  // comprimées.
   const total = widths.reduce((a, w) => a + w, 0);
   const tableWidth = total > PAGE_W ? { size: total, type: WidthType.DXA } : { size: 100, type: WidthType.PERCENTAGE };
-  return new Table({ width: tableWidth, columnWidths: widths, layout: TableLayoutType.AUTOFIT, rows: [headRow, ...dataRows] });
+  return new Table({ width: tableWidth, columnWidths: widths, layout: TableLayoutType.FIXED, rows: [headRow, ...dataRows] });
 }
 
 // Rendu .docx du rapport, aux couleurs Éclosion. Interprète le Markdown produit

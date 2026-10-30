@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAnyRole } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { runEditorAnswer, runRewrite, REWRITE_MODES, assembleChapterText } from "../lib/aiEditor.js";
+import { extractUploadAttachment, type UploadAttachment } from "../lib/aiAssistant.js";
 
 // ÉCLOSION ÉDITORIAL IA — Lot A (lecture + diagnostic + dialogue). Réservé à la
 // Direction générale et à l'administrateur (ouverture au directeur éditorial
@@ -31,9 +32,17 @@ const KIND_LABEL: Record<string, string> = {
 const REWRITE_MODE_LABEL: Record<string, string> = { fidele: "fidèle à l'auteur", renforce: "littérairement renforcé", alternatif: "proposition alternative" };
 
 function messageView(m: {
-  id: string; kind: string; role: string; content: string; status: string; errorMessage: string | null; createdAt: Date; createdBy: string | null;
+  id: string; kind: string; role: string; content: string; status: string; errorMessage: string | null; createdAt: Date; createdBy: string | null; attachments?: unknown;
 }) {
-  return { id: m.id, kind: m.kind, role: m.role, content: m.content, status: m.status, error_message: m.errorMessage, created_at: m.createdAt, created_by: m.createdBy };
+  // On n'expose JAMAIS le texte/base64 extrait au navigateur : seul le nom de la
+  // pièce jointe (et si elle est lisible) est renvoyé, pour l'afficher dans le fil.
+  const atts = Array.isArray(m.attachments) ? (m.attachments as Array<Record<string, unknown>>) : [];
+  const attachment = atts.find((a) => a && a.kind === "upload");
+  return {
+    id: m.id, kind: m.kind, role: m.role, content: m.content, status: m.status, error_message: m.errorMessage,
+    created_at: m.createdAt, created_by: m.createdBy,
+    attachment: attachment ? { name: String(attachment.name ?? "pièce jointe"), lu: Boolean(attachment.lu) } : null,
+  };
 }
 
 export default async function aiEditorRoutes(fastify: FastifyInstance) {
@@ -130,15 +139,35 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
   const messageSchema = z.object({ content: z.string().trim().min(1).max(8000) });
   fastify.post("/api/v1/ai-editor/:manuscriptId/message", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
     const { manuscriptId } = request.params as { manuscriptId: string };
-    const parsed = messageSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Message invalide.", details: parsed.error.issues });
+    // On accepte soit du JSON { content }, soit un multipart (question + PDF/.docx/
+    // texte/image joint). La pièce jointe est lue (texte) ou « vue » (vision) et
+    // transmise à SAGE avec la question.
+    let content = "";
+    let upload: UploadAttachment | null = null;
+    if (request.isMultipart()) {
+      for await (const part of request.parts()) {
+        if (part.type === "file") {
+          const buf = await part.toBuffer();
+          if (buf.byteLength > 0) upload = await extractUploadAttachment(buf, part.mimetype || "application/octet-stream", part.filename || "piece-jointe");
+        } else if (part.fieldname === "content" && typeof part.value === "string") {
+          content = part.value;
+        }
+      }
+    } else {
+      const parsed = messageSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Message invalide.", details: parsed.error.issues });
+      content = parsed.data.content;
+    }
+    content = content.trim().slice(0, 8000);
+    if (!content && !upload) return reply.code(400).send({ code: "validation_error", message: "Message vide : saisissez une question ou joignez un document." });
+
     const manuscript = await prisma.manuscript.findFirst({ where: { id: manuscriptId, deletedAt: null }, select: { id: true } });
     if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Ouvrage introuvable dans Eclospace." });
     const already = await prisma.aiEditorialMessage.findFirst({ where: { manuscriptId, status: "pending" }, select: { id: true } });
     if (already) return reply.code(409).send({ code: "already_running", message: "Une réponse est déjà en cours pour cet ouvrage. Patientez quelques instants." });
 
     const userMessage = await prisma.aiEditorialMessage.create({
-      data: { manuscriptId, kind: "chat", role: "user", status: "done", content: parsed.data.content, createdBy: request.user!.id },
+      data: { manuscriptId, kind: "chat", role: "user", status: "done", content: content || `(Document joint : ${upload!.name})`, attachments: upload ? [upload] : undefined, createdBy: request.user!.id },
     });
     const assistant = await prisma.aiEditorialMessage.create({
       data: { manuscriptId, kind: "chat", role: "assistant", status: "pending", content: "", createdBy: request.user!.id },

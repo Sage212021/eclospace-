@@ -414,6 +414,9 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
     let task: string;
     let block: string;
     const messages: { role: "user" | "assistant"; content: string }[] = [];
+    // Pièce jointe éventuelle au dialogue (PDF/.docx/texte/image) : images à
+    // « montrer » à SAGE (vision). Le texte extrait est injecté dans `block`.
+    const attachImages: { base64: string; mediaType: string }[] = [];
     if (assistant.kind === "diagnostic") {
       // Le diagnostic lit TOUT le manuscrit (bilan complet) ET (re)construit la
       // mémoire de passages pour les dialogues à venir.
@@ -533,16 +536,38 @@ export async function runEditorAnswer(assistantMessageId: string): Promise<void>
       // aussi l'index de passages pour l'indicateur de mémoire.
       await buildPassageIndex(manuscriptId).catch(() => {});
       block = (await buildContext(manuscriptId)).block;
+      // DOCUMENT JOINT par l'opérateur au dialogue : SAGE le LIT (texte) ou le
+      // VOIT (images) avant de répondre. Type structurel local (pas d'import
+      // depuis aiAssistant : éviterait un cycle de modules).
+      const atts = Array.isArray(lastUser?.attachments) ? (lastUser!.attachments as Array<Record<string, unknown>>) : [];
+      for (const a of atts) {
+        if (!a || a.kind !== "upload") continue;
+        const name = String(a.name ?? "document joint");
+        const imgs = Array.isArray(a.images) ? (a.images as Array<{ base64?: unknown; mediaType?: unknown }>) : [];
+        if (imgs.length) {
+          for (const im of imgs) if (typeof im.base64 === "string" && typeof im.mediaType === "string") attachImages.push({ base64: im.base64, mediaType: im.mediaType });
+          block += `\n\n=== DOCUMENT JOINT PAR L'OPÉRATEUR : ${name} (image ci-jointe) ===`;
+        } else if (a.lu && typeof a.text === "string" && a.text.trim()) {
+          block += `\n\n=== DOCUMENT JOINT PAR L'OPÉRATEUR : ${name} ===\n${a.text}`;
+        } else if (typeof a.note === "string") {
+          block += `\n\n=== DOCUMENT JOINT : ${name} — non lisible : ${a.note} ===`;
+        }
+      }
     }
 
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey });
     const userContent = `${block}\n\n=== DEMANDE ===\n${task}`;
+    // Si un document image a été joint au dialogue, on l'ajoute en blocs d'image
+    // (vision) au dernier message utilisateur, en plus du texte.
+    const finalUserContent = attachImages.length
+      ? [{ type: "text", text: userContent }, ...attachImages.map((im) => ({ type: "image", source: { type: "base64", media_type: im.mediaType, data: im.base64 } }))]
+      : userContent;
     const resp = await client.messages.create({
       model: modelId,
       max_tokens: 4096,
       system: AGENT_SYSTEM,
-      messages: [...messages, { role: "user", content: userContent }],
+      messages: [...messages, { role: "user", content: finalUserContent as never }],
     });
     const text = resp.content.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("\n").trim();
     await prisma.aiEditorialMessage.update({

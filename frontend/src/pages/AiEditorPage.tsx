@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
 import {
   listManuscripts,
@@ -61,6 +61,8 @@ export function AiEditorPage() {
   const [dossier, setDossier] = useState<AiEditorDossier | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [dlgFile, setDlgFile] = useState<File | null>(null);
+  const dlgFileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [rwMode, setRwMode] = useState<RewriteMode>("fidele");
   const [rwSource, setRwSource] = useState("");
@@ -126,11 +128,13 @@ export function AiEditorPage() {
   }
 
   async function send() {
-    if (!selectedId || !input.trim()) return;
+    if (!selectedId || (!input.trim() && !dlgFile)) return;
     setBusy(true); setError(null);
     try {
-      await sendAiEditorMessage(selectedId, input.trim());
+      await sendAiEditorMessage(selectedId, input.trim(), dlgFile);
       setInput("");
+      setDlgFile(null);
+      if (dlgFileRef.current) dlgFileRef.current.value = "";
       await loadDossier(selectedId);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Envoi impossible.");
@@ -484,13 +488,22 @@ export function AiEditorPage() {
                 <div key={m.id} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                   <div style={{ maxWidth: "85%", background: m.role === "user" ? "var(--eclosion-soft, #f6efd8)" : "var(--ivory, #FAF8F2)", border: "1px solid var(--line)", borderRadius: 10, padding: "8px 11px", fontSize: 13 }}>
                     <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 3 }}>{m.role === "user" ? "Vous" : "SAGE"}</div>
+                    {m.attachment && <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 3 }}>📎 {m.attachment.name}{m.attachment.lu ? "" : " (non lisible)"}</div>}
                     <MessageBody m={m} />
                     <MsgActions m={m} busy={busy} onPdf={downloadPdf} onDelete={deleteMsg} />
                   </div>
                 </div>
               ))}
             </div>
+            {dlgFile && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, marginBottom: 6 }}>
+                <span>📎 {dlgFile.name} <span style={{ color: "var(--muted)" }}>({Math.max(1, Math.round(dlgFile.size / 1024))} Ko)</span></span>
+                <button onClick={() => { setDlgFile(null); if (dlgFileRef.current) dlgFileRef.current.value = ""; }} title="Retirer le document" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 13 }}>✕</button>
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+              <input ref={dlgFileRef} type="file" accept=".pdf,.docx,.txt,.md,.csv,.rtf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,image/*" style={{ display: "none" }} onChange={(e) => setDlgFile(e.target.files?.[0] ?? null)} />
+              <button onClick={() => dlgFileRef.current?.click()} disabled={busy || pending} title="Joindre un document (PDF, Word, image, texte) que SAGE lira" style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 12px", fontSize: 15, cursor: busy || pending ? "not-allowed" : "pointer", opacity: busy || pending ? 0.55 : 1 }}>📎</button>
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -500,8 +513,8 @@ export function AiEditorPage() {
               />
               <button
                 onClick={send}
-                disabled={busy || pending || !input.trim()}
-                style={{ background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 8, padding: "9px 15px", fontWeight: 700, fontSize: 12.5, cursor: busy || pending || !input.trim() ? "not-allowed" : "pointer", opacity: busy || pending || !input.trim() ? 0.55 : 1, whiteSpace: "nowrap" }}
+                disabled={busy || pending || (!input.trim() && !dlgFile)}
+                style={{ background: "var(--eclosion, #D9B21A)", color: "#0B0B0C", border: "none", borderRadius: 8, padding: "9px 15px", fontWeight: 700, fontSize: 12.5, cursor: busy || pending || (!input.trim() && !dlgFile) ? "not-allowed" : "pointer", opacity: busy || pending || (!input.trim() && !dlgFile) ? 0.55 : 1, whiteSpace: "nowrap" }}
               >
                 Envoyer
               </button>

@@ -3216,6 +3216,14 @@ async function main() {
       departmentCodes: ["DG"],
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
+    {
+      slug: "2026-10-rapport-docx-tableaux-pleine-page",
+      version: "2026.10",
+      title: "Nouveauté — Rapports .docx : les tableaux occupent de nouveau toute la largeur",
+      body: "Vous nous avez signalé que, dans le rapport d'évaluation téléchargé (.docx), les tableaux (Élément / Statut / Observation, grilles de notation…) ne s'étalaient plus sur la page : ils se tassaient sur la gauche avec des cases rétrécies et beaucoup de vide à droite. C'est corrigé : ces tableaux reprennent TOUTE la largeur utile de la page, avec des colonnes proportionnées (les colonnes de texte « respirent », les mots ne sont pas coupés). Les grands tableaux d'annotations de correction (en paysage) gardent, eux, leur ajustement au contenu.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["DIRED", "CORR", "INFOG", "SECR", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

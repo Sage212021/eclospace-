@@ -259,6 +259,19 @@ describe("Éclosion Éditorial IA — Lot A (lecture + diagnostic + dialogue)", 
     });
   }
 
+  it("rédige la lettre à l'auteur signée uniquement du Service éditorial (jamais « SAGE »)", async () => {
+    const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/lettre-auteur`, headers: { cookie: adminCookie } });
+    expect(r.statusCode).toBe(202);
+    await waitMessage(r.json().message_id);
+    const last = calls[calls.length - 1];
+    const task = (last?.messages as Array<{ content: string }> | undefined)?.map((x) => x.content).join(" ") ?? "";
+    // La consigne de la lettre impose la signature du service et interdit le nom « SAGE ».
+    expect(task).toContain("Le Service éditorial — Éditions Éclosion");
+    expect(task).toMatch(/jamais ton propre nom/i);
+    // La règle est aussi portée par la consigne de comportement (vaut pour tout courrier).
+    expect(last?.system ?? "").toContain("SIGNATURE DES COURRIERS");
+  });
+
   // ── Préparation de copie (Lot G) ──
   it("prépare la copie d'un passage collé (texte corrigé en arrière-plan)", async () => {
     const r = await app.inject({ method: "POST", url: `/api/v1/ai-editor/${withFile}/copyedit`, headers: { cookie: adminCookie }, payload: { source_text: "Il etait une fois un roi,qui vivait  dans un chateau." } });

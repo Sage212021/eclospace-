@@ -3199,6 +3199,15 @@ async function main() {
       departmentCodes: ["DG"],
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
+    {
+      slug: "2026-10-sage-editeur-signature-service-uniquement",
+      version: "2026.10",
+      title: "Nouveauté — SAGE : les lettres sont signées du Service éditorial, pas de « SAGE »",
+      body: "Petit ajustement sur les courriers rédigés par SAGE : désormais, une lettre ou un courrier qu'il rédige (lettre à l'auteur, etc.) se termine UNIQUEMENT par « Le Service éditorial — Éditions Éclosion ». SAGE n'ajoute plus son propre nom ni un nom de personne sous la signature. Les courriers paraissent donc bien au nom de la maison, comme il se doit.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

@@ -834,6 +834,27 @@ export function undoManuscriptMerge(mergeId: string) {
   return request<{ undone: boolean; loserId: string; keeperId: string }>(`/api/v1/manuscripts/merges/${mergeId}/undo`, { method: "POST" });
 }
 
+// ── Veille des abonnements & paiements numériques (administration) ──
+export interface DigitalService {
+  id: string; key: string; name: string; description: string | null;
+  kind: "subscription_monthly" | "usage_based";
+  billing_url: string | null; billing_label: string | null; currency: string;
+  next_due_date: string | null; monthly_budget: number | null; current_usage: number | null; usage_period: string | null;
+  active: boolean; sort_order: number;
+  status: "a_jour" | "a_surveiller" | "en_retard"; days_to_due: number | null; usage_pct: number | null;
+}
+export interface DigitalServicesResponse { services: DigitalService[]; summary: { total: number; to_watch: number; late: number } }
+export interface DigitalServicePayment {
+  id: string; amount: number; currency: string; paid_at: string; reference: string | null; method: string | null;
+  status: "confirmed" | "pending"; new_due_date: string | null; receipt_document_id: string | null; note: string | null; created_at: string;
+}
+export function getDigitalServices() { return request<DigitalServicesResponse>("/api/v1/digital-services"); }
+export function createDigitalService(body: Record<string, unknown>) { return request<DigitalService>("/api/v1/digital-services", { method: "POST", body: JSON.stringify(body) }); }
+export function updateDigitalService(id: string, body: Record<string, unknown>) { return request<DigitalService>(`/api/v1/digital-services/${id}`, { method: "PATCH", body: JSON.stringify(body) }); }
+export function deleteDigitalService(id: string) { return request<{ removed: boolean }>(`/api/v1/digital-services/${id}`, { method: "DELETE" }); }
+export function getDigitalServicePayments(id: string) { return request<DigitalServicePayment[]>(`/api/v1/digital-services/${id}/payments`); }
+export function addDigitalServicePayment(id: string, body: Record<string, unknown>) { return request<{ id: string; status: string }>(`/api/v1/digital-services/${id}/payments`, { method: "POST", body: JSON.stringify(body) }); }
+
 // Doublon possible sur une fiche précise : autres ouvrages au même titre.
 export interface TitleTwin {
   id: string;

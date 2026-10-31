@@ -3300,6 +3300,15 @@ async function main() {
       permissionModules: ["manuscripts"],
       departmentCodes: ["DG", "DIRED"],
     },
+    {
+      slug: "2026-10-veille-abonnements-numeriques",
+      version: "2026.10",
+      title: "Nouveauté — Veille des abonnements et paiements numériques",
+      body: "Un nouvel écran « Veille des abonnements » (Administration) surveille les services numériques qui font tourner la maison (API d'intelligence éditoriale, Claude Code, hébergement Scalingo…), pour qu'aucun ne s'interrompe faute de paiement. Pour chaque service : son STATUT (À jour / À surveiller / En retard), sa prochaine échéance, et pour les forfaits à l'usage la consommation du mois. Un bouton « Accéder au paiement » ouvre directement la plateforme concernée. Vous enregistrez les paiements à la main (montant, date, référence) et consultez l'historique ; attention, un paiement n'avance l'échéance QUE s'il est marqué « confirmé » — cliquer sur le lien externe ne suffit pas. La surveillance tourne en arrière-plan, indépendamment de toute connexion : l'administrateur est alerté AVANT l'échéance (J-15, J-7, J-3, J-1, puis « dépassé ») et quand la consommation atteint 70 %, 85 % puis 95 % du budget. Aucun numéro de carte, CVV ou identifiant secret n'est demandé ni stocké. Réservé à l'administration.",
+      permissionModules: ["abonnements"],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

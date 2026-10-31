@@ -66,6 +66,7 @@ const ChatPage = lazy(() => import("./pages/ChatPage").then((m) => ({ default: m
 const AuthorPortal = lazy(() => import("./pages/author/AuthorPortal").then((m) => ({ default: m.AuthorPortal })));
 const ReviewerPortal = lazy(() => import("./pages/reviewer/ReviewerPortal").then((m) => ({ default: m.ReviewerPortal })));
 const ServiceDeskPage = lazy(() => import("./pages/ServiceDeskPage").then((m) => ({ default: m.ServiceDeskPage })));
+const SubscriptionsPage = lazy(() => import("./pages/SubscriptionsPage").then((m) => ({ default: m.SubscriptionsPage })));
 
 // Court message affiché le temps qu'un écran se télécharge (en général une
 // fraction de seconde).
@@ -138,6 +139,7 @@ type PageId =
   | "author-royalties"
   | "chat"
   | "service-desk"
+  | "subscriptions"
   | "site-publish";
 
 type LeafView = { page: PageId } | { stage: string; heading: string };
@@ -278,6 +280,7 @@ const NAV_POLES: NavPole[] = [
       { key: "ad-users", label: "Utilisateurs & rôles", permission: "users:administration" },
       { key: "ad-rights", label: "Droits & pôles", permission: "users:administration" },
       { key: "ad-parametres", label: "Paramètres", permission: "settings:consultation" },
+      { key: "ad-abonnements", label: "Veille des abonnements", permission: "abonnements:consultation" },
       { key: "ad-diagnostics", label: "Diagnostics système", role: "ADMIN_GENERAL" },
     ],
   },
@@ -357,6 +360,7 @@ const LEAF_VIEWS: Record<string, LeafView> = {
   "ad-users": { page: "users-roles" },
   "ad-rights": { page: "rights-matrix" },
   "ad-parametres": { page: "settings" },
+  "ad-abonnements": { page: "subscriptions" },
   "ad-diagnostics": { page: "diagnostics" },
   "cm-messagerie": { page: "chat" },
   "cm-messages-auteurs": { page: "service-desk" },
@@ -988,6 +992,9 @@ export function App() {
         {leaf && "page" in leaf && leaf.page === "audit" && <AuditLogPage />}
         {leaf && "page" in leaf && leaf.page === "settings" && (
           <SettingsPage canAdminister={permissions.has("settings:administration")} user={user} />
+        )}
+        {leaf && "page" in leaf && leaf.page === "subscriptions" && (
+          <SubscriptionsPage canManage={permissions.has("abonnements:administration")} />
         )}
         {leaf && "page" in leaf && leaf.page === "communication" && (
           <AnnouncementsPage

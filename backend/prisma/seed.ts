@@ -3224,6 +3224,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks"],
       departmentCodes: ["DIRED", "CORR", "INFOG", "SECR", "DG"],
     },
+    {
+      slug: "2026-10-vc1-version-a-corriger-repli-dossier",
+      version: "2026.10",
+      title: "Nouveauté — « Version à corriger » : le bloc n'est plus vide à tort",
+      body: "Dans l'étape Correction, le bloc « Version à corriger (VC1) » pouvait sembler VIDE alors que le livre était déjà corrigé — ce qui prêtait à confusion. Rappel : déposer un VC1 reste FACULTATIF (c'est le dossier de départ optionnel, déposé à la planification). Désormais, si aucun VC1 n'a été déposé, le bloc affiche automatiquement la matière DÉJÀ au dossier : le manuscrit déposé à la réception (et un fichier de couverture s'il existe), en lecture seule — exactement ce sur quoi la correction a travaillé. Mention « Du dossier » à l'appui. Vous pouvez toujours déposer un VC1 distinct pour le remplacer. Plus de bloc vide inexpliqué.",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["DIRED", "CORR", "INFOG", "SECR", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

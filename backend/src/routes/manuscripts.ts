@@ -1240,8 +1240,11 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
   // correction) depuis « Mes corrections » sans le droit large « documents ».
   fastify.get("/api/v1/manuscripts/:id/step-attachments/:versionId/download", { preHandler: requireAnyPermission([{ module: "manuscripts", action: "consultation" }, { module: "tasks", action: "consultation" }]) }, async (request, reply) => {
     const { id, versionId } = request.params as { id: string; versionId: string };
+    // Pièces d'étape, et matière « dossier » servie en repli par le bloc VC1
+    // (manuscrit déposé à la réception, couverture) — mêmes droits de
+    // consultation manuscrit/tâches que la liste.
     const version = await prisma.documentVersion.findFirst({
-      where: { id: versionId, document: { entityType: "manuscript", entityId: id, category: "piece_etape", deletedAt: null } },
+      where: { id: versionId, document: { entityType: "manuscript", entityId: id, category: { in: ["piece_etape", "manuscrit", "couverture"] }, deletedAt: null } },
     });
     if (!version) return reply.code(404).send({ code: "not_found", message: "Pièce introuvable." });
     const buffer = await readStoredFile(version.filePath);
@@ -1555,7 +1558,9 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null } });
       if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
       const slots = await vc1State(id);
-      return reply.send(slots.map((s) => ({ ...s, can_correct: s.has_file && canCorrectDeposit(request, s.uploaded_by) })));
+      // Un fichier « du dossier » (repli) n'est pas un dépôt VC1 : on ne propose
+      // pas de le retirer depuis ce bloc (le manuscrit source reste protégé).
+      return reply.send(slots.map((s) => ({ ...s, can_correct: s.has_file && !s.from_dossier && canCorrectDeposit(request, s.uploaded_by) })));
     },
   );
 

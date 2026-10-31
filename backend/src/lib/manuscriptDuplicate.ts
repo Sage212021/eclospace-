@@ -39,6 +39,27 @@ export async function findDuplicateManuscript(
   return hit ? { manuscriptNumber: hit.manuscriptNumber, title: hit.title, statusLabel: hit.status.label } : null;
 }
 
+export type TitleTwin = { id: string; manuscriptNumber: string; title: string; statusLabel: string };
+
+// Autres manuscrits (non supprimés) partageant le MÊME titre normalisé que la
+// fiche donnée — elle-même exclue. Sert au bandeau d'alerte « doublon possible »
+// sur la fiche (signalement, sans rien bloquer ni supprimer).
+export async function findTitleTwins(
+  manuscriptId: string,
+  title: string,
+  db: Pick<typeof prisma, "manuscript"> = prisma,
+): Promise<TitleTwin[]> {
+  const key = normalizeTitleForDuplicate(title);
+  if (!key) return [];
+  const candidates = await db.manuscript.findMany({
+    where: { deletedAt: null, id: { not: manuscriptId } },
+    select: { id: true, manuscriptNumber: true, title: true, status: { select: { label: true } } },
+  });
+  return candidates
+    .filter((c) => normalizeTitleForDuplicate(c.title) === key)
+    .map((c) => ({ id: c.id, manuscriptNumber: c.manuscriptNumber, title: c.title, statusLabel: c.status.label }));
+}
+
 // Message 409 explicite et homogène pour les deux voies de création.
 export function duplicateMessage(match: DuplicateMatch, requestedTitle: string): string {
   const base = `Un manuscrit « ${match.title.trim()} » est déjà enregistré sous ${match.manuscriptNumber} (étape : ${match.statusLabel}).`;

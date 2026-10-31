@@ -818,6 +818,17 @@ export function getDuplicateManuscripts() {
   return request<DuplicateGroup[]>("/api/v1/manuscripts/duplicates");
 }
 
+// Doublon possible sur une fiche précise : autres ouvrages au même titre.
+export interface TitleTwin {
+  id: string;
+  manuscript_number: string;
+  title: string;
+  stage: string | null;
+}
+export function getTitleDuplicates(manuscriptId: string) {
+  return request<TitleTwin[]>(`/api/v1/manuscripts/${manuscriptId}/title-duplicates`);
+}
+
 // Fichier source du manuscrit (dépôt à la réception → entrée du circuit).
 export function getManuscriptSourceFileMeta(manuscriptId: string) {
   return request<{ has_file: boolean; mime_type: string | null }>(`/api/v1/manuscripts/${manuscriptId}/source-file/meta`);

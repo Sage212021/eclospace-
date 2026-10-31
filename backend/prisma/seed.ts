@@ -3249,6 +3249,15 @@ async function main() {
       departmentCodes: ["DG"],
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
+    {
+      slug: "2026-10-sage-ton-editeur-citations-naturelles",
+      version: "2026.10",
+      title: "Nouveauté — SAGE parle comme un éditeur, plus comme un moteur",
+      body: "Ajustement du ton de SAGE dans « Échanger avec SAGE » : il entre désormais DIRECTEMENT dans le sujet, sans annoncer ce qu'il va faire (fini les « Avant de rédiger… », « Je vais vérifier… », « Voici… ») et sans parler de ses outils ou de ses limites. Surtout, il CITE SES SOURCES NATURELLEMENT dans le fil de la phrase, à la manière d'un éditeur cultivé (« comme le relève Publishing Perspectives à l'automne 2026… »), avec la source et la date — fini la liste d'URLs « Sources consultées sur le Web » collée en bas de réponse. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

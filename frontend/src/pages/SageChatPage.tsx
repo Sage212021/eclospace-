@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { VoiceDictation } from "../components/VoiceDictation";
+import { downloadSageAnswerPdf } from "../lib/sageAnswerPdf";
 import {
   listSageConversations,
   getSageConversation,
@@ -425,7 +426,10 @@ export function SageChatPage() {
                       </div>
                     )}
                     {m.role === "assistant" && m.status === "done" && m.content && (
-                      <button onClick={() => rememberFromMessage(m.content)} title="Retenir dans la mémoire de la maison" style={{ background: "none", border: "none", padding: 0, marginTop: 6, fontSize: 11.5, color: "var(--muted)", cursor: "pointer", textDecoration: "underline" }}>📌 Retenir</button>
+                      <div style={{ display: "flex", gap: 14, marginTop: 6, flexWrap: "wrap" }}>
+                        <button onClick={() => rememberFromMessage(m.content)} title="Retenir dans la mémoire de la maison" style={{ background: "none", border: "none", padding: 0, fontSize: 11.5, color: "var(--muted)", cursor: "pointer", textDecoration: "underline" }}>📌 Retenir</button>
+                        <button onClick={() => { void downloadSageAnswerPdf(m.content, { dateIso: m.created_at }); }} title="Télécharger cette réponse en PDF (à l'en-tête Éclosion)" style={{ background: "none", border: "none", padding: 0, fontSize: 11.5, color: "var(--eclosion-dark, #9a7a12)", cursor: "pointer", textDecoration: "underline" }}>⬇️ Télécharger en PDF</button>
+                      </div>
                     )}
                   </div>
                 </div>

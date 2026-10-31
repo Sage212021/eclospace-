@@ -3267,6 +3267,15 @@ async function main() {
       departmentCodes: ["DG"],
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
+    {
+      slug: "2026-10-sage-editeur-meme-personne-pdf-soigne",
+      version: "2026.10",
+      title: "Nouveauté — SAGE Éditeur : même personne que dans l'espace DG, et PDF soigné",
+      body: "Rappel utile : « SAGE — Éditeur » (le dialogue par ouvrage) et « Échanger avec SAGE » (l'espace du DG) sont UNE SEULE ET MÊME PERSONNE — même voix, même culture, même ton d'éditeur humain. Deux améliorations côté SAGE Éditeur : (1) il adopte le même ton naturel (il entre directement dans le sujet, ne parle pas de ses outils, cite ses sources dans le fil) ; (2) le bouton « Télécharger en PDF » de ses analyses produit désormais le MÊME document soigné que côté DG — en-tête Éclosion avec logo, mise en page (titres, listes), et signature « Le Service éditorial — Éditions Éclosion », sans aucune mention d'outil. Réservé à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

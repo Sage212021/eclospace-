@@ -35,7 +35,7 @@ function clean(line: string): string {
     .replace(/\s+$/g, "");
 }
 
-export async function downloadSageAnswerPdf(content: string, opts?: { title?: string; dateIso?: string }): Promise<void> {
+export async function downloadSageAnswerPdf(content: string, opts?: { title?: string; subtitle?: string; dateIso?: string; fileStem?: string }): Promise<void> {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const L = 18, R = 192, W = R - L, BOTTOM = 276;
   let y = 16;
@@ -59,7 +59,12 @@ export async function downloadSageAnswerPdf(content: string, opts?: { title?: st
   doc.splitTextToSize(title, W).forEach((t: string) => { doc.text(t, L, y); y += 7.5; });
   const date = new Date(opts?.dateIso || Date.now()).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...GRIS);
-  doc.text(`Service éditorial — Éditions Éclosion · ${date}`, L, y); y += 8;
+  doc.text(`Service éditorial — Éditions Éclosion · ${date}`, L, y); y += 5;
+  if (opts?.subtitle) {
+    doc.setFontSize(9);
+    doc.splitTextToSize(opts.subtitle, W).forEach((ln: string) => { doc.text(ln, L, y); y += 4.4; });
+  }
+  y += 3;
 
   const newPageIfNeeded = (needed: number) => { if (y + needed > BOTTOM) { doc.addPage(); y = 20; } };
 
@@ -135,5 +140,5 @@ export async function downloadSageAnswerPdf(content: string, opts?: { title?: st
   }
 
   const stamp = new Date(opts?.dateIso || Date.now()).toISOString().slice(0, 10).replace(/-/g, "");
-  doc.save(`Note-editoriale-Eclosion-${stamp}.pdf`);
+  doc.save(`${opts?.fileStem || `Note-editoriale-Eclosion-${stamp}`}.pdf`);
 }

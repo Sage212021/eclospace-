@@ -43,6 +43,7 @@ import financeRoutes from "./routes/finance.js";
 import financeRequestRoutes from "./routes/financeRequests.js";
 import editorialQuoteRoutes from "./routes/editorialQuotes.js";
 import authorReceiptRoutes from "./routes/authorReceipts.js";
+import digitalServiceRoutes from "./routes/digitalServices.js";
 import weeklyReportRoutes from "./routes/weeklyReports.js";
 import royaltiesRoutes from "./routes/royalties.js";
 import hrRoutes from "./routes/hr.js";
@@ -250,6 +251,7 @@ export async function buildApp() {
   await app.register(authorRoutes);
   await app.register(serviceDeskRoutes);
   await app.register(billingOrderRoutes);
+  await app.register(digitalServiceRoutes);
 
   // En production, le frontend compilé (frontend/dist) est copié dans backend/public
   // par le script de build racine (npm run build) : une seule application déployée,

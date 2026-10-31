@@ -1449,16 +1449,31 @@ async function main() {
   // Services numériques à surveiller (module « Abonnements & paiements »), créés
   // une fois (idempotent par `key`) : l'administrateur renseigne ensuite URLs,
   // échéances et budgets. Aucun secret bancaire n'est stocké.
+  // Chaque service a une PAGE DE PAIEMENT officielle (billingUrl) vers laquelle
+  // le bouton « Accéder au paiement » renvoie. Important : le paiement se fait
+  // TOUJOURS sur le site du fournisseur (avec la carte de l'administrateur) ;
+  // Éclospace n'encaisse rien et ne stocke aucun secret.
+  // - API (forfait à l'usage) → console Anthropic (paiement de l'API).
+  // - Claude Code (abonnement) → compte Claude de l'administrateur (claude.ai).
+  // - Scalingo → tableau de bord Scalingo.
   const digitalServices = [
-    { key: "api_ia", name: "API — Corrections éditoriales IA", description: "API d'IA pour les corrections éditoriales (BAT1, BAT2, assistance éditoriale).", kind: "usage_based" as const, billingLabel: "Accéder au paiement API", sortOrder: 10 },
-    { key: "claude_code", name: "Claude Code — Développement", description: "Développement et maintenance d'Eclospace.", kind: "subscription_monthly" as const, billingUrl: "https://console.anthropic.com/settings/billing", billingLabel: "Accéder à la facturation", sortOrder: 20 },
-    { key: "scalingo", name: "Scalingo — Hébergement", description: "Application en ligne et infrastructure cloud.", kind: "subscription_monthly" as const, billingUrl: "https://dashboard.scalingo.com", billingLabel: "Accéder à Scalingo", sortOrder: 30 },
+    { key: "api_ia", name: "API — Corrections éditoriales IA", description: "API d'IA pour les corrections éditoriales (BAT1, BAT2, assistance éditoriale).", kind: "usage_based" as const, billingUrl: "https://console.anthropic.com/settings/billing", billingLabel: "Accéder au paiement API", sortOrder: 10, staleUrls: [] as string[] },
+    { key: "claude_code", name: "Claude Code — Développement", description: "Développement et maintenance d'Eclospace.", kind: "subscription_monthly" as const, billingUrl: "https://claude.ai/settings/billing", billingLabel: "Accéder à la facturation", sortOrder: 20, staleUrls: ["https://console.anthropic.com/settings/billing"] },
+    { key: "scalingo", name: "Scalingo — Hébergement", description: "Application en ligne et infrastructure cloud.", kind: "subscription_monthly" as const, billingUrl: "https://dashboard.scalingo.com", billingLabel: "Accéder à Scalingo", sortOrder: 30, staleUrls: [] as string[] },
   ];
   for (const s of digitalServices) {
     await prisma.digitalService.upsert({
       where: { key: s.key },
-      update: {}, // on NE réécrit pas les réglages saisis par l'admin
-      create: { key: s.key, name: s.name, description: s.description, kind: s.kind, billingUrl: ("billingUrl" in s ? s.billingUrl : null) ?? null, billingLabel: s.billingLabel, sortOrder: s.sortOrder, createdBy: adminUser.id, updatedBy: adminUser.id },
+      update: {}, // on NE réécrit pas les réglages (échéances, budgets) saisis par l'admin
+      create: { key: s.key, name: s.name, description: s.description, kind: s.kind, billingUrl: s.billingUrl, billingLabel: s.billingLabel, sortOrder: s.sortOrder, createdBy: adminUser.id, updatedBy: adminUser.id },
+    });
+    // Renseigne la page de paiement officielle UNIQUEMENT si elle est encore
+    // vide ou si elle porte un ancien lien par défaut (correction du lien erroné
+    // de Claude Code, autrefois pointé vers la console API). On ne touche JAMAIS
+    // une URL que l'administrateur a personnalisée lui-même.
+    await prisma.digitalService.updateMany({
+      where: { key: s.key, OR: [{ billingUrl: null }, { billingUrl: "" }, ...s.staleUrls.map((u) => ({ billingUrl: u }))] },
+      data: { billingUrl: s.billingUrl },
     });
   }
 
@@ -3305,6 +3320,15 @@ async function main() {
       version: "2026.10",
       title: "Nouveauté — Veille des abonnements et paiements numériques",
       body: "Un nouvel écran « Veille des abonnements » (Administration) surveille les services numériques qui font tourner la maison (API d'intelligence éditoriale, Claude Code, hébergement Scalingo…), pour qu'aucun ne s'interrompe faute de paiement. Pour chaque service : son STATUT (À jour / À surveiller / En retard), sa prochaine échéance, et pour les forfaits à l'usage la consommation du mois. Un bouton « Accéder au paiement » ouvre directement la plateforme concernée. Vous enregistrez les paiements à la main (montant, date, référence) et consultez l'historique ; attention, un paiement n'avance l'échéance QUE s'il est marqué « confirmé » — cliquer sur le lien externe ne suffit pas. La surveillance tourne en arrière-plan, indépendamment de toute connexion : l'administrateur est alerté AVANT l'échéance (J-15, J-7, J-3, J-1, puis « dépassé ») et quand la consommation atteint 70 %, 85 % puis 95 % du budget. Aucun numéro de carte, CVV ou identifiant secret n'est demandé ni stocké. Réservé à l'administration.",
+      permissionModules: ["abonnements"],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
+      slug: "2026-10-veille-abonnements-liens-paiement",
+      version: "2026.10",
+      title: "Nouveauté — Veille des abonnements : le bouton « Accéder au paiement » mène à la bonne page",
+      body: "Sur l'écran « Veille des abonnements », le bouton « Accéder au paiement » de chaque service ouvre désormais directement la page officielle où vous réglez : l'API de corrections éditoriales → la console de facturation Anthropic ; Claude Code (développement) → votre compte Claude (claude.ai), là où le paiement passe sur votre carte ; Scalingo → votre tableau de bord Scalingo. Rappel : Éclospace ne paie jamais à votre place et n'enregistre aucune donnée bancaire — il vous emmène simplement sur le site du fournisseur, où vous payez comme d'habitude, puis vous notez le paiement pour l'historique. Vous pouvez à tout moment changer l'adresse d'un service dans « Gérer → Réglages → URL de facturation ».",
       permissionModules: ["abonnements"],
       departmentCodes: ["DG"],
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],

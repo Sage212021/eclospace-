@@ -2004,6 +2004,13 @@ model Manuscript {
   deletedAt DateTime? @map("deleted_at")
   deletedBy String?   @map("deleted_by")
 
+  // Fusion de fiches en double : la fiche SECONDAIRE n'est pas détruite — elle est
+  // mise en suppression logique et pointe vers la fiche PRINCIPALE (alias). Son
+  // ancien numéro reste consultable et résout vers le principal.
+  mergedIntoId String?      @map("merged_into_id")
+  mergedInto   Manuscript?  @relation("ManuscriptMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom   Manuscript[] @relation("ManuscriptMerge")
+
   workContributors     WorkContributor[]
   steps                ManuscriptStep[]
   stepTransitions      StepTransition[]
@@ -2035,6 +2042,27 @@ model Manuscript {
   correctionCycles     CorrectionCycle[]
 
   @@map("manuscripts")
+}
+
+// Journal des fusions de fiches ouvrages : trace QUI a fusionné QUOI, et le
+// DÉTAIL de ce qui a été déplacé (ids par table, conflits), pour la traçabilité
+// ET pour pouvoir ANNULER une fusion (remettre les lignes déplacées sur la fiche
+// secondaire, la réactiver). Append-only côté métier ; `undoneAt` marque l'annulation.
+model ManuscriptMerge {
+  id          String    @id @default(uuid())
+  keeperId    String    @map("keeper_id")
+  loserId     String    @map("loser_id")
+  // { moved: { Model: [ids…] }, skipped: { Model: [ids…] }, documents: [ids…],
+  //   counts: { Model: n }, conflicts: [{ model, reason }] }
+  details     Json
+  performedBy String    @map("performed_by")
+  performedAt DateTime  @default(now()) @map("performed_at")
+  undoneAt    DateTime? @map("undone_at")
+  undoneBy    String?   @map("undone_by")
+
+  @@index([keeperId])
+  @@index([loserId])
+  @@map("manuscript_merges")
 }
 
 // Demande adressée à la Finance depuis la fiche manuscrit (point 6 du chantier) :

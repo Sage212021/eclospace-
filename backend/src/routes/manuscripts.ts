@@ -13,6 +13,7 @@ import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
 import { findDuplicateManuscript, duplicateMessage, normalizeTitleForDuplicate, findTitleTwins } from "../lib/manuscriptDuplicate.js";
+import { mergeManuscripts, undoManuscriptMerge, MergeError } from "../lib/manuscriptMerge.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import type { DocumentCategory } from "@prisma/client";
 
@@ -1332,6 +1333,37 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
       return reply.send(twins.map((t) => ({ id: t.id, manuscript_number: t.manuscriptNumber, title: t.title, stage: t.statusLabel })));
     },
   );
+
+  // FUSION de deux fiches en double : `:id` = fiche PRINCIPALE (conservée),
+  // `loser_id` = fiche secondaire (réunie dans la principale, alias). Déplace
+  // toutes les données sans perte, signale les conflits, trace et reste
+  // annulable. Réservé à l'administration (opération structurante).
+  fastify.post("/api/v1/manuscripts/:id/merge", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = z.object({ loser_id: z.string().uuid() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "validation_error", message: "Fiche à fusionner invalide.", details: parsed.error.issues });
+    try {
+      const { mergeId, details } = await mergeManuscripts({ keeperId: id, loserId: parsed.data.loser_id, userId: request.user!.id });
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "manuscript", entityId: id, newValues: { merged_from: parsed.data.loser_id, merge_id: mergeId, counts: details.counts, conflicts: details.conflicts }, ipAddress: request.ip });
+      return reply.send({ merged: true, merge_id: mergeId, counts: details.counts, conflicts: details.conflicts });
+    } catch (e) {
+      if (e instanceof MergeError) return reply.code(409).send({ code: e.code, message: e.message });
+      throw e;
+    }
+  });
+
+  // Annuler une fusion (remet les données sur la fiche secondaire, la réactive).
+  fastify.post("/api/v1/manuscripts/merges/:mergeId/undo", { preHandler: requirePermission("manuscripts", "administration") }, async (request, reply) => {
+    const { mergeId } = request.params as { mergeId: string };
+    try {
+      const r = await undoManuscriptMerge(mergeId, request.user!.id);
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "manuscript", entityId: r.keeperId, newValues: { merge_undone: mergeId, restored: r.loserId }, ipAddress: request.ip });
+      return reply.send({ undone: true, ...r });
+    } catch (e) {
+      if (e instanceof MergeError) return reply.code(409).send({ code: e.code, message: e.message });
+      throw e;
+    }
+  });
 
   // --- Correction éditoriale en deux temps (cycle de 4 phases) ---------------
   // Rapport de correction → intégration → 2e relecture → intégration finale.

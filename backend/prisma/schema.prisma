@@ -6229,3 +6229,73 @@ model AuthorReceipt {
   @@index([paidAt])
   @@map("author_receipts")
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// VEILLE DES ABONNEMENTS & PAIEMENTS NUMÉRIQUES (module administrateur)
+// Surveille les échéances des services numériques indispensables (API IA,
+// Claude Code, Scalingo…) pour éviter toute interruption : statut, alertes,
+// historique de paiements. Aucun secret bancaire n'est stocké (montants,
+// dates, références, URLs uniquement). Réservé à l'administrateur.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum DigitalServiceKind {
+  subscription_monthly // abonnement mensuel / échéance fixe (Scalingo, Claude Code…)
+  usage_based          // forfait à consommation : budget + conso saisie (API IA)
+}
+
+enum DigitalPaymentStatus {
+  confirmed // paiement confirmé
+  pending   // en attente de confirmation
+}
+
+model DigitalService {
+  id            String             @id @default(uuid())
+  key           String             @unique // api_ia, claude_code, scalingo (+ libres)
+  name          String
+  description   String?
+  kind          DigitalServiceKind @default(subscription_monthly)
+  billingUrl    String?            @map("billing_url")   // « Accéder au paiement » (configurable)
+  billingLabel  String?            @map("billing_label")
+  currency      String             @default("FCFA")
+  nextDueDate   DateTime?          @map("next_due_date")
+  // Forfait à l'usage : budget mensuel + consommation renseignée MANUELLEMENT.
+  monthlyBudget Decimal?           @map("monthly_budget") @db.Decimal(14, 2)
+  currentUsage  Decimal?           @map("current_usage") @db.Decimal(14, 2)
+  usagePeriod   String?            @map("usage_period") // mois de la conso, ex. "2026-10"
+  active        Boolean            @default(true)
+  sortOrder     Int                @default(0) @map("sort_order")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  payments DigitalServicePayment[]
+
+  @@map("digital_services")
+}
+
+model DigitalServicePayment {
+  id                String               @id @default(uuid())
+  serviceId         String               @map("service_id")
+  service           DigitalService       @relation(fields: [serviceId], references: [id])
+  amount            Decimal              @db.Decimal(14, 2)
+  currency          String               @default("FCFA")
+  paidAt            DateTime             @map("paid_at")
+  reference         String?
+  method            String?
+  status            DigitalPaymentStatus @default(confirmed)
+  newDueDate        DateTime?            @map("new_due_date")       // échéance fixée par ce paiement
+  receiptDocumentId String?              @map("receipt_document_id") // facture / reçu joint
+  note              String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  @@index([serviceId])
+  @@map("digital_service_payments")
+}

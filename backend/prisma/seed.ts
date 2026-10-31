@@ -73,7 +73,7 @@ const lot5Modules = ["finance", "royalties"];
 const lot6Modules = ["rh", "rh_confidentiel", "direction", "pilotage", "rapports"];
 // Évolution : modules « Présences & Temps de travail » et « Paie » (D-007),
 // indépendants et désactivables.
-const evolutionModules = ["presences", "paie", "communication", "service_auteurs", "marketing", "paiements_auteurs"];
+const evolutionModules = ["presences", "paie", "communication", "service_auteurs", "marketing", "paiements_auteurs", "abonnements"];
 const modules = [...lot0Modules, ...lot1Modules, ...lot2Modules, ...lot3Modules, ...lot4Modules, ...lot5Modules, ...lot6Modules, ...evolutionModules];
 const actions = Object.values(PermissionAction);
 
@@ -1446,6 +1446,22 @@ async function main() {
   }
 
   // « Quoi de neuf » — notes de version. Le DÉVELOPPEUR ajoute ici une entrée à
+  // Services numériques à surveiller (module « Abonnements & paiements »), créés
+  // une fois (idempotent par `key`) : l'administrateur renseigne ensuite URLs,
+  // échéances et budgets. Aucun secret bancaire n'est stocké.
+  const digitalServices = [
+    { key: "api_ia", name: "API — Corrections éditoriales IA", description: "API d'IA pour les corrections éditoriales (BAT1, BAT2, assistance éditoriale).", kind: "usage_based" as const, billingLabel: "Accéder au paiement API", sortOrder: 10 },
+    { key: "claude_code", name: "Claude Code — Développement", description: "Développement et maintenance d'Eclospace.", kind: "subscription_monthly" as const, billingUrl: "https://console.anthropic.com/settings/billing", billingLabel: "Accéder à la facturation", sortOrder: 20 },
+    { key: "scalingo", name: "Scalingo — Hébergement", description: "Application en ligne et infrastructure cloud.", kind: "subscription_monthly" as const, billingUrl: "https://dashboard.scalingo.com", billingLabel: "Accéder à Scalingo", sortOrder: 30 },
+  ];
+  for (const s of digitalServices) {
+    await prisma.digitalService.upsert({
+      where: { key: s.key },
+      update: {}, // on NE réécrit pas les réglages saisis par l'admin
+      create: { key: s.key, name: s.name, description: s.description, kind: s.kind, billingUrl: ("billingUrl" in s ? s.billingUrl : null) ?? null, billingLabel: s.billingLabel, sortOrder: s.sortOrder, createdBy: adminUser.id, updatedBy: adminUser.id },
+    });
+  }
+
   // chaque mise à jour d'un pôle ; au déploiement suivant, les utilisateurs
   // concernés (par département/pôle, rôle, ou tous) reçoivent automatiquement un
   // message explicatif dans leur messagerie interne (la cloche). Idempotent :

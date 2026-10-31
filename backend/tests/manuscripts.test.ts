@@ -129,6 +129,30 @@ describe("secrétariat éditorial, comité de lecture, décision éditoriale (Lo
     expect(dup.json().message).toContain(first.json().manuscriptNumber);
   });
 
+  it("signale un doublon pré-existant sur la fiche (title-duplicates) et l'oublie après suppression", async () => {
+    // Le garde-fou bloque les NOUVEAUX doublons ; ceux déjà en base (données
+    // anciennes) sont signalés par la fiche. On simule ces anciennes données en
+    // écrivant directement en base (contourne la route gardée).
+    const status = await prisma.workflowStatus.findFirstOrThrow();
+    const base = `Les clés d'une retraite épanouie ${uniq()}`;
+    const mk = (num: string, title: string) =>
+      prisma.manuscript.create({ data: { manuscriptNumber: num, title, statusId: status.id, ownerId: adminId, origin: "soumission", language: "fr", receivedAt: new Date() } });
+    const a = await mk(`MS-DUP-${uniq()}`, base);
+    // Même titre normalisé : accents retirés + CASSE différente (comme LG-CAT vs MS).
+    const b = await mk(`LG-CAT-${uniq()}`, base.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase());
+
+    const res = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${a.id}/title-duplicates`, headers: { cookie: adminCookie } });
+    expect(res.statusCode).toBe(200);
+    const twins = res.json() as { id: string; manuscript_number: string; stage: string | null }[];
+    expect(twins.some((t) => t.id === b.id)).toBe(true); // le jumeau est signalé…
+    expect(twins.some((t) => t.id === a.id)).toBe(false); // …mais pas la fiche elle-même
+
+    // Suppression logique du jumeau → plus aucun doublon signalé.
+    await prisma.manuscript.update({ where: { id: b.id }, data: { deletedAt: new Date() } });
+    const res2 = await app.inject({ method: "GET", url: `/api/v1/manuscripts/${a.id}/title-duplicates`, headers: { cookie: adminCookie } });
+    expect((res2.json() as unknown[]).length).toBe(0);
+  });
+
   it("interdit de sauter une étape ou de valider hors séquence", async () => {
     const manuscript = await createManuscript("Manuscrit B");
 

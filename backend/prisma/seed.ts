@@ -3232,6 +3232,14 @@ async function main() {
       permissionModules: ["manuscripts", "tasks"],
       departmentCodes: ["DIRED", "CORR", "INFOG", "SECR", "DG"],
     },
+    {
+      slug: "2026-10-fiche-bandeau-doublon-titre",
+      version: "2026.10",
+      title: "Nouveauté — Doublon de titre signalé directement sur la fiche",
+      body: "Quand un ouvrage porte le MÊME titre qu'un autre (accents, casse et ponctuation ignorés), sa fiche affiche désormais, tout en haut, un bandeau d'alerte « Doublon possible » qui liste la ou les fiches jumelles (numéro + étape) avec un bouton « Ouvrir » pour aller vérifier. C'est un simple signalement : rien n'est bloqué ni supprimé. Pour nettoyer, gardez la fiche porteuse (celle qui a la correction et les pièces) et retirez le doublon via Manuscrits → « Doublons potentiels ». Rappel : la création d'un NOUVEAU doublon reste, elle, bloquée d'office ; ce bandeau sert à repérer les doublons déjà présents (données anciennes).",
+      permissionModules: ["manuscripts", "tasks"],
+      departmentCodes: ["DIRED", "SECR", "DG"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

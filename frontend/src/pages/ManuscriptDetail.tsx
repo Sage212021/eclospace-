@@ -84,6 +84,7 @@ import { FinanceRequestCard } from "../components/FinanceRequestCard";
 import { EditorialQuotesInbox } from "../components/EditorialQuotesInbox";
 import { AiReadingLauncher } from "../components/AiReadingLauncher";
 import { AiTrashSection } from "../components/AiTrashSection";
+import { DuplicateTitleBanner } from "../components/DuplicateTitleBanner";
 import { SitePublicationSection } from "../components/SitePublicationSection";
 import { ManuscriptStockSection } from "../components/ManuscriptStockSection";
 import { ProjectPlanSection } from "../components/ProjectPlanSection";
@@ -439,6 +440,8 @@ export function ManuscriptDetail({ manuscriptId, permissions, roles, originKey, 
           </button>
         )}
       </div>
+
+      <DuplicateTitleBanner manuscriptId={manuscript.id} onOpenManuscript={onOpenManuscript} />
 
       {manuscript.sealed && (
         <div style={{ background: "var(--eclosion-soft, #eef1f7)", border: "1px solid var(--ink, #0b0b0c)", color: "var(--ink, #0b0b0c)", borderRadius: 8, padding: "10px 14px", fontSize: 13, fontWeight: 600, marginBottom: 12 }}>

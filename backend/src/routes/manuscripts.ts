@@ -12,7 +12,7 @@ import { optionalStepMeta } from "../lib/stepRealization.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyUsers } from "../lib/notify.js";
 import { nextManuscriptNumber } from "../lib/manuscriptNumber.js";
-import { findDuplicateManuscript, duplicateMessage, normalizeTitleForDuplicate } from "../lib/manuscriptDuplicate.js";
+import { findDuplicateManuscript, duplicateMessage, normalizeTitleForDuplicate, findTitleTwins } from "../lib/manuscriptDuplicate.js";
 import { storeFile, readStoredFile } from "../lib/storage.js";
 import type { DocumentCategory } from "@prisma/client";
 
@@ -1317,6 +1317,21 @@ export default async function manuscriptRoutes(fastify: FastifyInstance) {
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "document", entityId: docId, newValues: { step_document_restored: true, title: doc.title }, ipAddress: request.ip });
     return reply.send({ restored: true });
   });
+
+  // Doublon possible sur CETTE fiche : autres ouvrages (non supprimés) au même
+  // titre normalisé. Sert au bandeau d'alerte de la fiche — signalement sans
+  // rien bloquer ni supprimer (le nettoyage se fait via « Doublons potentiels »).
+  fastify.get(
+    "/api/v1/manuscripts/:id/title-duplicates",
+    { preHandler: requireAnyPermission([{ module: "manuscripts", action: "consultation" }, { module: "tasks", action: "consultation" }]) },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const manuscript = await prisma.manuscript.findFirst({ where: { id, deletedAt: null }, select: { title: true } });
+      if (!manuscript) return reply.code(404).send({ code: "not_found", message: "Manuscrit introuvable." });
+      const twins = await findTitleTwins(id, manuscript.title);
+      return reply.send(twins.map((t) => ({ id: t.id, manuscript_number: t.manuscriptNumber, title: t.title, stage: t.statusLabel })));
+    },
+  );
 
   // --- Correction éditoriale en deux temps (cycle de 4 phases) ---------------
   // Rapport de correction → intégration → 2e relecture → intégration finale.

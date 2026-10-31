@@ -818,6 +818,22 @@ export function getDuplicateManuscripts() {
   return request<DuplicateGroup[]>("/api/v1/manuscripts/duplicates");
 }
 
+// Fusion de deux fiches : `keeperId` = fiche principale (conservée), `loserId` =
+// fiche secondaire (réunie dans la principale, alias). Renvoie les compteurs de
+// déplacement et les conflits conservés sur la secondaire.
+export interface MergeFichesResult {
+  merged: boolean;
+  merge_id: string;
+  counts: Record<string, number>;
+  conflicts: { model: string; reason: string }[];
+}
+export function mergeManuscriptFiches(keeperId: string, loserId: string) {
+  return request<MergeFichesResult>(`/api/v1/manuscripts/${keeperId}/merge`, { method: "POST", body: JSON.stringify({ loser_id: loserId }) });
+}
+export function undoManuscriptMerge(mergeId: string) {
+  return request<{ undone: boolean; loserId: string; keeperId: string }>(`/api/v1/manuscripts/merges/${mergeId}/undo`, { method: "POST" });
+}
+
 // Doublon possible sur une fiche précise : autres ouvrages au même titre.
 export interface TitleTwin {
   id: string;

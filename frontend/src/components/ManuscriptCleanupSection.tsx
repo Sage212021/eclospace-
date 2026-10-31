@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getCatalogueIncomplete, getPurgeCandidates, purgeManuscripts, getDuplicateManuscripts, deleteManuscript, type CatalogueIncompleteRow, type PurgeCandidateRow, type DuplicateGroup } from "../api/client";
+import { getCatalogueIncomplete, getPurgeCandidates, purgeManuscripts, getDuplicateManuscripts, deleteManuscript, mergeManuscriptFiches, undoManuscriptMerge, type CatalogueIncompleteRow, type PurgeCandidateRow, type DuplicateGroup } from "../api/client";
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { IconAdmin } from "./icons";
@@ -15,9 +15,54 @@ export function ManuscriptCleanupSection({ canAdminister, onOpenManuscript }: { 
   const [candidates, setCandidates] = useState<PurgeCandidateRow[] | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [duplicates, setDuplicates] = useState<DuplicateGroup[] | null>(null);
+  const [keeperSel, setKeeperSel] = useState<Record<number, string>>({});
+  const [lastMerge, setLastMerge] = useState<{ id: string; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  // Fiche principale par défaut : celle qui porte des données (contrat, ISBN,
+  // finances) si une seule en porte ; sinon la plus ancienne.
+  function defaultKeeper(g: DuplicateGroup): string {
+    const withData = g.manuscripts.filter((m) => !m.safe);
+    if (withData.length === 1) return withData[0].id;
+    return [...g.manuscripts].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0].id;
+  }
+
+  async function mergeGroup(gi: number, g: DuplicateGroup) {
+    const keeperId = keeperSel[gi] ?? defaultKeeper(g);
+    const keeper = g.manuscripts.find((m) => m.id === keeperId)!;
+    const losers = g.manuscripts.filter((m) => m.id !== keeperId);
+    if (!window.confirm(
+      `Fusionner ${losers.length} fiche(s) dans « ${keeper.manuscript_number} » ?\n\n` +
+      `Tout (étapes, ISBN, contrats, pièces jointes, finances…) est déplacé vers la fiche PRINCIPALE, sans perte. ` +
+      `Les fiches secondaires partent en corbeille avec un renvoi vers la principale. Opération réversible.\n\n` +
+      `⚠️ Vérifiez d'abord qu'il s'agit bien du MÊME ouvrage (auteurs, ISBN).`
+    )) return;
+    setBusy(true); setError(null); setMessage(null);
+    try {
+      let conflicts = 0; let lastId = "";
+      for (const l of losers) { const r = await mergeManuscriptFiches(keeperId, l.id); lastId = r.merge_id; conflicts += r.conflicts.length; }
+      setLastMerge(losers.length === 1 ? { id: lastId, label: keeper.manuscript_number } : null);
+      setMessage(`Fusion effectuée : ${losers.length} fiche(s) réunie(s) dans ${keeper.manuscript_number}.${conflicts ? ` ${conflicts} point(s) à vérifier (conservés sur la fiche secondaire).` : ""}`);
+      setDuplicates(await getDuplicateManuscripts());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fusion impossible.");
+    } finally { setBusy(false); }
+  }
+
+  async function undoLastMerge() {
+    if (!lastMerge) return;
+    setBusy(true); setError(null);
+    try {
+      await undoManuscriptMerge(lastMerge.id);
+      setMessage(`Dernière fusion annulée — la fiche secondaire a été réactivée (${lastMerge.label}).`);
+      setLastMerge(null);
+      setDuplicates(await getDuplicateManuscripts());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Annulation impossible.");
+    } finally { setBusy(false); }
+  }
 
   useEffect(() => {
     getCatalogueIncomplete().then(setIncomplete).catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."));
@@ -118,6 +163,7 @@ export function ManuscriptCleanupSection({ canAdminister, onOpenManuscript }: { 
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                       <thead>
                         <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
+                          <th style={{ padding: "5px 8px" }}>Principale</th>
                           <th style={{ padding: "5px 8px" }}>N°</th>
                           <th style={{ padding: "5px 8px" }}>Auteur</th>
                           <th style={{ padding: "5px 8px" }}>Étape</th>
@@ -129,6 +175,9 @@ export function ManuscriptCleanupSection({ canAdminister, onOpenManuscript }: { 
                       <tbody>
                         {g.manuscripts.map((m) => (
                           <tr key={m.id} style={{ borderTop: "1px solid var(--line)" }}>
+                            <td style={{ padding: "5px 8px", textAlign: "center" }}>
+                              <input type="radio" name={`keeper-${gi}`} disabled={busy} checked={(keeperSel[gi] ?? defaultKeeper(g)) === m.id} onChange={() => setKeeperSel((s) => ({ ...s, [gi]: m.id }))} title="Garder cette fiche comme principale" />
+                            </td>
                             <td style={{ padding: "5px 8px", fontFamily: "var(--font-mono)" }}>{m.manuscript_number}</td>
                             <td style={{ padding: "5px 8px" }}>{m.author ?? "—"}</td>
                             <td style={{ padding: "5px 8px", color: "var(--muted)" }}>{m.stage ?? "—"}</td>
@@ -149,10 +198,20 @@ export function ManuscriptCleanupSection({ canAdminister, onOpenManuscript }: { 
                       </tbody>
                     </table>
                   </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "center", padding: "8px 10px", borderTop: "1px solid var(--line)", background: "var(--card, #fff)" }}>
+                    <span style={{ fontSize: 11.5, color: "var(--muted)", marginRight: "auto" }}>Choisissez la fiche <strong>principale</strong> (à conserver), puis fusionnez-y les autres.</span>
+                    <Button variant="add" size="sm" type="button" disabled={busy} onClick={() => mergeGroup(gi, g)}>🔗 Fusionner dans la principale</Button>
+                  </div>
                 </div>
               ))}
+              {lastMerge && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, background: "var(--gold-soft, #f6efdc)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 12px" }}>
+                  <span>Dernière fusion sur <strong>{lastMerge.label}</strong>.</span>
+                  <Button variant="view" size="sm" type="button" disabled={busy} onClick={undoLastMerge}>↩︎ Annuler la fusion</Button>
+                </div>
+              )}
               <p style={{ fontSize: 11.5, color: "var(--muted)", margin: 0 }}>
-                « Retirer » = suppression logique (corbeille), réversible. Une fiche marquée <strong>🔒</strong> porte un contrat, un ISBN ou des données financières : ouvrez-la avant de décider — c'est en général celle à conserver.
+                <strong>Fusionner</strong> réunit tout (étapes, ISBN, contrats, pièces, finances) sur la fiche principale, sans perte ; la secondaire part en corbeille avec un renvoi (alias). <strong>Vérifiez d'abord qu'il s'agit du même ouvrage</strong> (auteurs, ISBN). « Retirer » = simple mise en corbeille d'une fiche. Une fiche marquée <strong>🔒</strong> porte un contrat, un ISBN ou des données financières : c'est en général celle à conserver comme principale.
               </p>
             </div>
           )}

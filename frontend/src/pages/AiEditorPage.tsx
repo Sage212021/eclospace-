@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
+import { downloadSageAnswerPdf } from "../lib/sageAnswerPdf";
 import {
   listManuscripts,
   listAiEditorConversations,
@@ -196,42 +197,15 @@ export function AiEditorPage() {
       bibliographie: "Contrôle bibliographique",
       typographie: "Contrôle typographique",
     };
-    const title = KIND_TITLE[m.kind] ?? "Note éditoriale";
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    const margin = 18;
-    const maxW = pageW - margin * 2;
-    let y = margin;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.text(title, margin, y);
-    y += 7;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-    doc.setTextColor(110);
-    doc.text(`Éditions Éclosion — Service éditorial · ${dossier.manuscript.title} (${dossier.manuscript.number})`, margin, y);
-    y += 4;
-    doc.text(new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }), margin, y);
-    y += 4;
-    doc.setDrawColor(217, 178, 26);
-    doc.setLineWidth(0.5);
-    doc.line(margin, y, pageW - margin, y);
-    y += 7;
-
-    doc.setTextColor(20);
-    doc.setFontSize(11);
-    const lines = doc.splitTextToSize(m.content, maxW) as string[];
-    const lineH = 5.4;
-    for (const line of lines) {
-      if (y + lineH > pageH - margin) { doc.addPage(); y = margin; }
-      doc.text(line, margin, y);
-      y += lineH;
-    }
-
+    // Même document soigné que « Échanger avec SAGE » (un seul SAGE) : en-tête
+    // Éclosion, mise en page markdown, signature du Service éditorial, sans
+    // aucune mention d'IA (règle d'or §9).
     const safe = dossier.manuscript.number.replace(/[^\w.-]+/g, "-");
-    doc.save(`note-editoriale-${safe}.pdf`);
+    void downloadSageAnswerPdf(m.content, {
+      title: KIND_TITLE[m.kind] ?? "Note éditoriale",
+      subtitle: `${dossier.manuscript.title} (${dossier.manuscript.number})`,
+      fileStem: `note-editoriale-${safe}`,
+    });
   }
 
   async function runCoherence() {

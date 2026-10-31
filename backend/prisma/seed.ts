@@ -3240,6 +3240,15 @@ async function main() {
       permissionModules: ["manuscripts", "tasks"],
       departmentCodes: ["DIRED", "SECR", "DG"],
     },
+    {
+      slug: "2026-10-sage-expert-360-et-dictee-vocale",
+      version: "2026.10",
+      title: "Nouveauté — SAGE répond à tout, et vous pouvez lui parler",
+      body: "Dans « Échanger avec SAGE » (espace du DG), SAGE devient un vrai éditeur-expert, pas seulement sur vos manuscrits : (1) IL CONNAÎT ECLOSPACE — posez-lui « c'est quoi ECLOSPACE / que fait-il » et il vous répond sur ses modules et ses atouts. (2) IL RÉPOND AUX QUESTIONS OUVERTES sur tout le monde du livre — édition numérique, livre audio, marché et tendances, droits, distribution, autoédition — en Afrique (Cameroun, CEMAC) comme à l'international, en expert qui tranche. Pour ce qui évolue, il ACTUALISE sa réponse par une recherche sur le web (sources crédibles, citées) sans jamais inventer de chiffre. (3) DICTÉE VOCALE : un bouton micro 🎤 à côté de 📎 — parlez au lieu de taper, votre message se transcrit en français dans la zone de saisie, vous relisez et vous envoyez. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

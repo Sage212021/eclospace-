@@ -6273,8 +6273,26 @@ model DigitalService {
   deletedBy String?   @map("deleted_by")
 
   payments DigitalServicePayment[]
+  alerts   DigitalServiceAlert[]
 
   @@map("digital_services")
+}
+
+// Alertes de veille déjà émises, pour ne JAMAIS envoyer deux fois la même
+// (anti-doublon). `dedupeKey` encode service + nature + seuil + cycle (échéance
+// concernée ou mois de consommation) : un nouveau cycle (paiement qui avance
+// l'échéance, nouveau mois) ré-ouvre les alertes.
+model DigitalServiceAlert {
+  id        String   @id @default(uuid())
+  serviceId String   @map("service_id")
+  service   DigitalService @relation(fields: [serviceId], references: [id])
+  kind      String   // "deadline" | "usage"
+  threshold String   // "J-15" | "J-7" | "J-3" | "J-1" | "overdue" | "70" | "85" | "95"
+  dedupeKey String   @unique @map("dedupe_key")
+  sentAt    DateTime @default(now()) @map("sent_at")
+
+  @@index([serviceId])
+  @@map("digital_service_alerts")
 }
 
 model DigitalServicePayment {

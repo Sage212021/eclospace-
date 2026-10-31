@@ -3276,6 +3276,14 @@ async function main() {
       departmentCodes: ["DG"],
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
+    {
+      slug: "2026-10-doublons-fusionner-fiches",
+      version: "2026.10",
+      title: "Nouveauté — Fusionner deux fiches d'un même ouvrage (sans perte)",
+      body: "Dans Manuscrits → « Doublons potentiels », vous pouvez maintenant FUSIONNER les fiches d'un même ouvrage, au lieu d'en retirer une (ce qui risquait de perdre des informations). Choisissez la fiche PRINCIPALE (à conserver), puis « 🔗 Fusionner dans la principale » : tout est déplacé vers elle sans perte — étapes et historique, ISBN, contrats, pièces jointes, stock (via l'ISBN), finances, droits. La fiche secondaire part en corbeille avec un renvoi (alias) vers la principale ; une recherche par son ancien numéro ramènera désormais à la bonne fiche. Les éléments en conflit (ex. deux métadonnées) ne sont jamais écrasés : ils sont signalés. L'opération est tracée et RÉVERSIBLE (« ↩︎ Annuler la fusion »). Important : vérifiez d'abord qu'il s'agit bien du même ouvrage (auteurs, ISBN) — rien n'est fusionné automatiquement. Réservé à l'administration.",
+      permissionModules: ["manuscripts"],
+      departmentCodes: ["DG", "DIRED"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

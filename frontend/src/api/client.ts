@@ -953,6 +953,7 @@ export interface Vc1SlotState {
   key: string;
   label: string;
   has_file: boolean;
+  from_dossier?: boolean; // true = repli sur la matière déjà au dossier (lecture seule)
   doc_id?: string | null;
   can_correct?: boolean;
   version_id: string | null;

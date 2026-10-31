@@ -57,11 +57,18 @@ export function StartingProofPanel({ manuscriptId, canManage }: { manuscriptId: 
             <div style={{ flex: 1, minWidth: 200 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>{s.label}</div>
               {s.has_file ? (
-                <a href={stepAttachmentDownloadUrl(manuscriptId, s.version_id!)} download style={{ fontSize: 12, color: "var(--eclosion-dark)", fontWeight: 600 }}>
-                  ⬇️ {s.filename ?? "Télécharger le fichier"}
-                </a>
+                <>
+                  <a href={stepAttachmentDownloadUrl(manuscriptId, s.version_id!)} download style={{ fontSize: 12, color: "var(--eclosion-dark)", fontWeight: 600 }}>
+                    ⬇️ {s.filename ?? "Télécharger le fichier"}
+                  </a>
+                  {s.from_dossier && (
+                    <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>
+                      Du dossier (déjà déposé pour l'ouvrage) — aucun VC1 distinct n'a été déposé. Déposez-en un ci-contre pour le remplacer.
+                    </div>
+                  )}
+                </>
               ) : (
-                <span style={{ fontSize: 12, color: "var(--muted)" }}>Non déposé</span>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>Non déposé (facultatif)</span>
               )}
             </div>
             <span aria-hidden style={{ fontSize: 16 }}>{s.has_file ? "✅" : "—"}</span>

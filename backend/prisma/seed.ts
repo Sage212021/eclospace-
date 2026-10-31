@@ -3258,6 +3258,15 @@ async function main() {
       departmentCodes: ["DG"],
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
+    {
+      slug: "2026-10-sage-reponse-telechargeable-pdf",
+      version: "2026.10",
+      title: "Nouveauté — Télécharger une réponse de SAGE en PDF",
+      body: "Sous chaque réponse de SAGE (« Échanger avec SAGE »), un nouveau bouton « ⬇️ Télécharger en PDF » produit un document propre à l'en-tête des Éditions Éclosion : logo, coordonnées, titre, date, mise en page soignée (titres, listes, paragraphes), et signature « Le Service éditorial — Éditions Éclosion ». Le document se lit comme un travail livré de main d'homme : aucune mention d'outil n'y figure. Pratique pour archiver, imprimer ou transmettre une note. SAGE est par ailleurs réglé pour dialoguer comme un éditeur humain, réel. Réservé, comme SAGE, à la Direction générale et à l'administrateur.",
+      permissionModules: [],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
   ];
   for (const n of releaseNotes) {
     await prisma.releaseNote.upsert({

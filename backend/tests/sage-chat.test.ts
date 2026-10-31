@@ -366,16 +366,19 @@ describe("Échanger avec SAGE — espace de dialogue privé du DG (Lot 1)", () =
   });
 
   // ── Recherche web (accès Internet réel, section 16) ──
-  it("SAGE peut rechercher sur le Web et cite ses sources (traçabilité)", async () => {
+  it("SAGE peut rechercher sur le Web mais NE colle PAS de liste d'URLs en pied (citation naturelle)", async () => {
     webRef = true;
     const conv = await app.inject({ method: "POST", url: "/api/v1/sage/conversations", headers: { cookie: dgCookie }, payload: {} });
     const msg = await app.inject({ method: "POST", url: `/api/v1/sage/conversations/${conv.json().id}/messages`, headers: { cookie: dgCookie }, payload: { content: "Quelles sont les tendances du marché du livre ?" } });
     const assistant = await waitMessage(msg.json().assistant_message_id);
     webRef = false;
     expect(assistant.status).toBe("done");
-    // La réponse cite la source consultée (titre + lien) → traçabilité.
-    expect(assistant.content).toContain("Sources consultées sur le Web");
-    expect(assistant.content).toContain("https://exemple.org/etude");
+    // La réponse est le texte de SAGE lui-même (qui cite dans le fil), PAS une
+    // rubrique « Sources consultées sur le Web » ni une URL brute recollée par le
+    // système (demande opérateur 31/10 : citer comme un éditeur, pas un moteur).
+    expect(assistant.content).toContain("D'après une source consultée");
+    expect(assistant.content).not.toContain("Sources consultées sur le Web");
+    expect(assistant.content).not.toContain("https://exemple.org/etude");
   });
 
   it("dégradation gracieuse : si le modèle ne supporte pas la recherche web, SAGE répond quand même", async () => {

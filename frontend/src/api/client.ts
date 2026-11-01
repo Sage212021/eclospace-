@@ -842,6 +842,9 @@ export interface DigitalService {
   next_due_date: string | null; monthly_budget: number | null; current_usage: number | null; usage_period: string | null;
   active: boolean; sort_order: number;
   status: "a_jour" | "a_surveiller" | "en_retard"; days_to_due: number | null; usage_pct: number | null;
+  // Lecture automatique de la consommation (ex. "anthropic_cost") : source,
+  // dernière synchro, dernière erreur, et si la clé est configurée côté hébergeur.
+  usage_auto_source: string | null; usage_synced_at: string | null; usage_sync_error: string | null; auto_usage_configured: boolean | null;
 }
 export interface DigitalServicesResponse { services: DigitalService[]; summary: { total: number; to_watch: number; late: number } }
 export interface DigitalServicePayment {
@@ -854,6 +857,7 @@ export function updateDigitalService(id: string, body: Record<string, unknown>) 
 export function deleteDigitalService(id: string) { return request<{ removed: boolean }>(`/api/v1/digital-services/${id}`, { method: "DELETE" }); }
 export function getDigitalServicePayments(id: string) { return request<DigitalServicePayment[]>(`/api/v1/digital-services/${id}/payments`); }
 export function addDigitalServicePayment(id: string, body: Record<string, unknown>) { return request<{ id: string; status: string }>(`/api/v1/digital-services/${id}/payments`, { method: "POST", body: JSON.stringify(body) }); }
+export function syncDigitalServiceUsage(id: string) { return request<DigitalService>(`/api/v1/digital-services/${id}/sync-usage`, { method: "POST" }); }
 
 // Doublon possible sur une fiche précise : autres ouvrages au même titre.
 export interface TitleTwin {

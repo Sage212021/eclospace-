@@ -6262,6 +6262,13 @@ model DigitalService {
   monthlyBudget Decimal?           @map("monthly_budget") @db.Decimal(14, 2)
   currentUsage  Decimal?           @map("current_usage") @db.Decimal(14, 2)
   usagePeriod   String?            @map("usage_period") // mois de la conso, ex. "2026-10"
+  // Lecture AUTOMATIQUE de la consommation (option opérateur) : source
+  // ("anthropic_cost" = API Anthropic), horodatage de la dernière synchro réussie
+  // et dernière erreur de synchro (pour l'affichage admin). La CLÉ secrète n'est
+  // JAMAIS stockée ici : elle vit dans le coffre à secrets de l'hébergeur.
+  usageAutoSource String?          @map("usage_auto_source")
+  usageSyncedAt   DateTime?        @map("usage_synced_at")
+  usageSyncError  String?          @map("usage_sync_error")
   active        Boolean            @default(true)
   sortOrder     Int                @default(0) @map("sort_order")
 

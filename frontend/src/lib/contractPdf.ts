@@ -363,6 +363,29 @@ export function buildContractPdfFromHtml(html: string, publisher?: Partial<Publi
   return doc.output("blob");
 }
 
+// Télécharge le PDF du contrat (tous modèles) À PARTIR DU MÊME contenu que
+// l'aperçu ET le transfert : source UNIQUE de génération. Garantit une fidélité
+// 100 % entre la fiche/aperçu, le document généré et la version transférée —
+// plus aucune donnée (frais éditoriaux, prix, date de publication…) ne disparaît
+// selon le bouton utilisé. Remplace l'ancien PDF « natif » réservé au compte
+// d'éditeur (`downloadAuthorContractPdf`), qui mettait des pointillés à la place
+// de valeurs pourtant renseignées.
+export async function downloadContractPdf(
+  c: ContractDetail,
+  kind: "edition" | "auteur" | "demi" | "service",
+  publisher?: Partial<PublisherLegal> | null,
+  branding?: Branding | null,
+  templates?: Record<number, string>,
+): Promise<void> {
+  const blob = await buildTransferContractPdf(c, kind, publisher, branding, templates);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Contrat-${c.contractNumber}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // Prépare le PDF du contrat À TRANSFÉRER, fidèle au MODÈLE (édition / compte
 // d'auteur / compte à demi / prestation) — même contenu que l'aperçu.
 export async function buildTransferContractPdf(

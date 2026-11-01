@@ -1506,6 +1506,8 @@ export function buildAuthorAccountContractHtml(c: ContractDetail, publisher?: Pa
   const distrib = num("distribution_pct") || 25;
   const duree = num("duration_years") || 5;
   const territoire = esc(typeof ft.territory === "string" ? (ft.territory as string) : null) ?? "Cameroun";
+  // Date limite de publication (article 3) : saisie dans la fiche, injectée ici.
+  const datePub = esc(typeof ft.publication_date === "string" ? (ft.publication_date as string) : null) ?? "";
   const ctx: Record<string, string> = {
     numero: c.contractNumber,
     titre: (c.manuscript?.title ?? "").trim(),
@@ -1522,6 +1524,7 @@ export function buildAuthorAccountContractHtml(c: ContractDetail, publisher?: Pa
     pct_total: String(logo + distrib),
     duree: String(duree),
     territoire,
+    date_publication: datePub,
   };
 
   const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
@@ -1571,7 +1574,7 @@ export function buildAuthorAccountContractHtml(c: ContractDetail, publisher?: Pa
       ${par(`Après fabrication, l'Éditeur remet tous les exemplaires à l'Auteur en vue de la répartition actée par procès-verbal signé des deux parties. Le premier tirage de <b>${copies > 0 ? copies : BL(4)}</b> exemplaires est arrêté à <b>${moneyPlain(printTotal)}</b>${unit > 0 ? ` (soit ${moneyPlain(unit)} l'unité)` : ""}. Quelques exemplaires, exempts des droits de l'Auteur et de la rémunération de l'Éditeur, sont réservés :`)}
       ${li(["05 exemplaires destinés au dépôt légal ;", "03 exemplaires destinés au service de presse, à la promotion et à la publicité ;", "02 exemplaires destinés aux justificatifs."])}
       ${par("<b>2/ Épreuves et bon à tirer.</b> L'Éditeur envoie les épreuves à l'Auteur, qui les lit, corrige et retourne sous trois (03) semaines, revêtues de son « bon à tirer ». À défaut, l'Éditeur peut confier les fichiers à un correcteur de son choix (moyennant contribution de l'Auteur) ou résilier le contrat.")}
-      ${par(`<b>3/ Publication.</b> L'Éditeur s'engage à publier l'œuvre dès remise des frais afférents par l'Auteur, au plus tard un mois après la remise des éléments. Si l'ouvrage n'est pas publié dans les six (06) mois suivant la remise des éléments et des frais, le contrat est résilié aux torts exclusifs de l'Éditeur, après mise en demeure restée sans effet pendant un (01) mois.`)}
+      ${par(`<b>3/ Publication.</b> L'Éditeur s'engage à publier l'œuvre dès remise des frais afférents par l'Auteur${datePub ? `, et au plus tard le <b>${datePub}</b>` : ", au plus tard un mois après la remise des éléments"}. Si l'ouvrage n'est pas publié dans les six (06) mois suivant la remise des éléments et des frais, le contrat est résilié aux torts exclusifs de l'Éditeur, après mise en demeure restée sans effet pendant un (01) mois.`)}
       ${par("<b>4/ Marketing, communication et vente.</b> L'Éditeur accompagne l'Auteur dans la diffusion et le suivi de l'œuvre auprès du public, par les moyens et canaux de marketing et de communication.")}`)}
 
     ${art(4, "PRÉROGATIVES DE L'ÉDITEUR", `
@@ -1646,6 +1649,7 @@ export function buildDemiContractHtml(c: ContractDetail, publisher?: Partial<Pub
   const duree = num("duration_years") || 5;
   const territoire = esc(typeof ft.territory === "string" ? (ft.territory as string) : null) ?? "Cameroun";
   const periodicite = esc(typeof ft.statement_periodicity === "string" ? (ft.statement_periodicity as string) : null) ?? "semestrielle";
+  const datePub = esc(typeof ft.publication_date === "string" ? (ft.publication_date as string) : null) ?? "";
   const montantPartAuteur = coutTotal > 0 ? Math.round((coutTotal * partAuteur) / 100) : 0;
   const ctx: Record<string, string> = {
     numero: c.contractNumber,
@@ -1664,6 +1668,7 @@ export function buildDemiContractHtml(c: ContractDetail, publisher?: Partial<Pub
     periodicite,
     duree: String(duree),
     territoire,
+    date_publication: datePub,
   };
 
   const par = (t: string) => `<p style="margin:6px 0;text-align:justify;font-size:12px;line-height:1.55">${t}</p>`;
@@ -1707,7 +1712,7 @@ export function buildDemiContractHtml(c: ContractDetail, publisher?: Partial<Pub
       ${par(`<b>3/ Participation aux frais.</b> Au titre du compte à demi, l'Auteur prend en charge <b>${partAuteur} %</b> des frais d'édition et de fabrication, soit <b>${moneyPlain(montantPartAuteur)}</b> sur un coût total de ${moneyPlain(coutTotal)} (cf. article 4).`)}`)}
 
     ${art(3, "OBLIGATIONS DE L'ÉDITEUR", `
-      ${par(`<b>1/ Fabrication et publication.</b> L'Éditeur assure la fabrication et publie l'œuvre dans un délai raisonnable après remise des éléments et versement de la quote-part de l'Auteur ; à défaut de publication dans les six (06) mois, le contrat peut être résilié aux torts de l'Éditeur après mise en demeure restée sans effet pendant un (01) mois.`)}
+      ${par(`<b>1/ Fabrication et publication.</b> L'Éditeur assure la fabrication et publie l'œuvre ${datePub ? `au plus tard le <b>${datePub}</b>` : "dans un délai raisonnable"} après remise des éléments et versement de la quote-part de l'Auteur ; à défaut de publication dans les six (06) mois, le contrat peut être résilié aux torts de l'Éditeur après mise en demeure restée sans effet pendant un (01) mois.`)}
       ${par(`<b>2/ Prise en charge.</b> L'Éditeur prend en charge <b>${partEditeur} %</b> des frais d'édition et de fabrication.`)}
       ${par("<b>3/ Diffusion et reddition.</b> L'Éditeur assure une exploitation permanente et suivie (diffusion, disponibilité, promotion) et rend compte à l'Auteur des ventes et des recettes de façon claire et transparente, selon la périodicité convenue à l'article 5.")}`)}
 

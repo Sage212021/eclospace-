@@ -3325,6 +3325,14 @@ async function main() {
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
     {
+      slug: "2026-11-contrat-date-publication-et-fidelite-transfert",
+      version: "2026.11",
+      title: "Nouveauté — Contrats : date limite de publication (article 3) + fidélité parfaite au transfert",
+      body: "Deux améliorations sur les contrats. (1) Un champ « Date limite de publication (article 3) » a été ajouté dans la fiche de modification (et de création) des contrats à compte d'auteur et à compte à demi : la date que vous saisissez s'écrit automatiquement dans l'article 3 du contrat, dans l'aperçu ET dans le document généré — plus besoin de retoucher le texte à la main. (2) Le document TRANSFÉRÉ à un collègue (messagerie / WhatsApp) et le PDF téléchargé sont désormais produits à partir de la MÊME source que l'aperçu : la fiche, l'aperçu, le document et la version transférée sont identiques à 100 %. Fini les informations qui disparaissaient selon le bouton utilisé (frais éditoriaux, prix de vente…). Le bouton « Télécharger le PDF (net) » est maintenant disponible pour tous les types de contrats.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DG", "DIRED"],
+    },
+    {
       slug: "2026-10-veille-abonnements-liens-paiement",
       version: "2026.10",
       title: "Nouveauté — Veille des abonnements : le bouton « Accéder au paiement » mène à la bonne page",

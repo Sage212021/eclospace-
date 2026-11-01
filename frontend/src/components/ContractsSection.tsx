@@ -40,7 +40,7 @@ import {
 import { printContract, printAuthorContract, buildAuthorContractHtml, AUTHOR_CONTRACT_ARTICLES, printServiceContract, buildServiceContractHtml, SERVICE_CONTRACT_ARTICLES, printAuthorAccountContract, buildAuthorAccountContractHtml, AUTHOR_ACCOUNT_CONTRACT_ARTICLES, printDemiContract, buildDemiContractHtml, DEMI_CONTRACT_ARTICLES } from "../lib/print";
 import { pasteTidied } from "../lib/tidyProse";
 import { getBranding } from "../api/client";
-import { downloadAuthorContractPdf, buildTransferContractPdf } from "../lib/contractPdf";
+import { downloadContractPdf, buildTransferContractPdf } from "../lib/contractPdf";
 import { Modal, Field } from "./Modal";
 import { Button } from "./Button";
 import { DocPrintMenu } from "./DocPrintMenu";
@@ -243,12 +243,17 @@ export function ContractsSection({ manuscriptId, defaultPartnerId, canCreate, ca
             <DocPrintMenu label="Fiche (résumé)" onPrint={(o) => getContract(contract.id).then((c) => printContract(c, o)).catch((e) => setError(e.message))} />
             <DocPrintMenu
               label={contractKind(contract) === "auteur" ? "Contrat (compte d'auteur)" : contractKind(contract) === "demi" ? "Contrat (compte à demi)" : contractKind(contract) === "service" ? "Contrat (prestation)" : "Contrat d'édition"}
-              // PDF vectoriel « net » : disponible pour le contrat d'édition
-              // (modèle jsPDF). Les contrats prestation / compte d'auteur passent
-              // par l'impression (bouton « Enregistrer en PDF » de la fenêtre).
-              onDownloadPdf={contractKind(contract) !== "edition" ? undefined : () =>
+              // PDF « net » pour TOUS les modèles, via la MÊME source que l'aperçu
+              // et le transfert (fidélité 100 %, plus de données perdues selon le
+              // bouton). Le modèle (auteur / demi / prestation / édition) est choisi
+              // automatiquement.
+              onDownloadPdf={() =>
                 Promise.all([getContract(contract.id), getPublisherIdentity().catch(() => null), getBranding().catch(() => null)])
-                  .then(([c, pub, brand]) => downloadAuthorContractPdf(c, pub, brand, templates.edition))
+                  .then(([c, pub, brand]) => {
+                    const kind = contractKind(c);
+                    const tpl = kind === "auteur" ? templates.auteur : kind === "demi" ? templates.demi : kind === "service" ? templates.service : templates.edition;
+                    return downloadContractPdf(c, kind, pub, brand, tpl);
+                  })
                   .catch((e) => setError(e.message))
               }
               onPrint={(o) =>
@@ -1023,9 +1028,9 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
         ...(royaltiesApply
           ? { rate: rate / 100, advance_amount: advance, duration_months: durationYears > 0 ? durationYears * 12 : null, print_run: printRun, public_price_ht: publicPriceHt, publication_date: publicationDate.trim() }
           : authorAccount
-            ? { editorial_fees: editorialFees, print_copies: printCopies, print_unit_cost: printUnitCost, sale_price_min: salePriceMin, logo_pct: logoPct, distribution_pct: distributionPct, duration_years: aaDurationYears, territory: territory.trim() || "Cameroun" }
+            ? { editorial_fees: editorialFees, print_copies: printCopies, print_unit_cost: printUnitCost, sale_price_min: salePriceMin, logo_pct: logoPct, distribution_pct: distributionPct, duration_years: aaDurationYears, territory: territory.trim() || "Cameroun", publication_date: publicationDate.trim() }
             : demiAccount
-              ? { total_cost: totalCost, author_cost_share_pct: authorCostSharePct, author_revenue_share_pct: authorRevenueSharePct, print_copies: printCopies, sale_price: salePrice, statement_periodicity: demiPeriodicity, duration_years: aaDurationYears, territory: territory.trim() || "Cameroun" }
+              ? { total_cost: totalCost, author_cost_share_pct: authorCostSharePct, author_revenue_share_pct: authorRevenueSharePct, print_copies: printCopies, sale_price: salePrice, statement_periodicity: demiPeriodicity, duration_years: aaDurationYears, territory: territory.trim() || "Cameroun", publication_date: publicationDate.trim() }
               : { service_cost: serviceCost, service_deposit: serviceDeposit, service_delivery: serviceDelivery.trim() }),
       });
       onSaved();
@@ -1058,7 +1063,7 @@ function EditContractModal({ contract, onClose, onSaved, onError }: { contract: 
               {royaltiesApply && <label style={{ fontSize: 12 }}>Durée de la cession (années)<input type="number" min={0} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={inputStyle} /></label>}
               {royaltiesApply && <label style={{ fontSize: 12 }}>Tirage (nb exemplaires)<input type="number" min={0} value={printRun} onChange={(e) => setPrintRun(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
               {royaltiesApply && <label style={{ fontSize: 12 }}>Prix public HT (FCFA)<input type="number" min={0} value={publicPriceHt} onChange={(e) => setPublicPriceHt(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
-              {royaltiesApply && <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Date de publication prévue<input type="text" value={publicationDate} onChange={(e) => setPublicationDate(e.target.value)} placeholder="ex. 30/06/2026" style={inputStyle} /></label>}
+              {(royaltiesApply || authorAccount || demiAccount) && <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Date limite de publication (article 3)<input type="text" value={publicationDate} onChange={(e) => setPublicationDate(e.target.value)} placeholder="ex. 30/06/2026" style={inputStyle} /></label>}
               {/* Contrat à compte d'auteur (modèle BIKORO), corrigeable ici. */}
               {authorAccount && <label style={{ fontSize: 12 }}>Frais éditoriaux (FCFA)<input type="number" min={0} value={editorialFees} onChange={(e) => setEditorialFees(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
               {authorAccount && <label style={{ fontSize: 12 }}>Nb exemplaires (1er tirage)<input type="number" min={0} value={printCopies} onChange={(e) => setPrintCopies(Math.max(0, Number(e.target.value) || 0))} style={inputStyle} /></label>}
@@ -1244,7 +1249,7 @@ function ArticleModal({ contract, templates, onClose, onSaved, onError }: { cont
   // Imprimer / Télécharger le PDF à partir de la copie de travail (WYSIWYG).
   const printWorking = () => { if (!workingDetail) return; if (kind === "auteur") printAuthorAccountContract(workingDetail, {}, pub, sign, tplMap); else if (kind === "demi") printDemiContract(workingDetail, {}, pub, sign, tplMap); else if (kind === "service") printServiceContract(workingDetail, {}, pub, sign, tplMap); else printAuthorContract(workingDetail, {}, pub, sign, tplMap); };
   // PDF vectoriel « net » : seulement pour le contrat d'édition (modèle jsPDF).
-  const pdfWorking = () => { if (workingDetail) downloadAuthorContractPdf(workingDetail, pub, brand, tplMap).catch((e) => onError(e instanceof Error ? e.message : "PDF impossible.")); };
+  const pdfWorking = () => { if (workingDetail) downloadContractPdf(workingDetail, kind, pub, brand, tplMap).catch((e) => onError(e instanceof Error ? e.message : "PDF impossible.")); };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(11,11,12,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
@@ -1321,7 +1326,7 @@ function ArticleModal({ contract, templates, onClose, onSaved, onError }: { cont
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
           <button onClick={printWorking} style={secondaryButtonStyle}>🖨 Imprimer / PDF</button>
-          {kind === "edition" && <button onClick={pdfWorking} style={{ ...secondaryButtonStyle, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)" }}>📄 Télécharger le PDF (net)</button>}
+          <button onClick={pdfWorking} style={{ ...secondaryButtonStyle, fontWeight: 700, color: "var(--eclosion-dark, #9a7a12)" }}>📄 Télécharger le PDF (net)</button>
           <button onClick={onClose} disabled={busy} style={secondaryButtonStyle}>Fermer</button>
         </div>
       </div>
@@ -1762,6 +1767,7 @@ function NewContractForm({
               distribution_pct: distributionPct,
               duration_years: aaDurationYears,
               territory: territory.trim() || "Cameroun",
+              ...(publicationDate.trim() ? { publication_date: publicationDate.trim() } : {}),
             }
           : demiAccount
           ? {
@@ -1774,6 +1780,7 @@ function NewContractForm({
               statement_periodicity: demiPeriodicity,
               duration_years: aaDurationYears,
               territory: territory.trim() || "Cameroun",
+              ...(publicationDate.trim() ? { publication_date: publicationDate.trim() } : {}),
             }
           : {
               // Contrat de prestation : coût, acompte, livraison (aucun palier).
@@ -1987,6 +1994,9 @@ function NewContractForm({
               <label style={{ fontSize: 12 }}>Territoire
                 <input type="text" value={territory} onChange={(e) => setTerritory(e.target.value)} style={inputStyle} />
               </label>
+              <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Date limite de publication (article 3)
+                <input type="text" value={publicationDate} onChange={(e) => setPublicationDate(e.target.value)} placeholder="ex. 30/06/2026" style={inputStyle} />
+              </label>
             </div>
             <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Coût du 1er tirage = {printCopies > 0 && printUnitCost > 0 ? (printCopies * printUnitCost).toLocaleString("fr-FR") + " FCFA" : "nb exemplaires × coût unitaire"}. Exemplaires exempts repris au contrat : 5 dépôt légal, 3 presse, 2 justificatifs.</div>
           </>
@@ -2023,6 +2033,9 @@ function NewContractForm({
               </label>
               <label style={{ fontSize: 12 }}>Territoire
                 <input type="text" value={territory} onChange={(e) => setTerritory(e.target.value)} style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 12, gridColumn: "1 / span 2" }}>Date limite de publication (article 3)
+                <input type="text" value={publicationDate} onChange={(e) => setPublicationDate(e.target.value)} placeholder="ex. 30/06/2026" style={inputStyle} />
               </label>
             </div>
             <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Frais : auteur {authorCostSharePct} % / éditeur {Math.max(0, 100 - authorCostSharePct)} %. Recettes : auteur {authorRevenueSharePct} % / éditeur {Math.max(0, 100 - authorRevenueSharePct)} %.</div>

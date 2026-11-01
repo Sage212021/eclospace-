@@ -3336,6 +3336,14 @@ async function main() {
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
     {
+      slug: "2026-11-contrat-pdf-transfert-propre-et-journal-accordeon",
+      version: "2026.11",
+      title: "Nouveauté — Contrats : le PDF transféré est enfin identique à l'aperçu",
+      body: "Correction d'un défaut d'affichage sur le contrat envoyé en PDF (messagerie / WhatsApp) : un paragraphe — celui des frais éditoriaux — s'affichait cassé, lettre par lettre, et « 100 000 » devenait « 100/000 ». En cause : un caractère d'espacement spécial que le format PDF ne savait pas lire. C'est corrigé : le texte est propre et JUSTIFIÉ comme à l'écran, donc le document transféré correspond à l'aperçu. Par ailleurs, le « Journal d'envoi » (l'historique des transmissions du contrat) se replie désormais en accordéon pour alléger la fiche ; cliquez dessus pour le dérouler.",
+      permissionModules: ["contracts"],
+      departmentCodes: ["DG", "DIRED"],
+    },
+    {
       slug: "2026-11-abonnements-lecture-auto-consommation-api",
       version: "2026.11",
       title: "Nouveauté — Veille des abonnements : la consommation de l'API se lit toute seule",

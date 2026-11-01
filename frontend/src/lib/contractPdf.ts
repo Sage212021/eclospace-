@@ -299,14 +299,26 @@ export function buildContractPdfFromHtml(html: string, publisher?: Partial<Publi
   const bottom = 272; // laisse la place au pied de page
   let y = houseHeader();
   const ensure = (h: number) => { if (y + h > bottom) { footer(); doc.addPage(); y = houseHeader(); } };
-  const text = (s: string, opts?: { size?: number; bold?: boolean; gap?: number }) => {
+  // IMPORTANT : jsPDF (police standard) ne connaît pas les espaces Unicode spéciales
+  // — notamment l'espace fine insécable (U+202F) que le français met dans « 100 000 »
+  // via toLocaleString. Un seul de ces caractères casse TOUT le paragraphe (rendu
+  // lettre par lettre). On les ramène donc à une espace normale avant le tracé.
+  const NBSP_RE = /[    ⁠  ]/g;
+  const text = (s: string, opts?: { size?: number; bold?: boolean; gap?: number; justify?: boolean }) => {
     const size = opts?.size ?? 9.5;
     doc.setFont("helvetica", opts?.bold ? "bold" : "normal");
     doc.setFontSize(size);
     doc.setTextColor(0);
-    for (const chunk of s.split("\n")) {
+    for (const chunk of s.replace(NBSP_RE, " ").split("\n")) {
       const lines = doc.splitTextToSize(chunk, W) as string[];
-      for (const line of lines) { ensure(size * 0.42 + 1.4); doc.text(line, L, y); y += size * 0.42 + 1.4; }
+      lines.forEach((line, i) => {
+        ensure(size * 0.42 + 1.4);
+        // Texte JUSTIFIÉ comme l'aperçu HTML (toutes les lignes sauf la dernière
+        // de chaque ligne logique, pour ne pas étirer la fin d'un paragraphe).
+        if (opts?.justify && i < lines.length - 1 && line.trim()) doc.text(line, L, y, { align: "justify", maxWidth: W });
+        else doc.text(line, L, y);
+        y += size * 0.42 + 1.4;
+      });
     }
     y += opts?.gap ?? 1.6;
   };
@@ -350,13 +362,13 @@ export function buildContractPdfFromHtml(html: string, publisher?: Partial<Publi
       for (const child of Array.from(el.children)) {
         if (child.tagName === "H3") continue;
         if (child.tagName === "UL") { for (const liEl of Array.from(child.querySelectorAll("li"))) text("• " + blockText(liEl)); }
-        else text(blockText(child));
+        else text(blockText(child), { justify: true });
       }
       continue;
     }
     if (el.querySelector && el.querySelector(".party__label")) { renderSignatures(); continue; }
     const t = blockText(el);
-    if (t) text(t);
+    if (t) text(t, { justify: true });
   }
 
   footer();

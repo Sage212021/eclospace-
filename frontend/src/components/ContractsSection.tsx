@@ -796,10 +796,15 @@ function DispatchJournal({ contractId, refreshToken }: { contractId: string; ref
   }, [contractId, refreshToken]);
 
   if (rows.length === 0) return null;
+  // Repliable en accordéon (demande opérateur) : l'historique peut être long.
+  // Replié par défaut ; la préférence ouvert/fermé est mémorisée.
   return (
-    <div style={{ marginTop: 8, fontSize: 12 }}>
-      <div style={{ fontWeight: 700, color: "var(--muted)", marginBottom: 4 }}>Journal d'envoi ({rows.length})</div>
-      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+    <CollapsibleSection
+      title="Journal d'envoi"
+      storageKey="contract:journal-envoi"
+      badge={<span style={{ background: "var(--eclosion-soft)", color: "var(--eclosion-dark, #9a7a12)", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontWeight: 700 }}>{rows.length}</span>}
+    >
+      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
         {rows.map((r) => (
           <li key={r.id} style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap", borderLeft: "2px solid var(--eclosion-soft)", paddingLeft: 8 }}>
             <span style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{new Date(r.sent_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</span>
@@ -809,7 +814,7 @@ function DispatchJournal({ contractId, refreshToken }: { contractId: string; ref
           </li>
         ))}
       </ul>
-    </div>
+    </CollapsibleSection>
   );
 }
 

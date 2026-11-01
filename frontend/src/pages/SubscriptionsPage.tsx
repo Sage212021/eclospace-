@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   getDigitalServices, updateDigitalService, createDigitalService, deleteDigitalService,
-  getDigitalServicePayments, addDigitalServicePayment,
+  getDigitalServicePayments, addDigitalServicePayment, syncDigitalServiceUsage,
   type DigitalService, type DigitalServicePayment,
 } from "../api/client";
 
@@ -20,6 +20,7 @@ const KIND_LABEL: Record<DigitalService["kind"], string> = {
   usage_based: "Forfait à l'usage (budget + consommation)",
 };
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }) : "à renseigner");
+const fmtDateTime = (s: string | null) => (s ? new Date(s).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "jamais");
 const fmtNum = (n: number) => n.toLocaleString("fr-FR");
 const todayInput = () => new Date().toISOString().slice(0, 10);
 
@@ -103,6 +104,26 @@ function ServiceCard({ s, canManage, busy, run }: { s: DigitalService; canManage
         </div>
         <span style={{ background: st.soft, color: st.color, borderRadius: 999, padding: "2px 12px", fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap" }}>{st.label}</span>
       </div>
+
+      {s.usage_auto_source && (
+        <div style={{ marginTop: 8, padding: "8px 10px", background: "var(--paper, #FAF8F2)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12 }}>
+          {s.auto_usage_configured === false ? (
+            <div style={{ color: "var(--warn, #B87400)" }}>
+              🔌 Lecture automatique <strong>en attente</strong> : la clé d'administration doit être configurée côté hébergeur (variable <code>ANTHROPIC_ADMIN_KEY</code>). En attendant, la consommation peut être saisie à la main.
+            </div>
+          ) : (
+            <div style={{ color: "var(--muted)" }}>
+              🔄 Consommation <strong>lue automatiquement</strong> — dernière mise à jour : <strong style={{ color: "var(--ink)" }}>{fmtDateTime(s.usage_synced_at)}</strong>.
+              {s.usage_sync_error && <div style={{ color: "var(--alert, #B23A2E)", marginTop: 3 }}>Dernière erreur : {s.usage_sync_error}</div>}
+            </div>
+          )}
+          {canManage && (
+            <button onClick={() => run(() => syncDigitalServiceUsage(s.id), "Consommation actualisée.")} disabled={busy} style={{ ...linkBtn, marginTop: 4 }}>
+              Rafraîchir maintenant
+            </button>
+          )}
+        </div>
+      )}
 
       {s.billing_url && (
         <a href={s.billing_url} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 10, border: "1px solid var(--line)", borderRadius: 8, padding: "7px 14px", fontSize: 13, color: "var(--ink)", textDecoration: "none" }}>

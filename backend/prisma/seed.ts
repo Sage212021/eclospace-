@@ -1456,16 +1456,20 @@ async function main() {
   // - API (forfait à l'usage) → console Anthropic (paiement de l'API).
   // - Claude Code (abonnement) → compte Claude de l'administrateur (claude.ai).
   // - Scalingo → tableau de bord Scalingo.
+  // `autoSource`/`autoCurrency` : lecture AUTOMATIQUE de la consommation (coût du
+  // mois) depuis l'API du fournisseur. Aujourd'hui, seule l'API Anthropic est
+  // branchée ("anthropic_cost", coût en USD). La clé d'administration n'est JAMAIS
+  // en base : elle est lue dans le coffre à secrets de l'hébergeur (ANTHROPIC_ADMIN_KEY).
   const digitalServices = [
-    { key: "api_ia", name: "API — Corrections éditoriales IA", description: "API d'IA pour les corrections éditoriales (BAT1, BAT2, assistance éditoriale).", kind: "usage_based" as const, billingUrl: "https://console.anthropic.com/settings/billing", billingLabel: "Accéder au paiement API", sortOrder: 10, staleUrls: [] as string[] },
-    { key: "claude_code", name: "Claude Code — Développement", description: "Développement et maintenance d'Eclospace.", kind: "subscription_monthly" as const, billingUrl: "https://claude.ai/settings/billing", billingLabel: "Accéder à la facturation", sortOrder: 20, staleUrls: ["https://console.anthropic.com/settings/billing"] },
-    { key: "scalingo", name: "Scalingo — Hébergement", description: "Application en ligne et infrastructure cloud.", kind: "subscription_monthly" as const, billingUrl: "https://dashboard.scalingo.com", billingLabel: "Accéder à Scalingo", sortOrder: 30, staleUrls: [] as string[] },
+    { key: "api_ia", name: "API — Corrections éditoriales IA", description: "API d'IA pour les corrections éditoriales (BAT1, BAT2, assistance éditoriale).", kind: "usage_based" as const, billingUrl: "https://console.anthropic.com/settings/billing", billingLabel: "Accéder au paiement API", sortOrder: 10, staleUrls: [] as string[], autoSource: "anthropic_cost", autoCurrency: "USD" },
+    { key: "claude_code", name: "Claude Code — Développement", description: "Développement et maintenance d'Eclospace.", kind: "subscription_monthly" as const, billingUrl: "https://claude.ai/settings/billing", billingLabel: "Accéder à la facturation", sortOrder: 20, staleUrls: ["https://console.anthropic.com/settings/billing"], autoSource: null as string | null, autoCurrency: null as string | null },
+    { key: "scalingo", name: "Scalingo — Hébergement", description: "Application en ligne et infrastructure cloud.", kind: "subscription_monthly" as const, billingUrl: "https://dashboard.scalingo.com", billingLabel: "Accéder à Scalingo", sortOrder: 30, staleUrls: [] as string[], autoSource: null as string | null, autoCurrency: null as string | null },
   ];
   for (const s of digitalServices) {
     await prisma.digitalService.upsert({
       where: { key: s.key },
       update: {}, // on NE réécrit pas les réglages (échéances, budgets) saisis par l'admin
-      create: { key: s.key, name: s.name, description: s.description, kind: s.kind, billingUrl: s.billingUrl, billingLabel: s.billingLabel, sortOrder: s.sortOrder, createdBy: adminUser.id, updatedBy: adminUser.id },
+      create: { key: s.key, name: s.name, description: s.description, kind: s.kind, billingUrl: s.billingUrl, billingLabel: s.billingLabel, sortOrder: s.sortOrder, currency: s.autoCurrency ?? "FCFA", usageAutoSource: s.autoSource, createdBy: adminUser.id, updatedBy: adminUser.id },
     });
     // Renseigne la page de paiement officielle UNIQUEMENT si elle est encore
     // vide ou si elle porte un ancien lien par défaut (correction du lien erroné
@@ -1475,6 +1479,13 @@ async function main() {
       where: { key: s.key, OR: [{ billingUrl: null }, { billingUrl: "" }, ...s.staleUrls.map((u) => ({ billingUrl: u }))] },
       data: { billingUrl: s.billingUrl },
     });
+    // Active la lecture auto sur les services concernés si elle ne l'est pas déjà
+    // (sans toucher aux autres réglages). La devise est passée à USD pour l'API
+    // seulement si elle est restée sur la valeur par défaut (FCFA).
+    if (s.autoSource) {
+      await prisma.digitalService.updateMany({ where: { key: s.key, usageAutoSource: null }, data: { usageAutoSource: s.autoSource } });
+      if (s.autoCurrency) await prisma.digitalService.updateMany({ where: { key: s.key, currency: "FCFA" }, data: { currency: s.autoCurrency } });
+    }
   }
 
   // chaque mise à jour d'un pôle ; au déploiement suivant, les utilisateurs
@@ -3320,6 +3331,15 @@ async function main() {
       version: "2026.10",
       title: "Nouveauté — Veille des abonnements et paiements numériques",
       body: "Un nouvel écran « Veille des abonnements » (Administration) surveille les services numériques qui font tourner la maison (API d'intelligence éditoriale, Claude Code, hébergement Scalingo…), pour qu'aucun ne s'interrompe faute de paiement. Pour chaque service : son STATUT (À jour / À surveiller / En retard), sa prochaine échéance, et pour les forfaits à l'usage la consommation du mois. Un bouton « Accéder au paiement » ouvre directement la plateforme concernée. Vous enregistrez les paiements à la main (montant, date, référence) et consultez l'historique ; attention, un paiement n'avance l'échéance QUE s'il est marqué « confirmé » — cliquer sur le lien externe ne suffit pas. La surveillance tourne en arrière-plan, indépendamment de toute connexion : l'administrateur est alerté AVANT l'échéance (J-15, J-7, J-3, J-1, puis « dépassé ») et quand la consommation atteint 70 %, 85 % puis 95 % du budget. Aucun numéro de carte, CVV ou identifiant secret n'est demandé ni stocké. Réservé à l'administration.",
+      permissionModules: ["abonnements"],
+      departmentCodes: ["DG"],
+      roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
+    },
+    {
+      slug: "2026-11-abonnements-lecture-auto-consommation-api",
+      version: "2026.11",
+      title: "Nouveauté — Veille des abonnements : la consommation de l'API se lit toute seule",
+      body: "Sur l'écran « Veille des abonnements », le service « API — Corrections éditoriales IA » affiche désormais sa consommation du mois (le coût) LUE AUTOMATIQUEMENT depuis Anthropic, avec la date de dernière mise à jour et un bouton « Rafraîchir maintenant ». La lecture se fait aussi toute seule en arrière-plan (toutes les 12 h), ce qui alimente les alertes de budget (70/85/95 %). Important : Éclospace ne fait que LIRE le montant — il ne paie jamais et ne stocke aucune donnée bancaire. La lecture nécessite une clé d'administration Anthropic (lecture seule), rangée dans le coffre à secrets de l'hébergeur (jamais dans l'application) ; tant qu'elle n'est pas configurée, l'écran l'indique et la consommation reste saisissable à la main. Les autres services (Claude Code, Scalingo) restent en saisie manuelle. Réservé à l'administration.",
       permissionModules: ["abonnements"],
       departmentCodes: ["DG"],
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],

@@ -4,6 +4,8 @@ import { prisma } from "../lib/prisma.js";
 import { requirePermission } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { computeServiceView } from "../lib/digitalServices.js";
+import { syncServiceUsage, UsageSyncError } from "../lib/digitalServicesUsageSync.js";
+import { AnthropicUsageError, isAnthropicUsageConfigured } from "../lib/anthropicUsage.js";
 
 // Module « Veille des abonnements & paiements numériques » — RÉSERVÉ à
 // l'administrateur (permission `abonnements`, que seul l'ADMIN_GENERAL possède).
@@ -48,6 +50,7 @@ function serviceView(s: {
   id: string; key: string; name: string; description: string | null; kind: string;
   billingUrl: string | null; billingLabel: string | null; currency: string; nextDueDate: Date | null;
   monthlyBudget: unknown; currentUsage: unknown; usagePeriod: string | null; active: boolean; sortOrder: number;
+  usageAutoSource?: string | null; usageSyncedAt?: Date | null; usageSyncError?: string | null;
 }) {
   const view = computeServiceView({ nextDueDate: s.nextDueDate, kind: s.kind, monthlyBudget: s.monthlyBudget as never, currentUsage: s.currentUsage as never });
   return {
@@ -57,6 +60,12 @@ function serviceView(s: {
     current_usage: s.currentUsage == null ? null : Number(s.currentUsage), usage_period: s.usagePeriod,
     active: s.active, sort_order: s.sortOrder,
     status: view.status, days_to_due: view.daysToDue, usage_pct: view.usagePct,
+    // Lecture automatique : source, dernière synchro, dernière erreur, et si la
+    // clé est bien configurée côté hébergeur (pour guider l'admin à l'écran).
+    usage_auto_source: s.usageAutoSource ?? null,
+    usage_synced_at: s.usageSyncedAt ?? null,
+    usage_sync_error: s.usageSyncError ?? null,
+    auto_usage_configured: s.usageAutoSource ? isAnthropicUsageConfigured() : null,
   };
 }
 
@@ -166,5 +175,27 @@ export default async function digitalServiceRoutes(fastify: FastifyInstance) {
     }
     await writeAuditLog({ userId: request.user!.id, action: "create", entityType: "digital_service_payment", entityId: payment.id, newValues: { serviceId: id, amount: d.amount, status }, ipAddress: request.ip });
     return reply.code(201).send({ id: payment.id, status });
+  });
+
+  // Rafraîchir MAINTENANT la consommation lue automatiquement (API Anthropic).
+  // La clé d'administration est lue côté serveur (coffre à secrets) ; elle n'est
+  // jamais stockée ni renvoyée. Aucun paiement n'est déclenché : lecture seule.
+  fastify.post("/api/v1/digital-services/:id/sync-usage", { preHandler: requirePermission("abonnements", "administration") }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const updated = await syncServiceUsage(id);
+      await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "digital_service", entityId: id, newValues: { usage_synced: true, usage_period: updated.usagePeriod }, ipAddress: request.ip });
+      return reply.send(serviceView(updated));
+    } catch (e) {
+      if (e instanceof UsageSyncError) {
+        const code = e.code === "not_found" ? 404 : 409;
+        return reply.code(code).send({ code: e.code, message: e.message });
+      }
+      if (e instanceof AnthropicUsageError) {
+        const code = e.code === "not_configured" ? 400 : 502;
+        return reply.code(code).send({ code: e.code, message: e.message });
+      }
+      return reply.code(500).send({ code: "sync_failed", message: "Synchronisation impossible." });
+    }
   });
 }

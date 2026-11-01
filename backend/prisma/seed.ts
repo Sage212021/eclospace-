@@ -3336,6 +3336,14 @@ async function main() {
       roleCodes: ["ADMIN_GENERAL", "DIR_GENERAL"],
     },
     {
+      slug: "2026-11-impression-carnet-imprimeurs-devis",
+      version: "2026.11",
+      title: "Nouveauté — Étape Impression : ajouter un imprimeur et lancer un devis",
+      body: "L'étape « Impression » est maintenant utilisable de bout en bout. Jusqu'ici elle « ne renvoyait à rien » car toute la chaîne commence par choisir un IMPRIMEUR, mais aucun n'était enregistré et il n'y avait pas d'écran pour en ajouter. C'est corrigé : dans la fiche de l'ouvrage, rubrique « Impression et fabrication », vous avez désormais un petit CARNET D'IMPRIMEURS — bouton « + Ajouter un imprimeur » (nom, ville, téléphone, email, spécialités, conditions de paiement) — puis vous CHOISISSEZ l'imprimeur et les hypothèses de tirage (ex. 500, 1000) pour « Demander un devis ». La suite s'enchaîne : saisie des montants reçus, comparaison, sélection, génération du bon de commande, suivi de fabrication et réception des exemplaires avec contrôle qualité avant l'entrée en stock. Réservé aux profils Production/Impression (et à l'administration).",
+      permissionModules: ["printing"],
+      departmentCodes: ["DG"],
+    },
+    {
       slug: "2026-11-contrat-pdf-transfert-propre-et-journal-accordeon",
       version: "2026.11",
       title: "Nouveauté — Contrats : le PDF transféré est enfin identique à l'aperçu",

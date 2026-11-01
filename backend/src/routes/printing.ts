@@ -19,6 +19,18 @@ const printerSchema = z.object({
   payment_terms: z.string().optional(),
 });
 
+// Création RAPIDE d'un imprimeur depuis la fiche (carnet d'imprimeurs) : crée en
+// une fois le partenaire (catégorie « imprimeur ») ET le Printer associé, pour que
+// l'étape Impression soit utilisable sans passer par un écran séparé.
+const quickPrinterSchema = z.object({
+  name: z.string().trim().min(2).max(160),
+  city: z.string().trim().max(120).optional(),
+  phone: z.string().trim().max(60).optional(),
+  email: z.string().trim().max(160).optional(),
+  specialties: z.array(z.string()).default([]),
+  payment_terms: z.string().trim().max(400).optional(),
+});
+
 const printQuoteRequestSchema = z.object({
   printer_id: z.string().uuid(),
   quantities: z.array(z.number().int().positive()).min(1),
@@ -101,6 +113,41 @@ export default async function printingRoutes(fastify: FastifyInstance) {
       entityType: "printer",
       entityId: printer.id,
       newValues: parsed.data,
+      ipAddress: request.ip,
+    });
+    return reply.code(201).send(printer);
+  });
+
+  // Carnet d'imprimeurs — ajout rapide (partenaire « imprimeur » + Printer) en un
+  // seul appel, directement depuis la rubrique Impression de la fiche de l'ouvrage.
+  fastify.post("/api/v1/printers/quick", { preHandler: requirePermission("printing", "administration") }, async (request, reply) => {
+    const parsed = quickPrinterSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: "validation_error", message: "Champs invalides.", details: parsed.error.issues });
+    }
+    const d = parsed.data;
+    const printer = await prisma.$transaction(async (tx) => {
+      const partner = await tx.partner.create({
+        data: {
+          category: "imprimeur",
+          firstName: d.name,   // raison sociale de l'imprimeur
+          lastName: "",
+          city: d.city ?? null,
+          phone: d.phone ?? null,
+          email: d.email ?? null,
+        },
+      });
+      return tx.printer.create({
+        data: { partnerId: partner.id, specialties: d.specialties, paymentTerms: d.payment_terms },
+        include: { partner: true },
+      });
+    });
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "create",
+      entityType: "printer",
+      entityId: printer.id,
+      newValues: { name: d.name, city: d.city },
       ipAddress: request.ip,
     });
     return reply.code(201).send(printer);

@@ -3,6 +3,7 @@ import {
   correctGoodsReceipt,
   createGoodsReceiptClaim,
   createPurchaseOrder,
+  createPrinterQuick,
   listPrintQuotes,
   listPrinters,
   listPurchaseOrders,
@@ -40,6 +41,11 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [qcItems, setQcItems] = useState<QcChecklistItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Carnet d'imprimeurs (ajout rapide) + formulaire de demande de devis.
+  const [showAddPrinter, setShowAddPrinter] = useState(false);
+  const [pf, setPf] = useState({ name: "", city: "", phone: "", email: "", specialties: "", payment_terms: "" });
+  const [selPrinter, setSelPrinter] = useState("");
+  const [qtys, setQtys] = useState("500, 1000");
 
   const refresh = async () => {
     const [printerList, quoteData, orderList] = await Promise.all([listPrinters(), listPrintQuotes(manuscriptId), listPurchaseOrders(manuscriptId)]);
@@ -58,20 +64,40 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
     refresh().catch((e) => setError(e.message));
   }, [manuscriptId]);
 
+  async function handleAddPrinter() {
+    if (pf.name.trim().length < 2) { setError("Le nom de l'imprimeur est requis."); return; }
+    try {
+      const created = await createPrinterQuick({
+        name: pf.name.trim(),
+        city: pf.city.trim() || undefined,
+        phone: pf.phone.trim() || undefined,
+        email: pf.email.trim() || undefined,
+        specialties: pf.specialties.split(",").map((s) => s.trim()).filter(Boolean),
+        payment_terms: pf.payment_terms.trim() || undefined,
+      });
+      await refresh();
+      setSelPrinter(created.id); // présélectionné pour le devis
+      setPf({ name: "", city: "", phone: "", email: "", specialties: "", payment_terms: "" });
+      setShowAddPrinter(false);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de l'ajout de l'imprimeur.");
+    }
+  }
+
   async function handleRequestQuote() {
     if (printers.length === 0) {
-      setError("Aucun imprimeur enregistré.");
+      setError("Ajoutez d'abord un imprimeur (bouton « + Ajouter un imprimeur »).");
+      setShowAddPrinter(true);
       return;
     }
-    const printerId = printers[0].id;
-    const quantities = (window.prompt("Hypothèses de tirage (séparées par des virgules)", "500,1000") ?? "")
-      .split(",")
-      .map((v) => Number(v.trim()))
-      .filter((v) => v > 0);
-    if (quantities.length === 0) return;
+    const printerId = selPrinter || printers[0].id;
+    const quantities = qtys.split(",").map((v) => Number(v.trim())).filter((v) => v > 0);
+    if (quantities.length === 0) { setError("Indiquez au moins une hypothèse de tirage (ex. 500, 1000)."); return; }
     try {
       await requestPrintQuote(manuscriptId, printerId, quantities);
       await refresh();
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de la demande de devis.");
     }
@@ -140,14 +166,49 @@ export function PrintingSection({ manuscriptId, canManage, canValidate }: Printi
 
   return (
     <CollapsibleSection title="Impression et fabrication" storageKey="fiche:impression">
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 10 }}>
-        {canManage && (
-          <button onClick={handleRequestQuote} style={secondaryButtonStyle}>
-            + Demander un devis
-          </button>
-        )}
-      </div>
       {error && <p style={{ color: "var(--alert)", fontSize: 12 }}>{error}</p>}
+
+      {/* Carnet d'imprimeurs : sans imprimeur, impossible de demander un devis. */}
+      {canManage && (
+        <div style={{ marginBottom: 12, padding: 10, border: "1px solid var(--line)", borderRadius: 8, background: "var(--paper, #FAF8F2)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12.5 }}>
+              <strong>Imprimeurs ({printers.length})</strong>
+              {printers.length > 0
+                ? <span style={{ color: "var(--muted)" }}> — {printers.map((p) => `${p.partner.firstName} ${p.partner.lastName}`.trim()).join(", ")}</span>
+                : <span style={{ color: "var(--muted)" }}> — aucun imprimeur enregistré. Ajoutez-en un pour pouvoir demander des devis.</span>}
+            </div>
+            <button onClick={() => setShowAddPrinter((v) => !v)} style={{ ...secondaryButtonStyle, marginTop: 0 }}>{showAddPrinter ? "Annuler" : "+ Ajouter un imprimeur"}</button>
+          </div>
+          {showAddPrinter && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+              <label style={fieldLabel}>Nom / raison sociale *<input style={fieldInput} value={pf.name} onChange={(e) => setPf({ ...pf, name: e.target.value })} placeholder="Ex. Imprimerie Saint-Paul" /></label>
+              <label style={fieldLabel}>Ville<input style={fieldInput} value={pf.city} onChange={(e) => setPf({ ...pf, city: e.target.value })} /></label>
+              <label style={fieldLabel}>Téléphone<input style={fieldInput} value={pf.phone} onChange={(e) => setPf({ ...pf, phone: e.target.value })} /></label>
+              <label style={fieldLabel}>Email<input style={fieldInput} value={pf.email} onChange={(e) => setPf({ ...pf, email: e.target.value })} /></label>
+              <label style={fieldLabel}>Spécialités (séparées par des virgules)<input style={fieldInput} value={pf.specialties} onChange={(e) => setPf({ ...pf, specialties: e.target.value })} placeholder="offset, numérique, reliure" /></label>
+              <label style={fieldLabel}>Conditions de paiement<input style={fieldInput} value={pf.payment_terms} onChange={(e) => setPf({ ...pf, payment_terms: e.target.value })} placeholder="Ex. 50 % à la commande" /></label>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <button onClick={handleAddPrinter} style={{ ...secondaryButtonStyle, marginTop: 0, background: "var(--eclosion, #D9B21A)", border: "none", fontWeight: 700 }}>Enregistrer l'imprimeur</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Demander un devis : choix de l'imprimeur + hypothèses de tirage. */}
+      {canManage && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 10 }}>
+          <label style={fieldLabel}>Imprimeur
+            <select style={fieldInput} value={selPrinter || (printers[0]?.id ?? "")} onChange={(e) => setSelPrinter(e.target.value)} disabled={printers.length === 0}>
+              {printers.length === 0 && <option value="">— aucun —</option>}
+              {printers.map((p) => <option key={p.id} value={p.id}>{`${p.partner.firstName} ${p.partner.lastName}`.trim()}</option>)}
+            </select>
+          </label>
+          <label style={fieldLabel}>Hypothèses de tirage<input style={fieldInput} value={qtys} onChange={(e) => setQtys(e.target.value)} placeholder="500, 1000" /></label>
+          <button onClick={handleRequestQuote} style={{ ...secondaryButtonStyle, marginTop: 0 }}>+ Demander un devis</button>
+        </div>
+      )}
 
       <div style={{ fontSize: 12, fontWeight: 600 }}>Devis</div>
       {quotes.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Aucun devis demandé.</p>}
@@ -242,6 +303,9 @@ const secondaryButtonStyle: React.CSSProperties = {
   cursor: "pointer",
   marginTop: 6,
 };
+
+const fieldLabel: React.CSSProperties = { fontSize: 11.5, color: "var(--muted)", fontWeight: 600, display: "flex", flexDirection: "column", gap: 2 };
+const fieldInput: React.CSSProperties = { padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12.5, boxSizing: "border-box" };
 
 // Charte Éclospace : or = conforme (positif), orange = réserves, rouge = critique.
 const VERDICTS: { value: QcVerdict; label: string; color: string }[] = [

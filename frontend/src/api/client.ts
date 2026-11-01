@@ -3182,6 +3182,11 @@ export function listPrinters() {
   return request<Printer[]>("/api/v1/printers");
 }
 
+// Ajout rapide d'un imprimeur (carnet), depuis la rubrique Impression de la fiche.
+export function createPrinterQuick(body: { name: string; city?: string; phone?: string; email?: string; specialties?: string[]; payment_terms?: string }) {
+  return request<Printer>("/api/v1/printers/quick", { method: "POST", body: JSON.stringify(body) });
+}
+
 export interface PrintQuote {
   id: string;
   status: "requested" | "received" | "selected" | "declined";

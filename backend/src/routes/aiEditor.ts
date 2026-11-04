@@ -5,6 +5,20 @@ import { requireAnyRole } from "../lib/permissions.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { runEditorAnswer, runRewrite, REWRITE_MODES, assembleChapterText } from "../lib/aiEditor.js";
 import { extractUploadAttachment, type UploadAttachment } from "../lib/aiAssistant.js";
+import { buildSageDocx } from "../lib/sageDocx.js";
+
+// Compose le document markdown d'un livrable de réécriture (titre de l'ouvrage,
+// texte réécrit intégral, observations éditoriales, texte initial pour
+// référence). Même structure que le PDF produit côté navigateur.
+function composeRewriteMarkdown(input: { title: string; mode: string; instruction: string | null; proposedText: string; explanation: string | null; sourceText: string }): string {
+  const parts: string[] = [`# Réécriture éditoriale — ${input.title}`];
+  parts.push(`Réécriture ${REWRITE_MODE_LABEL[input.mode] ?? input.mode}.`);
+  if (input.instruction) parts.push(`Consigne : ${input.instruction}`);
+  parts.push("## Texte réécrit", input.proposedText.trim());
+  if (input.explanation && input.explanation.trim()) parts.push("## Observations éditoriales", input.explanation.trim());
+  parts.push("## Texte initial", input.sourceText.trim());
+  return parts.join("\n\n");
+}
 
 // ÉCLOSION ÉDITORIAL IA — Lot A (lecture + diagnostic + dialogue). Réservé à la
 // Direction générale et à l'administrateur (ouverture au directeur éditorial
@@ -360,6 +374,29 @@ export default async function aiEditorRoutes(fastify: FastifyInstance) {
     });
     await writeAuditLog({ userId: request.user!.id, action: "update", entityType: "ai_editorial_rewrite", entityId: rewriteId, newValues: { decision: parsed.data.decision }, ipAddress: request.ip });
     return reply.send({ id: updated.id, status: updated.status });
+  });
+
+  // Livrable Word (.docx) d'une réécriture : le texte réécrit INTÉGRAL + les
+  // observations, à l'en-tête des Éditions Éclosion, sans aucune mention d'IA
+  // (règle d'or des documents LIVRÉS). Le PDF équivalent est produit côté
+  // navigateur. Une réécriture finalisée ne reste donc pas que dans l'écran.
+  fastify.get("/api/v1/ai-editor/rewrites/:rewriteId/export.docx", { preHandler: requireAnyRole(EDITOR_ROLES) }, async (request, reply) => {
+    const { rewriteId } = request.params as { rewriteId: string };
+    const rw = await prisma.aiEditorialRewrite.findUnique({ where: { id: rewriteId } });
+    if (!rw || !["done", "accepted", "rejected"].includes(rw.status) || !rw.proposedText.trim()) {
+      return reply.code(404).send({ code: "not_found", message: "Réécriture introuvable ou non finalisée." });
+    }
+    const manuscript = await prisma.manuscript.findFirst({ where: { id: rw.manuscriptId, deletedAt: null }, select: { title: true, manuscriptNumber: true } });
+    const title = manuscript?.title ?? "Ouvrage";
+    const markdown = composeRewriteMarkdown({ title, mode: rw.mode, instruction: rw.instruction, proposedText: rw.proposedText, explanation: rw.explanation, sourceText: rw.sourceText });
+    const buffer = await buildSageDocx(markdown, { title: `Réécriture éditoriale — ${title}`, dateIso: rw.updatedAt.toISOString() });
+    const stamp = rw.updatedAt.toISOString().slice(0, 10).replace(/-/g, "");
+    const filename = `Reecriture-${(manuscript?.manuscriptNumber ?? "ouvrage").replace(/[^A-Za-z0-9_-]+/g, "")}-${stamp}.docx`;
+    await writeAuditLog({ userId: request.user!.id, action: "export", entityType: "ai_editorial_rewrite", entityId: rewriteId, newValues: { format: "docx" }, ipAddress: request.ip });
+    return reply
+      .header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+      .header("Content-Disposition", `attachment; filename="${filename}"`)
+      .send(buffer);
   });
 
   // JOURNAL ÉDITORIAL de l'ouvrage : historique LISIBLE de tout mouvement de

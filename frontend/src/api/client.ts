@@ -2978,6 +2978,10 @@ export function requestAiEditorTranslation(manuscriptId: string, source_text: st
 export function requestAiEditorRewrite(manuscriptId: string, input: { mode: RewriteMode; source_text: string; instruction?: string }) {
   return request<{ rewrite_id: string }>(`/api/v1/ai-editor/${manuscriptId}/rewrite`, { method: "POST", body: JSON.stringify(input) });
 }
+// URL de téléchargement Word (.docx) d'un livrable de réécriture (cookie de session).
+export function aiEditorRewriteDocxUrl(rewriteId: string): string {
+  return `${API_BASE}/api/v1/ai-editor/rewrites/${rewriteId}/export.docx`;
+}
 export function decideAiEditorRewrite(rewriteId: string, decision: "accepted" | "rejected") {
   return request<{ id: string; status: string }>(`/api/v1/ai-editor/rewrites/${rewriteId}/decision`, { method: "POST", body: JSON.stringify({ decision }) });
 }

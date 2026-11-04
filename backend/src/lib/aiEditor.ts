@@ -350,6 +350,13 @@ const REWRITE_DELIM = "---EXPLICATION---";
 
 // Exécution (longue) en arrière-plan d'une proposition de réécriture. Ne lève
 // JAMAIS : le résultat (ou l'erreur) est consigné sur la ligne de réécriture.
+// Réécriture : budget de jetons par appel et bornage des continuations. Une
+// réécriture INTÉGRALE (chapitre, voire manuscrit) dépasse souvent une seule
+// génération : on la poursuit par « préfixe assistant » (cf. aiRunner / SAGE)
+// pour livrer le texte complet, jamais un extrait tronqué.
+const REWRITE_MAX_TOKENS = 8192;
+const REWRITE_CONTINUATION_LIMIT = 8;
+
 export async function runRewrite(rewriteId: string): Promise<void> {
   try {
     const rw = await prisma.aiEditorialRewrite.findUnique({ where: { id: rewriteId } });
@@ -377,13 +384,41 @@ export async function runRewrite(rewriteId: string): Promise<void> {
 
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey });
-    const resp = await client.messages.create({
+    const userContent = `${context}\n\n=== DEMANDE ===\n${task}`;
+    const textOf = (content: unknown): string =>
+      (content as Array<{ type: string; text?: string }> | undefined ?? [])
+        .filter((b) => b.type === "text")
+        .map((b) => b.text ?? "")
+        .join("\n");
+    const first = await client.messages.create({
       model: modelId,
-      max_tokens: 4096,
+      max_tokens: REWRITE_MAX_TOKENS,
       system: AGENT_SYSTEM,
-      messages: [{ role: "user", content: `${context}\n\n=== DEMANDE ===\n${task}` }],
+      messages: [{ role: "user", content: userContent }],
     });
-    const text = resp.content.filter((b) => b.type === "text").map((b) => (b as unknown as { text: string }).text).join("\n").trim();
+    // CONTINUATION si la réécriture a été coupée par la limite de jetons :
+    // on redonne à l'IA son propre texte partiel comme début de réponse et elle
+    // le poursuit exactement là où il s'est arrêté (même rédaction, aucun
+    // séparateur). Garantit une réécriture INTÉGRALE, pas un extrait.
+    let full = textOf(first.content);
+    let stop: string | null = first.stop_reason ?? null;
+    for (let i = 0; i < REWRITE_CONTINUATION_LIMIT && stop === "max_tokens"; i++) {
+      try {
+        const cont = await client.messages.create({
+          model: modelId,
+          max_tokens: REWRITE_MAX_TOKENS,
+          system: AGENT_SYSTEM,
+          messages: [{ role: "user", content: userContent }, { role: "assistant", content: full }],
+        });
+        stop = cont.stop_reason ?? null;
+        const more = textOf(cont.content);
+        if (!more) break;
+        full += more;
+      } catch {
+        break; // une continuation qui échoue ne doit pas perdre le texte déjà produit
+      }
+    }
+    const text = full.trim();
     const idx = text.indexOf(REWRITE_DELIM);
     const proposed = (idx >= 0 ? text.slice(0, idx) : text).trim();
     const explanation = idx >= 0 ? text.slice(idx + REWRITE_DELIM.length).trim() : "";

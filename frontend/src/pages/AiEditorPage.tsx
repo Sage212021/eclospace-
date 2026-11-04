@@ -14,6 +14,7 @@ import {
   requestAiEditorTranslation,
   requestAiEditorRewrite,
   decideAiEditorRewrite,
+  aiEditorRewriteDocxUrl,
   requestAiEditorFicheLecture,
   requestAiEditorPresentation,
   requestAiEditorLettreAuteur,
@@ -694,7 +695,7 @@ export function AiEditorPage() {
             </button>
 
             <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
-              {rewrites.map((r) => <RewriteCard key={r.id} r={r} busy={busy} onDecide={decide} />)}
+              {rewrites.map((r) => <RewriteCard key={r.id} r={r} busy={busy} onDecide={decide} manuscriptTitle={dossier?.manuscript.title ?? "Ouvrage"} />)}
             </div>
           </div>
 
@@ -808,8 +809,20 @@ const STATUS_BADGE: Record<string, { label: string; color: string }> = {
   rejected: { label: "Refusée", color: "var(--muted)" },
 };
 
-function RewriteCard({ r, busy, onDecide }: { r: AiEditorRewrite; busy: boolean; onDecide: (id: string, d: "accepted" | "rejected") => void }) {
+// Compose le livrable markdown d'une réécriture (même structure que le .docx
+// serveur) pour le PDF produit côté navigateur.
+function rewriteDeliverableMarkdown(r: AiEditorRewrite, title: string): string {
+  const parts: string[] = [`# Réécriture éditoriale — ${title}`, `Réécriture ${REWRITE_CARD_MODE[r.mode] ?? r.mode}.`];
+  if (r.instruction) parts.push(`Consigne : ${r.instruction}`);
+  parts.push("## Texte réécrit", r.proposed_text.trim());
+  if (r.explanation && r.explanation.trim()) parts.push("## Observations éditoriales", r.explanation.trim());
+  parts.push("## Texte initial", r.source_text.trim());
+  return parts.join("\n\n");
+}
+
+function RewriteCard({ r, busy, onDecide, manuscriptTitle }: { r: AiEditorRewrite; busy: boolean; onDecide: (id: string, d: "accepted" | "rejected") => void; manuscriptTitle: string }) {
   const badge = STATUS_BADGE[r.status] ?? STATUS_BADGE.done;
+  const finalized = r.status === "done" || r.status === "accepted" || r.status === "rejected";
   return (
     <div style={{ border: "1px solid var(--line)", borderRadius: 10, background: "var(--ivory, #FAF8F2)", padding: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
@@ -842,6 +855,15 @@ function RewriteCard({ r, busy, onDecide }: { r: AiEditorRewrite; busy: boolean;
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button onClick={() => onDecide(r.id, "accepted")} disabled={busy} style={{ background: "#2F7D4A", color: "#fff", border: "none", borderRadius: 8, padding: "6px 13px", fontWeight: 700, fontSize: 12.5, cursor: busy ? "not-allowed" : "pointer" }}>Accepter</button>
               <button onClick={() => onDecide(r.id, "rejected")} disabled={busy} style={{ background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 8, padding: "6px 13px", fontWeight: 600, fontSize: 12.5, cursor: busy ? "not-allowed" : "pointer" }}>Refuser</button>
+            </div>
+          )}
+          {finalized && r.proposed_text.trim() && (
+            <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 5 }}>LIVRABLES DE RÉÉCRITURE</div>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                <a href={aiEditorRewriteDocxUrl(r.id)} title="Télécharger la réécriture en Word modifiable (.docx)" style={{ fontSize: 11.5, color: "var(--eclosion-dark, #9a7a12)", textDecoration: "underline", cursor: "pointer" }}>⬇️ Télécharger en Word</a>
+                <button onClick={() => { void downloadSageAnswerPdf(rewriteDeliverableMarkdown(r, manuscriptTitle), { dateIso: r.created_at, fileStem: `Reecriture-${new Date(r.created_at).toISOString().slice(0, 10).replace(/-/g, "")}` }); }} title="Télécharger la réécriture en PDF" style={{ background: "none", border: "none", padding: 0, fontSize: 11.5, color: "var(--eclosion-dark, #9a7a12)", textDecoration: "underline", cursor: "pointer" }}>⬇️ Télécharger en PDF</button>
+              </div>
             </div>
           )}
         </>
